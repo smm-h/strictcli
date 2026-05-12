@@ -1,4 +1,4 @@
-# cli
+# excli
 
 ## Release workflow
 
