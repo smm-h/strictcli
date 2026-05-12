@@ -288,7 +288,10 @@ class App:
             exit_code = 1
         else:
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
-                cmd.handler(**kwargs)
+                try:
+                    cmd.handler(**kwargs)
+                except SystemExit as e:
+                    exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
 
         return Result(
             stdout=stdout_buf.getvalue(),
