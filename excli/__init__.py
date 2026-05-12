@@ -6,8 +6,11 @@ __version__ = "0.1.0"
 
 __all__ = ["App", "Flag", "Arg", "Tag", "Result", "flag", "arg"]
 
+import contextlib
 import inspect
+import io
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -227,6 +230,70 @@ class App:
 
         # Step 3: parse remaining tokens for the resolved command
         return _parse_command(cmd, rest)
+
+    def _find_command_prefix(self, cmd: Command) -> str:
+        """Find the group prefix for a command (for help formatting)."""
+        for group in self._groups.values():
+            if cmd in group.commands.values():
+                return f"{group.name} "
+        return ""
+
+    def run(self) -> None:
+        """Run the CLI application, reading from sys.argv."""
+        argv = sys.argv[1:]
+        try:
+            cmd, kwargs = self._parse(argv)
+        except _HelpRequested as e:
+            if isinstance(e.target, App):
+                print(_format_app_help(self))
+            elif isinstance(e.target, Group):
+                print(_format_group_help(self, e.target))
+            elif isinstance(e.target, Command):
+                prefix = self._find_command_prefix(e.target)
+                print(_format_command_help(self, e.target, prefix))
+            sys.exit(0)
+        except _VersionRequested:
+            print(_format_version(self))
+            sys.exit(0)
+        except _ParseError as e:
+            print(f"error: {e}", file=sys.stderr)
+            print(f"try '{self.name} --help'", file=sys.stderr)
+            sys.exit(1)
+        else:
+            cmd.handler(**kwargs)
+            sys.exit(0)
+
+    def test(self, argv: list[str]) -> Result:
+        """Run the CLI with given argv, capturing output and exit code."""
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        exit_code = 0
+
+        try:
+            cmd, kwargs = self._parse(argv)
+        except _HelpRequested as e:
+            if isinstance(e.target, App):
+                stdout_buf.write(_format_app_help(self) + "\n")
+            elif isinstance(e.target, Group):
+                stdout_buf.write(_format_group_help(self, e.target) + "\n")
+            elif isinstance(e.target, Command):
+                prefix = self._find_command_prefix(e.target)
+                stdout_buf.write(_format_command_help(self, e.target, prefix) + "\n")
+        except _VersionRequested:
+            stdout_buf.write(_format_version(self) + "\n")
+        except _ParseError as e:
+            stderr_buf.write(f"error: {e}\n")
+            stderr_buf.write(f"try '{self.name} --help'\n")
+            exit_code = 1
+        else:
+            with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+                cmd.handler(**kwargs)
+
+        return Result(
+            stdout=stdout_buf.getvalue(),
+            stderr=stderr_buf.getvalue(),
+            exit_code=exit_code,
+        )
 
 
 def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, object]]:
