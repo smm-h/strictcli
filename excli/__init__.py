@@ -120,6 +120,7 @@ class Group:
     name: str
     help: str
     commands: dict[str, Command] = field(default_factory=dict)
+    env_prefix: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
@@ -136,7 +137,7 @@ class Group:
 
         def decorator(func: Callable) -> Callable:
             cmd = _build_and_validate_command(
-                name, help=help, handler=func, args=args, tags=tags, env_prefix=None
+                name, help=help, handler=func, args=args, tags=tags, env_prefix=self.env_prefix
             )
             self.commands[name] = cmd
             return func
@@ -193,7 +194,7 @@ class App:
 
     def group(self, name: str, *, help: str) -> Group:
         """Create and register a command group."""
-        grp = Group(name=name, help=help)
+        grp = Group(name=name, help=help, env_prefix=self.env_prefix)
         self._groups[name] = grp
         return grp
 
@@ -680,6 +681,8 @@ def _build_flag_spec(f: Flag) -> str:
     parts: list[str] = []
     if f.type is bool and f.negatable:
         parts.append(f"--{f.name}, --no-{f.name}")
+        if f.short:
+            parts.append(f"-{f.short}")
     else:
         parts.append(f"--{f.name}")
         if f.short:
