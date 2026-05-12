@@ -7,6 +7,7 @@ __version__ = "0.1.0"
 __all__ = ["App", "Flag", "Arg", "Tag", "Result", "flag", "arg"]
 
 import inspect
+import os
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -18,6 +19,22 @@ class _MissingSentinel:
 
 
 _MISSING = _MissingSentinel()
+
+
+class _HelpRequested(Exception):
+    """Raised when --help or -h is encountered."""
+
+    def __init__(self, target: object) -> None:
+        self.target = target
+        super().__init__()
+
+
+class _VersionRequested(Exception):
+    """Raised when --version or -v is encountered."""
+
+
+class _ParseError(Exception):
+    """Raised for user-facing parse errors."""
 
 
 def _require_non_empty_str(value: str, field_name: str, class_name: str) -> None:
@@ -176,6 +193,198 @@ class App:
         grp = Group(name=name, help=help)
         self._groups[name] = grp
         return grp
+
+    def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object]]:
+        """Parse argv (without program name) into a resolved Command and kwargs."""
+
+        # Step 1: intercept app-level --help/-h and --version/-v
+        if not argv or argv == ["--help"] or argv == ["-h"]:
+            raise _HelpRequested(target=self)
+        if argv == ["--version"] or argv == ["-v"]:
+            raise _VersionRequested()
+
+        # Step 2: route to command or group
+        token = argv[0]
+        rest = argv[1:]
+
+        if token in self._groups:
+            group = self._groups[token]
+            if not rest or rest == ["--help"] or rest == ["-h"]:
+                raise _HelpRequested(target=group)
+            sub_token = rest[0]
+            rest = rest[1:]
+            if sub_token not in group.commands:
+                raise _ParseError(f"unknown command '{sub_token}'")
+            cmd = group.commands[sub_token]
+        elif token in self._commands:
+            cmd = self._commands[token]
+        else:
+            raise _ParseError(f"unknown command '{token}'")
+
+        # Check for command-level --help/-h
+        if rest == ["--help"] or rest == ["-h"]:
+            raise _HelpRequested(target=cmd)
+
+        # Step 3: parse remaining tokens for the resolved command
+        return _parse_command(cmd, rest)
+
+
+def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, object]]:
+    """Parse tokens against a resolved command's flags and args."""
+
+    # Build flag lookup dicts
+    long_lookup: dict[str, Flag] = {}  # --flag-name -> Flag
+    short_lookup: dict[str, Flag] = {}  # -x -> Flag
+    negation_lookup: dict[str, Flag] = {}  # --no-flag-name -> Flag
+
+    for f in cmd.flags:
+        long_lookup[f"--{f.name}"] = f
+        if f.short:
+            short_lookup[f"-{f.short}"] = f
+        if f.type is bool and f.negatable:
+            negation_lookup[f"--no-{f.name}"] = f
+
+    # Track which flags were set by CLI args
+    cli_set: dict[str, object] = {}  # flag.name -> value
+    positionals: list[str] = []
+
+    i = 0
+    stop_flags = False  # set when -- is encountered
+
+    while i < len(tokens):
+        tok = tokens[i]
+
+        if stop_flags or not tok.startswith("-") or tok == "-":
+            positionals.append(tok)
+            i += 1
+            continue
+
+        if tok == "--":
+            stop_flags = True
+            i += 1
+            continue
+
+        # --flag=value form
+        if tok.startswith("--") and "=" in tok:
+            eq_pos = tok.index("=")
+            flag_part = tok[:eq_pos]
+            value_part = tok[eq_pos + 1 :]
+
+            if flag_part in long_lookup:
+                f = long_lookup[flag_part]
+                if f.type is bool:
+                    raise _ParseError(
+                        f"flag '{flag_part}' is a boolean flag and does not take a value"
+                    )
+                cli_set[f.name] = value_part
+            elif flag_part in negation_lookup:
+                raise _ParseError(
+                    f"flag '{flag_part}' is a boolean negation and does not take a value"
+                )
+            else:
+                raise _ParseError(f"unknown flag '{flag_part}'")
+            i += 1
+            continue
+
+        # --no-flag negation
+        if tok in negation_lookup:
+            f = negation_lookup[tok]
+            cli_set[f.name] = False
+            i += 1
+            continue
+
+        # --flag (long form without =)
+        if tok.startswith("--"):
+            if tok in long_lookup:
+                f = long_lookup[tok]
+                if f.type is bool:
+                    cli_set[f.name] = True
+                    i += 1
+                else:
+                    # str flag: consume next token as value
+                    if i + 1 < len(tokens) and not tokens[i + 1].startswith("-"):
+                        cli_set[f.name] = tokens[i + 1]
+                        i += 2
+                    else:
+                        raise _ParseError(f"flag '{tok}' requires a value")
+            else:
+                raise _ParseError(f"unknown flag '{tok}'")
+            continue
+
+        # -x (short form)
+        if tok.startswith("-") and len(tok) == 2:
+            if tok in short_lookup:
+                f = short_lookup[tok]
+                if f.type is bool:
+                    cli_set[f.name] = True
+                    i += 1
+                else:
+                    # str flag: consume next token as value
+                    if i + 1 < len(tokens) and not tokens[i + 1].startswith("-"):
+                        cli_set[f.name] = tokens[i + 1]
+                        i += 2
+                    else:
+                        raise _ParseError(f"flag '{tok}' requires a value")
+            else:
+                raise _ParseError(f"unknown flag '{tok}'")
+            continue
+
+        # Unknown flag-like token
+        raise _ParseError(f"unknown flag '{tok}'")
+
+    # Step 4: resolve env vars for flags not set by CLI
+    for f in cmd.flags:
+        if f.name in cli_set:
+            continue
+        if f.env is not None:
+            env_val = os.environ.get(f.env)
+            if env_val is not None:
+                if f.type is bool:
+                    lower = env_val.lower()
+                    if lower in ("1", "true", "yes"):
+                        cli_set[f.name] = True
+                    elif lower in ("0", "false", "no"):
+                        cli_set[f.name] = False
+                    else:
+                        raise _ParseError(
+                            f"invalid boolean value {env_val!r} for env var "
+                            f"'{f.env}' (flag '--{f.name}')"
+                        )
+                else:
+                    cli_set[f.name] = env_val
+
+    # Step 5: apply defaults
+    for f in cmd.flags:
+        if f.name in cli_set:
+            continue
+        if f.type is bool:
+            # Bool flags always have a default (False unless overridden)
+            cli_set[f.name] = f.default
+        elif f.default is not None:
+            cli_set[f.name] = f.default
+        else:
+            # str flag with no default and no value: required
+            raise _ParseError(f"flag '--{f.name}' is required")
+
+    # Step 6: resolve positional args
+    arg_values: dict[str, str] = {}
+    for idx, a in enumerate(cmd.args):
+        if idx < len(positionals):
+            arg_values[a.name] = positionals[idx]
+        elif a.required:
+            raise _ParseError(f"missing required argument '{a.name}'")
+    if len(positionals) > len(cmd.args):
+        raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
+
+    # Step 7: build kwargs dict
+    kwargs: dict[str, object] = {}
+    for f in cmd.flags:
+        kwargs[_flag_param_name(f.name)] = cli_set[f.name]
+    for a in cmd.args:
+        if a.name in arg_values:
+            kwargs[a.name] = arg_values[a.name]
+
+    return cmd, kwargs
 
 
 def _flag_param_name(flag_name: str) -> str:
