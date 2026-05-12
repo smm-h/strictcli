@@ -6,7 +6,15 @@
   "scripts": {
     "postinstall": "node postinstall.js"
   },
-  "keywords": ["excli", "cli", "argparse", "command-line", "framework", "python"],
+  "keywords": [
+    "excli",
+    "cli",
+    "argparse",
+    "command-line",
+    "framework",
+    "python",
+    "rlsbl"
+  ],
   "author": "S. M. Hosseini <m.hosseini@veliu.com>",
   "license": "MIT",
   "repository": {
