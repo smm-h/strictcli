@@ -544,3 +544,122 @@ def arg(name: str, *, help: str, required: bool = True) -> Callable:
         return func
 
     return decorator
+
+
+# ---------------------------------------------------------------------------
+# Help text formatters
+# ---------------------------------------------------------------------------
+
+
+def _format_version(app: App) -> str:
+    """Format version string: '{name} {version}'."""
+    return f"{app.name} {app.version}"
+
+
+def _format_app_help(app: App) -> str:
+    """Format app-level help shown when the user runs 'myapp --help'."""
+    lines: list[str] = [f"{app.name} v{app.version} -- {app.help}"]
+
+    if app._commands:
+        lines.append("")
+        lines.append("Commands:")
+        names = list(app._commands.keys())
+        max_len = max(len(n) for n in names)
+        for name in names:
+            cmd = app._commands[name]
+            padding = max_len - len(name) + 4
+            lines.append(f"  {name}{' ' * padding}{cmd.help}")
+
+    if app._groups:
+        lines.append("")
+        lines.append("Groups:")
+        names = list(app._groups.keys())
+        max_len = max(len(n) for n in names)
+        for name in names:
+            grp = app._groups[name]
+            padding = max_len - len(name) + 4
+            lines.append(f"  {name}{' ' * padding}{grp.help}")
+
+    lines.append("")
+    lines.append(f"Use '{app.name} <command> --help' for more information.")
+
+    return "\n".join(lines)
+
+
+def _format_group_help(app: App, group: Group) -> str:
+    """Format group-level help shown when the user runs 'myapp group --help'."""
+    lines: list[str] = [f"{app.name} {group.name} -- {group.help}"]
+
+    if group.commands:
+        lines.append("")
+        lines.append("Commands:")
+        names = list(group.commands.keys())
+        max_len = max(len(n) for n in names)
+        for name in names:
+            cmd = group.commands[name]
+            padding = max_len - len(name) + 4
+            lines.append(f"  {name}{' ' * padding}{cmd.help}")
+
+    lines.append("")
+    lines.append(
+        f"Use '{app.name} {group.name} <command> --help' for more information."
+    )
+
+    return "\n".join(lines)
+
+
+def _build_flag_spec(f: Flag) -> str:
+    """Build the left-column spec string for a flag (e.g. '--target, -t <str>')."""
+    parts: list[str] = []
+    if f.type is bool and f.negatable:
+        parts.append(f"--{f.name}, --no-{f.name}")
+    else:
+        parts.append(f"--{f.name}")
+        if f.short:
+            parts.append(f"-{f.short}")
+    spec = ", ".join(parts)
+    if f.type is str:
+        spec += " <str>"
+    return spec
+
+
+def _build_flag_meta(f: Flag) -> str:
+    """Build the bracketed metadata suffix for a flag."""
+    meta_parts: list[str] = []
+    if f.env is not None:
+        meta_parts.append(f"env: {f.env}")
+    if f.type is bool:
+        meta_parts.append(f"default: {'true' if f.default else 'false'}")
+    elif f.default is not None:
+        meta_parts.append(f"default: {f.default}")
+    else:
+        meta_parts.append("required")
+    return " [" + "] [".join(meta_parts) + "]"
+
+
+def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
+    """Format command-level help shown when the user runs 'myapp cmd --help'."""
+    lines: list[str] = [f"{app.name} {prefix}{cmd.name} -- {cmd.help}"]
+
+    if cmd.args:
+        lines.append("")
+        lines.append("Arguments:")
+        max_len = max(len(a.name) for a in cmd.args)
+        for a in cmd.args:
+            padding = max_len - len(a.name) + 4
+            help_text = a.help
+            if not a.required:
+                help_text += " (optional)"
+            lines.append(f"  {a.name}{' ' * padding}{help_text}")
+
+    if cmd.flags:
+        lines.append("")
+        lines.append("Flags:")
+        specs = [_build_flag_spec(f) for f in cmd.flags]
+        max_spec = max(len(s) for s in specs)
+        for f, spec in zip(cmd.flags, specs):
+            padding = max_spec - len(spec) + 4
+            meta = _build_flag_meta(f)
+            lines.append(f"  {spec}{' ' * padding}{f.help}{meta}")
+
+    return "\n".join(lines)
