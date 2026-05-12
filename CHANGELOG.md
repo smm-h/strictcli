@@ -2,6 +2,10 @@
 
 ## 0.2.0
 
+- npm thin wrapper: `npm install excli` installs the Python package via uv/pip
+
+## 0.1.0
+
 - Decorator-based command registration with `@app.command` and `@excli.flag`/`@excli.arg`
 - Two-level command nesting via `app.group()` with `@group.command`
 - First-class environment variable support with prefix enforcement and `prefixed=False` opt-out
@@ -14,7 +18,3 @@
 - Handler signature validation at registration time
 - `app.run()` full lifecycle and `app.test(argv)` for testing
 - `--` separator to stop flag parsing
-
-## 0.1.0
-
-- Initial release (name claim)
