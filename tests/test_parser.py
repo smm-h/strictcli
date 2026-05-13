@@ -176,3 +176,23 @@ def test_required_str_flag_via_equals():
     r = app.test(["cmd", "--target=hello"])
     assert r.exit_code == 0
     assert "target=hello" in r.stdout
+
+
+def test_str_flag_value_starting_with_hyphen():
+    """Str flag accepts a value that starts with a hyphen (e.g. --offset -5)."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag("offset", short="o", type=str, help="the offset")
+    def cmd(offset):
+        print(f"offset={offset}")
+
+    # Long flag form
+    r = app.test(["cmd", "--offset", "-5"])
+    assert r.exit_code == 0
+    assert "offset=-5" in r.stdout
+
+    # Short flag form
+    r = app.test(["cmd", "-o", "-5"])
+    assert r.exit_code == 0
+    assert "offset=-5" in r.stdout
