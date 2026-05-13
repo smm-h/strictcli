@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Fix: str flag values starting with hyphen (e.g. `--offset -5`) no longer rejected
+
 ## 0.1.0
 
 - Decorator-based command registration with `@app.command` and `@strictcli.flag`/`@strictcli.arg`
