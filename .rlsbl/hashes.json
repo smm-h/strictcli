@@ -1,5 +1,5 @@
 {
-  ".github/workflows/ci.yml": "d71e558f1bfd93b43a783054577698da34c3e45455c6039686e06a7449b2bf1b",
+  ".github/workflows/ci.yml": "d1da13d13914be16b2ecafe67afc62d611dc8dcc4ebc9db2befd84c2d6296ab2",
   ".github/workflows/publish.yml": "5f4ac1bf0bdd4c70041e3d2502efaae28d29eca7575e8ff12fdaad0d3af5b17a",
   "CHANGELOG.md": "7a6ec46141007c18090a0ff325e2dd68cd51588c4e0b5af7b580365e5eaaca85",
   ".gitignore": "c89d76c6c43e7f0897b3472a15b7c0103e0be5b3a04c2b44e585fa48bdcda2bb",
