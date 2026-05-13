@@ -1,12 +1,9 @@
 # Changelog
 
-## 0.2.0
-
-- npm thin wrapper: `npm install strictcli` installs the Python package via uv/pip
-
 ## 0.1.0
 
 - Decorator-based command registration with `@app.command` and `@strictcli.flag`/`@strictcli.arg`
+- npm thin wrapper: `npm install strictcli` installs the Python package via uv/pip
 - Two-level command nesting via `app.group()` with `@group.command`
 - First-class environment variable support with prefix enforcement and `prefixed=False` opt-out
 - Tags: reusable flag bundles applied to commands
