@@ -1,11 +1,11 @@
 """Tests for two-level nesting (groups with subcommands)."""
 
-import excli
+import strictcli
 
 
 def _make_group_app():
     """Helper: app with a group containing subcommands."""
-    app = excli.App(name="myapp", version="1.0.0", help="test app")
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
     grp = app.group("config", help="manage configuration")
 
     @grp.command("show", help="display current config")
@@ -13,8 +13,8 @@ def _make_group_app():
         print("showing config")
 
     @grp.command("set", help="set a config value")
-    @excli.flag("key", type=str, help="config key")
-    @excli.flag("value", type=str, help="config value")
+    @strictcli.flag("key", type=str, help="config key")
+    @strictcli.flag("value", type=str, help="config value")
     def set_(key, value):
         print(f"set {key}={value}")
 
@@ -32,9 +32,9 @@ def test_group_command_dispatch():
 def test_group_command_with_flags():
     """Group subcommand with flags works."""
     app = _make_group_app()
-    r = app.test(["config", "set", "--key", "name", "--value", "excli"])
+    r = app.test(["config", "set", "--key", "name", "--value", "strictcli"])
     assert r.exit_code == 0
-    assert "set name=excli" in r.stdout
+    assert "set name=strictcli" in r.stdout
 
 
 def test_unknown_group_subcommand():

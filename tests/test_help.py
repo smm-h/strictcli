@@ -1,23 +1,23 @@
 """Tests for help output formatting."""
 
-import excli
+import strictcli
 
 
 def _make_full_app():
     """Helper: app with commands, a group, and flags."""
-    app = excli.App(name="myapp", version="2.0.0", help="a great app")
+    app = strictcli.App(name="myapp", version="2.0.0", help="a great app")
 
     @app.command("init", help="initialize the project")
-    @excli.flag("force", type=bool, help="overwrite existing files")
+    @strictcli.flag("force", type=bool, help="overwrite existing files")
     def init(force):
         pass
 
     @app.command(
         "build",
         help="build the project",
-        args=[excli.Arg(name="target", help="build target")],
+        args=[strictcli.Arg(name="target", help="build target")],
     )
-    @excli.flag("output", short="o", type=str, help="output directory", default="dist")
+    @strictcli.flag("output", short="o", type=str, help="output directory", default="dist")
     def build(target, output):
         pass
 
@@ -28,7 +28,7 @@ def _make_full_app():
         pass
 
     @grp.command("set", help="set a config value")
-    @excli.flag("key", type=str, help="config key")
+    @strictcli.flag("key", type=str, help="config key")
     def set_(key):
         pass
 
@@ -49,7 +49,7 @@ def test_app_level_help_shows_commands_and_groups():
 
 def test_app_level_help_skips_empty_sections():
     """App-level help skips empty sections when no commands or groups."""
-    app = excli.App(name="empty", version="0.0.1", help="empty app")
+    app = strictcli.App(name="empty", version="0.0.1", help="empty app")
 
     @app.command("only", help="the only command")
     def only():

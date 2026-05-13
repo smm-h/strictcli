@@ -1,15 +1,15 @@
 """Tests for the tag system."""
 
-import excli
+import strictcli
 
 
 def test_tag_with_single_flag():
     """Tag with single flag applied to command."""
-    verbose_tag = excli.Tag(
+    verbose_tag = strictcli.Tag(
         name="verbose",
-        flags=[excli.Flag(name="verbose", type=bool, help="verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
     )
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", tags=[verbose_tag])
     def cmd(verbose):
@@ -22,14 +22,14 @@ def test_tag_with_single_flag():
 
 def test_tag_with_multiple_flags():
     """Tag with multiple flags applied to command."""
-    output_tag = excli.Tag(
+    output_tag = strictcli.Tag(
         name="output",
         flags=[
-            excli.Flag(name="format", type=str, help="output format", default="text"),
-            excli.Flag(name="color", type=bool, help="use color"),
+            strictcli.Flag(name="format", type=str, help="output format", default="text"),
+            strictcli.Flag(name="color", type=bool, help="use color"),
         ],
     )
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", tags=[output_tag])
     def cmd(format, color):
@@ -43,11 +43,11 @@ def test_tag_with_multiple_flags():
 
 def test_tag_flags_in_command_flags():
     """Tag flags appear in command's flags list."""
-    tag = excli.Tag(
+    tag = strictcli.Tag(
         name="debug",
-        flags=[excli.Flag(name="debug", type=bool, help="enable debug mode")],
+        flags=[strictcli.Flag(name="debug", type=bool, help="enable debug mode")],
     )
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", tags=[tag])
     def cmd(debug):
@@ -59,11 +59,11 @@ def test_tag_flags_in_command_flags():
 
 def test_tag_flags_in_help():
     """Tag flags shown in help output."""
-    tag = excli.Tag(
+    tag = strictcli.Tag(
         name="debug",
-        flags=[excli.Flag(name="debug", type=bool, help="enable debug mode")],
+        flags=[strictcli.Flag(name="debug", type=bool, help="enable debug mode")],
     )
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", tags=[tag])
     def cmd(debug):
@@ -77,14 +77,14 @@ def test_tag_flags_in_help():
 
 def test_tag_flag_values_parsed():
     """Tag flag values parsed correctly through the full pipeline."""
-    auth_tag = excli.Tag(
+    auth_tag = strictcli.Tag(
         name="auth",
         flags=[
-            excli.Flag(name="token", type=str, help="auth token", default="none"),
-            excli.Flag(name="insecure", type=bool, help="skip TLS verification"),
+            strictcli.Flag(name="token", type=str, help="auth token", default="none"),
+            strictcli.Flag(name="insecure", type=bool, help="skip TLS verification"),
         ],
     )
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("deploy", help="deploy the app", tags=[auth_tag])
     def deploy(token, insecure):

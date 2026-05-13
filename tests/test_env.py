@@ -1,6 +1,6 @@
 """Tests for environment variable support."""
 
-import excli
+import strictcli
 
 
 def _make_env_app(prefixed=True):
@@ -9,10 +9,10 @@ def _make_env_app(prefixed=True):
     env_name = "MYAPP_TARGET" if prefixed else "SPECIAL"
     flag_prefixed = prefixed
 
-    app = excli.App(name="test", version="1.0.0", help="test app", env_prefix=prefix)
+    app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix=prefix)
 
     @app.command("cmd", help="a command")
-    @excli.flag(
+    @strictcli.flag(
         "target",
         type=str,
         help="the target",
@@ -46,10 +46,10 @@ def test_cli_overrides_env(monkeypatch):
 
 def _make_bool_env_app():
     """Helper: app with a bool flag backed by an env var."""
-    app = excli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
+    app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
     @app.command("cmd", help="a command")
-    @excli.flag("verbose", type=bool, help="be verbose", env="MYAPP_VERBOSE")
+    @strictcli.flag("verbose", type=bool, help="be verbose", env="MYAPP_VERBOSE")
     def cmd(verbose):
         print(f"verbose={verbose}")
 

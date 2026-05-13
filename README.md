@@ -1,19 +1,19 @@
-# excli
+# strictcli
 
-An explicit, zero-dependency CLI framework for Python.
+A strict, zero-dependency CLI framework for Python.
 
-excli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework errors at registration time. Types are `str` and `bool` only; there is no magic type inference. Environment variables are first-class, with prefix enforcement to keep your config namespace clean.
+strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework errors at registration time. Types are `str` and `bool` only; there is no magic type inference. Environment variables are first-class, with prefix enforcement to keep your config namespace clean.
 
 ## Installation
 
 ```
-uv add excli
+uv add strictcli
 ```
 
 Or:
 
 ```
-pip install excli
+pip install strictcli
 ```
 
 Requires Python 3.11+.
@@ -22,12 +22,12 @@ Requires Python 3.11+.
 
 ```python
 # greet.py
-import excli
+import strictcli
 
-app = excli.App(name="greet", version="0.1.0", help="a friendly greeter")
+app = strictcli.App(name="greet", version="0.1.0", help="a friendly greeter")
 
-@app.command("hello", help="say hello", args=[excli.Arg(name="name", help="who to greet")])
-@excli.flag("loud", short="l", type=bool, help="shout the greeting")
+@app.command("hello", help="say hello", args=[strictcli.Arg(name="name", help="who to greet")])
+@strictcli.flag("loud", short="l", type=bool, help="shout the greeting")
 def hello(name, loud):
     msg = f"Hello, {name}!"
     if loud:
@@ -59,7 +59,7 @@ Flags:
 Register top-level commands with `@app.command`:
 
 ```python
-app = excli.App(name="myapp", version="1.0.0", help="manage deployments")
+app = strictcli.App(name="myapp", version="1.0.0", help="manage deployments")
 
 @app.command("status", help="show current status")
 def status():
@@ -72,7 +72,7 @@ Create groups for two-level nesting with `app.group`:
 db = app.group("db", help="manage databases")
 
 @db.command("migrate", help="run database migrations")
-@excli.flag("dry-run", type=bool, help="preview without applying")
+@strictcli.flag("dry-run", type=bool, help="preview without applying")
 def migrate(dry_run):
     if dry_run:
         print("would run migrations")
@@ -80,7 +80,7 @@ def migrate(dry_run):
         print("running migrations")
 
 @db.command("seed", help="populate with sample data")
-@excli.flag("count", type=str, help="number of records", default="100")
+@strictcli.flag("count", type=str, help="number of records", default="100")
 def seed(count):
     print(f"seeding {count} records")
 ```
@@ -95,13 +95,13 @@ seeding 500 records
 
 ## Flags
 
-Declare flags with the `@excli.flag` decorator. Every flag must have `help` text.
+Declare flags with the `@strictcli.flag` decorator. Every flag must have `help` text.
 
 ### String flags
 
 ```python
 @app.command("build", help="build the project")
-@excli.flag("output", short="o", type=str, help="output directory", default="dist")
+@strictcli.flag("output", short="o", type=str, help="output directory", default="dist")
 def build(output):
     print(f"building to {output}")
 ```
@@ -112,7 +112,7 @@ String flags accept values via `--output dist` or `--output=dist`. A string flag
 
 ```python
 @app.command("deploy", help="deploy the app")
-@excli.flag("force", short="f", type=bool, help="skip confirmation")
+@strictcli.flag("force", short="f", type=bool, help="skip confirmation")
 def deploy(force):
     if force:
         print("deploying without confirmation")
@@ -125,7 +125,7 @@ Bool flags default to `False`. Pass `--force` to set `True`, or `--no-force` to 
 Any flag can have a one-character short alias:
 
 ```python
-@excli.flag("verbose", short="v", type=bool, help="verbose output")
+@strictcli.flag("verbose", short="v", type=bool, help="verbose output")
 ```
 
 This allows both `--verbose` and `-v`.
@@ -138,24 +138,24 @@ This allows both `--verbose` and `-v`.
 
 ## Arguments
 
-Positional arguments are declared with `excli.Arg`. There are two equivalent forms.
+Positional arguments are declared with `strictcli.Arg`. There are two equivalent forms.
 
 Using the `args=` parameter:
 
 ```python
 @app.command("copy", help="copy files", args=[
-    excli.Arg(name="src", help="source path"),
-    excli.Arg(name="dst", help="destination path"),
+    strictcli.Arg(name="src", help="source path"),
+    strictcli.Arg(name="dst", help="destination path"),
 ])
 def copy(src, dst):
     print(f"copying {src} to {dst}")
 ```
 
-Using the `@excli.arg` decorator:
+Using the `@strictcli.arg` decorator:
 
 ```python
 @app.command("show", help="show a file")
-@excli.arg("path", help="file to show")
+@strictcli.arg("path", help="file to show")
 def show(path):
     print(f"showing {path}")
 ```
@@ -171,10 +171,10 @@ $ myapp cmd -- --not-a-flag
 Flags can be backed by environment variables with the `env` parameter:
 
 ```python
-app = excli.App(name="myapp", version="1.0.0", help="my app", env_prefix="MYAPP")
+app = strictcli.App(name="myapp", version="1.0.0", help="my app", env_prefix="MYAPP")
 
 @app.command("deploy", help="deploy the app")
-@excli.flag("region", type=str, help="cloud region", env="MYAPP_REGION", default="us-east-1")
+@strictcli.flag("region", type=str, help="cloud region", env="MYAPP_REGION", default="us-east-1")
 def deploy(region):
     print(f"deploying to {region}")
 ```
@@ -185,7 +185,7 @@ When `env_prefix` is set on the App, all env vars must start with that prefix. T
 
 ```python
 # This raises ValueError: env var 'REGION' must start with 'MYAPP_'
-@excli.flag("region", type=str, help="region", env="REGION", default="x")
+@strictcli.flag("region", type=str, help="region", env="REGION", default="x")
 ```
 
 ### External env vars
@@ -193,7 +193,7 @@ When `env_prefix` is set on the App, all env vars must start with that prefix. T
 Use `prefixed=False` for env vars outside your app's namespace:
 
 ```python
-@excli.flag("token", type=str, help="auth token", env="GITHUB_TOKEN", prefixed=False, default="")
+@strictcli.flag("token", type=str, help="auth token", env="GITHUB_TOKEN", prefixed=False, default="")
 ```
 
 ### Priority
@@ -209,11 +209,11 @@ Bool flags from env vars accept `1`, `true`, `yes` (case-insensitive) for `True`
 Tags are reusable bundles of flags that can be applied to multiple commands:
 
 ```python
-auth_tag = excli.Tag(
+auth_tag = strictcli.Tag(
     name="auth",
     flags=[
-        excli.Flag(name="token", type=str, help="auth token", env="MYAPP_TOKEN", default=""),
-        excli.Flag(name="insecure", type=bool, help="skip TLS verification"),
+        strictcli.Flag(name="token", type=str, help="auth token", env="MYAPP_TOKEN", default=""),
+        strictcli.Flag(name="insecure", type=bool, help="skip TLS verification"),
     ],
 )
 
@@ -287,9 +287,9 @@ assert result.stderr == ""
 
 The `Result` dataclass has three fields: `stdout`, `stderr`, and `exit_code`.
 
-## Explicit by Design
+## Strict by Design
 
-excli is opinionated about explicitness:
+strictcli is opinionated about strictness:
 
 - **Help is mandatory.** Every command, flag, and argument must have help text. Missing help raises `ValueError` at registration time, not at runtime.
 - **Only str and bool.** No int, float, or list types. Parse them yourself in the handler -- it is one line of code and makes the conversion visible.

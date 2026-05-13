@@ -1,4 +1,4 @@
-# excli
+# strictcli
 
 ## Release workflow
 

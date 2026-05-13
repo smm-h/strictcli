@@ -1,14 +1,14 @@
 """Tests for argument parsing."""
 
-import excli
+import strictcli
 
 
 def _make_app_with_str_flag(**flag_kwargs):
     """Helper: app with a single command that has one str flag."""
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @excli.flag("target", type=str, help="the target", **flag_kwargs)
+    @strictcli.flag("target", type=str, help="the target", **flag_kwargs)
     def cmd(target):
         print(f"target={target}")
 
@@ -17,10 +17,10 @@ def _make_app_with_str_flag(**flag_kwargs):
 
 def _make_app_with_bool_flag():
     """Helper: app with a single command that has one bool flag."""
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @excli.flag("verbose", type=bool, help="be verbose")
+    @strictcli.flag("verbose", type=bool, help="be verbose")
     def cmd(verbose):
         print(f"verbose={verbose}")
 
@@ -69,10 +69,10 @@ def test_no_flag_negation():
 
 def test_short_flag_bool():
     """Short flag -x for a bool flag."""
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @excli.flag("verbose", short="v", type=bool, help="be verbose")
+    @strictcli.flag("verbose", short="v", type=bool, help="be verbose")
     def cmd(verbose):
         print(f"verbose={verbose}")
 
@@ -83,10 +83,10 @@ def test_short_flag_bool():
 
 def test_short_flag_with_value():
     """Short flag -x value for a str flag."""
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @excli.flag("target", short="t", type=str, help="the target")
+    @strictcli.flag("target", short="t", type=str, help="the target")
     def cmd(target):
         print(f"target={target}")
 
@@ -113,10 +113,10 @@ def test_missing_required_str_flag():
 
 def test_double_dash_separator():
     """-- separator stops flag parsing; remaining tokens become positional."""
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", args=[excli.Arg(name="path", help="a path")])
-    @excli.flag("verbose", type=bool, help="be verbose")
+    @app.command("cmd", help="a command", args=[strictcli.Arg(name="path", help="a path")])
+    @strictcli.flag("verbose", type=bool, help="be verbose")
     def cmd(verbose, path):
         print(f"verbose={verbose} path={path}")
 
@@ -128,12 +128,12 @@ def test_double_dash_separator():
 
 def test_positional_args_in_order():
     """Positional args matched in order."""
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
         "cmd",
         help="a command",
-        args=[excli.Arg(name="src", help="source"), excli.Arg(name="dst", help="dest")],
+        args=[strictcli.Arg(name="src", help="source"), strictcli.Arg(name="dst", help="dest")],
     )
     def cmd(src, dst):
         print(f"src={src} dst={dst}")
@@ -146,9 +146,9 @@ def test_positional_args_in_order():
 
 def test_missing_required_positional_arg():
     """Missing required positional arg raises error."""
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", args=[excli.Arg(name="path", help="a path")])
+    @app.command("cmd", help="a command", args=[strictcli.Arg(name="path", help="a path")])
     def cmd(path):
         pass
 
@@ -159,7 +159,7 @@ def test_missing_required_positional_arg():
 
 def test_extra_positional_arg():
     """Extra positional arg raises error."""
-    app = excli.App(name="test", version="1.0.0", help="test app")
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
     def cmd():

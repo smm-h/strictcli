@@ -1,14 +1,14 @@
 """End-to-end tests with a realistic rlsbl-like app."""
 
-import excli
+import strictcli
 
 
 def _build_rlsbl_app():
     """Build a mini rlsbl-like CLI app with commands, groups, tags, and env vars."""
-    auth_tag = excli.Tag(
+    auth_tag = strictcli.Tag(
         name="auth",
         flags=[
-            excli.Flag(
+            strictcli.Flag(
                 name="token",
                 type=str,
                 help="GitHub auth token",
@@ -18,7 +18,7 @@ def _build_rlsbl_app():
         ],
     )
 
-    app = excli.App(
+    app = strictcli.App(
         name="rlsbl",
         version="3.1.0",
         help="release orchestration tool",
@@ -33,11 +33,11 @@ def _build_rlsbl_app():
     @app.command(
         "release",
         help="create a new release",
-        args=[excli.Arg(name="bump", help="version bump type")],
+        args=[strictcli.Arg(name="bump", help="version bump type")],
         tags=[auth_tag],
     )
-    @excli.flag("dry-run", type=bool, help="preview without making changes")
-    @excli.flag("yes", type=bool, help="non-interactive mode")
+    @strictcli.flag("dry-run", type=bool, help="preview without making changes")
+    @strictcli.flag("yes", type=bool, help="non-interactive mode")
     def release(bump, token, dry_run, yes):
         parts = [f"releasing {bump}"]
         if dry_run:
@@ -51,7 +51,7 @@ def _build_rlsbl_app():
     @app.command(
         "watch",
         help="monitor CI for a commit",
-        args=[excli.Arg(name="sha", help="commit SHA")],
+        args=[strictcli.Arg(name="sha", help="commit SHA")],
     )
     def watch(sha):
         print(f"watching {sha}")
@@ -60,13 +60,13 @@ def _build_rlsbl_app():
     config = app.group("config", help="manage rlsbl configuration")
 
     @config.command("show", help="display current config")
-    @excli.flag("format", type=str, help="output format", default="text", env="RLSBL_FORMAT")
+    @strictcli.flag("format", type=str, help="output format", default="text", env="RLSBL_FORMAT")
     def config_show(format):
         print(f"config format={format}")
 
     @config.command("set", help="set a config value")
-    @excli.flag("key", type=str, help="config key")
-    @excli.flag("value", type=str, help="config value")
+    @strictcli.flag("key", type=str, help="config key")
+    @strictcli.flag("value", type=str, help="config value")
     def config_set(key, value):
         print(f"config {key}={value}")
 
