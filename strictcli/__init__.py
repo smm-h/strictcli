@@ -373,7 +373,7 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                     i += 1
                 else:
                     # str flag: consume next token as value
-                    if i + 1 < len(tokens) and not tokens[i + 1].startswith("-"):
+                    if i + 1 < len(tokens):
                         cli_set[f.name] = tokens[i + 1]
                         i += 2
                     else:
@@ -391,7 +391,7 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                     i += 1
                 else:
                     # str flag: consume next token as value
-                    if i + 1 < len(tokens) and not tokens[i + 1].startswith("-"):
+                    if i + 1 < len(tokens):
                         cli_set[f.name] = tokens[i + 1]
                         i += 2
                     else:
