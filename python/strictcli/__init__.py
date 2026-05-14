@@ -166,6 +166,7 @@ class Group:
     help: str
     commands: dict[str, Command] = field(default_factory=dict)
     env_prefix: str | None = None
+    _global_flags: list[Flag] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
@@ -185,6 +186,7 @@ class Group:
             cmd = _build_and_validate_command(
                 name, help=help, handler=func, args=args, tags=tags, mutex=mutex,
                 env_prefix=self.env_prefix,
+                global_flags=self._global_flags,
             )
             self.commands[name] = cmd
             return func
@@ -209,11 +211,13 @@ class App:
     version: str
     help: str
     env_prefix: str | None = None
+    flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
     _groups: dict[str, Group] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "App")
+        self._global_flags: list[Flag] = list(self.flags)
 
     def command(
         self,
@@ -235,6 +239,7 @@ class App:
                 tags=tags,
                 mutex=mutex,
                 env_prefix=self.env_prefix,
+                global_flags=self._global_flags,
             )
             self._commands[name] = cmd
             return func
@@ -243,7 +248,8 @@ class App:
 
     def group(self, name: str, *, help: str) -> Group:
         """Create and register a command group."""
-        grp = Group(name=name, help=help, env_prefix=self.env_prefix)
+        grp = Group(name=name, help=help, env_prefix=self.env_prefix,
+                     _global_flags=self._global_flags)
         self._groups[name] = grp
         return grp
 
@@ -256,9 +262,19 @@ class App:
         if argv == ["--version"] or argv == ["-v"]:
             raise _VersionRequested()
 
+        # Step 1.5: parse global flags before command routing
+        global_values, remaining = self._parse_global_flags(argv)
+
         # Step 2: route to command or group
-        token = argv[0]
-        rest = argv[1:]
+        # If global flag parsing stopped at --, strip it before routing
+        if remaining and remaining[0] == "--":
+            remaining = remaining[1:]
+
+        if not remaining or remaining == ["--help"] or remaining == ["-h"]:
+            raise _HelpRequested(target=self)
+
+        token = remaining[0]
+        rest = remaining[1:]
 
         if token in self._groups:
             group = self._groups[token]
@@ -279,7 +295,184 @@ class App:
             raise _HelpRequested(target=cmd)
 
         # Step 3: parse remaining tokens for the resolved command
-        return _parse_command(cmd, rest)
+        cmd, kwargs = _parse_command(cmd, rest)
+
+        # Step 4: merge global flag values into kwargs
+        for gf in self._global_flags:
+            kwargs[_flag_param_name(gf.name)] = global_values[gf.name]
+
+        return cmd, kwargs
+
+    def _parse_global_flags(
+        self, argv: list[str]
+    ) -> tuple[dict[str, object], list[str]]:
+        """Parse global flags from argv, returning (global_values, remaining_tokens).
+
+        Scans tokens from left to right. Global flags are consumed; the first
+        non-global-flag token (the command name) and everything after it are
+        returned as remaining tokens. A bare ``--`` stops global flag parsing
+        and is included in the remaining tokens.
+        """
+        if not self._global_flags:
+            return {}, argv
+
+        # Build lookup tables
+        long_lookup: dict[str, Flag] = {}
+        short_lookup: dict[str, Flag] = {}
+        negation_lookup: dict[str, Flag] = {}
+
+        for f in self._global_flags:
+            long_lookup[f"--{f.name}"] = f
+            if f.short:
+                short_lookup[f"-{f.short}"] = f
+            if f.type is bool and f.negatable:
+                negation_lookup[f"--no-{f.name}"] = f
+
+        cli_set: dict[str, object] = {}
+        remaining: list[str] = []
+        i = 0
+
+        while i < len(argv):
+            tok = argv[i]
+
+            # -- stops global flag parsing; include it in remaining
+            if tok == "--":
+                remaining = argv[i:]
+                break
+
+            # --flag=value form
+            if tok.startswith("--") and "=" in tok:
+                eq_pos = tok.index("=")
+                flag_part = tok[:eq_pos]
+                value_part = tok[eq_pos + 1:]
+
+                if flag_part in long_lookup:
+                    f = long_lookup[flag_part]
+                    if f.type is bool:
+                        raise _ParseError(
+                            f"flag '{flag_part}' is a boolean flag and does not take a value"
+                        )
+                    if f.type is int:
+                        try:
+                            cli_set[f.name] = int(value_part)
+                        except ValueError:
+                            raise _ParseError(
+                                f"--{f.name}: expected integer, got {value_part!r}"
+                            )
+                    else:
+                        cli_set[f.name] = value_part
+                    i += 1
+                    continue
+                elif flag_part in negation_lookup:
+                    raise _ParseError(
+                        f"flag '{flag_part}' is a boolean negation and does not take a value"
+                    )
+                else:
+                    # Not a global flag -- this is the command name region
+                    remaining = argv[i:]
+                    break
+
+            # --no-flag negation
+            if tok in negation_lookup:
+                f = negation_lookup[tok]
+                cli_set[f.name] = False
+                i += 1
+                continue
+
+            # --flag (long form)
+            if tok.startswith("--") and tok in long_lookup:
+                f = long_lookup[tok]
+                if f.type is bool:
+                    cli_set[f.name] = True
+                    i += 1
+                else:
+                    if i + 1 < len(argv):
+                        raw = argv[i + 1]
+                        if f.type is int:
+                            try:
+                                cli_set[f.name] = int(raw)
+                            except ValueError:
+                                raise _ParseError(
+                                    f"--{f.name}: expected integer, got {raw!r}"
+                                )
+                        else:
+                            cli_set[f.name] = raw
+                        i += 2
+                    else:
+                        raise _ParseError(f"flag '{tok}' requires a value")
+                continue
+
+            # -x (short form)
+            if tok.startswith("-") and len(tok) == 2 and tok in short_lookup:
+                f = short_lookup[tok]
+                if f.type is bool:
+                    cli_set[f.name] = True
+                    i += 1
+                else:
+                    if i + 1 < len(argv):
+                        raw = argv[i + 1]
+                        if f.type is int:
+                            try:
+                                cli_set[f.name] = int(raw)
+                            except ValueError:
+                                raise _ParseError(
+                                    f"--{f.name}: expected integer, got {raw!r}"
+                                )
+                        else:
+                            cli_set[f.name] = raw
+                        i += 2
+                    else:
+                        raise _ParseError(f"flag '{tok}' requires a value")
+                continue
+
+            # Not a global flag -- this is the command name or unknown token
+            remaining = argv[i:]
+            break
+        else:
+            # Loop completed without break -- all tokens consumed
+            remaining = []
+
+        # Resolve env vars for global flags not set by CLI
+        for f in self._global_flags:
+            if f.name in cli_set:
+                continue
+            if f.env is not None:
+                env_val = os.environ.get(f.env)
+                if env_val is not None:
+                    if f.type is bool:
+                        lower = env_val.lower()
+                        if lower in ("1", "true", "yes"):
+                            cli_set[f.name] = True
+                        elif lower in ("0", "false", "no"):
+                            cli_set[f.name] = False
+                        else:
+                            raise _ParseError(
+                                f"invalid boolean value {env_val!r} for env var "
+                                f"'{f.env}' (flag '--{f.name}')"
+                            )
+                    elif f.type is int:
+                        try:
+                            cli_set[f.name] = int(env_val)
+                        except ValueError:
+                            raise _ParseError(
+                                f"--{f.name}: expected integer, got {env_val!r} "
+                                f"(from env var '{f.env}')"
+                            )
+                    else:
+                        cli_set[f.name] = env_val
+
+        # Apply defaults for global flags not set by CLI or env
+        for f in self._global_flags:
+            if f.name in cli_set:
+                continue
+            if f.type is bool:
+                cli_set[f.name] = f.default
+            elif f.default is not None:
+                cli_set[f.name] = f.default
+            else:
+                raise _ParseError(f"flag '--{f.name}' is required")
+
+        return cli_set, remaining
 
     def _find_command_prefix(self, cmd: Command) -> str:
         """Find the group prefix for a command (for help formatting)."""
@@ -622,6 +815,7 @@ def _build_and_validate_command(
     tags: list[Tag] | None,
     mutex: list[MutexGroup] | None,
     env_prefix: str | None,
+    global_flags: list[Flag] | None = None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
@@ -675,6 +869,15 @@ def _build_and_validate_command(
             raise ValueError(f"command {name!r}: duplicate flag name {f.name!r}")
         seen_flag_names.add(f.name)
 
+    # Validate: no collision with global flags
+    if global_flags:
+        global_flag_names = {gf.name for gf in global_flags}
+        for f in all_flags:
+            if f.name in global_flag_names:
+                raise ValueError(
+                    f"command {name!r}: flag {f.name!r} collides with a global flag"
+                )
+
     # Validate: no duplicate arg names
     seen_arg_names: set[str] = set()
     for a in all_args:
@@ -709,6 +912,10 @@ def _build_and_validate_command(
         expected_names.add(_flag_param_name(f.name))
     for a in all_args:
         expected_names.add(a.name)
+    # Global flags are also passed to handlers
+    if global_flags:
+        for gf in global_flags:
+            expected_names.add(_flag_param_name(gf.name))
 
     # Check each flag has a matching parameter
     for f in all_flags:
@@ -946,6 +1153,17 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
         specs = [_build_flag_spec(f) for f in mg.flags]
         max_spec = max(len(s) for s in specs)
         for f, spec in zip(mg.flags, specs):
+            padding = max_spec - len(spec) + 4
+            meta = _build_flag_meta(f)
+            lines.append(f"  {spec}{' ' * padding}{f.help}{meta}")
+
+    # Global flags
+    if app._global_flags:
+        lines.append("")
+        lines.append("Global flags:")
+        specs = [_build_flag_spec(f) for f in app._global_flags]
+        max_spec = max(len(s) for s in specs)
+        for f, spec in zip(app._global_flags, specs):
             padding = max_spec - len(spec) + 4
             meta = _build_flag_meta(f)
             lines.append(f"  {spec}{' ' * padding}{f.help}{meta}")
