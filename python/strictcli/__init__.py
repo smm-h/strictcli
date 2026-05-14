@@ -59,11 +59,15 @@ class Flag:
     negatable: bool = True
     choices: list | None = None
     validate: Callable | None = None
+    repeatable: bool = False
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
         if self.type not in (str, bool, int):
             raise ValueError(f"Flag.type must be str, bool, or int, got {self.type!r}")
+        # Validate repeatable
+        if self.repeatable and self.type is bool:
+            raise ValueError(f"Flag {self.name!r}: repeatable is incompatible with type=bool")
         # Validate choices
         if self.choices is not None:
             if self.type is bool:
@@ -77,14 +81,16 @@ class Flag:
                     )
         # Validate default type for int flags
         if self.type is int and not isinstance(self.default, _MissingSentinel) and self.default is not None:
-            if not isinstance(self.default, int):
+            if not self.repeatable and not isinstance(self.default, int):
                 raise ValueError(
                     f"Flag {self.name!r}: type=int requires an int default, "
                     f"got {type(self.default).__name__!r}"
                 )
         # Resolve _MISSING sentinels based on type
         if isinstance(self.default, _MissingSentinel):
-            if self.type is bool:
+            if self.repeatable:
+                self.default = []
+            elif self.type is bool:
                 self.default = False
             else:
                 # str/int with _MISSING default means required (no default)
@@ -93,7 +99,7 @@ class Flag:
             self.default = False
         # Validate default is in choices (after sentinel resolution)
         if self.choices is not None and self.default is not None:
-            if self.default not in self.choices:
+            if not self.repeatable and self.default not in self.choices:
                 raise ValueError(
                     f"Flag {self.name!r}: default {self.default!r} is not in choices "
                     f"{self.choices!r}"
@@ -346,6 +352,15 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
     cli_set: dict[str, object] = {}  # flag.name -> value
     positionals: list[str] = []
 
+    def _store_value(f: Flag, value: object) -> None:
+        """Store a parsed value, appending to a list for repeatable flags."""
+        if f.repeatable:
+            if f.name not in cli_set:
+                cli_set[f.name] = []
+            cli_set[f.name].append(value)
+        else:
+            cli_set[f.name] = value
+
     i = 0
     stop_flags = False  # set when -- is encountered
 
@@ -376,11 +391,11 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                     )
                 if f.type is int:
                     try:
-                        cli_set[f.name] = int(value_part)
+                        _store_value(f, int(value_part))
                     except ValueError:
                         raise _ParseError(f"--{f.name}: expected integer, got {value_part!r}")
                 else:
-                    cli_set[f.name] = value_part
+                    _store_value(f, value_part)
             elif flag_part in negation_lookup:
                 raise _ParseError(
                     f"flag '{flag_part}' is a boolean negation and does not take a value"
@@ -410,11 +425,11 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                         raw = tokens[i + 1]
                         if f.type is int:
                             try:
-                                cli_set[f.name] = int(raw)
+                                _store_value(f, int(raw))
                             except ValueError:
                                 raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
                         else:
-                            cli_set[f.name] = raw
+                            _store_value(f, raw)
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -435,11 +450,11 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                         raw = tokens[i + 1]
                         if f.type is int:
                             try:
-                                cli_set[f.name] = int(raw)
+                                _store_value(f, int(raw))
                             except ValueError:
                                 raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
                         else:
-                            cli_set[f.name] = raw
+                            _store_value(f, raw)
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -470,20 +485,24 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                         )
                 elif f.type is int:
                     try:
-                        cli_set[f.name] = int(env_val)
+                        coerced = int(env_val)
                     except ValueError:
                         raise _ParseError(
                             f"--{f.name}: expected integer, got {env_val!r} "
                             f"(from env var '{f.env}')"
                         )
+                    cli_set[f.name] = [coerced] if f.repeatable else coerced
                 else:
-                    cli_set[f.name] = env_val
+                    cli_set[f.name] = [env_val] if f.repeatable else env_val
 
     # Step 5: apply defaults
     for f in cmd.flags:
         if f.name in cli_set:
             continue
-        if f.type is bool:
+        if f.repeatable:
+            # Repeatable flags default to [] (never required)
+            cli_set[f.name] = list(f.default) if f.default else []
+        elif f.type is bool:
             # Bool flags always have a default (False unless overridden)
             cli_set[f.name] = f.default
         elif f.default is not None:
@@ -495,20 +514,35 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
     # Step 5.5: validate choices
     for f in cmd.flags:
         if f.choices is not None and f.name in cli_set:
-            val = cli_set[f.name]
-            if val not in f.choices:
-                choices_str = ", ".join(str(c) for c in f.choices)
-                raise _ParseError(
-                    f"--{f.name}: invalid value {val!r}, must be one of: {choices_str}"
-                )
+            if f.repeatable:
+                for val in cli_set[f.name]:
+                    if val not in f.choices:
+                        choices_str = ", ".join(str(c) for c in f.choices)
+                        raise _ParseError(
+                            f"--{f.name}: invalid value {val!r}, must be one of: {choices_str}"
+                        )
+            else:
+                val = cli_set[f.name]
+                if val not in f.choices:
+                    choices_str = ", ".join(str(c) for c in f.choices)
+                    raise _ParseError(
+                        f"--{f.name}: invalid value {val!r}, must be one of: {choices_str}"
+                    )
 
     # Step 5.6: custom validation
     for f in cmd.flags:
         if f.validate is not None and f.name in cli_set:
-            try:
-                f.validate(cli_set[f.name])
-            except ValueError as e:
-                raise _ParseError(f"--{f.name}: {e}")
+            if f.repeatable:
+                for val in cli_set[f.name]:
+                    try:
+                        f.validate(val)
+                    except ValueError as e:
+                        raise _ParseError(f"--{f.name}: {e}")
+            else:
+                try:
+                    f.validate(cli_set[f.name])
+                except ValueError as e:
+                    raise _ParseError(f"--{f.name}: {e}")
 
     # Step 6: resolve positional args
     arg_values: dict[str, str] = {}
@@ -657,6 +691,7 @@ def flag(
     negatable: object = _MISSING,
     choices: list | None = None,
     validate: Callable | None = None,
+    repeatable: bool = False,
 ) -> Callable:
     """Module-level decorator to attach a Flag to a command handler."""
 
@@ -672,6 +707,7 @@ def flag(
             negatable=negatable,
             choices=choices,
             validate=validate,
+            repeatable=repeatable,
         )
         if not hasattr(func, "_strictcli_flags"):
             func._strictcli_flags = []
@@ -778,6 +814,8 @@ def _build_flag_spec(f: Flag) -> str:
 def _build_flag_meta(f: Flag) -> str:
     """Build the bracketed metadata suffix for a flag."""
     meta_parts: list[str] = []
+    if f.repeatable:
+        meta_parts.append("repeatable")
     if f.choices is not None:
         choices_str = ", ".join(str(c) for c in f.choices)
         meta_parts.append(f"choices: {choices_str}")
@@ -785,6 +823,9 @@ def _build_flag_meta(f: Flag) -> str:
         meta_parts.append(f"env: {f.env}")
     if f.type is bool:
         meta_parts.append(f"default: {'true' if f.default else 'false'}")
+    elif f.repeatable:
+        # Repeatable flags are never required; no default shown
+        pass
     elif f.default is not None:
         meta_parts.append(f"default: {f.default}")
     else:
