@@ -11,7 +11,3 @@ jobs:
     uses: ./.github/workflows/strictcli-publish.yml
     secrets: inherit
 
-  go-strictcli:
-    if: startsWith(github.event.release.tag_name, 'go-strictcli@v')
-    uses: ./.github/workflows/go-strictcli-publish.yml
-    secrets: inherit
