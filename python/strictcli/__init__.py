@@ -310,8 +310,8 @@ class App:
             print(f"try '{self.name} --help'", file=sys.stderr)
             sys.exit(1)
         else:
-            cmd.handler(**kwargs)
-            sys.exit(0)
+            code = cmd.handler(**kwargs)
+            sys.exit(code if isinstance(code, int) else 0)
 
     def test(self, argv: list[str]) -> Result:
         """Run the CLI with given argv, capturing output and exit code."""
@@ -338,7 +338,9 @@ class App:
         else:
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
                 try:
-                    cmd.handler(**kwargs)
+                    code = cmd.handler(**kwargs)
+                    if isinstance(code, int):
+                        exit_code = code
                 except SystemExit as e:
                     exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
 
