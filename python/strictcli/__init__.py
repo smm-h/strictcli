@@ -58,6 +58,7 @@ class Flag:
     prefixed: bool = True
     negatable: bool = True
     choices: list | None = None
+    validate: Callable | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
@@ -501,6 +502,14 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                     f"--{f.name}: invalid value {val!r}, must be one of: {choices_str}"
                 )
 
+    # Step 5.6: custom validation
+    for f in cmd.flags:
+        if f.validate is not None and f.name in cli_set:
+            try:
+                f.validate(cli_set[f.name])
+            except ValueError as e:
+                raise _ParseError(f"--{f.name}: {e}")
+
     # Step 6: resolve positional args
     arg_values: dict[str, str] = {}
     for idx, a in enumerate(cmd.args):
@@ -647,6 +656,7 @@ def flag(
     prefixed: bool = True,
     negatable: object = _MISSING,
     choices: list | None = None,
+    validate: Callable | None = None,
 ) -> Callable:
     """Module-level decorator to attach a Flag to a command handler."""
 
@@ -661,6 +671,7 @@ def flag(
             prefixed=prefixed,
             negatable=negatable,
             choices=choices,
+            validate=validate,
         )
         if not hasattr(func, "_strictcli_flags"):
             func._strictcli_flags = []
