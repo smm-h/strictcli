@@ -5,3 +5,7 @@ name = "strictcli"
 [[projects]]
 path = "go/"
 name = "go-strictcli"
+
+[[projects]]
+path = "conformance/"
+name = "conformance"
