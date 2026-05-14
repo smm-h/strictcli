@@ -57,11 +57,23 @@ class Flag:
     env: str | None = None
     prefixed: bool = True
     negatable: bool = True
+    choices: list | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
         if self.type not in (str, bool, int):
             raise ValueError(f"Flag.type must be str, bool, or int, got {self.type!r}")
+        # Validate choices
+        if self.choices is not None:
+            if self.type is bool:
+                raise ValueError(f"Flag {self.name!r}: choices is incompatible with type=bool")
+            if not isinstance(self.choices, list) or len(self.choices) == 0:
+                raise ValueError(f"Flag {self.name!r}: choices must be a non-empty list")
+            for c in self.choices:
+                if not isinstance(c, self.type):
+                    raise ValueError(
+                        f"Flag {self.name!r}: choice {c!r} is not of type {self.type.__name__}"
+                    )
         # Validate default type for int flags
         if self.type is int and not isinstance(self.default, _MissingSentinel) and self.default is not None:
             if not isinstance(self.default, int):
@@ -78,6 +90,13 @@ class Flag:
                 self.default = None
         elif self.type is bool and self.default is None:
             self.default = False
+        # Validate default is in choices (after sentinel resolution)
+        if self.choices is not None and self.default is not None:
+            if self.default not in self.choices:
+                raise ValueError(
+                    f"Flag {self.name!r}: default {self.default!r} is not in choices "
+                    f"{self.choices!r}"
+                )
         if isinstance(self.negatable, _MissingSentinel):
             self.negatable = self.type is bool
         elif self.type in (str, int):
@@ -472,6 +491,16 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
             # str/int flag with no default and no value: required
             raise _ParseError(f"flag '--{f.name}' is required")
 
+    # Step 5.5: validate choices
+    for f in cmd.flags:
+        if f.choices is not None and f.name in cli_set:
+            val = cli_set[f.name]
+            if val not in f.choices:
+                choices_str = ", ".join(str(c) for c in f.choices)
+                raise _ParseError(
+                    f"--{f.name}: invalid value {val!r}, must be one of: {choices_str}"
+                )
+
     # Step 6: resolve positional args
     arg_values: dict[str, str] = {}
     for idx, a in enumerate(cmd.args):
@@ -617,6 +646,7 @@ def flag(
     env: str | None = None,
     prefixed: bool = True,
     negatable: object = _MISSING,
+    choices: list | None = None,
 ) -> Callable:
     """Module-level decorator to attach a Flag to a command handler."""
 
@@ -630,6 +660,7 @@ def flag(
             env=env,
             prefixed=prefixed,
             negatable=negatable,
+            choices=choices,
         )
         if not hasattr(func, "_strictcli_flags"):
             func._strictcli_flags = []
@@ -736,6 +767,9 @@ def _build_flag_spec(f: Flag) -> str:
 def _build_flag_meta(f: Flag) -> str:
     """Build the bracketed metadata suffix for a flag."""
     meta_parts: list[str] = []
+    if f.choices is not None:
+        choices_str = ", ".join(str(c) for c in f.choices)
+        meta_parts.append(f"choices: {choices_str}")
     if f.env is not None:
         meta_parts.append(f"env: {f.env}")
     if f.type is bool:
