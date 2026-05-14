@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Handler return as exit code: handlers returning an `int` set the process exit code
+- App-level global flags: flags parsed both before and after the command name
+- Variadic positional args: `Arg` with `variadic=True` to collect remaining positional arguments into a list
+- Passthrough commands: `Passthrough` class for wrapper CLIs that forward unknown args to a subprocess
+
 ## 0.2.0
 
 - Integer flags: `type=int` on flags for automatic coercion and validation
