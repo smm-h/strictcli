@@ -1,0 +1,153 @@
+[
+  {
+    "name": "choices: valid str choice accepted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"]}],
+          "handler_prints": "format={format}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--format", "json"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "format=json"
+    }
+  },
+  {
+    "name": "choices: invalid str choice rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"]}],
+          "handler_prints": "format={format}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--format", "xml"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["invalid value", "'xml'", "text", "json"]
+    }
+  },
+  {
+    "name": "choices: shown in help output",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"], "default": "text"}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "choices: text, json"
+    }
+  },
+  {
+    "name": "choices: valid int choice accepted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port", "choices_int": [80, 443, 8080]}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port", "443"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "port=443"
+    }
+  },
+  {
+    "name": "choices: invalid int choice rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port", "choices_int": [80, 443, 8080]}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port", "9090"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["invalid value", "9090"]
+    }
+  },
+  {
+    "name": "choices: env var with valid choice accepted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"], "default": "text", "env": "MYAPP_FORMAT"}],
+          "handler_prints": "format={format}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {"MYAPP_FORMAT": "json"},
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "format=json"
+    }
+  },
+  {
+    "name": "choices: env var with invalid choice rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"], "default": "text", "env": "MYAPP_FORMAT"}],
+          "handler_prints": "format={format}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {"MYAPP_FORMAT": "xml"},
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["invalid value", "'xml'"]
+    }
+  }
+]

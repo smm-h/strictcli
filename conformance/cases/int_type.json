@@ -1,0 +1,216 @@
+[
+  {
+    "name": "int: basic int flag parses",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port", "8080"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "port=8080"
+    }
+  },
+  {
+    "name": "int: default value used when omitted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port", "default": 8000}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "port=8000"
+    }
+  },
+  {
+    "name": "int: bad value rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port", "abc"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["expected integer", "'abc'"]
+    }
+  },
+  {
+    "name": "int: env var coerced to int",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port", "default": 80, "env": "MYAPP_PORT"}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {"MYAPP_PORT": "9090"},
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "port=9090"
+    }
+  },
+  {
+    "name": "int: bad env var value rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port", "default": 80, "env": "MYAPP_PORT"}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {"MYAPP_PORT": "abc"},
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["expected integer", "'abc'"]
+    }
+  },
+  {
+    "name": "int: required int flag missing produces error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "required"
+    }
+  },
+  {
+    "name": "int: equals syntax",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port=8080"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "port=8080"
+    }
+  },
+  {
+    "name": "int: bad value via equals syntax",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port=abc"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "expected integer"
+    }
+  },
+  {
+    "name": "int: short flag form",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "short": "p", "help": "the port"}],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "-p", "8080"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "port=8080"
+    }
+  },
+  {
+    "name": "int: shown as <int> in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "the port", "default": 8000}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "<int>"
+    }
+  }
+]

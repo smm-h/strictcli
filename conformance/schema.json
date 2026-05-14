@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "strictcli conformance test cases",
+  "description": "Array of test cases for verifying strictcli implementations.",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/test_case"
+  },
+  "minItems": 1,
+  "$defs": {
+    "test_case": {
+      "type": "object",
+      "required": ["name", "app", "argv", "expect"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Descriptive test name."
+        },
+        "app": {
+          "$ref": "#/$defs/app"
+        },
+        "argv": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Command-line arguments (including the subcommand)."
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Environment variables to set before invoking the app."
+        },
+        "expect": {
+          "$ref": "#/$defs/expect"
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "required": ["name", "version", "help", "commands"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "help": { "type": "string" },
+        "env_prefix": { "type": "string" },
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "groups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/group" }
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": ["name", "help", "commands"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "help": { "type": "string" },
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "required": ["name", "help", "handler_prints"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "help": { "type": "string" },
+        "handler_prints": {
+          "type": "string",
+          "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'."
+        },
+        "args": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/arg" }
+        },
+        "flags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/flag" }
+        },
+        "tags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tag" }
+        },
+        "mutex": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/mutex_group" }
+        }
+      }
+    },
+    "arg": {
+      "type": "object",
+      "required": ["name", "help"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "help": { "type": "string" },
+        "required": { "type": "boolean", "default": true },
+        "default": { "type": "string" }
+      }
+    },
+    "flag": {
+      "type": "object",
+      "required": ["name", "help"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "help": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["str", "bool", "int"],
+          "default": "str"
+        },
+        "short": { "type": "string" },
+        "default": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "boolean" },
+            { "type": "integer" },
+            { "type": "null" }
+          ]
+        },
+        "env": { "type": "string" },
+        "prefixed": { "type": "boolean", "default": true },
+        "choices_str": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Choices for str-type flags."
+        },
+        "choices_int": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Choices for int-type flags."
+        },
+        "repeatable": { "type": "boolean", "default": false }
+      }
+    },
+    "tag": {
+      "type": "object",
+      "required": ["name", "flags"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "flags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/flag" }
+        }
+      }
+    },
+    "mutex_group": {
+      "type": "object",
+      "required": ["flags"],
+      "additionalProperties": false,
+      "properties": {
+        "flags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/flag" },
+          "minItems": 2
+        },
+        "required": { "type": "boolean", "default": false }
+      }
+    },
+    "expect": {
+      "type": "object",
+      "required": ["exit_code"],
+      "additionalProperties": false,
+      "properties": {
+        "exit_code": { "type": "integer" },
+        "stdout_contains": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Substring(s) that must appear in stdout."
+        },
+        "stdout_equals": {
+          "type": "string",
+          "description": "Exact stdout content."
+        },
+        "stderr_contains": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Substring(s) that must appear in stderr."
+        },
+        "stderr_equals": {
+          "type": "string",
+          "description": "Exact stderr content."
+        },
+        "stdout_not_contains": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Substring(s) that must NOT appear in stdout."
+        }
+      }
+    }
+  }
+}

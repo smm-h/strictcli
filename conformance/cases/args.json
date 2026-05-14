@@ -1,0 +1,197 @@
+[
+  {
+    "name": "args: single required arg",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "args": [{"name": "name", "help": "who to greet"}],
+          "handler_prints": "hello {name}"
+        }
+      ]
+    },
+    "argv": ["greet", "world"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "hello world"
+    }
+  },
+  {
+    "name": "args: missing required arg",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "args": [{"name": "name", "help": "who to greet"}],
+          "handler_prints": "hello {name}"
+        }
+      ]
+    },
+    "argv": ["greet"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "missing required argument"
+    }
+  },
+  {
+    "name": "args: two positional args in order",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "copy",
+          "help": "copy files",
+          "args": [
+            {"name": "src", "help": "source file"},
+            {"name": "dst", "help": "destination file"}
+          ],
+          "handler_prints": "{src}->{dst}"
+        }
+      ]
+    },
+    "argv": ["copy", "a.txt", "b.txt"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "a.txt->b.txt"
+    }
+  },
+  {
+    "name": "args: extra positional arg rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "surprise"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unexpected argument"
+    }
+  },
+  {
+    "name": "args: optional arg with default, value provided",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [{"name": "path", "help": "project dir", "required": false, "default": "."}],
+          "handler_prints": "path={path}"
+        }
+      ]
+    },
+    "argv": ["cmd", "/tmp/foo"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "path=/tmp/foo"
+    }
+  },
+  {
+    "name": "args: optional arg with default, value omitted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [{"name": "path", "help": "project dir", "required": false, "default": "."}],
+          "handler_prints": "path={path}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "path=."
+    }
+  },
+  {
+    "name": "args: required arg first, optional arg second with default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {"name": "src", "help": "source file"},
+            {"name": "dst", "help": "destination", "required": false, "default": "out"}
+          ],
+          "handler_prints": "{src}:{dst}"
+        }
+      ]
+    },
+    "argv": ["cmd", "input.txt"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "input.txt:out"
+    }
+  },
+  {
+    "name": "args: optional arg without default, omitted gives None",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [{"name": "path", "help": "project dir", "required": false}],
+          "handler_prints": "path={path}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "path=None"
+    }
+  },
+  {
+    "name": "args: double dash stops flag parsing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [{"name": "path", "help": "a path"}],
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "handler_prints": "verbose={verbose} path={path}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--", "--not-a-flag"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["verbose=false", "path=--not-a-flag"]
+    }
+  }
+]

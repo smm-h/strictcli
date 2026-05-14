@@ -1,0 +1,214 @@
+[
+  {
+    "name": "repeatable: single occurrence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--tag", "alpha"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "tags=alpha"
+    }
+  },
+  {
+    "name": "repeatable: multiple occurrences",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--tag", "alpha", "--tag", "beta", "--tag", "gamma"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "tags=alpha,beta,gamma"
+    }
+  },
+  {
+    "name": "repeatable: zero occurrences gives empty",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "tags="
+    }
+  },
+  {
+    "name": "repeatable: int type coerces each value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "port", "type": "int", "help": "a port", "repeatable": true}],
+          "handler_prints": "ports={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port", "80", "--port", "443"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "ports=80,443"
+    }
+  },
+  {
+    "name": "repeatable: with choices valid",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true, "choices_str": ["alpha", "beta", "gamma"]}],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--tag", "alpha", "--tag", "gamma"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "tags=alpha,gamma"
+    }
+  },
+  {
+    "name": "repeatable: with choices invalid",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true, "choices_str": ["alpha", "beta"]}],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--tag", "alpha", "--tag", "delta"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["invalid value", "'delta'"]
+    }
+  },
+  {
+    "name": "repeatable: with equals syntax",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--tag=alpha", "--tag=beta"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "tags=alpha,beta"
+    }
+  },
+  {
+    "name": "repeatable: with short flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "short": "t", "help": "a tag", "repeatable": true}],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "-t", "alpha", "-t", "beta"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "tags=alpha,beta"
+    }
+  },
+  {
+    "name": "repeatable: shown in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "repeatable"
+    }
+  },
+  {
+    "name": "repeatable: env var becomes single-element list",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true, "env": "MYAPP_TAG"}],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {"MYAPP_TAG": "fromenv"},
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "tags=fromenv"
+    }
+  }
+]

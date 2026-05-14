@@ -1,0 +1,167 @@
+[
+  {
+    "name": "basic: dispatch to command",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["greet"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "hello"
+    }
+  },
+  {
+    "name": "basic: unknown command error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["deploy"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown command"
+    }
+  },
+  {
+    "name": "basic: no args shows app help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": [],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["myapp v1.0.0", "Commands:", "greet"]
+    }
+  },
+  {
+    "name": "basic: --version flag",
+    "app": {
+      "name": "myapp",
+      "version": "2.5.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["--version"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "myapp 2.5.0"
+    }
+  },
+  {
+    "name": "basic: -v short version flag",
+    "app": {
+      "name": "myapp",
+      "version": "2.5.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["-v"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "myapp 2.5.0"
+    }
+  },
+  {
+    "name": "basic: --help flag shows help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["myapp v1.0.0", "test app"]
+    }
+  },
+  {
+    "name": "basic: -h short help flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["-h"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "myapp v1.0.0"
+    }
+  },
+  {
+    "name": "basic: multiple commands dispatch",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "start",
+          "help": "start service",
+          "handler_prints": "started"
+        },
+        {
+          "name": "stop",
+          "help": "stop service",
+          "handler_prints": "stopped"
+        }
+      ]
+    },
+    "argv": ["stop"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "stopped"
+    }
+  }
+]

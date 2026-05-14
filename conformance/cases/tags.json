@@ -1,0 +1,112 @@
+[
+  {
+    "name": "tags: single flag from tag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "tags": [
+            {
+              "name": "verbose",
+              "flags": [{"name": "verbose", "type": "bool", "help": "verbose output"}]
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=true"
+    }
+  },
+  {
+    "name": "tags: multiple flags from tag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "tags": [
+            {
+              "name": "output",
+              "flags": [
+                {"name": "format", "type": "str", "help": "output format", "default": "text"},
+                {"name": "color", "type": "bool", "help": "use color"}
+              ]
+            }
+          ],
+          "handler_prints": "format={format} color={color}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--format", "json", "--color"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["format=json", "color=true"]
+    }
+  },
+  {
+    "name": "tags: tag flags with defaults",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "tags": [
+            {
+              "name": "auth",
+              "flags": [
+                {"name": "token", "type": "str", "help": "auth token", "default": "none"},
+                {"name": "insecure", "type": "bool", "help": "skip TLS verification"}
+              ]
+            }
+          ],
+          "handler_prints": "token={token} insecure={insecure}"
+        }
+      ]
+    },
+    "argv": ["deploy"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["token=none", "insecure=false"]
+    }
+  },
+  {
+    "name": "tags: tag flags shown in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "tags": [
+            {
+              "name": "debug",
+              "flags": [{"name": "debug", "type": "bool", "help": "enable debug mode"}]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["--debug", "enable debug mode"]
+    }
+  }
+]

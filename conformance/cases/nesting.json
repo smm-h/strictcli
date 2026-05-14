@@ -1,0 +1,203 @@
+[
+  {
+    "name": "nesting: group command dispatch",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {"name": "show", "help": "display config", "handler_prints": "showing config"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "show"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "showing config"
+    }
+  },
+  {
+    "name": "nesting: group command with flags",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {
+              "name": "set",
+              "help": "set a config value",
+              "flags": [
+                {"name": "key", "type": "str", "help": "config key"},
+                {"name": "value", "type": "str", "help": "config value"}
+              ],
+              "handler_prints": "{key}={value}"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "--key", "name", "--value", "strictcli"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "name=strictcli"
+    }
+  },
+  {
+    "name": "nesting: unknown group subcommand error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {"name": "show", "help": "display config", "handler_prints": "ok"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "delete"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown command"
+    }
+  },
+  {
+    "name": "nesting: group help shows subcommands",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {"name": "show", "help": "display config", "handler_prints": "ok"},
+            {"name": "set", "help": "set a config value", "handler_prints": "ok"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["show", "set", "display config", "set a config value"]
+    }
+  },
+  {
+    "name": "nesting: group help via -h",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {"name": "show", "help": "display config", "handler_prints": "ok"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "-h"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "manage configuration"
+    }
+  },
+  {
+    "name": "nesting: group with no subcommand shows group help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {"name": "show", "help": "display config", "handler_prints": "ok"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["manage configuration", "show"]
+    }
+  },
+  {
+    "name": "nesting: nested command help shows group prefix",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {
+              "name": "set",
+              "help": "set a config value",
+              "flags": [
+                {"name": "key", "type": "str", "help": "config key"},
+                {"name": "value", "type": "str", "help": "config value"}
+              ],
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "config set"
+    }
+  },
+  {
+    "name": "nesting: group use hint",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {"name": "show", "help": "display config", "handler_prints": "ok"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "Use 'myapp config <command> --help' for more information."
+    }
+  }
+]

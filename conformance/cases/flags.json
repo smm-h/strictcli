@@ -1,0 +1,233 @@
+[
+  {
+    "name": "flags: str flag with space syntax",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--target", "foo"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "target=foo"
+    }
+  },
+  {
+    "name": "flags: str flag with equals syntax",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--target=bar"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "target=bar"
+    }
+  },
+  {
+    "name": "flags: bool flag present is true",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=true"
+    }
+  },
+  {
+    "name": "flags: bool flag absent is false",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=false"
+    }
+  },
+  {
+    "name": "flags: bool flag --no-X negation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--no-verbose"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=false"
+    }
+  },
+  {
+    "name": "flags: short flag for bool",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "short": "V", "help": "be verbose"}],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd", "-V"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=true"
+    }
+  },
+  {
+    "name": "flags: short flag for str",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "target", "type": "str", "short": "t", "help": "the target"}],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": ["cmd", "-t", "foo"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "target=foo"
+    }
+  },
+  {
+    "name": "flags: str flag with default, omitted uses default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "format", "type": "str", "help": "output format", "default": "text"}],
+          "handler_prints": "format={format}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "format=text"
+    }
+  },
+  {
+    "name": "flags: str flag with default, provided overrides default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "format", "type": "str", "help": "output format", "default": "text"}],
+          "handler_prints": "format={format}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--format", "json"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "format=json"
+    }
+  },
+  {
+    "name": "flags: required str flag missing produces error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "required"
+    }
+  },
+  {
+    "name": "flags: bool flag=value syntax is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose=true"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "boolean flag"
+    }
+  }
+]

@@ -1,0 +1,258 @@
+[
+  {
+    "name": "mutex: neither provided, non-required is ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "verbose", "type": "bool", "help": "verbose output"},
+                {"name": "quiet", "type": "bool", "help": "quiet output"}
+              ]
+            }
+          ],
+          "handler_prints": "verbose={verbose} quiet={quiet}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["verbose=false", "quiet=false"]
+    }
+  },
+  {
+    "name": "mutex: one provided is ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "verbose", "type": "bool", "help": "verbose output"},
+                {"name": "quiet", "type": "bool", "help": "quiet output"}
+              ]
+            }
+          ],
+          "handler_prints": "verbose={verbose} quiet={quiet}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["verbose=true", "quiet=false"]
+    }
+  },
+  {
+    "name": "mutex: both provided is error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "verbose", "type": "bool", "help": "verbose output"},
+                {"name": "quiet", "type": "bool", "help": "quiet output"}
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose", "--quiet"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["--verbose", "--quiet", "mutually exclusive"]
+    }
+  },
+  {
+    "name": "mutex: required group, none provided is error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "verbose", "type": "bool", "help": "verbose output"},
+                {"name": "quiet", "type": "bool", "help": "quiet output"}
+              ],
+              "required": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["--verbose", "--quiet", "required"]
+    }
+  },
+  {
+    "name": "mutex: required group, one provided is ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "verbose", "type": "bool", "help": "verbose output"},
+                {"name": "quiet", "type": "bool", "help": "quiet output"}
+              ],
+              "required": true
+            }
+          ],
+          "handler_prints": "verbose={verbose} quiet={quiet}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--quiet"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["verbose=false", "quiet=true"]
+    }
+  },
+  {
+    "name": "mutex: str flags, one provided is ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "fetch",
+          "help": "fetch data",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "file", "type": "str", "help": "read from file", "default": null},
+                {"name": "url", "type": "str", "help": "read from URL", "default": null}
+              ]
+            }
+          ],
+          "handler_prints": "file={file} url={url}"
+        }
+      ]
+    },
+    "argv": ["fetch", "--file", "data.txt"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "file=data.txt"
+    }
+  },
+  {
+    "name": "mutex: str flags, both provided is error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "fetch",
+          "help": "fetch data",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "file", "type": "str", "help": "read from file", "default": null},
+                {"name": "url", "type": "str", "help": "read from URL", "default": null}
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["fetch", "--file", "data.txt", "--url", "http://example.com"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["--file", "--url", "mutually exclusive"]
+    }
+  },
+  {
+    "name": "mutex: help shows mutually exclusive section",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "name", "type": "str", "help": "your name", "default": "anon"}],
+          "mutex": [
+            {
+              "flags": [
+                {"name": "verbose", "type": "bool", "help": "verbose output"},
+                {"name": "quiet", "type": "bool", "help": "quiet output"}
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["Flags (mutually exclusive):", "--verbose", "--quiet", "Flags:", "--name"]
+    }
+  },
+  {
+    "name": "mutex: required group shown in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "verbose", "type": "bool", "help": "verbose output"},
+                {"name": "quiet", "type": "bool", "help": "quiet output"}
+              ],
+              "required": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "Flags (mutually exclusive, required):"
+    }
+  }
+]

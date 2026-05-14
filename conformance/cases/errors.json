@@ -1,0 +1,166 @@
+[
+  {
+    "name": "errors: unknown flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--unknown"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag"
+    }
+  },
+  {
+    "name": "errors: unknown short flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "-x"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag"
+    }
+  },
+  {
+    "name": "errors: missing required str flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["--target", "required"]
+    }
+  },
+  {
+    "name": "errors: extra positional arg",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "surprise"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unexpected argument"
+    }
+  },
+  {
+    "name": "errors: flag requires a value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--target"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "requires a value"
+    }
+  },
+  {
+    "name": "errors: error message includes try hint",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["unknown"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["unknown command", "try 'myapp --help'"]
+    }
+  },
+  {
+    "name": "errors: bool negation with value is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--no-verbose=true"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "boolean negation"
+    }
+  },
+  {
+    "name": "errors: unknown flag in equals form",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--unknown=value"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag"
+    }
+  }
+]

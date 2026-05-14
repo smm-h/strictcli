@@ -1,0 +1,184 @@
+[
+  {
+    "name": "help: app help shows version and commands",
+    "app": {
+      "name": "myapp",
+      "version": "3.0.0",
+      "help": "my cool app",
+      "commands": [
+        {"name": "run", "help": "run something", "handler_prints": "ok"},
+        {"name": "test", "help": "run tests", "handler_prints": "ok"}
+      ]
+    },
+    "argv": [],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["myapp v3.0.0", "my cool app", "Commands:", "run", "test"]
+    }
+  },
+  {
+    "name": "help: command help shows flags and args",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "args": [{"name": "target", "help": "deploy target"}],
+          "flags": [{"name": "dry-run", "type": "bool", "help": "preview changes"}],
+          "handler_prints": "{target}:{dry-run}"
+        }
+      ]
+    },
+    "argv": ["deploy", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["--dry-run", "--no-dry-run", "target", "deploy the app"]
+    }
+  },
+  {
+    "name": "help: command help via -h",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["deploy", "-h"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "deploy the app"
+    }
+  },
+  {
+    "name": "help: str flag shows <str> in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "output", "type": "str", "help": "output path", "default": "out.txt"}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["<str>", "default: out.txt"]
+    }
+  },
+  {
+    "name": "help: required flag shown as required in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "required"
+    }
+  },
+  {
+    "name": "help: app help shows groups",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {"name": "show", "help": "display config", "handler_prints": "ok"}
+          ]
+        }
+      ]
+    },
+    "argv": [],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["Groups:", "config"]
+    }
+  },
+  {
+    "name": "help: optional arg shows default in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [{"name": "path", "help": "project dir", "required": false, "default": "."}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "[default: .]"
+    }
+  },
+  {
+    "name": "help: optional arg without default shows (optional)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [{"name": "path", "help": "project dir", "required": false}],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "(optional)"
+    }
+  },
+  {
+    "name": "help: use hint at bottom of app help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {"name": "run", "help": "run something", "handler_prints": "ok"}
+      ]
+    },
+    "argv": ["--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "Use 'myapp <command> --help' for more information."
+    }
+  }
+]
