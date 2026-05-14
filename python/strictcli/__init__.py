@@ -323,10 +323,13 @@ class App:
             return cmd, rest
 
         # Step 3: parse remaining tokens for the resolved command
-        cmd, kwargs = _parse_command(cmd, rest)
+        cmd, kwargs, post_global = _parse_command(cmd, rest, self._global_flags)
 
         # Step 4: merge global flag values into kwargs
+        # Post-command global flags override pre-command ones
         for gf in self._global_flags:
+            if gf.name in post_global:
+                global_values[gf.name] = post_global[gf.name]
             kwargs[_flag_param_name(gf.name)] = global_values[gf.name]
 
         return cmd, kwargs
@@ -580,8 +583,16 @@ class App:
         )
 
 
-def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, object]]:
-    """Parse tokens against a resolved command's flags and args."""
+def _parse_command(
+    cmd: Command,
+    tokens: list[str],
+    global_flags: list[Flag] | None = None,
+) -> tuple[Command, dict[str, object], dict[str, object]]:
+    """Parse tokens against a resolved command's flags and args.
+
+    Returns (cmd, kwargs, global_cli_set) where global_cli_set contains
+    any global flag values parsed from tokens appearing after the command name.
+    """
 
     # Build flag lookup dicts
     long_lookup: dict[str, Flag] = {}  # --flag-name -> Flag
@@ -594,6 +605,18 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
             short_lookup[f"-{f.short}"] = f
         if f.type is bool and f.negatable:
             negation_lookup[f"--no-{f.name}"] = f
+
+    # Also include global flags in the lookup tables so they are recognized
+    # when placed after the command name
+    global_flag_names: set[str] = set()
+    if global_flags:
+        for f in global_flags:
+            long_lookup[f"--{f.name}"] = f
+            if f.short:
+                short_lookup[f"-{f.short}"] = f
+            if f.type is bool and f.negatable:
+                negation_lookup[f"--no-{f.name}"] = f
+            global_flag_names.add(f.name)
 
     # Track which flags were set by CLI args
     cli_set: dict[str, object] = {}  # flag.name -> value
@@ -834,7 +857,7 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
     elif len(positionals) > len(cmd.args):
         raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
 
-    # Step 7: build kwargs dict
+    # Step 7: build kwargs dict (command flags only)
     kwargs: dict[str, object] = {}
     for f in cmd.flags:
         kwargs[_flag_param_name(f.name)] = cli_set[f.name]
@@ -842,7 +865,13 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
         if a.name in arg_values:
             kwargs[a.name] = arg_values[a.name]
 
-    return cmd, kwargs
+    # Separate out global flag values parsed from post-command tokens
+    global_cli_set: dict[str, object] = {}
+    for name in global_flag_names:
+        if name in cli_set:
+            global_cli_set[name] = cli_set[name]
+
+    return cmd, kwargs, global_cli_set
 
 
 def _flag_param_name(flag_name: str) -> str:
