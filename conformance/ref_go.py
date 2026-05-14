@@ -245,11 +245,16 @@ def _emit_command_go(
                 else:
                     lines.append(f'{indent}\tfmt.Printf("{gf["name"]}=%v\\n", globals["{gf_key}"])')
         else:
-            lines.append(f'{indent}{target}.Passthrough("{cmd_def["name"]}", "{cmd_def["help"]}", func(name string, args []string) int {{')
+            lines.append(f'{indent}{target}.Passthrough("{cmd_def["name"]}", "{cmd_def["help"]}", func(name string, args []string, globals map[string]interface{{}}) int {{')
         # Print name:comma-separated-args
         lines.append(f'{indent}\tfmt.Printf("%s:%s\\n", name, strings.Join(args, ","))')
         lines.append(f'{indent}\treturn {exit_code}')
-        lines.append(f"{indent}}})")
+        # Include CmdOptions for flags/args (to trigger registration errors when invalid)
+        pt_opts = _emit_cmd_options(cmd_def, indent + "\t")
+        if pt_opts:
+            lines.append(f"{indent}}}, {', '.join(pt_opts)})")
+        else:
+            lines.append(f"{indent}}})")
     else:
         # Normal command with handler_exit_code support
         handler_body = _emit_handler_body(cmd_def, indent + "\t", global_flags)
@@ -276,6 +281,7 @@ def generate(app_def: dict) -> str:
     lines.append("")
     lines.append("import (")
     lines.append('\t"fmt"')
+    lines.append('\t"os"')
     lines.append('\t"strings"')
     lines.append("")
     lines.append('\t"github.com/smm-h/strictcli/go/strictcli"')
@@ -286,6 +292,14 @@ def generate(app_def: dict) -> str:
     lines.append("var _ = strings.ReplaceAll")
     lines.append("")
     lines.append("func main() {")
+    # Recover from panics (registration errors) and exit with code 1
+    lines.append('\tdefer func() {')
+    lines.append('\t\tif r := recover(); r != nil {')
+    lines.append('\t\t\tfmt.Fprintf(os.Stderr, "error: %v\\n", r)')
+    lines.append('\t\t\tos.Exit(1)')
+    lines.append('\t\t}')
+    lines.append('\t}()')
+    lines.append("")
 
     # Build app
     app_opts = []
