@@ -185,36 +185,71 @@ def _emit_command_registration(
 
     # --- Passthrough command ---
     if is_passthrough:
-        lines.append(f"{indent}@{target}.passthrough(")
-        lines.append(f"{indent}    {cmd_def['name']!r},")
-        lines.append(f"{indent}    help={cmd_def['help']!r},")
-        lines.append(f"{indent})")
-        # Passthrough handler signature: (name, args, **globals)
-        handler_name = cmd_def['name'].replace('-', '_') + '_handler'
+        handler_name = cmd_def['name'].replace('-', '_') + '_passthrough_handler'
+        # Define the passthrough handler function first
+        # Signature: func(name: str, args: list[str], globals: dict) -> int
+        lines.append(f"{indent}def {handler_name}(name, args, globals):")
         if global_flags:
-            gf_params = ", ".join(_flag_param(f["name"]) for f in global_flags)
-            lines.append(f"{indent}def {handler_name}(name, args, {gf_params}):")
             # Print global flag values first
             for gf in global_flags:
-                pname = _flag_param(gf["name"])
                 gf_name = gf["name"]
                 ftype = gf.get("type", "str")
                 if ftype == "bool":
                     lines.append(
-                        f'{indent}    print({gf_name!r} + "=" + ("true" if {pname} else "false"))'
+                        f'{indent}    print({gf_name!r} + "=" + ("true" if globals[{gf_name!r}] else "false"))'
                     )
                 else:
                     lines.append(
-                        f'{indent}    print({gf_name!r} + "=" + str({pname}))'
+                        f'{indent}    print({gf_name!r} + "=" + str(globals[{gf_name!r}]))'
                     )
-        else:
-            lines.append(f"{indent}def {handler_name}(name, args):")
         # Print name:comma-separated-args
         lines.append(f'{indent}    print(name + ":" + ",".join(args))')
-        if exit_code != 0:
-            lines.append(f"{indent}    return {exit_code}")
-        else:
-            lines.append(f"{indent}    return 0")
+        lines.append(f"{indent}    return {exit_code}")
+        lines.append("")
+
+        # Register the command with passthrough=Passthrough(handler=...)
+        lines.append(f"{indent}@{target}.command(")
+        lines.append(f"{indent}    {cmd_def['name']!r},")
+        lines.append(f"{indent}    help={cmd_def['help']!r},")
+
+        # If the test case also specifies flags/args/tags/mutex (registration error tests),
+        # include them so the error is triggered
+        if cmd_def.get("args"):
+            arg_exprs = []
+            for a in cmd_def["args"]:
+                aparts = [f"name={a['name']!r}", f"help={a['help']!r}"]
+                if "required" in a:
+                    aparts.append(f"required={a['required']!r}")
+                if "default" in a:
+                    aparts.append(f"default={a['default']!r}")
+                if a.get("variadic", False):
+                    aparts.append("variadic=True")
+                arg_exprs.append(f"strictcli.Arg({', '.join(aparts)})")
+            lines.append(
+                f"{indent}    args=[{', '.join(arg_exprs)}],"
+            )
+
+        lines.append(f"{indent}    passthrough=strictcli.Passthrough(handler={handler_name}),")
+        lines.append(f"{indent})")
+
+        # Emit flag decorators if present (for registration error tests)
+        flag_decorators = []
+        for f in cmd_def.get("flags", []):
+            fd_parts = [f"{f['name']!r}"]
+            ftype = f.get("type", "str")
+            if ftype != "str":
+                fd_parts.append(f"type={ftype}")
+            fd_parts.append(f"help={f['help']!r}")
+            flag_decorators.append(
+                f"{indent}@strictcli.flag({', '.join(fd_parts)})"
+            )
+        for fd in flag_decorators:
+            lines.append(fd)
+
+        # The decorated function is a dummy (ignored for passthrough commands)
+        dummy_name = cmd_def['name'].replace('-', '_') + '_cmd'
+        lines.append(f"{indent}def {dummy_name}():")
+        lines.append(f"{indent}    pass")
         lines.append("")
         return "\n".join(lines)
 
@@ -348,6 +383,7 @@ def generate(app_def: dict) -> str:
     lines.append("")
 
     # Build app
+    global_flags = app_def.get("global_flags", [])
     app_parts = [
         f"name={app_def['name']!r}",
         f"version={app_def['version']!r}",
@@ -355,16 +391,12 @@ def generate(app_def: dict) -> str:
     ]
     if "env_prefix" in app_def:
         app_parts.append(f"env_prefix={app_def['env_prefix']!r}")
+    if global_flags:
+        gf_exprs = [_emit_flag(gf) for gf in global_flags]
+        app_parts.append(f"flags=[{', '.join(gf_exprs)}]")
 
     lines.append(f"app = strictcli.App({', '.join(app_parts)})")
     lines.append("")
-
-    # Register global flags
-    global_flags = app_def.get("global_flags", [])
-    for gf in global_flags:
-        lines.append(f"app.global_flag({_emit_flag(gf)})")
-    if global_flags:
-        lines.append("")
 
     # Register groups first
     for group_def in app_def.get("groups", []):
