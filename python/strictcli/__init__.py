@@ -4,7 +4,7 @@ from __future__ import annotations
 
 __version__ = "0.2.0"
 
-__all__ = ["App", "Flag", "Arg", "Tag", "MutexGroup", "Result", "flag", "arg"]
+__all__ = ["App", "Flag", "Arg", "Tag", "MutexGroup", "Passthrough", "Result", "flag", "arg"]
 
 import contextlib
 import inspect
@@ -144,16 +144,25 @@ class MutexGroup:
 
 
 @dataclass
+class Passthrough:
+    """Marks a command as passthrough -- all tokens after the command name are
+    forwarded to the handler as a raw list, bypassing flag/arg parsing."""
+
+    handler: Callable  # func(name: str, args: list[str], globals: dict) -> int
+
+
+@dataclass
 class Command:
     """A leaf command with a handler."""
 
     name: str
     help: str
-    handler: Callable
+    handler: Callable | None
     flags: list[Flag] = field(default_factory=list)
     args: list[Arg] = field(default_factory=list)
     tags: list[Tag] = field(default_factory=list)
     mutex: list[MutexGroup] = field(default_factory=list)
+    passthrough: Passthrough | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
@@ -180,6 +189,7 @@ class Group:
         args: list[Arg] | None = None,
         tags: list[Tag] | None = None,
         mutex: list[MutexGroup] | None = None,
+        passthrough: Passthrough | None = None,
     ) -> Callable:
         """Decorator to register a command within this group."""
 
@@ -188,6 +198,7 @@ class Group:
                 name, help=help, handler=func, args=args, tags=tags, mutex=mutex,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
+                passthrough=passthrough,
             )
             self.commands[name] = cmd
             return func
@@ -219,6 +230,7 @@ class App:
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "App")
         self._global_flags: list[Flag] = list(self.flags)
+        self._last_global_values: dict[str, object] = {}
 
     def command(
         self,
@@ -228,6 +240,7 @@ class App:
         args: list[Arg] | None = None,
         tags: list[Tag] | None = None,
         mutex: list[MutexGroup] | None = None,
+        passthrough: Passthrough | None = None,
     ) -> Callable:
         """Decorator to register a top-level command."""
 
@@ -241,6 +254,7 @@ class App:
                 mutex=mutex,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
+                passthrough=passthrough,
             )
             self._commands[name] = cmd
             return func
@@ -254,8 +268,16 @@ class App:
         self._groups[name] = grp
         return grp
 
-    def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object]]:
-        """Parse argv (without program name) into a resolved Command and kwargs."""
+    def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object] | list[str]]:
+        """Parse argv (without program name) into a resolved Command and kwargs.
+
+        For normal commands, returns (Command, kwargs_dict).
+        For passthrough commands, returns (Command, raw_args_list).
+        Callers disambiguate by checking cmd.passthrough.
+
+        After parsing, self._last_global_values holds the parsed global flag
+        values (used by passthrough command handlers).
+        """
 
         # Step 1: intercept app-level --help/-h and --version/-v
         if not argv or argv == ["--help"] or argv == ["-h"]:
@@ -265,6 +287,7 @@ class App:
 
         # Step 1.5: parse global flags before command routing
         global_values, remaining = self._parse_global_flags(argv)
+        self._last_global_values = global_values
 
         # Step 2: route to command or group
         # If global flag parsing stopped at --, strip it before routing
@@ -294,6 +317,10 @@ class App:
         # Check for command-level --help/-h
         if rest == ["--help"] or rest == ["-h"]:
             raise _HelpRequested(target=cmd)
+
+        # Passthrough commands: skip all flag/arg parsing, forward raw args
+        if cmd.passthrough is not None:
+            return cmd, rest
 
         # Step 3: parse remaining tokens for the resolved command
         cmd, kwargs = _parse_command(cmd, rest)
@@ -486,7 +513,7 @@ class App:
         """Run the CLI application, reading from sys.argv."""
         argv = sys.argv[1:]
         try:
-            cmd, kwargs = self._parse(argv)
+            cmd, data = self._parse(argv)
         except _HelpRequested as e:
             if isinstance(e.target, App):
                 print(_format_app_help(self))
@@ -504,7 +531,10 @@ class App:
             print(f"try '{self.name} --help'", file=sys.stderr)
             sys.exit(1)
         else:
-            code = cmd.handler(**kwargs)
+            if cmd.passthrough is not None:
+                code = cmd.passthrough.handler(cmd.name, data, self._last_global_values)
+            else:
+                code = cmd.handler(**data)
             sys.exit(code if isinstance(code, int) else 0)
 
     def test(self, argv: list[str]) -> Result:
@@ -514,7 +544,7 @@ class App:
         exit_code = 0
 
         try:
-            cmd, kwargs = self._parse(argv)
+            cmd, data = self._parse(argv)
         except _HelpRequested as e:
             if isinstance(e.target, App):
                 stdout_buf.write(_format_app_help(self) + "\n")
@@ -532,7 +562,12 @@ class App:
         else:
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
                 try:
-                    code = cmd.handler(**kwargs)
+                    if cmd.passthrough is not None:
+                        code = cmd.passthrough.handler(
+                            cmd.name, data, self._last_global_values,
+                        )
+                    else:
+                        code = cmd.handler(**data)
                     if isinstance(code, int):
                         exit_code = code
                 except SystemExit as e:
@@ -825,10 +860,40 @@ def _build_and_validate_command(
     mutex: list[MutexGroup] | None,
     env_prefix: str | None,
     global_flags: list[Flag] | None = None,
+    passthrough: Passthrough | None = None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
         raise ValueError(f"command {name!r}: missing help text")
+
+    # Passthrough commands must not have flags, args, tags, or mutex groups
+    if passthrough is not None:
+        decorator_flags = list(getattr(handler, "_strictcli_flags", []))
+        decorator_args = list(getattr(handler, "_strictcli_args", []))
+        has_flags = bool(decorator_flags)
+        has_args = bool(args) or bool(decorator_args)
+        has_tags = bool(tags)
+        has_mutex = bool(mutex)
+        if has_flags or has_args or has_tags or has_mutex:
+            parts = []
+            if has_flags:
+                parts.append("flags")
+            if has_args:
+                parts.append("args")
+            if has_tags:
+                parts.append("tags")
+            if has_mutex:
+                parts.append("mutex groups")
+            raise ValueError(
+                f"command {name!r}: passthrough commands cannot have "
+                + ", ".join(parts)
+            )
+        return Command(
+            name=name,
+            help=help,
+            handler=None,
+            passthrough=passthrough,
+        )
 
     # Collect flags attached by @strictcli.flag decorators
     decorator_flags: list[Flag] = list(getattr(handler, "_strictcli_flags", []))
@@ -1134,6 +1199,10 @@ def _build_flag_meta(f: Flag) -> str:
 def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
     """Format command-level help shown when the user runs 'myapp cmd --help'."""
     lines: list[str] = [f"{app.name} {prefix}{cmd.name} -- {cmd.help}"]
+
+    # Passthrough commands show only the header line (no flags/args section)
+    if cmd.passthrough is not None:
+        return "\n".join(lines)
 
     if cmd.args:
         lines.append("")
