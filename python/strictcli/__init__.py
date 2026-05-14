@@ -119,6 +119,7 @@ class Arg:
     help: str
     required: bool = True
     default: object = _MISSING
+    variadic: bool = False
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Arg")
@@ -780,14 +781,22 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
 
     # Step 6: resolve positional args
     arg_values: dict[str, object] = {}
-    for idx, a in enumerate(cmd.args):
+    has_variadic = cmd.args and cmd.args[-1].variadic
+    fixed_args = cmd.args[:-1] if has_variadic else cmd.args
+    for idx, a in enumerate(fixed_args):
         if idx < len(positionals):
             arg_values[a.name] = positionals[idx]
         elif a.required:
             raise _ParseError(f"missing required argument '{a.name}'")
         elif not isinstance(a.default, _MissingSentinel):
             arg_values[a.name] = a.default
-    if len(positionals) > len(cmd.args):
+    if has_variadic:
+        va = cmd.args[-1]
+        remaining_positionals = positionals[len(fixed_args):]
+        if va.required and len(remaining_positionals) == 0:
+            raise _ParseError(f"missing required argument '{va.name}'")
+        arg_values[va.name] = remaining_positionals
+    elif len(positionals) > len(cmd.args):
         raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
 
     # Step 7: build kwargs dict
@@ -884,6 +893,13 @@ def _build_and_validate_command(
         if a.name in seen_arg_names:
             raise ValueError(f"command {name!r}: duplicate arg name {a.name!r}")
         seen_arg_names.add(a.name)
+
+    # Validate: variadic arg constraints
+    variadic_count = sum(1 for a in all_args if a.variadic)
+    if variadic_count > 1:
+        raise ValueError(f"command {name!r}: at most one variadic arg is allowed")
+    if variadic_count == 1 and not all_args[-1].variadic:
+        raise ValueError(f"command {name!r}: variadic arg must be the last arg")
 
     # Validate: flag help text
     for f in all_flags:
@@ -992,11 +1008,18 @@ def flag(
     return decorator
 
 
-def arg(name: str, *, help: str, required: bool = True, default: object = _MISSING) -> Callable:
+def arg(
+    name: str,
+    *,
+    help: str,
+    required: bool = True,
+    default: object = _MISSING,
+    variadic: bool = False,
+) -> Callable:
     """Module-level decorator to attach an Arg to a command handler."""
 
     def decorator(func: Callable) -> Callable:
-        a = Arg(name=name, help=help, required=required, default=default)
+        a = Arg(name=name, help=help, required=required, default=default, variadic=variadic)
         if not hasattr(func, "_strictcli_args"):
             func._strictcli_args = []
         func._strictcli_args.append(a)
@@ -1115,16 +1138,17 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
     if cmd.args:
         lines.append("")
         lines.append("Arguments:")
-        max_len = max(len(a.name) for a in cmd.args)
-        for a in cmd.args:
-            padding = max_len - len(a.name) + 4
+        display_names = [f"{a.name}..." if a.variadic else a.name for a in cmd.args]
+        max_len = max(len(dn) for dn in display_names)
+        for a, dn in zip(cmd.args, display_names):
+            padding = max_len - len(dn) + 4
             help_text = a.help
             if not a.required:
                 if not isinstance(a.default, _MissingSentinel):
                     help_text += f" [default: {a.default}]"
                 else:
                     help_text += " (optional)"
-            lines.append(f"  {a.name}{' ' * padding}{help_text}")
+            lines.append(f"  {dn}{' ' * padding}{help_text}")
 
     # Collect flag names that belong to mutex groups
     mutex_flag_names: set[str] = set()
