@@ -60,20 +60,27 @@ class Flag:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
-        if self.type not in (str, bool):
-            raise ValueError(f"Flag.type must be str or bool, got {self.type!r}")
+        if self.type not in (str, bool, int):
+            raise ValueError(f"Flag.type must be str, bool, or int, got {self.type!r}")
+        # Validate default type for int flags
+        if self.type is int and not isinstance(self.default, _MissingSentinel) and self.default is not None:
+            if not isinstance(self.default, int):
+                raise ValueError(
+                    f"Flag {self.name!r}: type=int requires an int default, "
+                    f"got {type(self.default).__name__!r}"
+                )
         # Resolve _MISSING sentinels based on type
         if isinstance(self.default, _MissingSentinel):
             if self.type is bool:
                 self.default = False
             else:
-                # str with _MISSING default means required (no default)
+                # str/int with _MISSING default means required (no default)
                 self.default = None
         elif self.type is bool and self.default is None:
             self.default = False
         if isinstance(self.negatable, _MissingSentinel):
             self.negatable = self.type is bool
-        elif self.type is str:
+        elif self.type in (str, int):
             # negatable is only meaningful for bool flags
             self.negatable = False
 
@@ -347,7 +354,13 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                     raise _ParseError(
                         f"flag '{flag_part}' is a boolean flag and does not take a value"
                     )
-                cli_set[f.name] = value_part
+                if f.type is int:
+                    try:
+                        cli_set[f.name] = int(value_part)
+                    except ValueError:
+                        raise _ParseError(f"--{f.name}: expected integer, got {value_part!r}")
+                else:
+                    cli_set[f.name] = value_part
             elif flag_part in negation_lookup:
                 raise _ParseError(
                     f"flag '{flag_part}' is a boolean negation and does not take a value"
@@ -372,9 +385,16 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                     cli_set[f.name] = True
                     i += 1
                 else:
-                    # str flag: consume next token as value
+                    # str/int flag: consume next token as value
                     if i + 1 < len(tokens):
-                        cli_set[f.name] = tokens[i + 1]
+                        raw = tokens[i + 1]
+                        if f.type is int:
+                            try:
+                                cli_set[f.name] = int(raw)
+                            except ValueError:
+                                raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
+                        else:
+                            cli_set[f.name] = raw
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -390,9 +410,16 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                     cli_set[f.name] = True
                     i += 1
                 else:
-                    # str flag: consume next token as value
+                    # str/int flag: consume next token as value
                     if i + 1 < len(tokens):
-                        cli_set[f.name] = tokens[i + 1]
+                        raw = tokens[i + 1]
+                        if f.type is int:
+                            try:
+                                cli_set[f.name] = int(raw)
+                            except ValueError:
+                                raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
+                        else:
+                            cli_set[f.name] = raw
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -421,6 +448,14 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                             f"invalid boolean value {env_val!r} for env var "
                             f"'{f.env}' (flag '--{f.name}')"
                         )
+                elif f.type is int:
+                    try:
+                        cli_set[f.name] = int(env_val)
+                    except ValueError:
+                        raise _ParseError(
+                            f"--{f.name}: expected integer, got {env_val!r} "
+                            f"(from env var '{f.env}')"
+                        )
                 else:
                     cli_set[f.name] = env_val
 
@@ -434,7 +469,7 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
         elif f.default is not None:
             cli_set[f.name] = f.default
         else:
-            # str flag with no default and no value: required
+            # str/int flag with no default and no value: required
             raise _ParseError(f"flag '--{f.name}' is required")
 
     # Step 6: resolve positional args
@@ -693,6 +728,8 @@ def _build_flag_spec(f: Flag) -> str:
     spec = ", ".join(parts)
     if f.type is str:
         spec += " <str>"
+    elif f.type is int:
+        spec += " <int>"
     return spec
 
 
