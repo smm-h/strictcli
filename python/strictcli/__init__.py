@@ -118,9 +118,12 @@ class Arg:
     name: str
     help: str
     required: bool = True
+    default: object = _MISSING
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Arg")
+        if self.required and not isinstance(self.default, _MissingSentinel):
+            raise ValueError("required arg cannot have a default")
 
 
 @dataclass
@@ -545,12 +548,14 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                     raise _ParseError(f"--{f.name}: {e}")
 
     # Step 6: resolve positional args
-    arg_values: dict[str, str] = {}
+    arg_values: dict[str, object] = {}
     for idx, a in enumerate(cmd.args):
         if idx < len(positionals):
             arg_values[a.name] = positionals[idx]
         elif a.required:
             raise _ParseError(f"missing required argument '{a.name}'")
+        elif not isinstance(a.default, _MissingSentinel):
+            arg_values[a.name] = a.default
     if len(positionals) > len(cmd.args):
         raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
 
@@ -717,11 +722,11 @@ def flag(
     return decorator
 
 
-def arg(name: str, *, help: str, required: bool = True) -> Callable:
+def arg(name: str, *, help: str, required: bool = True, default: object = _MISSING) -> Callable:
     """Module-level decorator to attach an Arg to a command handler."""
 
     def decorator(func: Callable) -> Callable:
-        a = Arg(name=name, help=help, required=required)
+        a = Arg(name=name, help=help, required=required, default=default)
         if not hasattr(func, "_strictcli_args"):
             func._strictcli_args = []
         func._strictcli_args.append(a)
@@ -845,7 +850,10 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
             padding = max_len - len(a.name) + 4
             help_text = a.help
             if not a.required:
-                help_text += " (optional)"
+                if not isinstance(a.default, _MissingSentinel):
+                    help_text += f" [default: {a.default}]"
+                else:
+                    help_text += " (optional)"
             lines.append(f"  {a.name}{' ' * padding}{help_text}")
 
     if cmd.flags:
