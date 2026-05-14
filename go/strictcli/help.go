@@ -81,17 +81,30 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("%s %s%s -- %s", app.Name, prefix, cmd.Name, cmd.Help))
 
+	// Passthrough commands: minimal help (no flags/args sections)
+	if cmd.Passthrough {
+		return strings.Join(lines, "\n")
+	}
+
 	if len(cmd.Args) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Arguments:")
 		maxLen := 0
 		for _, a := range cmd.Args {
-			if len(a.Name) > maxLen {
-				maxLen = len(a.Name)
+			displayName := a.Name
+			if a.IsVariadic {
+				displayName = a.Name + "..."
+			}
+			if len(displayName) > maxLen {
+				maxLen = len(displayName)
 			}
 		}
 		for _, a := range cmd.Args {
-			padding := maxLen - len(a.Name) + 4
+			displayName := a.Name
+			if a.IsVariadic {
+				displayName = a.Name + "..."
+			}
+			padding := maxLen - len(displayName) + 4
 			helpText := a.Help
 			if !a.Required {
 				if a.hasDefault {
@@ -100,7 +113,7 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 					helpText += " (optional)"
 				}
 			}
-			lines = append(lines, fmt.Sprintf("  %s%s%s", a.Name, strings.Repeat(" ", padding), helpText))
+			lines = append(lines, fmt.Sprintf("  %s%s%s", displayName, strings.Repeat(" ", padding), helpText))
 		}
 	}
 
@@ -155,6 +168,25 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 			}
 		}
 		for i, f := range mg.Flags {
+			padding := maxSpec - len(specs[i]) + 4
+			meta := buildFlagMeta(f)
+			lines = append(lines, fmt.Sprintf("  %s%s%s%s", specs[i], strings.Repeat(" ", padding), f.Help, meta))
+		}
+	}
+
+	// Global flags section
+	if len(app.globalFlags) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Global flags:")
+		specs := make([]string, len(app.globalFlags))
+		maxSpec := 0
+		for i, f := range app.globalFlags {
+			specs[i] = buildFlagSpec(f)
+			if len(specs[i]) > maxSpec {
+				maxSpec = len(specs[i])
+			}
+		}
+		for i, f := range app.globalFlags {
 			padding := maxSpec - len(specs[i]) + 4
 			meta := buildFlagMeta(f)
 			lines = append(lines, fmt.Sprintf("  %s%s%s%s", specs[i], strings.Repeat(" ", padding), f.Help, meta))

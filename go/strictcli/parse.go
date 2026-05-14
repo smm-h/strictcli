@@ -8,8 +8,9 @@ import (
 )
 
 // parseCommand parses tokens against a resolved command's flags and args.
+// globalFlags are recognized and silently skipped (already parsed by extractGlobalFlags).
 // Returns kwargs on success, or a non-empty error string on failure.
-func parseCommand(cmd *Command, tokens []string) (map[string]interface{}, string) {
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string]interface{}, string) {
 	// Build flag lookup maps
 	longLookup := make(map[string]*Flag)    // --flag-name -> Flag
 	shortLookup := make(map[string]*Flag)   // -x -> Flag
@@ -316,9 +317,28 @@ func parseCommand(cmd *Command, tokens []string) (map[string]interface{}, string
 
 	// Resolve positional args
 	argValues := make(map[string]interface{})
-	for idx, a := range cmd.Args {
-		if idx < len(positionals) {
-			argValues[a.Name] = positionals[idx]
+	posIdx := 0
+	for _, a := range cmd.Args {
+		if a.IsVariadic {
+			// Collect all remaining positionals
+			remaining := positionals[posIdx:]
+			if len(remaining) == 0 {
+				if a.Required {
+					return nil, fmt.Sprintf("missing required argument '%s'", a.Name)
+				}
+				// Optional variadic with no values: empty list
+				argValues[a.Name] = []interface{}{}
+			} else {
+				vals := make([]interface{}, len(remaining))
+				for j, v := range remaining {
+					vals[j] = v
+				}
+				argValues[a.Name] = vals
+			}
+			posIdx = len(positionals)
+		} else if posIdx < len(positionals) {
+			argValues[a.Name] = positionals[posIdx]
+			posIdx++
 		} else if a.Required {
 			return nil, fmt.Sprintf("missing required argument '%s'", a.Name)
 		} else if a.hasDefault {
@@ -328,8 +348,8 @@ func parseCommand(cmd *Command, tokens []string) (map[string]interface{}, string
 			argValues[a.Name] = nil
 		}
 	}
-	if len(positionals) > len(cmd.Args) {
-		return nil, fmt.Sprintf("unexpected argument '%s'", positionals[len(cmd.Args)])
+	if posIdx < len(positionals) {
+		return nil, fmt.Sprintf("unexpected argument '%s'", positionals[posIdx])
 	}
 
 	// Build kwargs dict

@@ -4,6 +4,7 @@ package strictcli
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -40,6 +41,7 @@ type Arg struct {
 	Help     string
 	Required bool
 	Default  interface{}
+	IsVariadic bool
 
 	hasDefault bool
 }
@@ -56,15 +58,20 @@ type MutexGroup struct {
 	Required bool
 }
 
+// PassthroughHandler is the handler type for passthrough commands.
+type PassthroughHandler func(name string, args []string, globals map[string]interface{}) int
+
 // Command is a leaf command with a handler.
 type Command struct {
-	Name    string
-	Help    string
-	Handler func(map[string]interface{})
-	Flags   []Flag
-	Args    []Arg
-	Tags    []Tag
-	Mutex   []MutexGroup
+	Name               string
+	Help               string
+	Handler            func(map[string]interface{}) int
+	Flags              []Flag
+	Args               []Arg
+	Tags               []Tag
+	Mutex              []MutexGroup
+	Passthrough        bool
+	PassthroughHandler PassthroughHandler
 }
 
 // Group is a container for nested commands (one nesting level).
@@ -92,8 +99,9 @@ type App struct {
 	Help      string
 	EnvPrefix string
 
-	commands map[string]*Command
-	groups   map[string]*Group
+	commands    map[string]*Command
+	groups      map[string]*Group
+	globalFlags []Flag
 
 	// order preserves insertion order for help display
 	cmdOrder   []string
@@ -190,6 +198,13 @@ func ArgDefault(v interface{}) ArgOption {
 	}
 }
 
+// Variadic marks a positional argument as variadic (collects remaining values).
+func Variadic() ArgOption {
+	return func(a *Arg) {
+		a.IsVariadic = true
+	}
+}
+
 // CmdOption configures a Command during registration.
 type CmdOption func(*Command)
 
@@ -218,6 +233,14 @@ func WithTags(tags ...Tag) CmdOption {
 func WithMutex(groups ...MutexGroup) CmdOption {
 	return func(c *Command) {
 		c.Mutex = append(c.Mutex, groups...)
+	}
+}
+
+// WithPassthrough marks a command as passthrough (skips parsing, forwards raw args).
+func WithPassthrough(handler PassthroughHandler) CmdOption {
+	return func(c *Command) {
+		c.Passthrough = true
+		c.PassthroughHandler = handler
 	}
 }
 
@@ -340,10 +363,44 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 }
 
 // Command registers a top-level command.
-func (a *App) Command(name, help string, handler func(map[string]interface{}), opts ...CmdOption) {
-	cmd := buildAndValidateCommand(name, help, handler, a.EnvPrefix, opts)
+func (a *App) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
+	cmd := buildAndValidateCommand(name, help, handler, a.EnvPrefix, a.globalFlags, opts)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
+}
+
+// Passthrough registers a passthrough command (raw args, no parsing).
+// Accepts CmdOptions for validation purposes (e.g., to detect invalid passthrough+flags).
+func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ...CmdOption) {
+	if strings.TrimSpace(help) == "" {
+		panic(fmt.Sprintf("command %q: missing help text", name))
+	}
+	cmd := &Command{
+		Name:               name,
+		Help:               help,
+		Passthrough:        true,
+		PassthroughHandler: handler,
+	}
+	for _, opt := range opts {
+		opt(cmd)
+	}
+	// Passthrough commands cannot have flags, args, tags, or mutex
+	if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.Tags) > 0 || len(cmd.Mutex) > 0 {
+		panic(fmt.Sprintf("command %q: passthrough commands cannot have flags, args, tags, or mutex groups", name))
+	}
+	a.commands[name] = cmd
+	a.cmdOrder = append(a.cmdOrder, name)
+}
+
+// GlobalFlag registers a global flag on the app.
+func (a *App) GlobalFlag(f Flag) {
+	// Check for collisions with existing global flags
+	for _, gf := range a.globalFlags {
+		if gf.Name == f.Name {
+			panic(fmt.Sprintf("duplicate global flag name %q", f.Name))
+		}
+	}
+	a.globalFlags = append(a.globalFlags, f)
 }
 
 // Group creates and registers a command group.
@@ -363,8 +420,8 @@ func (a *App) Group(name, help string) *Group {
 }
 
 // Command registers a command within a group.
-func (g *Group) Command(name, help string, handler func(map[string]interface{}), opts ...CmdOption) {
-	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, opts)
+func (g *Group) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
+	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, nil, opts)
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
 }
@@ -372,38 +429,43 @@ func (g *Group) Command(name, help string, handler func(map[string]interface{}),
 // Run executes the CLI, reading from os.Args.
 func (a *App) Run() {
 	argv := os.Args[1:]
-	cmd, kwargs, helpText, versionText, parseErr := a.doParse(argv)
+	pr := a.doParse(argv)
 
-	if helpText != "" {
-		fmt.Println(helpText)
+	if pr.helpText != "" {
+		fmt.Println(pr.helpText)
 		os.Exit(0)
 	}
-	if versionText != "" {
-		fmt.Println(versionText)
+	if pr.versionText != "" {
+		fmt.Println(pr.versionText)
 		os.Exit(0)
 	}
-	if parseErr != "" {
-		fmt.Fprintln(os.Stderr, "error: "+parseErr)
+	if pr.parseErr != "" {
+		fmt.Fprintln(os.Stderr, "error: "+pr.parseErr)
 		fmt.Fprintf(os.Stderr, "try '%s --help'\n", a.Name)
 		os.Exit(1)
 	}
 
-	cmd.Handler(kwargs)
-	os.Exit(0)
+	if pr.cmd.Passthrough {
+		code := pr.cmd.PassthroughHandler(pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
+		os.Exit(code)
+	}
+
+	code := pr.cmd.Handler(pr.kwargs)
+	os.Exit(code)
 }
 
 // Test runs the CLI with the given argv, capturing output and exit code.
 func (a *App) Test(argv []string) Result {
-	cmd, kwargs, helpText, versionText, parseErr := a.doParse(argv)
+	pr := a.doParse(argv)
 
-	if helpText != "" {
-		return Result{Stdout: helpText + "\n", ExitCode: 0}
+	if pr.helpText != "" {
+		return Result{Stdout: pr.helpText + "\n", ExitCode: 0}
 	}
-	if versionText != "" {
-		return Result{Stdout: versionText + "\n", ExitCode: 0}
+	if pr.versionText != "" {
+		return Result{Stdout: pr.versionText + "\n", ExitCode: 0}
 	}
-	if parseErr != "" {
-		stderr := fmt.Sprintf("error: %s\ntry '%s --help'\n", parseErr, a.Name)
+	if pr.parseErr != "" {
+		stderr := fmt.Sprintf("error: %s\ntry '%s --help'\n", pr.parseErr, a.Name)
 		return Result{Stderr: stderr, ExitCode: 1}
 	}
 
@@ -416,7 +478,12 @@ func (a *App) Test(argv []string) Result {
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
-	cmd.Handler(kwargs)
+	var exitCode int
+	if pr.cmd.Passthrough {
+		exitCode = pr.cmd.PassthroughHandler(pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
+	} else {
+		exitCode = pr.cmd.Handler(pr.kwargs)
+	}
 
 	stdoutW.Close()
 	stderrW.Close()
@@ -433,64 +500,287 @@ func (a *App) Test(argv []string) Result {
 	return Result{
 		Stdout:   string(stdoutBuf[:stdoutN]),
 		Stderr:   string(stderrBuf[:stderrN]),
-		ExitCode: 0,
+		ExitCode: exitCode,
 	}
 }
 
-// doParse parses argv and returns one of: (cmd, kwargs), helpText, versionText, or parseErr.
-// Exactly one of the return groups will be non-zero.
-func (a *App) doParse(argv []string) (*Command, map[string]interface{}, string, string, string) {
-	// App-level --help/-h and --version/-v
+// parseResult holds the output of doParse.
+type parseResult struct {
+	cmd             *Command
+	kwargs          map[string]interface{}
+	globalKwargs    map[string]interface{}
+	passthroughArgs []string
+	helpText        string
+	versionText     string
+	parseErr        string
+}
+
+// doParse parses argv and returns a parseResult.
+// Exactly one of: (cmd+kwargs), helpText, versionText, or parseErr will be non-zero.
+func (a *App) doParse(argv []string) parseResult {
+	// App-level --help/-h and --version/-v (no global flags present)
 	if len(argv) == 0 || (len(argv) == 1 && (argv[0] == "--help" || argv[0] == "-h")) {
-		return nil, nil, formatAppHelp(a), "", ""
+		return parseResult{helpText: formatAppHelp(a)}
 	}
 	if len(argv) == 1 && (argv[0] == "--version" || argv[0] == "-v") {
-		return nil, nil, "", formatVersion(a), ""
+		return parseResult{versionText: formatVersion(a)}
 	}
 
-	token := argv[0]
-	rest := argv[1:]
+	// Extract global flags from argv, leaving the rest for command routing.
+	// Global flags can appear before the command name.
+	globalValues, rest, globalErr := a.extractGlobalFlags(argv)
+	if globalErr != "" {
+		return parseResult{parseErr: globalErr}
+	}
+
+	// After extracting globals, check for help/version again
+	if len(rest) == 0 || (len(rest) == 1 && (rest[0] == "--help" || rest[0] == "-h")) {
+		return parseResult{helpText: formatAppHelp(a)}
+	}
+	if len(rest) == 1 && (rest[0] == "--version" || rest[0] == "-v") {
+		return parseResult{versionText: formatVersion(a)}
+	}
+
+	token := rest[0]
+	cmdRest := rest[1:]
 
 	// Check groups first
 	if grp, ok := a.groups[token]; ok {
-		if len(rest) == 0 || (len(rest) == 1 && (rest[0] == "--help" || rest[0] == "-h")) {
-			return nil, nil, formatGroupHelp(a, grp), "", ""
+		if len(cmdRest) == 0 || (len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h")) {
+			return parseResult{helpText: formatGroupHelp(a, grp)}
 		}
-		subToken := rest[0]
-		rest = rest[1:]
+		subToken := cmdRest[0]
+		cmdRest = cmdRest[1:]
 		cmd, ok := grp.Commands[subToken]
 		if !ok {
-			return nil, nil, "", "", fmt.Sprintf("unknown command '%s'", subToken)
+			return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", subToken)}
 		}
 		// Check command-level --help
-		if len(rest) == 1 && (rest[0] == "--help" || rest[0] == "-h") {
+		if len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h") {
 			prefix := grp.Name + " "
-			return nil, nil, formatCommandHelp(a, cmd, prefix), "", ""
+			return parseResult{helpText: formatCommandHelp(a, cmd, prefix)}
 		}
-		kwargs, err := parseCommand(cmd, rest)
+		kwargs, err := parseCommand(cmd, cmdRest, a.globalFlags)
 		if err != "" {
-			return nil, nil, "", "", err
+			return parseResult{parseErr: err}
 		}
-		return cmd, kwargs, "", "", ""
+		// Merge global values
+		for k, v := range globalValues {
+			kwargs[k] = v
+		}
+		return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
 	}
 
 	// Check commands
 	if cmd, ok := a.commands[token]; ok {
-		if len(rest) == 1 && (rest[0] == "--help" || rest[0] == "-h") {
-			return nil, nil, formatCommandHelp(a, cmd, ""), "", ""
+		// Passthrough: skip parsing, forward raw args
+		if cmd.Passthrough {
+			// Check for help in passthrough
+			if len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h") {
+				return parseResult{helpText: formatCommandHelp(a, cmd, "")}
+			}
+			return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
 		}
-		kwargs, err := parseCommand(cmd, rest)
+		// Check command-level --help
+		if len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h") {
+			return parseResult{helpText: formatCommandHelp(a, cmd, "")}
+		}
+		kwargs, err := parseCommand(cmd, cmdRest, a.globalFlags)
 		if err != "" {
-			return nil, nil, "", "", err
+			return parseResult{parseErr: err}
 		}
-		return cmd, kwargs, "", "", ""
+		// Merge global values
+		for k, v := range globalValues {
+			kwargs[k] = v
+		}
+		return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
 	}
 
-	return nil, nil, "", "", fmt.Sprintf("unknown command '%s'", token)
+	return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", token)}
+}
+
+// extractGlobalFlags scans argv for global flag tokens, parsing and removing them.
+// Returns (globalValues map, remaining argv, error string).
+func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []string, string) {
+	globalValues := make(map[string]interface{})
+	if len(a.globalFlags) == 0 {
+		return globalValues, argv, ""
+	}
+
+	// Build lookup maps for global flags
+	longLookup := make(map[string]*Flag)
+	shortLookup := make(map[string]*Flag)
+	negationLookup := make(map[string]*Flag)
+	for i := range a.globalFlags {
+		f := &a.globalFlags[i]
+		longLookup["--"+f.Name] = f
+		if f.Short != "" {
+			shortLookup["-"+f.Short] = f
+		}
+		if f.Type == TypeBool && f.Negatable {
+			negationLookup["--no-"+f.Name] = f
+		}
+	}
+
+	var remaining []string
+	i := 0
+	for i < len(argv) {
+		tok := argv[i]
+
+		// --flag=value form for global flags
+		if strings.HasPrefix(tok, "--") && strings.Contains(tok, "=") {
+			eqPos := strings.Index(tok, "=")
+			flagPart := tok[:eqPos]
+			valuePart := tok[eqPos+1:]
+			if f, ok := longLookup[flagPart]; ok {
+				if f.Type == TypeBool {
+					return nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
+				}
+				val, err := parseGlobalFlagValue(f, valuePart)
+				if err != "" {
+					return nil, nil, err
+				}
+				globalValues[f.Name] = val
+				i++
+				continue
+			}
+		}
+
+		// --no-flag negation for global bool flags
+		if f, ok := negationLookup[tok]; ok {
+			globalValues[f.Name] = false
+			i++
+			continue
+		}
+
+		// --flag (long form)
+		if f, ok := longLookup[tok]; ok {
+			if f.Type == TypeBool {
+				globalValues[f.Name] = true
+				i++
+			} else {
+				if i+1 >= len(argv) {
+					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
+				}
+				val, err := parseGlobalFlagValue(f, argv[i+1])
+				if err != "" {
+					return nil, nil, err
+				}
+				globalValues[f.Name] = val
+				i += 2
+			}
+			continue
+		}
+
+		// -x (short form)
+		if f, ok := shortLookup[tok]; ok {
+			if f.Type == TypeBool {
+				globalValues[f.Name] = true
+				i++
+			} else {
+				if i+1 >= len(argv) {
+					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
+				}
+				val, err := parseGlobalFlagValue(f, argv[i+1])
+				if err != "" {
+					return nil, nil, err
+				}
+				globalValues[f.Name] = val
+				i += 2
+			}
+			continue
+		}
+
+		remaining = append(remaining, tok)
+		i++
+	}
+
+	// Resolve env vars for global flags not set by CLI
+	for i := range a.globalFlags {
+		f := &a.globalFlags[i]
+		if _, ok := globalValues[f.Name]; ok {
+			continue
+		}
+		if f.Env != "" {
+			envVal, ok := os.LookupEnv(f.Env)
+			if ok {
+				switch f.Type {
+				case TypeBool:
+					lower := strings.ToLower(envVal)
+					switch lower {
+					case "1", "true", "yes":
+						globalValues[f.Name] = true
+					case "0", "false", "no":
+						globalValues[f.Name] = false
+					default:
+						return nil, nil, fmt.Sprintf(
+							"invalid boolean value '%s' for env var '%s' (flag '--%s')",
+							envVal, f.Env, f.Name,
+						)
+					}
+				case TypeInt:
+					intVal, err := strconv.Atoi(envVal)
+					if err != nil {
+						return nil, nil, fmt.Sprintf(
+							"--%s: expected integer, got '%s' (from env var '%s')",
+							f.Name, envVal, f.Env,
+						)
+					}
+					globalValues[f.Name] = intVal
+				default:
+					globalValues[f.Name] = envVal
+				}
+				continue
+			}
+		}
+	}
+
+	// Apply defaults for global flags not set
+	for i := range a.globalFlags {
+		f := &a.globalFlags[i]
+		if _, ok := globalValues[f.Name]; ok {
+			continue
+		}
+		if f.Type == TypeBool {
+			if f.hasDefault {
+				globalValues[f.Name] = f.Default
+			} else {
+				globalValues[f.Name] = false
+			}
+		} else if f.hasDefault && f.Default != nil {
+			globalValues[f.Name] = f.Default
+		} else if f.hasDefault {
+			globalValues[f.Name] = nil
+		} else {
+			return nil, nil, fmt.Sprintf("global flag '--%s' is required", f.Name)
+		}
+	}
+
+	// Convert to param-name keys
+	result := make(map[string]interface{})
+	for k, v := range globalValues {
+		result[flagParamName(k)] = v
+	}
+
+	return result, remaining, ""
+}
+
+// parseGlobalFlagValue parses a string value for a global flag.
+func parseGlobalFlagValue(f *Flag, raw string) (interface{}, string) {
+	switch f.Type {
+	case TypeInt:
+		intVal, err := strconv.Atoi(raw)
+		if err != nil {
+			return nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
+		}
+		return intVal, ""
+	default:
+		return raw, ""
+	}
 }
 
 // buildAndValidateCommand creates and validates a Command.
-func buildAndValidateCommand(name, help string, handler func(map[string]interface{}), envPrefix string, opts []CmdOption) *Command {
+func buildAndValidateCommand(name, help string, handler func(map[string]interface{}) int, envPrefix string, globalFlags []Flag, opts []CmdOption) *Command {
 	if strings.TrimSpace(help) == "" {
 		panic(fmt.Sprintf("command %q: missing help text", name))
 	}
@@ -502,6 +792,14 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 	}
 	for _, opt := range opts {
 		opt(cmd)
+	}
+
+	// Passthrough commands cannot have flags, args, tags, or mutex
+	if cmd.Passthrough {
+		if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.Tags) > 0 || len(cmd.Mutex) > 0 {
+			panic(fmt.Sprintf("command %q: passthrough commands cannot have flags, args, tags, or mutex groups", name))
+		}
+		return cmd
 	}
 
 	// Merge tag flags and mutex flags into a unified all-flags list for validation
@@ -526,8 +824,11 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 		allFlags = append(allFlags, mg.Flags...)
 	}
 
-	// Check duplicate flag names
+	// Check duplicate flag names (including collisions with global flags)
 	seenFlags := make(map[string]bool)
+	for _, gf := range globalFlags {
+		seenFlags[gf.Name] = true
+	}
 	for _, f := range allFlags {
 		if seenFlags[f.Name] {
 			panic(fmt.Sprintf("command %q: duplicate flag name %q", name, f.Name))
@@ -542,6 +843,20 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 			panic(fmt.Sprintf("command %q: duplicate arg name %q", name, a.Name))
 		}
 		seenArgs[a.Name] = true
+	}
+
+	// Validate variadic args: at most one, must be last
+	variadicCount := 0
+	for i, a := range cmd.Args {
+		if a.IsVariadic {
+			variadicCount++
+			if variadicCount > 1 {
+				panic(fmt.Sprintf("command %q: at most one variadic arg allowed", name))
+			}
+			if i != len(cmd.Args)-1 {
+				panic(fmt.Sprintf("command %q: variadic arg %q must be the last arg", name, a.Name))
+			}
+		}
 	}
 
 	// Validate flag help
