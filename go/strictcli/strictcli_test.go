@@ -1,0 +1,1387 @@
+package strictcli
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+)
+
+// helper to build a simple app with one command that prints a template
+func simpleApp(cmdName, cmdHelp, handlerPrints string, opts ...CmdOption) *App {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command(cmdName, cmdHelp, func(args map[string]interface{}) {
+		out := handlerPrints
+		for k, v := range args {
+			out = strings.ReplaceAll(out, "{"+k+"}", formatValue(v))
+		}
+		fmt.Print(out)
+	}, opts...)
+	return app
+}
+
+// formatValue formats a value the way conformance tests expect
+func formatValue(v interface{}) string {
+	if v == nil {
+		return "None"
+	}
+	switch val := v.(type) {
+	case bool:
+		if val {
+			return "true"
+		}
+		return "false"
+	case []interface{}:
+		parts := make([]string, len(val))
+		for i, item := range val {
+			parts[i] = fmt.Sprintf("%v", item)
+		}
+		return strings.Join(parts, ",")
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
+// --- Basic tests ---
+
+func TestBasicDispatch(t *testing.T) {
+	app := simpleApp("greet", "say hello", "hello")
+	r := app.Test([]string{"greet"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "hello") {
+		t.Fatalf("stdout should contain 'hello', got %q", r.Stdout)
+	}
+}
+
+func TestBasicUnknownCommand(t *testing.T) {
+	app := simpleApp("greet", "say hello", "hello")
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown command") {
+		t.Fatalf("stderr should contain 'unknown command', got %q", r.Stderr)
+	}
+}
+
+func TestBasicNoArgs(t *testing.T) {
+	app := simpleApp("greet", "say hello", "hello")
+	r := app.Test([]string{})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "myapp v1.0.0") {
+		t.Fatalf("stdout should contain version, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "Commands:") {
+		t.Fatalf("stdout should contain 'Commands:', got %q", r.Stdout)
+	}
+}
+
+func TestVersionFlag(t *testing.T) {
+	app := NewApp("myapp", "2.5.0", "test app")
+	app.Command("greet", "say hello", func(args map[string]interface{}) {}, )
+	r := app.Test([]string{"--version"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "myapp 2.5.0") {
+		t.Fatalf("stdout should contain 'myapp 2.5.0', got %q", r.Stdout)
+	}
+}
+
+func TestShortVersionFlag(t *testing.T) {
+	app := NewApp("myapp", "2.5.0", "test app")
+	app.Command("greet", "say hello", func(args map[string]interface{}) {}, )
+	r := app.Test([]string{"-v"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "myapp 2.5.0") {
+		t.Fatalf("stdout should contain 'myapp 2.5.0', got %q", r.Stdout)
+	}
+}
+
+func TestHelpFlag(t *testing.T) {
+	app := simpleApp("greet", "say hello", "hello")
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "myapp v1.0.0") {
+		t.Fatalf("stdout should contain version, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "test app") {
+		t.Fatalf("stdout should contain help text, got %q", r.Stdout)
+	}
+}
+
+func TestShortHelpFlag(t *testing.T) {
+	app := simpleApp("greet", "say hello", "hello")
+	r := app.Test([]string{"-h"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "myapp v1.0.0") {
+		t.Fatalf("stdout should contain version, got %q", r.Stdout)
+	}
+}
+
+func TestMultipleCommands(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("start", "start service", func(args map[string]interface{}) {
+		fmt.Print("started")
+	})
+	app.Command("stop", "stop service", func(args map[string]interface{}) {
+		fmt.Print("stopped")
+	})
+	r := app.Test([]string{"stop"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "stopped") {
+		t.Fatalf("stdout should contain 'stopped', got %q", r.Stdout)
+	}
+}
+
+// --- Flag tests ---
+
+func TestStrFlagSpaceSyntax(t *testing.T) {
+	app := simpleApp("cmd", "a command", "target={target}",
+		WithFlags(StringFlag("target", "the target")))
+	r := app.Test([]string{"cmd", "--target", "foo"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "target=foo") {
+		t.Fatalf("stdout should contain 'target=foo', got %q", r.Stdout)
+	}
+}
+
+func TestStrFlagEqualsSyntax(t *testing.T) {
+	app := simpleApp("cmd", "a command", "target={target}",
+		WithFlags(StringFlag("target", "the target")))
+	r := app.Test([]string{"cmd", "--target=bar"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "target=bar") {
+		t.Fatalf("stdout should contain 'target=bar', got %q", r.Stdout)
+	}
+}
+
+func TestBoolFlagPresent(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose}",
+		WithFlags(BoolFlag("verbose", "be verbose")))
+	r := app.Test([]string{"cmd", "--verbose"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "verbose=true") {
+		t.Fatalf("stdout should contain 'verbose=true', got %q", r.Stdout)
+	}
+}
+
+func TestBoolFlagAbsent(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose}",
+		WithFlags(BoolFlag("verbose", "be verbose")))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "verbose=false") {
+		t.Fatalf("stdout should contain 'verbose=false', got %q", r.Stdout)
+	}
+}
+
+func TestBoolFlagNegation(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose}",
+		WithFlags(BoolFlag("verbose", "be verbose")))
+	r := app.Test([]string{"cmd", "--no-verbose"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "verbose=false") {
+		t.Fatalf("stdout should contain 'verbose=false', got %q", r.Stdout)
+	}
+}
+
+func TestShortBoolFlag(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose}",
+		WithFlags(BoolFlag("verbose", "be verbose", Short("V"))))
+	r := app.Test([]string{"cmd", "-V"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "verbose=true") {
+		t.Fatalf("stdout should contain 'verbose=true', got %q", r.Stdout)
+	}
+}
+
+func TestShortStrFlag(t *testing.T) {
+	app := simpleApp("cmd", "a command", "target={target}",
+		WithFlags(StringFlag("target", "the target", Short("t"))))
+	r := app.Test([]string{"cmd", "-t", "foo"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "target=foo") {
+		t.Fatalf("stdout should contain 'target=foo', got %q", r.Stdout)
+	}
+}
+
+func TestStrFlagDefault(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format}",
+		WithFlags(StringFlag("format", "output format", Default("text"))))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "format=text") {
+		t.Fatalf("stdout should contain 'format=text', got %q", r.Stdout)
+	}
+}
+
+func TestStrFlagDefaultOverride(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format}",
+		WithFlags(StringFlag("format", "output format", Default("text"))))
+	r := app.Test([]string{"cmd", "--format", "json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "format=json") {
+		t.Fatalf("stdout should contain 'format=json', got %q", r.Stdout)
+	}
+}
+
+func TestRequiredStrFlagMissing(t *testing.T) {
+	app := simpleApp("cmd", "a command", "target={target}",
+		WithFlags(StringFlag("target", "the target")))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "required") {
+		t.Fatalf("stderr should contain 'required', got %q", r.Stderr)
+	}
+}
+
+func TestBoolFlagEqualsSyntaxRejected(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose}",
+		WithFlags(BoolFlag("verbose", "be verbose")))
+	r := app.Test([]string{"cmd", "--verbose=true"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "boolean flag") {
+		t.Fatalf("stderr should contain 'boolean flag', got %q", r.Stderr)
+	}
+}
+
+// --- Arg tests ---
+
+func TestSingleRequiredArg(t *testing.T) {
+	app := simpleApp("greet", "say hello", "hello {name}",
+		WithArgs(NewArg("name", "who to greet")))
+	r := app.Test([]string{"greet", "world"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "hello world") {
+		t.Fatalf("stdout should contain 'hello world', got %q", r.Stdout)
+	}
+}
+
+func TestMissingRequiredArg(t *testing.T) {
+	app := simpleApp("greet", "say hello", "hello {name}",
+		WithArgs(NewArg("name", "who to greet")))
+	r := app.Test([]string{"greet"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "missing required argument") {
+		t.Fatalf("stderr should contain 'missing required argument', got %q", r.Stderr)
+	}
+}
+
+func TestTwoPositionalArgs(t *testing.T) {
+	app := simpleApp("copy", "copy files", "{src}->{dst}",
+		WithArgs(NewArg("src", "source file"), NewArg("dst", "destination file")))
+	r := app.Test([]string{"copy", "a.txt", "b.txt"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "a.txt->b.txt") {
+		t.Fatalf("stdout should contain 'a.txt->b.txt', got %q", r.Stdout)
+	}
+}
+
+func TestExtraPositionalArgRejected(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok")
+	r := app.Test([]string{"cmd", "surprise"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unexpected argument") {
+		t.Fatalf("stderr should contain 'unexpected argument', got %q", r.Stderr)
+	}
+}
+
+func TestOptionalArgWithDefault(t *testing.T) {
+	app := simpleApp("cmd", "a command", "path={path}",
+		WithArgs(NewArg("path", "project dir", ArgRequired(false), ArgDefault("."))))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "path=.") {
+		t.Fatalf("stdout should contain 'path=.', got %q", r.Stdout)
+	}
+}
+
+func TestOptionalArgProvided(t *testing.T) {
+	app := simpleApp("cmd", "a command", "path={path}",
+		WithArgs(NewArg("path", "project dir", ArgRequired(false), ArgDefault("."))))
+	r := app.Test([]string{"cmd", "/tmp/foo"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "path=/tmp/foo") {
+		t.Fatalf("stdout should contain 'path=/tmp/foo', got %q", r.Stdout)
+	}
+}
+
+func TestOptionalArgNoDefault(t *testing.T) {
+	app := simpleApp("cmd", "a command", "path={path}",
+		WithArgs(NewArg("path", "project dir", ArgRequired(false))))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "path=None") {
+		t.Fatalf("stdout should contain 'path=None', got %q", r.Stdout)
+	}
+}
+
+func TestDoubleDashStopsFlagParsing(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose} path={path}",
+		WithFlags(BoolFlag("verbose", "be verbose")),
+		WithArgs(NewArg("path", "a path")))
+	r := app.Test([]string{"cmd", "--", "--not-a-flag"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "verbose=false") {
+		t.Fatalf("stdout should contain 'verbose=false', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "path=--not-a-flag") {
+		t.Fatalf("stdout should contain 'path=--not-a-flag', got %q", r.Stdout)
+	}
+}
+
+// --- Int type tests ---
+
+func TestIntFlagParses(t *testing.T) {
+	app := simpleApp("cmd", "a command", "port={port}",
+		WithFlags(IntFlag("port", "the port")))
+	r := app.Test([]string{"cmd", "--port", "8080"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=8080") {
+		t.Fatalf("stdout should contain 'port=8080', got %q", r.Stdout)
+	}
+}
+
+func TestIntFlagDefault(t *testing.T) {
+	app := simpleApp("cmd", "a command", "port={port}",
+		WithFlags(IntFlag("port", "the port", Default(8000))))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=8000") {
+		t.Fatalf("stdout should contain 'port=8000', got %q", r.Stdout)
+	}
+}
+
+func TestIntFlagBadValue(t *testing.T) {
+	app := simpleApp("cmd", "a command", "port={port}",
+		WithFlags(IntFlag("port", "the port")))
+	r := app.Test([]string{"cmd", "--port", "abc"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "expected integer") {
+		t.Fatalf("stderr should contain 'expected integer', got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "'abc'") {
+		t.Fatalf("stderr should contain 'abc', got %q", r.Stderr)
+	}
+}
+
+func TestIntFlagEqualsSyntax(t *testing.T) {
+	app := simpleApp("cmd", "a command", "port={port}",
+		WithFlags(IntFlag("port", "the port")))
+	r := app.Test([]string{"cmd", "--port=8080"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=8080") {
+		t.Fatalf("stdout should contain 'port=8080', got %q", r.Stdout)
+	}
+}
+
+func TestIntFlagShort(t *testing.T) {
+	app := simpleApp("cmd", "a command", "port={port}",
+		WithFlags(IntFlag("port", "the port", Short("p"))))
+	r := app.Test([]string{"cmd", "-p", "8080"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=8080") {
+		t.Fatalf("stdout should contain 'port=8080', got %q", r.Stdout)
+	}
+}
+
+func TestIntFlagRequired(t *testing.T) {
+	app := simpleApp("cmd", "a command", "port={port}",
+		WithFlags(IntFlag("port", "the port")))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "required") {
+		t.Fatalf("stderr should contain 'required', got %q", r.Stderr)
+	}
+}
+
+// --- Env tests ---
+
+func TestEnvStrFlag(t *testing.T) {
+	os.Setenv("MYAPP_TARGET", "from-env")
+	defer os.Unsetenv("MYAPP_TARGET")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {
+		fmt.Print("target=" + formatValue(args["target"]))
+	}, WithFlags(StringFlag("target", "the target", Default("fallback"), Env("MYAPP_TARGET"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "target=from-env") {
+		t.Fatalf("stdout should contain 'target=from-env', got %q", r.Stdout)
+	}
+}
+
+func TestEnvCLIOverrides(t *testing.T) {
+	os.Setenv("MYAPP_TARGET", "from-env")
+	defer os.Unsetenv("MYAPP_TARGET")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {
+		fmt.Print("target=" + formatValue(args["target"]))
+	}, WithFlags(StringFlag("target", "the target", Default("fallback"), Env("MYAPP_TARGET"))))
+
+	r := app.Test([]string{"cmd", "--target", "from-cli"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "target=from-cli") {
+		t.Fatalf("stdout should contain 'target=from-cli', got %q", r.Stdout)
+	}
+}
+
+func TestEnvBoolTrue(t *testing.T) {
+	for _, val := range []string{"true", "1", "yes"} {
+		os.Setenv("MYAPP_VERBOSE", val)
+		app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+		app.Command("cmd", "a command", func(args map[string]interface{}) {
+			fmt.Print("verbose=" + formatValue(args["verbose"]))
+		}, WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"))))
+
+		r := app.Test([]string{"cmd"})
+		if r.ExitCode != 0 {
+			t.Fatalf("val=%q: expected exit 0, got %d", val, r.ExitCode)
+		}
+		if !strings.Contains(r.Stdout, "verbose=true") {
+			t.Fatalf("val=%q: stdout should contain 'verbose=true', got %q", val, r.Stdout)
+		}
+		os.Unsetenv("MYAPP_VERBOSE")
+	}
+}
+
+func TestEnvBoolFalse(t *testing.T) {
+	for _, val := range []string{"false", "0", "no"} {
+		os.Setenv("MYAPP_VERBOSE", val)
+		app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+		app.Command("cmd", "a command", func(args map[string]interface{}) {
+			fmt.Print("verbose=" + formatValue(args["verbose"]))
+		}, WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"))))
+
+		r := app.Test([]string{"cmd"})
+		if r.ExitCode != 0 {
+			t.Fatalf("val=%q: expected exit 0, got %d", val, r.ExitCode)
+		}
+		if !strings.Contains(r.Stdout, "verbose=false") {
+			t.Fatalf("val=%q: stdout should contain 'verbose=false', got %q", val, r.Stdout)
+		}
+		os.Unsetenv("MYAPP_VERBOSE")
+	}
+}
+
+func TestEnvBoolInvalid(t *testing.T) {
+	os.Setenv("MYAPP_VERBOSE", "maybe")
+	defer os.Unsetenv("MYAPP_VERBOSE")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {},
+		WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "invalid boolean value") {
+		t.Fatalf("stderr should contain 'invalid boolean value', got %q", r.Stderr)
+	}
+}
+
+func TestEnvIntFlag(t *testing.T) {
+	os.Setenv("MYAPP_PORT", "9090")
+	defer os.Unsetenv("MYAPP_PORT")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {
+		fmt.Print("port=" + formatValue(args["port"]))
+	}, WithFlags(IntFlag("port", "the port", Default(80), Env("MYAPP_PORT"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=9090") {
+		t.Fatalf("stdout should contain 'port=9090', got %q", r.Stdout)
+	}
+}
+
+func TestEnvIntBadValue(t *testing.T) {
+	os.Setenv("MYAPP_PORT", "abc")
+	defer os.Unsetenv("MYAPP_PORT")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {},
+		WithFlags(IntFlag("port", "the port", Default(80), Env("MYAPP_PORT"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "expected integer") {
+		t.Fatalf("stderr should contain 'expected integer', got %q", r.Stderr)
+	}
+}
+
+// --- Choices tests ---
+
+func TestChoicesValidStr(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format}",
+		WithFlags(StringFlag("format", "output format", Choices("text", "json"))))
+	r := app.Test([]string{"cmd", "--format", "json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "format=json") {
+		t.Fatalf("stdout should contain 'format=json', got %q", r.Stdout)
+	}
+}
+
+func TestChoicesInvalidStr(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format}",
+		WithFlags(StringFlag("format", "output format", Choices("text", "json"))))
+	r := app.Test([]string{"cmd", "--format", "xml"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "invalid value") {
+		t.Fatalf("stderr should contain 'invalid value', got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "'xml'") {
+		t.Fatalf("stderr should contain 'xml', got %q", r.Stderr)
+	}
+}
+
+func TestChoicesValidInt(t *testing.T) {
+	app := simpleApp("cmd", "a command", "port={port}",
+		WithFlags(IntFlag("port", "the port", Choices(80, 443, 8080))))
+	r := app.Test([]string{"cmd", "--port", "443"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=443") {
+		t.Fatalf("stdout should contain 'port=443', got %q", r.Stdout)
+	}
+}
+
+func TestChoicesInvalidInt(t *testing.T) {
+	app := simpleApp("cmd", "a command", "port={port}",
+		WithFlags(IntFlag("port", "the port", Choices(80, 443, 8080))))
+	r := app.Test([]string{"cmd", "--port", "9090"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "invalid value") {
+		t.Fatalf("stderr should contain 'invalid value', got %q", r.Stderr)
+	}
+}
+
+func TestChoicesInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("format", "output format", Default("text"), Choices("text", "json"))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "choices: text, json") {
+		t.Fatalf("stdout should contain 'choices: text, json', got %q", r.Stdout)
+	}
+}
+
+// --- Error tests ---
+
+func TestUnknownFlag(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(BoolFlag("verbose", "be verbose")))
+	r := app.Test([]string{"cmd", "--unknown"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown flag") {
+		t.Fatalf("stderr should contain 'unknown flag', got %q", r.Stderr)
+	}
+}
+
+func TestUnknownShortFlag(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok")
+	r := app.Test([]string{"cmd", "-x"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown flag") {
+		t.Fatalf("stderr should contain 'unknown flag', got %q", r.Stderr)
+	}
+}
+
+func TestFlagRequiresValue(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("target", "the target")))
+	r := app.Test([]string{"cmd", "--target"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "requires a value") {
+		t.Fatalf("stderr should contain 'requires a value', got %q", r.Stderr)
+	}
+}
+
+func TestErrorIncludesTryHint(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok")
+	r := app.Test([]string{"unknown"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown command") {
+		t.Fatalf("stderr should contain 'unknown command', got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "try 'myapp --help'") {
+		t.Fatalf("stderr should contain try hint, got %q", r.Stderr)
+	}
+}
+
+func TestBoolNegationWithValueRejected(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(BoolFlag("verbose", "be verbose")))
+	r := app.Test([]string{"cmd", "--no-verbose=true"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "boolean negation") {
+		t.Fatalf("stderr should contain 'boolean negation', got %q", r.Stderr)
+	}
+}
+
+// --- Repeatable tests ---
+
+func TestRepeatableSingle(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+	r := app.Test([]string{"cmd", "--tag", "alpha"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=alpha") {
+		t.Fatalf("stdout should contain 'tags=alpha', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableMultiple(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+	r := app.Test([]string{"cmd", "--tag", "alpha", "--tag", "beta", "--tag", "gamma"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=alpha,beta,gamma") {
+		t.Fatalf("stdout should contain 'tags=alpha,beta,gamma', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableZero(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=") {
+		t.Fatalf("stdout should contain 'tags=', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableInt(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ports={port}",
+		WithFlags(IntFlag("port", "a port", Repeatable())))
+	r := app.Test([]string{"cmd", "--port", "80", "--port", "443"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "ports=80,443") {
+		t.Fatalf("stdout should contain 'ports=80,443', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableWithChoicesValid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Choices("alpha", "beta", "gamma"))))
+	r := app.Test([]string{"cmd", "--tag", "alpha", "--tag", "gamma"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=alpha,gamma") {
+		t.Fatalf("stdout should contain 'tags=alpha,gamma', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableWithChoicesInvalid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Choices("alpha", "beta"))))
+	r := app.Test([]string{"cmd", "--tag", "alpha", "--tag", "delta"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "invalid value") {
+		t.Fatalf("stderr should contain 'invalid value', got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "'delta'") {
+		t.Fatalf("stderr should contain 'delta', got %q", r.Stderr)
+	}
+}
+
+func TestRepeatableEquals(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+	r := app.Test([]string{"cmd", "--tag=alpha", "--tag=beta"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=alpha,beta") {
+		t.Fatalf("stdout should contain 'tags=alpha,beta', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableShortFlag(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Short("t"), Repeatable())))
+	r := app.Test([]string{"cmd", "-t", "alpha", "-t", "beta"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=alpha,beta") {
+		t.Fatalf("stdout should contain 'tags=alpha,beta', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "repeatable") {
+		t.Fatalf("stdout should contain 'repeatable', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableEnv(t *testing.T) {
+	os.Setenv("MYAPP_TAG", "fromenv")
+	defer os.Unsetenv("MYAPP_TAG")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Env("MYAPP_TAG"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=fromenv") {
+		t.Fatalf("stdout should contain 'tags=fromenv', got %q", r.Stdout)
+	}
+}
+
+// --- Mutex tests ---
+
+func TestMutexNeitherProvided(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose} quiet={quiet}",
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				BoolFlag("verbose", "verbose output"),
+				BoolFlag("quiet", "quiet output"),
+			},
+		}))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "verbose=false") || !strings.Contains(r.Stdout, "quiet=false") {
+		t.Fatalf("stdout should contain defaults, got %q", r.Stdout)
+	}
+}
+
+func TestMutexOneProvided(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose} quiet={quiet}",
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				BoolFlag("verbose", "verbose output"),
+				BoolFlag("quiet", "quiet output"),
+			},
+		}))
+	r := app.Test([]string{"cmd", "--verbose"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "verbose=true") {
+		t.Fatalf("stdout should contain 'verbose=true', got %q", r.Stdout)
+	}
+}
+
+func TestMutexBothProvidedError(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				BoolFlag("verbose", "verbose output"),
+				BoolFlag("quiet", "quiet output"),
+			},
+		}))
+	r := app.Test([]string{"cmd", "--verbose", "--quiet"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--verbose") || !strings.Contains(r.Stderr, "--quiet") {
+		t.Fatalf("stderr should mention both flags, got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "mutually exclusive") {
+		t.Fatalf("stderr should contain 'mutually exclusive', got %q", r.Stderr)
+	}
+}
+
+func TestMutexRequiredNoneError(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				BoolFlag("verbose", "verbose output"),
+				BoolFlag("quiet", "quiet output"),
+			},
+			Required: true,
+		}))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "required") {
+		t.Fatalf("stderr should contain 'required', got %q", r.Stderr)
+	}
+}
+
+func TestMutexRequiredOneOk(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose} quiet={quiet}",
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				BoolFlag("verbose", "verbose output"),
+				BoolFlag("quiet", "quiet output"),
+			},
+			Required: true,
+		}))
+	r := app.Test([]string{"cmd", "--quiet"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "quiet=true") {
+		t.Fatalf("stdout should contain 'quiet=true', got %q", r.Stdout)
+	}
+}
+
+func TestMutexStrFlags(t *testing.T) {
+	app := simpleApp("fetch", "fetch data", "file={file} url={url}",
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				StringFlag("file", "read from file", Default(nil)),
+				StringFlag("url", "read from URL", Default(nil)),
+			},
+		}))
+	r := app.Test([]string{"fetch", "--file", "data.txt"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "file=data.txt") {
+		t.Fatalf("stdout should contain 'file=data.txt', got %q", r.Stdout)
+	}
+}
+
+func TestMutexStrFlagsBothError(t *testing.T) {
+	app := simpleApp("fetch", "fetch data", "ok",
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				StringFlag("file", "read from file", Default(nil)),
+				StringFlag("url", "read from URL", Default(nil)),
+			},
+		}))
+	r := app.Test([]string{"fetch", "--file", "data.txt", "--url", "http://example.com"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "mutually exclusive") {
+		t.Fatalf("stderr should contain 'mutually exclusive', got %q", r.Stderr)
+	}
+}
+
+func TestMutexHelpSection(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("name", "your name", Default("anon"))),
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				BoolFlag("verbose", "verbose output"),
+				BoolFlag("quiet", "quiet output"),
+			},
+		}))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Flags (mutually exclusive):") {
+		t.Fatalf("stdout should contain mutex section header, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "--verbose") || !strings.Contains(r.Stdout, "--quiet") {
+		t.Fatalf("stdout should contain mutex flags, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "Flags:") || !strings.Contains(r.Stdout, "--name") {
+		t.Fatalf("stdout should contain regular flags, got %q", r.Stdout)
+	}
+}
+
+func TestMutexRequiredInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithMutex(MutexGroup{
+			Flags: []Flag{
+				BoolFlag("verbose", "verbose output"),
+				BoolFlag("quiet", "quiet output"),
+			},
+			Required: true,
+		}))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Flags (mutually exclusive, required):") {
+		t.Fatalf("stdout should contain required mutex header, got %q", r.Stdout)
+	}
+}
+
+// --- Nesting (Group) tests ---
+
+func TestGroupDispatch(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) {
+		fmt.Print("showing config")
+	})
+	r := app.Test([]string{"config", "show"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "showing config") {
+		t.Fatalf("stdout should contain 'showing config', got %q", r.Stdout)
+	}
+}
+
+func TestGroupCommandWithFlags(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("set", "set a config value", func(args map[string]interface{}) {
+		fmt.Printf("%s=%s", args["key"], args["value"])
+	}, WithFlags(
+		StringFlag("key", "config key"),
+		StringFlag("value", "config value"),
+	))
+	r := app.Test([]string{"config", "set", "--key", "name", "--value", "strictcli"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "name=strictcli") {
+		t.Fatalf("stdout should contain 'name=strictcli', got %q", r.Stdout)
+	}
+}
+
+func TestGroupUnknownSubcommand(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) {})
+	r := app.Test([]string{"config", "delete"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown command") {
+		t.Fatalf("stderr should contain 'unknown command', got %q", r.Stderr)
+	}
+}
+
+func TestGroupHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) {})
+	g.Command("set", "set a config value", func(args map[string]interface{}) {})
+	r := app.Test([]string{"config", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "show") || !strings.Contains(r.Stdout, "set") {
+		t.Fatalf("stdout should list subcommands, got %q", r.Stdout)
+	}
+}
+
+func TestGroupNoSubcommandShowsHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) {})
+	r := app.Test([]string{"config"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "manage configuration") {
+		t.Fatalf("stdout should contain group help, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "show") {
+		t.Fatalf("stdout should list subcommands, got %q", r.Stdout)
+	}
+}
+
+func TestGroupCommandHelpShowsPrefix(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("set", "set a config value", func(args map[string]interface{}) {},
+		WithFlags(StringFlag("key", "config key"), StringFlag("value", "config value")))
+	r := app.Test([]string{"config", "set", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "config set") {
+		t.Fatalf("stdout should contain 'config set', got %q", r.Stdout)
+	}
+}
+
+func TestGroupUseHint(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) {})
+	r := app.Test([]string{"config", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Use 'myapp config <command> --help' for more information.") {
+		t.Fatalf("stdout should contain use hint, got %q", r.Stdout)
+	}
+}
+
+func TestAppHelpShowsGroups(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) {})
+	r := app.Test([]string{})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Groups:") {
+		t.Fatalf("stdout should contain 'Groups:', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "config") {
+		t.Fatalf("stdout should contain 'config', got %q", r.Stdout)
+	}
+}
+
+// --- Tag tests ---
+
+func TestTagSingleFlag(t *testing.T) {
+	app := simpleApp("cmd", "a command", "verbose={verbose}",
+		WithTags(Tag{
+			Name: "verbose",
+			Flags: []Flag{BoolFlag("verbose", "verbose output")},
+		}))
+	r := app.Test([]string{"cmd", "--verbose"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "verbose=true") {
+		t.Fatalf("stdout should contain 'verbose=true', got %q", r.Stdout)
+	}
+}
+
+func TestTagMultipleFlags(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format} color={color}",
+		WithTags(Tag{
+			Name: "output",
+			Flags: []Flag{
+				StringFlag("format", "output format", Default("text")),
+				BoolFlag("color", "use color"),
+			},
+		}))
+	r := app.Test([]string{"cmd", "--format", "json", "--color"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "format=json") {
+		t.Fatalf("stdout should contain 'format=json', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "color=true") {
+		t.Fatalf("stdout should contain 'color=true', got %q", r.Stdout)
+	}
+}
+
+func TestTagFlagsWithDefaults(t *testing.T) {
+	app := simpleApp("deploy", "deploy the app", "token={token} insecure={insecure}",
+		WithTags(Tag{
+			Name: "auth",
+			Flags: []Flag{
+				StringFlag("token", "auth token", Default("none")),
+				BoolFlag("insecure", "skip TLS verification"),
+			},
+		}))
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "token=none") {
+		t.Fatalf("stdout should contain 'token=none', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "insecure=false") {
+		t.Fatalf("stdout should contain 'insecure=false', got %q", r.Stdout)
+	}
+}
+
+func TestTagFlagsInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithTags(Tag{
+			Name:  "debug",
+			Flags: []Flag{BoolFlag("debug", "enable debug mode")},
+		}))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "--debug") {
+		t.Fatalf("stdout should contain '--debug', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "enable debug mode") {
+		t.Fatalf("stdout should contain 'enable debug mode', got %q", r.Stdout)
+	}
+}
+
+// --- Help format tests ---
+
+func TestHelpShowsVersionAndCommands(t *testing.T) {
+	app := NewApp("myapp", "3.0.0", "my cool app")
+	app.Command("run", "run something", func(args map[string]interface{}) {})
+	app.Command("test", "run tests", func(args map[string]interface{}) {})
+	r := app.Test([]string{})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	for _, want := range []string{"myapp v3.0.0", "my cool app", "Commands:", "run", "test"} {
+		if !strings.Contains(r.Stdout, want) {
+			t.Fatalf("stdout should contain %q, got %q", want, r.Stdout)
+		}
+	}
+}
+
+func TestCommandHelpShowsFlagsAndArgs(t *testing.T) {
+	app := simpleApp("deploy", "deploy the app", "{target}:{dry_run}",
+		WithArgs(NewArg("target", "deploy target")),
+		WithFlags(BoolFlag("dry-run", "preview changes")))
+	r := app.Test([]string{"deploy", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	for _, want := range []string{"--dry-run", "--no-dry-run", "target", "deploy the app"} {
+		if !strings.Contains(r.Stdout, want) {
+			t.Fatalf("stdout should contain %q, got %q", want, r.Stdout)
+		}
+	}
+}
+
+func TestStrFlagShowsTypeInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("output", "output path", Default("out.txt"))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "<str>") {
+		t.Fatalf("stdout should contain '<str>', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "default: out.txt") {
+		t.Fatalf("stdout should contain 'default: out.txt', got %q", r.Stdout)
+	}
+}
+
+func TestIntShowsTypeInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(IntFlag("port", "the port", Default(8000))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "<int>") {
+		t.Fatalf("stdout should contain '<int>', got %q", r.Stdout)
+	}
+}
+
+func TestRequiredFlagInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("target", "the target")))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "required") {
+		t.Fatalf("stdout should contain 'required', got %q", r.Stdout)
+	}
+}
+
+func TestOptionalArgDefaultInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("path", "project dir", ArgRequired(false), ArgDefault("."))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "[default: .]") {
+		t.Fatalf("stdout should contain '[default: .]', got %q", r.Stdout)
+	}
+}
+
+func TestOptionalArgNoDefaultInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("path", "project dir", ArgRequired(false))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "(optional)") {
+		t.Fatalf("stdout should contain '(optional)', got %q", r.Stdout)
+	}
+}
+
+func TestUseHintInAppHelp(t *testing.T) {
+	app := simpleApp("run", "run something", "ok")
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Use 'myapp <command> --help' for more information.") {
+		t.Fatalf("stdout should contain use hint, got %q", r.Stdout)
+	}
+}
+
+func TestEnvInHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {},
+		WithFlags(StringFlag("target", "the target", Default("x"), Env("MYAPP_TARGET"))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "env: MYAPP_TARGET") {
+		t.Fatalf("stdout should contain 'env: MYAPP_TARGET', got %q", r.Stdout)
+	}
+}
+
+func TestPrefixedFalseEnvVar(t *testing.T) {
+	os.Setenv("SPECIAL", "works")
+	defer os.Unsetenv("SPECIAL")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) {
+		fmt.Print("target=" + formatValue(args["target"]))
+	}, WithFlags(StringFlag("target", "the target", Default("fallback"), Env("SPECIAL"), Prefixed(false))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "target=works") {
+		t.Fatalf("stdout should contain 'target=works', got %q", r.Stdout)
+	}
+}
+
+func TestEnvChoicesValid(t *testing.T) {
+	os.Setenv("MYAPP_FORMAT", "json")
+	defer os.Unsetenv("MYAPP_FORMAT")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {
+		fmt.Print("format=" + formatValue(args["format"]))
+	}, WithFlags(StringFlag("format", "output format", Default("text"), Env("MYAPP_FORMAT"), Choices("text", "json"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "format=json") {
+		t.Fatalf("stdout should contain 'format=json', got %q", r.Stdout)
+	}
+}
+
+func TestEnvChoicesInvalid(t *testing.T) {
+	os.Setenv("MYAPP_FORMAT", "xml")
+	defer os.Unsetenv("MYAPP_FORMAT")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) {},
+		WithFlags(StringFlag("format", "output format", Default("text"), Env("MYAPP_FORMAT"), Choices("text", "json"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "invalid value") {
+		t.Fatalf("stderr should contain 'invalid value', got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "'xml'") {
+		t.Fatalf("stderr should contain 'xml', got %q", r.Stderr)
+	}
+}
