@@ -1,3 +1,7 @@
 [[projects]]
 path = "python/"
 name = "strictcli"
+
+[[projects]]
+path = "go/"
+name = "go-strictcli"
