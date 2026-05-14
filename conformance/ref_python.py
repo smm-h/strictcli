@@ -87,9 +87,12 @@ def _emit_mutex(mutex_def: dict, indent: str = "") -> str:
     )
 
 
-def _collect_params(cmd_def: dict) -> list[str]:
+def _collect_params(cmd_def: dict, global_flags: list[dict] | None = None) -> list[str]:
     """Collect all parameter names for a command handler."""
     params = []
+    # Global flags (passed as kwargs to all handlers)
+    for f in (global_flags or []):
+        params.append(_flag_param(f["name"]))
     # Flags from direct flags, tags, and mutex groups
     for f in cmd_def.get("flags", []):
         params.append(_flag_param(f["name"]))
@@ -105,9 +108,10 @@ def _collect_params(cmd_def: dict) -> list[str]:
     return params
 
 
-def _collect_all_flag_defs(cmd_def: dict) -> list[dict]:
-    """Collect all flag definitions (direct, from tags, from mutex)."""
-    flags = list(cmd_def.get("flags", []))
+def _collect_all_flag_defs(cmd_def: dict, global_flags: list[dict] | None = None) -> list[dict]:
+    """Collect all flag definitions (global, direct, from tags, from mutex)."""
+    flags = list(global_flags or [])
+    flags.extend(cmd_def.get("flags", []))
     for tag in cmd_def.get("tags", []):
         flags.extend(tag["flags"])
     for mg in cmd_def.get("mutex", []):
@@ -115,16 +119,16 @@ def _collect_all_flag_defs(cmd_def: dict) -> list[dict]:
     return flags
 
 
-def _emit_handler_body(cmd_def: dict) -> str:
+def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) -> str:
     """Emit the handler body that prints the template-substituted output."""
     template = cmd_def["handler_prints"]
-    all_flags = _collect_all_flag_defs(cmd_def)
+    all_flags = _collect_all_flag_defs(cmd_def, global_flags)
     flag_types = {}
     for f in all_flags:
         flag_types[f["name"]] = f.get("type", "str")
 
     # Build a format expression
-    params = _collect_params(cmd_def)
+    params = _collect_params(cmd_def, global_flags)
     if not params:
         return f"    print({template!r})"
 
@@ -152,7 +156,11 @@ def _emit_handler_body(cmd_def: dict) -> str:
             lines.append(f"    _parts[{f['name']!r}] = str({pname})")
 
     for a in cmd_def.get("args", []):
-        lines.append(f"    _parts[{a['name']!r}] = str({a['name']})")
+        if a.get("variadic", False):
+            # Variadic: value is a list, print comma-separated
+            lines.append(f"    _parts[{a['name']!r}] = ','.join(str(x) for x in {a['name']})")
+        else:
+            lines.append(f"    _parts[{a['name']!r}] = str({a['name']})")
 
     lines.append(f"    _template = {template!r}")
     lines.append("    _out = _template")
@@ -164,14 +172,54 @@ def _emit_handler_body(cmd_def: dict) -> str:
 
 
 def _emit_command_registration(
-    cmd_def: dict, target: str, indent: str = ""
+    cmd_def: dict, target: str, indent: str = "",
+    global_flags: list[dict] | None = None,
 ) -> str:
     """Emit the code to register a command on a target (app or group variable name).
 
     Returns multi-line code string.
     """
     lines = []
-    params = _collect_params(cmd_def)
+    is_passthrough = cmd_def.get("passthrough", False)
+    exit_code = cmd_def.get("handler_exit_code", 0)
+
+    # --- Passthrough command ---
+    if is_passthrough:
+        lines.append(f"{indent}@{target}.passthrough(")
+        lines.append(f"{indent}    {cmd_def['name']!r},")
+        lines.append(f"{indent}    help={cmd_def['help']!r},")
+        lines.append(f"{indent})")
+        # Passthrough handler signature: (name, args, **globals)
+        handler_name = cmd_def['name'].replace('-', '_') + '_handler'
+        if global_flags:
+            gf_params = ", ".join(_flag_param(f["name"]) for f in global_flags)
+            lines.append(f"{indent}def {handler_name}(name, args, {gf_params}):")
+            # Print global flag values first
+            for gf in global_flags:
+                pname = _flag_param(gf["name"])
+                gf_name = gf["name"]
+                ftype = gf.get("type", "str")
+                if ftype == "bool":
+                    lines.append(
+                        f'{indent}    print({gf_name!r} + "=" + ("true" if {pname} else "false"))'
+                    )
+                else:
+                    lines.append(
+                        f'{indent}    print({gf_name!r} + "=" + str({pname}))'
+                    )
+        else:
+            lines.append(f"{indent}def {handler_name}(name, args):")
+        # Print name:comma-separated-args
+        lines.append(f'{indent}    print(name + ":" + ",".join(args))')
+        if exit_code != 0:
+            lines.append(f"{indent}    return {exit_code}")
+        else:
+            lines.append(f"{indent}    return 0")
+        lines.append("")
+        return "\n".join(lines)
+
+    # --- Normal command ---
+    params = _collect_params(cmd_def, global_flags)
 
     # Build decorator kwargs
     decorator_parts = [f"{indent}@{target}.command("]
@@ -187,6 +235,8 @@ def _emit_command_registration(
                 aparts.append(f"required={a['required']!r}")
             if "default" in a:
                 aparts.append(f"default={a['default']!r}")
+            if a.get("variadic", False):
+                aparts.append("variadic=True")
             arg_exprs.append(f"strictcli.Arg({', '.join(aparts)})")
         decorator_parts.append(
             f"{indent}    args=[{', '.join(arg_exprs)}],"
@@ -246,27 +296,38 @@ def _emit_command_registration(
 
     # Handler function
     # For optional args with no default, set handler param default to None
+    # For variadic optional args, default to empty list
     param_strs = []
     for p in params:
         # Check if this param corresponds to an optional arg without a default
         is_optional_no_default = False
+        is_variadic_optional = False
         for a in cmd_def.get("args", []):
+            if a["name"] == p and a.get("variadic", False) and not a.get("required", True):
+                is_variadic_optional = True
+                break
             if a["name"] == p and not a.get("required", True) and "default" not in a:
                 is_optional_no_default = True
                 break
-        if is_optional_no_default:
+        if is_variadic_optional:
+            param_strs.append(p)
+        elif is_optional_no_default:
             param_strs.append(f"{p}=None")
         else:
             param_strs.append(p)
     param_str = ", ".join(param_strs)
 
-    handler_body = _emit_handler_body(cmd_def)
+    handler_body = _emit_handler_body(cmd_def, global_flags)
 
     lines.extend(decorator_parts)
     for fd in flag_decorators:
         lines.append(fd)
     lines.append(f"{indent}def {cmd_def['name'].replace('-', '_')}_handler({param_str}):")
     lines.append(handler_body)
+    if exit_code != 0:
+        lines.append(f"{indent}    return {exit_code}")
+    else:
+        lines.append(f"{indent}    return 0")
     lines.append("")
 
     return "\n".join(lines)
@@ -298,6 +359,13 @@ def generate(app_def: dict) -> str:
     lines.append(f"app = strictcli.App({', '.join(app_parts)})")
     lines.append("")
 
+    # Register global flags
+    global_flags = app_def.get("global_flags", [])
+    for gf in global_flags:
+        lines.append(f"app.global_flag({_emit_flag(gf)})")
+    if global_flags:
+        lines.append("")
+
     # Register groups first
     for group_def in app_def.get("groups", []):
         gvar = f"group_{group_def['name'].replace('-', '_')}"
@@ -306,11 +374,15 @@ def generate(app_def: dict) -> str:
         )
         lines.append("")
         for cmd_def in group_def.get("commands", []):
-            lines.append(_emit_command_registration(cmd_def, gvar))
+            lines.append(_emit_command_registration(
+                cmd_def, gvar, global_flags=global_flags,
+            ))
 
     # Register top-level commands
     for cmd_def in app_def.get("commands", []):
-        lines.append(_emit_command_registration(cmd_def, "app"))
+        lines.append(_emit_command_registration(
+            cmd_def, "app", global_flags=global_flags,
+        ))
 
     lines.append("app.run()")
     lines.append("")

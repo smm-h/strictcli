@@ -1,0 +1,238 @@
+[
+  {
+    "name": "global_flags: global bool flag before command name",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["--verbose", "cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=true"
+    }
+  },
+  {
+    "name": "global_flags: global bool flag after command name",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=true"
+    }
+  },
+  {
+    "name": "global_flags: global bool flag negation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["--no-verbose", "cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=false"
+    }
+  },
+  {
+    "name": "global_flags: global str flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "config", "type": "str", "help": "config directory", "default": "/etc/myapp"}
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "config={config}"
+        }
+      ]
+    },
+    "argv": ["--config", "/tmp", "cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "config=/tmp"
+    }
+  },
+  {
+    "name": "global_flags: global int flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "port", "type": "int", "help": "server port", "default": 3000}
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["--port", "8080", "cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "port=8080"
+    }
+  },
+  {
+    "name": "global_flags: global flag shown in command help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["--verbose", "enable verbose output"]
+    }
+  },
+  {
+    "name": "global_flags: global flag with env var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output", "env": "MYAPP_VERBOSE"}
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {"MYAPP_VERBOSE": "true"},
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=true"
+    }
+  },
+  {
+    "name": "global_flags: global flag and command flag together",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+      ],
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "flags": [{"name": "target", "type": "str", "help": "deploy target"}],
+          "handler_prints": "verbose={verbose} target={target}"
+        }
+      ]
+    },
+    "argv": ["--verbose", "deploy", "--target", "prod"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=true target=prod"
+    }
+  },
+  {
+    "name": "global_flags: global flag default when not provided",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output"},
+        {"name": "config", "type": "str", "help": "config path", "default": "/etc/myapp"}
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "verbose={verbose} config={config}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=false config=/etc/myapp"
+    }
+  },
+  {
+    "name": "global_flags: handler prints both global and command flag values",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output"},
+        {"name": "config", "type": "str", "help": "config path", "default": "/etc/myapp"}
+      ],
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "flags": [{"name": "force", "type": "bool", "help": "force deploy"}],
+          "handler_prints": "verbose={verbose} config={config} force={force}"
+        }
+      ]
+    },
+    "argv": ["--verbose", "--config", "/tmp/cfg", "deploy", "--force"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=true config=/tmp/cfg force=true"
+    }
+  }
+]

@@ -1,0 +1,230 @@
+[
+  {
+    "name": "passthrough: receives raw args",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["checkout", "-b", "feature"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "checkout:-b,feature"
+    }
+  },
+  {
+    "name": "passthrough: flags that look like flags are not parsed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "merge",
+          "help": "merge branches",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["merge", "--no-ff", "main"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "merge:--no-ff,main"
+    }
+  },
+  {
+    "name": "passthrough: no args gives empty args",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "status",
+          "help": "show status",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["status"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "status:"
+    }
+  },
+  {
+    "name": "passthrough: with global flags",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+      ],
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["--verbose", "checkout", "-b", "foo"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["verbose=true", "checkout:-b,foo"]
+    }
+  },
+  {
+    "name": "passthrough: command shown in app help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        },
+        {
+          "name": "status",
+          "help": "show status",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["checkout", "checkout a branch", "status"]
+    }
+  },
+  {
+    "name": "passthrough: command help shows help text without flags section",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["checkout", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "checkout a branch",
+      "stdout_not_contains": "Flags:"
+    }
+  },
+  {
+    "name": "passthrough: with flags declaration is registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}",
+          "flags": [{"name": "force", "type": "bool", "help": "force"}]
+        }
+      ]
+    },
+    "argv": ["checkout"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "passthrough"
+    }
+  },
+  {
+    "name": "passthrough: with args declaration is registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}",
+          "args": [{"name": "branch", "help": "branch name"}]
+        }
+      ]
+    },
+    "argv": ["checkout"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "passthrough"
+    }
+  },
+  {
+    "name": "passthrough: handler returns nonzero exit code",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}",
+          "handler_exit_code": 3
+        }
+      ]
+    },
+    "argv": ["checkout", "-b", "feature"],
+    "expect": {
+      "exit_code": 3,
+      "stdout_contains": "checkout:-b,feature"
+    }
+  },
+  {
+    "name": "passthrough: multiple passthrough commands",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        },
+        {
+          "name": "merge",
+          "help": "merge branches",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["merge", "--squash", "dev"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "merge:--squash,dev"
+    }
+  }
+]

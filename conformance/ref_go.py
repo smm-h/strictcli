@@ -77,15 +77,18 @@ def _emit_arg(arg_def: dict) -> str:
             opts.append("strictcli.ArgDefault(nil)")
         else:
             opts.append(f'strictcli.ArgDefault("{default}")')
+    if arg_def.get("variadic", False):
+        opts.append("strictcli.Variadic()")
     opts_str = ""
     if opts:
         opts_str = ", " + ", ".join(opts)
     return f'strictcli.NewArg("{arg_def["name"]}", "{arg_def["help"]}"{opts_str})'
 
 
-def _collect_all_flag_defs(cmd_def: dict) -> list[dict]:
-    """Collect all flag definitions (direct, from tags, from mutex)."""
-    flags = list(cmd_def.get("flags", []))
+def _collect_all_flag_defs(cmd_def: dict, global_flags: list[dict] | None = None) -> list[dict]:
+    """Collect all flag definitions (global, direct, from tags, from mutex)."""
+    flags = list(global_flags or [])
+    flags.extend(cmd_def.get("flags", []))
     for tag in cmd_def.get("tags", []):
         flags.extend(tag["flags"])
     for mg in cmd_def.get("mutex", []):
@@ -93,10 +96,10 @@ def _collect_all_flag_defs(cmd_def: dict) -> list[dict]:
     return flags
 
 
-def _emit_handler_body(cmd_def: dict, indent: str) -> str:
+def _emit_handler_body(cmd_def: dict, indent: str, global_flags: list[dict] | None = None) -> str:
     """Emit the Go handler body that prints the template-substituted output."""
     template = cmd_def["handler_prints"]
-    all_flags = _collect_all_flag_defs(cmd_def)
+    all_flags = _collect_all_flag_defs(cmd_def, global_flags)
 
     # Collect all parameter names (flags then args)
     params = []
@@ -153,6 +156,18 @@ def _emit_handler_body(cmd_def: dict, indent: str) -> str:
                 lines.append(f'{indent}}} else {{')
                 lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", "None")')
                 lines.append(f'{indent}}}')
+        elif kind == "arg" and defn.get("variadic", False):
+            # Variadic arg: value is a list, print comma-separated
+            lines.append(f'{indent}{{')
+            lines.append(f'{indent}\traw := args["{param_key}"]')
+            lines.append(f'{indent}\tvar parts []string')
+            lines.append(f'{indent}\tif raw != nil {{')
+            lines.append(f'{indent}\t\tfor _, v := range raw.([]interface{{}}) {{')
+            lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%v", v))')
+            lines.append(f'{indent}\t\t}}')
+            lines.append(f'{indent}\t}}')
+            lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", strings.Join(parts, ","))')
+            lines.append(f'{indent}}}')
         else:
             # arg -- always a string or nil
             lines.append(f'{indent}if args["{param_key}"] != nil {{')
@@ -199,6 +214,58 @@ def _emit_cmd_options(cmd_def: dict, indent: str) -> list[str]:
     return opts
 
 
+def _emit_command_go(
+    cmd_def: dict, target: str, indent: str,
+    global_flags: list[dict] | None = None,
+) -> list[str]:
+    """Emit Go code to register a single command (normal or passthrough).
+
+    Returns a list of code lines.
+    """
+    lines = []
+    is_passthrough = cmd_def.get("passthrough", False)
+    exit_code = cmd_def.get("handler_exit_code", 0)
+
+    if is_passthrough:
+        # Passthrough command: handler receives (name string, args []string, globals map[string]interface{})
+        if global_flags:
+            lines.append(f'{indent}{target}.Passthrough("{cmd_def["name"]}", "{cmd_def["help"]}", func(name string, args []string, globals map[string]interface{{}}) int {{')
+            # Print global flag values
+            for gf in global_flags:
+                gf_key = _flag_param(gf["name"])
+                gftype = gf.get("type", "str")
+                if gftype == "bool":
+                    lines.append(f'{indent}\tif globals["{gf_key}"].(bool) {{')
+                    lines.append(f'{indent}\t\tfmt.Println("{gf["name"]}=true")')
+                    lines.append(f'{indent}\t}} else {{')
+                    lines.append(f'{indent}\t\tfmt.Println("{gf["name"]}=false")')
+                    lines.append(f'{indent}\t}}')
+                elif gftype == "int":
+                    lines.append(f'{indent}\tfmt.Printf("{gf["name"]}=%d\\n", globals["{gf_key}"].(int))')
+                else:
+                    lines.append(f'{indent}\tfmt.Printf("{gf["name"]}=%v\\n", globals["{gf_key}"])')
+        else:
+            lines.append(f'{indent}{target}.Passthrough("{cmd_def["name"]}", "{cmd_def["help"]}", func(name string, args []string) int {{')
+        # Print name:comma-separated-args
+        lines.append(f'{indent}\tfmt.Printf("%s:%s\\n", name, strings.Join(args, ","))')
+        lines.append(f'{indent}\treturn {exit_code}')
+        lines.append(f"{indent}}})")
+    else:
+        # Normal command with handler_exit_code support
+        handler_body = _emit_handler_body(cmd_def, indent + "\t", global_flags)
+        cmd_opts = _emit_cmd_options(cmd_def, indent + "\t")
+        opts_args = ""
+        if cmd_opts:
+            opts_args = ", " + ", ".join(cmd_opts)
+        lines.append(f'{indent}{target}.Command("{cmd_def["name"]}", "{cmd_def["help"]}", func(args map[string]interface{{}}) int {{')
+        lines.append(handler_body)
+        lines.append(f'{indent}\treturn {exit_code}')
+        lines.append(f"{indent}}}{opts_args})")
+
+    lines.append("")
+    return lines
+
+
 def generate(app_def: dict) -> str:
     """Generate a complete Go main.go from an app definition.
 
@@ -230,33 +297,24 @@ def generate(app_def: dict) -> str:
     lines.append(f'\tapp := strictcli.NewApp("{app_def["name"]}", "{app_def["version"]}", "{app_def["help"]}"{opts_str})')
     lines.append("")
 
+    # Register global flags
+    global_flags = app_def.get("global_flags", [])
+    for gf in global_flags:
+        lines.append(f"\tapp.GlobalFlag({_emit_flag(gf)})")
+    if global_flags:
+        lines.append("")
+
     # Register groups first
     for group_def in app_def.get("groups", []):
         gvar = f"group_{group_def['name'].replace('-', '_')}"
         lines.append(f'\t{gvar} := app.Group("{group_def["name"]}", "{group_def["help"]}")')
         lines.append("")
         for cmd_def in group_def.get("commands", []):
-            handler_body = _emit_handler_body(cmd_def, "\t\t")
-            cmd_opts = _emit_cmd_options(cmd_def, "\t\t")
-            opts_args = ""
-            if cmd_opts:
-                opts_args = ", " + ", ".join(cmd_opts)
-            lines.append(f'\t{gvar}.Command("{cmd_def["name"]}", "{cmd_def["help"]}", func(args map[string]interface{{}}) {{')
-            lines.append(handler_body)
-            lines.append(f"\t}}{opts_args})")
-            lines.append("")
+            lines.extend(_emit_command_go(cmd_def, gvar, "\t", global_flags))
 
     # Register top-level commands
     for cmd_def in app_def.get("commands", []):
-        handler_body = _emit_handler_body(cmd_def, "\t\t")
-        cmd_opts = _emit_cmd_options(cmd_def, "\t\t")
-        opts_args = ""
-        if cmd_opts:
-            opts_args = ", " + ", ".join(cmd_opts)
-        lines.append(f'\tapp.Command("{cmd_def["name"]}", "{cmd_def["help"]}", func(args map[string]interface{{}}) {{')
-        lines.append(handler_body)
-        lines.append(f"\t}}{opts_args})")
-        lines.append("")
+        lines.extend(_emit_command_go(cmd_def, "app", "\t", global_flags))
 
     lines.append("\tapp.Run()")
     lines.append("}")

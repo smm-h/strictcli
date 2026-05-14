@@ -44,6 +44,11 @@
         "version": { "type": "string" },
         "help": { "type": "string" },
         "env_prefix": { "type": "string" },
+        "global_flags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/flag" },
+          "description": "Flags declared on the App, parsed before the command name and available to every handler."
+        },
         "commands": {
           "type": "array",
           "items": { "$ref": "#/$defs/command" }
@@ -69,7 +74,7 @@
     },
     "command": {
       "type": "object",
-      "required": ["name", "help", "handler_prints"],
+      "required": ["name", "help"],
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string" },
@@ -77,6 +82,20 @@
         "handler_prints": {
           "type": "string",
           "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'."
+        },
+        "handler_exit_code": {
+          "type": "integer",
+          "default": 0,
+          "description": "The integer value the generated handler returns. Used as the process exit code."
+        },
+        "passthrough": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, the command is a passthrough command: no flag/arg parsing, handler receives raw args."
+        },
+        "passthrough_handler_prints": {
+          "type": "string",
+          "description": "Template for passthrough handler output. Receives name and raw args. Generated handler prints name:arg1,arg2,..."
         },
         "args": {
           "type": "array",
@@ -104,7 +123,12 @@
         "name": { "type": "string" },
         "help": { "type": "string" },
         "required": { "type": "boolean", "default": true },
-        "default": { "type": "string" }
+        "default": { "type": "string" },
+        "variadic": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, collects all remaining positional args into a list. Must be the last declared arg."
+        }
       }
     },
     "flag": {

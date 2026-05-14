@@ -1,0 +1,88 @@
+[
+  {
+    "name": "exit_codes: handler returns 0",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok",
+          "handler_exit_code": 0
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "ok"
+    }
+  },
+  {
+    "name": "exit_codes: handler returns 1",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "failing",
+          "handler_exit_code": 1
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": "failing"
+    }
+  },
+  {
+    "name": "exit_codes: handler returns 42",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "custom code",
+          "handler_exit_code": 42
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 42,
+      "stdout_contains": "custom code"
+    }
+  },
+  {
+    "name": "exit_codes: handler returns 0 with flags and args",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "args": [{"name": "target", "help": "deploy target"}],
+          "flags": [{"name": "force", "type": "bool", "help": "force deploy"}],
+          "handler_prints": "deploy {target} force={force}",
+          "handler_exit_code": 0
+        }
+      ]
+    },
+    "argv": ["deploy", "--force", "production"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "deploy production force=true"
+    }
+  }
+]
