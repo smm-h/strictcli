@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       strictcli: ${{ steps.changes.outputs.strictcli }}
+      go-strictcli: ${{ steps.changes.outputs.go-strictcli }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -18,8 +19,14 @@ jobs:
         with:
           filters: |
             strictcli: 'python//**'
+            go-strictcli: 'go//**'
 
   strictcli:
     needs: detect
     if: needs.detect.outputs.strictcli == 'true'
     uses: ./.github/workflows/strictcli-ci.yml
+
+  go-strictcli:
+    needs: detect
+    if: needs.detect.outputs.go-strictcli == 'true'
+    uses: ./.github/workflows/go-strictcli-ci.yml
