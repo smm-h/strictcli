@@ -4,7 +4,7 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-__all__ = ["App", "Flag", "Arg", "Tag", "Result", "flag", "arg"]
+__all__ = ["App", "Flag", "Arg", "Tag", "MutexGroup", "Result", "flag", "arg"]
 
 import contextlib
 import inspect
@@ -135,6 +135,14 @@ class Tag:
 
 
 @dataclass
+class MutexGroup:
+    """A group of mutually exclusive flags."""
+
+    flags: list[Flag] = field(default_factory=list)
+    required: bool = False
+
+
+@dataclass
 class Command:
     """A leaf command with a handler."""
 
@@ -144,6 +152,7 @@ class Command:
     flags: list[Flag] = field(default_factory=list)
     args: list[Arg] = field(default_factory=list)
     tags: list[Tag] = field(default_factory=list)
+    mutex: list[MutexGroup] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
@@ -168,12 +177,14 @@ class Group:
         help: str,
         args: list[Arg] | None = None,
         tags: list[Tag] | None = None,
+        mutex: list[MutexGroup] | None = None,
     ) -> Callable:
         """Decorator to register a command within this group."""
 
         def decorator(func: Callable) -> Callable:
             cmd = _build_and_validate_command(
-                name, help=help, handler=func, args=args, tags=tags, env_prefix=self.env_prefix
+                name, help=help, handler=func, args=args, tags=tags, mutex=mutex,
+                env_prefix=self.env_prefix,
             )
             self.commands[name] = cmd
             return func
@@ -211,6 +222,7 @@ class App:
         help: str,
         args: list[Arg] | None = None,
         tags: list[Tag] | None = None,
+        mutex: list[MutexGroup] | None = None,
     ) -> Callable:
         """Decorator to register a top-level command."""
 
@@ -221,6 +233,7 @@ class App:
                 handler=func,
                 args=args,
                 tags=tags,
+                mutex=mutex,
                 env_prefix=self.env_prefix,
             )
             self._commands[name] = cmd
@@ -498,6 +511,25 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
                 else:
                     cli_set[f.name] = [env_val] if f.repeatable else env_val
 
+    # Step 4.5: enforce mutex group constraints (before defaults are applied,
+    # so cli_set only contains values explicitly provided via CLI or env)
+    for mg in cmd.mutex:
+        set_flags = [f for f in mg.flags if f.name in cli_set]
+        if len(set_flags) > 1:
+            names = " and ".join(f"--{f.name}" for f in set_flags)
+            raise _ParseError(f"{names} are mutually exclusive")
+        if mg.required and len(set_flags) == 0:
+            names = ", ".join(f"--{f.name}" for f in mg.flags)
+            raise _ParseError(f"one of {names} is required")
+
+    # Build set of flag names belonging to mutex groups (used in step 5
+    # to suppress "required" errors -- mutex groups handle their own
+    # required/optional semantics via MutexGroup.required)
+    mutex_flag_names: set[str] = set()
+    for mg in cmd.mutex:
+        for mf in mg.flags:
+            mutex_flag_names.add(mf.name)
+
     # Step 5: apply defaults
     for f in cmd.flags:
         if f.name in cli_set:
@@ -510,6 +542,10 @@ def _parse_command(cmd: Command, tokens: list[str]) -> tuple[Command, dict[str, 
             cli_set[f.name] = f.default
         elif f.default is not None:
             cli_set[f.name] = f.default
+        elif f.name in mutex_flag_names:
+            # Mutex group flags with no default get None instead of being
+            # required -- the mutex group itself enforces required semantics
+            cli_set[f.name] = None
         else:
             # str/int flag with no default and no value: required
             raise _ParseError(f"flag '--{f.name}' is required")
@@ -582,6 +618,7 @@ def _build_and_validate_command(
     handler: Callable,
     args: list[Arg] | None,
     tags: list[Tag] | None,
+    mutex: list[MutexGroup] | None,
     env_prefix: str | None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
@@ -603,10 +640,33 @@ def _build_and_validate_command(
     for tag in resolved_tags:
         tag_flags.extend(tag.flags)
 
-    # All flags: decorator flags + tag flags
-    all_flags = decorator_flags + tag_flags
+    # Resolve mutex groups and merge their flags
+    resolved_mutex = list(mutex) if mutex else []
+    mutex_flags: list[Flag] = []
+    for mg in resolved_mutex:
+        # Validate: mutex groups must have at least 2 flags
+        if len(mg.flags) < 2:
+            raise ValueError(
+                f"command {name!r}: mutex group must have at least 2 flags, "
+                f"got {len(mg.flags)}"
+            )
+        mutex_flags.extend(mg.flags)
 
-    # Validate: no duplicate flag names
+    # Validate: mutex flags must not overlap between groups
+    mutex_flag_names: set[str] = set()
+    for mg in resolved_mutex:
+        for f in mg.flags:
+            if f.name in mutex_flag_names:
+                raise ValueError(
+                    f"command {name!r}: flag {f.name!r} appears in multiple mutex groups"
+                )
+            mutex_flag_names.add(f.name)
+
+    # All flags: decorator flags + tag flags + mutex flags
+    all_flags = decorator_flags + tag_flags + mutex_flags
+
+    # Validate: no duplicate flag names (catches mutex flags overlapping with
+    # regular flags or tag flags)
     seen_flag_names: set[str] = set()
     for f in all_flags:
         if f.name in seen_flag_names:
@@ -681,6 +741,7 @@ def _build_and_validate_command(
         flags=all_flags,
         args=all_args,
         tags=resolved_tags,
+        mutex=resolved_mutex,
     )
 
 
@@ -856,12 +917,33 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
                     help_text += " (optional)"
             lines.append(f"  {a.name}{' ' * padding}{help_text}")
 
-    if cmd.flags:
+    # Collect flag names that belong to mutex groups
+    mutex_flag_names: set[str] = set()
+    for mg in cmd.mutex:
+        for f in mg.flags:
+            mutex_flag_names.add(f.name)
+
+    # Regular flags (not in any mutex group)
+    regular_flags = [f for f in cmd.flags if f.name not in mutex_flag_names]
+
+    if regular_flags:
         lines.append("")
         lines.append("Flags:")
-        specs = [_build_flag_spec(f) for f in cmd.flags]
+        specs = [_build_flag_spec(f) for f in regular_flags]
         max_spec = max(len(s) for s in specs)
-        for f, spec in zip(cmd.flags, specs):
+        for f, spec in zip(regular_flags, specs):
+            padding = max_spec - len(spec) + 4
+            meta = _build_flag_meta(f)
+            lines.append(f"  {spec}{' ' * padding}{f.help}{meta}")
+
+    # Mutex groups
+    for mg in cmd.mutex:
+        lines.append("")
+        label = "Flags (mutually exclusive, required):" if mg.required else "Flags (mutually exclusive):"
+        lines.append(label)
+        specs = [_build_flag_spec(f) for f in mg.flags]
+        max_spec = max(len(s) for s in specs)
+        for f, spec in zip(mg.flags, specs):
             padding = max_spec - len(spec) + 4
             meta = _build_flag_meta(f)
             lines.append(f"  {spec}{' ' * padding}{f.help}{meta}")
