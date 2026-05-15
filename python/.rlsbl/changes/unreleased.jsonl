@@ -5,3 +5,4 @@
 {"commits":["6faeaf254586c448e3a268a8fff31797fa7598ec"],"user_facing":true,"description":"**Global flags after command name.** Global flags are now recognized after the command name, not only before it.","type":"fix"}
 {"commits":["ec85bd51c5528c4b64b076529ec8973a93f7b65b"],"user_facing":false}
 {"commits":["ef83c5b498bd9dec1482536a246d0257509b7f32"],"user_facing":false}
+{"commits":["04dcfc959534551638197effc96e61f64c798ed1"],"user_facing":false}
