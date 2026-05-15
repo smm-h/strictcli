@@ -3,3 +3,4 @@
 {"commits":["ee1853519c3ed67e08848af1363ad3164bf7a884"],"user_facing":true,"description":"**Variadic positional args.** `Arg` with `variadic=True` to collect remaining positional arguments into a list.","type":"feature"}
 {"commits":["b65ae530630fa8c8d7ff9474b1690e72e729823d"],"user_facing":true,"description":"**Passthrough commands.** `Passthrough` class for wrapper CLIs that forward unknown args to a subprocess.","type":"feature"}
 {"commits":["6faeaf254586c448e3a268a8fff31797fa7598ec"],"user_facing":true,"description":"**Global flags after command name.** Global flags are now recognized after the command name, not only before it.","type":"fix"}
+{"commits":["ec85bd51c5528c4b64b076529ec8973a93f7b65b"],"user_facing":false}
