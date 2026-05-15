@@ -1379,6 +1379,26 @@ func TestEnvChoicesValid(t *testing.T) {
 	}
 }
 
+func TestGroupCommandGlobalFlagCollisionPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for global flag collision in group command, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "duplicate flag name") || !strings.Contains(msg, "verbose") {
+			t.Fatalf("panic message should mention duplicate flag 'verbose', got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(BoolFlag("verbose", "global verbosity"))
+	g := app.Group("config", "manage configuration")
+	// This should panic: "verbose" collides with the global flag
+	g.Command("show", "display config", func(args map[string]interface{}) int { return 0 },
+		WithFlags(BoolFlag("verbose", "local verbosity")))
+}
+
 func TestEnvChoicesInvalid(t *testing.T) {
 	os.Setenv("MYAPP_FORMAT", "xml")
 	defer os.Unsetenv("MYAPP_FORMAT")

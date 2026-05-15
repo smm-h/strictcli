@@ -81,6 +81,9 @@ type Group struct {
 	Commands  map[string]*Command
 	envPrefix string
 
+	// globalFlags is a reference to the app's global flags for collision checking
+	globalFlags []Flag
+
 	// order preserves insertion order for help display
 	order []string
 }
@@ -409,10 +412,11 @@ func (a *App) Group(name, help string) *Group {
 		panic("Group.help must be a non-empty string")
 	}
 	grp := &Group{
-		Name:      name,
-		Help:      help,
-		Commands:  make(map[string]*Command),
-		envPrefix: a.EnvPrefix,
+		Name:        name,
+		Help:        help,
+		Commands:    make(map[string]*Command),
+		envPrefix:   a.EnvPrefix,
+		globalFlags: a.globalFlags,
 	}
 	a.groups[name] = grp
 	a.groupOrder = append(a.groupOrder, name)
@@ -421,7 +425,7 @@ func (a *App) Group(name, help string) *Group {
 
 // Command registers a command within a group.
 func (g *Group) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
-	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, nil, opts)
+	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, opts)
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
 }
