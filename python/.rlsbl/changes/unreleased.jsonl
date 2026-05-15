@@ -1,0 +1,1 @@
+{"commits":["100904f2efc76752d85cc603d0f10ffb82fa0a24"],"user_facing":true,"description":"**Handler return as exit code.** Handlers returning an `int` set the process exit code.","type":"feature"}
