@@ -12,16 +12,14 @@ jobs:
     outputs:
       strictcli: ${{ steps.changes.outputs.strictcli }}
       go-strictcli: ${{ steps.changes.outputs.go-strictcli }}
-      conformance: ${{ steps.changes.outputs.conformance }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
-            strictcli: 'python/**'
-            go-strictcli: 'go/**'
-            conformance: 'conformance/**'
+            strictcli: 'python//**'
+            go-strictcli: 'go//**'
 
   strictcli:
     needs: detect
