@@ -1,1 +1,2 @@
 {"commits":["100904f2efc76752d85cc603d0f10ffb82fa0a24"],"user_facing":true,"description":"**Handler return as exit code.** Handlers returning an `int` set the process exit code.","type":"feature"}
+{"commits":["640ddbebaebf94f4b2295db0869444ef49975c78"],"user_facing":true,"description":"**App-level global flags.** Flags parsed both before and after the command name.","type":"feature"}
