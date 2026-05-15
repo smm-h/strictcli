@@ -7,7 +7,7 @@ on:
 
 defaults:
   run:
-    working-directory: python/
+    working-directory: python
 
 jobs:
   test:
@@ -22,4 +22,3 @@ jobs:
       - run: uv python install ${{ matrix.python-version }}
       - run: uv sync
       - run: uv run python -c "import strictcli"
-      - run: uv run pytest

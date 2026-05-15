@@ -7,7 +7,7 @@ on:
 
 defaults:
   run:
-    working-directory: go/
+    working-directory: go
 
 jobs:
   test:
