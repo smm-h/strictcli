@@ -1,0 +1,400 @@
+[
+  {
+    "name": "registration: empty app help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "must be a non-empty string"
+    }
+  },
+  {
+    "name": "registration: empty command help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "missing help text"
+    }
+  },
+  {
+    "name": "registration: empty flag help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": ""
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "must be a non-empty string"
+    }
+  },
+  {
+    "name": "registration: empty arg help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "file",
+              "help": ""
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "test.txt"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "must be a non-empty string"
+    }
+  },
+  {
+    "name": "registration: empty group help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "groups": [
+        {
+          "name": "config",
+          "help": "",
+          "commands": [
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ],
+      "commands": []
+    },
+    "argv": ["config", "show"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "must be a non-empty string"
+    }
+  },
+  {
+    "name": "registration: repeatable bool flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "repeatable": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "repeatable",
+        "bool"
+      ]
+    }
+  },
+  {
+    "name": "registration: choices on bool flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "choices_str": ["yes", "no"]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "choices",
+        "bool"
+      ]
+    }
+  },
+  {
+    "name": "registration: mutex group with one flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "at least 2"
+    }
+  },
+  {
+    "name": "registration: duplicate flag names",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            },
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target again"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "duplicate"
+    }
+  },
+  {
+    "name": "registration: duplicate arg names",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "file",
+              "help": "the file"
+            },
+            {
+              "name": "file",
+              "help": "the file again"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "a.txt", "b.txt"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "duplicate"
+    }
+  },
+  {
+    "name": "registration: flag collides with global flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "collides"
+    }
+  },
+  {
+    "name": "registration: env prefix mismatch",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target",
+              "env": "WRONG_TARGET"
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--target", "prod"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "must start with"
+    }
+  },
+  {
+    "name": "registration: required arg with default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "file",
+              "help": "the file",
+              "required": true,
+              "default": "default.txt"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "test.txt"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "required arg cannot have a default"
+    }
+  },
+  {
+    "name": "registration: duplicate global flag names",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        },
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output again"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "duplicate"
+    }
+  }
+]

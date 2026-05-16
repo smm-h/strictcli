@@ -619,6 +619,10 @@ func (a *App) doParse(argv []string) parseResult {
 			prefix := grp.Name + " "
 			return parseResult{helpText: formatCommandHelp(a, cmd, prefix)}
 		}
+		// Passthrough: skip parsing, forward raw args
+		if cmd.Passthrough {
+			return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
+		}
 		kwargs, err := parseCommand(cmd, cmdRest, a.globalFlags)
 		if err != "" {
 			return parseResult{parseErr: err}

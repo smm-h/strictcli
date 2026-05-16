@@ -1,0 +1,220 @@
+[
+  {
+    "name": "errors: repeated non-repeatable flag is last-wins",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--target", "first", "--target", "second"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=second"
+    }
+  },
+  {
+    "name": "errors: global flag requires a value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "config",
+          "type": "str",
+          "help": "config path",
+          "default": "/etc"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "config={config}"
+        }
+      ]
+    },
+    "argv": ["--config"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "requires a value",
+      "stderr_equals": "error: flag '--config' requires a value\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "errors: global flag invalid int",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "port",
+          "type": "int",
+          "help": "server port",
+          "default": 3000
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["--port", "abc", "cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "expected integer",
+        "'abc'"
+      ],
+      "stderr_equals": "error: --port: expected integer, got 'abc'\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "errors: global flag is required",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "config",
+          "type": "str",
+          "help": "config path"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "config={config}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "global flag",
+        "required"
+      ],
+      "stderr_equals": "error: global flag '--config' is required\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "errors: global flag invalid bool env var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output",
+          "env": "MYAPP_VERBOSE"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {
+      "MYAPP_VERBOSE": "maybe"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "invalid boolean value",
+        "'maybe'",
+        "MYAPP_VERBOSE"
+      ],
+      "stderr_equals": "error: invalid boolean value 'maybe' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "errors: int flag with float value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port", "1.5"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "expected integer",
+        "'1.5'"
+      ],
+      "stderr_equals": "error: --port: expected integer, got '1.5'\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "errors: int flag with hex value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port", "0xFF"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "expected integer",
+        "'0xFF'"
+      ],
+      "stderr_equals": "error: --port: expected integer, got '0xFF'\ntry 'myapp --help'"
+    }
+  }
+]

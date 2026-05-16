@@ -200,6 +200,73 @@
     }
   },
   {
+    "name": "errors: str flag value looks like unknown flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--target",
+      "--unknown"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=--unknown"
+    }
+  },
+  {
+    "name": "errors: str flag value looks like known flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            },
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
+          "handler_prints": "target={target} verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--target",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=--verbose verbose=false"
+    }
+  },
+  {
     "name": "errors: unknown flag in equals form",
     "app": {
       "name": "myapp",

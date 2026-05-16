@@ -308,5 +308,112 @@
       "exit_code": 0,
       "stdout_equals": "merge:--squash,dev"
     }
+  },
+  {
+    "name": "passthrough: with tags only is registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}",
+          "tags": [
+            {
+              "name": "output",
+              "flags": [
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "checkout"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "passthrough"
+    }
+  },
+  {
+    "name": "passthrough: with mutex only is registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "checkout",
+          "help": "checkout a branch",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                },
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "quiet output"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "checkout"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "passthrough"
+    }
+  },
+  {
+    "name": "passthrough: in group works",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "git",
+          "help": "git operations",
+          "commands": [
+            {
+              "name": "checkout",
+              "help": "checkout a branch",
+              "passthrough": true,
+              "passthrough_handler_prints": "{name}:{args}"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "git",
+      "checkout",
+      "-b",
+      "feature"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "checkout:-b,feature"
+    }
   }
 ]

@@ -229,9 +229,11 @@ def _emit_command_go(
     exit_code = cmd_def.get("handler_exit_code", 0)
 
     if is_passthrough:
-        # Passthrough command: handler receives (name string, args []string, globals map[string]interface{})
+        # Passthrough command: define handler, then register via Command + WithPassthrough.
+        # This works for both App and Group targets (Group has no Passthrough method).
+        handler_var = f"_pt_{cmd_def['name'].replace('-', '_')}"
+        lines.append(f'{indent}{handler_var} := func(name string, args []string, globals map[string]interface{{}}) int {{')
         if global_flags:
-            lines.append(f'{indent}{target}.Passthrough("{cmd_def["name"]}", "{cmd_def["help"]}", func(name string, args []string, globals map[string]interface{{}}) int {{')
             # Print global flag values
             for gf in global_flags:
                 gf_key = _flag_param(gf["name"])
@@ -246,8 +248,6 @@ def _emit_command_go(
                     lines.append(f'{indent}\tfmt.Printf("{gf["name"]}=%d\\n", globals["{gf_key}"].(int))')
                 else:
                     lines.append(f'{indent}\tfmt.Printf("{gf["name"]}=%v\\n", globals["{gf_key}"])')
-        else:
-            lines.append(f'{indent}{target}.Passthrough("{cmd_def["name"]}", "{cmd_def["help"]}", func(name string, args []string, globals map[string]interface{{}}) int {{')
         # Print using passthrough_handler_prints template, or default format
         pt_template = cmd_def.get("passthrough_handler_prints")
         if pt_template:
@@ -259,12 +259,11 @@ def _emit_command_go(
         else:
             lines.append(f'{indent}\tfmt.Printf("%s:%s\\n", name, strings.Join(args, ","))')
         lines.append(f'{indent}\treturn {exit_code}')
-        # Include CmdOptions for flags/args (to trigger registration errors when invalid)
-        pt_opts = _emit_cmd_options(cmd_def, indent + "\t")
-        if pt_opts:
-            lines.append(f"{indent}}}, {', '.join(pt_opts)})")
-        else:
-            lines.append(f"{indent}}})")
+        lines.append(f'{indent}}}')
+        # Build CmdOptions: WithPassthrough first, then any flags/args/tags/mutex opts
+        pt_opts = [f"strictcli.WithPassthrough({handler_var})"]
+        pt_opts.extend(_emit_cmd_options(cmd_def, indent + "\t"))
+        lines.append(f'{indent}{target}.Command("{cmd_def["name"]}", "{cmd_def["help"]}", nil, {", ".join(pt_opts)})')
     else:
         # Normal command with handler_exit_code support
         handler_body = _emit_handler_body(cmd_def, indent + "\t", global_flags)

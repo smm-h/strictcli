@@ -240,6 +240,20 @@ def _emit_command_registration(
                 f"{indent}    args=[{', '.join(arg_exprs)}],"
             )
 
+        if cmd_def.get("tags"):
+            tag_exprs = [_emit_tag(t, indent + "        ") for t in cmd_def["tags"]]
+            lines.append(f"{indent}    tags=[")
+            for te in tag_exprs:
+                lines.append(f"{te},")
+            lines.append(f"{indent}    ],")
+
+        if cmd_def.get("mutex"):
+            mutex_exprs = [_emit_mutex(m, indent + "        ") for m in cmd_def["mutex"]]
+            lines.append(f"{indent}    mutex=[")
+            for me in mutex_exprs:
+                lines.append(f"{me},")
+            lines.append(f"{indent}    ],")
+
         lines.append(f"{indent}    passthrough=strictcli.Passthrough(handler={handler_name}),")
         lines.append(f"{indent})")
 
@@ -345,6 +359,15 @@ def _emit_command_registration(
     # Handler function
     # For optional args with no default, set handler param default to None
     # For variadic optional args, default to empty list
+    # De-duplicate params to avoid SyntaxError (library validation catches duplicates at registration)
+    seen_params = set()
+    unique_params = []
+    for p in params:
+        if p not in seen_params:
+            seen_params.add(p)
+            unique_params.append(p)
+    params = unique_params
+
     param_strs = []
     for p in params:
         # Check if this param corresponds to an optional arg without a default
