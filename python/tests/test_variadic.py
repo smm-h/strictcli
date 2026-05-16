@@ -151,7 +151,7 @@ def test_multiple_variadic_args_registration_error():
 def test_variadic_not_last_arg_registration_error():
     """Variadic arg not in last position -> ValueError at registration."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
-    with pytest.raises(ValueError, match="variadic arg must be the last arg"):
+    with pytest.raises(ValueError, match='variadic arg "files" must be the last arg'):
 
         @app.command(
             "cmd",

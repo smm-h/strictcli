@@ -81,7 +81,7 @@ def test_duplicate_flag_name():
 def test_env_prefix_without_prefix():
     """Env var without correct prefix raises ValueError."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
-    with pytest.raises(ValueError, match="must start with 'MYAPP_'"):
+    with pytest.raises(ValueError, match='must start with "MYAPP_'):
 
         @app.command("cmd", help="a command")
         @strictcli.flag("target", type=str, help="target", default="x", env="WRONG_TARGET")
@@ -148,7 +148,7 @@ def test_group_env_prefix_propagation():
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
     grp = app.group("config", help="config commands")
 
-    with pytest.raises(ValueError, match="must start with 'MYAPP_'"):
+    with pytest.raises(ValueError, match='must start with "MYAPP_'):
 
         @grp.command("show", help="show config")
         @strictcli.flag("path", type=str, help="path", default="/etc", env="BAD_PATH")

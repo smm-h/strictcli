@@ -893,7 +893,7 @@ def _build_and_validate_command(
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
-        raise ValueError(f"command {name!r}: missing help text")
+        raise ValueError(f'command "{name}": missing help text')
 
     # Passthrough commands must not have flags, args, tags, or mutex groups
     if passthrough is not None:
@@ -914,7 +914,7 @@ def _build_and_validate_command(
             if has_mutex:
                 parts.append("mutex groups")
             raise ValueError(
-                f"command {name!r}: passthrough commands cannot have "
+                f'command "{name}": passthrough commands cannot have '
                 + ", ".join(parts)
             )
         return Command(
@@ -948,7 +948,7 @@ def _build_and_validate_command(
         # Validate: mutex groups must have at least 2 flags
         if len(mg.flags) < 2:
             raise ValueError(
-                f"command {name!r}: mutex group must have at least 2 flags, "
+                f'command "{name}": mutex group must have at least 2 flags, '
                 f"got {len(mg.flags)}"
             )
         mutex_flags.extend(mg.flags)
@@ -959,7 +959,7 @@ def _build_and_validate_command(
         for f in mg.flags:
             if f.name in mutex_flag_names:
                 raise ValueError(
-                    f"command {name!r}: flag {f.name!r} appears in multiple mutex groups"
+                    f'command "{name}": flag "{f.name}" appears in multiple mutex groups'
                 )
             mutex_flag_names.add(f.name)
 
@@ -971,7 +971,7 @@ def _build_and_validate_command(
     seen_flag_names: set[str] = set()
     for f in all_flags:
         if f.name in seen_flag_names:
-            raise ValueError(f"command {name!r}: duplicate flag name {f.name!r}")
+            raise ValueError(f'command "{name}": duplicate flag name "{f.name}"')
         seen_flag_names.add(f.name)
 
     # Validate: no collision with global flags
@@ -980,29 +980,29 @@ def _build_and_validate_command(
         for f in all_flags:
             if f.name in global_flag_names:
                 raise ValueError(
-                    f"command {name!r}: flag {f.name!r} collides with a global flag"
+                    f'command "{name}": flag "{f.name}" collides with a global flag'
                 )
 
     # Validate: no duplicate arg names
     seen_arg_names: set[str] = set()
     for a in all_args:
         if a.name in seen_arg_names:
-            raise ValueError(f"command {name!r}: duplicate arg name {a.name!r}")
+            raise ValueError(f'command "{name}": duplicate arg name "{a.name}"')
         seen_arg_names.add(a.name)
 
     # Validate: variadic arg constraints
     variadic_count = sum(1 for a in all_args if a.variadic)
     if variadic_count > 1:
-        raise ValueError(f"command {name!r}: at most one variadic arg is allowed")
+        raise ValueError(f'command "{name}": at most one variadic arg is allowed')
     if variadic_count == 1 and not all_args[-1].variadic:
         variadic_name = next(a.name for a in all_args if a.variadic)
-        raise ValueError(f"command {name!r}: variadic arg {variadic_name!r} must be the last arg")
+        raise ValueError(f'command "{name}": variadic arg "{variadic_name}" must be the last arg')
 
     # Validate: flag help text
     for f in all_flags:
         if not f.help or not f.help.strip():
             raise ValueError(
-                f"command {name!r}: flag {f.name!r} missing help text"
+                f'command "{name}": flag "{f.name}" missing help text'
             )
 
     # Validate: env prefix
@@ -1012,8 +1012,8 @@ def _build_and_validate_command(
                 expected_prefix = f"{env_prefix}_"
                 if not f.env.startswith(expected_prefix):
                     raise ValueError(
-                        f"command {name!r}: env var {f.env!r} for flag {f.name!r} "
-                        f"must start with {expected_prefix!r} (or set prefixed=False)"
+                        f'command "{name}": env var "{f.env}" for flag "{f.name}" '
+                        f'must start with "{expected_prefix}" (or set prefixed=false)'
                     )
 
     # Validate: handler signature matches declared flags and args
@@ -1035,16 +1035,16 @@ def _build_and_validate_command(
         pname = _flag_param_name(f.name)
         if pname not in param_names:
             raise ValueError(
-                f"command {name!r}: handler missing parameter {pname!r} "
-                f"for flag {f.name!r}"
+                f'command "{name}": handler missing parameter "{pname}" '
+                f'for flag "{f.name}"'
             )
 
     # Check each arg has a matching parameter
     for a in all_args:
         if a.name not in param_names:
             raise ValueError(
-                f"command {name!r}: handler missing parameter {a.name!r} "
-                f"for arg {a.name!r}"
+                f'command "{name}": handler missing parameter "{a.name}" '
+                f'for arg "{a.name}"'
             )
 
     # Check for extra parameters
@@ -1052,7 +1052,7 @@ def _build_and_validate_command(
     if extra:
         extra_name = sorted(extra)[0]
         raise ValueError(
-            f"command {name!r}: handler has extra parameter {extra_name!r} "
+            f'command "{name}": handler has extra parameter "{extra_name}" '
             f"not matching any flag or arg"
         )
 
