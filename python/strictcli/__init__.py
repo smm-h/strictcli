@@ -812,14 +812,14 @@ def _parse_command(
                     if val not in f.choices:
                         choices_str = ", ".join(str(c) for c in f.choices)
                         raise _ParseError(
-                            f"--{f.name}: invalid value {val!r}, must be one of: {choices_str}"
+                            f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
                         )
             else:
                 val = cli_set[f.name]
                 if val not in f.choices:
                     choices_str = ", ".join(str(c) for c in f.choices)
                     raise _ParseError(
-                        f"--{f.name}: invalid value {val!r}, must be one of: {choices_str}"
+                        f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
                     )
 
     # Step 5.6: custom validation
@@ -925,7 +925,9 @@ def _build_and_validate_command(
         )
 
     # Collect flags attached by @strictcli.flag decorators
-    decorator_flags: list[Flag] = list(getattr(handler, "_strictcli_flags", []))
+    # Reverse because Python decorators execute bottom-to-top, so the list
+    # is in reverse declaration order.
+    decorator_flags: list[Flag] = list(reversed(getattr(handler, "_strictcli_flags", [])))
     # Collect args attached by @strictcli.arg decorators
     decorator_args: list[Arg] = list(getattr(handler, "_strictcli_args", []))
 
@@ -993,7 +995,8 @@ def _build_and_validate_command(
     if variadic_count > 1:
         raise ValueError(f"command {name!r}: at most one variadic arg is allowed")
     if variadic_count == 1 and not all_args[-1].variadic:
-        raise ValueError(f"command {name!r}: variadic arg must be the last arg")
+        variadic_name = next(a.name for a in all_args if a.variadic)
+        raise ValueError(f"command {name!r}: variadic arg {variadic_name!r} must be the last arg")
 
     # Validate: flag help text
     for f in all_flags:
