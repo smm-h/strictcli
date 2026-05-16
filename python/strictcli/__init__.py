@@ -67,23 +67,23 @@ class Flag:
             raise ValueError(f"Flag.type must be str, bool, or int, got {self.type!r}")
         # Validate repeatable
         if self.repeatable and self.type is bool:
-            raise ValueError(f"Flag {self.name!r}: repeatable is incompatible with type=bool")
+            raise ValueError(f'Flag "{self.name}": repeatable is incompatible with type=bool')
         # Validate choices
         if self.choices is not None:
             if self.type is bool:
-                raise ValueError(f"Flag {self.name!r}: choices is incompatible with type=bool")
+                raise ValueError(f'Flag "{self.name}": choices is incompatible with type=bool')
             if not isinstance(self.choices, list) or len(self.choices) == 0:
-                raise ValueError(f"Flag {self.name!r}: choices must be a non-empty list")
+                raise ValueError(f'Flag "{self.name}": choices must be a non-empty list')
             for c in self.choices:
                 if not isinstance(c, self.type):
                     raise ValueError(
-                        f"Flag {self.name!r}: choice {c!r} is not of type {self.type.__name__}"
+                        f'Flag "{self.name}": choice {c!r} is not of type {self.type.__name__}'
                     )
         # Validate default type for int flags
         if self.type is int and not isinstance(self.default, _MissingSentinel) and self.default is not None:
             if not self.repeatable and not isinstance(self.default, int):
                 raise ValueError(
-                    f"Flag {self.name!r}: type=int requires an int default, "
+                    f'Flag "{self.name}": type=int requires an int default, '
                     f"got {type(self.default).__name__!r}"
                 )
         # Resolve _MISSING sentinels based on type
@@ -101,7 +101,7 @@ class Flag:
         if self.choices is not None and self.default is not None:
             if not self.repeatable and self.default not in self.choices:
                 raise ValueError(
-                    f"Flag {self.name!r}: default {self.default!r} is not in choices "
+                    f'Flag "{self.name}": default {self.default!r} is not in choices '
                     f"{self.choices!r}"
                 )
         if isinstance(self.negatable, _MissingSentinel):
