@@ -633,5 +633,138 @@
       "stderr_contains": "must be a non-empty string",
       "stderr_equals": "error: Flag.help must be a non-empty string"
     }
+  },
+  {
+    "name": "registration: CoRequired fewer than 2 flags",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "output", "type": "str", "help": "output file", "default": "none"}
+          ],
+          "dependencies": [
+            {"type": "co_required", "flags": ["output"]}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "skip_schema_validation": true,
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "CoRequired must have at least 2 flags"
+    }
+  },
+  {
+    "name": "registration: CoRequired references unknown flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "output", "type": "str", "help": "output file", "default": "none"},
+            {"name": "format", "type": "str", "help": "format", "default": "none"}
+          ],
+          "dependencies": [
+            {"type": "co_required", "flags": ["output", "missing"]}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "CoRequired references unknown flag"
+    }
+  },
+  {
+    "name": "registration: CoRequired has duplicate flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "output", "type": "str", "help": "output file", "default": "none"},
+            {"name": "format", "type": "str", "help": "format", "default": "none"}
+          ],
+          "dependencies": [
+            {"type": "co_required", "flags": ["output", "output"]}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "CoRequired has duplicate flag"
+    }
+  },
+  {
+    "name": "registration: Requires references unknown flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "output", "type": "str", "help": "output file", "default": "none"}
+          ],
+          "dependencies": [
+            {"type": "requires", "flag": "missing", "depends_on": "output"}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Requires references unknown flag"
+    }
+  },
+  {
+    "name": "registration: Requires flag and depends_on same",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "output", "type": "str", "help": "output file", "default": "none"}
+          ],
+          "dependencies": [
+            {"type": "requires", "flag": "output", "depends_on": "output"}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "cannot be the same"
+    }
   }
 ]
