@@ -52,10 +52,9 @@ type Tag struct {
 	Flags []Flag
 }
 
-// MutexGroup is a group of mutually exclusive flags.
+// MutexGroup is a group of mutually exclusive flags. Exactly one must be provided.
 type MutexGroup struct {
-	Flags    []Flag
-	Required bool
+	Flags []Flag
 }
 
 // PassthroughHandler is the handler type for passthrough commands.

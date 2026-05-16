@@ -865,11 +865,11 @@ func TestMutexNeitherProvided(t *testing.T) {
 			},
 		}))
 	r := app.Test([]string{"cmd"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stdout, "verbose=false") || !strings.Contains(r.Stdout, "quiet=false") {
-		t.Fatalf("stdout should contain defaults, got %q", r.Stdout)
+	if !strings.Contains(r.Stderr, "one of") || !strings.Contains(r.Stderr, "is required") {
+		t.Fatalf("stderr should contain 'one of' and 'is required', got %q", r.Stderr)
 	}
 }
 
@@ -917,7 +917,6 @@ func TestMutexRequiredNoneError(t *testing.T) {
 				BoolFlag("verbose", "verbose output"),
 				BoolFlag("quiet", "quiet output"),
 			},
-			Required: true,
 		}))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 1 {
@@ -935,7 +934,6 @@ func TestMutexRequiredOneOk(t *testing.T) {
 				BoolFlag("verbose", "verbose output"),
 				BoolFlag("quiet", "quiet output"),
 			},
-			Required: true,
 		}))
 	r := app.Test([]string{"cmd", "--quiet"})
 	if r.ExitCode != 0 {
@@ -993,7 +991,7 @@ func TestMutexHelpSection(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stdout, "Flags (mutually exclusive):") {
+	if !strings.Contains(r.Stdout, "Flags (mutually exclusive, required):") {
 		t.Fatalf("stdout should contain mutex section header, got %q", r.Stdout)
 	}
 	if !strings.Contains(r.Stdout, "--verbose") || !strings.Contains(r.Stdout, "--quiet") {
@@ -1011,7 +1009,6 @@ func TestMutexRequiredInHelp(t *testing.T) {
 				BoolFlag("verbose", "verbose output"),
 				BoolFlag("quiet", "quiet output"),
 			},
-			Required: true,
 		}))
 	r := app.Test([]string{"cmd", "--help"})
 	if r.ExitCode != 0 {

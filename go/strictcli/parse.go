@@ -232,7 +232,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		if len(setFlags) > 1 {
 			return nil, nil, fmt.Sprintf("%s are mutually exclusive", strings.Join(setFlags, " and "))
 		}
-		if mg.Required && len(setFlags) == 0 {
+		if len(setFlags) == 0 {
 			names := make([]string, len(mg.Flags))
 			for j, f := range mg.Flags {
 				names[j] = "--" + f.Name
