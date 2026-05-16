@@ -22,6 +22,9 @@ jobs:
       - name: API surface check
         run: uv run python ../conformance/check_api_surface.py
         working-directory: python
+      - name: Error parity check
+        run: uv run python ../conformance/check_error_parity.py
+        working-directory: python
       - run: uv run python ../conformance/run.py --target python
         working-directory: python
       - run: uv run python ../conformance/run.py --target go
