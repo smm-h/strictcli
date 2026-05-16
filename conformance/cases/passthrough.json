@@ -110,6 +110,41 @@
     }
   },
   {
+    "name": "passthrough: global flag after command name stays in args",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        }
+      ],
+      "commands": [
+        {
+          "name": "raw",
+          "help": "run raw command",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": [
+      "raw",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "verbose=false",
+        "raw:--verbose"
+      ],
+      "stdout_equals": "verbose=false\nraw:--verbose"
+    }
+  },
+  {
     "name": "passthrough: command shown in app help",
     "app": {
       "name": "myapp",
