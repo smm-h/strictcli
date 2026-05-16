@@ -210,8 +210,7 @@ def _emit_cmd_options(cmd_def: dict, indent: str) -> list[str]:
         for mg in cmd_def["mutex"]:
             flag_exprs = [_emit_flag(f) for f in mg["flags"]]
             inner = ", ".join(flag_exprs)
-            required = "true" if mg.get("required", False) else "false"
-            opts.append(f"strictcli.WithMutex(strictcli.MutexGroup{{Flags: []strictcli.Flag{{{inner}}}, Required: {required}}})")
+            opts.append(f"strictcli.WithMutex(strictcli.MutexGroup{{Flags: []strictcli.Flag{{{inner}}}}})")
 
     return opts
 

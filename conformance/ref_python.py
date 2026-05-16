@@ -79,13 +79,11 @@ def _emit_mutex(mutex_def: dict, indent: str = "") -> str:
     """Emit a strictcli.MutexGroup(...) expression."""
     flag_lines = [_emit_flag(f, indent + "        ") for f in mutex_def["flags"]]
     flags_str = ",\n".join(flag_lines)
-    required = mutex_def.get("required", False)
     return (
         f"{indent}strictcli.MutexGroup(\n"
         f"{indent}    flags=[\n"
         f"{flags_str},\n"
         f"{indent}    ],\n"
-        f"{indent}    required={required!r},\n"
         f"{indent})"
     )
 

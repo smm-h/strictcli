@@ -199,8 +199,7 @@
           "type": "array",
           "items": { "$ref": "#/$defs/flag" },
           "minItems": 2
-        },
-        "required": { "type": "boolean", "default": false }
+        }
       }
     },
     "expect": {
