@@ -118,6 +118,69 @@
     }
   },
   {
+    "name": "composition: global_flags + choices, invalid choice rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "format",
+          "type": "str",
+          "help": "output format",
+          "choices_str": ["text", "json"],
+          "default": "text"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--format", "xml", "cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "composition: global_flags + choices + env, invalid choice via env rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "global_flags": [
+        {
+          "name": "format",
+          "type": "str",
+          "help": "output format",
+          "choices_str": ["text", "json"],
+          "default": "text",
+          "env": "MYAPP_FORMAT"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {
+      "MYAPP_FORMAT": "xml"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp --help'"
+    }
+  },
+  {
     "name": "composition: global_flags + short + env, global flag with short and env",
     "app": {
       "name": "myapp",
