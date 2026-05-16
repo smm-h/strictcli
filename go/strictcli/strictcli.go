@@ -57,6 +57,25 @@ type MutexGroup struct {
 	Flags []Flag
 }
 
+// CoRequired declares flags that must all appear together or none.
+type CoRequired struct {
+	Flags []string
+}
+
+// Requires declares that one flag depends on another being present.
+type Requires struct {
+	Flag      string
+	DependsOn string
+}
+
+// Dependency is either a CoRequired or Requires constraint.
+type Dependency interface {
+	isDependency()
+}
+
+func (CoRequired) isDependency() {}
+func (Requires) isDependency()   {}
+
 // PassthroughHandler is the handler type for passthrough commands.
 type PassthroughHandler func(name string, args []string, globals map[string]interface{}) int
 
@@ -69,6 +88,7 @@ type Command struct {
 	Args               []Arg
 	Tags               []Tag
 	Mutex              []MutexGroup
+	Dependencies       []Dependency
 	Passthrough        bool
 	PassthroughHandler PassthroughHandler
 }
@@ -239,6 +259,13 @@ func WithTags(tags ...Tag) CmdOption {
 func WithMutex(groups ...MutexGroup) CmdOption {
 	return func(c *Command) {
 		c.Mutex = append(c.Mutex, groups...)
+	}
+}
+
+// WithDependencies adds dependency constraints to a command.
+func WithDependencies(deps ...Dependency) CmdOption {
+	return func(c *Command) {
+		c.Dependencies = append(c.Dependencies, deps...)
 	}
 }
 
@@ -1053,6 +1080,36 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 						name, f.Env, f.Name, expectedPrefix,
 					))
 				}
+			}
+		}
+	}
+
+	// Validate dependencies
+	for _, dep := range cmd.Dependencies {
+		switch d := dep.(type) {
+		case CoRequired:
+			if len(d.Flags) < 2 {
+				panic(fmt.Sprintf("command %q: CoRequired must have at least 2 flags, got %d", name, len(d.Flags)))
+			}
+			seen := make(map[string]bool)
+			for _, flagName := range d.Flags {
+				if !seenFlags[flagName] {
+					panic(fmt.Sprintf("command %q: CoRequired references unknown flag %q", name, flagName))
+				}
+				if seen[flagName] {
+					panic(fmt.Sprintf("command %q: CoRequired has duplicate flag %q", name, flagName))
+				}
+				seen[flagName] = true
+			}
+		case Requires:
+			if d.Flag == d.DependsOn {
+				panic(fmt.Sprintf("command %q: Requires flag %q cannot depend on itself", name, d.Flag))
+			}
+			if !seenFlags[d.Flag] {
+				panic(fmt.Sprintf("command %q: Requires references unknown flag %q", name, d.Flag))
+			}
+			if !seenFlags[d.DependsOn] {
+				panic(fmt.Sprintf("command %q: Requires references unknown flag %q", name, d.DependsOn))
 			}
 		}
 	}

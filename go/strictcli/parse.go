@@ -241,6 +241,35 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		}
 	}
 
+	// Enforce dependency constraints
+	for _, dep := range cmd.Dependencies {
+		switch d := dep.(type) {
+		case CoRequired:
+			var setFlags []string
+			var unsetFlags []string
+			for _, flagName := range d.Flags {
+				if _, ok := cliSet[flagName]; ok {
+					setFlags = append(setFlags, "--"+flagName)
+				} else {
+					unsetFlags = append(unsetFlags, "--"+flagName)
+				}
+			}
+			if len(setFlags) > 0 && len(unsetFlags) > 0 {
+				names := make([]string, len(d.Flags))
+				for j, flagName := range d.Flags {
+					names[j] = "--" + flagName
+				}
+				return nil, nil, fmt.Sprintf("flags %s must be used together", strings.Join(names, ", "))
+			}
+		case Requires:
+			if _, flagSet := cliSet[d.Flag]; flagSet {
+				if _, depSet := cliSet[d.DependsOn]; !depSet {
+					return nil, nil, fmt.Sprintf("flag '--%s' requires '--%s'", d.Flag, d.DependsOn)
+				}
+			}
+		}
+	}
+
 	// Build set of flag names belonging to mutex groups
 	mutexFlagNames := make(map[string]bool)
 	for _, mg := range cmd.Mutex {

@@ -1415,3 +1415,191 @@ func TestEnvChoicesInvalid(t *testing.T) {
 		t.Fatalf("stderr should contain 'xml', got %q", r.Stderr)
 	}
 }
+
+// --- CoRequired tests ---
+
+func TestCoRequiredBothProvided(t *testing.T) {
+	app := simpleApp("cmd", "a command", "user={user} pass={pass}",
+		WithFlags(
+			StringFlag("user", "username", Default("none")),
+			StringFlag("pass", "password", Default("none")),
+		),
+		WithDependencies(CoRequired{Flags: []string{"user", "pass"}}))
+	r := app.Test([]string{"cmd", "--user", "admin", "--pass", "secret"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "user=admin") {
+		t.Fatalf("stdout should contain 'user=admin', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "pass=secret") {
+		t.Fatalf("stdout should contain 'pass=secret', got %q", r.Stdout)
+	}
+}
+
+func TestCoRequiredNeitherProvided(t *testing.T) {
+	app := simpleApp("cmd", "a command", "user={user} pass={pass}",
+		WithFlags(
+			StringFlag("user", "username", Default("none")),
+			StringFlag("pass", "password", Default("none")),
+		),
+		WithDependencies(CoRequired{Flags: []string{"user", "pass"}}))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "user=none") {
+		t.Fatalf("stdout should contain 'user=none', got %q", r.Stdout)
+	}
+}
+
+func TestCoRequiredOneProvidedError(t *testing.T) {
+	app := simpleApp("cmd", "a command", "user={user} pass={pass}",
+		WithFlags(
+			StringFlag("user", "username", Default("none")),
+			StringFlag("pass", "password", Default("none")),
+		),
+		WithDependencies(CoRequired{Flags: []string{"user", "pass"}}))
+	r := app.Test([]string{"cmd", "--user", "admin"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "must be used together") {
+		t.Fatalf("stderr should contain 'must be used together', got %q", r.Stderr)
+	}
+}
+
+// --- Requires tests ---
+
+func TestRequiresFlagWithDependsOn(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format} output={output}",
+		WithFlags(
+			StringFlag("format", "output format", Default("text")),
+			StringFlag("output", "output file", Default("out.txt")),
+		),
+		WithDependencies(Requires{Flag: "output", DependsOn: "format"}))
+	r := app.Test([]string{"cmd", "--output", "file.txt", "--format", "json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "output=file.txt") {
+		t.Fatalf("stdout should contain 'output=file.txt', got %q", r.Stdout)
+	}
+}
+
+func TestRequiresFlagNotProvided(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format} output={output}",
+		WithFlags(
+			StringFlag("format", "output format", Default("text")),
+			StringFlag("output", "output file", Default("out.txt")),
+		),
+		WithDependencies(Requires{Flag: "output", DependsOn: "format"}))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestRequiresDependsOnWithoutFlag(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format} output={output}",
+		WithFlags(
+			StringFlag("format", "output format", Default("text")),
+			StringFlag("output", "output file", Default("out.txt")),
+		),
+		WithDependencies(Requires{Flag: "output", DependsOn: "format"}))
+	// Only --format provided (DependsOn), not --output (Flag) -- should be ok (unidirectional)
+	r := app.Test([]string{"cmd", "--format", "json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestRequiresFlagWithoutDependsOnError(t *testing.T) {
+	app := simpleApp("cmd", "a command", "format={format} output={output}",
+		WithFlags(
+			StringFlag("format", "output format", Default("text")),
+			StringFlag("output", "output file", Default("out.txt")),
+		),
+		WithDependencies(Requires{Flag: "output", DependsOn: "format"}))
+	r := app.Test([]string{"cmd", "--output", "file.txt"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "requires") {
+		t.Fatalf("stderr should contain 'requires', got %q", r.Stderr)
+	}
+}
+
+// --- Dependency registration panic tests ---
+
+func TestCoRequiredLessThanTwoFlagsPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for CoRequired with <2 flags, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "CoRequired must have at least 2 flags") {
+			t.Fatalf("panic message should mention at least 2 flags, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("user", "username", Default("none"))),
+		WithDependencies(CoRequired{Flags: []string{"user"}}))
+}
+
+func TestCoRequiredUnknownFlagPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for CoRequired with unknown flag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "CoRequired references unknown flag") {
+			t.Fatalf("panic message should mention unknown flag, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("user", "username", Default("none"))),
+		WithDependencies(CoRequired{Flags: []string{"user", "nonexistent"}}))
+}
+
+func TestRequiresUnknownFlagPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Requires with unknown flag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "Requires references unknown flag") {
+			t.Fatalf("panic message should mention unknown flag, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("user", "username", Default("none"))),
+		WithDependencies(Requires{Flag: "user", DependsOn: "nonexistent"}))
+}
+
+func TestRequiresSelfDependencyPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Requires with self-dependency, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "cannot depend on itself") {
+			t.Fatalf("panic message should mention self-dependency, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("user", "username", Default("none"))),
+		WithDependencies(Requires{Flag: "user", DependsOn: "user"}))
+}
