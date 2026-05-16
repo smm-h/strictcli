@@ -12,8 +12,16 @@
           "mutex": [
             {
               "flags": [
-                {"name": "verbose", "type": "bool", "help": "verbose output"},
-                {"name": "quiet", "type": "bool", "help": "quiet output"}
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                },
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "quiet output"
+                }
               ]
             }
           ],
@@ -21,10 +29,16 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["verbose=false", "quiet=false"]
+      "stdout_contains": [
+        "verbose=false",
+        "quiet=false"
+      ],
+      "stdout_equals": "verbose=false quiet=false"
     }
   },
   {
@@ -40,8 +54,16 @@
           "mutex": [
             {
               "flags": [
-                {"name": "verbose", "type": "bool", "help": "verbose output"},
-                {"name": "quiet", "type": "bool", "help": "quiet output"}
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                },
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "quiet output"
+                }
               ]
             }
           ],
@@ -49,10 +71,17 @@
         }
       ]
     },
-    "argv": ["cmd", "--verbose"],
+    "argv": [
+      "cmd",
+      "--verbose"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["verbose=true", "quiet=false"]
+      "stdout_contains": [
+        "verbose=true",
+        "quiet=false"
+      ],
+      "stdout_equals": "verbose=true quiet=false"
     }
   },
   {
@@ -68,8 +97,16 @@
           "mutex": [
             {
               "flags": [
-                {"name": "verbose", "type": "bool", "help": "verbose output"},
-                {"name": "quiet", "type": "bool", "help": "quiet output"}
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                },
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "quiet output"
+                }
               ]
             }
           ],
@@ -77,10 +114,19 @@
         }
       ]
     },
-    "argv": ["cmd", "--verbose", "--quiet"],
+    "argv": [
+      "cmd",
+      "--verbose",
+      "--quiet"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["--verbose", "--quiet", "mutually exclusive"]
+      "stderr_contains": [
+        "--verbose",
+        "--quiet",
+        "mutually exclusive"
+      ],
+      "stderr_equals": "error: --verbose and --quiet are mutually exclusive\ntry 'myapp --help'"
     }
   },
   {
@@ -96,8 +142,16 @@
           "mutex": [
             {
               "flags": [
-                {"name": "verbose", "type": "bool", "help": "verbose output"},
-                {"name": "quiet", "type": "bool", "help": "quiet output"}
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                },
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "quiet output"
+                }
               ],
               "required": true
             }
@@ -106,10 +160,17 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["--verbose", "--quiet", "required"]
+      "stderr_contains": [
+        "--verbose",
+        "--quiet",
+        "required"
+      ],
+      "stderr_equals": "error: one of --verbose, --quiet is required\ntry 'myapp --help'"
     }
   },
   {
@@ -125,8 +186,16 @@
           "mutex": [
             {
               "flags": [
-                {"name": "verbose", "type": "bool", "help": "verbose output"},
-                {"name": "quiet", "type": "bool", "help": "quiet output"}
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                },
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "quiet output"
+                }
               ],
               "required": true
             }
@@ -135,10 +204,17 @@
         }
       ]
     },
-    "argv": ["cmd", "--quiet"],
+    "argv": [
+      "cmd",
+      "--quiet"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["verbose=false", "quiet=true"]
+      "stdout_contains": [
+        "verbose=false",
+        "quiet=true"
+      ],
+      "stdout_equals": "verbose=false quiet=true"
     }
   },
   {
@@ -154,8 +230,18 @@
           "mutex": [
             {
               "flags": [
-                {"name": "file", "type": "str", "help": "read from file", "default": null},
-                {"name": "url", "type": "str", "help": "read from URL", "default": null}
+                {
+                  "name": "file",
+                  "type": "str",
+                  "help": "read from file",
+                  "default": null
+                },
+                {
+                  "name": "url",
+                  "type": "str",
+                  "help": "read from URL",
+                  "default": null
+                }
               ]
             }
           ],
@@ -163,10 +249,15 @@
         }
       ]
     },
-    "argv": ["fetch", "--file", "data.txt"],
+    "argv": [
+      "fetch",
+      "--file",
+      "data.txt"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "file=data.txt"
+      "stdout_contains": "file=data.txt",
+      "stdout_equals": "file=data.txt url=None"
     }
   },
   {
@@ -182,8 +273,18 @@
           "mutex": [
             {
               "flags": [
-                {"name": "file", "type": "str", "help": "read from file", "default": null},
-                {"name": "url", "type": "str", "help": "read from URL", "default": null}
+                {
+                  "name": "file",
+                  "type": "str",
+                  "help": "read from file",
+                  "default": null
+                },
+                {
+                  "name": "url",
+                  "type": "str",
+                  "help": "read from URL",
+                  "default": null
+                }
               ]
             }
           ],
@@ -191,10 +292,21 @@
         }
       ]
     },
-    "argv": ["fetch", "--file", "data.txt", "--url", "http://example.com"],
+    "argv": [
+      "fetch",
+      "--file",
+      "data.txt",
+      "--url",
+      "http://example.com"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["--file", "--url", "mutually exclusive"]
+      "stderr_contains": [
+        "--file",
+        "--url",
+        "mutually exclusive"
+      ],
+      "stderr_equals": "error: --file and --url are mutually exclusive\ntry 'myapp --help'"
     }
   },
   {
@@ -207,12 +319,27 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "name", "type": "str", "help": "your name", "default": "anon"}],
+          "flags": [
+            {
+              "name": "name",
+              "type": "str",
+              "help": "your name",
+              "default": "anon"
+            }
+          ],
           "mutex": [
             {
               "flags": [
-                {"name": "verbose", "type": "bool", "help": "verbose output"},
-                {"name": "quiet", "type": "bool", "help": "quiet output"}
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                },
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "quiet output"
+                }
               ]
             }
           ],
@@ -220,10 +347,20 @@
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["Flags (mutually exclusive):", "--verbose", "--quiet", "Flags:", "--name"]
+      "stdout_contains": [
+        "Flags (mutually exclusive):",
+        "--verbose",
+        "--quiet",
+        "Flags:",
+        "--name"
+      ],
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --verbose, --no-verbose    verbose output [default: false]\n  --quiet, --no-quiet        quiet output [default: false]"
     }
   },
   {
@@ -239,8 +376,16 @@
           "mutex": [
             {
               "flags": [
-                {"name": "verbose", "type": "bool", "help": "verbose output"},
-                {"name": "quiet", "type": "bool", "help": "quiet output"}
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                },
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "quiet output"
+                }
               ],
               "required": true
             }
@@ -249,10 +394,14 @@
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "Flags (mutually exclusive, required):"
+      "stdout_contains": "Flags (mutually exclusive, required):",
+      "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive, required):\n  --verbose, --no-verbose    verbose output [default: false]\n  --quiet, --no-quiet        quiet output [default: false]"
     }
   }
 ]

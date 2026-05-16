@@ -9,15 +9,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "files", "help": "files to process", "variadic": true}],
+          "args": [
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true
+            }
+          ],
           "handler_prints": "files={files}"
         }
       ]
     },
-    "argv": ["cmd", "a", "b", "c"],
+    "argv": [
+      "cmd",
+      "a",
+      "b",
+      "c"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "files=a,b,c"
+      "stdout_equals": "files=a,b,c"
     }
   },
   {
@@ -30,15 +41,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "files", "help": "files to process", "variadic": true}],
+          "args": [
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true
+            }
+          ],
           "handler_prints": "files={files}"
         }
       ]
     },
-    "argv": ["cmd", "a"],
+    "argv": [
+      "cmd",
+      "a"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "files=a"
+      "stdout_equals": "files=a"
     }
   },
   {
@@ -51,15 +71,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "files", "help": "files to process", "variadic": true}],
+          "args": [
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true
+            }
+          ],
           "handler_prints": "files={files}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "missing required argument"
+      "stderr_contains": "missing required argument",
+      "stderr_equals": "error: missing required argument 'files'\ntry 'myapp --help'"
     }
   },
   {
@@ -72,15 +101,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "files", "help": "files to process", "variadic": true, "required": false}],
+          "args": [
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true,
+              "required": false
+            }
+          ],
           "handler_prints": "files={files}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "files="
+      "stdout_equals": "files="
     }
   },
   {
@@ -93,15 +131,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "files", "help": "files to process", "variadic": true}],
+          "args": [
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true
+            }
+          ],
           "handler_prints": "files={files}"
         }
       ]
     },
-    "argv": ["cmd", "--", "-a", "-b"],
+    "argv": [
+      "cmd",
+      "--",
+      "-a",
+      "-b"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "files=-a,-b"
+      "stdout_equals": "files=-a,-b"
     }
   },
   {
@@ -115,17 +164,29 @@
           "name": "cmd",
           "help": "a command",
           "args": [
-            {"name": "target", "help": "build target"},
-            {"name": "files", "help": "files to process", "variadic": true}
+            {
+              "name": "target",
+              "help": "build target"
+            },
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true
+            }
           ],
           "handler_prints": "target={target} files={files}"
         }
       ]
     },
-    "argv": ["cmd", "target", "f1", "f2"],
+    "argv": [
+      "cmd",
+      "target",
+      "f1",
+      "f2"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "target=target files=f1,f2"
+      "stdout_equals": "target=target files=f1,f2"
     }
   },
   {
@@ -138,15 +199,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "files", "help": "files to process", "variadic": true}],
+          "args": [
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true
+            }
+          ],
           "handler_prints": "files={files}"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "files..."
+      "stdout_contains": "files...",
+      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  files...    files to process"
     }
   },
   {
@@ -160,17 +231,28 @@
           "name": "cmd",
           "help": "a command",
           "args": [
-            {"name": "files", "help": "files to process", "variadic": true},
-            {"name": "targets", "help": "targets", "variadic": true}
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true
+            },
+            {
+              "name": "targets",
+              "help": "targets",
+              "variadic": true
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "variadic"
+      "stderr_contains": "variadic",
+      "stderr_equals": "error: command \"cmd\": at most one variadic arg is allowed"
     }
   },
   {
@@ -184,17 +266,27 @@
           "name": "cmd",
           "help": "a command",
           "args": [
-            {"name": "files", "help": "files to process", "variadic": true},
-            {"name": "target", "help": "build target"}
+            {
+              "name": "files",
+              "help": "files to process",
+              "variadic": true
+            },
+            {
+              "name": "target",
+              "help": "build target"
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "variadic"
+      "stderr_contains": "variadic",
+      "stderr_equals": "error: command \"cmd\": variadic arg \"files\" must be the last arg"
     }
   }
 ]

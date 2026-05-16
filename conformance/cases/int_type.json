@@ -9,15 +9,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd", "--port", "8080"],
+    "argv": [
+      "cmd",
+      "--port",
+      "8080"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "port=8080"
+      "stdout_equals": "port=8080"
     }
   },
   {
@@ -30,15 +40,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port", "default": 8000}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "default": 8000
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "port=8000"
+      "stdout_equals": "port=8000"
     }
   },
   {
@@ -51,15 +70,29 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd", "--port", "abc"],
+    "argv": [
+      "cmd",
+      "--port",
+      "abc"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["expected integer", "'abc'"]
+      "stderr_contains": [
+        "expected integer",
+        "'abc'"
+      ],
+      "stderr_equals": "error: --port: expected integer, got 'abc'\ntry 'myapp --help'"
     }
   },
   {
@@ -73,16 +106,28 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port", "default": 80, "env": "MYAPP_PORT"}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "default": 80,
+              "env": "MYAPP_PORT"
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd"],
-    "env": {"MYAPP_PORT": "9090"},
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_PORT": "9090"
+    },
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "port=9090"
+      "stdout_equals": "port=9090"
     }
   },
   {
@@ -96,16 +141,32 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port", "default": 80, "env": "MYAPP_PORT"}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "default": 80,
+              "env": "MYAPP_PORT"
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd"],
-    "env": {"MYAPP_PORT": "abc"},
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_PORT": "abc"
+    },
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["expected integer", "'abc'"]
+      "stderr_contains": [
+        "expected integer",
+        "'abc'"
+      ],
+      "stderr_equals": "error: --port: expected integer, got 'abc' (from env var 'MYAPP_PORT')\ntry 'myapp --help'"
     }
   },
   {
@@ -118,15 +179,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "required"
+      "stderr_contains": "required",
+      "stderr_equals": "error: flag '--port' is required\ntry 'myapp --help'"
     }
   },
   {
@@ -139,15 +209,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd", "--port=8080"],
+    "argv": [
+      "cmd",
+      "--port=8080"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "port=8080"
+      "stdout_equals": "port=8080"
     }
   },
   {
@@ -160,15 +239,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port"}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd", "--port=abc"],
+    "argv": [
+      "cmd",
+      "--port=abc"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "expected integer"
+      "stderr_contains": "expected integer",
+      "stderr_equals": "error: --port: expected integer, got 'abc'\ntry 'myapp --help'"
     }
   },
   {
@@ -181,15 +270,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "short": "p", "help": "the port"}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "short": "p",
+              "help": "the port"
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd", "-p", "8080"],
+    "argv": [
+      "cmd",
+      "-p",
+      "8080"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "port=8080"
+      "stdout_equals": "port=8080"
     }
   },
   {
@@ -202,15 +302,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port", "default": 8000}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "default": 8000
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "<int>"
+      "stdout_contains": "<int>",
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --port <int>    the port [default: 8000]"
     }
   }
 ]

@@ -14,10 +14,14 @@
         }
       ]
     },
-    "argv": ["checkout", "-b", "feature"],
+    "argv": [
+      "checkout",
+      "-b",
+      "feature"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "checkout:-b,feature"
+      "stdout_equals": "checkout:-b,feature"
     }
   },
   {
@@ -35,10 +39,14 @@
         }
       ]
     },
-    "argv": ["merge", "--no-ff", "main"],
+    "argv": [
+      "merge",
+      "--no-ff",
+      "main"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "merge:--no-ff,main"
+      "stdout_equals": "merge:--no-ff,main"
     }
   },
   {
@@ -56,10 +64,12 @@
         }
       ]
     },
-    "argv": ["status"],
+    "argv": [
+      "status"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "status:"
+      "stdout_equals": "status:"
     }
   },
   {
@@ -69,7 +79,11 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        }
       ],
       "commands": [
         {
@@ -80,10 +94,19 @@
         }
       ]
     },
-    "argv": ["--verbose", "checkout", "-b", "foo"],
+    "argv": [
+      "--verbose",
+      "checkout",
+      "-b",
+      "foo"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["verbose=true", "checkout:-b,foo"]
+      "stdout_contains": [
+        "verbose=true",
+        "checkout:-b,foo"
+      ],
+      "stdout_equals": "verbose=true\ncheckout:-b,foo"
     }
   },
   {
@@ -109,7 +132,12 @@
     "argv": [],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["checkout", "checkout a branch", "status"]
+      "stdout_contains": [
+        "checkout",
+        "checkout a branch",
+        "status"
+      ],
+      "stdout_equals": "myapp v1.0.0 -- test app\n\nCommands:\n  checkout    checkout a branch\n  status      show status\n\nUse 'myapp <command> --help' for more information."
     }
   },
   {
@@ -127,11 +155,15 @@
         }
       ]
     },
-    "argv": ["checkout", "--help"],
+    "argv": [
+      "checkout",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "checkout a branch",
-      "stdout_not_contains": "Flags:"
+      "stdout_not_contains": "Flags:",
+      "stdout_equals": "myapp checkout -- checkout a branch"
     }
   },
   {
@@ -146,14 +178,23 @@
           "help": "checkout a branch",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}",
-          "flags": [{"name": "force", "type": "bool", "help": "force"}]
+          "flags": [
+            {
+              "name": "force",
+              "type": "bool",
+              "help": "force"
+            }
+          ]
         }
       ]
     },
-    "argv": ["checkout"],
+    "argv": [
+      "checkout"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "passthrough"
+      "stderr_contains": "passthrough",
+      "stderr_equals": "error: command \"checkout\": passthrough commands cannot have flags"
     }
   },
   {
@@ -168,14 +209,22 @@
           "help": "checkout a branch",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}",
-          "args": [{"name": "branch", "help": "branch name"}]
+          "args": [
+            {
+              "name": "branch",
+              "help": "branch name"
+            }
+          ]
         }
       ]
     },
-    "argv": ["checkout"],
+    "argv": [
+      "checkout"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "passthrough"
+      "stderr_contains": "passthrough",
+      "stderr_equals": "error: command \"checkout\": passthrough commands cannot have args"
     }
   },
   {
@@ -194,10 +243,14 @@
         }
       ]
     },
-    "argv": ["checkout", "-b", "feature"],
+    "argv": [
+      "checkout",
+      "-b",
+      "feature"
+    ],
     "expect": {
       "exit_code": 3,
-      "stdout_contains": "checkout:-b,feature"
+      "stdout_equals": "checkout:-b,feature"
     }
   },
   {
@@ -215,10 +268,14 @@
         }
       ]
     },
-    "argv": ["exec", "--verbose", "deploy"],
+    "argv": [
+      "exec",
+      "--verbose",
+      "deploy"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "cmd=exec rest=--verbose,deploy"
+      "stdout_equals": "cmd=exec rest=--verbose,deploy"
     }
   },
   {
@@ -242,10 +299,14 @@
         }
       ]
     },
-    "argv": ["merge", "--squash", "dev"],
+    "argv": [
+      "merge",
+      "--squash",
+      "dev"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "merge:--squash,dev"
+      "stdout_equals": "merge:--squash,dev"
     }
   }
 ]

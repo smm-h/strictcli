@@ -9,15 +9,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
           "handler_prints": "target={target}"
         }
       ]
     },
-    "argv": ["cmd", "--target", "foo"],
+    "argv": [
+      "cmd",
+      "--target",
+      "foo"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "target=foo"
+      "stdout_equals": "target=foo"
     }
   },
   {
@@ -30,15 +40,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
           "handler_prints": "target={target}"
         }
       ]
     },
-    "argv": ["cmd", "--target=bar"],
+    "argv": [
+      "cmd",
+      "--target=bar"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "target=bar"
+      "stdout_equals": "target=bar"
     }
   },
   {
@@ -51,15 +70,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
           "handler_prints": "verbose={verbose}"
         }
       ]
     },
-    "argv": ["cmd", "--verbose"],
+    "argv": [
+      "cmd",
+      "--verbose"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=true"
+      "stdout_equals": "verbose=true"
     }
   },
   {
@@ -72,15 +100,23 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
           "handler_prints": "verbose={verbose}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=false"
+      "stdout_equals": "verbose=false"
     }
   },
   {
@@ -93,15 +129,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
           "handler_prints": "verbose={verbose}"
         }
       ]
     },
-    "argv": ["cmd", "--no-verbose"],
+    "argv": [
+      "cmd",
+      "--no-verbose"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=false"
+      "stdout_equals": "verbose=false"
     }
   },
   {
@@ -114,15 +159,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "short": "V", "help": "be verbose"}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "short": "V",
+              "help": "be verbose"
+            }
+          ],
           "handler_prints": "verbose={verbose}"
         }
       ]
     },
-    "argv": ["cmd", "-V"],
+    "argv": [
+      "cmd",
+      "-V"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=true"
+      "stdout_equals": "verbose=true"
     }
   },
   {
@@ -135,15 +190,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "target", "type": "str", "short": "t", "help": "the target"}],
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "short": "t",
+              "help": "the target"
+            }
+          ],
           "handler_prints": "target={target}"
         }
       ]
     },
-    "argv": ["cmd", "-t", "foo"],
+    "argv": [
+      "cmd",
+      "-t",
+      "foo"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "target=foo"
+      "stdout_equals": "target=foo"
     }
   },
   {
@@ -156,15 +222,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "format", "type": "str", "help": "output format", "default": "text"}],
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "default": "text"
+            }
+          ],
           "handler_prints": "format={format}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "format=text"
+      "stdout_equals": "format=text"
     }
   },
   {
@@ -177,15 +252,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "format", "type": "str", "help": "output format", "default": "text"}],
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "default": "text"
+            }
+          ],
           "handler_prints": "format={format}"
         }
       ]
     },
-    "argv": ["cmd", "--format", "json"],
+    "argv": [
+      "cmd",
+      "--format",
+      "json"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "format=json"
+      "stdout_equals": "format=json"
     }
   },
   {
@@ -198,15 +284,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
           "handler_prints": "target={target}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "required"
+      "stderr_contains": "required",
+      "stderr_equals": "error: flag '--target' is required\ntry 'myapp --help'"
     }
   },
   {
@@ -219,15 +314,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
           "handler_prints": "verbose={verbose}"
         }
       ]
     },
-    "argv": ["cmd", "--verbose=true"],
+    "argv": [
+      "cmd",
+      "--verbose=true"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "boolean flag"
+      "stderr_contains": "boolean flag",
+      "stderr_equals": "error: flag '--verbose' is a boolean flag and does not take a value\ntry 'myapp --help'"
     }
   },
   {
@@ -240,15 +345,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose", "negatable": false}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "negatable": false
+            }
+          ],
           "handler_prints": "verbose={verbose}"
         }
       ]
     },
-    "argv": ["cmd", "--no-verbose"],
+    "argv": [
+      "cmd",
+      "--no-verbose"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unknown flag"
+      "stderr_contains": "unknown flag",
+      "stderr_equals": "error: unknown flag '--no-verbose'\ntry 'myapp --help'"
     }
   },
   {
@@ -261,15 +377,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose", "negatable": true}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "negatable": true
+            }
+          ],
           "handler_prints": "verbose={verbose}"
         }
       ]
     },
-    "argv": ["cmd", "--no-verbose"],
+    "argv": [
+      "cmd",
+      "--no-verbose"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=false"
+      "stdout_equals": "verbose=false"
     }
   }
 ]

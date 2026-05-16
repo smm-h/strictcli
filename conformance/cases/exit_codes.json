@@ -14,10 +14,12 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "ok"
+      "stdout_equals": "ok"
     }
   },
   {
@@ -35,10 +37,12 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stdout_contains": "failing"
+      "stdout_equals": "failing"
     }
   },
   {
@@ -56,10 +60,12 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 42,
-      "stdout_contains": "custom code"
+      "stdout_equals": "custom code"
     }
   },
   {
@@ -72,17 +78,32 @@
         {
           "name": "deploy",
           "help": "deploy the app",
-          "args": [{"name": "target", "help": "deploy target"}],
-          "flags": [{"name": "force", "type": "bool", "help": "force deploy"}],
+          "args": [
+            {
+              "name": "target",
+              "help": "deploy target"
+            }
+          ],
+          "flags": [
+            {
+              "name": "force",
+              "type": "bool",
+              "help": "force deploy"
+            }
+          ],
           "handler_prints": "deploy {target} force={force}",
           "handler_exit_code": 0
         }
       ]
     },
-    "argv": ["deploy", "--force", "production"],
+    "argv": [
+      "deploy",
+      "--force",
+      "production"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "deploy production force=true"
+      "stdout_equals": "deploy production force=true"
     }
   }
 ]

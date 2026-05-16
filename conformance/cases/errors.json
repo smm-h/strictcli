@@ -9,15 +9,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--unknown"],
+    "argv": [
+      "cmd",
+      "--unknown"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unknown flag"
+      "stderr_contains": "unknown flag",
+      "stderr_equals": "error: unknown flag '--unknown'\ntry 'myapp --help'"
     }
   },
   {
@@ -34,10 +44,14 @@
         }
       ]
     },
-    "argv": ["cmd", "-x"],
+    "argv": [
+      "cmd",
+      "-x"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unknown flag"
+      "stderr_contains": "unknown flag",
+      "stderr_equals": "error: unknown flag '-x'\ntry 'myapp --help'"
     }
   },
   {
@@ -50,15 +64,27 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["--target", "required"]
+      "stderr_contains": [
+        "--target",
+        "required"
+      ],
+      "stderr_equals": "error: flag '--target' is required\ntry 'myapp --help'"
     }
   },
   {
@@ -75,10 +101,14 @@
         }
       ]
     },
-    "argv": ["cmd", "surprise"],
+    "argv": [
+      "cmd",
+      "surprise"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unexpected argument"
+      "stderr_contains": "unexpected argument",
+      "stderr_equals": "error: unexpected argument 'surprise'\ntry 'myapp --help'"
     }
   },
   {
@@ -91,15 +121,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--target"],
+    "argv": [
+      "cmd",
+      "--target"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "requires a value"
+      "stderr_contains": "requires a value",
+      "stderr_equals": "error: flag '--target' requires a value\ntry 'myapp --help'"
     }
   },
   {
@@ -116,10 +156,16 @@
         }
       ]
     },
-    "argv": ["unknown"],
+    "argv": [
+      "unknown"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["unknown command", "try 'myapp --help'"]
+      "stderr_contains": [
+        "unknown command",
+        "try 'myapp --help'"
+      ],
+      "stderr_equals": "error: unknown command 'unknown'\ntry 'myapp --help'"
     }
   },
   {
@@ -132,15 +178,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--no-verbose=true"],
+    "argv": [
+      "cmd",
+      "--no-verbose=true"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "boolean negation"
+      "stderr_contains": "boolean negation",
+      "stderr_equals": "error: flag '--no-verbose' is a boolean negation and does not take a value\ntry 'myapp --help'"
     }
   },
   {
@@ -157,10 +213,14 @@
         }
       ]
     },
-    "argv": ["cmd", "--unknown=value"],
+    "argv": [
+      "cmd",
+      "--unknown=value"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unknown flag"
+      "stderr_contains": "unknown flag",
+      "stderr_equals": "error: unknown flag '--unknown'\ntry 'myapp --help'"
     }
   }
 ]

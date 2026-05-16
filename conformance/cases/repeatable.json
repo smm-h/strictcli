@@ -9,15 +9,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true
+            }
+          ],
           "handler_prints": "tags={tag}"
         }
       ]
     },
-    "argv": ["cmd", "--tag", "alpha"],
+    "argv": [
+      "cmd",
+      "--tag",
+      "alpha"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "tags=alpha"
+      "stdout_equals": "tags=alpha"
     }
   },
   {
@@ -30,15 +41,30 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true
+            }
+          ],
           "handler_prints": "tags={tag}"
         }
       ]
     },
-    "argv": ["cmd", "--tag", "alpha", "--tag", "beta", "--tag", "gamma"],
+    "argv": [
+      "cmd",
+      "--tag",
+      "alpha",
+      "--tag",
+      "beta",
+      "--tag",
+      "gamma"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "tags=alpha,beta,gamma"
+      "stdout_equals": "tags=alpha,beta,gamma"
     }
   },
   {
@@ -51,15 +77,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true
+            }
+          ],
           "handler_prints": "tags={tag}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "tags="
+      "stdout_equals": "tags="
     }
   },
   {
@@ -72,15 +107,28 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "a port", "repeatable": true}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "a port",
+              "repeatable": true
+            }
+          ],
           "handler_prints": "ports={port}"
         }
       ]
     },
-    "argv": ["cmd", "--port", "80", "--port", "443"],
+    "argv": [
+      "cmd",
+      "--port",
+      "80",
+      "--port",
+      "443"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "ports=80,443"
+      "stdout_equals": "ports=80,443"
     }
   },
   {
@@ -93,15 +141,33 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true, "choices_str": ["alpha", "beta", "gamma"]}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "choices_str": [
+                "alpha",
+                "beta",
+                "gamma"
+              ]
+            }
+          ],
           "handler_prints": "tags={tag}"
         }
       ]
     },
-    "argv": ["cmd", "--tag", "alpha", "--tag", "gamma"],
+    "argv": [
+      "cmd",
+      "--tag",
+      "alpha",
+      "--tag",
+      "gamma"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "tags=alpha,gamma"
+      "stdout_equals": "tags=alpha,gamma"
     }
   },
   {
@@ -114,15 +180,36 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true, "choices_str": ["alpha", "beta"]}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "choices_str": [
+                "alpha",
+                "beta"
+              ]
+            }
+          ],
           "handler_prints": "tags={tag}"
         }
       ]
     },
-    "argv": ["cmd", "--tag", "alpha", "--tag", "delta"],
+    "argv": [
+      "cmd",
+      "--tag",
+      "alpha",
+      "--tag",
+      "delta"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["invalid value", "'delta'"]
+      "stderr_contains": [
+        "invalid value",
+        "'delta'"
+      ],
+      "stderr_equals": "error: --tag: invalid value 'delta', must be one of: alpha, beta\ntry 'myapp --help'"
     }
   },
   {
@@ -135,15 +222,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true
+            }
+          ],
           "handler_prints": "tags={tag}"
         }
       ]
     },
-    "argv": ["cmd", "--tag=alpha", "--tag=beta"],
+    "argv": [
+      "cmd",
+      "--tag=alpha",
+      "--tag=beta"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "tags=alpha,beta"
+      "stdout_equals": "tags=alpha,beta"
     }
   },
   {
@@ -156,15 +254,29 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "short": "t", "help": "a tag", "repeatable": true}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "short": "t",
+              "help": "a tag",
+              "repeatable": true
+            }
+          ],
           "handler_prints": "tags={tag}"
         }
       ]
     },
-    "argv": ["cmd", "-t", "alpha", "-t", "beta"],
+    "argv": [
+      "cmd",
+      "-t",
+      "alpha",
+      "-t",
+      "beta"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "tags=alpha,beta"
+      "stdout_equals": "tags=alpha,beta"
     }
   },
   {
@@ -177,15 +289,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "repeatable"
+      "stdout_contains": "repeatable",
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --tag <str>    a tag [repeatable]"
     }
   },
   {
@@ -199,16 +322,28 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "tag", "type": "str", "help": "a tag", "repeatable": true, "env": "MYAPP_TAG"}],
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "env": "MYAPP_TAG"
+            }
+          ],
           "handler_prints": "tags={tag}"
         }
       ]
     },
-    "argv": ["cmd"],
-    "env": {"MYAPP_TAG": "fromenv"},
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_TAG": "fromenv"
+    },
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "tags=fromenv"
+      "stdout_equals": "tags=fromenv"
     }
   }
 ]

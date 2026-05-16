@@ -6,7 +6,11 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        }
       ],
       "commands": [
         {
@@ -16,10 +20,13 @@
         }
       ]
     },
-    "argv": ["--verbose", "cmd"],
+    "argv": [
+      "--verbose",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=true"
+      "stdout_equals": "verbose=true"
     }
   },
   {
@@ -29,7 +36,11 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        }
       ],
       "commands": [
         {
@@ -39,10 +50,13 @@
         }
       ]
     },
-    "argv": ["cmd", "--verbose"],
+    "argv": [
+      "cmd",
+      "--verbose"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=true"
+      "stdout_equals": "verbose=true"
     }
   },
   {
@@ -52,7 +66,11 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        }
       ],
       "commands": [
         {
@@ -62,10 +80,13 @@
         }
       ]
     },
-    "argv": ["--no-verbose", "cmd"],
+    "argv": [
+      "--no-verbose",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=false"
+      "stdout_equals": "verbose=false"
     }
   },
   {
@@ -75,7 +96,12 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "config", "type": "str", "help": "config directory", "default": "/etc/myapp"}
+        {
+          "name": "config",
+          "type": "str",
+          "help": "config directory",
+          "default": "/etc/myapp"
+        }
       ],
       "commands": [
         {
@@ -85,10 +111,14 @@
         }
       ]
     },
-    "argv": ["--config", "/tmp", "cmd"],
+    "argv": [
+      "--config",
+      "/tmp",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "config=/tmp"
+      "stdout_equals": "config=/tmp"
     }
   },
   {
@@ -98,7 +128,12 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "port", "type": "int", "help": "server port", "default": 3000}
+        {
+          "name": "port",
+          "type": "int",
+          "help": "server port",
+          "default": 3000
+        }
       ],
       "commands": [
         {
@@ -108,10 +143,14 @@
         }
       ]
     },
-    "argv": ["--port", "8080", "cmd"],
+    "argv": [
+      "--port",
+      "8080",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "port=8080"
+      "stdout_equals": "port=8080"
     }
   },
   {
@@ -121,7 +160,11 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        }
       ],
       "commands": [
         {
@@ -131,10 +174,17 @@
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["--verbose", "enable verbose output"]
+      "stdout_contains": [
+        "--verbose",
+        "enable verbose output"
+      ],
+      "stdout_equals": "myapp cmd -- a command\n\nGlobal flags:\n  --verbose, --no-verbose    enable verbose output [default: false]"
     }
   },
   {
@@ -145,7 +195,12 @@
       "help": "test app",
       "env_prefix": "MYAPP",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output", "env": "MYAPP_VERBOSE"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output",
+          "env": "MYAPP_VERBOSE"
+        }
       ],
       "commands": [
         {
@@ -155,11 +210,15 @@
         }
       ]
     },
-    "argv": ["cmd"],
-    "env": {"MYAPP_VERBOSE": "true"},
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "true"
+    },
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=true"
+      "stdout_equals": "verbose=true"
     }
   },
   {
@@ -169,21 +228,36 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        }
       ],
       "commands": [
         {
           "name": "deploy",
           "help": "deploy the app",
-          "flags": [{"name": "target", "type": "str", "help": "deploy target"}],
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "deploy target"
+            }
+          ],
           "handler_prints": "verbose={verbose} target={target}"
         }
       ]
     },
-    "argv": ["--verbose", "deploy", "--target", "prod"],
+    "argv": [
+      "--verbose",
+      "deploy",
+      "--target",
+      "prod"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=true target=prod"
+      "stdout_equals": "verbose=true target=prod"
     }
   },
   {
@@ -193,8 +267,17 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output"},
-        {"name": "config", "type": "str", "help": "config path", "default": "/etc/myapp"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        },
+        {
+          "name": "config",
+          "type": "str",
+          "help": "config path",
+          "default": "/etc/myapp"
+        }
       ],
       "commands": [
         {
@@ -204,10 +287,12 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=false config=/etc/myapp"
+      "stdout_equals": "verbose=false config=/etc/myapp"
     }
   },
   {
@@ -217,22 +302,43 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "verbose", "type": "bool", "help": "enable verbose output"},
-        {"name": "config", "type": "str", "help": "config path", "default": "/etc/myapp"}
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output"
+        },
+        {
+          "name": "config",
+          "type": "str",
+          "help": "config path",
+          "default": "/etc/myapp"
+        }
       ],
       "commands": [
         {
           "name": "deploy",
           "help": "deploy the app",
-          "flags": [{"name": "force", "type": "bool", "help": "force deploy"}],
+          "flags": [
+            {
+              "name": "force",
+              "type": "bool",
+              "help": "force deploy"
+            }
+          ],
           "handler_prints": "verbose={verbose} config={config} force={force}"
         }
       ]
     },
-    "argv": ["--verbose", "--config", "/tmp/cfg", "deploy", "--force"],
+    "argv": [
+      "--verbose",
+      "--config",
+      "/tmp/cfg",
+      "deploy",
+      "--force"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=true config=/tmp/cfg force=true"
+      "stdout_equals": "verbose=true config=/tmp/cfg force=true"
     }
   }
 ]

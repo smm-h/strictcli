@@ -9,15 +9,29 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"]}],
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "choices_str": [
+                "text",
+                "json"
+              ]
+            }
+          ],
           "handler_prints": "format={format}"
         }
       ]
     },
-    "argv": ["cmd", "--format", "json"],
+    "argv": [
+      "cmd",
+      "--format",
+      "json"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "format=json"
+      "stdout_equals": "format=json"
     }
   },
   {
@@ -30,15 +44,35 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"]}],
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "choices_str": [
+                "text",
+                "json"
+              ]
+            }
+          ],
           "handler_prints": "format={format}"
         }
       ]
     },
-    "argv": ["cmd", "--format", "xml"],
+    "argv": [
+      "cmd",
+      "--format",
+      "xml"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["invalid value", "'xml'", "text", "json"]
+      "stderr_contains": [
+        "invalid value",
+        "'xml'",
+        "text",
+        "json"
+      ],
+      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp --help'"
     }
   },
   {
@@ -51,15 +85,30 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"], "default": "text"}],
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "choices_str": [
+                "text",
+                "json"
+              ],
+              "default": "text"
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "choices: text, json"
+      "stdout_contains": "choices: text, json",
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --format <str>    output format [choices: text, json] [default: text]"
     }
   },
   {
@@ -72,15 +121,30 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port", "choices_int": [80, 443, 8080]}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "choices_int": [
+                80,
+                443,
+                8080
+              ]
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd", "--port", "443"],
+    "argv": [
+      "cmd",
+      "--port",
+      "443"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "port=443"
+      "stdout_equals": "port=443"
     }
   },
   {
@@ -93,15 +157,34 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "port", "type": "int", "help": "the port", "choices_int": [80, 443, 8080]}],
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "choices_int": [
+                80,
+                443,
+                8080
+              ]
+            }
+          ],
           "handler_prints": "port={port}"
         }
       ]
     },
-    "argv": ["cmd", "--port", "9090"],
+    "argv": [
+      "cmd",
+      "--port",
+      "9090"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["invalid value", "9090"]
+      "stderr_contains": [
+        "invalid value",
+        "9090"
+      ],
+      "stderr_equals": "error: --port: invalid value '9090', must be one of: 80, 443, 8080\ntry 'myapp --help'"
     }
   },
   {
@@ -115,16 +198,32 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"], "default": "text", "env": "MYAPP_FORMAT"}],
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "choices_str": [
+                "text",
+                "json"
+              ],
+              "default": "text",
+              "env": "MYAPP_FORMAT"
+            }
+          ],
           "handler_prints": "format={format}"
         }
       ]
     },
-    "argv": ["cmd"],
-    "env": {"MYAPP_FORMAT": "json"},
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_FORMAT": "json"
+    },
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "format=json"
+      "stdout_equals": "format=json"
     }
   },
   {
@@ -138,16 +237,36 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "format", "type": "str", "help": "output format", "choices_str": ["text", "json"], "default": "text", "env": "MYAPP_FORMAT"}],
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "choices_str": [
+                "text",
+                "json"
+              ],
+              "default": "text",
+              "env": "MYAPP_FORMAT"
+            }
+          ],
           "handler_prints": "format={format}"
         }
       ]
     },
-    "argv": ["cmd"],
-    "env": {"MYAPP_FORMAT": "xml"},
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_FORMAT": "xml"
+    },
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["invalid value", "'xml'"]
+      "stderr_contains": [
+        "invalid value",
+        "'xml'"
+      ],
+      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp --help'"
     }
   }
 ]

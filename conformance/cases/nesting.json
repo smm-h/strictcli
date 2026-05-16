@@ -11,15 +11,22 @@
           "name": "config",
           "help": "manage configuration",
           "commands": [
-            {"name": "show", "help": "display config", "handler_prints": "showing config"}
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "showing config"
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "show"],
+    "argv": [
+      "config",
+      "show"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "showing config"
+      "stdout_equals": "showing config"
     }
   },
   {
@@ -38,8 +45,16 @@
               "name": "set",
               "help": "set a config value",
               "flags": [
-                {"name": "key", "type": "str", "help": "config key"},
-                {"name": "value", "type": "str", "help": "config value"}
+                {
+                  "name": "key",
+                  "type": "str",
+                  "help": "config key"
+                },
+                {
+                  "name": "value",
+                  "type": "str",
+                  "help": "config value"
+                }
               ],
               "handler_prints": "{key}={value}"
             }
@@ -47,10 +62,17 @@
         }
       ]
     },
-    "argv": ["config", "set", "--key", "name", "--value", "strictcli"],
+    "argv": [
+      "config",
+      "set",
+      "--key",
+      "name",
+      "--value",
+      "strictcli"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "name=strictcli"
+      "stdout_equals": "name=strictcli"
     }
   },
   {
@@ -65,15 +87,23 @@
           "name": "config",
           "help": "manage configuration",
           "commands": [
-            {"name": "show", "help": "display config", "handler_prints": "ok"}
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "ok"
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "delete"],
+    "argv": [
+      "config",
+      "delete"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unknown command"
+      "stderr_contains": "unknown command",
+      "stderr_equals": "error: unknown command 'delete'\ntry 'myapp --help'"
     }
   },
   {
@@ -88,16 +118,33 @@
           "name": "config",
           "help": "manage configuration",
           "commands": [
-            {"name": "show", "help": "display config", "handler_prints": "ok"},
-            {"name": "set", "help": "set a config value", "handler_prints": "ok"}
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "ok"
+            },
+            {
+              "name": "set",
+              "help": "set a config value",
+              "handler_prints": "ok"
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "--help"],
+    "argv": [
+      "config",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["show", "set", "display config", "set a config value"]
+      "stdout_contains": [
+        "show",
+        "set",
+        "display config",
+        "set a config value"
+      ],
+      "stdout_equals": "myapp config -- manage configuration\n\nCommands:\n  show    display config\n  set     set a config value\n\nUse 'myapp config <command> --help' for more information."
     }
   },
   {
@@ -112,15 +159,23 @@
           "name": "config",
           "help": "manage configuration",
           "commands": [
-            {"name": "show", "help": "display config", "handler_prints": "ok"}
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "ok"
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "-h"],
+    "argv": [
+      "config",
+      "-h"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "manage configuration"
+      "stdout_contains": "manage configuration",
+      "stdout_equals": "myapp config -- manage configuration\n\nCommands:\n  show    display config\n\nUse 'myapp config <command> --help' for more information."
     }
   },
   {
@@ -135,15 +190,25 @@
           "name": "config",
           "help": "manage configuration",
           "commands": [
-            {"name": "show", "help": "display config", "handler_prints": "ok"}
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "ok"
+            }
           ]
         }
       ]
     },
-    "argv": ["config"],
+    "argv": [
+      "config"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["manage configuration", "show"]
+      "stdout_contains": [
+        "manage configuration",
+        "show"
+      ],
+      "stdout_equals": "myapp config -- manage configuration\n\nCommands:\n  show    display config\n\nUse 'myapp config <command> --help' for more information."
     }
   },
   {
@@ -162,8 +227,16 @@
               "name": "set",
               "help": "set a config value",
               "flags": [
-                {"name": "key", "type": "str", "help": "config key"},
-                {"name": "value", "type": "str", "help": "config value"}
+                {
+                  "name": "key",
+                  "type": "str",
+                  "help": "config key"
+                },
+                {
+                  "name": "value",
+                  "type": "str",
+                  "help": "config value"
+                }
               ],
               "handler_prints": "ok"
             }
@@ -171,10 +244,15 @@
         }
       ]
     },
-    "argv": ["config", "set", "--help"],
+    "argv": [
+      "config",
+      "set",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "config set"
+      "stdout_contains": "config set",
+      "stdout_equals": "myapp config set -- set a config value\n\nFlags:\n  --key <str>      config key [required]\n  --value <str>    config value [required]"
     }
   },
   {
@@ -189,15 +267,23 @@
           "name": "config",
           "help": "manage configuration",
           "commands": [
-            {"name": "show", "help": "display config", "handler_prints": "ok"}
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "ok"
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "--help"],
+    "argv": [
+      "config",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "Use 'myapp config <command> --help' for more information."
+      "stdout_contains": "Use 'myapp config <command> --help' for more information.",
+      "stdout_equals": "myapp config -- manage configuration\n\nCommands:\n  show    display config\n\nUse 'myapp config <command> --help' for more information."
     }
   }
 ]

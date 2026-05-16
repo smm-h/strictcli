@@ -12,17 +12,26 @@
           "tags": [
             {
               "name": "verbose",
-              "flags": [{"name": "verbose", "type": "bool", "help": "verbose output"}]
+              "flags": [
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                }
+              ]
             }
           ],
           "handler_prints": "verbose={verbose}"
         }
       ]
     },
-    "argv": ["cmd", "--verbose"],
+    "argv": [
+      "cmd",
+      "--verbose"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "verbose=true"
+      "stdout_equals": "verbose=true"
     }
   },
   {
@@ -39,8 +48,17 @@
             {
               "name": "output",
               "flags": [
-                {"name": "format", "type": "str", "help": "output format", "default": "text"},
-                {"name": "color", "type": "bool", "help": "use color"}
+                {
+                  "name": "format",
+                  "type": "str",
+                  "help": "output format",
+                  "default": "text"
+                },
+                {
+                  "name": "color",
+                  "type": "bool",
+                  "help": "use color"
+                }
               ]
             }
           ],
@@ -48,10 +66,19 @@
         }
       ]
     },
-    "argv": ["cmd", "--format", "json", "--color"],
+    "argv": [
+      "cmd",
+      "--format",
+      "json",
+      "--color"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["format=json", "color=true"]
+      "stdout_contains": [
+        "format=json",
+        "color=true"
+      ],
+      "stdout_equals": "format=json color=true"
     }
   },
   {
@@ -68,8 +95,17 @@
             {
               "name": "auth",
               "flags": [
-                {"name": "token", "type": "str", "help": "auth token", "default": "none"},
-                {"name": "insecure", "type": "bool", "help": "skip TLS verification"}
+                {
+                  "name": "token",
+                  "type": "str",
+                  "help": "auth token",
+                  "default": "none"
+                },
+                {
+                  "name": "insecure",
+                  "type": "bool",
+                  "help": "skip TLS verification"
+                }
               ]
             }
           ],
@@ -77,10 +113,16 @@
         }
       ]
     },
-    "argv": ["deploy"],
+    "argv": [
+      "deploy"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["token=none", "insecure=false"]
+      "stdout_contains": [
+        "token=none",
+        "insecure=false"
+      ],
+      "stdout_equals": "token=none insecure=false"
     }
   },
   {
@@ -96,17 +138,30 @@
           "tags": [
             {
               "name": "debug",
-              "flags": [{"name": "debug", "type": "bool", "help": "enable debug mode"}]
+              "flags": [
+                {
+                  "name": "debug",
+                  "type": "bool",
+                  "help": "enable debug mode"
+                }
+              ]
             }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["--debug", "enable debug mode"]
+      "stdout_contains": [
+        "--debug",
+        "enable debug mode"
+      ],
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --debug, --no-debug    enable debug mode [default: false]"
     }
   }
 ]

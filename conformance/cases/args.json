@@ -9,15 +9,23 @@
         {
           "name": "greet",
           "help": "say hello",
-          "args": [{"name": "name", "help": "who to greet"}],
+          "args": [
+            {
+              "name": "name",
+              "help": "who to greet"
+            }
+          ],
           "handler_prints": "hello {name}"
         }
       ]
     },
-    "argv": ["greet", "world"],
+    "argv": [
+      "greet",
+      "world"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "hello world"
+      "stdout_equals": "hello world"
     }
   },
   {
@@ -30,15 +38,23 @@
         {
           "name": "greet",
           "help": "say hello",
-          "args": [{"name": "name", "help": "who to greet"}],
+          "args": [
+            {
+              "name": "name",
+              "help": "who to greet"
+            }
+          ],
           "handler_prints": "hello {name}"
         }
       ]
     },
-    "argv": ["greet"],
+    "argv": [
+      "greet"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "missing required argument"
+      "stderr_contains": "missing required argument",
+      "stderr_equals": "error: missing required argument 'name'\ntry 'myapp --help'"
     }
   },
   {
@@ -52,17 +68,27 @@
           "name": "copy",
           "help": "copy files",
           "args": [
-            {"name": "src", "help": "source file"},
-            {"name": "dst", "help": "destination file"}
+            {
+              "name": "src",
+              "help": "source file"
+            },
+            {
+              "name": "dst",
+              "help": "destination file"
+            }
           ],
           "handler_prints": "{src}->{dst}"
         }
       ]
     },
-    "argv": ["copy", "a.txt", "b.txt"],
+    "argv": [
+      "copy",
+      "a.txt",
+      "b.txt"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "a.txt->b.txt"
+      "stdout_equals": "a.txt->b.txt"
     }
   },
   {
@@ -79,10 +105,14 @@
         }
       ]
     },
-    "argv": ["cmd", "surprise"],
+    "argv": [
+      "cmd",
+      "surprise"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unexpected argument"
+      "stderr_contains": "unexpected argument",
+      "stderr_equals": "error: unexpected argument 'surprise'\ntry 'myapp --help'"
     }
   },
   {
@@ -95,15 +125,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "path", "help": "project dir", "required": false, "default": "."}],
+          "args": [
+            {
+              "name": "path",
+              "help": "project dir",
+              "required": false,
+              "default": "."
+            }
+          ],
           "handler_prints": "path={path}"
         }
       ]
     },
-    "argv": ["cmd", "/tmp/foo"],
+    "argv": [
+      "cmd",
+      "/tmp/foo"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "path=/tmp/foo"
+      "stdout_equals": "path=/tmp/foo"
     }
   },
   {
@@ -116,15 +156,24 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "path", "help": "project dir", "required": false, "default": "."}],
+          "args": [
+            {
+              "name": "path",
+              "help": "project dir",
+              "required": false,
+              "default": "."
+            }
+          ],
           "handler_prints": "path={path}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "path=."
+      "stdout_equals": "path=."
     }
   },
   {
@@ -138,17 +187,28 @@
           "name": "cmd",
           "help": "a command",
           "args": [
-            {"name": "src", "help": "source file"},
-            {"name": "dst", "help": "destination", "required": false, "default": "out"}
+            {
+              "name": "src",
+              "help": "source file"
+            },
+            {
+              "name": "dst",
+              "help": "destination",
+              "required": false,
+              "default": "out"
+            }
           ],
           "handler_prints": "{src}:{dst}"
         }
       ]
     },
-    "argv": ["cmd", "input.txt"],
+    "argv": [
+      "cmd",
+      "input.txt"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "input.txt:out"
+      "stdout_equals": "input.txt:out"
     }
   },
   {
@@ -161,15 +221,23 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "path", "help": "project dir", "required": false}],
+          "args": [
+            {
+              "name": "path",
+              "help": "project dir",
+              "required": false
+            }
+          ],
           "handler_prints": "path={path}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "path=None"
+      "stdout_equals": "path=None"
     }
   },
   {
@@ -182,16 +250,35 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "path", "help": "a path"}],
-          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose"}],
+          "args": [
+            {
+              "name": "path",
+              "help": "a path"
+            }
+          ],
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
           "handler_prints": "verbose={verbose} path={path}"
         }
       ]
     },
-    "argv": ["cmd", "--", "--not-a-flag"],
+    "argv": [
+      "cmd",
+      "--",
+      "--not-a-flag"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["verbose=false", "path=--not-a-flag"]
+      "stdout_contains": [
+        "verbose=false",
+        "path=--not-a-flag"
+      ],
+      "stdout_equals": "verbose=false path=--not-a-flag"
     }
   }
 ]

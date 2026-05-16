@@ -6,14 +6,29 @@
       "version": "3.0.0",
       "help": "my cool app",
       "commands": [
-        {"name": "run", "help": "run something", "handler_prints": "ok"},
-        {"name": "test", "help": "run tests", "handler_prints": "ok"}
+        {
+          "name": "run",
+          "help": "run something",
+          "handler_prints": "ok"
+        },
+        {
+          "name": "test",
+          "help": "run tests",
+          "handler_prints": "ok"
+        }
       ]
     },
     "argv": [],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["myapp v3.0.0", "my cool app", "Commands:", "run", "test"]
+      "stdout_contains": [
+        "myapp v3.0.0",
+        "my cool app",
+        "Commands:",
+        "run",
+        "test"
+      ],
+      "stdout_equals": "myapp v3.0.0 -- my cool app\n\nCommands:\n  run     run something\n  test    run tests\n\nUse 'myapp <command> --help' for more information."
     }
   },
   {
@@ -26,16 +41,36 @@
         {
           "name": "deploy",
           "help": "deploy the app",
-          "args": [{"name": "target", "help": "deploy target"}],
-          "flags": [{"name": "dry-run", "type": "bool", "help": "preview changes"}],
+          "args": [
+            {
+              "name": "target",
+              "help": "deploy target"
+            }
+          ],
+          "flags": [
+            {
+              "name": "dry-run",
+              "type": "bool",
+              "help": "preview changes"
+            }
+          ],
           "handler_prints": "{target}:{dry-run}"
         }
       ]
     },
-    "argv": ["deploy", "--help"],
+    "argv": [
+      "deploy",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["--dry-run", "--no-dry-run", "target", "deploy the app"]
+      "stdout_contains": [
+        "--dry-run",
+        "--no-dry-run",
+        "target",
+        "deploy the app"
+      ],
+      "stdout_equals": "myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target\n\nFlags:\n  --dry-run, --no-dry-run    preview changes [default: false]"
     }
   },
   {
@@ -52,10 +87,14 @@
         }
       ]
     },
-    "argv": ["deploy", "-h"],
+    "argv": [
+      "deploy",
+      "-h"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "deploy the app"
+      "stdout_contains": "deploy the app",
+      "stdout_equals": "myapp deploy -- deploy the app"
     }
   },
   {
@@ -68,15 +107,29 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "output", "type": "str", "help": "output path", "default": "out.txt"}],
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output path",
+              "default": "out.txt"
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["<str>", "default: out.txt"]
+      "stdout_contains": [
+        "<str>",
+        "default: out.txt"
+      ],
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --output <str>    output path [default: out.txt]"
     }
   },
   {
@@ -89,15 +142,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "flags": [{"name": "target", "type": "str", "help": "the target"}],
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "required"
+      "stdout_contains": "required",
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --target <str>    the target [required]"
     }
   },
   {
@@ -112,7 +175,11 @@
           "name": "config",
           "help": "manage configuration",
           "commands": [
-            {"name": "show", "help": "display config", "handler_prints": "ok"}
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "ok"
+            }
           ]
         }
       ]
@@ -120,7 +187,11 @@
     "argv": [],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["Groups:", "config"]
+      "stdout_contains": [
+        "Groups:",
+        "config"
+      ],
+      "stdout_equals": "myapp v1.0.0 -- test app\n\nGroups:\n  config    manage configuration\n\nUse 'myapp <command> --help' for more information."
     }
   },
   {
@@ -133,15 +204,26 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "path", "help": "project dir", "required": false, "default": "."}],
+          "args": [
+            {
+              "name": "path",
+              "help": "project dir",
+              "required": false,
+              "default": "."
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "[default: .]"
+      "stdout_contains": "[default: .]",
+      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  path    project dir [default: .]"
     }
   },
   {
@@ -154,15 +236,25 @@
         {
           "name": "cmd",
           "help": "a command",
-          "args": [{"name": "path", "help": "project dir", "required": false}],
+          "args": [
+            {
+              "name": "path",
+              "help": "project dir",
+              "required": false
+            }
+          ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "(optional)"
+      "stdout_contains": "(optional)",
+      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  path    project dir (optional)"
     }
   },
   {
@@ -172,13 +264,20 @@
       "version": "1.0.0",
       "help": "test app",
       "commands": [
-        {"name": "run", "help": "run something", "handler_prints": "ok"}
+        {
+          "name": "run",
+          "help": "run something",
+          "handler_prints": "ok"
+        }
       ]
     },
-    "argv": ["--help"],
+    "argv": [
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "Use 'myapp <command> --help' for more information."
+      "stdout_contains": "Use 'myapp <command> --help' for more information.",
+      "stdout_equals": "myapp v1.0.0 -- test app\n\nCommands:\n  run    run something\n\nUse 'myapp <command> --help' for more information."
     }
   }
 ]
