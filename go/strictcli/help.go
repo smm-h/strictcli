@@ -154,7 +154,7 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 	// Mutex groups
 	for _, mg := range cmd.Mutex {
 		lines = append(lines, "")
-		lines = append(lines, "Flags (mutually exclusive, required):")
+		lines = append(lines, "Flags (mutually exclusive):")
 		specs := make([]string, len(mg.Flags))
 		maxSpec := 0
 		for i, f := range mg.Flags {

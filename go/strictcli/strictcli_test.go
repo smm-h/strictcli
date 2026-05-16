@@ -991,7 +991,7 @@ func TestMutexHelpSection(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stdout, "Flags (mutually exclusive, required):") {
+	if !strings.Contains(r.Stdout, "Flags (mutually exclusive):") {
 		t.Fatalf("stdout should contain mutex section header, got %q", r.Stdout)
 	}
 	if !strings.Contains(r.Stdout, "--verbose") || !strings.Contains(r.Stdout, "--quiet") {
@@ -1014,7 +1014,7 @@ func TestMutexRequiredInHelp(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stdout, "Flags (mutually exclusive, required):") {
+	if !strings.Contains(r.Stdout, "Flags (mutually exclusive):") {
 		t.Fatalf("stdout should contain required mutex header, got %q", r.Stdout)
 	}
 }
