@@ -60,6 +60,7 @@ Both implementations must:
 - Accept the same boolean env var strings: `1|true|yes` / `0|false|no` (case-insensitive).
 - Produce identical error messages for identical inputs (checked by `check_error_parity.py`).
 - Export the same API surface (checked by `check_api_surface.py`).
+- Produce identical error messages for dependency violations (checked by `check_error_parity.py`).
 - Pass all conformance cases for both targets before release.
 
 When adding a feature to one implementation, add it to both and add conformance cases.
@@ -71,7 +72,9 @@ When adding a feature to one implementation, add it to both and add conformance 
 - Help text is mandatory on every Flag, Arg, Command, Group, and App. Missing help is a registration-time error.
 - Only two levels of nesting: App > Group > Command or App > Command. No deeper.
 - Passthrough commands bypass all parsing — handler gets raw args plus global flag values.
+- `CoRequired(flags=[...])` declares flags that must appear together. `Requires(flag=..., depends_on=...)` declares one-way dependency. Both passed via `dependencies=[...]`.
 - Validation errors at registration time use panics (Go) / ValueError (Python). Parse-time errors print to stderr and exit 1.
+- Release blocked by rlsbl monorepo hook path bug (`rlsbl/todo/monorepo-hook-path-bug.md`). All code changes for v0.4.0 (Python) / v0.2.0 (Go) / v0.1.0 (conformance) are complete and passing.
 
 ## Release workflow
 
