@@ -790,5 +790,196 @@
       "exit_code": 0,
       "stdout_equals": "count=-2147483648"
     }
+  },
+  {
+    "name": "boundary: partially numeric int rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--port",
+      "12abc"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --port: expected integer, got '12abc'\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "boundary: bool env lowercase no",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "no"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=false"
+    }
+  },
+  {
+    "name": "boundary: bool env rejected 2",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "2"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: invalid boolean value '2' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "boundary: unknown flag with no command",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "--unknown-flag"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: unknown command '--unknown-flag'\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "boundary: empty string env var for str flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "name",
+              "type": "str",
+              "help": "a name",
+              "default": "fallback",
+              "env": "MYAPP_NAME"
+            }
+          ],
+          "handler_prints": "name={name}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_NAME": ""
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name="
+    }
+  },
+  {
+    "name": "boundary: whitespace env var for str flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "name",
+              "type": "str",
+              "help": "a name",
+              "default": "fallback",
+              "env": "MYAPP_NAME"
+            }
+          ],
+          "handler_prints": "name={name}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_NAME": "  hello  "
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name=  hello  "
+    }
   }
 ]
