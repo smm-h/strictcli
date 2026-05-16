@@ -695,6 +695,18 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		}
 	}
 
+	storeValue := func(f *Flag, value interface{}) {
+		if f.Repeatable {
+			if existing, ok := globalValues[f.Name]; ok {
+				globalValues[f.Name] = append(existing.([]interface{}), value)
+			} else {
+				globalValues[f.Name] = []interface{}{value}
+			}
+		} else {
+			globalValues[f.Name] = value
+		}
+	}
+
 	i := 0
 	for i < len(argv) {
 		tok := argv[i]
@@ -722,7 +734,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if err != "" {
 					return nil, nil, err
 				}
-				globalValues[f.Name] = val
+				storeValue(f, val)
 				i++
 				continue
 			}
@@ -750,7 +762,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if err != "" {
 					return nil, nil, err
 				}
-				globalValues[f.Name] = val
+				storeValue(f, val)
 				i += 2
 			}
 			continue
@@ -769,7 +781,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if err != "" {
 					return nil, nil, err
 				}
-				globalValues[f.Name] = val
+				storeValue(f, val)
 				i += 2
 			}
 			continue
@@ -812,9 +824,17 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 							f.Name, envVal, f.Env,
 						)
 					}
-					globalValues[f.Name] = intVal
+					if f.Repeatable {
+						globalValues[f.Name] = []interface{}{intVal}
+					} else {
+						globalValues[f.Name] = intVal
+					}
 				default:
-					globalValues[f.Name] = envVal
+					if f.Repeatable {
+						globalValues[f.Name] = []interface{}{envVal}
+					} else {
+						globalValues[f.Name] = envVal
+					}
 				}
 				continue
 			}
@@ -827,7 +847,9 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		if _, ok := globalValues[f.Name]; ok {
 			continue
 		}
-		if f.Type == TypeBool {
+		if f.Repeatable {
+			globalValues[f.Name] = []interface{}{}
+		} else if f.Type == TypeBool {
 			if f.hasDefault {
 				globalValues[f.Name] = f.Default
 			} else {
