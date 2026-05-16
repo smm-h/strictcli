@@ -692,5 +692,39 @@
       "exit_code": 0,
       "stdout_equals": "target=--foo"
     }
+  },
+  {
+    "name": "boundary: env var with whitespace for int",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "env": "MYAPP_PORT"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_PORT": " 42 "
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "expected integer"
+    }
   }
 ]
