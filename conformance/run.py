@@ -218,6 +218,10 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str]]:
             errors.extend(
                 _check_equals(result.stderr, expect["stderr_equals"], "stderr")
             )
+        if "stderr_not_contains" in expect:
+            errors.extend(
+                _check_not_contains(result.stderr, expect["stderr_not_contains"], "stderr")
+            )
 
     except subprocess.TimeoutExpired:
         errors.append("  timed out after 10 seconds")

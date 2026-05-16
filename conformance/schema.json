@@ -226,6 +226,13 @@
             { "type": "array", "items": { "type": "string" } }
           ],
           "description": "Substring(s) that must NOT appear in stdout."
+        },
+        "stderr_not_contains": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Substring(s) that must NOT appear in stderr."
         }
       }
     }
