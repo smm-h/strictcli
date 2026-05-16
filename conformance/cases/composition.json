@@ -750,5 +750,94 @@
       "exit_code": 0,
       "stdout_equals": "port=8080"
     }
+  },
+  {
+    "name": "composition: global_flags + repeatable, multiple occurrences",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "tag",
+          "type": "str",
+          "help": "add a tag",
+          "repeatable": true
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "tag={tag}"
+        }
+      ]
+    },
+    "argv": ["--tag", "a", "--tag", "b", "cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tag=a,b"
+    }
+  },
+  {
+    "name": "composition: global_flags + repeatable, zero occurrences",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "tag",
+          "type": "str",
+          "help": "add a tag",
+          "repeatable": true
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "tag={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tag="
+    }
+  },
+  {
+    "name": "composition: global_flags + repeatable, env var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "global_flags": [
+        {
+          "name": "tag",
+          "type": "str",
+          "help": "add a tag",
+          "repeatable": true,
+          "env": "MYAPP_TAG"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "tag={tag}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {
+      "MYAPP_TAG": "fromenv"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tag=fromenv"
+    }
   }
 ]
