@@ -408,28 +408,32 @@ def generate(app_def: dict) -> str:
         gf_exprs = [_emit_flag(gf) for gf in global_flags]
         app_parts.append(f"flags=[{', '.join(gf_exprs)}]")
 
-    lines.append(f"app = strictcli.App({', '.join(app_parts)})")
+    lines.append("try:")
+    lines.append(f"    app = strictcli.App({', '.join(app_parts)})")
     lines.append("")
 
     # Register groups first
     for group_def in app_def.get("groups", []):
         gvar = f"group_{group_def['name'].replace('-', '_')}"
         lines.append(
-            f"{gvar} = app.group({group_def['name']!r}, help={group_def['help']!r})"
+            f"    {gvar} = app.group({group_def['name']!r}, help={group_def['help']!r})"
         )
         lines.append("")
         for cmd_def in group_def.get("commands", []):
-            lines.append(_emit_command_registration(
+            lines.append(textwrap.indent(_emit_command_registration(
                 cmd_def, gvar, global_flags=global_flags,
-            ))
+            ), "    "))
 
     # Register top-level commands
     for cmd_def in app_def.get("commands", []):
-        lines.append(_emit_command_registration(
+        lines.append(textwrap.indent(_emit_command_registration(
             cmd_def, "app", global_flags=global_flags,
-        ))
+        ), "    "))
 
-    lines.append("app.run()")
+    lines.append("    app.run()")
+    lines.append("except ValueError as e:")
+    lines.append("    print(f'error: {e}', file=sys.stderr)")
+    lines.append("    sys.exit(1)")
     lines.append("")
 
     return "\n".join(lines)
