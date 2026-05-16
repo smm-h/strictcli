@@ -389,7 +389,20 @@ func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ..
 	}
 	// Passthrough commands cannot have flags, args, tags, or mutex
 	if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.Tags) > 0 || len(cmd.Mutex) > 0 {
-		panic(fmt.Sprintf("command %q: passthrough commands cannot have flags, args, tags, or mutex groups", name))
+		var parts []string
+		if len(cmd.Flags) > 0 {
+			parts = append(parts, "flags")
+		}
+		if len(cmd.Args) > 0 {
+			parts = append(parts, "args")
+		}
+		if len(cmd.Tags) > 0 {
+			parts = append(parts, "tags")
+		}
+		if len(cmd.Mutex) > 0 {
+			parts = append(parts, "mutex groups")
+		}
+		panic(fmt.Sprintf("command %q: passthrough commands cannot have %s", name, strings.Join(parts, ", ")))
 	}
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
@@ -801,7 +814,20 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 	// Passthrough commands cannot have flags, args, tags, or mutex
 	if cmd.Passthrough {
 		if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.Tags) > 0 || len(cmd.Mutex) > 0 {
-			panic(fmt.Sprintf("command %q: passthrough commands cannot have flags, args, tags, or mutex groups", name))
+			var parts []string
+			if len(cmd.Flags) > 0 {
+				parts = append(parts, "flags")
+			}
+			if len(cmd.Args) > 0 {
+				parts = append(parts, "args")
+			}
+			if len(cmd.Tags) > 0 {
+				parts = append(parts, "tags")
+			}
+			if len(cmd.Mutex) > 0 {
+				parts = append(parts, "mutex groups")
+			}
+			panic(fmt.Sprintf("command %q: passthrough commands cannot have %s", name, strings.Join(parts, ", ")))
 		}
 		return cmd
 	}
@@ -849,17 +875,19 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 		seenArgs[a.Name] = true
 	}
 
-	// Validate variadic args: at most one, must be last
+	// Validate variadic args: first check count, then check position
 	variadicCount := 0
-	for i, a := range cmd.Args {
+	for _, a := range cmd.Args {
 		if a.IsVariadic {
 			variadicCount++
-			if variadicCount > 1 {
-				panic(fmt.Sprintf("command %q: at most one variadic arg allowed", name))
-			}
-			if i != len(cmd.Args)-1 {
-				panic(fmt.Sprintf("command %q: variadic arg %q must be the last arg", name, a.Name))
-			}
+		}
+	}
+	if variadicCount > 1 {
+		panic(fmt.Sprintf("command %q: at most one variadic arg is allowed", name))
+	}
+	for i, a := range cmd.Args {
+		if a.IsVariadic && i != len(cmd.Args)-1 {
+			panic(fmt.Sprintf("command %q: variadic arg %q must be the last arg", name, a.Name))
 		}
 	}
 
