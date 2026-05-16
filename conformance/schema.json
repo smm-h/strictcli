@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "The 'validate' feature (custom validation callback on flags) is intentionally excluded from this conformance schema because it is a callable that cannot be serialized to JSON. Both implementations support it (Flag.validate in Python, ValidateFn() in Go) but it is tested via unit tests, not conformance tests.",
   "title": "strictcli conformance test cases",
   "description": "Array of test cases for verifying strictcli implementations.",
   "type": "array",
