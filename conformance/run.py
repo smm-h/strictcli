@@ -21,9 +21,12 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+import jsonschema
+
 # Resolve paths relative to this file
 CONFORMANCE_DIR = Path(__file__).resolve().parent
 CASES_DIR = CONFORMANCE_DIR / "cases"
+SCHEMA_PATH = CONFORMANCE_DIR / "schema.json"
 PROJECT_ROOT = CONFORMANCE_DIR.parent
 GO_PKG_DIR = PROJECT_ROOT / "go"
 
@@ -31,13 +34,42 @@ GO_PKG_DIR = PROJECT_ROOT / "go"
 GO_BUILD_CACHE: dict[str, str] = {}
 
 
+def _load_schema() -> tuple[dict, dict]:
+    """Load the conformance schema and return (full_schema, test_case_schema).
+
+    The test_case_schema is the $defs/test_case definition with a local $defs
+    copy so $ref pointers resolve correctly when validating individual cases.
+    """
+    with open(SCHEMA_PATH) as f:
+        full_schema = json.load(f)
+    # Build a standalone schema for a single test_case that carries all $defs
+    test_case_schema = dict(full_schema["$defs"]["test_case"])
+    test_case_schema["$defs"] = full_schema["$defs"]
+    return full_schema, test_case_schema
+
+
 def _load_cases() -> list[tuple[str, dict]]:
-    """Load all test cases from JSON files. Returns (filename, case) pairs."""
+    """Load all test cases from JSON files. Returns (filename, case) pairs.
+
+    Validates each non-exempt case against schema.json. Exits on first failure.
+    """
+    _, test_case_schema = _load_schema()
     cases = []
     for json_file in sorted(CASES_DIR.glob("*.json")):
         with open(json_file) as f:
             data = json.load(f)
         for case in data:
+            if not case.get("skip_schema_validation", False):
+                try:
+                    jsonschema.validate(instance=case, schema=test_case_schema)
+                except jsonschema.ValidationError as e:
+                    print(
+                        f"Schema validation failed for case "
+                        f"{case.get('name', '<unnamed>')!r} in {json_file.name}:",
+                        file=sys.stderr,
+                    )
+                    print(f"  {e.message}", file=sys.stderr)
+                    sys.exit(1)
             cases.append((json_file.name, case))
     return cases
 
