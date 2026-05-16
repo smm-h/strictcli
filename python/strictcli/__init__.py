@@ -229,6 +229,12 @@ class App:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "App")
+        # Check for duplicate global flag names
+        seen: set[str] = set()
+        for f in self.flags:
+            if f.name in seen:
+                raise ValueError(f'duplicate global flag name "{f.name}"')
+            seen.add(f.name)
         self._global_flags: list[Flag] = list(self.flags)
         self._last_global_values: dict[str, object] = {}
 
@@ -501,7 +507,7 @@ class App:
             elif f.default is not None:
                 cli_set[f.name] = f.default
             else:
-                raise _ParseError(f"flag '--{f.name}' is required")
+                raise _ParseError(f"global flag '--{f.name}' is required")
 
         return cli_set, remaining
 
