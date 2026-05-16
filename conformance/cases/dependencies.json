@@ -106,7 +106,7 @@
     "argv": ["cmd", "--output", "file.txt"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["flags", "--output", "--format", "must be used together"]
+      "stderr_contains": "flags --output, --format must be used together"
     }
   },
   {
@@ -143,7 +143,7 @@
     "argv": ["cmd", "--format", "json"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["flags", "--output", "--format", "must be used together"]
+      "stderr_contains": "flags --output, --format must be used together"
     }
   },
   {
@@ -284,7 +284,7 @@
     "argv": ["cmd", "--verbose"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["flag", "'--verbose'", "requires", "'--output'"]
+      "stderr_contains": "flag '--verbose' requires '--output'"
     }
   }
 ]
