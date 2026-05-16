@@ -118,6 +118,10 @@
         "mutex": {
           "type": "array",
           "items": { "$ref": "#/$defs/mutex_group" }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dependency" }
         }
       }
     },
@@ -201,6 +205,35 @@
           "minItems": 2
         }
       }
+    },
+    "co_required": {
+      "type": "object",
+      "required": ["type", "flags"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "co_required" },
+        "flags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2
+        }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "required": ["type", "flag", "depends_on"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "requires" },
+        "flag": { "type": "string" },
+        "depends_on": { "type": "string" }
+      }
+    },
+    "dependency": {
+      "oneOf": [
+        { "$ref": "#/$defs/co_required" },
+        { "$ref": "#/$defs/requires" }
+      ]
     },
     "expect": {
       "type": "object",
