@@ -1603,3 +1603,24 @@ func TestRequiresSelfDependencyPanics(t *testing.T) {
 		WithFlags(StringFlag("user", "username", Default("none"))),
 		WithDependencies(Requires{Flag: "user", DependsOn: "user"}))
 }
+
+func TestCoRequiredDuplicateFlagPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for CoRequired with duplicate flags, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "duplicate") {
+			t.Fatalf("panic message should mention duplicate, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(
+			StringFlag("user", "username", Default("none")),
+			StringFlag("pass", "password", Default("none")),
+		),
+		WithDependencies(CoRequired{Flags: []string{"user", "user"}}))
+}
