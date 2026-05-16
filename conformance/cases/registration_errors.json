@@ -449,5 +449,156 @@
       "stderr_contains": "duplicate",
       "stderr_equals": "error: duplicate global flag name \"verbose\""
     }
+  },
+  {
+    "name": "registration: int flag with string default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "default": "abc"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "type=int requires an int default",
+        "port"
+      ]
+    }
+  },
+  {
+    "name": "registration: default not in choices",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "choices_str": ["json", "csv"],
+              "default": "xml"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "default",
+        "not in choices"
+      ]
+    }
+  },
+  {
+    "name": "registration: flag in multiple mutex groups",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "json",
+                  "type": "bool",
+                  "help": "output as json"
+                },
+                {
+                  "name": "csv",
+                  "type": "bool",
+                  "help": "output as csv"
+                }
+              ]
+            },
+            {
+              "flags": [
+                {
+                  "name": "csv",
+                  "type": "bool",
+                  "help": "output as csv"
+                },
+                {
+                  "name": "xml",
+                  "type": "bool",
+                  "help": "output as xml"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "appears in multiple mutex groups",
+      "stderr_equals": "error: command \"cmd\": flag \"csv\" appears in multiple mutex groups"
+    }
+  },
+  {
+    "name": "registration: global flag with empty help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": ""
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "must be a non-empty string",
+      "stderr_equals": "error: Flag.help must be a non-empty string"
+    }
   }
 ]

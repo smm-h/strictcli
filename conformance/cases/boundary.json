@@ -520,6 +520,40 @@
     }
   },
   {
+    "name": "boundary: bool env False title case",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "False"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=false"
+    }
+  },
+  {
     "name": "boundary: bool env empty string",
     "app": {
       "name": "myapp",
@@ -552,6 +586,40 @@
       "exit_code": 1,
       "stderr_contains": "invalid boolean value",
       "stderr_equals": "error: invalid boolean value '' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "boundary: bool env whitespace-only rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "   "
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: invalid boolean value '   ' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp --help'"
     }
   },
   {

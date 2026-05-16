@@ -289,5 +289,35 @@
       "stderr_contains": "unknown flag",
       "stderr_equals": "error: unknown flag '--unknown'\ntry 'myapp --help'"
     }
+  },
+  {
+    "name": "errors: missing required flag stderr_not_contains unknown flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--target' is required\ntry 'myapp --help'",
+      "stderr_not_contains": "unknown flag"
+    }
   }
 ]

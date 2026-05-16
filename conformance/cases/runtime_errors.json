@@ -216,5 +216,32 @@
       ],
       "stderr_equals": "error: --port: expected integer, got '0xFF'\ntry 'myapp --help'"
     }
+  },
+  {
+    "name": "errors: int flag with scientific notation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--port", "1e3"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --port: expected integer, got '1e3'\ntry 'myapp --help'"
+    }
   }
 ]
