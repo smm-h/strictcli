@@ -1386,8 +1386,8 @@ func TestGroupCommandGlobalFlagCollisionPanics(t *testing.T) {
 			t.Fatal("expected panic for global flag collision in group command, got none")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "duplicate flag name") || !strings.Contains(msg, "verbose") {
-			t.Fatalf("panic message should mention duplicate flag 'verbose', got %q", msg)
+		if !strings.Contains(msg, "collides with a global flag") || !strings.Contains(msg, "verbose") {
+			t.Fatalf("panic message should mention flag 'verbose' collides with global, got %q", msg)
 		}
 	}()
 

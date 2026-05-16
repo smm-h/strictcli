@@ -587,6 +587,11 @@ func (a *App) doParse(argv []string) parseResult {
 		return parseResult{parseErr: globalErr}
 	}
 
+	// If global flag parsing stopped at --, strip it before routing
+	if len(rest) > 0 && rest[0] == "--" {
+		rest = rest[1:]
+	}
+
 	// After extracting globals, check for help/version again
 	if len(rest) == 0 || (len(rest) == 1 && (rest[0] == "--help" || rest[0] == "-h")) {
 		return parseResult{helpText: formatAppHelp(a)}
@@ -680,6 +685,12 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 	i := 0
 	for i < len(argv) {
 		tok := argv[i]
+
+		// -- stops global flag parsing; include it in remaining
+		if tok == "--" {
+			remaining = append(remaining, argv[i:]...)
+			break
+		}
 
 		// --flag=value form for global flags
 		if strings.HasPrefix(tok, "--") && strings.Contains(tok, "=") {
@@ -891,12 +902,16 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 		allFlags = append(allFlags, mg.Flags...)
 	}
 
-	// Check duplicate flag names (including collisions with global flags)
-	seenFlags := make(map[string]bool)
+	// Check duplicate flag names and collisions with global flags
+	globalFlagSet := make(map[string]bool)
 	for _, gf := range globalFlags {
-		seenFlags[gf.Name] = true
+		globalFlagSet[gf.Name] = true
 	}
+	seenFlags := make(map[string]bool)
 	for _, f := range allFlags {
+		if globalFlagSet[f.Name] {
+			panic(fmt.Sprintf("command %q: flag %q collides with a global flag", name, f.Name))
+		}
 		if seenFlags[f.Name] {
 			panic(fmt.Sprintf("command %q: duplicate flag name %q", name, f.Name))
 		}
