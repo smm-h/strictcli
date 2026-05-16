@@ -155,7 +155,6 @@ class MutexGroup:
     """A group of mutually exclusive flags."""
 
     flags: list[Flag] = field(default_factory=list)
-    required: bool = False
 
 
 @dataclass
@@ -823,13 +822,13 @@ def _parse_command(
         if len(set_flags) > 1:
             names = " and ".join(f"--{f.name}" for f in set_flags)
             raise _ParseError(f"{names} are mutually exclusive")
-        if mg.required and len(set_flags) == 0:
+        if len(set_flags) == 0:
             names = ", ".join(f"--{f.name}" for f in mg.flags)
             raise _ParseError(f"one of {names} is required")
 
     # Build set of flag names belonging to mutex groups (used in step 5
     # to suppress "required" errors -- mutex groups handle their own
-    # required/optional semantics via MutexGroup.required)
+    # required semantics)
     mutex_flag_names: set[str] = set()
     for mg in cmd.mutex:
         for mf in mg.flags:
@@ -1324,7 +1323,7 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
     # Mutex groups
     for mg in cmd.mutex:
         lines.append("")
-        label = "Flags (mutually exclusive, required):" if mg.required else "Flags (mutually exclusive):"
+        label = "Flags (mutually exclusive):"
         lines.append(label)
         specs = [_build_flag_spec(f) for f in mg.flags]
         max_spec = max(len(s) for s in specs)

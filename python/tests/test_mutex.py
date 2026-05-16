@@ -10,8 +10,8 @@ import strictcli
 # ---------------------------------------------------------------------------
 
 
-def test_bool_mutex_neither_provided_ok():
-    """Two bool flags in non-required mutex group, neither provided -> OK."""
+def test_bool_mutex_neither_provided_error():
+    """Two bool flags in mutex group, neither provided -> error (always required)."""
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(name="verbose", type=bool, help="verbose output"),
@@ -25,9 +25,9 @@ def test_bool_mutex_neither_provided_ok():
         print(f"verbose={verbose} quiet={quiet}")
 
     r = app.test(["cmd"])
-    assert r.exit_code == 0
-    assert "verbose=False" in r.stdout
-    assert "quiet=False" in r.stdout
+    assert r.exit_code == 1
+    assert "one of" in r.stderr
+    assert "is required" in r.stderr
 
 
 def test_bool_mutex_one_provided():
@@ -77,13 +77,12 @@ def test_bool_mutex_both_provided_error():
 
 
 def test_required_mutex_none_provided_error():
-    """Required mutex group, none provided -> error."""
+    """Mutex group, none provided -> error (always required)."""
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(name="verbose", type=bool, help="verbose output"),
             strictcli.Flag(name="quiet", type=bool, help="quiet output"),
         ],
-        required=True,
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
@@ -99,13 +98,12 @@ def test_required_mutex_none_provided_error():
 
 
 def test_required_mutex_one_provided_ok():
-    """Required mutex group, one provided -> OK."""
+    """Mutex group, one provided -> OK."""
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(name="verbose", type=bool, help="verbose output"),
             strictcli.Flag(name="quiet", type=bool, help="quiet output"),
         ],
-        required=True,
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
@@ -225,13 +223,12 @@ def test_mutex_shown_in_help():
 
 
 def test_required_mutex_shown_in_help():
-    """Required mutex group shows 'required' in the help section header."""
+    """Mutex group shows 'mutually exclusive' in the help section header."""
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(name="verbose", type=bool, help="verbose output"),
             strictcli.Flag(name="quiet", type=bool, help="quiet output"),
         ],
-        required=True,
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
@@ -241,7 +238,7 @@ def test_required_mutex_shown_in_help():
 
     r = app.test(["cmd", "--help"])
     assert r.exit_code == 0
-    assert "Flags (mutually exclusive, required):" in r.stdout
+    assert "Flags (mutually exclusive):" in r.stdout
 
 
 # ---------------------------------------------------------------------------
