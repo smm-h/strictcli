@@ -536,6 +536,24 @@ class App:
             else:
                 raise _ParseError(f"global flag '--{f.name}' is required")
 
+        # Validate choices for global flags
+        for f in self._global_flags:
+            if f.choices is not None and f.name in cli_set:
+                if f.repeatable:
+                    for val in cli_set[f.name]:
+                        if val not in f.choices:
+                            choices_str = ", ".join(str(c) for c in f.choices)
+                            raise _ParseError(
+                                f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
+                            )
+                else:
+                    val = cli_set[f.name]
+                    if val not in f.choices:
+                        choices_str = ", ".join(str(c) for c in f.choices)
+                        raise _ParseError(
+                            f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
+                        )
+
         return cli_set, remaining
 
     def _find_command_prefix(self, cmd: Command) -> str:
