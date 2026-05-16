@@ -4,15 +4,17 @@
 
 ## Unreleased
 
+### Breaking
+
+- **Breaking: mutex groups always required.** Removed the `required` parameter from `MutexGroup`. All mutex groups now require exactly one flag to be provided.
+
 ### Features
 
-- **Handler return as exit code.** Handlers returning an `int` set the process exit code.
-- **App-level global flags.** Flags parsed both before and after the command name.
-- **Variadic positional args.** `Arg` with `variadic=True` to collect remaining positional arguments into a list.
-- **Passthrough commands.** `Passthrough` class for wrapper CLIs that forward unknown args to a subprocess.
+- **Flag dependencies.** New `CoRequired` and `Requires` types for declaring flags that must appear together.
 
 ### Fixes
 
-- **Global flags after command name.** Global flags are now recognized after the command name, not only before it.
-- **Bug fixes.** Global flags now validate choices, support repeatable, and detect duplicate names.
-- **Bug fix.** Stricter int flag validation: reject whitespace in env var values, enforce int64 range.
+- **Choices on global flags.** Global flags now validate choices correctly.
+- **Repeatable global flags.** Global flags with `repeatable=True` now work correctly.
+- **Strict int parsing.** Integer flags now enforce 64-bit signed range to match Go behavior.
+- **Strict int env parsing.** Integer environment variables reject leading/trailing whitespace.
