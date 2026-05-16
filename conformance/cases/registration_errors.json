@@ -13,10 +13,13 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "must be a non-empty string"
+      "stderr_contains": "must be a non-empty string",
+      "stderr_equals": "error: App.help must be a non-empty string"
     }
   },
   {
@@ -33,10 +36,13 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "missing help text"
+      "stderr_contains": "missing help text",
+      "stderr_equals": "error: command \"cmd\": missing help text"
     }
   },
   {
@@ -60,10 +66,13 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "must be a non-empty string"
+      "stderr_contains": "must be a non-empty string",
+      "stderr_equals": "error: Flag.help must be a non-empty string"
     }
   },
   {
@@ -86,10 +95,14 @@
         }
       ]
     },
-    "argv": ["cmd", "test.txt"],
+    "argv": [
+      "cmd",
+      "test.txt"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "must be a non-empty string"
+      "stderr_contains": "must be a non-empty string",
+      "stderr_equals": "error: Arg.help must be a non-empty string"
     }
   },
   {
@@ -113,10 +126,14 @@
       ],
       "commands": []
     },
-    "argv": ["config", "show"],
+    "argv": [
+      "config",
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "must be a non-empty string"
+      "stderr_contains": "must be a non-empty string",
+      "stderr_equals": "error: Group.help must be a non-empty string"
     }
   },
   {
@@ -141,13 +158,16 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": [
         "repeatable",
         "bool"
-      ]
+      ],
+      "stderr_equals": "error: Flag \"verbose\": repeatable is incompatible with type=bool"
     }
   },
   {
@@ -165,20 +185,26 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "choices_str": ["yes", "no"]
+              "choices_str": [
+                "yes",
+                "no"
+              ]
             }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": [
         "choices",
         "bool"
-      ]
+      ],
+      "stderr_equals": "error: Flag \"verbose\": choices is incompatible with type=bool"
     }
   },
   {
@@ -207,10 +233,13 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "at least 2"
+      "stderr_contains": "at least 2",
+      "stderr_equals": "error: command \"cmd\": mutex group must have at least 2 flags, got 1"
     }
   },
   {
@@ -239,10 +268,13 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "duplicate"
+      "stderr_contains": "duplicate",
+      "stderr_equals": "error: command \"cmd\": duplicate flag name \"target\""
     }
   },
   {
@@ -269,10 +301,15 @@
         }
       ]
     },
-    "argv": ["cmd", "a.txt", "b.txt"],
+    "argv": [
+      "cmd",
+      "a.txt",
+      "b.txt"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "duplicate"
+      "stderr_contains": "duplicate",
+      "stderr_equals": "error: command \"cmd\": duplicate arg name \"file\""
     }
   },
   {
@@ -303,10 +340,13 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "collides"
+      "stderr_contains": "collides",
+      "stderr_equals": "error: command \"cmd\": flag \"verbose\" collides with a global flag"
     }
   },
   {
@@ -332,10 +372,15 @@
         }
       ]
     },
-    "argv": ["cmd", "--target", "prod"],
+    "argv": [
+      "cmd",
+      "--target",
+      "prod"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "must start with"
+      "stderr_contains": "must start with",
+      "stderr_equals": "error: command \"cmd\": env var \"WRONG_TARGET\" for flag \"target\" must start with \"MYAPP_\" (or set prefixed=false)"
     }
   },
   {
@@ -360,10 +405,14 @@
         }
       ]
     },
-    "argv": ["cmd", "test.txt"],
+    "argv": [
+      "cmd",
+      "test.txt"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "required arg cannot have a default"
+      "stderr_contains": "required arg cannot have a default",
+      "stderr_equals": "error: required arg cannot have a default"
     }
   },
   {
@@ -392,10 +441,13 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "duplicate"
+      "stderr_contains": "duplicate",
+      "stderr_equals": "error: duplicate global flag name \"verbose\""
     }
   }
 ]
