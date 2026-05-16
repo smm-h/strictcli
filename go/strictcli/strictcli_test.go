@@ -1593,7 +1593,7 @@ func TestRequiresSelfDependencyPanics(t *testing.T) {
 			t.Fatal("expected panic for Requires with self-dependency, got none")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "cannot depend on itself") {
+		if !strings.Contains(msg, "cannot be the same") {
 			t.Fatalf("panic message should mention self-dependency, got %q", msg)
 		}
 	}()

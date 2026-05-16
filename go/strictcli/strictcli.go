@@ -1103,7 +1103,7 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 			}
 		case Requires:
 			if d.Flag == d.DependsOn {
-				panic(fmt.Sprintf("command %q: Requires flag %q cannot depend on itself", name, d.Flag))
+				panic(fmt.Sprintf("command %q: Requires flag and depends_on cannot be the same (%q)", name, d.Flag))
 			}
 			if !seenFlags[d.Flag] {
 				panic(fmt.Sprintf("command %q: Requires references unknown flag %q", name, d.Flag))
