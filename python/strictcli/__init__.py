@@ -384,6 +384,15 @@ class App:
         remaining: list[str] = []
         i = 0
 
+        def _store_value(f: Flag, value: object) -> None:
+            """Store a parsed value, appending to a list for repeatable flags."""
+            if f.repeatable:
+                if f.name not in cli_set:
+                    cli_set[f.name] = []
+                cli_set[f.name].append(value)
+            else:
+                cli_set[f.name] = value
+
         while i < len(argv):
             tok = argv[i]
 
@@ -406,13 +415,13 @@ class App:
                         )
                     if f.type is int:
                         try:
-                            cli_set[f.name] = _strict_int(value_part)
+                            _store_value(f, _strict_int(value_part))
                         except ValueError:
                             raise _ParseError(
                                 f"--{f.name}: expected integer, got {value_part!r}"
                             )
                     else:
-                        cli_set[f.name] = value_part
+                        _store_value(f, value_part)
                     i += 1
                     continue
                 elif flag_part in negation_lookup:
@@ -442,13 +451,13 @@ class App:
                         raw = argv[i + 1]
                         if f.type is int:
                             try:
-                                cli_set[f.name] = _strict_int(raw)
+                                _store_value(f, _strict_int(raw))
                             except ValueError:
                                 raise _ParseError(
                                     f"--{f.name}: expected integer, got {raw!r}"
                                 )
                         else:
-                            cli_set[f.name] = raw
+                            _store_value(f, raw)
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -465,13 +474,13 @@ class App:
                         raw = argv[i + 1]
                         if f.type is int:
                             try:
-                                cli_set[f.name] = _strict_int(raw)
+                                _store_value(f, _strict_int(raw))
                             except ValueError:
                                 raise _ParseError(
                                     f"--{f.name}: expected integer, got {raw!r}"
                                 )
                         else:
-                            cli_set[f.name] = raw
+                            _store_value(f, raw)
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -504,20 +513,23 @@ class App:
                             )
                     elif f.type is int:
                         try:
-                            cli_set[f.name] = _strict_int(env_val)
+                            coerced = _strict_int(env_val)
                         except ValueError:
                             raise _ParseError(
                                 f"--{f.name}: expected integer, got {env_val!r} "
                                 f"(from env var '{f.env}')"
                             )
+                        cli_set[f.name] = [coerced] if f.repeatable else coerced
                     else:
-                        cli_set[f.name] = env_val
+                        cli_set[f.name] = [env_val] if f.repeatable else env_val
 
         # Apply defaults for global flags not set by CLI or env
         for f in self._global_flags:
             if f.name in cli_set:
                 continue
-            if f.type is bool:
+            if f.repeatable:
+                cli_set[f.name] = list(f.default) if f.default else []
+            elif f.type is bool:
                 cli_set[f.name] = f.default
             elif f.default is not None:
                 cli_set[f.name] = f.default
