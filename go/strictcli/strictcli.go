@@ -158,7 +158,11 @@ func Prefixed(b bool) FlagOption {
 // Choices sets the allowed values for a flag.
 func Choices(vals ...interface{}) FlagOption {
 	return func(f *Flag) {
-		f.Choices = vals
+		if vals == nil {
+			f.Choices = []interface{}{}
+		} else {
+			f.Choices = vals
+		}
 	}
 }
 
@@ -347,7 +351,16 @@ func validateFlagConfig(f *Flag) {
 	if f.Type == TypeInt && f.hasDefault && f.Default != nil {
 		if !f.Repeatable {
 			if _, ok := f.Default.(int); !ok {
-				panic(fmt.Sprintf("Flag %q: type=int requires an int default, got %T", f.Name, f.Default))
+				var gotType string
+				switch f.Default.(type) {
+				case string:
+					gotType = "str"
+				case bool:
+					gotType = "bool"
+				default:
+					gotType = fmt.Sprintf("%T", f.Default)
+				}
+				panic(fmt.Sprintf("Flag %q: type=int requires an int default, got '%s'", f.Name, gotType))
 			}
 		}
 	}
@@ -377,7 +390,11 @@ func validateFlagConfig(f *Flag) {
 			}
 		}
 		if !found {
-			panic(fmt.Sprintf("Flag %q: default %v is not in choices %v", f.Name, f.Default, f.Choices))
+			choiceParts := make([]string, len(f.Choices))
+			for i, c := range f.Choices {
+				choiceParts[i] = fmt.Sprintf("'%v'", c)
+			}
+			panic(fmt.Sprintf("Flag %q: default '%v' is not in choices [%s]", f.Name, f.Default, strings.Join(choiceParts, ", ")))
 		}
 	}
 }
