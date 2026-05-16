@@ -18,6 +18,11 @@
           "type": "string",
           "description": "Descriptive test name."
         },
+        "skip_schema_validation": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, this test case is exempt from schema validation (used for cases that intentionally craft invalid app definitions)."
+        },
         "app": {
           "$ref": "#/$defs/app"
         },

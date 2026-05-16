@@ -183,6 +183,7 @@
   },
   {
     "name": "registration: mutex group with one flag",
+    "skip_schema_validation": true,
     "app": {
       "name": "myapp",
       "version": "1.0.0",
