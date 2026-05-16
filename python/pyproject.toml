@@ -20,7 +20,7 @@ classifiers = [
 ]
 
 [dependency-groups]
-dev = ["pytest", "allpairspy"]
+dev = ["pytest", "allpairspy", "hypothesis"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
