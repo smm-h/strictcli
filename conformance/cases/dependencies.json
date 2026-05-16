@@ -1,0 +1,290 @@
+[
+  {
+    "name": "dependencies: co_required both provided ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "co_required", "flags": ["output", "format"]}
+          ],
+          "handler_prints": "output={output} format={format}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--output", "file.txt", "--format", "json"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["output=file.txt", "format=json"]
+    }
+  },
+  {
+    "name": "dependencies: co_required neither provided ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "co_required", "flags": ["output", "format"]}
+          ],
+          "handler_prints": "output={output} format={format}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0
+    }
+  },
+  {
+    "name": "dependencies: co_required one provided error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "co_required", "flags": ["output", "format"]}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--output", "file.txt"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["flags", "--output", "--format", "must be used together"]
+    }
+  },
+  {
+    "name": "dependencies: co_required second only error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "co_required", "flags": ["output", "format"]}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--format", "json"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["flags", "--output", "--format", "must be used together"]
+    }
+  },
+  {
+    "name": "dependencies: requires both provided ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "verbose output"
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "requires", "flag": "verbose", "depends_on": "output"}
+          ],
+          "handler_prints": "verbose={verbose} output={output}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose", "--output", "log.txt"],
+    "expect": {
+      "exit_code": 0
+    }
+  },
+  {
+    "name": "dependencies: requires flag not provided ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "verbose output"
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "requires", "flag": "verbose", "depends_on": "output"}
+          ],
+          "handler_prints": "verbose={verbose} output={output}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0
+    }
+  },
+  {
+    "name": "dependencies: requires depends_on alone ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "verbose output"
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "requires", "flag": "verbose", "depends_on": "output"}
+          ],
+          "handler_prints": "verbose={verbose} output={output}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--output", "log.txt"],
+    "expect": {
+      "exit_code": 0
+    }
+  },
+  {
+    "name": "dependencies: requires flag without depends_on error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "verbose output"
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "requires", "flag": "verbose", "depends_on": "output"}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["flag", "'--verbose'", "requires", "'--output'"]
+    }
+  }
+]

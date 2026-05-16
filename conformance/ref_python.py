@@ -252,6 +252,18 @@ def _emit_command_registration(
                 lines.append(f"{me},")
             lines.append(f"{indent}    ],")
 
+        if cmd_def.get("dependencies"):
+            dep_exprs = []
+            for dep in cmd_def["dependencies"]:
+                if dep["type"] == "co_required":
+                    flags_repr = repr(dep["flags"])
+                    dep_exprs.append(f"strictcli.CoRequired(flags={flags_repr})")
+                elif dep["type"] == "requires":
+                    dep_exprs.append(
+                        f"strictcli.Requires(flag={dep['flag']!r}, depends_on={dep['depends_on']!r})"
+                    )
+            lines.append(f"{indent}    dependencies=[{', '.join(dep_exprs)}],")
+
         lines.append(f"{indent}    passthrough=strictcli.Passthrough(handler={handler_name}),")
         lines.append(f"{indent})")
 
@@ -315,6 +327,19 @@ def _emit_command_registration(
         for me in mutex_exprs:
             decorator_parts.append(f"{me},")
         decorator_parts.append(f"{indent}    ],")
+
+    # dependencies
+    if cmd_def.get("dependencies"):
+        dep_exprs = []
+        for dep in cmd_def["dependencies"]:
+            if dep["type"] == "co_required":
+                flags_repr = repr(dep["flags"])
+                dep_exprs.append(f"strictcli.CoRequired(flags={flags_repr})")
+            elif dep["type"] == "requires":
+                dep_exprs.append(
+                    f"strictcli.Requires(flag={dep['flag']!r}, depends_on={dep['depends_on']!r})"
+                )
+        decorator_parts.append(f"{indent}    dependencies=[{', '.join(dep_exprs)}],")
 
     decorator_parts.append(f"{indent})")
 

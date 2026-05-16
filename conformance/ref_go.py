@@ -212,6 +212,20 @@ def _emit_cmd_options(cmd_def: dict, indent: str) -> list[str]:
             inner = ", ".join(flag_exprs)
             opts.append(f"strictcli.WithMutex(strictcli.MutexGroup{{Flags: []strictcli.Flag{{{inner}}}}})")
 
+    # Dependencies
+    if cmd_def.get("dependencies"):
+        dep_exprs = []
+        for dep in cmd_def["dependencies"]:
+            if dep["type"] == "co_required":
+                flags_inner = ", ".join(f'"{f}"' for f in dep["flags"])
+                dep_exprs.append(f"strictcli.CoRequired{{Flags: []string{{{flags_inner}}}}}")
+            elif dep["type"] == "requires":
+                dep_exprs.append(
+                    f'strictcli.Requires{{Flag: "{dep["flag"]}", DependsOn: "{dep["depends_on"]}"}}'
+                )
+        inner = ", ".join(dep_exprs)
+        opts.append(f"strictcli.WithDependencies({inner})")
+
     return opts
 
 

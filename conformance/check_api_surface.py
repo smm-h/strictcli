@@ -58,6 +58,12 @@ SCHEMA_TEST_ONLY: set[str] = {
     "passthrough_handler_prints",
 }
 
+# Per-entity schema fields that are JSON discriminators, not real API fields:
+SCHEMA_PER_ENTITY_EXCLUSIONS: dict[str, set[str]] = {
+    "co_required": {"type"},
+    "requires": {"type"},
+}
+
 # ---------------------------------------------------------------------------
 # Name mappings between implementations and schema
 # ---------------------------------------------------------------------------
@@ -103,6 +109,7 @@ SCHEMA_TO_GO: dict[str, str] = {
     "negatable": "Negatable",
     "env_prefix": "EnvPrefix",
     "type": "Type",
+    "depends_on": "DependsOn",
     "app.commands": "commands",  # Go App.commands (unexported, set via method)
     "app.global_flags": "globalFlags",  # Go App.globalFlags (unexported, set via method)
     "app.groups": "groups",  # Go App.groups (unexported, set via method)
@@ -125,7 +132,8 @@ def get_python_fields() -> dict[str, set[str]]:
     result: dict[str, set[str]] = {}
     for cls in [
         strictcli.Flag, strictcli.Arg, strictcli.Tag,
-        strictcli.MutexGroup, strictcli.App, strictcli.Group,
+        strictcli.MutexGroup, strictcli.CoRequired, strictcli.Requires,
+        strictcli.App, strictcli.Group,
         Command,
     ]:
         fields = {f.name for f in dataclasses.fields(cls)}
@@ -214,6 +222,8 @@ ENTITY_MAP: list[tuple[str, str, str]] = [
     ("arg", "Arg", "Arg"),
     ("tag", "Tag", "Tag"),
     ("mutex_group", "MutexGroup", "MutexGroup"),
+    ("co_required", "CoRequired", "CoRequired"),
+    ("requires", "Requires", "Requires"),
     ("command", "Command", "Command"),
     ("app", "App", "App"),
     ("group", "Group", "Group"),
@@ -336,6 +346,9 @@ def check_schema_in_impls(
             # Skip test-only fields
             if field in SCHEMA_TEST_ONLY:
                 continue
+            # Skip per-entity schema exclusions (e.g. JSON discriminator "type")
+            if field in SCHEMA_PER_ENTITY_EXCLUSIONS.get(schema_def, set()):
+                continue
 
             # Check Python
             py_name = _resolve_schema_to_python(schema_def, field)
@@ -391,8 +404,8 @@ def check_option_funcs_coverage(
         "Short", "Default", "Env", "Prefixed", "Choices", "Repeatable",
         "ValidateFn", "NegatableOpt",
         "ArgRequired", "ArgDefault", "Variadic",
-        "WithArgs", "WithFlags", "WithTags", "WithMutex", "WithPassthrough",
-        "WithEnvPrefix",
+        "WithArgs", "WithFlags", "WithTags", "WithMutex", "WithDependencies",
+        "WithPassthrough", "WithEnvPrefix",
     }
     actual = go_fields.get("_option_funcs", set())
     unknown = actual - known_option_funcs
