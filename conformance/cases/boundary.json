@@ -1,0 +1,696 @@
+[
+  {
+    "name": "boundary: empty string as flag value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "name",
+              "type": "str",
+              "help": "a name",
+              "default": "fallback"
+            }
+          ],
+          "handler_prints": "name={name}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--name",
+      ""
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name="
+    }
+  },
+  {
+    "name": "boundary: string with spaces",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "name",
+              "type": "str",
+              "help": "a name",
+              "default": "fallback"
+            }
+          ],
+          "handler_prints": "name={name}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--name",
+      "hello world"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name=hello world"
+    }
+  },
+  {
+    "name": "boundary: string with equals sign",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "name",
+              "type": "str",
+              "help": "a name",
+              "default": "fallback"
+            }
+          ],
+          "handler_prints": "name={name}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--name",
+      "a=b"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name=a=b"
+    }
+  },
+  {
+    "name": "boundary: string with dashes",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "name",
+              "type": "str",
+              "help": "a name",
+              "default": "fallback"
+            }
+          ],
+          "handler_prints": "name={name}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--name",
+      "--not-a-flag"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name=--not-a-flag"
+    }
+  },
+  {
+    "name": "boundary: very long string",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "name",
+              "type": "str",
+              "help": "a name",
+              "default": "fallback"
+            }
+          ],
+          "handler_prints": "name={name}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--name",
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
+  },
+  {
+    "name": "boundary: int zero",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--port",
+      "0"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=0"
+    }
+  },
+  {
+    "name": "boundary: negative int",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "the count"
+            }
+          ],
+          "handler_prints": "count={count}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--count",
+      "-1"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "count=-1"
+    }
+  },
+  {
+    "name": "boundary: large positive int",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "the count"
+            }
+          ],
+          "handler_prints": "count={count}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--count",
+      "2147483647"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "count=2147483647"
+    }
+  },
+  {
+    "name": "boundary: leading zeros",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--port",
+      "007"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=7"
+    }
+  },
+  {
+    "name": "boundary: plus sign",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--port",
+      "+5"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=5"
+    }
+  },
+  {
+    "name": "boundary: bool env TRUE uppercase",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "TRUE"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=true"
+    }
+  },
+  {
+    "name": "boundary: bool env True mixed case",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "True"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=true"
+    }
+  },
+  {
+    "name": "boundary: bool env YES",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "YES"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=true"
+    }
+  },
+  {
+    "name": "boundary: bool env NO",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "NO"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=false"
+    }
+  },
+  {
+    "name": "boundary: bool env FALSE uppercase",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "FALSE"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=false"
+    }
+  },
+  {
+    "name": "boundary: bool env invalid maybe",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "maybe"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "invalid boolean value",
+      "stderr_equals": "error: invalid boolean value 'maybe' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "boundary: bool env empty string",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": ""
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "invalid boolean value",
+      "stderr_equals": "error: invalid boolean value '' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "boundary: empty argv shows help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": [],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "myapp v1.0.0",
+        "Commands:",
+        "greet"
+      ],
+      "stdout_equals": "myapp v1.0.0 -- test app\n\nCommands:\n  greet    say hello\n\nUse 'myapp <command> --help' for more information."
+    }
+  },
+  {
+    "name": "boundary: only double dash shows help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": [
+      "--"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "myapp v1.0.0",
+        "Commands:",
+        "greet"
+      ],
+      "stdout_equals": "myapp v1.0.0 -- test app\n\nCommands:\n  greet    say hello\n\nUse 'myapp <command> --help' for more information."
+    }
+  },
+  {
+    "name": "boundary: dash as positional arg",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "path",
+              "help": "a path"
+            }
+          ],
+          "handler_prints": "path={path}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "-"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "path=-"
+    }
+  },
+  {
+    "name": "boundary: command then double dash then nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "ok"
+    }
+  },
+  {
+    "name": "boundary: env var that looks like flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "target",
+              "type": "str",
+              "help": "the target",
+              "default": "fallback",
+              "env": "MYAPP_TARGET"
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_TARGET": "--foo"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=--foo"
+    }
+  }
+]
