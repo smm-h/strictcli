@@ -12,6 +12,7 @@ jobs:
     outputs:
       strictcli: ${{ steps.changes.outputs.strictcli }}
       go-strictcli: ${{ steps.changes.outputs.go-strictcli }}
+      conformance: ${{ steps.changes.outputs.conformance }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -20,6 +21,7 @@ jobs:
           filters: |
             strictcli: 'python/**'
             go-strictcli: 'go/**'
+            conformance: 'conformance/**'
 
   strictcli:
     needs: detect
@@ -30,3 +32,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.go-strictcli == 'true'
     uses: ./.github/workflows/go-strictcli-ci.yml
+
+  conformance:
+    needs: detect
+    if: needs.detect.outputs.conformance == 'true'
+    uses: ./.github/workflows/conformance-ci.yml
