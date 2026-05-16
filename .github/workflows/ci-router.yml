@@ -21,7 +21,11 @@ jobs:
           filters: |
             strictcli: 'python/**'
             go-strictcli: 'go/**'
-            conformance: 'conformance/**'
+            conformance:
+              - 'conformance/**'
+              - 'python/**'
+              - 'go/**'
+              - 'conformance/**'
 
   strictcli:
     needs: detect
