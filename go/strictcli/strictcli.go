@@ -623,11 +623,14 @@ func (a *App) doParse(argv []string) parseResult {
 		if cmd.Passthrough {
 			return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
 		}
-		kwargs, err := parseCommand(cmd, cmdRest, a.globalFlags)
+		kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags)
 		if err != "" {
 			return parseResult{parseErr: err}
 		}
-		// Merge global values
+		// Merge global values: post-command globals override pre-command ones
+		for k, v := range postGlobalValues {
+			globalValues[k] = v
+		}
 		for k, v := range globalValues {
 			kwargs[k] = v
 		}
@@ -648,11 +651,14 @@ func (a *App) doParse(argv []string) parseResult {
 		if len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h") {
 			return parseResult{helpText: formatCommandHelp(a, cmd, "")}
 		}
-		kwargs, err := parseCommand(cmd, cmdRest, a.globalFlags)
+		kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags)
 		if err != "" {
 			return parseResult{parseErr: err}
 		}
-		// Merge global values
+		// Merge global values: post-command globals override pre-command ones
+		for k, v := range postGlobalValues {
+			globalValues[k] = v
+		}
 		for k, v := range globalValues {
 			kwargs[k] = v
 		}
@@ -662,7 +668,11 @@ func (a *App) doParse(argv []string) parseResult {
 	return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", token)}
 }
 
-// extractGlobalFlags scans argv for global flag tokens, parsing and removing them.
+// extractGlobalFlags scans argv for global flag tokens that appear before the
+// command name.  It stops at the first non-flag token (the command name) or at
+// "--", returning everything from that point onward as remaining tokens.
+// This matches Python's _parse_global_flags behavior.  Global flags appearing
+// after the command name are handled by parseCommand instead.
 // Returns (globalValues map, remaining argv, error string).
 func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []string, string) {
 	globalValues := make(map[string]interface{})
@@ -685,14 +695,17 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		}
 	}
 
-	var remaining []string
 	i := 0
 	for i < len(argv) {
 		tok := argv[i]
 
-		// -- stops global flag parsing; include it in remaining
+		// -- stops global flag parsing; include it and the rest in remaining
 		if tok == "--" {
-			remaining = append(remaining, argv[i:]...)
+			break
+		}
+
+		// Non-flag token (command name): stop and return the rest
+		if !strings.HasPrefix(tok, "-") || tok == "-" {
 			break
 		}
 
@@ -713,6 +726,8 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				i++
 				continue
 			}
+			// Not a global flag -- stop (command region)
+			break
 		}
 
 		// --no-flag negation for global bool flags
@@ -760,9 +775,11 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 			continue
 		}
 
-		remaining = append(remaining, tok)
-		i++
+		// Unknown flag-like token before command name: stop (let command parser handle it)
+		break
 	}
+
+	remaining := argv[i:]
 
 	// Resolve env vars for global flags not set by CLI
 	for i := range a.globalFlags {

@@ -8,9 +8,10 @@ import (
 )
 
 // parseCommand parses tokens against a resolved command's flags and args.
-// globalFlags are recognized and silently skipped (already parsed by extractGlobalFlags).
-// Returns kwargs on success, or a non-empty error string on failure.
-func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string]interface{}, string) {
+// globalFlags are also recognized in post-command tokens and returned separately
+// in postGlobalValues so the caller can merge them with pre-command globals.
+// Returns (kwargs, postGlobalValues, errorString).
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string]interface{}, map[string]interface{}, string) {
 	// Build flag lookup maps
 	longLookup := make(map[string]*Flag)    // --flag-name -> Flag
 	shortLookup := make(map[string]*Flag)   // -x -> Flag
@@ -25,6 +26,21 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		if f.Type == TypeBool && f.Negatable {
 			negationLookup["--no-"+f.Name] = f
 		}
+	}
+
+	// Also include global flags in the lookup tables so they are recognized
+	// when placed after the command name (matching Python's _parse_command)
+	globalFlagNames := make(map[string]bool)
+	for i := range globalFlags {
+		f := &globalFlags[i]
+		longLookup["--"+f.Name] = f
+		if f.Short != "" {
+			shortLookup["-"+f.Short] = f
+		}
+		if f.Type == TypeBool && f.Negatable {
+			negationLookup["--no-"+f.Name] = f
+		}
+		globalFlagNames[f.Name] = true
 	}
 
 	// Track which flags were set by CLI args
@@ -69,21 +85,21 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 
 			if f, ok := longLookup[flagPart]; ok {
 				if f.Type == TypeBool {
-					return nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
+					return nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
 				}
 				if f.Type == TypeInt {
 					intVal, err := strconv.Atoi(valuePart)
 					if err != nil {
-						return nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, valuePart)
+						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, valuePart)
 					}
 					storeValue(f, intVal)
 				} else {
 					storeValue(f, valuePart)
 				}
 			} else if _, ok := negationLookup[flagPart]; ok {
-				return nil, fmt.Sprintf("flag '%s' is a boolean negation and does not take a value", flagPart)
+				return nil, nil, fmt.Sprintf("flag '%s' is a boolean negation and does not take a value", flagPart)
 			} else {
-				return nil, fmt.Sprintf("unknown flag '%s'", flagPart)
+				return nil, nil, fmt.Sprintf("unknown flag '%s'", flagPart)
 			}
 			i++
 			continue
@@ -100,20 +116,20 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		if strings.HasPrefix(tok, "--") {
 			f, ok := longLookup[tok]
 			if !ok {
-				return nil, fmt.Sprintf("unknown flag '%s'", tok)
+				return nil, nil, fmt.Sprintf("unknown flag '%s'", tok)
 			}
 			if f.Type == TypeBool {
 				cliSet[f.Name] = true
 				i++
 			} else {
 				if i+1 >= len(tokens) {
-					return nil, fmt.Sprintf("flag '%s' requires a value", tok)
+					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
 				raw := tokens[i+1]
 				if f.Type == TypeInt {
 					intVal, err := strconv.Atoi(raw)
 					if err != nil {
-						return nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
+						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
 					}
 					storeValue(f, intVal)
 				} else {
@@ -128,20 +144,20 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		if strings.HasPrefix(tok, "-") && len(tok) == 2 {
 			f, ok := shortLookup[tok]
 			if !ok {
-				return nil, fmt.Sprintf("unknown flag '%s'", tok)
+				return nil, nil, fmt.Sprintf("unknown flag '%s'", tok)
 			}
 			if f.Type == TypeBool {
 				cliSet[f.Name] = true
 				i++
 			} else {
 				if i+1 >= len(tokens) {
-					return nil, fmt.Sprintf("flag '%s' requires a value", tok)
+					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
 				raw := tokens[i+1]
 				if f.Type == TypeInt {
 					intVal, err := strconv.Atoi(raw)
 					if err != nil {
-						return nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
+						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
 					}
 					storeValue(f, intVal)
 				} else {
@@ -153,7 +169,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		}
 
 		// Unknown flag-like token
-		return nil, fmt.Sprintf("unknown flag '%s'", tok)
+		return nil, nil, fmt.Sprintf("unknown flag '%s'", tok)
 	}
 
 	// Resolve env vars for flags not set by CLI
@@ -178,7 +194,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 			case "0", "false", "no":
 				cliSet[f.Name] = false
 			default:
-				return nil, fmt.Sprintf(
+				return nil, nil, fmt.Sprintf(
 					"invalid boolean value '%s' for env var '%s' (flag '--%s')",
 					envVal, f.Env, f.Name,
 				)
@@ -186,7 +202,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		case TypeInt:
 			intVal, err := strconv.Atoi(envVal)
 			if err != nil {
-				return nil, fmt.Sprintf(
+				return nil, nil, fmt.Sprintf(
 					"--%s: expected integer, got '%s' (from env var '%s')",
 					f.Name, envVal, f.Env,
 				)
@@ -214,14 +230,14 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 			}
 		}
 		if len(setFlags) > 1 {
-			return nil, fmt.Sprintf("%s are mutually exclusive", strings.Join(setFlags, " and "))
+			return nil, nil, fmt.Sprintf("%s are mutually exclusive", strings.Join(setFlags, " and "))
 		}
 		if mg.Required && len(setFlags) == 0 {
 			names := make([]string, len(mg.Flags))
 			for j, f := range mg.Flags {
 				names[j] = "--" + f.Name
 			}
-			return nil, fmt.Sprintf("one of %s is required", strings.Join(names, ", "))
+			return nil, nil, fmt.Sprintf("one of %s is required", strings.Join(names, ", "))
 		}
 	}
 
@@ -251,7 +267,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		} else if mutexFlagNames[f.Name] {
 			cliSet[f.Name] = nil
 		} else {
-			return nil, fmt.Sprintf("flag '--%s' is required", f.Name)
+			return nil, nil, fmt.Sprintf("flag '--%s' is required", f.Name)
 		}
 	}
 
@@ -272,7 +288,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 			}
 			for _, v := range vals {
 				if !inChoices(v, f.Choices) {
-					return nil, fmt.Sprintf(
+					return nil, nil, fmt.Sprintf(
 						"--%s: invalid value '%v', must be one of: %s",
 						f.Name, v, formatChoices(f.Choices),
 					)
@@ -280,7 +296,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 			}
 		} else {
 			if !inChoices(val, f.Choices) {
-				return nil, fmt.Sprintf(
+				return nil, nil, fmt.Sprintf(
 					"--%s: invalid value '%v', must be one of: %s",
 					f.Name, val, formatChoices(f.Choices),
 				)
@@ -305,12 +321,12 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 			}
 			for _, v := range vals {
 				if err := f.Validate(v); err != nil {
-					return nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
+					return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 				}
 			}
 		} else {
 			if err := f.Validate(val); err != nil {
-				return nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
+				return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 			}
 		}
 	}
@@ -324,7 +340,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 			remaining := positionals[posIdx:]
 			if len(remaining) == 0 {
 				if a.Required {
-					return nil, fmt.Sprintf("missing required argument '%s'", a.Name)
+					return nil, nil, fmt.Sprintf("missing required argument '%s'", a.Name)
 				}
 				// Optional variadic with no values: empty list
 				argValues[a.Name] = []interface{}{}
@@ -340,7 +356,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 			argValues[a.Name] = positionals[posIdx]
 			posIdx++
 		} else if a.Required {
-			return nil, fmt.Sprintf("missing required argument '%s'", a.Name)
+			return nil, nil, fmt.Sprintf("missing required argument '%s'", a.Name)
 		} else if a.hasDefault {
 			argValues[a.Name] = a.Default
 		} else {
@@ -349,10 +365,10 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		}
 	}
 	if posIdx < len(positionals) {
-		return nil, fmt.Sprintf("unexpected argument '%s'", positionals[posIdx])
+		return nil, nil, fmt.Sprintf("unexpected argument '%s'", positionals[posIdx])
 	}
 
-	// Build kwargs dict
+	// Build kwargs dict (command flags only)
 	kwargs := make(map[string]interface{})
 	for i := range cmd.Flags {
 		f := &cmd.Flags[i]
@@ -364,7 +380,15 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		}
 	}
 
-	return kwargs, ""
+	// Separate out global flag values parsed from post-command tokens
+	postGlobalValues := make(map[string]interface{})
+	for name := range globalFlagNames {
+		if v, ok := cliSet[name]; ok {
+			postGlobalValues[flagParamName(name)] = v
+		}
+	}
+
+	return kwargs, postGlobalValues, ""
 }
 
 func inChoices(val interface{}, choices []interface{}) bool {
