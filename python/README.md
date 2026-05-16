@@ -228,6 +228,53 @@ def status(token, insecure):
 
 Both commands now have `--token` and `--insecure` flags. Tag flags appear in help output and are parsed like any other flag.
 
+## Mutex Groups
+
+Mutex groups declare mutually exclusive flags -- exactly one flag from the group must be provided. If the user provides more than one, or provides none, the parser errors.
+
+```python
+@app.command("log", help="show logs", mutex=[
+    strictcli.MutexGroup(flags=[
+        strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+        strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+    ]),
+])
+def log(verbose, quiet):
+    if verbose:
+        print("showing all logs")
+    elif quiet:
+        print("showing errors only")
+```
+
+If both flags are provided:
+
+```
+$ myapp log --verbose --quiet
+error: --verbose and --quiet are mutually exclusive
+try 'myapp --help'
+```
+
+If neither flag is provided:
+
+```
+$ myapp log
+error: one of --verbose, --quiet is required
+try 'myapp --help'
+```
+
+Mutex group flags appear in a separate section in help output:
+
+```
+$ myapp log --help
+myapp log -- show logs
+
+Flags (mutually exclusive):
+  --verbose, --no-verbose    verbose output [default: false]
+  --quiet, --no-quiet        quiet output [default: false]
+```
+
+Flags inside a mutex group follow the same rules as regular flags (short aliases, env vars, types), but they are not declared with `@strictcli.flag` -- they live inside the `MutexGroup`.
+
 ## Help Output
 
 Help is auto-generated at three levels. Pass `--help` or `-h` at any level, or invoke the app with no arguments.
