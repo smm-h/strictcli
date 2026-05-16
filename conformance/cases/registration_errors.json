@@ -658,7 +658,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "CoRequired must have at least 2 flags"
+      "stderr_contains": "command \"cmd\": CoRequired must have at least 2 flags, got 1"
     }
   },
   {
@@ -685,7 +685,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "CoRequired references unknown flag"
+      "stderr_contains": "command \"cmd\": CoRequired references unknown flag \"missing\""
     }
   },
   {
@@ -712,7 +712,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "CoRequired has duplicate flag"
+      "stderr_contains": "command \"cmd\": CoRequired has duplicate flag \"output\""
     }
   },
   {
@@ -738,7 +738,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "Requires references unknown flag"
+      "stderr_contains": "command \"cmd\": Requires references unknown flag \"missing\""
     }
   },
   {
@@ -764,7 +764,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "cannot be the same"
+      "stderr_contains": "command \"cmd\": Requires flag and depends_on cannot be the same (\"output\")"
     }
   }
 ]
