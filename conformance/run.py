@@ -146,9 +146,10 @@ def _check_equals(actual: str, expected: str, stream_name: str) -> list[str]:
     return errors
 
 
-def _run_case(case: dict, target: str) -> tuple[bool, list[str]]:
-    """Run a single test case. Returns (passed, error_messages)."""
+def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.CompletedProcess | None]:
+    """Run a single test case. Returns (passed, error_messages, raw_result)."""
     errors = []
+    raw_result = None
 
     if target == "python":
         script = _generate_python_script(case["app"])
@@ -164,11 +165,11 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str]]:
         try:
             binary = _build_go_binary(case["app"])
         except RuntimeError as e:
-            return False, [f"  build error: {e}"]
+            return False, [f"  build error: {e}"], None
         argv = [binary] + case["argv"]
         cleanup_path = None  # binary lives in cache, cleaned up at exit
     else:
-        return False, [f"  unsupported target: {target}"]
+        return False, [f"  unsupported target: {target}"], None
 
     try:
         # Build environment: inherit current env, overlay test env
@@ -183,6 +184,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str]]:
             env=env,
             timeout=10,
         )
+        raw_result = result
 
         # Check exit code
         expect = case["expect"]
@@ -231,7 +233,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str]]:
         if cleanup_path is not None:
             os.unlink(cleanup_path)
 
-    return len(errors) == 0, errors
+    return len(errors) == 0, errors, raw_result
 
 
 def _cleanup_go_cache() -> None:
@@ -242,37 +244,127 @@ def _cleanup_go_cache() -> None:
     GO_BUILD_CACHE.clear()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run strictcli conformance tests")
-    parser.add_argument(
-        "--target",
-        required=True,
-        choices=["python", "go"],
-        help="Which implementation to test",
-    )
-    parser.add_argument(
-        "--filter",
-        default=None,
-        help="Only run cases whose name contains this substring",
-    )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Print each test case name as it runs",
-    )
-    args = parser.parse_args()
+def _compare_outputs(
+    py_result: subprocess.CompletedProcess | None,
+    go_result: subprocess.CompletedProcess | None,
+) -> list[str]:
+    """Compare normalized stdout/stderr between two targets. Returns warnings."""
+    warnings = []
+    if py_result is None or go_result is None:
+        return warnings
 
-    cases = _load_cases()
-    if not cases:
-        print("No test cases found!")
-        sys.exit(1)
+    py_stdout = _normalize(py_result.stdout)
+    go_stdout = _normalize(go_result.stdout)
+    if py_stdout != go_stdout:
+        warnings.append("  stdout divergence:")
+        warnings.append(f"    python: {py_stdout!r}")
+        warnings.append(f"    go:     {go_stdout!r}")
 
-    if args.filter:
-        cases = [(f, c) for f, c in cases if args.filter in c["name"]]
-        if not cases:
-            print(f"No test cases match filter: {args.filter!r}")
-            sys.exit(1)
+    py_stderr = _normalize(py_result.stderr)
+    go_stderr = _normalize(go_result.stderr)
+    if py_stderr != go_stderr:
+        warnings.append("  stderr divergence:")
+        warnings.append(f"    python: {py_stderr!r}")
+        warnings.append(f"    go:     {go_stderr!r}")
 
+    return warnings
+
+
+def _run_both_mode(cases: list[tuple[str, dict]], verbose: bool) -> int:
+    """Run all cases against both python and go, comparing results.
+
+    Returns exit code (0 = no parity failures, 1 = parity failures exist).
+    """
+    passed = 0
+    parity_failures = 0
+    output_divergences = 0
+    consistent_failures = 0
+    parity_failure_details: list[tuple[str, str]] = []
+    divergence_details: list[tuple[str, list[str]]] = []
+
+    for filename, case in cases:
+        name = case["name"]
+        label = f"{filename}: {name}"
+
+        if verbose:
+            print(f"  running: {label} ...", end=" ", flush=True)
+
+        py_ok, py_errors, py_result = _run_case(case, "python")
+        go_ok, go_errors, go_result = _run_case(case, "go")
+
+        if py_ok and go_ok:
+            # Both pass -- check output divergence
+            passed += 1
+            div_warnings = _compare_outputs(py_result, go_result)
+            if div_warnings:
+                output_divergences += 1
+                divergence_details.append((label, div_warnings))
+                if verbose:
+                    print("PASS (output divergence)")
+            else:
+                if verbose:
+                    print("PASS")
+        elif not py_ok and not go_ok:
+            # Both fail -- consistent
+            consistent_failures += 1
+            extra = ""
+            if (
+                py_result is not None
+                and go_result is not None
+                and py_result.returncode != go_result.returncode
+            ):
+                extra = (
+                    f" (exit codes differ: python={py_result.returncode},"
+                    f" go={go_result.returncode})"
+                )
+            if verbose:
+                print(f"CONSISTENT FAIL{extra}")
+        else:
+            # Parity failure -- one passes, one fails
+            parity_failures += 1
+            py_status = "PASS" if py_ok else "FAIL"
+            go_status = "PASS" if go_ok else "FAIL"
+            detail = f"python={py_status}, go={go_status}"
+            parity_failure_details.append((label, detail))
+            if verbose:
+                print(f"PARITY FAIL ({detail})")
+
+    # Print parity failures
+    if parity_failure_details:
+        print()
+        print("PARITY FAILURES:")
+        print("=" * 60)
+        for label, detail in parity_failure_details:
+            print(f"\n{label}")
+            print(f"  {detail}")
+        print()
+
+    # Print output divergence warnings
+    if divergence_details:
+        print()
+        print("OUTPUT DIVERGENCE WARNINGS:")
+        print("=" * 60)
+        for label, warnings in divergence_details:
+            print(f"\n{label}")
+            for w in warnings:
+                print(w)
+        print()
+
+    # Cleanup
+    _cleanup_go_cache()
+
+    # Summary
+    total = passed + parity_failures + consistent_failures
+    print(
+        f"{passed}/{total} passed, {parity_failures} parity failures,"
+        f" {output_divergences} output divergence warnings"
+    )
+
+    return 0 if parity_failures == 0 else 1
+
+
+def _run_single_mode(cases: list[tuple[str, dict]], target: str, verbose: bool) -> int:
+    """Run all cases against a single target. Returns exit code."""
     passed = 0
     failed = 0
     failures = []
@@ -281,19 +373,19 @@ def main() -> None:
         name = case["name"]
         label = f"{filename}: {name}"
 
-        if args.verbose:
+        if verbose:
             print(f"  running: {label} ...", end=" ", flush=True)
 
-        ok, errors = _run_case(case, args.target)
+        ok, errors, _result = _run_case(case, target)
 
         if ok:
             passed += 1
-            if args.verbose:
+            if verbose:
                 print("PASS")
         else:
             failed += 1
             failures.append((label, errors))
-            if args.verbose:
+            if verbose:
                 print("FAIL")
 
     # Print failures
@@ -314,7 +406,59 @@ def main() -> None:
     total = passed + failed
     print(f"{passed}/{total} passed, {failed} failed")
 
-    sys.exit(0 if failed == 0 else 1)
+    return 0 if failed == 0 else 1
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run strictcli conformance tests")
+    parser.add_argument(
+        "--target",
+        default=None,
+        choices=["python", "go"],
+        help="Which implementation to test",
+    )
+    parser.add_argument(
+        "--both",
+        action="store_true",
+        help="Test both python and go, comparing results for parity",
+    )
+    parser.add_argument(
+        "--filter",
+        default=None,
+        help="Only run cases whose name contains this substring",
+    )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Print each test case name as it runs",
+    )
+    args = parser.parse_args()
+
+    # Validate: exactly one of --target or --both
+    if args.both and args.target is not None:
+        print("error: --both and --target are mutually exclusive", file=sys.stderr)
+        sys.exit(2)
+    if not args.both and args.target is None:
+        print("error: one of --target or --both is required", file=sys.stderr)
+        sys.exit(2)
+
+    cases = _load_cases()
+    if not cases:
+        print("No test cases found!")
+        sys.exit(1)
+
+    if args.filter:
+        cases = [(f, c) for f, c in cases if args.filter in c["name"]]
+        if not cases:
+            print(f"No test cases match filter: {args.filter!r}")
+            sys.exit(1)
+
+    if args.both:
+        exit_code = _run_both_mode(cases, args.verbose)
+    else:
+        exit_code = _run_single_mode(cases, args.target, args.verbose)
+
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
