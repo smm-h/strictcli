@@ -297,6 +297,9 @@ func IntFlag(name, help string, opts ...FlagOption) Flag {
 
 // NewArg creates a positional argument.
 func NewArg(name, help string, opts ...ArgOption) Arg {
+	if strings.TrimSpace(help) == "" {
+		panic("Arg.help must be a non-empty string")
+	}
 	a := Arg{
 		Name:     name,
 		Help:     help,
@@ -326,6 +329,27 @@ func validateFlagConfig(f *Flag) {
 		if len(f.Choices) == 0 {
 			panic(fmt.Sprintf("Flag %q: choices must be a non-empty list", f.Name))
 		}
+		// Validate each choice matches the flag type
+		for _, c := range f.Choices {
+			switch f.Type {
+			case TypeStr:
+				if _, ok := c.(string); !ok {
+					panic(fmt.Sprintf("Flag %q: choice %v is not of type str", f.Name, c))
+				}
+			case TypeInt:
+				if _, ok := c.(int); !ok {
+					panic(fmt.Sprintf("Flag %q: choice %v is not of type int", f.Name, c))
+				}
+			}
+		}
+	}
+	// Validate int default type
+	if f.Type == TypeInt && f.hasDefault && f.Default != nil {
+		if !f.Repeatable {
+			if _, ok := f.Default.(int); !ok {
+				panic(fmt.Sprintf("Flag %q: type=int requires an int default, got %T", f.Name, f.Default))
+			}
+		}
 	}
 	// For non-bool, non-repeatable: negatable is forced off
 	if f.Type != TypeBool {
@@ -342,6 +366,19 @@ func validateFlagConfig(f *Flag) {
 		// str/int with no default: required (nil Default)
 	} else if f.Type == TypeBool && f.Default == nil {
 		f.Default = false
+	}
+	// Validate default is in choices (after default resolution)
+	if f.Choices != nil && f.hasDefault && f.Default != nil && !f.Repeatable {
+		found := false
+		for _, c := range f.Choices {
+			if f.Default == c {
+				found = true
+				break
+			}
+		}
+		if !found {
+			panic(fmt.Sprintf("Flag %q: default %v is not in choices %v", f.Name, f.Default, f.Choices))
+		}
 	}
 }
 
