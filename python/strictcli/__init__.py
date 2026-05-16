@@ -4,7 +4,10 @@ from __future__ import annotations
 
 __version__ = "0.2.0"
 
-__all__ = ["App", "Flag", "Arg", "Tag", "MutexGroup", "Passthrough", "Result", "flag", "arg"]
+__all__ = [
+    "App", "Flag", "Arg", "Tag", "MutexGroup", "CoRequired", "Requires",
+    "Passthrough", "Result", "flag", "arg",
+]
 
 import contextlib
 import inspect
@@ -158,6 +161,21 @@ class MutexGroup:
 
 
 @dataclass
+class CoRequired:
+    """Flags that must all appear together or none."""
+
+    flags: list[str]
+
+
+@dataclass
+class Requires:
+    """Flag that depends on another flag being present."""
+
+    flag: str
+    depends_on: str
+
+
+@dataclass
 class Passthrough:
     """Marks a command as passthrough -- all tokens after the command name are
     forwarded to the handler as a raw list, bypassing flag/arg parsing."""
@@ -176,6 +194,7 @@ class Command:
     args: list[Arg] = field(default_factory=list)
     tags: list[Tag] = field(default_factory=list)
     mutex: list[MutexGroup] = field(default_factory=list)
+    dependencies: list[CoRequired | Requires] = field(default_factory=list)
     passthrough: Passthrough | None = None
 
     def __post_init__(self) -> None:
@@ -203,6 +222,7 @@ class Group:
         args: list[Arg] | None = None,
         tags: list[Tag] | None = None,
         mutex: list[MutexGroup] | None = None,
+        dependencies: list[CoRequired | Requires] | None = None,
         passthrough: Passthrough | None = None,
     ) -> Callable:
         """Decorator to register a command within this group."""
@@ -210,6 +230,7 @@ class Group:
         def decorator(func: Callable) -> Callable:
             cmd = _build_and_validate_command(
                 name, help=help, handler=func, args=args, tags=tags, mutex=mutex,
+                dependencies=dependencies,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
@@ -260,6 +281,7 @@ class App:
         args: list[Arg] | None = None,
         tags: list[Tag] | None = None,
         mutex: list[MutexGroup] | None = None,
+        dependencies: list[CoRequired | Requires] | None = None,
         passthrough: Passthrough | None = None,
     ) -> Callable:
         """Decorator to register a top-level command."""
@@ -272,6 +294,7 @@ class App:
                 args=args,
                 tags=tags,
                 mutex=mutex,
+                dependencies=dependencies,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
@@ -826,6 +849,20 @@ def _parse_command(
             names = ", ".join(f"--{f.name}" for f in mg.flags)
             raise _ParseError(f"one of {names} is required")
 
+    # Step 4.6: enforce flag dependencies (before defaults, so cli_set only
+    # contains values explicitly provided via CLI or env)
+    for dep in cmd.dependencies:
+        if isinstance(dep, CoRequired):
+            present = [f for f in dep.flags if f in cli_set]
+            if 0 < len(present) < len(dep.flags):
+                names = ", ".join(f"--{f}" for f in dep.flags)
+                raise _ParseError(f"flags {names} must be used together")
+        elif isinstance(dep, Requires):
+            if dep.flag in cli_set and dep.depends_on not in cli_set:
+                raise _ParseError(
+                    f"flag '--{dep.flag}' requires '--{dep.depends_on}'"
+                )
+
     # Build set of flag names belonging to mutex groups (used in step 5
     # to suppress "required" errors -- mutex groups handle their own
     # required semantics)
@@ -937,6 +974,7 @@ def _build_and_validate_command(
     args: list[Arg] | None,
     tags: list[Tag] | None,
     mutex: list[MutexGroup] | None,
+    dependencies: list[CoRequired | Requires] | None = None,
     env_prefix: str | None,
     global_flags: list[Flag] | None = None,
     passthrough: Passthrough | None = None,
@@ -1106,6 +1144,45 @@ def _build_and_validate_command(
             f"not matching any flag or arg"
         )
 
+    # Validate dependencies
+    resolved_dependencies = list(dependencies) if dependencies else []
+    for dep in resolved_dependencies:
+        if isinstance(dep, CoRequired):
+            if len(dep.flags) < 2:
+                raise ValueError(
+                    f'command "{name}": CoRequired must have at least 2 flags, '
+                    f"got {len(dep.flags)}"
+                )
+            seen_dep_flags: set[str] = set()
+            for flag_name in dep.flags:
+                if flag_name not in seen_flag_names:
+                    raise ValueError(
+                        f'command "{name}": CoRequired references unknown flag '
+                        f'"{flag_name}"'
+                    )
+                if flag_name in seen_dep_flags:
+                    raise ValueError(
+                        f'command "{name}": CoRequired has duplicate flag '
+                        f'"{flag_name}"'
+                    )
+                seen_dep_flags.add(flag_name)
+        elif isinstance(dep, Requires):
+            if dep.flag not in seen_flag_names:
+                raise ValueError(
+                    f'command "{name}": Requires references unknown flag '
+                    f'"{dep.flag}"'
+                )
+            if dep.depends_on not in seen_flag_names:
+                raise ValueError(
+                    f'command "{name}": Requires references unknown flag '
+                    f'"{dep.depends_on}"'
+                )
+            if dep.flag == dep.depends_on:
+                raise ValueError(
+                    f'command "{name}": Requires flag and depends_on cannot be '
+                    f'the same ("{dep.flag}")'
+                )
+
     return Command(
         name=name,
         help=help,
@@ -1114,6 +1191,7 @@ def _build_and_validate_command(
         args=all_args,
         tags=resolved_tags,
         mutex=resolved_mutex,
+        dependencies=resolved_dependencies,
     )
 
 
