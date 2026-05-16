@@ -19,6 +19,9 @@ jobs:
           go-version: '1.23'
       - run: uv sync
         working-directory: python
+      - name: API surface check
+        run: uv run python ../conformance/check_api_surface.py
+        working-directory: python
       - run: uv run python ../conformance/run.py --target python
         working-directory: python
       - run: uv run python ../conformance/run.py --target go
