@@ -44,11 +44,15 @@ def _strict_int(s: str) -> int:
     """Parse an integer string strictly -- no leading/trailing whitespace allowed.
 
     Python's int() silently strips whitespace; Go's strconv.Atoi does not.
-    This matches Go's stricter behavior.
+    This matches Go's stricter behavior. Additionally, the result is
+    range-checked to fit in a signed 64-bit integer, matching Go's int/int64.
     """
     if s != s.strip():
         raise ValueError(f"invalid literal for int() with base 10: {s!r}")
-    return int(s)
+    n = int(s)
+    if n < -(2**63) or n > 2**63 - 1:
+        raise ValueError("integer out of range")
+    return n
 
 
 def _require_non_empty_str(value: str, field_name: str, class_name: str) -> None:
