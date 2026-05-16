@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["allpairspy"]
+# dependencies = ["allpairspy", "jsonschema"]
 # ///
 """Generate pairwise combinatorial test cases for strictcli conformance.
 
@@ -29,7 +29,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import jsonschema
 from allpairspy import AllPairs
+
+CONFORMANCE_DIR = Path(__file__).resolve().parent
+SCHEMA_PATH = CONFORMANCE_DIR / "schema.json"
 
 # Axis values
 FLAG_TYPES = ["str", "bool", "int"]
@@ -286,6 +290,17 @@ def generate_test_case(row_idx: int, row: list) -> dict:
         }]
         handler_prints = f"{flag_name}={{{flag_name}}} {companion_name}={{{companion_name}}}"
         command["handler_prints"] = handler_prints
+
+        # Compute companion's expected output: companion is never provided,
+        # so it uses its default or zero value.
+        if flag_type == "bool":
+            companion_expected = f"{companion_name}=false"
+        elif has_default:
+            companion_expected = f"{companion_name}={_default_value(flag_type)}"
+        else:
+            # companion has default=null (None)
+            companion_expected = f"{companion_name}=None"
+        expected = f"{expected} {companion_expected}"
     else:
         command["flags"] = [flag_def]
 
@@ -307,7 +322,7 @@ def generate_test_case(row_idx: int, row: list) -> dict:
         "argv": argv,
         "expect": {
             "exit_code": 0,
-            "stdout_contains": expected,
+            "stdout_equals": expected,
         },
     }
 
@@ -326,6 +341,19 @@ def main() -> None:
     for idx, row in enumerate(rows):
         case = generate_test_case(idx, list(row))
         cases.append(case)
+
+    # Validate each generated case against the conformance schema
+    with open(SCHEMA_PATH) as f:
+        full_schema = json.load(f)
+    test_case_schema = dict(full_schema["$defs"]["test_case"])
+    test_case_schema["$defs"] = full_schema["$defs"]
+    for case in cases:
+        try:
+            jsonschema.validate(instance=case, schema=test_case_schema)
+        except jsonschema.ValidationError as e:
+            raise RuntimeError(
+                f"Generated case {case['name']!r} fails schema validation: {e.message}"
+            ) from e
 
     out_path = Path(__file__).resolve().parent / "cases" / "pairwise.json"
     with open(out_path, "w") as f:

@@ -44,7 +44,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag0=test_val"
+      "stdout_equals": "flag0=test_val alt0=None"
     },
     "env": {
       "MYAPP_FLAG0": "test_val"
@@ -88,7 +88,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag1=false"
+      "stdout_equals": "flag1=false alt1=false"
     }
   },
   {
@@ -122,7 +122,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag2=99,99"
+      "stdout_equals": "flag2=99,99"
     }
   },
   {
@@ -159,7 +159,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag3=99"
+      "stdout_equals": "flag3=99"
     },
     "env": {
       "MYAPP_FLAG3": "99"
@@ -196,7 +196,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag4=true"
+      "stdout_equals": "flag4=true"
     },
     "env": {
       "MYAPP_FLAG4": "true"
@@ -238,7 +238,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag5=test_val,test_val"
+      "stdout_equals": "flag5=test_val,test_val"
     }
   },
   {
@@ -269,7 +269,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag6=env_val"
+      "stdout_equals": "flag6=env_val"
     },
     "env": {
       "MYAPP_FLAG6": "env_val"
@@ -314,7 +314,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag7=true"
+      "stdout_equals": "flag7=true alt7=false"
     }
   },
   {
@@ -349,7 +349,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag8=false"
+      "stdout_equals": "flag8=false"
     }
   },
   {
@@ -381,7 +381,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "flag9=true"
+      "stdout_equals": "flag9=true"
     },
     "env": {
       "MYAPP_FLAG9": "true"
