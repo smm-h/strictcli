@@ -376,7 +376,8 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "passthrough"
+      "stderr_contains": "passthrough",
+      "stderr_equals": "error: command \"checkout\": passthrough commands cannot have tags"
     }
   },
   {
@@ -415,7 +416,8 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "passthrough"
+      "stderr_contains": "passthrough",
+      "stderr_equals": "error: command \"checkout\": passthrough commands cannot have mutex groups"
     }
   },
   {

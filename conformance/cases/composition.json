@@ -34,7 +34,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_FILE": "data.txt"
     },
@@ -78,14 +80,21 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_FILE": "data.txt",
       "MYAPP_URL": "http://example.com"
     },
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["--file", "--url", "mutually exclusive"]
+      "stderr_contains": [
+        "--file",
+        "--url",
+        "mutually exclusive"
+      ],
+      "stderr_equals": "error: --file and --url are mutually exclusive\ntry 'myapp --help'"
     }
   },
   {
@@ -99,7 +108,10 @@
           "name": "format",
           "type": "str",
           "help": "output format",
-          "choices_str": ["text", "json"],
+          "choices_str": [
+            "text",
+            "json"
+          ],
           "default": "text"
         }
       ],
@@ -111,7 +123,11 @@
         }
       ]
     },
-    "argv": ["--format", "json", "cmd"],
+    "argv": [
+      "--format",
+      "json",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "format=json"
@@ -128,7 +144,10 @@
           "name": "format",
           "type": "str",
           "help": "output format",
-          "choices_str": ["text", "json"],
+          "choices_str": [
+            "text",
+            "json"
+          ],
           "default": "text"
         }
       ],
@@ -140,7 +159,11 @@
         }
       ]
     },
-    "argv": ["--format", "xml", "cmd"],
+    "argv": [
+      "--format",
+      "xml",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp --help'"
@@ -158,7 +181,10 @@
           "name": "format",
           "type": "str",
           "help": "output format",
-          "choices_str": ["text", "json"],
+          "choices_str": [
+            "text",
+            "json"
+          ],
           "default": "text",
           "env": "MYAPP_FORMAT"
         }
@@ -171,7 +197,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_FORMAT": "xml"
     },
@@ -205,7 +233,11 @@
         }
       ]
     },
-    "argv": ["-c", "/tmp/cfg", "cmd"],
+    "argv": [
+      "-c",
+      "/tmp/cfg",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "config=/tmp/cfg"
@@ -236,7 +268,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_CONFIG": "/from/env"
     },
@@ -282,7 +316,11 @@
         }
       ]
     },
-    "argv": ["config", "set", "--local"],
+    "argv": [
+      "config",
+      "set",
+      "--local"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "local=true system=false"
@@ -325,10 +363,20 @@
         }
       ]
     },
-    "argv": ["config", "set", "--local", "--system"],
+    "argv": [
+      "config",
+      "set",
+      "--local",
+      "--system"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["--local", "--system", "mutually exclusive"]
+      "stderr_contains": [
+        "--local",
+        "--system",
+        "mutually exclusive"
+      ],
+      "stderr_equals": "error: --local and --system are mutually exclusive\ntry 'myapp --help'"
     }
   },
   {
@@ -359,7 +407,11 @@
         }
       ]
     },
-    "argv": ["--verbose", "config", "show"],
+    "argv": [
+      "--verbose",
+      "config",
+      "show"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "verbose=true"
@@ -394,7 +446,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_FORMAT": "json"
     },
@@ -421,7 +475,11 @@
                   "name": "format",
                   "type": "str",
                   "help": "output format",
-                  "choices_str": ["text", "json", "csv"]
+                  "choices_str": [
+                    "text",
+                    "json",
+                    "csv"
+                  ]
                 }
               ]
             }
@@ -430,7 +488,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--format", "csv"],
+    "argv": [
+      "cmd",
+      "--format",
+      "csv"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "format=csv"
@@ -454,7 +516,11 @@
                   "name": "format",
                   "type": "str",
                   "help": "output format",
-                  "choices_str": ["text", "json", "csv"]
+                  "choices_str": [
+                    "text",
+                    "json",
+                    "csv"
+                  ]
                 }
               ]
             }
@@ -463,10 +529,18 @@
         }
       ]
     },
-    "argv": ["cmd", "--format", "xml"],
+    "argv": [
+      "cmd",
+      "--format",
+      "xml"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["invalid value", "'xml'"]
+      "stderr_contains": [
+        "invalid value",
+        "'xml'"
+      ],
+      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json, csv\ntry 'myapp --help'"
     }
   },
   {
@@ -496,7 +570,13 @@
         }
       ]
     },
-    "argv": ["cmd", "--label", "bug", "--label", "urgent"],
+    "argv": [
+      "cmd",
+      "--label",
+      "bug",
+      "--label",
+      "urgent"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "labels=bug,urgent"
@@ -519,7 +599,12 @@
               "type": "str",
               "help": "log level",
               "repeatable": true,
-              "choices_str": ["debug", "info", "warn", "error"],
+              "choices_str": [
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ],
               "env": "MYAPP_LEVEL"
             }
           ],
@@ -527,7 +612,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_LEVEL": "info"
     },
@@ -553,7 +640,12 @@
               "type": "str",
               "help": "log level",
               "repeatable": true,
-              "choices_str": ["debug", "info", "warn", "error"],
+              "choices_str": [
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ],
               "env": "MYAPP_LEVEL"
             }
           ],
@@ -561,13 +653,19 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_LEVEL": "trace"
     },
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["invalid value", "'trace'"]
+      "stderr_contains": [
+        "invalid value",
+        "'trace'"
+      ],
+      "stderr_equals": "error: --level: invalid value 'trace', must be one of: debug, info, warn, error\ntry 'myapp --help'"
     }
   },
   {
@@ -600,7 +698,10 @@
         }
       ]
     },
-    "argv": ["config", "show"],
+    "argv": [
+      "config",
+      "show"
+    ],
     "env": {
       "MYAPP_VERBOSE": "true"
     },
@@ -643,7 +744,12 @@
         }
       ]
     },
-    "argv": ["db", "query", "--format", "json"],
+    "argv": [
+      "db",
+      "query",
+      "--format",
+      "json"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "format=json"
@@ -677,7 +783,13 @@
         }
       ]
     },
-    "argv": ["build", "compile", "main.go", "util.go", "lib.go"],
+    "argv": [
+      "build",
+      "compile",
+      "main.go",
+      "util.go",
+      "lib.go"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "files=main.go,util.go,lib.go"
@@ -707,7 +819,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_PORT": "8080"
     },
@@ -740,7 +854,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "port=3000"
@@ -771,7 +887,11 @@
         }
       ]
     },
-    "argv": ["cmd", "-p", "9090"],
+    "argv": [
+      "cmd",
+      "-p",
+      "9090"
+    ],
     "env": {
       "MYAPP_PORT": "8080"
     },
@@ -805,7 +925,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_PORT": "8080"
     },
@@ -836,7 +958,13 @@
         }
       ]
     },
-    "argv": ["--tag", "a", "--tag", "b", "cmd"],
+    "argv": [
+      "--tag",
+      "a",
+      "--tag",
+      "b",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "tag=a,b"
@@ -864,7 +992,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "tag="
@@ -894,7 +1024,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "env": {
       "MYAPP_TAG": "fromenv"
     },
