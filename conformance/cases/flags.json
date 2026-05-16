@@ -229,5 +229,47 @@
       "exit_code": 1,
       "stderr_contains": "boolean flag"
     }
+  },
+  {
+    "name": "flags: negatable false rejects --no-flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose", "negatable": false}],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--no-verbose"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag"
+    }
+  },
+  {
+    "name": "flags: negatable true allows --no-flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [{"name": "verbose", "type": "bool", "help": "be verbose", "negatable": true}],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--no-verbose"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "verbose=false"
+    }
   }
 ]

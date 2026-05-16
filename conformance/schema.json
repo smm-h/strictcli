@@ -164,7 +164,12 @@
           "items": { "type": "integer" },
           "description": "Choices for int-type flags."
         },
-        "repeatable": { "type": "boolean", "default": false }
+        "repeatable": { "type": "boolean", "default": false },
+        "negatable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether --no-flagname negation is supported. Only meaningful for bool-type flags."
+        }
       }
     },
     "tag": {

@@ -48,6 +48,8 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
         opts.append(f"strictcli.Choices({args})")
     if flag_def.get("repeatable", False):
         opts.append("strictcli.Repeatable()")
+    if "negatable" in flag_def and not flag_def["negatable"]:
+        opts.append("strictcli.NegatableOpt(false)")
     return opts
 
 

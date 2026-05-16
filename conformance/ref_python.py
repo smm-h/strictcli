@@ -55,6 +55,9 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
     if flag_def.get("repeatable", False):
         parts.append("repeatable=True")
 
+    if "negatable" in flag_def and not flag_def["negatable"]:
+        parts.append("negatable=False")
+
     return f"{indent}strictcli.Flag({', '.join(parts)})"
 
 
@@ -333,6 +336,8 @@ def _emit_command_registration(
             fd_parts.append(f"choices={f['choices_int']!r}")
         if f.get("repeatable", False):
             fd_parts.append("repeatable=True")
+        if "negatable" in f and not f["negatable"]:
+            fd_parts.append("negatable=False")
         flag_decorators.append(
             f"{indent}@strictcli.flag({', '.join(fd_parts)})"
         )
