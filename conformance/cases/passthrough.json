@@ -201,6 +201,27 @@
     }
   },
   {
+    "name": "passthrough: custom handler_prints template",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "execute a command",
+          "passthrough": true,
+          "passthrough_handler_prints": "cmd={name} rest={args}"
+        }
+      ]
+    },
+    "argv": ["exec", "--verbose", "deploy"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "cmd=exec rest=--verbose,deploy"
+    }
+  },
+  {
     "name": "passthrough: multiple passthrough commands",
     "app": {
       "name": "myapp",

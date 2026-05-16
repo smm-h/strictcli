@@ -246,8 +246,16 @@ def _emit_command_go(
                     lines.append(f'{indent}\tfmt.Printf("{gf["name"]}=%v\\n", globals["{gf_key}"])')
         else:
             lines.append(f'{indent}{target}.Passthrough("{cmd_def["name"]}", "{cmd_def["help"]}", func(name string, args []string, globals map[string]interface{{}}) int {{')
-        # Print name:comma-separated-args
-        lines.append(f'{indent}\tfmt.Printf("%s:%s\\n", name, strings.Join(args, ","))')
+        # Print using passthrough_handler_prints template, or default format
+        pt_template = cmd_def.get("passthrough_handler_prints")
+        if pt_template:
+            # Build Go code that substitutes {name} and {args} in the template
+            lines.append(f'{indent}\t_ptOut := "{pt_template}"')
+            lines.append(f'{indent}\t_ptOut = strings.ReplaceAll(_ptOut, "{{name}}", name)')
+            lines.append(f'{indent}\t_ptOut = strings.ReplaceAll(_ptOut, "{{args}}", strings.Join(args, ","))')
+            lines.append(f'{indent}\tfmt.Println(_ptOut)')
+        else:
+            lines.append(f'{indent}\tfmt.Printf("%s:%s\\n", name, strings.Join(args, ","))')
         lines.append(f'{indent}\treturn {exit_code}')
         # Include CmdOptions for flags/args (to trigger registration errors when invalid)
         pt_opts = _emit_cmd_options(cmd_def, indent + "\t")

@@ -202,8 +202,16 @@ def _emit_command_registration(
                     lines.append(
                         f'{indent}    print({gf_name!r} + "=" + str(globals[{gf_name!r}]))'
                     )
-        # Print name:comma-separated-args
-        lines.append(f'{indent}    print(name + ":" + ",".join(args))')
+        # Print using passthrough_handler_prints template, or default format
+        pt_template = cmd_def.get("passthrough_handler_prints")
+        if pt_template:
+            # Build the output by substituting {name} and {args} in the template
+            lines.append(f'{indent}    _pt_out = {pt_template!r}')
+            lines.append(f'{indent}    _pt_out = _pt_out.replace("{{name}}", name)')
+            lines.append(f'{indent}    _pt_out = _pt_out.replace("{{args}}", ",".join(args))')
+            lines.append(f'{indent}    print(_pt_out)')
+        else:
+            lines.append(f'{indent}    print(name + ":" + ",".join(args))')
         lines.append(f"{indent}    return {exit_code}")
         lines.append("")
 
