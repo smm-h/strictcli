@@ -480,7 +480,8 @@
       "stderr_contains": [
         "type=int requires an int default",
         "port"
-      ]
+      ],
+      "stderr_equals": "error: Flag \"port\": type=int requires an int default, got 'str'"
     }
   },
   {
@@ -514,7 +515,8 @@
       "stderr_contains": [
         "default",
         "not in choices"
-      ]
+      ],
+      "stderr_equals": "error: Flag \"format\": default 'xml' is not in choices ['json', 'csv']"
     }
   },
   {
@@ -569,6 +571,37 @@
       "exit_code": 1,
       "stderr_contains": "appears in multiple mutex groups",
       "stderr_equals": "error: command \"cmd\": flag \"csv\" appears in multiple mutex groups"
+    }
+  },
+  {
+    "name": "registration: empty choices list",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "choices_str": []
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "choices must be a non-empty list",
+      "stderr_equals": "error: Flag \"format\": choices must be a non-empty list"
     }
   },
   {

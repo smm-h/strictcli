@@ -62,6 +62,11 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # Python Command.__post_init__ calls _require_non_empty_str
     'Command.help must be a non-empty string':
         "Python dataclass __post_init__; Go uses 'missing help text' message",
+    # Python uses {self.choices!r} which normalizes to * (no brackets);
+    # Go uses [%s] which normalizes to [*]. Same runtime output; different
+    # signature due to format string structure.
+    'Flag *: default * is not in choices *':
+        "Python f-string normalizes without brackets; Go counterpart is 'Flag *: default * is not in choices [*]'",
 }
 
 # Go-only: errors that have no Python counterpart by design
@@ -84,6 +89,20 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
         "Go entity-specific; Python generic '*.* must be a non-empty string'",
     'Group.help must be a non-empty string':
         "Go entity-specific; Python generic '*.* must be a non-empty string'",
+    # Go uses [%s] which normalizes to [*]; Python counterpart normalizes
+    # without brackets. Same runtime output; different signature form.
+    'Flag *: default * is not in choices [*]':
+        "Go fmt.Sprintf normalizes with brackets; Python counterpart is 'Flag *: default * is not in choices *'",
+}
+
+# Dead code: errors present in both implementations but unreachable at runtime.
+# These are excluded from coverage checks (no conformance test can trigger them).
+DEAD_CODE_EXCLUSIONS: dict[str, str] = {
+    # Both Python and Go validate Flag.help in the Flag constructor before
+    # the command-level loop that checks flag help. The command-level check
+    # is unreachable dead code.
+    'command *: flag * missing help text':
+        "Flag constructors validate help before command-level check can fire",
 }
 
 
@@ -395,8 +414,12 @@ def main() -> int:
     test_assertions = extract_test_stderr(CASES_DIR)
     all_sigs = set(py_sigs.keys()) | set(go_sigs.keys())
 
-    # Exclude signatures that are in the exclusion lists (one-impl-only by design)
-    excluded_sigs = set(PY_ONLY_EXCLUSIONS.keys()) | set(GO_ONLY_EXCLUSIONS.keys())
+    # Exclude signatures that are in exclusion lists (one-impl-only or dead code)
+    excluded_sigs = (
+        set(PY_ONLY_EXCLUSIONS.keys())
+        | set(GO_ONLY_EXCLUSIONS.keys())
+        | set(DEAD_CODE_EXCLUSIONS.keys())
+    )
 
     uncovered: list[str] = []
     for sig in sorted(all_sigs - excluded_sigs):
@@ -430,10 +453,13 @@ def main() -> int:
     go_excl = len([s for s in go_only if s in GO_ONLY_EXCLUSIONS])
     covered_count = len(all_sigs - excluded_sigs - set(uncovered))
 
+    dead_excl = len([s for s in all_sigs if s in DEAD_CODE_EXCLUSIONS])
+
     print("Error parity check passed.")
     print(f"  Matched signatures: {len(matched)}")
     print(f"  Python-only (excluded): {py_excl}")
     print(f"  Go-only (excluded): {go_excl}")
+    print(f"  Dead code (excluded): {dead_excl}")
     print(f"  Test coverage: {covered_count}/{len(all_sigs - excluded_sigs)} signatures covered")
     return 0
 
