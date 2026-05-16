@@ -40,6 +40,17 @@ class _ParseError(Exception):
     """Raised for user-facing parse errors."""
 
 
+def _strict_int(s: str) -> int:
+    """Parse an integer string strictly -- no leading/trailing whitespace allowed.
+
+    Python's int() silently strips whitespace; Go's strconv.Atoi does not.
+    This matches Go's stricter behavior.
+    """
+    if s != s.strip():
+        raise ValueError(f"invalid literal for int() with base 10: {s!r}")
+    return int(s)
+
+
 def _require_non_empty_str(value: str, field_name: str, class_name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{class_name}.{field_name} must be a non-empty string")
@@ -391,7 +402,7 @@ class App:
                         )
                     if f.type is int:
                         try:
-                            cli_set[f.name] = int(value_part)
+                            cli_set[f.name] = _strict_int(value_part)
                         except ValueError:
                             raise _ParseError(
                                 f"--{f.name}: expected integer, got {value_part!r}"
@@ -427,7 +438,7 @@ class App:
                         raw = argv[i + 1]
                         if f.type is int:
                             try:
-                                cli_set[f.name] = int(raw)
+                                cli_set[f.name] = _strict_int(raw)
                             except ValueError:
                                 raise _ParseError(
                                     f"--{f.name}: expected integer, got {raw!r}"
@@ -450,7 +461,7 @@ class App:
                         raw = argv[i + 1]
                         if f.type is int:
                             try:
-                                cli_set[f.name] = int(raw)
+                                cli_set[f.name] = _strict_int(raw)
                             except ValueError:
                                 raise _ParseError(
                                     f"--{f.name}: expected integer, got {raw!r}"
@@ -489,7 +500,7 @@ class App:
                             )
                     elif f.type is int:
                         try:
-                            cli_set[f.name] = int(env_val)
+                            cli_set[f.name] = _strict_int(env_val)
                         except ValueError:
                             raise _ParseError(
                                 f"--{f.name}: expected integer, got {env_val!r} "
@@ -667,7 +678,7 @@ def _parse_command(
                     )
                 if f.type is int:
                     try:
-                        _store_value(f, int(value_part))
+                        _store_value(f, _strict_int(value_part))
                     except ValueError:
                         raise _ParseError(f"--{f.name}: expected integer, got {value_part!r}")
                 else:
@@ -701,7 +712,7 @@ def _parse_command(
                         raw = tokens[i + 1]
                         if f.type is int:
                             try:
-                                _store_value(f, int(raw))
+                                _store_value(f, _strict_int(raw))
                             except ValueError:
                                 raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
                         else:
@@ -726,7 +737,7 @@ def _parse_command(
                         raw = tokens[i + 1]
                         if f.type is int:
                             try:
-                                _store_value(f, int(raw))
+                                _store_value(f, _strict_int(raw))
                             except ValueError:
                                 raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
                         else:
@@ -761,7 +772,7 @@ def _parse_command(
                         )
                 elif f.type is int:
                     try:
-                        coerced = int(env_val)
+                        coerced = _strict_int(env_val)
                     except ValueError:
                         raise _ParseError(
                             f"--{f.name}: expected integer, got {env_val!r} "
