@@ -1,0 +1,390 @@
+[
+  {
+    "name": "pairwise: type=str, short, env, repeatable, choices, mutex",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag0={flag0} alt0={alt0}",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "flag0",
+                  "type": "str",
+                  "help": "test flag 0",
+                  "short": "s",
+                  "env": "MYAPP_FLAG0",
+                  "repeatable": true,
+                  "choices_str": [
+                    "test_val",
+                    "other_val",
+                    "third_val"
+                  ]
+                },
+                {
+                  "name": "alt0",
+                  "type": "str",
+                  "help": "mutex companion 0",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag0=test_val"
+    },
+    "env": {
+      "MYAPP_FLAG0": "test_val"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, negatable=true, mutex",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag1={flag1} alt1={alt1}",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "flag1",
+                  "type": "bool",
+                  "help": "test flag 1",
+                  "negatable": true
+                },
+                {
+                  "name": "alt1",
+                  "type": "bool",
+                  "help": "mutex companion 1",
+                  "negatable": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--no-flag1"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag1=false"
+    }
+  },
+  {
+    "name": "pairwise: type=int, repeatable",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag2={flag2}",
+          "flags": [
+            {
+              "name": "flag2",
+              "type": "int",
+              "help": "test flag 2",
+              "repeatable": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--flag2",
+      "99",
+      "--flag2",
+      "99"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag2=99,99"
+    }
+  },
+  {
+    "name": "pairwise: type=int, short, env, choices",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag3={flag3}",
+          "flags": [
+            {
+              "name": "flag3",
+              "type": "int",
+              "help": "test flag 3",
+              "short": "n",
+              "env": "MYAPP_FLAG3",
+              "choices_int": [
+                99,
+                50,
+                1
+              ]
+            }
+          ]
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag3=99"
+    },
+    "env": {
+      "MYAPP_FLAG3": "99"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, short, default, env, negatable=false",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag4={flag4}",
+          "flags": [
+            {
+              "name": "flag4",
+              "type": "bool",
+              "help": "test flag 4",
+              "short": "b",
+              "default": false,
+              "env": "MYAPP_FLAG4",
+              "negatable": false
+            }
+          ]
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag4=true"
+    },
+    "env": {
+      "MYAPP_FLAG4": "true"
+    }
+  },
+  {
+    "name": "pairwise: type=str, repeatable, choices",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag5={flag5}",
+          "flags": [
+            {
+              "name": "flag5",
+              "type": "str",
+              "help": "test flag 5",
+              "repeatable": true,
+              "choices_str": [
+                "test_val",
+                "other_val",
+                "third_val"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--flag5",
+      "test_val",
+      "--flag5",
+      "test_val"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag5=test_val,test_val"
+    }
+  },
+  {
+    "name": "pairwise: type=str, env",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag6={flag6}",
+          "flags": [
+            {
+              "name": "flag6",
+              "type": "str",
+              "help": "test flag 6",
+              "env": "MYAPP_FLAG6"
+            }
+          ]
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag6=env_val"
+    },
+    "env": {
+      "MYAPP_FLAG6": "env_val"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, short, negatable=false, mutex",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag7={flag7} alt7={alt7}",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "flag7",
+                  "type": "bool",
+                  "help": "test flag 7",
+                  "short": "b",
+                  "negatable": false
+                },
+                {
+                  "name": "alt7",
+                  "type": "bool",
+                  "help": "mutex companion 7",
+                  "negatable": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--flag7"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag7=true"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, short, default, env, negatable=true",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag8={flag8}",
+          "flags": [
+            {
+              "name": "flag8",
+              "type": "bool",
+              "help": "test flag 8",
+              "short": "b",
+              "default": false,
+              "env": "MYAPP_FLAG8",
+              "negatable": true
+            }
+          ]
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--no-flag8"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag8=false"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, env, negatable=false",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "flag9={flag9}",
+          "flags": [
+            {
+              "name": "flag9",
+              "type": "bool",
+              "help": "test flag 9",
+              "env": "MYAPP_FLAG9",
+              "negatable": false
+            }
+          ]
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "flag9=true"
+    },
+    "env": {
+      "MYAPP_FLAG9": "true"
+    }
+  }
+]
