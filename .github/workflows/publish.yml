@@ -5,7 +5,37 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
-  strictcli:
+  pypi:
     if: startsWith(github.event.release.tag_name, 'strictcli@v')
-    uses: ./.github/workflows/strictcli-publish.yml
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist/
+
+  npm:
+    if: startsWith(github.event.release.tag_name, 'strictcli@v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
