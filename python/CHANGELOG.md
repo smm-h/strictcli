@@ -2,6 +2,12 @@
 
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **CI publish fix.** Fixed publish workflow for GitHub Actions compatibility.
+
 ## 0.4.0
 
 ### Breaking
