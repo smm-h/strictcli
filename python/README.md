@@ -275,6 +275,52 @@ Flags (mutually exclusive):
 
 Flags inside a mutex group follow the same rules as regular flags (short aliases, env vars, types), but they are not declared with `@strictcli.flag` -- they live inside the `MutexGroup`.
 
+## Flag Dependencies
+
+Flag dependencies enforce relationships between flags. Two types are available:
+
+- `CoRequired(flags=["output", "format"])` -- all listed flags must be provided together, or none. Providing some but not all is an error.
+- `Requires(flag="verbose", depends_on="output")` -- if `--verbose` is provided, `--output` must also be provided. But `--output` can appear alone.
+
+```python
+@app.command("export", help="export data", dependencies=[
+    strictcli.CoRequired(flags=["output", "format"]),
+    strictcli.Requires(flag="verbose", depends_on="output"),
+])
+@strictcli.flag("output", short="o", type=str, help="output file path", default="")
+@strictcli.flag("format", type=str, help="output format (json, csv)", default="")
+@strictcli.flag("verbose", type=bool, help="show export progress")
+def export(output, format, verbose):
+    if output:
+        print(f"exporting to {output} as {format}")
+    if verbose:
+        print("progress: 100%")
+```
+
+If `--output` is provided without `--format`:
+
+```
+$ myapp export --output data.csv
+error: flags --output, --format must be used together
+try 'myapp --help'
+```
+
+If `--verbose` is provided without `--output`:
+
+```
+$ myapp export --verbose
+error: flag '--verbose' requires '--output'
+try 'myapp --help'
+```
+
+Notes:
+
+- Flag names in dependencies are strings (names without `--` prefix).
+- `CoRequired` needs at least 2 flags.
+- `Requires` is unidirectional -- use two `Requires` for bidirectional dependency.
+- Checked after environment variable resolution, before defaults are applied.
+- Can be combined with mutex groups.
+
 ## Help Output
 
 Help is auto-generated at three levels. Pass `--help` or `-h` at any level, or invoke the app with no arguments.
