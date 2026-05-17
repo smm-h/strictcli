@@ -74,7 +74,6 @@ When adding a feature to one implementation, add it to both and add conformance 
 - Passthrough commands bypass all parsing — handler gets raw args plus global flag values.
 - `CoRequired(flags=[...])` declares flags that must appear together. `Requires(flag=..., depends_on=...)` declares one-way dependency. Both passed via `dependencies=[...]`.
 - Validation errors at registration time use panics (Go) / ValueError (Python). Parse-time errors print to stderr and exit 1.
-- Release blocked by rlsbl monorepo hook path bug (`rlsbl/todo/monorepo-hook-path-bug.md`). All code changes for v0.4.0 (Python) / v0.2.0 (Go) / v0.1.0 (conformance) are complete and passing.
 
 ## Release workflow
 
