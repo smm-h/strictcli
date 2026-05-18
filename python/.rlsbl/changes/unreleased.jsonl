@@ -1,0 +1,1 @@
+{"commits":["2a230acb24171d4d380ef4c499f20dc834db9aae"],"user_facing":true,"description":"**New feature.** `Implies` flag dependency type: when a trigger flag is set, automatically set a target bool flag to a specified value. Explicit contradictions are parse errors.","type":"feature"}
