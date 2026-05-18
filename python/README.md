@@ -321,6 +321,87 @@ Notes:
 - Checked after environment variable resolution, before defaults are applied.
 - Can be combined with mutex groups.
 
+## Implies Dependencies
+
+`Implies` automatically sets a target bool flag when a trigger flag is provided. Both the trigger and the target must be bool flags.
+
+```python
+@app.command("run", help="run the pipeline", dependencies=[
+    strictcli.Implies(flag="verbose", implies="log_output", value=True),
+])
+@strictcli.flag("verbose", type=bool, help="enable verbose output")
+@strictcli.flag("log-output", type=bool, help="write output to log file")
+def run(verbose, log_output):
+    if log_output:
+        print("logging enabled")
+    if verbose:
+        print("verbose mode")
+```
+
+When `--verbose` is provided, `--log-output` is automatically set to `True`:
+
+```
+$ myapp run --verbose
+logging enabled
+verbose mode
+```
+
+If the user explicitly provides a value that contradicts the implied value, it is a parse error:
+
+```
+$ myapp run --verbose --no-log-output
+error: flag '--verbose' implies '--log-output', but '--no-log-output' was explicitly provided
+try 'myapp --help'
+```
+
+Notes:
+
+- Both trigger and target must be bool flags.
+- Passed via `dependencies=[...]` alongside `CoRequired` and `Requires`.
+- The `value` parameter specifies what the target flag is set to when the trigger is provided.
+- If the trigger flag is not provided, the target flag is unaffected.
+
+## Deprecated Commands
+
+`app.deprecate()` registers a command name that prints a deprecation message to stderr and exits with code 1 when invoked. Deprecated commands are declaration-only stubs -- they cannot have handlers, flags, or args.
+
+```python
+app = strictcli.App(name="myapp", version="1.0.0", help="manage projects")
+
+app.deprecate("init", message="Use 'setup' instead")
+
+@app.command("setup", help="initialize a new project")
+def setup():
+    print("setting up project")
+```
+
+When the deprecated command is invoked:
+
+```
+$ myapp init
+error: command 'init' is deprecated: Use 'setup' instead
+```
+
+Works on both App and Group:
+
+```python
+db = app.group("db", help="manage databases")
+db.deprecate("reset", message="Use 'db wipe' instead")
+```
+
+Deprecated commands appear in help output under a `Deprecated:` section:
+
+```
+$ myapp --help
+myapp v1.0.0 -- manage projects
+
+Commands:
+  setup    initialize a new project
+
+Deprecated:
+  init    Use 'setup' instead
+```
+
 ## Help Output
 
 Help is auto-generated at three levels. Pass `--help` or `-h` at any level, or invoke the app with no arguments.
