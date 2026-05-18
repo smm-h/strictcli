@@ -85,6 +85,15 @@
       "properties": {
         "name": { "type": "string" },
         "help": { "type": "string" },
+        "deprecated": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, this is a deprecated command. It must have deprecated_message and must NOT have handler_prints, handler_exit_code, flags, args, tags, mutex, dependencies, passthrough, or passthrough_handler_prints."
+        },
+        "deprecated_message": {
+          "type": "string",
+          "description": "Deprecation message shown when the command is invoked or listed in help. Required when deprecated is true."
+        },
         "handler_prints": {
           "type": "string",
           "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'."
@@ -122,6 +131,28 @@
         "dependencies": {
           "type": "array",
           "items": { "$ref": "#/$defs/dependency" }
+        }
+      },
+      "if": {
+        "properties": { "deprecated": { "const": true } },
+        "required": ["deprecated"]
+      },
+      "then": {
+        "required": ["name", "help", "deprecated", "deprecated_message"],
+        "properties": {
+          "name": true,
+          "help": true,
+          "deprecated": true,
+          "deprecated_message": true,
+          "handler_prints": false,
+          "handler_exit_code": false,
+          "flags": false,
+          "args": false,
+          "tags": false,
+          "mutex": false,
+          "dependencies": false,
+          "passthrough": false,
+          "passthrough_handler_prints": false
         }
       }
     },

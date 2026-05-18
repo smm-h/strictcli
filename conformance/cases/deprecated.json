@@ -1,0 +1,223 @@
+[
+  {
+    "name": "deprecated: invoke deprecated command prints message and exits 1",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "new-cmd",
+          "help": "the replacement command",
+          "handler_prints": "new"
+        },
+        {
+          "name": "old-cmd",
+          "help": "do the old thing",
+          "deprecated": true,
+          "deprecated_message": "use 'new-cmd' instead"
+        }
+      ]
+    },
+    "argv": ["old-cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command 'old-cmd' is deprecated: use 'new-cmd' instead"
+    }
+  },
+  {
+    "name": "deprecated: app help shows deprecated section",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run something",
+          "handler_prints": "running"
+        },
+        {
+          "name": "old-run",
+          "help": "run the old way",
+          "deprecated": true,
+          "deprecated_message": "use 'run' instead"
+        }
+      ]
+    },
+    "argv": [],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "Commands:",
+        "run",
+        "Deprecated:",
+        "old-run"
+      ],
+      "stdout_not_contains": "old-run    run the old way"
+    }
+  },
+  {
+    "name": "deprecated: group help shows deprecated subcommand section",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "showing config"
+            },
+            {
+              "name": "dump",
+              "help": "dump config to stdout",
+              "deprecated": true,
+              "deprecated_message": "use 'config show' instead"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "Commands:",
+        "show",
+        "Deprecated:",
+        "dump"
+      ]
+    }
+  },
+  {
+    "name": "deprecated: normal and deprecated coexist, normal works",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "handler_prints": "deploying"
+        },
+        {
+          "name": "push",
+          "help": "push changes",
+          "deprecated": true,
+          "deprecated_message": "use 'deploy' instead"
+        }
+      ]
+    },
+    "argv": ["deploy"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "deploying"
+    }
+  },
+  {
+    "name": "deprecated: normal and deprecated coexist, deprecated prints message",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "handler_prints": "deploying"
+        },
+        {
+          "name": "push",
+          "help": "push changes",
+          "deprecated": true,
+          "deprecated_message": "use 'deploy' instead"
+        }
+      ]
+    },
+    "argv": ["push"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command 'push' is deprecated: use 'deploy' instead"
+    }
+  },
+  {
+    "name": "deprecated: registration error - deprecated with handler_prints",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "old-cmd",
+          "help": "old command",
+          "deprecated": true,
+          "deprecated_message": "use 'new-cmd' instead",
+          "handler_prints": "should not be here"
+        }
+      ]
+    },
+    "argv": ["old-cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "deprecated"
+    }
+  },
+  {
+    "name": "deprecated: registration error - deprecated with flags",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "old-cmd",
+          "help": "old command",
+          "deprecated": true,
+          "deprecated_message": "use 'new-cmd' instead",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "verbose output"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["old-cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "deprecated"
+    }
+  },
+  {
+    "name": "deprecated: registration error - deprecated without message",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "old-cmd",
+          "help": "old command",
+          "deprecated": true
+        }
+      ]
+    },
+    "argv": ["old-cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "deprecated"
+    }
+  }
+]

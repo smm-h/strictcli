@@ -476,15 +476,27 @@ def generate(app_def: dict) -> str:
         )
         lines.append("")
         for cmd_def in group_def.get("commands", []):
-            lines.append(textwrap.indent(_emit_command_registration(
-                cmd_def, gvar, global_flags=global_flags,
-            ), "    "))
+            if cmd_def.get("deprecated"):
+                lines.append(
+                    f"    {gvar}.deprecated({cmd_def['name']!r}, {cmd_def.get('deprecated_message', '')!r})"
+                )
+                lines.append("")
+            else:
+                lines.append(textwrap.indent(_emit_command_registration(
+                    cmd_def, gvar, global_flags=global_flags,
+                ), "    "))
 
     # Register top-level commands
     for cmd_def in app_def.get("commands", []):
-        lines.append(textwrap.indent(_emit_command_registration(
-            cmd_def, "app", global_flags=global_flags,
-        ), "    "))
+        if cmd_def.get("deprecated"):
+            lines.append(
+                f"    app.deprecated({cmd_def['name']!r}, {cmd_def.get('deprecated_message', '')!r})"
+            )
+            lines.append("")
+        else:
+            lines.append(textwrap.indent(_emit_command_registration(
+                cmd_def, "app", global_flags=global_flags,
+            ), "    "))
 
     lines.append("    app.run()")
     lines.append("except ValueError as e:")

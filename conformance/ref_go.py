@@ -351,11 +351,19 @@ def generate(app_def: dict) -> str:
         lines.append(f'\t{gvar} := app.Group("{group_def["name"]}", "{group_def["help"]}")')
         lines.append("")
         for cmd_def in group_def.get("commands", []):
-            lines.extend(_emit_command_go(cmd_def, gvar, "\t", global_flags))
+            if cmd_def.get("deprecated"):
+                lines.append(f'\t{gvar}.Deprecated("{cmd_def["name"]}", "{cmd_def.get("deprecated_message", "")}")')
+                lines.append("")
+            else:
+                lines.extend(_emit_command_go(cmd_def, gvar, "\t", global_flags))
 
     # Register top-level commands
     for cmd_def in app_def.get("commands", []):
-        lines.extend(_emit_command_go(cmd_def, "app", "\t", global_flags))
+        if cmd_def.get("deprecated"):
+            lines.append(f'\tapp.Deprecated("{cmd_def["name"]}", "{cmd_def.get("deprecated_message", "")}")')
+            lines.append("")
+        else:
+            lines.extend(_emit_command_go(cmd_def, "app", "\t", global_flags))
 
     lines.append("\tapp.Run()")
     lines.append("}")
