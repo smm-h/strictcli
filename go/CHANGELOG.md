@@ -2,6 +2,12 @@
 
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **New feature.** `Implies` flag dependency type: when a trigger bool flag is set, automatically set a target bool flag. Explicit contradictions are parse errors.
+
 ## 0.1.1
 
 ### Breaking
