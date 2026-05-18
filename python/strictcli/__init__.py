@@ -6,7 +6,7 @@ __version__ = "0.5.0"
 
 __all__ = [
     "App", "Flag", "Arg", "Tag", "MutexGroup", "CoRequired", "Requires",
-    "Implies", "Passthrough", "Result", "flag", "arg",
+    "Implies", "Passthrough", "DeprecatedCommand", "Result", "flag", "arg",
 ]
 
 import contextlib
@@ -193,6 +193,14 @@ class Passthrough:
 
 
 @dataclass
+class DeprecatedCommand:
+    """A declaration-only deprecated command: prints message to stderr and exits 1."""
+
+    name: str
+    message: str
+
+
+@dataclass
 class Command:
     """A leaf command with a handler."""
 
@@ -217,11 +225,28 @@ class Group:
     name: str
     help: str
     commands: dict[str, Command] = field(default_factory=dict)
+    deprecated: dict[str, DeprecatedCommand] = field(default_factory=dict)
     env_prefix: str | None = None
     _global_flags: list[Flag] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
+
+    def deprecate(self, name: str, *, message: str) -> None:
+        """Register a deprecated subcommand in this group."""
+        if not name or not name.strip():
+            raise ValueError("deprecated command name must be a non-empty string")
+        if not message or not message.strip():
+            raise ValueError("deprecated command message must be a non-empty string")
+        if name in self.commands:
+            raise ValueError(
+                f'deprecated command "{name}" collides with an existing command'
+            )
+        if name in self.deprecated:
+            raise ValueError(
+                f'deprecated command "{name}" is already registered'
+            )
+        self.deprecated[name] = DeprecatedCommand(name=name, message=message)
 
     def command(
         self,
@@ -270,6 +295,7 @@ class App:
     flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
     _groups: dict[str, Group] = field(default_factory=dict)
+    _deprecated: dict[str, DeprecatedCommand] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "App")
@@ -320,6 +346,26 @@ class App:
         self._groups[name] = grp
         return grp
 
+    def deprecate(self, name: str, *, message: str) -> None:
+        """Register a deprecated top-level command."""
+        if not name or not name.strip():
+            raise ValueError("deprecated command name must be a non-empty string")
+        if not message or not message.strip():
+            raise ValueError("deprecated command message must be a non-empty string")
+        if name in self._commands:
+            raise ValueError(
+                f'deprecated command "{name}" collides with an existing command'
+            )
+        if name in self._groups:
+            raise ValueError(
+                f'deprecated command "{name}" collides with an existing group'
+            )
+        if name in self._deprecated:
+            raise ValueError(
+                f'deprecated command "{name}" is already registered'
+            )
+        self._deprecated[name] = DeprecatedCommand(name=name, message=message)
+
     def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object] | list[str]]:
         """Parse argv (without program name) into a resolved Command and kwargs.
 
@@ -358,11 +404,21 @@ class App:
                 raise _HelpRequested(target=group)
             sub_token = rest[0]
             rest = rest[1:]
+            if sub_token in group.deprecated:
+                dep = group.deprecated[sub_token]
+                raise _ParseError(
+                    f"command '{sub_token}' is deprecated: {dep.message}"
+                )
             if sub_token not in group.commands:
                 raise _ParseError(f"unknown command '{sub_token}'")
             cmd = group.commands[sub_token]
         elif token in self._commands:
             cmd = self._commands[token]
+        elif token in self._deprecated:
+            dep = self._deprecated[token]
+            raise _ParseError(
+                f"command '{token}' is deprecated: {dep.message}"
+            )
         else:
             raise _ParseError(f"unknown command '{token}'")
 
@@ -1347,6 +1403,16 @@ def _format_app_help(app: App) -> str:
             padding = max_len - len(name) + 4
             lines.append(f"  {name}{' ' * padding}{grp.help}")
 
+    if app._deprecated:
+        lines.append("")
+        lines.append("Deprecated:")
+        names = list(app._deprecated.keys())
+        max_len = max(len(n) for n in names)
+        for name in names:
+            dep = app._deprecated[name]
+            padding = max_len - len(name) + 4
+            lines.append(f"  {name}{' ' * padding}{dep.message}")
+
     lines.append("")
     lines.append(f"Use '{app.name} <command> --help' for more information.")
 
@@ -1366,6 +1432,16 @@ def _format_group_help(app: App, group: Group) -> str:
             cmd = group.commands[name]
             padding = max_len - len(name) + 4
             lines.append(f"  {name}{' ' * padding}{cmd.help}")
+
+    if group.deprecated:
+        lines.append("")
+        lines.append("Deprecated:")
+        names = list(group.deprecated.keys())
+        max_len = max(len(n) for n in names)
+        for name in names:
+            dep = group.deprecated[name]
+            padding = max_len - len(name) + 4
+            lines.append(f"  {name}{' ' * padding}{dep.message}")
 
     lines.append("")
     lines.append(
