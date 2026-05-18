@@ -237,7 +237,7 @@ class Group:
         if not name or not name.strip():
             raise ValueError("deprecated command name must be a non-empty string")
         if not message or not message.strip():
-            raise ValueError("deprecated command message must be a non-empty string")
+            raise ValueError(f'deprecated command "{name}": message must not be empty')
         if name in self.commands:
             raise ValueError(
                 f'deprecated command "{name}" collides with an existing command'
@@ -351,7 +351,7 @@ class App:
         if not name or not name.strip():
             raise ValueError("deprecated command name must be a non-empty string")
         if not message or not message.strip():
-            raise ValueError("deprecated command message must be a non-empty string")
+            raise ValueError(f'deprecated command "{name}": message must not be empty')
         if name in self._commands:
             raise ValueError(
                 f'deprecated command "{name}" collides with an existing command'
@@ -1286,12 +1286,12 @@ def _build_and_validate_command(
             if trigger_flag.type is not bool:
                 raise ValueError(
                     f'command "{name}": Implies trigger flag "{dep.flag}" '
-                    f"must be type=bool"
+                    f"must be a bool flag"
                 )
             if target_flag.type is not bool:
                 raise ValueError(
                     f'command "{name}": Implies target flag "{dep.implies}" '
-                    f"must be type=bool"
+                    f"must be a bool flag"
                 )
             if not isinstance(dep.value, bool):
                 raise ValueError(
