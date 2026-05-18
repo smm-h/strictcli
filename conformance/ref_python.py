@@ -478,7 +478,7 @@ def generate(app_def: dict) -> str:
         for cmd_def in group_def.get("commands", []):
             if cmd_def.get("deprecated"):
                 lines.append(
-                    f"    {gvar}.deprecated({cmd_def['name']!r}, {cmd_def.get('deprecated_message', '')!r})"
+                    f"    {gvar}.deprecate({cmd_def['name']!r}, message={cmd_def.get('deprecated_message', '')!r})"
                 )
                 lines.append("")
             else:
@@ -490,7 +490,7 @@ def generate(app_def: dict) -> str:
     for cmd_def in app_def.get("commands", []):
         if cmd_def.get("deprecated"):
             lines.append(
-                f"    app.deprecated({cmd_def['name']!r}, {cmd_def.get('deprecated_message', '')!r})"
+                f"    app.deprecate({cmd_def['name']!r}, message={cmd_def.get('deprecated_message', '')!r})"
             )
             lines.append("")
         else:
