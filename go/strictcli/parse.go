@@ -248,9 +248,17 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 				if targetVal, targetSet := cliSet[d.Implies]; targetSet {
 					// Target was explicitly set -- check for conflict
 					if targetVal.(bool) != d.Value {
+						neg := ""
+						if !d.Value {
+							neg = "no-"
+						}
+						explicitNeg := ""
+						if d.Value {
+							explicitNeg = "no-"
+						}
 						return nil, nil, fmt.Sprintf(
-							"flag '--%s' implies --%s=%v, but --%s was explicitly set to %v",
-							d.Flag, d.Implies, d.Value, d.Implies, targetVal.(bool),
+							"flag '--%s' implies '--%s%s', but '--%s%s' was explicitly provided",
+							d.Flag, neg, d.Implies, explicitNeg, d.Implies,
 						)
 					}
 				} else {
