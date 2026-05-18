@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.6.1
+
+### Fixes
+
+- **Fix.** Harmonize Implies and deprecated command error messages with Go for exact parity.
+
 ## 0.6.0
 
 ### Features
