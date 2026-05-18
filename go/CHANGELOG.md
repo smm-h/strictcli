@@ -2,6 +2,12 @@
 
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **New feature.** Deprecated commands: declare a command name + message that prints the deprecation notice and exits when invoked, with a `Deprecated:` section in help output.
+
 ## 0.2.0
 
 ### Features
