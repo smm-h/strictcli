@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.3.1
+
+### Fixes
+
+- **Fix.** Harmonize Implies conflict error message with Python for exact parity.
+
 ## 0.3.0
 
 ### Features
