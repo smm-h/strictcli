@@ -118,7 +118,7 @@ def test_registration_error_empty_message():
     """Empty message raises ValueError."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    with pytest.raises(ValueError, match="deprecated command message must be a non-empty string"):
+    with pytest.raises(ValueError, match="message must not be empty"):
         app.deprecate("old-cmd", message="")
 
 
@@ -158,5 +158,5 @@ def test_group_registration_error_empty_message():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     grp = app.group("config", help="config commands")
 
-    with pytest.raises(ValueError, match="deprecated command message must be a non-empty string"):
+    with pytest.raises(ValueError, match="message must not be empty"):
         grp.deprecate("old-show", message="")
