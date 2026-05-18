@@ -572,7 +572,7 @@ def test_implies_trigger_not_bool_error():
     """Implies: trigger flag not type=bool -> ValueError at registration."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    with pytest.raises(ValueError, match='trigger flag "name" must be type=bool'):
+    with pytest.raises(ValueError, match='trigger flag "name" must be a bool flag'):
 
         @app.command(
             "cmd", help="a command",
@@ -593,7 +593,7 @@ def test_implies_target_not_bool_error():
     """Implies: target flag not type=bool -> ValueError at registration."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    with pytest.raises(ValueError, match='target flag "name" must be type=bool'):
+    with pytest.raises(ValueError, match='target flag "name" must be a bool flag'):
 
         @app.command(
             "cmd", help="a command",
