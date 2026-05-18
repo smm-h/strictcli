@@ -72,12 +72,14 @@ func main() {
 ## Features
 
 - Commands and command groups (two-level nesting)
+- Deprecated commands — register retired commands that print a message and exit 1, shown in help under a `Deprecated:` section
 - Flags: string, boolean (with `--no-` negation), integer
 - Short flag aliases (`-v` for `--verbose`)
 - Positional arguments (required, optional with defaults, variadic)
 - Environment variable binding with prefix enforcement
 - Flag tags — reusable bundles of flags shared across commands
-- Mutually exclusive flag groups (optional or required)
+- Mutually exclusive flag groups (exactly one required)
+- Implies dependencies — auto-set a bool flag when another flag is provided; explicit contradictions are parse errors
 - Global flags (parsed before and after the command token)
 - Passthrough commands — delegate unparsed args to another tool
 - Repeatable flags (accumulate values into a list)
