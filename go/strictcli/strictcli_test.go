@@ -1798,6 +1798,140 @@ func TestImpliesTargetNotBoolFlagPanics(t *testing.T) {
 		WithDependencies(Implies{Flag: "fast", Implies: "output", Value: false}))
 }
 
+// --- Deprecated command tests ---
+
+func TestDeprecatedCommandExitsWithError(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("run", "run something", func(args map[string]interface{}) int { return 0 })
+	app.Deprecated("deploy", "use 'run' instead")
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "deprecated") {
+		t.Fatalf("stderr should contain 'deprecated', got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "use 'run' instead") {
+		t.Fatalf("stderr should contain deprecation message, got %q", r.Stderr)
+	}
+}
+
+func TestDeprecatedCommandInAppHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("run", "run something", func(args map[string]interface{}) int { return 0 })
+	app.Deprecated("deploy", "use 'run' instead")
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Deprecated:") {
+		t.Fatalf("stdout should contain 'Deprecated:', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "deploy") {
+		t.Fatalf("stdout should contain 'deploy', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "use 'run' instead") {
+		t.Fatalf("stdout should contain deprecation message, got %q", r.Stdout)
+	}
+}
+
+func TestDeprecatedSubcommandInGroupHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) int { return 0 })
+	g.Deprecated("dump", "use 'show' instead")
+	r := app.Test([]string{"config", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Deprecated:") {
+		t.Fatalf("stdout should contain 'Deprecated:', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "dump") {
+		t.Fatalf("stdout should contain 'dump', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "use 'show' instead") {
+		t.Fatalf("stdout should contain deprecation message, got %q", r.Stdout)
+	}
+}
+
+func TestDeprecatedSubcommandExitsWithError(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) int { return 0 })
+	g.Deprecated("dump", "use 'show' instead")
+	r := app.Test([]string{"config", "dump"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "deprecated") {
+		t.Fatalf("stderr should contain 'deprecated', got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "use 'show' instead") {
+		t.Fatalf("stderr should contain deprecation message, got %q", r.Stderr)
+	}
+}
+
+func TestNormalAndDeprecatedCoexist(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Print("running")
+		return 0
+	})
+	app.Deprecated("deploy", "use 'run' instead")
+
+	// Normal command still works
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "running") {
+		t.Fatalf("stdout should contain 'running', got %q", r.Stdout)
+	}
+
+	// Deprecated command errors
+	r = app.Test([]string{"deploy"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "deprecated") {
+		t.Fatalf("stderr should contain 'deprecated', got %q", r.Stderr)
+	}
+}
+
+func TestDeprecatedDuplicateNameWithCommandPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for deprecated command with duplicate name, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "already used by a command") {
+			t.Fatalf("panic message should mention name collision, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("run", "run something", func(args map[string]interface{}) int { return 0 })
+	app.Deprecated("run", "this should panic")
+}
+
+func TestDeprecatedEmptyMessagePanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for deprecated command with empty message, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "message must not be empty") {
+			t.Fatalf("panic message should mention empty message, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Deprecated("deploy", "")
+}
+
 func TestImpliesEnvTrigger(t *testing.T) {
 	os.Setenv("MYAPP_FAST", "true")
 	defer os.Unsetenv("MYAPP_FAST")

@@ -45,6 +45,21 @@ func formatAppHelp(app *App) string {
 		}
 	}
 
+	if len(app.deprecated) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Deprecated:")
+		maxLen := 0
+		for _, d := range app.deprecated {
+			if len(d.Name) > maxLen {
+				maxLen = len(d.Name)
+			}
+		}
+		for _, d := range app.deprecated {
+			padding := maxLen - len(d.Name) + 4
+			lines = append(lines, fmt.Sprintf("  %s%s%s", d.Name, strings.Repeat(" ", padding), d.Message))
+		}
+	}
+
 	lines = append(lines, "")
 	lines = append(lines, fmt.Sprintf("Use '%s <command> --help' for more information.", app.Name))
 
@@ -68,6 +83,21 @@ func formatGroupHelp(app *App, group *Group) string {
 			cmd := group.Commands[name]
 			padding := maxLen - len(name) + 4
 			lines = append(lines, fmt.Sprintf("  %s%s%s", name, strings.Repeat(" ", padding), cmd.Help))
+		}
+	}
+
+	if len(group.deprecated) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Deprecated:")
+		maxLen := 0
+		for _, d := range group.deprecated {
+			if len(d.Name) > maxLen {
+				maxLen = len(d.Name)
+			}
+		}
+		for _, d := range group.deprecated {
+			padding := maxLen - len(d.Name) + 4
+			lines = append(lines, fmt.Sprintf("  %s%s%s", d.Name, strings.Repeat(" ", padding), d.Message))
 		}
 	}
 

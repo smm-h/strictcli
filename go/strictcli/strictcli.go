@@ -102,6 +102,12 @@ type Command struct {
 	PassthroughHandler PassthroughHandler
 }
 
+// deprecatedCmd is a declaration-only command that prints a message and exits 1.
+type deprecatedCmd struct {
+	Name    string
+	Message string
+}
+
 // Group is a container for nested commands (one nesting level).
 type Group struct {
 	Name      string
@@ -114,6 +120,9 @@ type Group struct {
 
 	// order preserves insertion order for help display
 	order []string
+
+	deprecated    []deprecatedCmd
+	deprecatedMap map[string]string
 }
 
 // Result is returned by App.Test().
@@ -137,6 +146,9 @@ type App struct {
 	// order preserves insertion order for help display
 	cmdOrder   []string
 	groupOrder []string
+
+	deprecated    []deprecatedCmd
+	deprecatedMap map[string]string
 }
 
 // --- Option types ---
@@ -442,11 +454,12 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		panic("App.help must be a non-empty string")
 	}
 	a := &App{
-		Name:     name,
-		Version:  version,
-		Help:     help,
-		commands: make(map[string]*Command),
-		groups:   make(map[string]*Group),
+		Name:          name,
+		Version:       version,
+		Help:          help,
+		commands:      make(map[string]*Command),
+		groups:        make(map[string]*Group),
+		deprecatedMap: make(map[string]string),
 	}
 	for _, opt := range opts {
 		opt(a)
@@ -514,11 +527,12 @@ func (a *App) Group(name, help string) *Group {
 		panic("Group.help must be a non-empty string")
 	}
 	grp := &Group{
-		Name:        name,
-		Help:        help,
-		Commands:    make(map[string]*Command),
-		envPrefix:   a.EnvPrefix,
-		globalFlags: a.globalFlags,
+		Name:          name,
+		Help:          help,
+		Commands:      make(map[string]*Command),
+		envPrefix:     a.EnvPrefix,
+		globalFlags:   a.globalFlags,
+		deprecatedMap: make(map[string]string),
 	}
 	a.groups[name] = grp
 	a.groupOrder = append(a.groupOrder, name)
@@ -530,6 +544,47 @@ func (g *Group) Command(name, help string, handler func(map[string]interface{}) 
 	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, opts)
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
+}
+
+// Deprecated registers a deprecated command on the app.
+// Invoking a deprecated command prints the message to stderr and exits 1.
+func (a *App) Deprecated(name, message string) {
+	if strings.TrimSpace(name) == "" {
+		panic("deprecated command name must not be empty")
+	}
+	if strings.TrimSpace(message) == "" {
+		panic(fmt.Sprintf("deprecated command %q: message must not be empty", name))
+	}
+	if _, ok := a.commands[name]; ok {
+		panic(fmt.Sprintf("deprecated command %q: name already used by a command", name))
+	}
+	if _, ok := a.groups[name]; ok {
+		panic(fmt.Sprintf("deprecated command %q: name already used by a group", name))
+	}
+	if _, ok := a.deprecatedMap[name]; ok {
+		panic(fmt.Sprintf("deprecated command %q: already registered as deprecated", name))
+	}
+	a.deprecated = append(a.deprecated, deprecatedCmd{Name: name, Message: message})
+	a.deprecatedMap[name] = message
+}
+
+// Deprecated registers a deprecated subcommand on the group.
+// Invoking a deprecated subcommand prints the message to stderr and exits 1.
+func (g *Group) Deprecated(name, message string) {
+	if strings.TrimSpace(name) == "" {
+		panic("deprecated command name must not be empty")
+	}
+	if strings.TrimSpace(message) == "" {
+		panic(fmt.Sprintf("deprecated command %q: message must not be empty", name))
+	}
+	if _, ok := g.Commands[name]; ok {
+		panic(fmt.Sprintf("deprecated command %q: name already used by a command", name))
+	}
+	if _, ok := g.deprecatedMap[name]; ok {
+		panic(fmt.Sprintf("deprecated command %q: already registered as deprecated", name))
+	}
+	g.deprecated = append(g.deprecated, deprecatedCmd{Name: name, Message: message})
+	g.deprecatedMap[name] = message
 }
 
 // Run executes the CLI, reading from os.Args.
@@ -662,6 +717,10 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 		subToken := cmdRest[0]
 		cmdRest = cmdRest[1:]
+		// Check deprecated subcommands before normal commands
+		if msg, ok := grp.deprecatedMap[subToken]; ok {
+			return parseResult{parseErr: fmt.Sprintf("command '%s' is deprecated: %s", subToken, msg)}
+		}
 		cmd, ok := grp.Commands[subToken]
 		if !ok {
 			return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", subToken)}
@@ -715,6 +774,11 @@ func (a *App) doParse(argv []string) parseResult {
 			kwargs[k] = v
 		}
 		return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
+	}
+
+	// Check deprecated commands
+	if msg, ok := a.deprecatedMap[token]; ok {
+		return parseResult{parseErr: fmt.Sprintf("command '%s' is deprecated: %s", token, msg)}
 	}
 
 	return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", token)}
