@@ -1624,3 +1624,201 @@ func TestCoRequiredDuplicateFlagPanics(t *testing.T) {
 		),
 		WithDependencies(CoRequired{Flags: []string{"user", "user"}}))
 }
+
+// --- Implies tests ---
+
+func TestImpliesTriggerSetsTarget(t *testing.T) {
+	app := simpleApp("cmd", "a command", "fast={fast} embeddings={embeddings}",
+		WithFlags(
+			BoolFlag("fast", "enable fast mode"),
+			BoolFlag("embeddings", "enable embeddings"),
+		),
+		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+	r := app.Test([]string{"cmd", "--fast"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "fast=true") {
+		t.Fatalf("stdout should contain 'fast=true', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "embeddings=false") {
+		t.Fatalf("stdout should contain 'embeddings=false', got %q", r.Stdout)
+	}
+}
+
+func TestImpliesTriggerNotSetTargetGetsDefault(t *testing.T) {
+	app := simpleApp("cmd", "a command", "fast={fast} embeddings={embeddings}",
+		WithFlags(
+			BoolFlag("fast", "enable fast mode"),
+			BoolFlag("embeddings", "enable embeddings"),
+		),
+		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "fast=false") {
+		t.Fatalf("stdout should contain 'fast=false', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "embeddings=false") {
+		t.Fatalf("stdout should contain 'embeddings=false', got %q", r.Stdout)
+	}
+}
+
+func TestImpliesExplicitConflictError(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(
+			BoolFlag("fast", "enable fast mode"),
+			BoolFlag("embeddings", "enable embeddings"),
+		),
+		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+	// --fast implies embeddings=false, but user explicitly sets --embeddings (true)
+	r := app.Test([]string{"cmd", "--fast", "--embeddings"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "implies") {
+		t.Fatalf("stderr should contain 'implies', got %q", r.Stderr)
+	}
+}
+
+func TestImpliesExplicitAgreementNoError(t *testing.T) {
+	app := simpleApp("cmd", "a command", "fast={fast} embeddings={embeddings}",
+		WithFlags(
+			BoolFlag("fast", "enable fast mode"),
+			BoolFlag("embeddings", "enable embeddings"),
+		),
+		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+	// --fast implies embeddings=false, and user explicitly sets --no-embeddings (false) -- agreement
+	r := app.Test([]string{"cmd", "--fast", "--no-embeddings"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "fast=true") {
+		t.Fatalf("stdout should contain 'fast=true', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "embeddings=false") {
+		t.Fatalf("stdout should contain 'embeddings=false', got %q", r.Stdout)
+	}
+}
+
+func TestImpliesUnknownTriggerFlagPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Implies with unknown trigger flag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "Implies references unknown flag") || !strings.Contains(msg, "nonexistent") {
+			t.Fatalf("panic message should mention unknown trigger flag, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(BoolFlag("embeddings", "enable embeddings")),
+		WithDependencies(Implies{Flag: "nonexistent", Implies: "embeddings", Value: false}))
+}
+
+func TestImpliesUnknownTargetFlagPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Implies with unknown target flag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "Implies references unknown flag") || !strings.Contains(msg, "nonexistent") {
+			t.Fatalf("panic message should mention unknown target flag, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(BoolFlag("fast", "enable fast mode")),
+		WithDependencies(Implies{Flag: "fast", Implies: "nonexistent", Value: false}))
+}
+
+func TestImpliesSelfImplicationPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Implies with self-implication, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "cannot be the same") {
+			t.Fatalf("panic message should mention self-implication, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(BoolFlag("fast", "enable fast mode")),
+		WithDependencies(Implies{Flag: "fast", Implies: "fast", Value: false}))
+}
+
+func TestImpliesTriggerNotBoolFlagPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Implies with non-bool trigger flag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "must be a bool flag") || !strings.Contains(msg, "trigger") {
+			t.Fatalf("panic message should mention trigger must be bool, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(
+			StringFlag("mode", "the mode", Default("fast")),
+			BoolFlag("embeddings", "enable embeddings"),
+		),
+		WithDependencies(Implies{Flag: "mode", Implies: "embeddings", Value: false}))
+}
+
+func TestImpliesTargetNotBoolFlagPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Implies with non-bool target flag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "must be a bool flag") || !strings.Contains(msg, "target") {
+			t.Fatalf("panic message should mention target must be bool, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(
+			BoolFlag("fast", "enable fast mode"),
+			StringFlag("output", "output format", Default("text")),
+		),
+		WithDependencies(Implies{Flag: "fast", Implies: "output", Value: false}))
+}
+
+func TestImpliesEnvTrigger(t *testing.T) {
+	os.Setenv("MYAPP_FAST", "true")
+	defer os.Unsetenv("MYAPP_FAST")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("fast=" + formatValue(args["fast"]) + " embeddings=" + formatValue(args["embeddings"]))
+		return 0
+	}, WithFlags(
+		BoolFlag("fast", "enable fast mode", Env("MYAPP_FAST")),
+		BoolFlag("embeddings", "enable embeddings"),
+	), WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "fast=true") {
+		t.Fatalf("stdout should contain 'fast=true', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "embeddings=false") {
+		t.Fatalf("stdout should contain 'embeddings=false', got %q", r.Stdout)
+	}
+}

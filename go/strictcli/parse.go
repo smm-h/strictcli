@@ -241,6 +241,26 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 		}
 	}
 
+	// Resolve Implies dependencies (before general dependency validation)
+	for _, dep := range cmd.Dependencies {
+		if d, ok := dep.(Implies); ok {
+			if _, triggerSet := cliSet[d.Flag]; triggerSet {
+				if targetVal, targetSet := cliSet[d.Implies]; targetSet {
+					// Target was explicitly set -- check for conflict
+					if targetVal.(bool) != d.Value {
+						return nil, nil, fmt.Sprintf(
+							"flag '--%s' implies --%s=%v, but --%s was explicitly set to %v",
+							d.Flag, d.Implies, d.Value, d.Implies, targetVal.(bool),
+						)
+					}
+				} else {
+					// Target not set -- inject the implied value
+					cliSet[d.Implies] = d.Value
+				}
+			}
+		}
+	}
+
 	// Enforce dependency constraints
 	for _, dep := range cmd.Dependencies {
 		switch d := dep.(type) {

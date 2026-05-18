@@ -68,13 +68,22 @@ type Requires struct {
 	DependsOn string
 }
 
-// Dependency is either a CoRequired or Requires constraint.
+// Implies declares that providing one bool flag automatically sets another bool flag to a value.
+// If the user explicitly provides a contradicting value for the target, it is a parse error.
+type Implies struct {
+	Flag    string
+	Implies string
+	Value   bool
+}
+
+// Dependency is either a CoRequired, Requires, or Implies constraint.
 type Dependency interface {
 	isDependency()
 }
 
 func (CoRequired) isDependency() {}
 func (Requires) isDependency()   {}
+func (Implies) isDependency()    {}
 
 // PassthroughHandler is the handler type for passthrough commands.
 type PassthroughHandler func(name string, args []string, globals map[string]interface{}) int
@@ -1110,6 +1119,32 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 			}
 			if !seenFlags[d.DependsOn] {
 				panic(fmt.Sprintf("command %q: Requires references unknown flag %q", name, d.DependsOn))
+			}
+		case Implies:
+			if d.Flag == d.Implies {
+				panic(fmt.Sprintf("command %q: Implies flag and implies cannot be the same (%q)", name, d.Flag))
+			}
+			if !seenFlags[d.Flag] {
+				panic(fmt.Sprintf("command %q: Implies references unknown flag %q", name, d.Flag))
+			}
+			if !seenFlags[d.Implies] {
+				panic(fmt.Sprintf("command %q: Implies references unknown flag %q", name, d.Implies))
+			}
+			// Both flags must be BoolFlag
+			var triggerType, targetType FlagType
+			for _, f := range allFlags {
+				if f.Name == d.Flag {
+					triggerType = f.Type
+				}
+				if f.Name == d.Implies {
+					targetType = f.Type
+				}
+			}
+			if triggerType != TypeBool {
+				panic(fmt.Sprintf("command %q: Implies trigger flag %q must be a bool flag", name, d.Flag))
+			}
+			if targetType != TypeBool {
+				panic(fmt.Sprintf("command %q: Implies target flag %q must be a bool flag", name, d.Implies))
 			}
 		}
 	}
