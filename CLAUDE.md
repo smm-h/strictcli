@@ -73,6 +73,8 @@ When adding a feature to one implementation, add it to both and add conformance 
 - Only two levels of nesting: App > Group > Command or App > Command. No deeper.
 - Passthrough commands bypass all parsing — handler gets raw args plus global flag values.
 - `CoRequired(flags=[...])` declares flags that must appear together. `Requires(flag=..., depends_on=...)` declares one-way dependency. Both passed via `dependencies=[...]`.
+- `Implies(flag=..., implies=..., value=...)` declares that when a trigger bool flag is set, a target bool flag is automatically set to a value. Explicit contradictions are parse errors. Both implementations support it.
+- `app.deprecate(name, message=...)` (Python) / `app.Deprecated(name, message)` (Go) declares a deprecated command that prints a message to stderr and exits 1 when invoked. Help output shows a "Deprecated:" section.
 - Validation errors at registration time use panics (Go) / ValueError (Python). Parse-time errors print to stderr and exit 1.
 
 ## Release workflow
