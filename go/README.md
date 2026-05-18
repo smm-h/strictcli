@@ -74,6 +74,7 @@ Flags:
 - **Mutex groups** -- mutually exclusive flags (exactly one required)
 - **CoRequired** -- flags that must appear together or not at all
 - **Requires** -- flag A depends on flag B being present
+- **Implies** -- providing one bool flag automatically sets another bool flag
 - **Global flags** -- app-level flags available to all commands
 - **Passthrough commands** -- bypass parsing, forward raw args to handler
 - **Repeatable flags** -- flags that accept multiple occurrences (collected into a slice)
@@ -81,6 +82,7 @@ Flags:
 - **Custom validation** -- per-flag validation functions
 - **Auto-generated help** -- `--help` / `-h` at app, group, and command levels
 - **Version flag** -- `--version` / `-v` prints app version
+- **Deprecated commands** -- declaration-only stubs that print a message and exit 1
 - **In-process testing** -- `app.Test(argv)` captures stdout, stderr, and exit code
 
 ## API Overview
@@ -98,6 +100,7 @@ Flags:
 | `MutexGroup` | Mutually exclusive flag group |
 | `CoRequired` | Flags that must appear together |
 | `Requires` | One flag depends on another |
+| `Implies` | Providing one bool flag sets another |
 | `Result` | Return type of `App.Test()` |
 
 ### Constructors
@@ -158,6 +161,52 @@ app.Test(argv []string) Result              // Run in-process, capture output
 | Function | Description |
 |----------|-------------|
 | `WithEnvPrefix(prefix)` | Set env var prefix for the app |
+
+## Implies Dependencies
+
+`Implies` declares that providing one bool flag automatically sets another bool flag to a specified value. Both the trigger flag and the target flag must be bool flags. If the user explicitly provides a contradicting value for the target, it is a parse error.
+
+Pass `Implies` via `WithDependencies(...)` alongside `CoRequired` and `Requires`:
+
+```go
+app.Command("deploy", "deploy the application", handler,
+    strictcli.WithFlags(
+        strictcli.BoolFlag("verbose", "enable verbose output"),
+        strictcli.BoolFlag("log-output", "write output to log file"),
+    ),
+    strictcli.WithDependencies(
+        strictcli.Implies{Flag: "verbose", Implies: "log-output", Value: true},
+    ),
+)
+```
+
+When `--verbose` is provided, `--log-output` is automatically set to `true`. If the user explicitly passes `--no-log-output` while also passing `--verbose`, the CLI exits with an error:
+
+```
+flag '--verbose' implies '--log-output', but '--no-log-output' was explicitly provided
+```
+
+## Deprecated Commands
+
+`app.Deprecated(name, message)` registers a command name that prints a deprecation message to stderr and exits 1 when invoked. Deprecated commands are declaration-only stubs -- they cannot have handlers, flags, or arguments.
+
+Works on both `App` and `Group`:
+
+```go
+app.Deprecated("old-cmd", "Use 'new-cmd' instead")
+
+group := app.Group("tools", "utility commands")
+group.Deprecated("legacy-lint", "Use 'lint' instead")
+```
+
+When a user invokes a deprecated command:
+
+```
+$ myapp old-cmd
+command 'old-cmd' is deprecated: Use 'new-cmd' instead
+```
+
+Deprecated commands appear in help output under a separate `Deprecated:` section, distinct from regular commands.
 
 ## Testing
 
