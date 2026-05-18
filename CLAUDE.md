@@ -29,7 +29,7 @@ cd conformance && python run.py --target python && python run.py --target go
 
 ### Python (`python/strictcli/__init__.py`)
 
-Single-file, zero-dependency implementation (~1350 lines). Key internal stages:
+Single-file, zero-dependency implementation (~1560 lines). Key internal stages:
 
 1. **Registration** — `@flag`/`@arg` decorators attach metadata to handlers; `@app.command()` triggers `_build_and_validate_command()` which merges tags, validates signatures, checks constraints.
 2. **Global flag parsing** — `_parse_global_flags()` extracts app-level flags before and after the command token.
@@ -72,9 +72,8 @@ When adding a feature to one implementation, add it to both and add conformance 
 - Help text is mandatory on every Flag, Arg, Command, Group, and App. Missing help is a registration-time error.
 - Only two levels of nesting: App > Group > Command or App > Command. No deeper.
 - Passthrough commands bypass all parsing — handler gets raw args plus global flag values.
-- `CoRequired(flags=[...])` declares flags that must appear together. `Requires(flag=..., depends_on=...)` declares one-way dependency. Both passed via `dependencies=[...]`.
-- `Implies(flag=..., implies=..., value=...)` declares that when a trigger bool flag is set, a target bool flag is automatically set to a value. Explicit contradictions are parse errors. Both implementations support it.
-- `app.deprecate(name, message=...)` (Python) / `app.Deprecated(name, message)` (Go) declares a deprecated command that prints a message to stderr and exits 1 when invoked. Help output shows a "Deprecated:" section.
+- `CoRequired(flags=[...])` declares flags that must appear together. `Requires(flag=..., depends_on=...)` declares one-way dependency. `Implies(flag=..., implies=..., value=...)` auto-sets a bool flag when a trigger is provided. All passed via `dependencies=[...]`.
+- `app.deprecate(name, message=...)` / `group.deprecate(name, message=...)` registers a retired command that prints the message to stderr and exits 1. Shown in help under a `Deprecated:` section.
 - Validation errors at registration time use panics (Go) / ValueError (Python). Parse-time errors print to stderr and exit 1.
 
 ## Release workflow
