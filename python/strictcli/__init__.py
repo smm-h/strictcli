@@ -6,7 +6,7 @@ __version__ = "0.4.1"
 
 __all__ = [
     "App", "Flag", "Arg", "Tag", "MutexGroup", "CoRequired", "Requires",
-    "Passthrough", "Result", "flag", "arg",
+    "Implies", "Passthrough", "Result", "flag", "arg",
 ]
 
 import contextlib
@@ -176,6 +176,15 @@ class Requires:
 
 
 @dataclass
+class Implies:
+    """When a trigger flag is provided, automatically set a target flag to a value."""
+
+    flag: str       # trigger flag name
+    implies: str    # target flag name
+    value: bool     # value to set on target when trigger is present
+
+
+@dataclass
 class Passthrough:
     """Marks a command as passthrough -- all tokens after the command name are
     forwarded to the handler as a raw list, bypassing flag/arg parsing."""
@@ -194,7 +203,7 @@ class Command:
     args: list[Arg] = field(default_factory=list)
     tags: list[Tag] = field(default_factory=list)
     mutex: list[MutexGroup] = field(default_factory=list)
-    dependencies: list[CoRequired | Requires] = field(default_factory=list)
+    dependencies: list[CoRequired | Requires | Implies] = field(default_factory=list)
     passthrough: Passthrough | None = None
 
     def __post_init__(self) -> None:
@@ -222,7 +231,7 @@ class Group:
         args: list[Arg] | None = None,
         tags: list[Tag] | None = None,
         mutex: list[MutexGroup] | None = None,
-        dependencies: list[CoRequired | Requires] | None = None,
+        dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
     ) -> Callable:
         """Decorator to register a command within this group."""
@@ -281,7 +290,7 @@ class App:
         args: list[Arg] | None = None,
         tags: list[Tag] | None = None,
         mutex: list[MutexGroup] | None = None,
-        dependencies: list[CoRequired | Requires] | None = None,
+        dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
     ) -> Callable:
         """Decorator to register a top-level command."""
@@ -849,6 +858,22 @@ def _parse_command(
             names = ", ".join(f"--{f.name}" for f in mg.flags)
             raise _ParseError(f"one of {names} is required")
 
+    # Step 4.55: resolve Implies dependencies (before dependency checks, so
+    # implied values participate in downstream CoRequired/Requires validation)
+    for dep in cmd.dependencies:
+        if isinstance(dep, Implies):
+            if dep.flag in cli_set:
+                if dep.implies in cli_set:
+                    if cli_set[dep.implies] != dep.value:
+                        neg = "no-" if not dep.value else ""
+                        explicit_neg = "" if not dep.value else "no-"
+                        raise _ParseError(
+                            f"flag '--{dep.flag}' implies '--{neg}{dep.implies}', "
+                            f"but '--{explicit_neg}{dep.implies}' was explicitly provided"
+                        )
+                else:
+                    cli_set[dep.implies] = dep.value
+
     # Step 4.6: enforce flag dependencies (before defaults, so cli_set only
     # contains values explicitly provided via CLI or env)
     for dep in cmd.dependencies:
@@ -974,7 +999,7 @@ def _build_and_validate_command(
     args: list[Arg] | None,
     tags: list[Tag] | None,
     mutex: list[MutexGroup] | None,
-    dependencies: list[CoRequired | Requires] | None = None,
+    dependencies: list[CoRequired | Requires | Implies] | None = None,
     env_prefix: str | None,
     global_flags: list[Flag] | None = None,
     passthrough: Passthrough | None = None,
@@ -1181,6 +1206,41 @@ def _build_and_validate_command(
                 raise ValueError(
                     f'command "{name}": Requires flag and depends_on cannot be '
                     f'the same ("{dep.flag}")'
+                )
+        elif isinstance(dep, Implies):
+            if dep.flag not in seen_flag_names:
+                raise ValueError(
+                    f'command "{name}": Implies references unknown flag '
+                    f'"{dep.flag}"'
+                )
+            if dep.implies not in seen_flag_names:
+                raise ValueError(
+                    f'command "{name}": Implies references unknown flag '
+                    f'"{dep.implies}"'
+                )
+            if dep.flag == dep.implies:
+                raise ValueError(
+                    f'command "{name}": Implies flag and implies cannot be '
+                    f'the same ("{dep.flag}")'
+                )
+            # Look up the actual Flag objects to validate types
+            all_flags_by_name = {f.name: f for f in all_flags}
+            trigger_flag = all_flags_by_name[dep.flag]
+            target_flag = all_flags_by_name[dep.implies]
+            if trigger_flag.type is not bool:
+                raise ValueError(
+                    f'command "{name}": Implies trigger flag "{dep.flag}" '
+                    f"must be type=bool"
+                )
+            if target_flag.type is not bool:
+                raise ValueError(
+                    f'command "{name}": Implies target flag "{dep.implies}" '
+                    f"must be type=bool"
+                )
+            if not isinstance(dep.value, bool):
+                raise ValueError(
+                    f'command "{name}": Implies value must be a bool, '
+                    f"got {type(dep.value).__name__!r}"
                 )
 
     return Command(
