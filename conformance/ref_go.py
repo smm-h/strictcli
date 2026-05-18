@@ -223,6 +223,11 @@ def _emit_cmd_options(cmd_def: dict, indent: str) -> list[str]:
                 dep_exprs.append(
                     f'strictcli.Requires{{Flag: "{dep["flag"]}", DependsOn: "{dep["depends_on"]}"}}'
                 )
+            elif dep["type"] == "implies":
+                val = "true" if dep["value"] else "false"
+                dep_exprs.append(
+                    f'strictcli.Implies{{Flag: "{dep["flag"]}", Implies: "{dep["implies"]}", Value: {val}}}'
+                )
         inner = ", ".join(dep_exprs)
         opts.append(f"strictcli.WithDependencies({inner})")
 

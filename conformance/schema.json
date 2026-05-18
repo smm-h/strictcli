@@ -229,10 +229,22 @@
         "depends_on": { "type": "string" }
       }
     },
+    "implies": {
+      "type": "object",
+      "required": ["type", "flag", "implies", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "implies" },
+        "flag": { "type": "string" },
+        "implies": { "type": "string" },
+        "value": { "type": "boolean" }
+      }
+    },
     "dependency": {
       "oneOf": [
         { "$ref": "#/$defs/co_required" },
-        { "$ref": "#/$defs/requires" }
+        { "$ref": "#/$defs/requires" },
+        { "$ref": "#/$defs/implies" }
       ]
     },
     "expect": {

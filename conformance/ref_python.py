@@ -262,6 +262,11 @@ def _emit_command_registration(
                     dep_exprs.append(
                         f"strictcli.Requires(flag={dep['flag']!r}, depends_on={dep['depends_on']!r})"
                     )
+                elif dep["type"] == "implies":
+                    val = "True" if dep["value"] else "False"
+                    dep_exprs.append(
+                        f"strictcli.Implies(flag={dep['flag']!r}, implies={dep['implies']!r}, value={val})"
+                    )
             lines.append(f"{indent}    dependencies=[{', '.join(dep_exprs)}],")
 
         lines.append(f"{indent}    passthrough=strictcli.Passthrough(handler={handler_name}),")
@@ -338,6 +343,11 @@ def _emit_command_registration(
             elif dep["type"] == "requires":
                 dep_exprs.append(
                     f"strictcli.Requires(flag={dep['flag']!r}, depends_on={dep['depends_on']!r})"
+                )
+            elif dep["type"] == "implies":
+                val = "True" if dep["value"] else "False"
+                dep_exprs.append(
+                    f"strictcli.Implies(flag={dep['flag']!r}, implies={dep['implies']!r}, value={val})"
                 )
         decorator_parts.append(f"{indent}    dependencies=[{', '.join(dep_exprs)}],")
 

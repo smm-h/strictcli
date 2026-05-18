@@ -286,5 +286,368 @@
       "exit_code": 1,
       "stderr_contains": "flag '--verbose' requires '--output'"
     }
+  },
+  {
+    "name": "dependencies: implies trigger set auto-sets target",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "default": true
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+          ],
+          "handler_prints": "fast={fast} embeddings={embeddings}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--fast"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["fast=true", "embeddings=false"]
+    }
+  },
+  {
+    "name": "dependencies: implies trigger not set target gets default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "default": true
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+          ],
+          "handler_prints": "fast={fast} embeddings={embeddings}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["fast=false", "embeddings=true"]
+    }
+  },
+  {
+    "name": "dependencies: implies explicit conflict error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "default": true
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--fast", "--embeddings"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "implies"
+    }
+  },
+  {
+    "name": "dependencies: implies explicit agreement ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "default": true
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+          ],
+          "handler_prints": "fast={fast} embeddings={embeddings}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--fast", "--no-embeddings"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["fast=true", "embeddings=false"]
+    }
+  },
+  {
+    "name": "dependencies: implies env var trigger fires implication",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "env": "MYAPP_FAST"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "default": true
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+          ],
+          "handler_prints": "fast={fast} embeddings={embeddings}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "env": {"MYAPP_FAST": "true"},
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["fast=true", "embeddings=false"]
+    }
+  },
+  {
+    "name": "dependencies: implies unknown trigger flag registration error",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "default": true
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "nonexistent", "implies": "embeddings", "value": false}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Implies references unknown flag"
+    }
+  },
+  {
+    "name": "dependencies: implies unknown target flag registration error",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "default": true
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "fast", "implies": "nonexistent", "value": false}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Implies references unknown flag"
+    }
+  },
+  {
+    "name": "dependencies: implies self-implication registration error",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode"
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "fast", "implies": "fast", "value": false}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Implies flag and implies cannot be the same"
+    }
+  },
+  {
+    "name": "dependencies: implies non-bool trigger registration error",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "mode",
+              "type": "str",
+              "help": "operation mode",
+              "default": "normal"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "default": true
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "mode", "implies": "embeddings", "value": false}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Implies trigger flag"
+    }
+  },
+  {
+    "name": "dependencies: implies non-bool target registration error",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode"
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            }
+          ],
+          "dependencies": [
+            {"type": "implies", "flag": "fast", "implies": "output", "value": false}
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Implies target flag"
+    }
   }
 ]
