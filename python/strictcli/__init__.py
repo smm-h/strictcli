@@ -59,6 +59,19 @@ def _strict_int(s: str) -> int:
     return n
 
 
+def _strict_float(s: str) -> float:
+    """Parse a float string strictly -- no leading/trailing whitespace allowed.
+
+    Rejects nan, inf, and -inf (case-insensitive) since these are valid Python
+    floats but not useful CLI values.
+    """
+    if s != s.strip():
+        raise ValueError(f"invalid literal for float(): {s!r}")
+    if s.lower() in ("nan", "inf", "-inf", "+inf", "infinity", "-infinity", "+infinity"):
+        raise ValueError(f"invalid float value: {s!r}")
+    return float(s)
+
+
 def _require_non_empty_str(value: str, field_name: str, class_name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{class_name}.{field_name} must be a non-empty string")
@@ -82,8 +95,8 @@ class Flag:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
-        if self.type not in (str, bool, int):
-            raise ValueError(f"Flag.type must be str, bool, or int, got {self.type!r}")
+        if self.type not in (str, bool, int, float):
+            raise ValueError(f"Flag.type must be str, bool, int, or float, got {self.type!r}")
         # Validate repeatable
         if self.repeatable and self.type is bool:
             raise ValueError(f'Flag "{self.name}": repeatable is incompatible with type=bool')
@@ -105,6 +118,13 @@ class Flag:
                     f'Flag "{self.name}": type=int requires an int default, '
                     f"got {type(self.default).__name__!r}"
                 )
+        # Validate default type for float flags
+        if self.type is float and not isinstance(self.default, _MissingSentinel) and self.default is not None:
+            if not self.repeatable and not isinstance(self.default, (int, float)):
+                raise ValueError(
+                    f'Flag "{self.name}": type=float requires a float default, '
+                    f"got {type(self.default).__name__!r}"
+                )
         # Resolve _MISSING sentinels based on type
         if isinstance(self.default, _MissingSentinel):
             if self.repeatable:
@@ -112,7 +132,7 @@ class Flag:
             elif self.type is bool:
                 self.default = False
             else:
-                # str/int with _MISSING default means required (no default)
+                # str/int/float with _MISSING default means required (no default)
                 self.default = None
         elif self.type is bool and self.default is None:
             self.default = False
@@ -125,7 +145,7 @@ class Flag:
                 )
         if isinstance(self.negatable, _MissingSentinel):
             self.negatable = self.type is bool
-        elif self.type in (str, int):
+        elif self.type in (str, int, float):
             # negatable is only meaningful for bool flags
             self.negatable = False
 
@@ -515,6 +535,13 @@ class App:
                             raise _ParseError(
                                 f"--{f.name}: expected integer, got {value_part!r}"
                             )
+                    elif f.type is float:
+                        try:
+                            _store_value(f, _strict_float(value_part))
+                        except ValueError:
+                            raise _ParseError(
+                                f"--{f.name}: expected float, got {value_part!r}"
+                            )
                     else:
                         _store_value(f, value_part)
                     i += 1
@@ -551,6 +578,13 @@ class App:
                                 raise _ParseError(
                                     f"--{f.name}: expected integer, got {raw!r}"
                                 )
+                        elif f.type is float:
+                            try:
+                                _store_value(f, _strict_float(raw))
+                            except ValueError:
+                                raise _ParseError(
+                                    f"--{f.name}: expected float, got {raw!r}"
+                                )
                         else:
                             _store_value(f, raw)
                         i += 2
@@ -573,6 +607,13 @@ class App:
                             except ValueError:
                                 raise _ParseError(
                                     f"--{f.name}: expected integer, got {raw!r}"
+                                )
+                        elif f.type is float:
+                            try:
+                                _store_value(f, _strict_float(raw))
+                            except ValueError:
+                                raise _ParseError(
+                                    f"--{f.name}: expected float, got {raw!r}"
                                 )
                         else:
                             _store_value(f, raw)
@@ -612,6 +653,15 @@ class App:
                         except ValueError:
                             raise _ParseError(
                                 f"--{f.name}: expected integer, got {env_val!r} "
+                                f"(from env var '{f.env}')"
+                            )
+                        cli_set[f.name] = [coerced] if f.repeatable else coerced
+                    elif f.type is float:
+                        try:
+                            coerced = _strict_float(env_val)
+                        except ValueError:
+                            raise _ParseError(
+                                f"--{f.name}: expected float, got {env_val!r} "
                                 f"(from env var '{f.env}')"
                             )
                         cli_set[f.name] = [coerced] if f.repeatable else coerced
@@ -820,6 +870,11 @@ def _parse_command(
                         _store_value(f, _strict_int(value_part))
                     except ValueError:
                         raise _ParseError(f"--{f.name}: expected integer, got {value_part!r}")
+                elif f.type is float:
+                    try:
+                        _store_value(f, _strict_float(value_part))
+                    except ValueError:
+                        raise _ParseError(f"--{f.name}: expected float, got {value_part!r}")
                 else:
                     _store_value(f, value_part)
             elif flag_part in negation_lookup:
@@ -846,7 +901,7 @@ def _parse_command(
                     cli_set[f.name] = True
                     i += 1
                 else:
-                    # str/int flag: consume next token as value
+                    # str/int/float flag: consume next token as value
                     if i + 1 < len(tokens):
                         raw = tokens[i + 1]
                         if f.type is int:
@@ -854,6 +909,11 @@ def _parse_command(
                                 _store_value(f, _strict_int(raw))
                             except ValueError:
                                 raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
+                        elif f.type is float:
+                            try:
+                                _store_value(f, _strict_float(raw))
+                            except ValueError:
+                                raise _ParseError(f"--{f.name}: expected float, got {raw!r}")
                         else:
                             _store_value(f, raw)
                         i += 2
@@ -871,7 +931,7 @@ def _parse_command(
                     cli_set[f.name] = True
                     i += 1
                 else:
-                    # str/int flag: consume next token as value
+                    # str/int/float flag: consume next token as value
                     if i + 1 < len(tokens):
                         raw = tokens[i + 1]
                         if f.type is int:
@@ -879,6 +939,11 @@ def _parse_command(
                                 _store_value(f, _strict_int(raw))
                             except ValueError:
                                 raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
+                        elif f.type is float:
+                            try:
+                                _store_value(f, _strict_float(raw))
+                            except ValueError:
+                                raise _ParseError(f"--{f.name}: expected float, got {raw!r}")
                         else:
                             _store_value(f, raw)
                         i += 2
@@ -915,6 +980,15 @@ def _parse_command(
                     except ValueError:
                         raise _ParseError(
                             f"--{f.name}: expected integer, got {env_val!r} "
+                            f"(from env var '{f.env}')"
+                        )
+                    cli_set[f.name] = [coerced] if f.repeatable else coerced
+                elif f.type is float:
+                    try:
+                        coerced = _strict_float(env_val)
+                    except ValueError:
+                        raise _ParseError(
+                            f"--{f.name}: expected float, got {env_val!r} "
                             f"(from env var '{f.env}')"
                         )
                     cli_set[f.name] = [coerced] if f.repeatable else coerced
@@ -987,7 +1061,7 @@ def _parse_command(
             # required -- the mutex group itself enforces required semantics
             cli_set[f.name] = None
         else:
-            # str/int flag with no default and no value: required
+            # str/int/float flag with no default and no value: required
             raise _ParseError(f"flag '--{f.name}' is required")
 
     # Step 5.5: validate choices
@@ -1485,6 +1559,8 @@ def _build_flag_spec(f: Flag) -> str:
         spec += " <str>"
     elif f.type is int:
         spec += " <int>"
+    elif f.type is float:
+        spec += " <float>"
     return spec
 
 
