@@ -66,9 +66,10 @@ func formatAppHelp(app *App) string {
 	return strings.Join(lines, "\n")
 }
 
-func formatGroupHelp(app *App, group *Group) string {
+func formatGroupHelp(app *App, group *Group, path []string) string {
 	var lines []string
-	lines = append(lines, fmt.Sprintf("%s %s -- %s", app.Name, group.Name, group.Help))
+	fullPath := strings.Join(path, " ")
+	lines = append(lines, fmt.Sprintf("%s %s -- %s", app.Name, fullPath, group.Help))
 
 	if len(group.order) > 0 {
 		lines = append(lines, "")
@@ -83,6 +84,22 @@ func formatGroupHelp(app *App, group *Group) string {
 			cmd := group.Commands[name]
 			padding := maxLen - len(name) + 4
 			lines = append(lines, fmt.Sprintf("  %s%s%s", name, strings.Repeat(" ", padding), cmd.Help))
+		}
+	}
+
+	if len(group.groupOrder) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Groups:")
+		maxLen := 0
+		for _, name := range group.groupOrder {
+			if len(name) > maxLen {
+				maxLen = len(name)
+			}
+		}
+		for _, name := range group.groupOrder {
+			sub := group.Groups[name]
+			padding := maxLen - len(name) + 4
+			lines = append(lines, fmt.Sprintf("  %s%s%s", name, strings.Repeat(" ", padding), sub.Help))
 		}
 	}
 
@@ -102,7 +119,7 @@ func formatGroupHelp(app *App, group *Group) string {
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("Use '%s %s <command> --help' for more information.", app.Name, group.Name))
+	lines = append(lines, fmt.Sprintf("Use '%s %s <command> --help' for more information.", app.Name, fullPath))
 
 	return strings.Join(lines, "\n")
 }

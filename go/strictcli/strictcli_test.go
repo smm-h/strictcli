@@ -2304,3 +2304,415 @@ func TestFloatFlagHelp(t *testing.T) {
 		t.Fatalf("help should contain '<float>', got:\n%s", r.Stdout)
 	}
 }
+
+// --- Deep nesting (recursive group) tests ---
+
+// make3LevelApp creates: app -> dns -> zone -> {list, create}
+func make3LevelApp() *App {
+	app := NewApp("nch", "1.0.0", "cloud tool")
+	dns := app.Group("dns", "manage DNS")
+	zone := dns.Group("zone", "manage DNS zones")
+	zone.Command("list", "list all zones", func(args map[string]interface{}) int {
+		fmt.Print("listing zones")
+		return 0
+	})
+	zone.Command("create", "create a zone", func(args map[string]interface{}) int {
+		fmt.Printf("creating zone %s", args["name"])
+		return 0
+	}, WithFlags(StringFlag("name", "zone name")))
+	return app
+}
+
+// make4LevelApp creates: app -> level1 -> level2 -> level3 -> action
+func make4LevelApp() *App {
+	app := NewApp("deep", "1.0.0", "deeply nested app")
+	g1 := app.Group("level1", "first level")
+	g2 := g1.Group("level2", "second level")
+	g3 := g2.Group("level3", "third level")
+	g3.Command("action", "do the thing", func(args map[string]interface{}) int {
+		fmt.Print("action executed")
+		return 0
+	})
+	return app
+}
+
+func TestDeepNesting3Level(t *testing.T) {
+	app := make3LevelApp()
+	r := app.Test([]string{"dns", "zone", "list"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "listing zones") {
+		t.Fatalf("stdout should contain 'listing zones', got %q", r.Stdout)
+	}
+
+	// With flags
+	r = app.Test([]string{"dns", "zone", "create", "--name", "example.com"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "creating zone example.com") {
+		t.Fatalf("stdout should contain 'creating zone example.com', got %q", r.Stdout)
+	}
+}
+
+func TestDeepNesting4Level(t *testing.T) {
+	app := make4LevelApp()
+	r := app.Test([]string{"level1", "level2", "level3", "action"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "action executed") {
+		t.Fatalf("stdout should contain 'action executed', got %q", r.Stdout)
+	}
+}
+
+func TestDeepNestingHelpAtEachLevel(t *testing.T) {
+	app := make3LevelApp()
+
+	// App level
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("app help: expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Groups:") || !strings.Contains(r.Stdout, "dns") {
+		t.Fatalf("app help should show dns group, got %q", r.Stdout)
+	}
+
+	// Group level (dns)
+	r = app.Test([]string{"dns", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("dns help: expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Groups:") || !strings.Contains(r.Stdout, "zone") {
+		t.Fatalf("dns help should show zone subgroup, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "nch dns -- manage DNS") {
+		t.Fatalf("dns help header should have full path, got %q", r.Stdout)
+	}
+
+	// Subgroup level (dns zone)
+	r = app.Test([]string{"dns", "zone", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("dns zone help: expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Commands:") {
+		t.Fatalf("dns zone help should show commands, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "list") || !strings.Contains(r.Stdout, "create") {
+		t.Fatalf("dns zone help should show list and create, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "nch dns zone -- manage DNS zones") {
+		t.Fatalf("dns zone help header should have full path, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "Use 'nch dns zone <command> --help'") {
+		t.Fatalf("dns zone help hint should have full path, got %q", r.Stdout)
+	}
+
+	// Command level
+	r = app.Test([]string{"dns", "zone", "create", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("create help: expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "nch dns zone create") {
+		t.Fatalf("create help should show full path, got %q", r.Stdout)
+	}
+}
+
+func TestDeepNestingHelpAnywhere(t *testing.T) {
+	app := make3LevelApp()
+
+	// -h at group level
+	r := app.Test([]string{"dns", "-h"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "nch dns") {
+		t.Fatalf("help should contain 'nch dns', got %q", r.Stdout)
+	}
+
+	// -h at subgroup level
+	r = app.Test([]string{"dns", "zone", "-h"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "nch dns zone") {
+		t.Fatalf("help should contain 'nch dns zone', got %q", r.Stdout)
+	}
+
+	// --help after flags in deep command
+	r = app.Test([]string{"dns", "zone", "create", "--name", "x", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "nch dns zone create") {
+		t.Fatalf("help should contain full path, got %q", r.Stdout)
+	}
+
+	// 4-level help at each level
+	app4 := make4LevelApp()
+	r = app4.Test([]string{"level1", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("level1 help: expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "level2") {
+		t.Fatalf("level1 help should show level2, got %q", r.Stdout)
+	}
+
+	r = app4.Test([]string{"level1", "level2", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("level2 help: expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "level3") {
+		t.Fatalf("level2 help should show level3, got %q", r.Stdout)
+	}
+
+	r = app4.Test([]string{"level1", "level2", "level3", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("level3 help: expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "action") {
+		t.Fatalf("level3 help should show action, got %q", r.Stdout)
+	}
+
+	r = app4.Test([]string{"level1", "level2", "level3", "action", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("action help: expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "deep level1 level2 level3 action") {
+		t.Fatalf("action help should show full path, got %q", r.Stdout)
+	}
+}
+
+func TestDeepNestingUnknownCommand(t *testing.T) {
+	app := make3LevelApp()
+
+	// Unknown at subgroup level
+	r := app.Test([]string{"dns", "zone", "delete"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown command 'delete' in 'dns zone'") {
+		t.Fatalf("stderr should contain path, got %q", r.Stderr)
+	}
+
+	// Unknown in 4-level
+	app4 := make4LevelApp()
+	r = app4.Test([]string{"level1", "level2", "level3", "bogus"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown command 'bogus' in 'level1 level2 level3'") {
+		t.Fatalf("stderr should contain full path, got %q", r.Stderr)
+	}
+
+	// Unknown at top level has no path prefix
+	r = app.Test([]string{"bogus"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown command 'bogus'") {
+		t.Fatalf("stderr should contain 'unknown command', got %q", r.Stderr)
+	}
+	if strings.Contains(r.Stderr, "in '") {
+		t.Fatalf("top-level unknown should not contain 'in', got %q", r.Stderr)
+	}
+}
+
+func TestDeepNestingMixedGroupsAndCommands(t *testing.T) {
+	app := NewApp("mix", "1.0.0", "mixed app")
+	grp := app.Group("infra", "infrastructure")
+	grp.Command("status", "show status", func(args map[string]interface{}) int {
+		fmt.Print("status ok")
+		return 0
+	})
+	sub := grp.Group("network", "network management")
+	sub.Command("list", "list networks", func(args map[string]interface{}) int {
+		fmt.Print("networks listed")
+		return 0
+	})
+
+	// Command in group works
+	r := app.Test([]string{"infra", "status"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "status ok") {
+		t.Fatalf("stdout should contain 'status ok', got %q", r.Stdout)
+	}
+
+	// Subgroup command works
+	r = app.Test([]string{"infra", "network", "list"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "networks listed") {
+		t.Fatalf("stdout should contain 'networks listed', got %q", r.Stdout)
+	}
+
+	// Help shows both commands and subgroups
+	r = app.Test([]string{"infra", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Commands:") {
+		t.Fatalf("help should contain 'Commands:', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "status") {
+		t.Fatalf("help should contain 'status', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "Groups:") {
+		t.Fatalf("help should contain 'Groups:', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "network") {
+		t.Fatalf("help should contain 'network', got %q", r.Stdout)
+	}
+}
+
+func TestDeepNestingDeprecatedInSubgroup(t *testing.T) {
+	app := NewApp("nch", "1.0.0", "cloud tool")
+	dns := app.Group("dns", "manage DNS")
+	zone := dns.Group("zone", "manage zones")
+	zone.Command("list", "list zones", func(args map[string]interface{}) int {
+		fmt.Print("listing")
+		return 0
+	})
+	zone.Deprecated("dump", "use 'list' instead")
+
+	// Invoking deprecated command
+	r := app.Test([]string{"dns", "zone", "dump"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "command 'dump' is deprecated: use 'list' instead") {
+		t.Fatalf("stderr should contain deprecation message, got %q", r.Stderr)
+	}
+
+	// Deprecated shown in subgroup help
+	r = app.Test([]string{"dns", "zone", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "Deprecated:") {
+		t.Fatalf("help should contain 'Deprecated:', got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "dump") {
+		t.Fatalf("help should contain 'dump', got %q", r.Stdout)
+	}
+}
+
+func TestDeepNestingGlobalFlags(t *testing.T) {
+	app := NewApp("nch", "1.0.0", "cloud tool")
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	dns := app.Group("dns", "manage DNS")
+	zone := dns.Group("zone", "manage zones")
+	zone.Command("list", "list zones", func(args map[string]interface{}) int {
+		if args["verbose"].(bool) {
+			fmt.Print("verbose listing")
+		} else {
+			fmt.Print("normal listing")
+		}
+		return 0
+	})
+
+	// Global flag before command
+	r := app.Test([]string{"--verbose", "dns", "zone", "list"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "verbose listing") {
+		t.Fatalf("stdout should contain 'verbose listing', got %q", r.Stdout)
+	}
+
+	// Without global flag
+	r = app.Test([]string{"dns", "zone", "list"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "normal listing") {
+		t.Fatalf("stdout should contain 'normal listing', got %q", r.Stdout)
+	}
+
+	// Global flag after command
+	r = app.Test([]string{"dns", "zone", "list", "--verbose"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "verbose listing") {
+		t.Fatalf("stdout should contain 'verbose listing', got %q", r.Stdout)
+	}
+}
+
+func TestDeepNestingNameCollision(t *testing.T) {
+	// Subgroup and command name collision: command first, then subgroup
+	func() {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatal("expected panic for command-then-group collision")
+			}
+			msg := fmt.Sprintf("%v", r)
+			if !strings.Contains(msg, "collides with an existing command") {
+				t.Fatalf("panic message should mention command collision, got %q", msg)
+			}
+		}()
+		app := NewApp("test", "1.0.0", "test app")
+		grp := app.Group("infra", "infra group")
+		grp.Command("network", "a command", func(args map[string]interface{}) int { return 0 })
+		grp.Group("network", "this conflicts")
+	}()
+
+	// Subgroup and command name collision: subgroup first, then command
+	func() {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatal("expected panic for group-then-command collision")
+			}
+			msg := fmt.Sprintf("%v", r)
+			if !strings.Contains(msg, "collides with an existing group") {
+				t.Fatalf("panic message should mention group collision, got %q", msg)
+			}
+		}()
+		app := NewApp("test", "1.0.0", "test app")
+		grp := app.Group("infra", "infra group")
+		grp.Group("network", "network subgroup")
+		grp.Command("network", "this conflicts", func(args map[string]interface{}) int { return 0 })
+	}()
+
+	// Deprecated and subgroup collision
+	func() {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatal("expected panic for deprecated-then-group collision")
+			}
+			msg := fmt.Sprintf("%v", r)
+			if !strings.Contains(msg, "name already used by a group") {
+				t.Fatalf("panic message should mention group collision, got %q", msg)
+			}
+		}()
+		app := NewApp("test", "1.0.0", "test app")
+		grp := app.Group("infra", "infra group")
+		grp.Group("network", "network subgroup")
+		grp.Deprecated("network", "removed")
+	}()
+
+	// Duplicate subgroup
+	func() {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatal("expected panic for duplicate subgroup")
+			}
+			msg := fmt.Sprintf("%v", r)
+			if !strings.Contains(msg, "is already registered") {
+				t.Fatalf("panic message should mention duplicate, got %q", msg)
+			}
+		}()
+		app := NewApp("test", "1.0.0", "test app")
+		grp := app.Group("infra", "infra group")
+		grp.Group("network", "first")
+		grp.Group("network", "second")
+	}()
+}

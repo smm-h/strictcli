@@ -109,18 +109,20 @@ type deprecatedCmd struct {
 	Message string
 }
 
-// Group is a container for nested commands (one nesting level).
+// Group is a container for nested commands and subgroups (arbitrary depth).
 type Group struct {
 	Name      string
 	Help      string
 	Commands  map[string]*Command
+	Groups    map[string]*Group
 	envPrefix string
 
 	// globalFlags is a reference to the app's global flags for collision checking
 	globalFlags []Flag
 
 	// order preserves insertion order for help display
-	order []string
+	order      []string
+	groupOrder []string
 
 	deprecated    []deprecatedCmd
 	deprecatedMap map[string]string
@@ -569,6 +571,7 @@ func (a *App) Group(name, help string) *Group {
 		Name:          name,
 		Help:          help,
 		Commands:      make(map[string]*Command),
+		Groups:        make(map[string]*Group),
 		envPrefix:     a.EnvPrefix,
 		globalFlags:   a.globalFlags,
 		deprecatedMap: make(map[string]string),
@@ -578,8 +581,36 @@ func (a *App) Group(name, help string) *Group {
 	return grp
 }
 
+// Group creates and registers a child subgroup.
+func (g *Group) Group(name, help string) *Group {
+	if strings.TrimSpace(help) == "" {
+		panic("Group.help must be a non-empty string")
+	}
+	if _, ok := g.Commands[name]; ok {
+		panic(fmt.Sprintf("group %q collides with an existing command", name))
+	}
+	if _, ok := g.Groups[name]; ok {
+		panic(fmt.Sprintf("group %q is already registered", name))
+	}
+	sub := &Group{
+		Name:          name,
+		Help:          help,
+		Commands:      make(map[string]*Command),
+		Groups:        make(map[string]*Group),
+		envPrefix:     g.envPrefix,
+		globalFlags:   g.globalFlags,
+		deprecatedMap: make(map[string]string),
+	}
+	g.Groups[name] = sub
+	g.groupOrder = append(g.groupOrder, name)
+	return sub
+}
+
 // Command registers a command within a group.
 func (g *Group) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
+	if _, ok := g.Groups[name]; ok {
+		panic(fmt.Sprintf("command %q collides with an existing group", name))
+	}
 	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, opts)
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
@@ -618,6 +649,9 @@ func (g *Group) Deprecated(name, message string) {
 	}
 	if _, ok := g.Commands[name]; ok {
 		panic(fmt.Sprintf("deprecated command %q: name already used by a command", name))
+	}
+	if _, ok := g.Groups[name]; ok {
+		panic(fmt.Sprintf("deprecated command %q: name already used by a group", name))
 	}
 	if _, ok := g.deprecatedMap[name]; ok {
 		panic(fmt.Sprintf("deprecated command %q: already registered as deprecated", name))
@@ -771,77 +805,81 @@ func (a *App) doParse(argv []string) parseResult {
 		return parseResult{versionText: formatVersion(a)}
 	}
 
-	token := rest[0]
-	cmdRest := rest[1:]
+	// Iterative traversal for arbitrary-depth group nesting
+	currentGroups := a.groups
+	currentCommands := a.commands
+	currentDeprecated := a.deprecatedMap
+	var path []string
+	var lastGroup *Group
 
-	// Check groups first
-	if grp, ok := a.groups[token]; ok {
-		if len(cmdRest) == 0 || (len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h")) {
-			return parseResult{helpText: formatGroupHelp(a, grp)}
+	for len(rest) > 0 {
+		token := rest[0]
+
+		// Check groups first
+		if grp, ok := currentGroups[token]; ok {
+			path = append(path, token)
+			lastGroup = grp
+			rest = rest[1:]
+
+			// Check for help at this level
+			if len(rest) == 0 || (len(rest) == 1 && (rest[0] == "--help" || rest[0] == "-h")) {
+				return parseResult{helpText: formatGroupHelp(a, grp, path)}
+			}
+
+			// Descend into subgroup
+			currentGroups = grp.Groups
+			currentCommands = grp.Commands
+			currentDeprecated = grp.deprecatedMap
+			continue
 		}
-		subToken := cmdRest[0]
-		cmdRest = cmdRest[1:]
-		// Check deprecated subcommands before normal commands
-		if msg, ok := grp.deprecatedMap[subToken]; ok {
-			return parseResult{parseErr: fmt.Sprintf("command '%s' is deprecated: %s", subToken, msg)}
+
+		// Check commands
+		if cmd, ok := currentCommands[token]; ok {
+			cmdRest := rest[1:]
+			// Check command-level --help anywhere in remaining tokens
+			if tokensContainHelp(cmdRest) {
+				prefix := ""
+				if len(path) > 0 {
+					prefix = strings.Join(path, " ") + " "
+				}
+				return parseResult{helpText: formatCommandHelp(a, cmd, prefix)}
+			}
+			// Passthrough: skip parsing, forward raw args
+			if cmd.Passthrough {
+				return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
+			}
+			kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags)
+			if err != "" {
+				return parseResult{parseErr: err}
+			}
+			// Merge global values: post-command globals override pre-command ones
+			for k, v := range postGlobalValues {
+				globalValues[k] = v
+			}
+			for k, v := range globalValues {
+				kwargs[k] = v
+			}
+			return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
 		}
-		cmd, ok := grp.Commands[subToken]
-		if !ok {
-			return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", subToken)}
+
+		// Check deprecated commands
+		if msg, ok := currentDeprecated[token]; ok {
+			return parseResult{parseErr: fmt.Sprintf("command '%s' is deprecated: %s", token, msg)}
 		}
-		// Check command-level --help anywhere in remaining tokens
-		if tokensContainHelp(cmdRest) {
-			prefix := grp.Name + " "
-			return parseResult{helpText: formatCommandHelp(a, cmd, prefix)}
+
+		// Unknown command -- include path in error message
+		if len(path) > 0 {
+			return parseResult{parseErr: fmt.Sprintf("unknown command '%s' in '%s'", token, strings.Join(path, " "))}
 		}
-		// Passthrough: skip parsing, forward raw args
-		if cmd.Passthrough {
-			return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
-		}
-		kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags)
-		if err != "" {
-			return parseResult{parseErr: err}
-		}
-		// Merge global values: post-command globals override pre-command ones
-		for k, v := range postGlobalValues {
-			globalValues[k] = v
-		}
-		for k, v := range globalValues {
-			kwargs[k] = v
-		}
-		return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
+		return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", token)}
 	}
 
-	// Check commands
-	if cmd, ok := a.commands[token]; ok {
-		// Check command-level --help anywhere in remaining tokens
-		if tokensContainHelp(cmdRest) {
-			return parseResult{helpText: formatCommandHelp(a, cmd, "")}
-		}
-		// Passthrough: skip parsing, forward raw args
-		if cmd.Passthrough {
-			return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
-		}
-		kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags)
-		if err != "" {
-			return parseResult{parseErr: err}
-		}
-		// Merge global values: post-command globals override pre-command ones
-		for k, v := range postGlobalValues {
-			globalValues[k] = v
-		}
-		for k, v := range globalValues {
-			kwargs[k] = v
-		}
-		return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
+	// Loop ended without finding a command -- remaining was exhausted by group traversal.
+	// This case is handled by the help check inside the loop, but guard against edge cases.
+	if lastGroup != nil {
+		return parseResult{helpText: formatGroupHelp(a, lastGroup, path)}
 	}
-
-	// Check deprecated commands
-	if msg, ok := a.deprecatedMap[token]; ok {
-		return parseResult{parseErr: fmt.Sprintf("command '%s' is deprecated: %s", token, msg)}
-	}
-
-	return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", token)}
+	return parseResult{parseErr: "no command specified"}
 }
 
 // tokensContainHelp checks if --help or -h appears in tokens before any "--"
@@ -1311,12 +1349,27 @@ func flagParamName(name string) string {
 }
 
 // findCommandPrefix finds the group prefix for a command.
+// Traverses the group tree recursively to find the full path.
 func (a *App) findCommandPrefix(cmd *Command) string {
-	for _, grp := range a.groups {
+	result := searchGroupsForCommand(a.groups, cmd, nil)
+	if result != "" {
+		return result
+	}
+	return ""
+}
+
+// searchGroupsForCommand recursively searches groups for a command and returns
+// the full path as a prefix string (e.g. "dns zone ").
+func searchGroupsForCommand(groups map[string]*Group, cmd *Command, path []string) string {
+	for _, grp := range groups {
 		for _, c := range grp.Commands {
 			if c == cmd {
-				return grp.Name + " "
+				return strings.Join(append(path, grp.Name), " ") + " "
 			}
+		}
+		result := searchGroupsForCommand(grp.Groups, cmd, append(path, grp.Name))
+		if result != "" {
+			return result
 		}
 	}
 	return ""
