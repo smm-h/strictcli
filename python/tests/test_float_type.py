@@ -131,7 +131,7 @@ def test_float_flag_reject_nan():
     app = _make_app_with_float_flag()
     r = app.test(["cmd", "--rate", "nan"])
     assert r.exit_code == 1
-    assert "expected float" in r.stderr
+    assert "NaN is not allowed" in r.stderr
 
 
 def test_float_flag_reject_nan_case_insensitive():
@@ -139,7 +139,7 @@ def test_float_flag_reject_nan_case_insensitive():
     app = _make_app_with_float_flag()
     r = app.test(["cmd", "--rate", "NaN"])
     assert r.exit_code == 1
-    assert "expected float" in r.stderr
+    assert "NaN is not allowed" in r.stderr
 
 
 def test_float_flag_reject_inf():
@@ -147,7 +147,7 @@ def test_float_flag_reject_inf():
     app = _make_app_with_float_flag()
     r = app.test(["cmd", "--rate", "inf"])
     assert r.exit_code == 1
-    assert "expected float" in r.stderr
+    assert "Inf is not allowed" in r.stderr
 
 
 def test_float_flag_reject_negative_inf():
@@ -155,7 +155,7 @@ def test_float_flag_reject_negative_inf():
     app = _make_app_with_float_flag()
     r = app.test(["cmd", "--rate", "-inf"])
     assert r.exit_code == 1
-    assert "expected float" in r.stderr
+    assert "Inf is not allowed" in r.stderr
 
 
 def test_float_flag_reject_whitespace():

@@ -120,9 +120,27 @@ def _strict_float(s: str) -> float:
     """
     if s != s.strip():
         raise ValueError(f"invalid literal for float(): {s!r}")
-    if s.lower() in ("nan", "inf", "-inf", "+inf", "infinity", "-infinity", "+infinity"):
-        raise ValueError(f"invalid float value: {s!r}")
+    low = s.lower()
+    if low == "nan":
+        raise ValueError("NaN is not allowed")
+    if low in ("inf", "-inf", "+inf", "infinity", "-infinity", "+infinity"):
+        raise ValueError("Inf is not allowed")
     return float(s)
+
+
+def _float_parse_error(
+    flag_name: str, raw: str, exc: ValueError, *, env: str | None = None,
+) -> "_ParseError":
+    """Build a _ParseError for a failed float parse.
+
+    If the ValueError is a NaN/Inf rejection, use its message directly.
+    Otherwise, produce the generic "expected float, got ..." message.
+    """
+    msg = str(exc)
+    if msg in ("NaN is not allowed", "Inf is not allowed"):
+        return _ParseError(f"--{flag_name}: {msg}")
+    suffix = f" (from env var '{env}')" if env else ""
+    return _ParseError(f"--{flag_name}: expected float, got {raw!r}{suffix}")
 
 
 def _require_non_empty_str(value: str, field_name: str, class_name: str) -> None:
@@ -755,10 +773,8 @@ class App:
                     elif f.type is float:
                         try:
                             _store_value(f, _strict_float(value_part))
-                        except ValueError:
-                            raise _ParseError(
-                                f"--{f.name}: expected float, got {value_part!r}"
-                            )
+                        except ValueError as e:
+                            raise _float_parse_error(f.name, value_part, e)
                     else:
                         _store_value(f, value_part)
                     i += 1
@@ -798,10 +814,8 @@ class App:
                         elif f.type is float:
                             try:
                                 _store_value(f, _strict_float(raw))
-                            except ValueError:
-                                raise _ParseError(
-                                    f"--{f.name}: expected float, got {raw!r}"
-                                )
+                            except ValueError as e:
+                                raise _float_parse_error(f.name, raw, e)
                         else:
                             _store_value(f, raw)
                         i += 2
@@ -828,10 +842,8 @@ class App:
                         elif f.type is float:
                             try:
                                 _store_value(f, _strict_float(raw))
-                            except ValueError:
-                                raise _ParseError(
-                                    f"--{f.name}: expected float, got {raw!r}"
-                                )
+                            except ValueError as e:
+                                raise _float_parse_error(f.name, raw, e)
                         else:
                             _store_value(f, raw)
                         i += 2
@@ -876,11 +888,8 @@ class App:
                     elif f.type is float:
                         try:
                             coerced = _strict_float(env_val)
-                        except ValueError:
-                            raise _ParseError(
-                                f"--{f.name}: expected float, got {env_val!r} "
-                                f"(from env var '{f.env}')"
-                            )
+                        except ValueError as e:
+                            raise _float_parse_error(f.name, env_val, e, env=f.env)
                         cli_set[f.name] = [coerced] if f.repeatable else coerced
                     else:
                         cli_set[f.name] = [env_val] if f.repeatable else env_val
@@ -1122,8 +1131,8 @@ def _parse_command(
                 elif f.type is float:
                     try:
                         _store_value(f, _strict_float(value_part))
-                    except ValueError:
-                        raise _ParseError(f"--{f.name}: expected float, got {value_part!r}")
+                    except ValueError as e:
+                        raise _float_parse_error(f.name, value_part, e)
                 else:
                     _store_value(f, value_part)
             elif flag_part in negation_lookup:
@@ -1161,8 +1170,8 @@ def _parse_command(
                         elif f.type is float:
                             try:
                                 _store_value(f, _strict_float(raw))
-                            except ValueError:
-                                raise _ParseError(f"--{f.name}: expected float, got {raw!r}")
+                            except ValueError as e:
+                                raise _float_parse_error(f.name, raw, e)
                         else:
                             _store_value(f, raw)
                         i += 2
@@ -1191,8 +1200,8 @@ def _parse_command(
                         elif f.type is float:
                             try:
                                 _store_value(f, _strict_float(raw))
-                            except ValueError:
-                                raise _ParseError(f"--{f.name}: expected float, got {raw!r}")
+                            except ValueError as e:
+                                raise _float_parse_error(f.name, raw, e)
                         else:
                             _store_value(f, raw)
                         i += 2
@@ -1235,11 +1244,8 @@ def _parse_command(
                 elif f.type is float:
                     try:
                         coerced = _strict_float(env_val)
-                    except ValueError:
-                        raise _ParseError(
-                            f"--{f.name}: expected float, got {env_val!r} "
-                            f"(from env var '{f.env}')"
-                        )
+                    except ValueError as e:
+                        raise _float_parse_error(f.name, env_val, e, env=f.env)
                     cli_set[f.name] = [coerced] if f.repeatable else coerced
                 else:
                     cli_set[f.name] = [env_val] if f.repeatable else env_val

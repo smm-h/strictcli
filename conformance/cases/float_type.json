@@ -218,7 +218,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "--rate:"
+      "stderr_contains": "NaN is not allowed"
     }
   },
   {
@@ -249,7 +249,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "--rate:"
+      "stderr_contains": "Inf is not allowed"
     }
   },
   {
