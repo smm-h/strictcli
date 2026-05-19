@@ -152,6 +152,9 @@ type App struct {
 
 	deprecated    []deprecatedCmd
 	deprecatedMap map[string]string
+
+	configEnabled bool
+	configData    map[string]interface{}
 }
 
 // --- Option types ---
@@ -163,6 +166,13 @@ type AppOption func(*App)
 func WithEnvPrefix(prefix string) AppOption {
 	return func(a *App) {
 		a.EnvPrefix = prefix
+	}
+}
+
+// WithConfig enables JSON config file support.
+func WithConfig() AppOption {
+	return func(a *App) {
+		a.configEnabled = true
 	}
 }
 
@@ -504,6 +514,10 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	}
 	for _, opt := range opts {
 		opt(a)
+	}
+	if a.configEnabled {
+		a.configData = loadConfig(a.Name)
+		a.registerConfigGroup()
 	}
 	return a
 }
@@ -848,7 +862,7 @@ func (a *App) doParse(argv []string) parseResult {
 			if cmd.Passthrough {
 				return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
 			}
-			kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags)
+			kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData)
 			if err != "" {
 				return parseResult{parseErr: err}
 			}
@@ -1075,6 +1089,24 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 					}
 				}
 				continue
+			}
+		}
+	}
+
+	// Resolve config values for global flags not set by CLI or env
+	if a.configData != nil {
+		for i := range a.globalFlags {
+			f := &a.globalFlags[i]
+			if _, ok := globalValues[f.Name]; ok {
+				continue
+			}
+			param := flagParamName(f.Name)
+			if v, ok := a.configData[param]; ok {
+				coerced, errStr := coerceConfigValue(v, f)
+				if errStr != "" {
+					return nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+				}
+				globalValues[f.Name] = coerced
 			}
 		}
 	}

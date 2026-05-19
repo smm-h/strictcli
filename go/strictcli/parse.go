@@ -11,8 +11,9 @@ import (
 // parseCommand parses tokens against a resolved command's flags and args.
 // globalFlags are also recognized in post-command tokens and returned separately
 // in postGlobalValues so the caller can merge them with pre-command globals.
+// configData is an optional map of config values (may be nil).
 // Returns (kwargs, postGlobalValues, errorString).
-func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string]interface{}, map[string]interface{}, string) {
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}) (map[string]interface{}, map[string]interface{}, string) {
 	// Build flag lookup maps
 	longLookup := make(map[string]*Flag)    // --flag-name -> Flag
 	shortLookup := make(map[string]*Flag)   // -x -> Flag
@@ -246,6 +247,24 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 				cliSet[f.Name] = []interface{}{envVal}
 			} else {
 				cliSet[f.Name] = envVal
+			}
+		}
+	}
+
+	// Resolve config values for flags not set by CLI or env
+	if configData != nil {
+		for i := range cmd.Flags {
+			f := &cmd.Flags[i]
+			if _, ok := cliSet[f.Name]; ok {
+				continue
+			}
+			param := flagParamName(f.Name)
+			if v, ok := configData[param]; ok {
+				coerced, errStr := coerceConfigValue(v, f)
+				if errStr != "" {
+					return nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+				}
+				cliSet[f.Name] = coerced
 			}
 		}
 	}

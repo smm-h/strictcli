@@ -1,8 +1,10 @@
 package strictcli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -2715,4 +2717,289 @@ func TestDeepNestingNameCollision(t *testing.T) {
 		grp.Group("network", "first")
 		grp.Group("network", "second")
 	}()
+}
+
+// --- Config tests ---
+
+// configTestSetup sets XDG_CONFIG_HOME to a temp dir and returns a cleanup function.
+func configTestSetup(t *testing.T) (string, func()) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	oldVal, hadOld := os.LookupEnv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	return tmpDir, func() {
+		if hadOld {
+			os.Setenv("XDG_CONFIG_HOME", oldVal)
+		} else {
+			os.Unsetenv("XDG_CONFIG_HOME")
+		}
+	}
+}
+
+// writeConfig writes a JSON config file for the given app name under the given XDG dir.
+func writeConfig(t *testing.T, xdgDir, appName string, data map[string]interface{}) {
+	t.Helper()
+	dir := filepath.Join(xdgDir, appName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+	raw, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal config: %v", err)
+	}
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+}
+
+func TestConfigDisabledNoSubcommand(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	_ = tmpDir
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.Command("greet", "say hello", func(args map[string]interface{}) int { return 0 })
+
+	// No config group should be registered
+	if _, ok := app.Groups()["config"]; ok {
+		t.Fatal("config group should not be registered when config is disabled")
+	}
+
+	// Trying "config" as a command should fail
+	r := app.Test([]string{"config", "path"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown command") {
+		t.Fatalf("stderr should mention unknown command, got %q", r.Stderr)
+	}
+}
+
+func TestConfigEnabledHasSubcommands(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	_ = tmpDir
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("greet", "say hello", func(args map[string]interface{}) int { return 0 })
+
+	grps := app.Groups()
+	configGrp, ok := grps["config"]
+	if !ok {
+		t.Fatal("config group should be registered when config is enabled")
+	}
+
+	// Check that all four subcommands exist
+	for _, name := range []string{"show", "set", "path", "edit"} {
+		if _, ok := configGrp.Commands[name]; !ok {
+			t.Fatalf("config group should have '%s' subcommand", name)
+		}
+	}
+}
+
+func TestConfigPrecedence(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Config sets port=9999
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{
+		"port": float64(9999),
+	})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Env("TESTAPP_PORT"), Default(8080)),
+	))
+
+	// Default: 8080 (but config overrides to 9999)
+	// Config value should win over default
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=9999") {
+		t.Fatalf("expected config value 9999, got %q", r.Stdout)
+	}
+
+	// CLI value should win over config
+	r = app.Test([]string{"serve", "--port", "3000"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=3000") {
+		t.Fatalf("expected CLI value 3000, got %q", r.Stdout)
+	}
+
+	// Env should win over config
+	os.Setenv("TESTAPP_PORT", "5555")
+	defer os.Unsetenv("TESTAPP_PORT")
+	r = app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=5555") {
+		t.Fatalf("expected env value 5555, got %q", r.Stdout)
+	}
+}
+
+func TestConfigInvalidJSON(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Write invalid JSON
+	dir := filepath.Join(tmpDir, "testapp")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte("{bad json"), 0o644)
+
+	// Capture stderr during NewApp to verify warning
+	oldStderr := os.Stderr
+	stderrR, stderrW, _ := os.Pipe()
+	os.Stderr = stderrW
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	stderrW.Close()
+	var stderrBuf [4096]byte
+	n, _ := stderrR.Read(stderrBuf[:])
+	stderrR.Close()
+	os.Stderr = oldStderr
+	stderrOut := string(stderrBuf[:n])
+
+	// Warning should be printed to stderr during construction
+	if !strings.Contains(stderrOut, "warning: invalid JSON") {
+		t.Fatalf("expected warning about invalid JSON, got stderr=%q", stderrOut)
+	}
+
+	// Should fall back to defaults (config is empty due to invalid JSON)
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=8080") {
+		t.Fatalf("expected default value 8080, got %q", r.Stdout)
+	}
+}
+
+func TestConfigSetCreatesFile(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("greet", "say hello", func(args map[string]interface{}) int { return 0 })
+
+	// Run config set
+	r := app.Test([]string{"config", "set", "theme", "dark"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// Verify file was created
+	path := filepath.Join(tmpDir, "testapp", "config.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("config file should be valid JSON: %v", err)
+	}
+	if config["theme"] != "dark" {
+		t.Fatalf("expected theme=dark, got %v", config["theme"])
+	}
+}
+
+func TestConfigPath(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("greet", "say hello", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"config", "path"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	expected := filepath.Join(tmpDir, "testapp", "config.json")
+	if !strings.Contains(r.Stdout, expected) {
+		t.Fatalf("expected path %q in stdout, got %q", expected, r.Stdout)
+	}
+}
+
+func TestConfigShow(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{
+		"port": float64(9999),
+	})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+		StringFlag("host", "hostname", Default("localhost")),
+	))
+
+	r := app.Test([]string{"config", "show"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// port should show config source
+	if !strings.Contains(r.Stdout, "port = 9999") {
+		t.Fatalf("expected port=9999 in output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "(source: config)") {
+		t.Fatalf("expected source: config in output, got %q", r.Stdout)
+	}
+
+	// host should show default source
+	if !strings.Contains(r.Stdout, "host = localhost") {
+		t.Fatalf("expected host=localhost in output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "host = localhost  (source: default)") {
+		t.Fatalf("expected host with source: default in output, got %q", r.Stdout)
+	}
+}
+
+func TestConfigXDGHome(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldVal, hadOld := os.LookupEnv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	defer func() {
+		if hadOld {
+			os.Setenv("XDG_CONFIG_HOME", oldVal)
+		} else {
+			os.Unsetenv("XDG_CONFIG_HOME")
+		}
+	}()
+
+	// Verify configPath respects XDG_CONFIG_HOME
+	path := configPath("myapp")
+	expected := filepath.Join(tmpDir, "myapp", "config.json")
+	if path != expected {
+		t.Fatalf("expected path %q, got %q", expected, path)
+	}
+
+	// Verify with a different XDG_CONFIG_HOME
+	otherDir := t.TempDir()
+	os.Setenv("XDG_CONFIG_HOME", otherDir)
+	path = configPath("myapp")
+	expected = filepath.Join(otherDir, "myapp", "config.json")
+	if path != expected {
+		t.Fatalf("expected path %q, got %q", expected, path)
+	}
 }
