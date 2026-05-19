@@ -587,6 +587,31 @@ func (g *Group) Deprecated(name, message string) {
 	g.deprecatedMap[name] = message
 }
 
+// Commands returns the registered top-level commands.
+func (a *App) Commands() map[string]*Command {
+	return a.commands
+}
+
+// Groups returns the registered command groups.
+func (a *App) Groups() map[string]*Group {
+	return a.groups
+}
+
+// GlobalFlags returns the registered global flags.
+func (a *App) GlobalFlags() []Flag {
+	return a.globalFlags
+}
+
+// DeprecatedCommands returns the deprecated command map (name -> message).
+func (a *App) DeprecatedCommands() map[string]string {
+	return a.deprecatedMap
+}
+
+// DeprecatedCommands returns the deprecated subcommand map (name -> message).
+func (g *Group) DeprecatedCommands() map[string]string {
+	return g.deprecatedMap
+}
+
 // Run executes the CLI, reading from os.Args.
 func (a *App) Run() {
 	argv := os.Args[1:]

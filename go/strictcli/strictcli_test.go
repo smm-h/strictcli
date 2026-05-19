@@ -1956,3 +1956,112 @@ func TestImpliesEnvTrigger(t *testing.T) {
 		t.Fatalf("stdout should contain 'embeddings=false', got %q", r.Stdout)
 	}
 }
+
+func TestAppCommands(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	handler := func(args map[string]interface{}) int { return 0 }
+	app.Command("build", "build the project", handler)
+	app.Command("test", "run tests", handler)
+
+	cmds := app.Commands()
+	if len(cmds) != 2 {
+		t.Fatalf("expected 2 commands, got %d", len(cmds))
+	}
+	if cmds["build"] == nil {
+		t.Fatal("expected 'build' command to be present")
+	}
+	if cmds["test"] == nil {
+		t.Fatal("expected 'test' command to be present")
+	}
+	if cmds["build"].Help != "build the project" {
+		t.Fatalf("expected build help 'build the project', got %q", cmds["build"].Help)
+	}
+	if cmds["test"].Help != "run tests" {
+		t.Fatalf("expected test help 'run tests', got %q", cmds["test"].Help)
+	}
+}
+
+func TestAppGroups(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	handler := func(args map[string]interface{}) int { return 0 }
+
+	grp := app.Group("config", "manage configuration")
+	grp.Command("set", "set a value", handler)
+	grp.Command("get", "get a value", handler)
+
+	groups := app.Groups()
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(groups))
+	}
+	g := groups["config"]
+	if g == nil {
+		t.Fatal("expected 'config' group to be present")
+	}
+	if g.Help != "manage configuration" {
+		t.Fatalf("expected group help 'manage configuration', got %q", g.Help)
+	}
+	if len(g.Commands) != 2 {
+		t.Fatalf("expected 2 subcommands, got %d", len(g.Commands))
+	}
+	if g.Commands["set"] == nil {
+		t.Fatal("expected 'set' subcommand to be present")
+	}
+	if g.Commands["get"] == nil {
+		t.Fatal("expected 'get' subcommand to be present")
+	}
+}
+
+func TestAppGlobalFlags(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.GlobalFlag(StringFlag("output", "output format", Default("json")))
+
+	flags := app.GlobalFlags()
+	if len(flags) != 2 {
+		t.Fatalf("expected 2 global flags, got %d", len(flags))
+	}
+	if flags[0].Name != "verbose" {
+		t.Fatalf("expected first flag name 'verbose', got %q", flags[0].Name)
+	}
+	if flags[0].Type != TypeBool {
+		t.Fatalf("expected first flag type TypeBool, got %v", flags[0].Type)
+	}
+	if flags[1].Name != "output" {
+		t.Fatalf("expected second flag name 'output', got %q", flags[1].Name)
+	}
+	if flags[1].Type != TypeStr {
+		t.Fatalf("expected second flag type TypeStr, got %v", flags[1].Type)
+	}
+}
+
+func TestAppDeprecated(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Deprecated("deploy", "use 'release' instead")
+	app.Deprecated("init", "use 'setup' instead")
+
+	deprecated := app.DeprecatedCommands()
+	if len(deprecated) != 2 {
+		t.Fatalf("expected 2 deprecated commands, got %d", len(deprecated))
+	}
+	if deprecated["deploy"] != "use 'release' instead" {
+		t.Fatalf("expected deploy message 'use 'release' instead', got %q", deprecated["deploy"])
+	}
+	if deprecated["init"] != "use 'setup' instead" {
+		t.Fatalf("expected init message 'use 'setup' instead', got %q", deprecated["init"])
+	}
+
+	// Also test Group.DeprecatedCommands
+	handler := func(args map[string]interface{}) int { return 0 }
+	app.Command("run", "run something", handler)
+	grp := app.Group("config", "manage configuration")
+	grp.Command("set", "set a value", handler)
+	grp.Deprecated("reset", "use 'set' with --default instead")
+
+	grpDeprecated := grp.DeprecatedCommands()
+	if len(grpDeprecated) != 1 {
+		t.Fatalf("expected 1 deprecated group command, got %d", len(grpDeprecated))
+	}
+	if grpDeprecated["reset"] != "use 'set' with --default instead" {
+		t.Fatalf("expected reset message, got %q", grpDeprecated["reset"])
+	}
+}
