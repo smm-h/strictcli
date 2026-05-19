@@ -750,8 +750,8 @@ func (a *App) doParse(argv []string) parseResult {
 		if !ok {
 			return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", subToken)}
 		}
-		// Check command-level --help
-		if len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h") {
+		// Check command-level --help anywhere in remaining tokens
+		if tokensContainHelp(cmdRest) {
 			prefix := grp.Name + " "
 			return parseResult{helpText: formatCommandHelp(a, cmd, prefix)}
 		}
@@ -775,17 +775,13 @@ func (a *App) doParse(argv []string) parseResult {
 
 	// Check commands
 	if cmd, ok := a.commands[token]; ok {
+		// Check command-level --help anywhere in remaining tokens
+		if tokensContainHelp(cmdRest) {
+			return parseResult{helpText: formatCommandHelp(a, cmd, "")}
+		}
 		// Passthrough: skip parsing, forward raw args
 		if cmd.Passthrough {
-			// Check for help in passthrough
-			if len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h") {
-				return parseResult{helpText: formatCommandHelp(a, cmd, "")}
-			}
 			return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
-		}
-		// Check command-level --help
-		if len(cmdRest) == 1 && (cmdRest[0] == "--help" || cmdRest[0] == "-h") {
-			return parseResult{helpText: formatCommandHelp(a, cmd, "")}
 		}
 		kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags)
 		if err != "" {
@@ -807,6 +803,20 @@ func (a *App) doParse(argv []string) parseResult {
 	}
 
 	return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", token)}
+}
+
+// tokensContainHelp checks if --help or -h appears in tokens before any "--"
+// separator. Tokens after "--" are literal arguments and should not trigger help.
+func tokensContainHelp(tokens []string) bool {
+	for _, tok := range tokens {
+		if tok == "--" {
+			return false
+		}
+		if tok == "--help" || tok == "-h" {
+			return true
+		}
+	}
+	return false
 }
 
 // extractGlobalFlags scans argv for global flag tokens that appear before the

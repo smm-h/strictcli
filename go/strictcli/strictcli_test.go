@@ -2101,3 +2101,36 @@ func TestRequiredFlagStillDisplaysRequired(t *testing.T) {
 		t.Fatalf("expected [required] in help output, got:\n%s", r.Stdout)
 	}
 }
+
+func TestHelpAfterFlags(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(BoolFlag("verbose", "enable verbose output")))
+	r := app.Test([]string{"cmd", "--verbose", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "cmd") {
+		t.Fatalf("expected help output containing 'cmd', got:\n%s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "--verbose") {
+		t.Fatalf("expected help output containing '--verbose', got:\n%s", r.Stdout)
+	}
+}
+
+func TestHelpNotAfterSeparator(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print(args["items"])
+		return 0
+	}, WithArgs(NewArg("items", "items to process", Variadic(), ArgRequired(false))))
+	r := app.Test([]string{"cmd", "--", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	// Should NOT show help text -- --help after -- is a literal argument
+	if strings.Contains(r.Stdout, "Flags:") {
+		t.Fatalf("expected no help output, but got help text:\n%s", r.Stdout)
+	}
+}
