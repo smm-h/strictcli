@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.2.0
+
+### Features
+
+- **New feature.** Float type and deep nesting conformance test cases.
+
 ## 0.1.0
 
 - No user-facing changes.
