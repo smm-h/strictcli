@@ -127,3 +127,36 @@ def test_help_at_group_level():
     assert r.exit_code == 0
     assert "config" in r.stdout
     assert "manage configuration" in r.stdout
+
+
+def test_help_after_flags():
+    """--help recognized after other flags, not just as the sole token."""
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag("verbose", type=bool, help="enable verbose output")
+    def cmd(verbose):
+        pass
+
+    r = app.test(["cmd", "--verbose", "--help"])
+    assert r.exit_code == 0
+    assert "cmd" in r.stdout
+    assert "--verbose" in r.stdout
+
+
+def test_help_not_after_separator():
+    """--help after -- is a literal argument, not a help request."""
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd",
+        help="a command",
+        args=[strictcli.Arg(name="items", help="items to process", variadic=True)],
+    )
+    def cmd(items):
+        print(",".join(items))
+
+    r = app.test(["cmd", "--", "--help"])
+    assert r.exit_code == 0
+    assert "--help" in r.stdout  # printed as a literal arg value
+    assert "Flags:" not in r.stdout  # not showing help text

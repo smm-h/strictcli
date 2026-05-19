@@ -429,8 +429,9 @@ class App:
         else:
             raise _ParseError(f"unknown command '{token}'")
 
-        # Check for command-level --help/-h
-        if rest == ["--help"] or rest == ["-h"]:
+        # Check for command-level --help/-h anywhere in remaining tokens
+        # (but not after "--" separator, which makes everything literal)
+        if _tokens_contain_help(rest):
             raise _HelpRequested(target=cmd)
 
         # Passthrough commands: skip all flag/arg parsing, forward raw args
@@ -726,6 +727,16 @@ class App:
             stderr=stderr_buf.getvalue(),
             exit_code=exit_code,
         )
+
+
+def _tokens_contain_help(tokens: list[str]) -> bool:
+    """Check if --help or -h appears in tokens before any -- separator."""
+    for tok in tokens:
+        if tok == "--":
+            return False
+        if tok == "--help" or tok == "-h":
+            return True
+    return False
 
 
 def _parse_command(
