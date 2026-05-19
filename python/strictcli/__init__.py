@@ -241,17 +241,33 @@ class Command:
 
 @dataclass
 class Group:
-    """A container for nested commands (one nesting level)."""
+    """A container for nested commands and subgroups (arbitrary depth)."""
 
     name: str
     help: str
     commands: dict[str, Command] = field(default_factory=dict)
+    _groups: dict[str, Group] = field(default_factory=dict)
     deprecated: dict[str, DeprecatedCommand] = field(default_factory=dict)
     env_prefix: str | None = None
     _global_flags: list[Flag] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
+
+    def group(self, name: str, *, help: str) -> Group:
+        """Create and register a child subgroup."""
+        if name in self.commands:
+            raise ValueError(
+                f'group "{name}" collides with an existing command'
+            )
+        if name in self._groups:
+            raise ValueError(
+                f'group "{name}" is already registered'
+            )
+        grp = Group(name=name, help=help, env_prefix=self.env_prefix,
+                     _global_flags=self._global_flags)
+        self._groups[name] = grp
+        return grp
 
     def deprecate(self, name: str, *, message: str) -> None:
         """Register a deprecated subcommand in this group."""
@@ -262,6 +278,10 @@ class Group:
         if name in self.commands:
             raise ValueError(
                 f'deprecated command "{name}" collides with an existing command'
+            )
+        if name in self._groups:
+            raise ValueError(
+                f'deprecated command "{name}" collides with an existing group'
             )
         if name in self.deprecated:
             raise ValueError(
@@ -283,6 +303,10 @@ class Group:
         """Decorator to register a command within this group."""
 
         def decorator(func: Callable) -> Callable:
+            if name in self._groups:
+                raise ValueError(
+                    f'command "{name}" collides with an existing group'
+                )
             cmd = _build_and_validate_command(
                 name, help=help, handler=func, args=args, tags=tags, mutex=mutex,
                 dependencies=dependencies,
@@ -414,7 +438,7 @@ class App:
         global_values, remaining = self._parse_global_flags(argv)
         self._last_global_values = global_values
 
-        # Step 2: route to command or group
+        # Step 2: route to command or group (iterative traversal for arbitrary depth)
         # If global flag parsing stopped at --, strip it before routing
         if remaining and remaining[0] == "--":
             remaining = remaining[1:]
@@ -422,32 +446,51 @@ class App:
         if not remaining or remaining == ["--help"] or remaining == ["-h"]:
             raise _HelpRequested(target=self)
 
-        token = remaining[0]
-        rest = remaining[1:]
+        current_groups = self._groups
+        current_commands = self._commands
+        current_deprecated = self._deprecated
+        path: list[str] = []  # tracks group names for error messages and help prefix
 
-        if token in self._groups:
-            group = self._groups[token]
-            if not rest or rest == ["--help"] or rest == ["-h"]:
-                raise _HelpRequested(target=group)
-            sub_token = rest[0]
-            rest = rest[1:]
-            if sub_token in group.deprecated:
-                dep = group.deprecated[sub_token]
+        while remaining:
+            token = remaining[0]
+
+            if token in current_groups:
+                group = current_groups[token]
+                path.append(token)
+                remaining = remaining[1:]
+
+                if not remaining or remaining[0] in ("--help", "-h"):
+                    raise _HelpRequested(target=group)
+
+                # Descend into group
+                current_groups = group._groups
+                current_commands = group.commands
+                current_deprecated = group.deprecated
+                continue
+
+            if token in current_commands:
+                cmd = current_commands[token]
+                rest = remaining[1:]
+                break
+
+            if token in current_deprecated:
+                dep = current_deprecated[token]
                 raise _ParseError(
-                    f"command '{sub_token}' is deprecated: {dep.message}"
+                    f"command '{token}' is deprecated: {dep.message}"
                 )
-            if sub_token not in group.commands:
-                raise _ParseError(f"unknown command '{sub_token}'")
-            cmd = group.commands[sub_token]
-        elif token in self._commands:
-            cmd = self._commands[token]
-        elif token in self._deprecated:
-            dep = self._deprecated[token]
-            raise _ParseError(
-                f"command '{token}' is deprecated: {dep.message}"
-            )
-        else:
+
+            # Unknown command -- include path in error message
+            if path:
+                raise _ParseError(
+                    f"unknown command '{token}' in '{' '.join(path)}'"
+                )
             raise _ParseError(f"unknown command '{token}'")
+        else:
+            # Loop ended without finding a command -- remaining was exhausted
+            # by group traversal. This means the last group had no subcommand.
+            # (Already handled by the help check inside the loop, but guard
+            # against edge cases.)
+            raise _HelpRequested(target=group)
 
         # Check for command-level --help/-h anywhere in remaining tokens
         # (but not after "--" separator, which makes everything literal)
@@ -702,11 +745,20 @@ class App:
         return cli_set, remaining
 
     def _find_command_prefix(self, cmd: Command) -> str:
-        """Find the group prefix for a command (for help formatting)."""
-        for group in self._groups.values():
-            if cmd in group.commands.values():
-                return f"{group.name} "
-        return ""
+        """Find the group prefix for a command (for help formatting).
+
+        Traverses the group tree recursively to find the full path.
+        """
+        def _search_groups(groups: dict[str, Group], path: list[str]) -> str | None:
+            for group in groups.values():
+                if cmd in group.commands.values():
+                    return " ".join(path + [group.name]) + " "
+                result = _search_groups(group._groups, path + [group.name])
+                if result is not None:
+                    return result
+            return None
+
+        return _search_groups(self._groups, []) or ""
 
     def run(self) -> None:
         """Run the CLI application, reading from sys.argv."""
@@ -1511,9 +1563,16 @@ def _format_app_help(app: App) -> str:
     return "\n".join(lines)
 
 
-def _format_group_help(app: App, group: Group) -> str:
-    """Format group-level help shown when the user runs 'myapp group --help'."""
-    lines: list[str] = [f"{app.name} {group.name} -- {group.help}"]
+def _format_group_help(app: App, group: Group, path: list[str] | None = None) -> str:
+    """Format group-level help shown when the user runs 'myapp group --help'.
+
+    ``path`` is the list of group names leading to this group (e.g. ['dns', 'zone']).
+    When None, the path is computed by searching the app's group tree.
+    """
+    if path is None:
+        path = _find_group_path(app, group)
+    full_path = " ".join(path)
+    lines: list[str] = [f"{app.name} {full_path} -- {group.help}"]
 
     if group.commands:
         lines.append("")
@@ -1524,6 +1583,16 @@ def _format_group_help(app: App, group: Group) -> str:
             cmd = group.commands[name]
             padding = max_len - len(name) + 4
             lines.append(f"  {name}{' ' * padding}{cmd.help}")
+
+    if group._groups:
+        lines.append("")
+        lines.append("Groups:")
+        names = list(group._groups.keys())
+        max_len = max(len(n) for n in names)
+        for name in names:
+            sub = group._groups[name]
+            padding = max_len - len(name) + 4
+            lines.append(f"  {name}{' ' * padding}{sub.help}")
 
     if group.deprecated:
         lines.append("")
@@ -1537,10 +1606,27 @@ def _format_group_help(app: App, group: Group) -> str:
 
     lines.append("")
     lines.append(
-        f"Use '{app.name} {group.name} <command> --help' for more information."
+        f"Use '{app.name} {full_path} <command> --help' for more information."
     )
 
     return "\n".join(lines)
+
+
+def _find_group_path(app: App, target: Group) -> list[str]:
+    """Find the full path (list of group names) from app root to the target group."""
+    def _search(groups: dict[str, Group], path: list[str]) -> list[str] | None:
+        for name, grp in groups.items():
+            current = path + [name]
+            if grp is target:
+                return current
+            result = _search(grp._groups, current)
+            if result is not None:
+                return result
+        return None
+
+    result = _search(app._groups, [])
+    # Fallback: just use the group name (shouldn't happen in practice)
+    return result if result is not None else [target.name]
 
 
 def _build_flag_spec(f: Flag) -> str:
