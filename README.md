@@ -13,7 +13,7 @@ strictcli has two first-class implementations kept in behavioral lockstep by a s
 
 Most CLI frameworks infer behavior from type hints, function signatures, or naming conventions. strictcli does the opposite: every flag, argument, command, and help string is declared explicitly. If something is missing, you get an error at registration time, not a confusing runtime surprise.
 
-- **Three types only.** `str`, `bool`, `int` — no magic type coercion.
+- **Four types only.** `str`, `bool`, `int`, `float` — no magic type coercion. NaN and Inf are rejected.
 - **Mandatory help text.** Every flag, arg, command, and group must have help text.
 - **Handler signature validation.** Parameter names must match declared flags and args exactly.
 - **Registration-time errors.** Misconfigurations fail loud and early, not at parse time.
@@ -71,9 +71,9 @@ func main() {
 
 ## Features
 
-- Commands and command groups (two-level nesting)
+- Commands and command groups (recursive nesting to arbitrary depth)
 - Deprecated commands — register retired commands that print a message and exit 1, shown in help under a `Deprecated:` section
-- Flags: string, boolean (with `--no-` negation), integer
+- Flags: string, boolean (with `--no-` negation), integer, float (NaN/Inf rejected)
 - Short flag aliases (`-v` for `--verbose`)
 - Positional arguments (required, optional with defaults, variadic)
 - Environment variable binding with prefix enforcement
@@ -87,13 +87,17 @@ func main() {
 - Custom validation functions per flag
 - Auto-generated help at every level (app, group, command)
 - Built-in `--version` / `-v` support
+- Auto-version detection from package metadata (Python only)
+- JSON config file support — reads `~/.config/{name}/config.json`, auto-registers `config show/set/path/edit` subcommands. Precedence: CLI > env > config > default.
+- `--dump-schema` — auto-injected flag that writes `.strictcli/schema.json` describing the full CLI structure
+- `--help` / `-h` recognized anywhere in argv
 - In-process testing via `app.test()` / `app.Test()`
 
 ## Conformance
 
 The `conformance/` directory contains a cross-language test suite that verifies both implementations produce identical output for identical inputs. It includes:
 
-- 21 JSON test case files covering every feature
+- 24 JSON test case files covering every feature
 - API surface verification (`check_api_surface.py`)
 - Error message parity checks (`check_error_parity.py`)
 - Pairwise combination testing and fuzzing

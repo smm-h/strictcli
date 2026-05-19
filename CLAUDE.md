@@ -29,7 +29,7 @@ cd conformance && python run.py --target python && python run.py --target go
 
 ### Python (`python/strictcli/__init__.py`)
 
-Single-file, zero-dependency implementation (~1560 lines). Key internal stages:
+Single-file, zero-dependency implementation (~2040 lines). Key internal stages:
 
 1. **Registration** — `@flag`/`@arg` decorators attach metadata to handlers; `@app.command()` triggers `_build_and_validate_command()` which merges tags, validates signatures, checks constraints.
 2. **Global flag parsing** — `_parse_global_flags()` extracts app-level flags before and after the command token.
@@ -39,11 +39,13 @@ Single-file, zero-dependency implementation (~1560 lines). Key internal stages:
 
 ### Go (`go/strictcli/`)
 
-Split across three files, zero dependencies (stdlib only):
+Split across five files (~2680 non-test lines), zero dependencies (stdlib only):
 
 - `strictcli.go` — types, constructors (functional options pattern), registration, orchestration.
 - `parse.go` — two-phase flag/arg parsing, env resolution, validation.
 - `help.go` — help text formatting at app/group/command levels.
+- `config.go` — JSON config file loading, `config show/set/path/edit` subcommands.
+- `schema.go` — `--dump-schema` implementation, writes `.strictcli/schema.json`.
 
 Handlers receive `map[string]interface{}` (flag names with hyphens converted to underscores as keys).
 
@@ -55,8 +57,8 @@ JSON test cases in `cases/` define app structure + argv + expected output. `run.
 
 Both implementations must:
 
-- Support exactly three types: `str`, `bool`, `int`.
-- Use strict integer parsing (no leading/trailing whitespace, 64-bit signed bounds, no leading zeros in Go).
+- Support exactly four types: `str`, `bool`, `int`, `float`.
+- Use strict integer parsing (no leading/trailing whitespace, 64-bit signed bounds, no leading zeros in Go). Float parsing rejects NaN and Inf.
 - Accept the same boolean env var strings: `1|true|yes` / `0|false|no` (case-insensitive).
 - Produce identical error messages for identical inputs (checked by `check_error_parity.py`).
 - Export the same API surface (checked by `check_api_surface.py`).
@@ -70,11 +72,17 @@ When adding a feature to one implementation, add it to both and add conformance 
 - Flags with dashes (`--dry-run`) become underscore parameters (`dry_run`) in handlers.
 - `app.test(argv)` / `app.Test(argv)` runs the CLI in-process for unit tests — never shell out.
 - Help text is mandatory on every Flag, Arg, Command, Group, and App. Missing help is a registration-time error.
-- Only two levels of nesting: App > Group > Command or App > Command. No deeper.
+- Recursive group nesting: `group.group(name, help=...)` (Python) / `group.Group(name, help)` (Go). Arbitrary depth: App > Group > Group > ... > Command.
 - Passthrough commands bypass all parsing — handler gets raw args plus global flag values.
 - `CoRequired(flags=[...])` declares flags that must appear together. `Requires(flag=..., depends_on=...)` declares one-way dependency. `Implies(flag=..., implies=..., value=...)` auto-sets a bool flag when a trigger is provided. All passed via `dependencies=[...]`.
 - `app.deprecate(name, message=...)` / `group.deprecate(name, message=...)` registers a retired command that prints the message to stderr and exits 1. Shown in help under a `Deprecated:` section.
 - Validation errors at registration time use panics (Go) / ValueError (Python). Parse-time errors print to stderr and exit 1.
+- `type=float` / `FloatFlag(...)` — float type support. NaN and Inf are rejected at parse time.
+- JSON config file support — `App(config=True)` (Python) / `WithConfig()` (Go). Reads `~/.config/{name}/config.json`. Precedence: CLI > env > config > default. Auto-registers `config show/set/path/edit` subcommands.
+- `--dump-schema` — auto-injected flag on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups).
+- Auto-version (Python only) — `App(name="x", help="...")` without an explicit `version` auto-detects from `importlib.metadata`.
+- `--help` / `-h` is recognized anywhere in argv, not just at token boundaries.
+- `Default(nil)` fix (Go only) — flags with `Default(nil)` display `[optional]` in help instead of `[default: <nil>]`.
 
 ## Release workflow
 
