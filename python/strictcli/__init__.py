@@ -89,6 +89,10 @@ class _VersionRequested(Exception):
     """Raised when --version or -v is encountered."""
 
 
+class _DumpSchemaRequested(Exception):
+    """Raised when --dump-schema is encountered."""
+
+
 class _ParseError(Exception):
     """Raised for user-facing parse errors."""
 
@@ -594,11 +598,13 @@ class App:
         values (used by passthrough command handlers).
         """
 
-        # Step 1: intercept app-level --help/-h and --version/-v
+        # Step 1: intercept app-level --help/-h, --version/-v, --dump-schema
         if not argv or argv == ["--help"] or argv == ["-h"]:
             raise _HelpRequested(target=self)
         if argv == ["--version"] or argv == ["-v"]:
             raise _VersionRequested()
+        if "--dump-schema" in argv:
+            raise _DumpSchemaRequested()
 
         # Step 1.5: parse global flags before command routing
         global_values, remaining = self._parse_global_flags(argv)
@@ -960,6 +966,10 @@ class App:
         except _VersionRequested:
             print(_format_version(self))
             sys.exit(0)
+        except _DumpSchemaRequested:
+            path = _write_schema(self)
+            print(path)
+            sys.exit(0)
         except _ParseError as e:
             print(f"error: {e}", file=sys.stderr)
             print(f"try '{self.name} --help'", file=sys.stderr)
@@ -989,6 +999,9 @@ class App:
                 stdout_buf.write(_format_command_help(self, e.target, prefix) + "\n")
         except _VersionRequested:
             stdout_buf.write(_format_version(self) + "\n")
+        except _DumpSchemaRequested:
+            path = _write_schema(self)
+            stdout_buf.write(path + "\n")
         except _ParseError as e:
             stderr_buf.write(f"error: {e}\n")
             stderr_buf.write(f"try '{self.name} --help'\n")
@@ -1937,3 +1950,84 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
             lines.append(f"  {spec}{' ' * padding}{f.help}{meta}")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Schema serialization (--dump-schema)
+# ---------------------------------------------------------------------------
+
+_TYPE_NAMES = {str: "str", bool: "bool", int: "int", float: "float"}
+
+
+def _serialize_flag(f: Flag) -> dict:
+    """Serialize a Flag to a JSON-serializable dict."""
+    return {
+        "name": f.name,
+        "type": _TYPE_NAMES[f.type],
+        "help": f.help,
+        "short": f.short,
+        "default": f.default,
+        "env": f.env,
+        "choices": f.choices,
+        "repeatable": f.repeatable,
+        "negatable": f.negatable if f.type is bool else None,
+        "hidden": False,
+    }
+
+
+def _serialize_arg(a: Arg) -> dict:
+    """Serialize an Arg to a JSON-serializable dict."""
+    return {
+        "name": a.name,
+        "help": a.help,
+        "required": a.required,
+        "variadic": a.variadic,
+    }
+
+
+def _serialize_command(cmd: Command) -> dict:
+    """Serialize a Command to a JSON-serializable dict."""
+    return {
+        "name": cmd.name,
+        "help": cmd.help,
+        "flags": [_serialize_flag(f) for f in cmd.flags],
+        "args": [_serialize_arg(a) for a in cmd.args],
+        "passthrough": cmd.passthrough is not None,
+    }
+
+
+def _serialize_group(group: Group) -> dict:
+    """Serialize a Group to a JSON-serializable dict (recursive)."""
+    return {
+        "name": group.name,
+        "help": group.help,
+        "commands": {name: _serialize_command(cmd) for name, cmd in group.commands.items()},
+        "groups": {name: _serialize_group(g) for name, g in group._groups.items()},
+        "deprecated": {name: dep.message for name, dep in group.deprecated.items()},
+    }
+
+
+def _dump_schema(app: App) -> dict:
+    """Produce a JSON-serializable dict representing the app's command tree."""
+    return {
+        "name": app.name,
+        "version": app.version,
+        "help": app.help,
+        "env_prefix": app.env_prefix,
+        "config": app.config,
+        "global_flags": [_serialize_flag(f) for f in app._global_flags],
+        "commands": {name: _serialize_command(cmd) for name, cmd in app._commands.items()},
+        "groups": {name: _serialize_group(grp) for name, grp in app._groups.items()},
+        "deprecated": {name: dep.message for name, dep in app._deprecated.items()},
+    }
+
+
+def _write_schema(app: App) -> str:
+    """Write the schema to .strictcli/schema.json and return the path."""
+    schema = _dump_schema(app)
+    dir_path = os.path.join(os.getcwd(), ".strictcli")
+    os.makedirs(dir_path, exist_ok=True)
+    file_path = os.path.join(dir_path, "schema.json")
+    with open(file_path, "w") as f:
+        f.write(json.dumps(schema, indent=2) + "\n")
+    return file_path
