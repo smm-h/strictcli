@@ -266,6 +266,8 @@ func buildFlagMeta(f Flag) string {
 		// Repeatable flags are never required; no default shown
 	} else if f.hasDefault && f.Default != nil {
 		metaParts = append(metaParts, fmt.Sprintf("default: %v", f.Default))
+	} else if f.hasDefault {
+		metaParts = append(metaParts, "optional")
 	} else {
 		metaParts = append(metaParts, "required")
 	}

@@ -2065,3 +2065,39 @@ func TestAppDeprecated(t *testing.T) {
 		t.Fatalf("expected reset message, got %q", grpDeprecated["reset"])
 	}
 }
+
+func TestDefaultNilDisplaysOptional(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("name", "a name", Default(nil))))
+	r := app.Test([]string{"cmd", "--help"})
+	if !strings.Contains(r.Stdout, "[optional]") {
+		t.Fatalf("expected [optional] in help output, got:\n%s", r.Stdout)
+	}
+	if strings.Contains(r.Stdout, "[required]") {
+		t.Fatalf("expected no [required] in help output, got:\n%s", r.Stdout)
+	}
+}
+
+func TestDefaultValueStillDisplays(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("name", "a name", Default("foo"))))
+	r := app.Test([]string{"cmd", "--help"})
+	if !strings.Contains(r.Stdout, "[default: foo]") {
+		t.Fatalf("expected [default: foo] in help output, got:\n%s", r.Stdout)
+	}
+}
+
+func TestRequiredFlagStillDisplaysRequired(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("name", "a name")))
+	r := app.Test([]string{"cmd", "--help"})
+	if !strings.Contains(r.Stdout, "[required]") {
+		t.Fatalf("expected [required] in help output, got:\n%s", r.Stdout)
+	}
+}
