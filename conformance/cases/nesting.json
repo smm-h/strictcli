@@ -285,5 +285,352 @@
       "stdout_contains": "Use 'myapp config <command> --help' for more information.",
       "stdout_equals": "myapp config -- manage configuration\n\nCommands:\n  show    display config\n\nUse 'myapp config <command> --help' for more information."
     }
+  },
+  {
+    "name": "nesting: 3-level dispatch",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "dns",
+          "help": "manage DNS",
+          "groups": [
+            {
+              "name": "zone",
+              "help": "manage zones",
+              "commands": [
+                {
+                  "name": "list",
+                  "help": "list all zones",
+                  "handler_prints": "listing zones"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["dns", "zone", "list"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "listing zones"
+    }
+  },
+  {
+    "name": "nesting: 3-level subgroup help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "dns",
+          "help": "manage DNS",
+          "groups": [
+            {
+              "name": "zone",
+              "help": "manage zones",
+              "commands": [
+                {
+                  "name": "list",
+                  "help": "list all zones",
+                  "handler_prints": "ok"
+                },
+                {
+                  "name": "create",
+                  "help": "create a zone",
+                  "handler_prints": "ok"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["dns", "zone", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["list", "create", "manage zones"],
+      "stdout_equals": "myapp dns zone -- manage zones\n\nCommands:\n  list      list all zones\n  create    create a zone\n\nUse 'myapp dns zone <command> --help' for more information."
+    }
+  },
+  {
+    "name": "nesting: 3-level parent group help shows subgroups",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "dns",
+          "help": "manage DNS",
+          "commands": [
+            {
+              "name": "status",
+              "help": "show DNS status",
+              "handler_prints": "ok"
+            }
+          ],
+          "groups": [
+            {
+              "name": "zone",
+              "help": "manage zones",
+              "commands": [
+                {
+                  "name": "list",
+                  "help": "list all zones",
+                  "handler_prints": "ok"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["dns", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["Commands:", "Groups:", "status", "zone", "manage zones"],
+      "stdout_equals": "myapp dns -- manage DNS\n\nCommands:\n  status    show DNS status\n\nGroups:\n  zone    manage zones\n\nUse 'myapp dns <command> --help' for more information."
+    }
+  },
+  {
+    "name": "nesting: 3-level unknown command in subgroup",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "dns",
+          "help": "manage DNS",
+          "groups": [
+            {
+              "name": "zone",
+              "help": "manage zones",
+              "commands": [
+                {
+                  "name": "list",
+                  "help": "list all zones",
+                  "handler_prints": "ok"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["dns", "zone", "delete"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown command",
+      "stderr_equals": "error: unknown command 'delete' in 'dns zone'\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "nesting: 4-level dispatch",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "cloud",
+          "help": "cloud operations",
+          "groups": [
+            {
+              "name": "compute",
+              "help": "compute resources",
+              "groups": [
+                {
+                  "name": "instance",
+                  "help": "manage instances",
+                  "commands": [
+                    {
+                      "name": "list",
+                      "help": "list instances",
+                      "handler_prints": "listing instances"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["cloud", "compute", "instance", "list"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "listing instances"
+    }
+  },
+  {
+    "name": "nesting: 3-level dispatch with flags",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "dns",
+          "help": "manage DNS",
+          "groups": [
+            {
+              "name": "zone",
+              "help": "manage zones",
+              "commands": [
+                {
+                  "name": "create",
+                  "help": "create a zone",
+                  "flags": [
+                    {
+                      "name": "name",
+                      "type": "str",
+                      "help": "zone name"
+                    }
+                  ],
+                  "handler_prints": "created {name}"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["dns", "zone", "create", "--name", "example.com"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "created example.com"
+    }
+  },
+  {
+    "name": "nesting: 3-level command help shows full path",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "dns",
+          "help": "manage DNS",
+          "groups": [
+            {
+              "name": "zone",
+              "help": "manage zones",
+              "commands": [
+                {
+                  "name": "create",
+                  "help": "create a zone",
+                  "flags": [
+                    {
+                      "name": "name",
+                      "type": "str",
+                      "help": "zone name"
+                    }
+                  ],
+                  "handler_prints": "ok"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["dns", "zone", "create", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "dns zone create",
+      "stdout_equals": "myapp dns zone create -- create a zone\n\nFlags:\n  --name <str>    zone name [required]"
+    }
+  },
+  {
+    "name": "nesting: 3-level no subcommand shows subgroup help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "dns",
+          "help": "manage DNS",
+          "groups": [
+            {
+              "name": "zone",
+              "help": "manage zones",
+              "commands": [
+                {
+                  "name": "list",
+                  "help": "list all zones",
+                  "handler_prints": "ok"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["dns", "zone"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["manage zones", "list"],
+      "stdout_equals": "myapp dns zone -- manage zones\n\nCommands:\n  list    list all zones\n\nUse 'myapp dns zone <command> --help' for more information."
+    }
+  },
+  {
+    "name": "nesting: mixed groups and commands at same level",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "version",
+          "help": "show version",
+          "handler_prints": "1.0.0"
+        }
+      ],
+      "groups": [
+        {
+          "name": "config",
+          "help": "manage configuration",
+          "commands": [
+            {
+              "name": "show",
+              "help": "display config",
+              "handler_prints": "showing config"
+            }
+          ],
+          "groups": [
+            {
+              "name": "remote",
+              "help": "manage remotes",
+              "commands": [
+                {
+                  "name": "list",
+                  "help": "list remotes",
+                  "handler_prints": "listing remotes"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "remote", "list"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "listing remotes"
+    }
   }
 ]

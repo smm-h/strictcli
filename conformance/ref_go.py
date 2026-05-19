@@ -352,17 +352,25 @@ def generate(app_def: dict) -> str:
     if global_flags:
         lines.append("")
 
-    # Register groups first
-    for group_def in app_def.get("groups", []):
-        gvar = f"group_{group_def['name'].replace('-', '_')}"
-        lines.append(f'\t{gvar} := app.Group("{group_def["name"]}", "{group_def["help"]}")')
+    # Register groups first (recursive helper for nested groups)
+    _go_group_counter = [0]
+
+    def _emit_group_go(group_def: dict, parent_var: str, indent: str) -> None:
+        _go_group_counter[0] += 1
+        gvar = f"group_{group_def['name'].replace('-', '_')}_{_go_group_counter[0]}"
+        lines.append(f'{indent}{gvar} := {parent_var}.Group("{group_def["name"]}", "{group_def["help"]}")')
         lines.append("")
         for cmd_def in group_def.get("commands", []):
             if cmd_def.get("deprecated"):
-                lines.append(f'\t{gvar}.Deprecated("{cmd_def["name"]}", "{cmd_def.get("deprecated_message", "")}")')
+                lines.append(f'{indent}{gvar}.Deprecated("{cmd_def["name"]}", "{cmd_def.get("deprecated_message", "")}")')
                 lines.append("")
             else:
-                lines.extend(_emit_command_go(cmd_def, gvar, "\t", global_flags))
+                lines.extend(_emit_command_go(cmd_def, gvar, indent, global_flags))
+        for sub_group_def in group_def.get("groups", []):
+            _emit_group_go(sub_group_def, gvar, indent)
+
+    for group_def in app_def.get("groups", []):
+        _emit_group_go(group_def, "app", "\t")
 
     # Register top-level commands
     for cmd_def in app_def.get("commands", []):

@@ -67,7 +67,7 @@
     },
     "group": {
       "type": "object",
-      "required": ["name", "help", "commands"],
+      "required": ["name", "help"],
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string" },
@@ -75,6 +75,10 @@
         "commands": {
           "type": "array",
           "items": { "$ref": "#/$defs/command" }
+        },
+        "groups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/group" }
         }
       }
     },

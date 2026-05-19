@@ -473,23 +473,28 @@ def generate(app_def: dict) -> str:
     lines.append(f"    app = strictcli.App({', '.join(app_parts)})")
     lines.append("")
 
-    # Register groups first
-    for group_def in app_def.get("groups", []):
+    # Register groups first (recursive helper for nested groups)
+    def _emit_group(group_def: dict, parent_var: str, indent: str) -> None:
         gvar = f"group_{group_def['name'].replace('-', '_')}"
         lines.append(
-            f"    {gvar} = app.group({group_def['name']!r}, help={group_def['help']!r})"
+            f"{indent}{gvar} = {parent_var}.group({group_def['name']!r}, help={group_def['help']!r})"
         )
         lines.append("")
         for cmd_def in group_def.get("commands", []):
             if cmd_def.get("deprecated"):
                 lines.append(
-                    f"    {gvar}.deprecate({cmd_def['name']!r}, message={cmd_def.get('deprecated_message', '')!r})"
+                    f"{indent}{gvar}.deprecate({cmd_def['name']!r}, message={cmd_def.get('deprecated_message', '')!r})"
                 )
                 lines.append("")
             else:
                 lines.append(textwrap.indent(_emit_command_registration(
                     cmd_def, gvar, global_flags=global_flags,
-                ), "    "))
+                ), indent))
+        for sub_group_def in group_def.get("groups", []):
+            _emit_group(sub_group_def, gvar, indent)
+
+    for group_def in app_def.get("groups", []):
+        _emit_group(group_def, "app", "    ")
 
     # Register top-level commands
     for cmd_def in app_def.get("commands", []):
