@@ -2134,3 +2134,173 @@ func TestHelpNotAfterSeparator(t *testing.T) {
 		t.Fatalf("expected no help output, but got help text:\n%s", r.Stdout)
 	}
 }
+
+// --- Float flag tests ---
+
+func TestFloatFlagBasic(t *testing.T) {
+	app := simpleApp("cmd", "a command", "rate={rate}",
+		WithFlags(FloatFlag("rate", "the rate")))
+	r := app.Test([]string{"cmd", "--rate", "3.14"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "rate=3.14") {
+		t.Fatalf("stdout should contain 'rate=3.14', got %q", r.Stdout)
+	}
+}
+
+func TestFloatFlagEquals(t *testing.T) {
+	app := simpleApp("cmd", "a command", "rate={rate}",
+		WithFlags(FloatFlag("rate", "the rate")))
+	r := app.Test([]string{"cmd", "--rate=3.14"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "rate=3.14") {
+		t.Fatalf("stdout should contain 'rate=3.14', got %q", r.Stdout)
+	}
+}
+
+func TestFloatFlagShort(t *testing.T) {
+	app := simpleApp("cmd", "a command", "rate={rate}",
+		WithFlags(FloatFlag("rate", "the rate", Short("r"))))
+	r := app.Test([]string{"cmd", "-r", "3.14"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "rate=3.14") {
+		t.Fatalf("stdout should contain 'rate=3.14', got %q", r.Stdout)
+	}
+}
+
+func TestFloatFlagEnv(t *testing.T) {
+	os.Setenv("MYAPP_RATE", "2.718")
+	defer os.Unsetenv("MYAPP_RATE")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("rate=" + formatValue(args["rate"]))
+		return 0
+	}, WithFlags(FloatFlag("rate", "the rate", Default(1.0), Env("MYAPP_RATE"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "rate=2.718") {
+		t.Fatalf("stdout should contain 'rate=2.718', got %q", r.Stdout)
+	}
+}
+
+func TestFloatFlagDefault(t *testing.T) {
+	app := simpleApp("cmd", "a command", "rate={rate}",
+		WithFlags(FloatFlag("rate", "the rate", Default(9.81))))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "rate=9.81") {
+		t.Fatalf("stdout should contain 'rate=9.81', got %q", r.Stdout)
+	}
+}
+
+func TestFloatFlagChoices(t *testing.T) {
+	app := simpleApp("cmd", "a command", "rate={rate}",
+		WithFlags(FloatFlag("rate", "the rate", Choices(1.0, 2.5, 3.14))))
+	// Valid choice
+	r := app.Test([]string{"cmd", "--rate", "2.5"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "rate=2.5") {
+		t.Fatalf("stdout should contain 'rate=2.5', got %q", r.Stdout)
+	}
+	// Invalid choice
+	r2 := app.Test([]string{"cmd", "--rate", "7.77"})
+	if r2.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r2.ExitCode)
+	}
+	if !strings.Contains(r2.Stderr, "invalid value") {
+		t.Fatalf("stderr should contain 'invalid value', got %q", r2.Stderr)
+	}
+}
+
+func TestFloatFlagNegative(t *testing.T) {
+	app := simpleApp("cmd", "a command", "temp={temp}",
+		WithFlags(FloatFlag("temp", "temperature")))
+	r := app.Test([]string{"cmd", "--temp", "-40.5"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "temp=-40.5") {
+		t.Fatalf("stdout should contain 'temp=-40.5', got %q", r.Stdout)
+	}
+}
+
+func TestFloatFlagRejectNaN(t *testing.T) {
+	app := simpleApp("cmd", "a command", "rate={rate}",
+		WithFlags(FloatFlag("rate", "the rate")))
+	r := app.Test([]string{"cmd", "--rate", "NaN"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "NaN is not allowed") {
+		t.Fatalf("stderr should contain 'NaN is not allowed', got %q", r.Stderr)
+	}
+}
+
+func TestFloatFlagRejectInf(t *testing.T) {
+	app := simpleApp("cmd", "a command", "rate={rate}",
+		WithFlags(FloatFlag("rate", "the rate")))
+	for _, val := range []string{"Inf", "+Inf", "-Inf"} {
+		r := app.Test([]string{"cmd", "--rate", val})
+		if r.ExitCode != 1 {
+			t.Fatalf("val=%q: expected exit 1, got %d", val, r.ExitCode)
+		}
+		if !strings.Contains(r.Stderr, "Inf is not allowed") {
+			t.Fatalf("val=%q: stderr should contain 'Inf is not allowed', got %q", val, r.Stderr)
+		}
+	}
+}
+
+func TestFloatFlagRejectWhitespace(t *testing.T) {
+	app := simpleApp("cmd", "a command", "rate={rate}",
+		WithFlags(FloatFlag("rate", "the rate")))
+	for _, val := range []string{" 3.14", "3.14 ", " 3.14 "} {
+		r := app.Test([]string{"cmd", "--rate", val})
+		if r.ExitCode != 1 {
+			t.Fatalf("val=%q: expected exit 1, got %d", val, r.ExitCode)
+		}
+		if !strings.Contains(r.Stderr, "expected float") {
+			t.Fatalf("val=%q: stderr should contain 'expected float', got %q", val, r.Stderr)
+		}
+	}
+}
+
+func TestFloatFlagRepeatable(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("vals=" + formatValue(args["val"]))
+		return 0
+	}, WithFlags(FloatFlag("val", "a value", Repeatable())))
+
+	r := app.Test([]string{"cmd", "--val", "1.1", "--val", "2.2", "--val", "3.3"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "vals=1.1,2.2,3.3") {
+		t.Fatalf("stdout should contain 'vals=1.1,2.2,3.3', got %q", r.Stdout)
+	}
+}
+
+func TestFloatFlagHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(FloatFlag("rate", "the rate")))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "<float>") {
+		t.Fatalf("help should contain '<float>', got:\n%s", r.Stdout)
+	}
+}

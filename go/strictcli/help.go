@@ -241,6 +241,8 @@ func buildFlagSpec(f Flag) string {
 		spec += " <str>"
 	case TypeInt:
 		spec += " <int>"
+	case TypeFloat:
+		spec += " <float>"
 	}
 	return spec
 }

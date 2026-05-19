@@ -12,9 +12,10 @@ import (
 type FlagType int
 
 const (
-	TypeStr  FlagType = iota
-	TypeBool FlagType = iota
-	TypeInt  FlagType = iota
+	TypeStr   FlagType = iota
+	TypeBool  FlagType = iota
+	TypeInt   FlagType = iota
+	TypeFloat FlagType = iota
 )
 
 // Flag represents a --flag declaration.
@@ -346,6 +347,21 @@ func IntFlag(name, help string, opts ...FlagOption) Flag {
 	return f
 }
 
+// FloatFlag creates a float-typed flag.
+func FloatFlag(name, help string, opts ...FlagOption) Flag {
+	f := Flag{
+		Name:     name,
+		Type:     TypeFloat,
+		Help:     help,
+		Prefixed: true,
+	}
+	for _, opt := range opts {
+		opt(&f)
+	}
+	validateFlagConfig(&f)
+	return f
+}
+
 // NewArg creates a positional argument.
 func NewArg(name, help string, opts ...ArgOption) Arg {
 	if strings.TrimSpace(help) == "" {
@@ -391,6 +407,10 @@ func validateFlagConfig(f *Flag) {
 				if _, ok := c.(int); !ok {
 					panic(fmt.Sprintf("Flag %q: choice %v is not of type int", f.Name, c))
 				}
+			case TypeFloat:
+				if _, ok := c.(float64); !ok {
+					panic(fmt.Sprintf("Flag %q: choice %v is not of type float", f.Name, c))
+				}
 			}
 		}
 	}
@@ -408,6 +428,25 @@ func validateFlagConfig(f *Flag) {
 					gotType = fmt.Sprintf("%T", f.Default)
 				}
 				panic(fmt.Sprintf("Flag %q: type=int requires an int default, got '%s'", f.Name, gotType))
+			}
+		}
+	}
+	// Validate float default type
+	if f.Type == TypeFloat && f.hasDefault && f.Default != nil {
+		if !f.Repeatable {
+			if _, ok := f.Default.(float64); !ok {
+				var gotType string
+				switch f.Default.(type) {
+				case string:
+					gotType = "str"
+				case bool:
+					gotType = "bool"
+				case int:
+					gotType = "int"
+				default:
+					gotType = fmt.Sprintf("%T", f.Default)
+				}
+				panic(fmt.Sprintf("Flag %q: type=float requires a float64 default, got '%s'", f.Name, gotType))
 			}
 		}
 	}
@@ -980,6 +1019,16 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 					} else {
 						globalValues[f.Name] = intVal
 					}
+				case TypeFloat:
+					floatVal, errStr := parseFloatStrict(f.Name, envVal)
+					if errStr != "" {
+						return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+					}
+					if f.Repeatable {
+						globalValues[f.Name] = []interface{}{floatVal}
+					} else {
+						globalValues[f.Name] = floatVal
+					}
 				default:
 					if f.Repeatable {
 						globalValues[f.Name] = []interface{}{envVal}
@@ -1066,6 +1115,8 @@ func parseGlobalFlagValue(f *Flag, raw string) (interface{}, string) {
 			return nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
 		}
 		return intVal, ""
+	case TypeFloat:
+		return parseFloatStrict(f.Name, raw)
 	default:
 		return raw, ""
 	}

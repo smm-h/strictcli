@@ -2,6 +2,7 @@ package strictcli
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -93,6 +94,12 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, valuePart)
 					}
 					storeValue(f, intVal)
+				} else if f.Type == TypeFloat {
+					floatVal, errStr := parseFloatStrict(f.Name, valuePart)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
+					storeValue(f, floatVal)
 				} else {
 					storeValue(f, valuePart)
 				}
@@ -132,6 +139,12 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
 					}
 					storeValue(f, intVal)
+				} else if f.Type == TypeFloat {
+					floatVal, errStr := parseFloatStrict(f.Name, raw)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
+					storeValue(f, floatVal)
 				} else {
 					storeValue(f, raw)
 				}
@@ -160,6 +173,12 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
 					}
 					storeValue(f, intVal)
+				} else if f.Type == TypeFloat {
+					floatVal, errStr := parseFloatStrict(f.Name, raw)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
+					storeValue(f, floatVal)
 				} else {
 					storeValue(f, raw)
 				}
@@ -211,6 +230,16 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag) (map[string
 				cliSet[f.Name] = []interface{}{intVal}
 			} else {
 				cliSet[f.Name] = intVal
+			}
+		case TypeFloat:
+			floatVal, errStr := parseFloatStrict(f.Name, envVal)
+			if errStr != "" {
+				return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+			}
+			if f.Repeatable {
+				cliSet[f.Name] = []interface{}{floatVal}
+			} else {
+				cliSet[f.Name] = floatVal
 			}
 		default: // TypeStr
 			if f.Repeatable {
@@ -463,4 +492,23 @@ func formatChoices(choices []interface{}) string {
 		parts[i] = fmt.Sprintf("%v", c)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// parseFloatStrict parses a string as float64 with strict validation:
+// rejects leading/trailing whitespace, NaN, and +/-Inf.
+func parseFloatStrict(flagName, raw string) (interface{}, string) {
+	if raw != strings.TrimSpace(raw) {
+		return nil, fmt.Sprintf("--%s: expected float, got '%s'", flagName, raw)
+	}
+	floatVal, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return nil, fmt.Sprintf("--%s: expected float, got '%s'", flagName, raw)
+	}
+	if math.IsNaN(floatVal) {
+		return nil, fmt.Sprintf("--%s: NaN is not allowed", flagName)
+	}
+	if math.IsInf(floatVal, 0) {
+		return nil, fmt.Sprintf("--%s: Inf is not allowed", flagName)
+	}
+	return floatVal, ""
 }
