@@ -712,6 +712,15 @@ func (a *App) Run() {
 		fmt.Println(pr.versionText)
 		os.Exit(0)
 	}
+	if pr.dumpSchema {
+		path, err := writeSchema(a)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(path)
+		os.Exit(0)
+	}
 	if pr.parseErr != "" {
 		fmt.Fprintln(os.Stderr, "error: "+pr.parseErr)
 		fmt.Fprintf(os.Stderr, "try '%s --help'\n", a.Name)
@@ -736,6 +745,13 @@ func (a *App) Test(argv []string) Result {
 	}
 	if pr.versionText != "" {
 		return Result{Stdout: pr.versionText + "\n", ExitCode: 0}
+	}
+	if pr.dumpSchema {
+		path, err := writeSchema(a)
+		if err != nil {
+			return Result{Stderr: fmt.Sprintf("error: %s\n", err), ExitCode: 1}
+		}
+		return Result{Stdout: path + "\n", ExitCode: 0}
 	}
 	if pr.parseErr != "" {
 		stderr := fmt.Sprintf("error: %s\ntry '%s --help'\n", pr.parseErr, a.Name)
@@ -786,6 +802,7 @@ type parseResult struct {
 	helpText        string
 	versionText     string
 	parseErr        string
+	dumpSchema      bool
 }
 
 // doParse parses argv and returns a parseResult.
@@ -797,6 +814,13 @@ func (a *App) doParse(argv []string) parseResult {
 	}
 	if len(argv) == 1 && (argv[0] == "--version" || argv[0] == "-v") {
 		return parseResult{versionText: formatVersion(a)}
+	}
+
+	// --dump-schema: detected anywhere in argv, before any other parsing
+	for _, tok := range argv {
+		if tok == "--dump-schema" {
+			return parseResult{dumpSchema: true}
+		}
 	}
 
 	// Extract global flags from argv, leaving the rest for command routing.

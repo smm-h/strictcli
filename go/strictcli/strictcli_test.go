@@ -3003,3 +3003,395 @@ func TestConfigXDGHome(t *testing.T) {
 		t.Fatalf("expected path %q, got %q", expected, path)
 	}
 }
+
+// --- Dump schema tests ---
+
+// chdirTemp changes to a temporary directory and restores the original on cleanup.
+func chdirTemp(t *testing.T) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+	return tmpDir
+}
+
+func TestDumpSchemaWritesFile(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.Command("greet", "Say hello", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(tmpDir, ".strictcli", "schema.json")
+	if _, err := os.Stat(schemaPath); os.IsNotExist(err) {
+		t.Fatalf("schema file not created at %s", schemaPath)
+	}
+
+	// stdout should contain the path
+	if !strings.Contains(r.Stdout, schemaPath) {
+		t.Fatalf("stdout should contain schema path %q, got %q", schemaPath, r.Stdout)
+	}
+}
+
+func TestDumpSchemaContents(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	app := NewApp("myapp", "2.3.4", "My great app")
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int { return 0 },
+		WithFlags(
+			StringFlag("target", "Deploy target", Short("t"), Choices("prod", "staging")),
+			BoolFlag("force", "Force deploy"),
+		),
+		WithArgs(
+			NewArg("env", "Environment name"),
+		),
+	)
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(tmpDir, ".strictcli", "schema.json")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]interface{}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// App metadata
+	if schema["name"] != "myapp" {
+		t.Fatalf("expected name 'myapp', got %v", schema["name"])
+	}
+	if schema["version"] != "2.3.4" {
+		t.Fatalf("expected version '2.3.4', got %v", schema["version"])
+	}
+	if schema["help"] != "My great app" {
+		t.Fatalf("expected help 'My great app', got %v", schema["help"])
+	}
+	// env_prefix should be null when not set
+	if schema["env_prefix"] != nil {
+		t.Fatalf("expected env_prefix to be null, got %v", schema["env_prefix"])
+	}
+	if schema["config"] != false {
+		t.Fatalf("expected config false, got %v", schema["config"])
+	}
+
+	// Commands
+	cmds, ok := schema["commands"].(map[string]interface{})
+	if !ok {
+		t.Fatal("commands is not a map")
+	}
+	deploy, ok := cmds["deploy"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deploy command not found")
+	}
+	if deploy["name"] != "deploy" {
+		t.Fatalf("expected command name 'deploy', got %v", deploy["name"])
+	}
+	if deploy["help"] != "Deploy the app" {
+		t.Fatalf("expected help 'Deploy the app', got %v", deploy["help"])
+	}
+	if deploy["passthrough"] != false {
+		t.Fatalf("expected passthrough false, got %v", deploy["passthrough"])
+	}
+
+	// Flags
+	flags, ok := deploy["flags"].([]interface{})
+	if !ok || len(flags) != 2 {
+		t.Fatalf("expected 2 flags, got %v", deploy["flags"])
+	}
+	targetFlag := flags[0].(map[string]interface{})
+	if targetFlag["name"] != "target" {
+		t.Fatalf("expected flag name 'target', got %v", targetFlag["name"])
+	}
+	if targetFlag["type"] != "str" {
+		t.Fatalf("expected flag type 'str', got %v", targetFlag["type"])
+	}
+	if targetFlag["short"] != "t" {
+		t.Fatalf("expected short 't', got %v", targetFlag["short"])
+	}
+	choices, ok := targetFlag["choices"].([]interface{})
+	if !ok || len(choices) != 2 {
+		t.Fatalf("expected 2 choices, got %v", targetFlag["choices"])
+	}
+	if choices[0] != "prod" || choices[1] != "staging" {
+		t.Fatalf("expected choices [prod, staging], got %v", choices)
+	}
+	if targetFlag["hidden"] != false {
+		t.Fatalf("expected hidden false, got %v", targetFlag["hidden"])
+	}
+
+	forceFlag := flags[1].(map[string]interface{})
+	if forceFlag["name"] != "force" {
+		t.Fatalf("expected flag name 'force', got %v", forceFlag["name"])
+	}
+	if forceFlag["type"] != "bool" {
+		t.Fatalf("expected flag type 'bool', got %v", forceFlag["type"])
+	}
+	if forceFlag["negatable"] != true {
+		t.Fatalf("expected negatable true, got %v", forceFlag["negatable"])
+	}
+	if forceFlag["default"] != false {
+		t.Fatalf("expected default false, got %v", forceFlag["default"])
+	}
+
+	// Args
+	args, ok := deploy["args"].([]interface{})
+	if !ok || len(args) != 1 {
+		t.Fatalf("expected 1 arg, got %v", deploy["args"])
+	}
+	envArg := args[0].(map[string]interface{})
+	if envArg["name"] != "env" {
+		t.Fatalf("expected arg name 'env', got %v", envArg["name"])
+	}
+	if envArg["help"] != "Environment name" {
+		t.Fatalf("expected arg help 'Environment name', got %v", envArg["help"])
+	}
+	if envArg["required"] != true {
+		t.Fatalf("expected required true, got %v", envArg["required"])
+	}
+	if envArg["variadic"] != false {
+		t.Fatalf("expected variadic false, got %v", envArg["variadic"])
+	}
+}
+
+func TestDumpSchemaGroups(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	app := NewApp("testapp", "1.0.0", "A test app")
+	dns := app.Group("dns", "DNS management")
+	dns.Command("list", "List DNS records", func(args map[string]interface{}) int { return 0 })
+	dns.Command("add", "Add a DNS record", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("type", "Record type")),
+	)
+	zone := dns.Group("zone", "Zone management")
+	zone.Command("list", "List zones", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(tmpDir, ".strictcli", "schema.json")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]interface{}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	groups, ok := schema["groups"].(map[string]interface{})
+	if !ok {
+		t.Fatal("groups is not a map")
+	}
+	dnsGrp, ok := groups["dns"].(map[string]interface{})
+	if !ok {
+		t.Fatal("dns group not found")
+	}
+	if dnsGrp["name"] != "dns" {
+		t.Fatalf("expected group name 'dns', got %v", dnsGrp["name"])
+	}
+	if dnsGrp["help"] != "DNS management" {
+		t.Fatalf("expected help 'DNS management', got %v", dnsGrp["help"])
+	}
+
+	dnsCmds, ok := dnsGrp["commands"].(map[string]interface{})
+	if !ok {
+		t.Fatal("dns commands not a map")
+	}
+	if _, ok := dnsCmds["list"]; !ok {
+		t.Fatal("dns list command not found")
+	}
+	if _, ok := dnsCmds["add"]; !ok {
+		t.Fatal("dns add command not found")
+	}
+	addCmd := dnsCmds["add"].(map[string]interface{})
+	addFlags := addCmd["flags"].([]interface{})
+	if len(addFlags) != 1 {
+		t.Fatalf("expected 1 flag on add, got %d", len(addFlags))
+	}
+	if addFlags[0].(map[string]interface{})["name"] != "type" {
+		t.Fatalf("expected flag 'type', got %v", addFlags[0])
+	}
+
+	// Nested groups
+	dnsGroups, ok := dnsGrp["groups"].(map[string]interface{})
+	if !ok {
+		t.Fatal("dns groups not a map")
+	}
+	zoneGrp, ok := dnsGroups["zone"].(map[string]interface{})
+	if !ok {
+		t.Fatal("zone group not found")
+	}
+	if zoneGrp["name"] != "zone" {
+		t.Fatalf("expected group name 'zone', got %v", zoneGrp["name"])
+	}
+	if zoneGrp["help"] != "Zone management" {
+		t.Fatalf("expected help 'Zone management', got %v", zoneGrp["help"])
+	}
+	zoneCmds, ok := zoneGrp["commands"].(map[string]interface{})
+	if !ok {
+		t.Fatal("zone commands not a map")
+	}
+	if _, ok := zoneCmds["list"]; !ok {
+		t.Fatal("zone list command not found")
+	}
+}
+
+func TestDumpSchemaGlobalFlags(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.GlobalFlag(BoolFlag("verbose", "Verbose output", Short("V")))
+	app.GlobalFlag(StringFlag("output", "Output format", Default("text"), Choices("text", "json")))
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(tmpDir, ".strictcli", "schema.json")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]interface{}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	gFlags, ok := schema["global_flags"].([]interface{})
+	if !ok {
+		t.Fatal("global_flags is not an array")
+	}
+	if len(gFlags) != 2 {
+		t.Fatalf("expected 2 global flags, got %d", len(gFlags))
+	}
+
+	verbose := gFlags[0].(map[string]interface{})
+	if verbose["name"] != "verbose" {
+		t.Fatalf("expected name 'verbose', got %v", verbose["name"])
+	}
+	if verbose["type"] != "bool" {
+		t.Fatalf("expected type 'bool', got %v", verbose["type"])
+	}
+	if verbose["short"] != "V" {
+		t.Fatalf("expected short 'V', got %v", verbose["short"])
+	}
+	if verbose["negatable"] != true {
+		t.Fatalf("expected negatable true, got %v", verbose["negatable"])
+	}
+
+	output := gFlags[1].(map[string]interface{})
+	if output["name"] != "output" {
+		t.Fatalf("expected name 'output', got %v", output["name"])
+	}
+	if output["type"] != "str" {
+		t.Fatalf("expected type 'str', got %v", output["type"])
+	}
+	if output["default"] != "text" {
+		t.Fatalf("expected default 'text', got %v", output["default"])
+	}
+	choices, ok := output["choices"].([]interface{})
+	if !ok || len(choices) != 2 {
+		t.Fatalf("expected 2 choices, got %v", output["choices"])
+	}
+	// negatable should be null for non-bool
+	if output["negatable"] != nil {
+		t.Fatalf("expected negatable nil for non-bool, got %v", output["negatable"])
+	}
+}
+
+func TestDumpSchemaDeprecated(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.Command("new-cmd", "The new command", func(args map[string]interface{}) int { return 0 })
+	app.Deprecated("old-cmd", "Use 'new-cmd' instead")
+
+	// Also test group-level deprecated
+	dns := app.Group("dns", "DNS management")
+	dns.Command("list", "List records", func(args map[string]interface{}) int { return 0 })
+	dns.Deprecated("old-list", "Use 'list' instead")
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(tmpDir, ".strictcli", "schema.json")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]interface{}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	deprecated, ok := schema["deprecated"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deprecated is not a map")
+	}
+	msg, ok := deprecated["old-cmd"]
+	if !ok {
+		t.Fatal("deprecated old-cmd not found")
+	}
+	if msg != "Use 'new-cmd' instead" {
+		t.Fatalf("expected message \"Use 'new-cmd' instead\", got %v", msg)
+	}
+
+	// Group-level deprecated
+	groups := schema["groups"].(map[string]interface{})
+	dnsGrp := groups["dns"].(map[string]interface{})
+	grpDeprecated := dnsGrp["deprecated"].(map[string]interface{})
+	grpMsg, ok := grpDeprecated["old-list"]
+	if !ok {
+		t.Fatal("deprecated old-list not found in dns group")
+	}
+	if grpMsg != "Use 'list' instead" {
+		t.Fatalf("expected message \"Use 'list' instead\", got %v", grpMsg)
+	}
+}
+
+func TestDumpSchemaCreatesDir(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	schemaDir := filepath.Join(tmpDir, ".strictcli")
+	// Ensure dir does not exist
+	if _, err := os.Stat(schemaDir); !os.IsNotExist(err) {
+		t.Fatal(".strictcli dir should not exist yet")
+	}
+
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	info, err := os.Stat(schemaDir)
+	if err != nil {
+		t.Fatalf(".strictcli dir was not created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal(".strictcli should be a directory")
+	}
+
+	schemaFile := filepath.Join(schemaDir, "schema.json")
+	if _, err := os.Stat(schemaFile); os.IsNotExist(err) {
+		t.Fatal("schema.json was not created")
+	}
+}
