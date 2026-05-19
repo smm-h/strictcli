@@ -181,7 +181,7 @@
         "help": { "type": "string" },
         "type": {
           "type": "string",
-          "enum": ["str", "bool", "int"],
+          "enum": ["str", "bool", "int", "float"],
           "default": "str"
         },
         "short": { "type": "string" },
@@ -189,7 +189,7 @@
           "oneOf": [
             { "type": "string" },
             { "type": "boolean" },
-            { "type": "integer" },
+            { "type": "number" },
             { "type": "null" }
           ]
         },
@@ -204,6 +204,11 @@
           "type": "array",
           "items": { "type": "integer" },
           "description": "Choices for int-type flags."
+        },
+        "choices_float": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Choices for float-type flags."
         },
         "repeatable": { "type": "boolean", "default": false },
         "negatable": {

@@ -29,6 +29,8 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
                 opts.append("strictcli.Default(true)")
             else:
                 opts.append("strictcli.Default(false)")
+        elif isinstance(default, float):
+            opts.append(f"strictcli.Default({default})")
         elif isinstance(default, int):
             opts.append(f"strictcli.Default({default})")
         else:
@@ -46,6 +48,9 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
     if "choices_int" in flag_def:
         args = ", ".join(str(c) for c in flag_def["choices_int"])
         opts.append(f"strictcli.Choices({args})")
+    if "choices_float" in flag_def:
+        args = ", ".join(str(c) for c in flag_def["choices_float"])
+        opts.append(f"strictcli.Choices({args})")
     if flag_def.get("repeatable", False):
         opts.append("strictcli.Repeatable()")
     if "negatable" in flag_def and not flag_def["negatable"]:
@@ -56,7 +61,7 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
 def _emit_flag(flag_def: dict) -> str:
     """Emit a strictcli.StringFlag/BoolFlag/IntFlag(...) call."""
     ftype = flag_def.get("type", "str")
-    type_map = {"str": "StringFlag", "bool": "BoolFlag", "int": "IntFlag"}
+    type_map = {"str": "StringFlag", "bool": "BoolFlag", "int": "IntFlag", "float": "FloatFlag"}
     constructor = type_map[ftype]
     opts = _emit_flag_opts(flag_def)
     opts_str = ""
@@ -151,6 +156,8 @@ def _emit_handler_body(cmd_def: dict, indent: str, global_flags: list[dict] | No
                 lines.append(f'{indent}}}')
             elif ftype == "int":
                 lines.append(f'{indent}_out = strings.ReplaceAll(_out, "{{{orig_name}}}", fmt.Sprintf("%d", args["{param_key}"].(int)))')
+            elif ftype == "float":
+                lines.append(f'{indent}_out = strings.ReplaceAll(_out, "{{{orig_name}}}", fmt.Sprintf("%v", args["{param_key}"].(float64)))')
             else:
                 # str -- might be nil for mutex flags with default=null
                 lines.append(f'{indent}if args["{param_key}"] != nil {{')

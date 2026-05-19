@@ -22,7 +22,7 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
         f"name={flag_def['name']!r}",
     ]
     ftype = flag_def.get("type", "str")
-    type_map = {"str": "str", "bool": "bool", "int": "int"}
+    type_map = {"str": "str", "bool": "bool", "int": "int", "float": "float"}
     parts.append(f"type={type_map[ftype]}")
     parts.append(f"help={flag_def['help']!r}")
 
@@ -35,7 +35,7 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
             parts.append("default=None")
         elif isinstance(default, bool):
             parts.append(f"default={default}")
-        elif isinstance(default, int):
+        elif isinstance(default, (int, float)):
             parts.append(f"default={default}")
         else:
             parts.append(f"default={default!r}")
@@ -51,6 +51,9 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
 
     if "choices_int" in flag_def:
         parts.append(f"choices={flag_def['choices_int']!r}")
+
+    if "choices_float" in flag_def:
+        parts.append(f"choices={flag_def['choices_float']!r}")
 
     if flag_def.get("repeatable", False):
         parts.append("repeatable=True")
@@ -369,7 +372,7 @@ def _emit_command_registration(
                 fd_parts.append("default=None")
             elif isinstance(default, bool):
                 fd_parts.append(f"default={default}")
-            elif isinstance(default, int):
+            elif isinstance(default, (int, float)):
                 fd_parts.append(f"default={default}")
             else:
                 fd_parts.append(f"default={default!r}")
@@ -381,6 +384,8 @@ def _emit_command_registration(
             fd_parts.append(f"choices={f['choices_str']!r}")
         if "choices_int" in f:
             fd_parts.append(f"choices={f['choices_int']!r}")
+        if "choices_float" in f:
+            fd_parts.append(f"choices={f['choices_float']!r}")
         if f.get("repeatable", False):
             fd_parts.append("repeatable=True")
         if "negatable" in f and not f["negatable"]:

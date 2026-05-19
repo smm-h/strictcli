@@ -1,0 +1,353 @@
+[
+  {
+    "name": "float: basic float flag parses",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--rate",
+      "3.14"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rate=3.14"
+    }
+  },
+  {
+    "name": "float: equals syntax",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--rate=3.14"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rate=3.14"
+    }
+  },
+  {
+    "name": "float: default value used when omitted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "default": 2.5
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rate=2.5"
+    }
+  },
+  {
+    "name": "float: env var coerced to float",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "default": 1.5,
+              "env": "MYAPP_RATE"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_RATE": "9.99"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rate=9.99"
+    }
+  },
+  {
+    "name": "float: required float flag missing produces error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "required",
+      "stderr_equals": "error: flag '--rate' is required\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "float: reject non-numeric string",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--rate",
+      "abc"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "expected float",
+        "'abc'"
+      ],
+      "stderr_equals": "error: --rate: expected float, got 'abc'\ntry 'myapp --help'"
+    }
+  },
+  {
+    "name": "float: reject NaN",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--rate",
+      "NaN"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "--rate:"
+    }
+  },
+  {
+    "name": "float: reject Inf",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--rate",
+      "Inf"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "--rate:"
+    }
+  },
+  {
+    "name": "float: choices valid value accepted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [1.5, 2.5, 3.5]
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--rate",
+      "2.5"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rate=2.5"
+    }
+  },
+  {
+    "name": "float: choices invalid value rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [1.5, 2.5, 3.5]
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--rate",
+      "4.5"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "invalid value",
+        "4.5"
+      ]
+    }
+  },
+  {
+    "name": "float: negative value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "temp",
+              "type": "float",
+              "help": "temperature"
+            }
+          ],
+          "handler_prints": "temp={temp}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--temp",
+      "-40.5"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "temp=-40.5"
+    }
+  }
+]
