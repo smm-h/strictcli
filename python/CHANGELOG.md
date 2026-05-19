@@ -2,6 +2,17 @@
 
 # Changelog
 
+## 0.7.0
+
+### Features
+
+- **New feature.** `--dump-schema` flag auto-generates `.strictcli/schema.json` describing the full CLI structure.
+- **New feature.** Opt-in JSON config file support with `App(config=True)`. Reads `~/.config/{name}/config.json` with precedence: CLI > env > config > default. Auto-registers `config show/set/path/edit` subcommands.
+- **New feature.** Recursive group nesting to arbitrary depth. Groups can contain subgroups via `group.group(name, help=...)`.
+- **New feature.** `type=float` flag support. Rejects NaN and Inf.
+- **New feature.** `--help` and `-h` recognized anywhere in the argument list, not just at token boundaries.
+- **New feature.** `App(version=None)` auto-detects version from `importlib.metadata`.
+
 ## 0.6.1
 
 ### Fixes
