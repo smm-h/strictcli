@@ -514,11 +514,11 @@ class App:
         config_grp.commands["path"] = Command(
             name="path",
             help="Print the config file path",
-            handler=lambda: print(_config_path(app_ref.name)),
+            handler=lambda **_kw: print(_config_path(app_ref.name)),
         )
 
         # config show
-        def _config_show_handler() -> None:
+        def _config_show_handler(**_kw) -> None:
             config_data = _load_config(app_ref.name)
             all_flags = app_ref._collect_all_flags()
             for f in all_flags:
@@ -542,7 +542,7 @@ class App:
         )
 
         # config set
-        def _config_set_handler(key, value) -> None:
+        def _config_set_handler(key, value, **_kw) -> None:
             path = _config_path(app_ref.name)
             dir_path = os.path.dirname(path)
             os.makedirs(dir_path, exist_ok=True)
@@ -569,7 +569,7 @@ class App:
         )
 
         # config edit
-        def _config_edit_handler() -> None:
+        def _config_edit_handler(**_kw) -> None:
             path = _config_path(app_ref.name)
             dir_path = os.path.dirname(path)
             os.makedirs(dir_path, exist_ok=True)
