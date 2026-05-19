@@ -10,6 +10,7 @@ __all__ = [
 ]
 
 import contextlib
+import importlib.metadata
 import inspect
 import io
 import os
@@ -289,8 +290,8 @@ class App:
     """The root CLI application."""
 
     name: str
-    version: str
     help: str
+    version: str | None = None
     env_prefix: str | None = None
     flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
@@ -298,6 +299,12 @@ class App:
     _deprecated: dict[str, DeprecatedCommand] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        # Auto-detect version from package metadata if not provided
+        if self.version is None:
+            try:
+                self.version = importlib.metadata.version(self.name)
+            except importlib.metadata.PackageNotFoundError:
+                self.version = "unknown"
         _require_non_empty_str(self.help, "help", "App")
         # Check for duplicate global flag names
         seen: set[str] = set()
