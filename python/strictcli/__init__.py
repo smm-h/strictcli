@@ -13,7 +13,9 @@ import contextlib
 import importlib.metadata
 import inspect
 import io
+import json
 import os
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from typing import Callable
@@ -26,6 +28,53 @@ class _MissingSentinel:
 
 
 _MISSING = _MissingSentinel()
+
+
+def _config_path(app_name: str) -> str:
+    """Compute the config file path for an app."""
+    config_home = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    return os.path.join(config_home, app_name, "config.json")
+
+
+def _load_config(app_name: str) -> dict:
+    """Load the JSON config file for an app.
+
+    Returns an empty dict if the file doesn't exist or contains invalid JSON.
+    Invalid JSON prints a warning to stderr.
+    """
+    path = _config_path(app_name)
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path) as f:
+            return json.loads(f.read())
+    except (json.JSONDecodeError, ValueError):
+        print(f"warning: invalid JSON in config file '{path}', ignoring", file=sys.stderr)
+        return {}
+
+
+def _coerce_config_value(value: object, flag: "Flag") -> object:
+    """Coerce a JSON config value to the flag's type.
+
+    Returns the coerced value, or raises ValueError if coercion fails.
+    """
+    if flag.type is bool:
+        if isinstance(value, bool):
+            return value
+        raise ValueError(f"expected boolean, got {type(value).__name__}")
+    if flag.type is int:
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        raise ValueError(f"expected integer, got {type(value).__name__}")
+    if flag.type is float:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+        raise ValueError(f"expected float, got {type(value).__name__}")
+    if flag.type is str:
+        if isinstance(value, str):
+            return value
+        raise ValueError(f"expected string, got {type(value).__name__}")
+    raise ValueError(f"unsupported flag type {flag.type}")
 
 
 class _HelpRequested(Exception):
@@ -337,6 +386,7 @@ class App:
     help: str
     version: str | None = None
     env_prefix: str | None = None
+    config: bool = False
     flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
     _groups: dict[str, Group] = field(default_factory=dict)
@@ -358,6 +408,11 @@ class App:
             seen.add(f.name)
         self._global_flags: list[Flag] = list(self.flags)
         self._last_global_values: dict[str, object] = {}
+        # Load config and register config subcommands if enabled
+        self._config_data: dict = {}
+        if self.config:
+            self._config_data = _load_config(self.name)
+            self._register_config_group()
 
     def command(
         self,
@@ -416,6 +471,117 @@ class App:
                 f'deprecated command "{name}" is already registered'
             )
         self._deprecated[name] = DeprecatedCommand(name=name, message=message)
+
+    def _collect_all_flags(self) -> list[Flag]:
+        """Collect all flags (global + all commands in all groups), for config show."""
+        flags: list[Flag] = list(self._global_flags)
+        seen_names: set[str] = {f.name for f in flags}
+        for cmd in self._commands.values():
+            for f in cmd.flags:
+                if f.name not in seen_names:
+                    flags.append(f)
+                    seen_names.add(f.name)
+
+        def _collect_from_group(grp: Group) -> None:
+            for cmd in grp.commands.values():
+                for f in cmd.flags:
+                    if f.name not in seen_names:
+                        flags.append(f)
+                        seen_names.add(f.name)
+            for sub in grp._groups.values():
+                _collect_from_group(sub)
+
+        for grp in self._groups.values():
+            _collect_from_group(grp)
+        return flags
+
+    def _register_config_group(self) -> None:
+        """Register the auto-generated 'config' command group."""
+        config_grp = Group(
+            name="config",
+            help="Manage configuration",
+            env_prefix=self.env_prefix,
+            _global_flags=self._global_flags,
+        )
+
+        app_ref = self  # capture for closures
+
+        # config path
+        config_grp.commands["path"] = Command(
+            name="path",
+            help="Print the config file path",
+            handler=lambda: print(_config_path(app_ref.name)),
+        )
+
+        # config show
+        def _config_show_handler() -> None:
+            config_data = _load_config(app_ref.name)
+            all_flags = app_ref._collect_all_flags()
+            for f in all_flags:
+                param = _flag_param_name(f.name)
+                # Determine source and value
+                if param in config_data:
+                    value = config_data[param]
+                    source = "config"
+                elif f.default is not None:
+                    value = f.default
+                    source = "default"
+                else:
+                    value = None
+                    source = "default"
+                print(f"{param} = {value}  (source: {source})")
+
+        config_grp.commands["show"] = Command(
+            name="show",
+            help="Show all config values with source attribution",
+            handler=_config_show_handler,
+        )
+
+        # config set
+        def _config_set_handler(key, value) -> None:
+            path = _config_path(app_ref.name)
+            dir_path = os.path.dirname(path)
+            os.makedirs(dir_path, exist_ok=True)
+            # Read existing config
+            existing: dict = {}
+            if os.path.isfile(path):
+                try:
+                    with open(path) as fh:
+                        existing = json.loads(fh.read())
+                except (json.JSONDecodeError, ValueError):
+                    existing = {}
+            existing[key] = value
+            with open(path, "w") as fh:
+                fh.write(json.dumps(existing, indent=2) + "\n")
+
+        config_grp.commands["set"] = Command(
+            name="set",
+            help="Set a config value",
+            handler=_config_set_handler,
+            args=[
+                Arg(name="key", help="Config key to set"),
+                Arg(name="value", help="Value to set"),
+            ],
+        )
+
+        # config edit
+        def _config_edit_handler() -> None:
+            path = _config_path(app_ref.name)
+            dir_path = os.path.dirname(path)
+            os.makedirs(dir_path, exist_ok=True)
+            if not os.path.isfile(path):
+                with open(path, "w") as fh:
+                    fh.write("{}\n")
+            editor = os.environ.get("EDITOR", "vi")
+            subprocess.run([editor, path])
+
+        config_grp.commands["edit"] = Command(
+            name="edit",
+            help="Open the config file in $EDITOR",
+            handler=_config_edit_handler,
+        )
+
+        self._groups["config"] = config_grp
 
     def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object] | list[str]]:
         """Parse argv (without program name) into a resolved Command and kwargs.
@@ -502,7 +668,9 @@ class App:
             return cmd, rest
 
         # Step 3: parse remaining tokens for the resolved command
-        cmd, kwargs, post_global = _parse_command(cmd, rest, self._global_flags)
+        cmd, kwargs, post_global = _parse_command(
+            cmd, rest, self._global_flags, config_data=self._config_data,
+        )
 
         # Step 4: merge global flag values into kwargs
         # Post-command global flags override pre-command ones
@@ -711,6 +879,21 @@ class App:
                     else:
                         cli_set[f.name] = [env_val] if f.repeatable else env_val
 
+        # Resolve config values for global flags not set by CLI or env
+        if self._config_data:
+            for f in self._global_flags:
+                if f.name in cli_set:
+                    continue
+                param = _flag_param_name(f.name)
+                if param in self._config_data:
+                    try:
+                        coerced = _coerce_config_value(self._config_data[param], f)
+                    except ValueError as e:
+                        raise _ParseError(
+                            f"--{f.name}: config value error: {e}"
+                        )
+                    cli_set[f.name] = coerced
+
         # Apply defaults for global flags not set by CLI or env
         for f in self._global_flags:
             if f.name in cli_set:
@@ -845,6 +1028,7 @@ def _parse_command(
     cmd: Command,
     tokens: list[str],
     global_flags: list[Flag] | None = None,
+    config_data: dict | None = None,
 ) -> tuple[Command, dict[str, object], dict[str, object]]:
     """Parse tokens against a resolved command's flags and args.
 
@@ -1046,6 +1230,21 @@ def _parse_command(
                     cli_set[f.name] = [coerced] if f.repeatable else coerced
                 else:
                     cli_set[f.name] = [env_val] if f.repeatable else env_val
+
+    # Step 4.2: resolve config values for flags not set by CLI or env
+    if config_data:
+        for f in cmd.flags:
+            if f.name in cli_set:
+                continue
+            param = _flag_param_name(f.name)
+            if param in config_data:
+                try:
+                    coerced = _coerce_config_value(config_data[param], f)
+                except ValueError as e:
+                    raise _ParseError(
+                        f"--{f.name}: config value error: {e}"
+                    )
+                cli_set[f.name] = coerced
 
     # Step 4.5: enforce mutex group constraints (before defaults are applied,
     # so cli_set only contains values explicitly provided via CLI or env)
