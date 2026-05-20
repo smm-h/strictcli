@@ -119,6 +119,19 @@ def _build_go_binary(app_def: dict) -> str:
     with open(go_mod, "w") as f:
         f.write(go_mod_content)
 
+    # Resolve transitive dependencies
+    tidy_result = subprocess.run(
+        ["go", "mod", "tidy"],
+        cwd=build_dir,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if tidy_result.returncode != 0:
+        raise RuntimeError(
+            f"go mod tidy failed:\n{tidy_result.stderr}\n\n--- main.go ---\n{source}"
+        )
+
     # Build
     result = subprocess.run(
         ["go", "build", "-o", binary, "."],
