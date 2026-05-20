@@ -602,10 +602,12 @@ class App:
             self._config_data = _load_config(self.name)
             self._register_config_group()
         # Discover checks TOML
+        self._check_context_factory: Callable | None = None
         checks_toml_path = Path.cwd() / ".strictcli" / "checks.toml"
         if checks_toml_path.is_file():
             self._check_defs: dict[str, _CheckDef] = _load_checks_toml(checks_toml_path)
             self._checks_enabled = True
+            self._register_check_command()
         else:
             self._check_defs = {}
             self._checks_enabled = False
@@ -646,6 +648,95 @@ class App:
                 + ", ".join(missing)
             )
         return None
+
+    def set_check_context(self, factory: Callable) -> None:
+        """Set the factory function that creates CheckContext for check runs.
+
+        The factory is called with no arguments and must return a CheckContext.
+        """
+        self._check_context_factory = factory
+
+    def _register_check_command(self) -> None:
+        """Register the auto-generated 'check' command when checks.toml exists."""
+        app_ref = self  # capture for closure
+
+        def _check_handler(
+            *, all: bool, tag: str, name: str,
+            list: bool, json: bool, ignore_warnings: bool,
+            verbose: bool, dry_run: bool, **_kw,
+        ) -> int:
+            # Treat empty strings as "not provided"
+            tag_expr = tag if tag else None
+            name_glob = name if name else None
+
+            if list:
+                _check_list_mode(app_ref._check_defs, json)
+                return 0
+
+            # Determine if any execution filter is active
+            has_filter = all or tag_expr is not None or name_glob is not None
+
+            if not has_filter:
+                # No flags: show help for the check command
+                check_cmd = app_ref._commands["check"]
+                prefix = app_ref._find_command_prefix(check_cmd)
+                print(_format_command_help(app_ref, check_cmd, prefix))
+                return 0
+
+            # Resolve filters and order
+            selected = _filter_checks(app_ref._check_defs, tag_expr, name_glob, all)
+            if not selected:
+                print("No checks matched the given filters.")
+                return 0
+            order = _resolve_check_order(app_ref._check_defs, selected)
+
+            if dry_run:
+                _check_dry_run_mode(app_ref._check_defs, order)
+                return 0
+
+            # Execution mode: need a context
+            if app_ref._check_context_factory is None:
+                print(
+                    "error: no check context configured. "
+                    "Call app.set_check_context(factory) before running.",
+                    file=sys.stderr,
+                )
+                return 1
+            context = app_ref._check_context_factory()
+            results, exit_code = _run_checks(
+                app_ref, order, context, ignore_warnings,
+            )
+
+            if json:
+                _check_format_json(results)
+            else:
+                _check_format_human(results, verbose)
+
+            return exit_code
+
+        check_cmd = _build_and_validate_command(
+            "check",
+            help="Run project checks",
+            handler=_check_handler,
+            args=None,
+            tags=None,
+            mutex=None,
+            dependencies=None,
+            env_prefix=self.env_prefix,
+            global_flags=self._global_flags,
+            passthrough=None,
+            extra_flags=[
+                Flag(name="all", type=bool, help="Run all checks"),
+                Flag(name="tag", type=str, default="", help="Tag DSL expression to filter checks"),
+                Flag(name="name", type=str, default="", help="Glob pattern to filter by check name"),
+                Flag(name="list", type=bool, help="List all checks and their tags"),
+                Flag(name="json", type=bool, help="Output results as JSON"),
+                Flag(name="ignore-warnings", type=bool, help="Warn severity does not cause nonzero exit"),
+                Flag(name="verbose", type=bool, help="Show details for passing checks too"),
+                Flag(name="dry-run", type=bool, help="Show which checks would run without running them"),
+            ],
+        )
+        self._commands["check"] = check_cmd
 
     def command(
         self,
@@ -1645,6 +1736,7 @@ def _build_and_validate_command(
     env_prefix: str | None,
     global_flags: list[Flag] | None = None,
     passthrough: Passthrough | None = None,
+    extra_flags: list[Flag] | None = None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
@@ -1718,8 +1810,10 @@ def _build_and_validate_command(
                 )
             mutex_flag_names.add(f.name)
 
-    # All flags: decorator flags + tag flags + mutex flags
+    # All flags: decorator flags + tag flags + mutex flags + extra flags
     all_flags = decorator_flags + tag_flags + mutex_flags
+    if extra_flags:
+        all_flags.extend(extra_flags)
 
     # Validate: no duplicate flag names (catches mutex flags overlapping with
     # regular flags or tag flags)
@@ -2552,6 +2646,89 @@ def _run_checks(
             pass
 
     return results, exit_code
+
+
+# ---------------------------------------------------------------------------
+# Check command output helpers
+# ---------------------------------------------------------------------------
+
+_CHECK_STATUS_LABELS = {"pass": "PASS", "fail": "FAIL", "warn": "WARN", "skip": "SKIP"}
+
+
+def _check_list_mode(check_defs: dict[str, _CheckDef], json_mode: bool) -> None:
+    """Print check listing in human or JSON format."""
+    if json_mode:
+        items = [
+            {"name": cdef.name, "tags": cdef.tags, "severity": cdef.severity}
+            for cdef in check_defs.values()
+        ]
+        print(json.dumps(items))
+        return
+
+    if not check_defs:
+        print("No checks defined.")
+        return
+
+    # Compute column widths
+    name_width = max(len(cdef.name) for cdef in check_defs.values())
+    name_width = max(name_width, len("NAME"))
+    tags_width = max(len(", ".join(cdef.tags)) for cdef in check_defs.values())
+    tags_width = max(tags_width, len("TAGS"))
+
+    header = f"{'NAME':<{name_width}}   {'TAGS':<{tags_width}}   SEVERITY"
+    print(header)
+    for cdef in check_defs.values():
+        tags_str = ", ".join(cdef.tags)
+        print(f"{cdef.name:<{name_width}}   {tags_str:<{tags_width}}   {cdef.severity}")
+
+
+def _check_dry_run_mode(
+    check_defs: dict[str, _CheckDef], order: list[str],
+) -> None:
+    """Print execution plan without running checks."""
+    print(f"Would run {len(order)} check{'s' if len(order) != 1 else ''}:")
+    for i, name in enumerate(order, 1):
+        cdef = check_defs[name]
+        deps = [d for d in cdef.depends_on if d in set(order)]
+        if deps:
+            print(f"  {i}. {name} (depends on: {', '.join(deps)})")
+        else:
+            print(f"  {i}. {name}")
+
+
+def _check_format_human(
+    results: list[tuple[str, CheckResult]], verbose: bool,
+) -> None:
+    """Print check results in human-readable aligned format."""
+    if not results:
+        return
+
+    name_width = max(len(name) for name, _ in results)
+
+    for name, result in results:
+        label = _CHECK_STATUS_LABELS[result.status]
+        print(f"{label}  {name:<{name_width}}    {result.message}")
+
+        show_details = result.details and (
+            verbose or result.status in ("fail", "warn", "skip")
+        )
+        if show_details:
+            for detail in result.details:
+                print(f"        {detail}")
+
+
+def _check_format_json(results: list[tuple[str, CheckResult]]) -> None:
+    """Print check results as JSON."""
+    items = [
+        {
+            "name": name,
+            "status": result.status,
+            "message": result.message,
+            "details": result.details,
+        }
+        for name, result in results
+    ]
+    print(json.dumps(items))
 
 
 # ---------------------------------------------------------------------------
