@@ -48,7 +48,10 @@ IMPL_EXCLUSIONS: dict[str, str] = {
 PER_ENTITY_EXCLUSIONS: dict[str, set[str]] = {
     # Python Group.env_prefix is inherited from App at runtime, not a schema
     # concept on Group itself (schema Group has no env_prefix).
-    "Group": {"env_prefix"},
+    # Python Group.deprecated is a runtime dict of DeprecatedCommand objects,
+    # not serializable to the schema (deprecated commands are declared via
+    # command.deprecated/deprecated_message in test case definitions).
+    "Group": {"env_prefix", "deprecated"},
 }
 
 # Schema fields that exist only for the test harness (not real API fields):
@@ -56,6 +59,10 @@ SCHEMA_TEST_ONLY: set[str] = {
     "handler_prints",
     "handler_exit_code",
     "passthrough_handler_prints",
+    # deprecated/deprecated_message describe deprecated commands in the JSON
+    # test definition -- they are not attributes of the Command struct itself.
+    "deprecated",
+    "deprecated_message",
 }
 
 # Per-entity schema fields that are JSON discriminators, not real API fields:
@@ -71,7 +78,7 @@ SCHEMA_PER_ENTITY_EXCLUSIONS: dict[str, set[str]] = {
 # Python field name -> schema field name(s)
 # Keyed as "ClassName.field" for per-entity mappings, or just "field" for global.
 PYTHON_TO_SCHEMA: dict[str, list[str]] = {
-    "choices": ["choices_str", "choices_int"],
+    "choices": ["choices_str", "choices_int", "choices_float"],
     "env_prefix": ["env_prefix"],
     "variadic": ["variadic"],
     "negatable": ["negatable"],
@@ -92,6 +99,7 @@ GO_TO_SCHEMA: dict[str, str] = {
 SCHEMA_TO_PYTHON: dict[str, str] = {
     "choices_str": "choices",
     "choices_int": "choices",
+    "choices_float": "choices",
     "env_prefix": "env_prefix",
     "variadic": "variadic",
     "negatable": "negatable",
@@ -105,6 +113,7 @@ SCHEMA_TO_PYTHON: dict[str, str] = {
 SCHEMA_TO_GO: dict[str, str] = {
     "choices_str": "Choices",
     "choices_int": "Choices",
+    "choices_float": "Choices",
     "variadic": "IsVariadic",
     "negatable": "Negatable",
     "env_prefix": "EnvPrefix",
@@ -113,6 +122,7 @@ SCHEMA_TO_GO: dict[str, str] = {
     "app.commands": "commands",  # Go App.commands (unexported, set via method)
     "app.global_flags": "globalFlags",  # Go App.globalFlags (unexported, set via method)
     "app.groups": "groups",  # Go App.groups (unexported, set via method)
+    "app.config": "configEnabled",  # Go App.configEnabled (unexported, set via WithConfig())
     "group.commands": "Commands",  # Go Group.Commands (exported)
 }
 
@@ -405,7 +415,7 @@ def check_option_funcs_coverage(
         "ValidateFn", "NegatableOpt",
         "ArgRequired", "ArgDefault", "Variadic",
         "WithArgs", "WithFlags", "WithTags", "WithMutex", "WithDependencies",
-        "WithPassthrough", "WithEnvPrefix",
+        "WithPassthrough", "WithEnvPrefix", "WithConfig",
     }
     actual = go_fields.get("_option_funcs", set())
     unknown = actual - known_option_funcs
