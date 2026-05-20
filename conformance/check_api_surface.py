@@ -63,6 +63,10 @@ SCHEMA_TEST_ONLY: set[str] = {
     # test definition -- they are not attributes of the Command struct itself.
     "deprecated",
     "deprecated_message",
+    # checks/checks_toml tell the conformance code generators what to generate
+    # (e.g. error parity checks) -- not part of the strictcli API.
+    "checks",
+    "checks_toml",
 }
 
 # Per-entity schema fields that are JSON discriminators, not real API fields:
