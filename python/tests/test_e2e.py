@@ -214,3 +214,112 @@ def test_e2e_unknown_group_subcommand():
     r = app.test(["config", "delete"])
     assert r.exit_code == 1
     assert "unknown command" in r.stderr
+
+
+# --- **kwargs handler tests ---
+
+
+def _build_kwargs_app():
+    """Build a CLI app with a **kwargs handler to verify dispatch and parameter passing."""
+    app = strictcli.App(
+        name="kw",
+        version="1.0.0",
+        help="kwargs test app",
+    )
+
+    @app.command(
+        "deploy",
+        help="deploy the app",
+        args=[strictcli.Arg(name="target", help="deploy target")],
+    )
+    @strictcli.flag("dry-run", type=bool, help="preview without making changes")
+    @strictcli.flag("replicas", type=int, help="number of replicas", default=1)
+    def deploy_handler(**kwargs):
+        parts = [f"target={kwargs['target']}"]
+        parts.append(f"dry_run={kwargs['dry_run']}")
+        parts.append(f"replicas={kwargs['replicas']}")
+        print(" ".join(parts))
+        return 0
+
+    return app
+
+
+def test_e2e_kwargs_handler_dispatches():
+    """Command with **kwargs handler dispatches and receives all parameters."""
+    app = _build_kwargs_app()
+    r = app.test(["deploy", "--dry-run", "--replicas", "3", "production"])
+    assert r.exit_code == 0
+    assert "target=production" in r.stdout
+    assert "dry_run=True" in r.stdout
+    assert "replicas=3" in r.stdout
+
+
+def test_e2e_kwargs_handler_defaults():
+    """Command with **kwargs handler receives default values for unset flags."""
+    app = _build_kwargs_app()
+    r = app.test(["deploy", "staging"])
+    assert r.exit_code == 0
+    assert "target=staging" in r.stdout
+    assert "dry_run=False" in r.stdout
+    assert "replicas=1" in r.stdout
+
+
+def test_e2e_kwargs_handler_with_tags():
+    """Command with **kwargs handler and tags receives tag flag values."""
+    auth_tag = strictcli.Tag(
+        name="auth",
+        flags=[
+            strictcli.Flag(name="token", type=str, help="auth token", default=""),
+        ],
+    )
+
+    app = strictcli.App(name="kw", version="1.0.0", help="kwargs test app")
+
+    @app.command("push", help="push changes", tags=[auth_tag])
+    def push_handler(**kwargs):
+        print(f"token={kwargs['token']}")
+        return 0
+
+    r = app.test(["push", "--token", "abc123"])
+    assert r.exit_code == 0
+    assert "token=abc123" in r.stdout
+
+
+def test_e2e_kwargs_handler_with_global_flags():
+    """Command with **kwargs handler receives global flag values."""
+    app = strictcli.App(
+        name="kw",
+        version="1.0.0",
+        help="kwargs test app",
+        flags=[
+            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+        ],
+    )
+
+    @app.command("run", help="run something")
+    def run_handler(**kwargs):
+        print(f"verbose={kwargs['verbose']}")
+        return 0
+
+    r = app.test(["--verbose", "run"])
+    assert r.exit_code == 0
+    assert "verbose=True" in r.stdout
+
+
+def test_e2e_kwargs_handler_registration_no_error():
+    """Registering a command with **kwargs handler does not raise on missing/extra params."""
+    app = strictcli.App(name="kw", version="1.0.0", help="kwargs test app")
+
+    # This should not raise ValueError even though the handler has no named params
+    @app.command(
+        "cmd",
+        help="a command",
+        args=[strictcli.Arg(name="name", help="a name")],
+    )
+    @strictcli.flag("count", type=int, help="a count", default=0)
+    @strictcli.flag("force", type=bool, help="force it")
+    def cmd_handler(**kwargs):
+        return 0
+
+    r = app.test(["cmd", "--count", "5", "hello"])
+    assert r.exit_code == 0
