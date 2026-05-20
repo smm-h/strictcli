@@ -2351,10 +2351,19 @@ def _tagdsl_parse(tokens: list[tuple[str, str, int]]) -> tuple:
         pos += 1
         return tok
 
+    def end_pos() -> int:
+        if not tokens:
+            return 0
+        last = tokens[-1]
+        return last[2] + len(last[1])
+
     def parse_atom() -> tuple:
         tok = peek()
         if tok is None:
-            raise ValueError("tag expression: unexpected end of expression")
+            raise ValueError(
+                f"tag expression: unexpected end of expression "
+                f"at position {end_pos()}"
+            )
         if tok[0] == "NOT":
             consume()
             child = parse_atom()
@@ -2365,7 +2374,7 @@ def _tagdsl_parse(tokens: list[tuple[str, str, int]]) -> tuple:
             closing = peek()
             if closing is None or closing[0] != "RPAREN":
                 raise ValueError(
-                    f"tag expression: expected closing parenthesis"
+                    f'tag expression: expected ")" at position {end_pos()}'
                 )
             consume()
             return node

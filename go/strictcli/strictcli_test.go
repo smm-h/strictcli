@@ -1908,7 +1908,7 @@ func TestDeprecatedDuplicateNameWithCommandPanics(t *testing.T) {
 			t.Fatal("expected panic for deprecated command with duplicate name, got none")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "already used by a command") {
+		if !strings.Contains(msg, "collides with an existing command") {
 			t.Fatalf("panic message should mention name collision, got %q", msg)
 		}
 	}()
@@ -2690,7 +2690,7 @@ func TestDeepNestingNameCollision(t *testing.T) {
 				t.Fatal("expected panic for deprecated-then-group collision")
 			}
 			msg := fmt.Sprintf("%v", r)
-			if !strings.Contains(msg, "name already used by a group") {
+			if !strings.Contains(msg, "collides with an existing group") {
 				t.Fatalf("panic message should mention group collision, got %q", msg)
 			}
 		}()

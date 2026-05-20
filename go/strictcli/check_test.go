@@ -233,7 +233,7 @@ pure = true
 needs_network = false
 depends_on = []
 `,
-			wantErr: `checks.toml: check "foo": "tags" must be an array of strings`,
+			wantErr: `checks.toml: check "foo": "tags" must be a non-empty list of strings`,
 		},
 		{
 			name: "severity is integer",
@@ -246,7 +246,7 @@ pure = true
 needs_network = false
 depends_on = []
 `,
-			wantErr: `checks.toml: check "foo": "severity" must be a string`,
+			wantErr: "checks.toml: check \"foo\": \"severity\" must be \"error\" or \"warn\", got '*'",
 		},
 		{
 			name: "fast is string",
@@ -259,7 +259,7 @@ pure = true
 needs_network = false
 depends_on = []
 `,
-			wantErr: `checks.toml: check "foo": "fast" must be a boolean`,
+			wantErr: `checks.toml: check "foo": "fast" must be a boolean, got str`,
 		},
 		{
 			name: "invalid severity value",
@@ -405,7 +405,7 @@ depends_on = []
 	if err == nil {
 		t.Fatal("expected error for empty tags")
 	}
-	if !strings.Contains(err.Error(), `"tags" must be non-empty`) {
+	if !strings.Contains(err.Error(), `"tags" must be a non-empty list of strings`) {
 		t.Errorf("expected error about empty tags, got %q", err.Error())
 	}
 }

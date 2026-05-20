@@ -138,7 +138,7 @@ class TestErrors:
             _match_tag_expr("a @b", {"a"})
 
     def test_mismatched_parenthesis_open(self):
-        with pytest.raises(ValueError, match="expected closing parenthesis"):
+        with pytest.raises(ValueError, match=r'expected "\)" at position'):
             _match_tag_expr("(a | b", {"a"})
 
     def test_mismatched_parenthesis_close(self):

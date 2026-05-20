@@ -695,19 +695,19 @@ func (g *Group) Command(name, help string, handler func(map[string]interface{}) 
 // Invoking a deprecated command prints the message to stderr and exits 1.
 func (a *App) Deprecated(name, message string) {
 	if strings.TrimSpace(name) == "" {
-		panic("deprecated command name must not be empty")
+		panic("deprecated command name must be a non-empty string")
 	}
 	if strings.TrimSpace(message) == "" {
 		panic(fmt.Sprintf("deprecated command %q: message must not be empty", name))
 	}
 	if _, ok := a.commands[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q: name already used by a command", name))
+		panic(fmt.Sprintf("deprecated command %q collides with an existing command", name))
 	}
 	if _, ok := a.groups[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q: name already used by a group", name))
+		panic(fmt.Sprintf("deprecated command %q collides with an existing group", name))
 	}
 	if _, ok := a.deprecatedMap[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q: already registered as deprecated", name))
+		panic(fmt.Sprintf("deprecated command %q is already registered", name))
 	}
 	a.deprecated = append(a.deprecated, deprecatedCmd{Name: name, Message: message})
 	a.deprecatedMap[name] = message
@@ -717,19 +717,19 @@ func (a *App) Deprecated(name, message string) {
 // Invoking a deprecated subcommand prints the message to stderr and exits 1.
 func (g *Group) Deprecated(name, message string) {
 	if strings.TrimSpace(name) == "" {
-		panic("deprecated command name must not be empty")
+		panic("deprecated command name must be a non-empty string")
 	}
 	if strings.TrimSpace(message) == "" {
 		panic(fmt.Sprintf("deprecated command %q: message must not be empty", name))
 	}
 	if _, ok := g.Commands[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q: name already used by a command", name))
+		panic(fmt.Sprintf("deprecated command %q collides with an existing command", name))
 	}
 	if _, ok := g.Groups[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q: name already used by a group", name))
+		panic(fmt.Sprintf("deprecated command %q collides with an existing group", name))
 	}
 	if _, ok := g.deprecatedMap[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q: already registered as deprecated", name))
+		panic(fmt.Sprintf("deprecated command %q is already registered", name))
 	}
 	g.deprecated = append(g.deprecated, deprecatedCmd{Name: name, Message: message})
 	g.deprecatedMap[name] = message

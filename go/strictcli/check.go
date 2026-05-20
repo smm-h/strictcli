@@ -5,6 +5,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 
 	tomledit "github.com/smm-h/go-toml-edit"
 )
@@ -74,7 +75,7 @@ func loadChecksToml(path string) (map[string]*checkDef, []string, error) {
 
 	checksMap, ok := checksRaw.(map[string]interface{})
 	if !ok {
-		return nil, nil, fmt.Errorf("checks.toml: \"checks\" must be a table")
+		return nil, nil, fmt.Errorf("checks.toml: [checks] must be a table")
 	}
 
 	result := make(map[string]*checkDef, len(checksMap))
@@ -158,20 +159,17 @@ func loadChecksToml(path string) (map[string]*checkDef, []string, error) {
 func parseCheckTags(name string, fields map[string]interface{}, def *checkDef) error {
 	raw, ok := fields["tags"]
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: missing required field \"tags\"", name)
+		return fmt.Errorf("checks.toml: check %q: missing required field %q", name, "tags")
 	}
 	arr, ok := raw.([]interface{})
-	if !ok {
-		return fmt.Errorf("checks.toml: check %q: \"tags\" must be an array of strings", name)
-	}
-	if len(arr) == 0 {
-		return fmt.Errorf("checks.toml: check %q: \"tags\" must be non-empty", name)
+	if !ok || len(arr) == 0 {
+		return fmt.Errorf("checks.toml: check %q: \"tags\" must be a non-empty list of strings", name)
 	}
 	tags := make([]string, len(arr))
 	for i, v := range arr {
 		s, ok := v.(string)
-		if !ok {
-			return fmt.Errorf("checks.toml: check %q: \"tags\" must be an array of strings", name)
+		if !ok || strings.TrimSpace(s) == "" {
+			return fmt.Errorf("checks.toml: check %q: \"tags\" entries must be non-empty strings", name)
 		}
 		tags[i] = s
 	}
@@ -183,14 +181,11 @@ func parseCheckTags(name string, fields map[string]interface{}, def *checkDef) e
 func parseCheckSeverity(name string, fields map[string]interface{}, def *checkDef) error {
 	raw, ok := fields["severity"]
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: missing required field \"severity\"", name)
+		return fmt.Errorf("checks.toml: check %q: missing required field %q", name, "severity")
 	}
 	s, ok := raw.(string)
-	if !ok {
-		return fmt.Errorf("checks.toml: check %q: \"severity\" must be a string", name)
-	}
-	if s != "error" && s != "warn" {
-		return fmt.Errorf("checks.toml: check %q: \"severity\" must be \"error\" or \"warn\", got %q", name, s)
+	if !ok || (s != "error" && s != "warn") {
+		return fmt.Errorf("checks.toml: check %q: \"severity\" must be \"error\" or \"warn\", got %q", name, raw)
 	}
 	def.severity = s
 	return nil
@@ -204,7 +199,7 @@ func parseCheckBool(name string, fields map[string]interface{}, field string, ta
 	}
 	b, ok := raw.(bool)
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: %q must be a boolean", name, field)
+		return fmt.Errorf("checks.toml: check %q: %q must be a boolean, got %s", name, field, tomlTypeName(raw))
 	}
 	*target = b
 	return nil
@@ -214,20 +209,43 @@ func parseCheckBool(name string, fields map[string]interface{}, field string, ta
 func parseCheckDependsOn(name string, fields map[string]interface{}, def *checkDef) error {
 	raw, ok := fields["depends_on"]
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: missing required field \"depends_on\"", name)
+		return fmt.Errorf("checks.toml: check %q: missing required field %q", name, "depends_on")
 	}
 	arr, ok := raw.([]interface{})
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: \"depends_on\" must be an array of strings", name)
+		return fmt.Errorf("checks.toml: check %q: \"depends_on\" must be a list of strings", name)
 	}
 	deps := make([]string, len(arr))
 	for i, v := range arr {
 		s, ok := v.(string)
 		if !ok {
-			return fmt.Errorf("checks.toml: check %q: \"depends_on\" must be an array of strings", name)
+			return fmt.Errorf("checks.toml: check %q: \"depends_on\" entries must be strings", name)
 		}
 		deps[i] = s
 	}
 	def.dependsOn = deps
 	return nil
+}
+
+// tomlTypeName returns a Python-compatible type name for a TOML-decoded value.
+// Matches Python's type(val).__name__ output for cross-language error parity.
+func tomlTypeName(v interface{}) string {
+	switch v.(type) {
+	case bool:
+		return "bool"
+	case int64:
+		return "int"
+	case float64:
+		return "float"
+	case string:
+		return "str"
+	case []interface{}:
+		return "list"
+	case map[string]interface{}:
+		return "dict"
+	case nil:
+		return "NoneType"
+	default:
+		return fmt.Sprintf("%T", v)
+	}
 }
