@@ -67,6 +67,30 @@
         "groups": {
           "type": "array",
           "items": { "$ref": "#/$defs/group" }
+        },
+        "checks_toml": {
+          "type": "string",
+          "description": "Raw TOML content to write as .strictcli/checks.toml for check conformance tests."
+        },
+        "checks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/check" },
+          "description": "Check stub definitions for code generation."
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["name", "check_returns", "check_message"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "check_returns": { "enum": ["pass", "fail", "warn"] },
+        "check_message": { "type": "string" },
+        "check_details": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
         }
       }
     },
