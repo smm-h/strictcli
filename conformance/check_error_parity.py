@@ -25,6 +25,10 @@ PROJECT_ROOT = CONFORMANCE_DIR.parent
 PY_SOURCE = PROJECT_ROOT / "python" / "strictcli" / "__init__.py"
 GO_STRICTCLI = PROJECT_ROOT / "go" / "strictcli" / "strictcli.go"
 GO_PARSE = PROJECT_ROOT / "go" / "strictcli" / "parse.go"
+GO_CHECK = PROJECT_ROOT / "go" / "strictcli" / "check.go"
+GO_CHECK_RUNNER = PROJECT_ROOT / "go" / "strictcli" / "check_runner.go"
+GO_TAGDSL = PROJECT_ROOT / "go" / "strictcli" / "tagdsl.go"
+GO_CONFIG = PROJECT_ROOT / "go" / "strictcli" / "config.go"
 CASES_DIR = CONFORMANCE_DIR / "cases"
 
 # ---------------------------------------------------------------------------
@@ -42,20 +46,32 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
         "Go uses map[string]interface{} kwargs, no handler signature validation",
     'command *: handler has extra parameter * not matching any flag or arg':
         "Go uses map[string]interface{} kwargs, no handler signature validation",
-    # Python raises ValueError for invalid type; Go uses typed constructors
+    # Python raises ValueError for invalid type; Go uses typed constructors.
+    # Covers both the 3-type form (str/bool/int) and 4-type form (str/bool/int/float).
     'Flag.type must be str, bool, or int, got *':
-        "Go uses typed constructors (StringFlag/BoolFlag/IntFlag), no runtime type check",
-    # Python validates default type for int flags; Go checks differently
+        "Go uses typed constructors (StringFlag/BoolFlag/IntFlag/FloatFlag), no runtime type check",
+    'Flag.type must be str, bool, int, or float, got *':
+        "Go uses typed constructors (StringFlag/BoolFlag/IntFlag/FloatFlag), no runtime type check",
+    # Python validates default type for int/float flags; Go checks differently
     'Flag *: type=int requires an int default, got *':
         "Go validates via typed assertion with %T format verb",
+    'Flag *: type=float requires a float default, got *':
+        "Go validates via typed assertion with %T format verb (float64)",
     # Python validates choices element types generically
     'Flag *: choice * is not of type *':
-        "Go validates choices with type-specific messages (str/int)",
+        "Go validates choices with type-specific messages (str/int/float)",
     # _strict_int internal errors -- surfaced through 'expected integer' at parse level
     'invalid literal for int() with base 10: *':
         "Python internal ValueError from _strict_int, surfaces as 'expected integer'",
     'integer out of range':
         "Python internal ValueError from _strict_int, surfaces as 'expected integer'",
+    # _strict_float internal errors -- surfaced through _float_parse_error wrapper
+    'invalid literal for float(): *':
+        "Python internal ValueError from _strict_float, surfaces as 'expected float'",
+    'NaN is not allowed':
+        "Python internal ValueError from _strict_float, wrapped with flag prefix at call site",
+    'Inf is not allowed':
+        "Python internal ValueError from _strict_float, wrapped with flag prefix at call site",
     # Python _require_non_empty_str uses generic {class_name}.{field_name} pattern
     '*.* must be a non-empty string':
         "Python uses generic _require_non_empty_str; Go has entity-specific messages",
@@ -67,6 +83,17 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # signature due to format string structure.
     'Flag *: default * is not in choices *':
         "Python f-string normalizes without brackets; Go counterpart is 'Flag *: default * is not in choices [*]'",
+    # Python validates CheckResult fields at construction; Go uses typed struct
+    'CheckResult.message must be a non-empty string':
+        "Go uses typed struct fields; no runtime validation needed",
+    'CheckResult.status must be one of "pass", "fail", "warn", "skip", got *':
+        "Go uses typed struct fields; no runtime validation needed",
+    # Python validates Implies.value type at registration; Go uses typed bool field
+    'command *: Implies value must be a bool, got *':
+        "Go Implies struct has typed bool Value field; no runtime type check needed",
+    # Python tag DSL uses tuple-based AST with runtime dispatch; Go uses typed interfaces
+    'tag expression: unknown AST node *':
+        "Python uses tuple-based AST with string dispatch; Go uses typed interfaces",
 }
 
 # Go-only: errors that have no Python counterpart by design
@@ -76,9 +103,13 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
         "Go type-specific choice validation (Python uses generic pattern)",
     'Flag *: choice * is not of type int':
         "Go type-specific choice validation (Python uses generic pattern)",
-    # Go validates int default type with %T; Python uses __name__
+    'Flag *: choice * is not of type float':
+        "Go type-specific choice validation (Python uses generic pattern)",
+    # Go validates int/float default type with %T; Python uses __name__
     'Flag *: type=int requires an int default, got *':
         "Go uses %T format verb; Python uses type(x).__name__",
+    'Flag *: type=float requires a float64 default, got *':
+        "Go uses 'float64' type name; Python uses 'float'",
     # Go has entity-specific help validation messages; Python uses generic
     # _require_non_empty_str producing '{class_name}.{field_name} must be...'
     'App.help must be a non-empty string':
@@ -93,6 +124,20 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
     # without brackets. Same runtime output; different signature form.
     'Flag *: default * is not in choices [*]':
         "Go fmt.Sprintf normalizes with brackets; Python counterpart is 'Flag *: default * is not in choices *'",
+    # Go has additional cycle detection messages from expansion phase and Kahn fallback
+    'check dependency cycle detected involving *':
+        "Go expansion-phase cycle detection; Python only reports cycles via path format",
+    'check dependency cycle detected':
+        "Go Kahn fallback when cycle path not found; Python always finds cycle path",
+    # Go path.Match can return an error for invalid glob patterns
+    'invalid glob pattern *: *':
+        "Go-specific path.Match error; Python fnmatch never errors on patterns",
+    # Go requires [checks] key; Python returns empty dict for missing key
+    'checks.toml: missing required top-level key "checks"':
+        "Go requires [checks] key; Python returns empty dict when missing",
+    # Go wraps float env var errors with a generic suffix pattern
+    '* (from env var *)':
+        "Go generic env var error wrapper; Python embeds env var in specific messages",
 }
 
 # Dead code: errors present in both implementations but unreachable at runtime.
@@ -103,6 +148,19 @@ DEAD_CODE_EXCLUSIONS: dict[str, str] = {
     # is unreachable dead code.
     'command *: flag * missing help text':
         "Flag constructors validate help before command-level check can fire",
+}
+
+# Coverage-deferred: parse-time errors that exist in both implementations but
+# require conformance test infrastructure not yet built (e.g., config file
+# fixtures, multi-flag interaction scenarios). These are temporarily excluded
+# from coverage checks but remain parity-checked.
+COVERAGE_DEFERRED_EXCLUSIONS: dict[str, str] = {
+    # Config value coercion error requires writing a config file fixture
+    '--*: config value error: *':
+        "Needs config file fixture support in conformance framework",
+    # Implies conflict requires specific flag interaction setup
+    "flag '--*' implies '--**', but '--**' was explicitly provided":
+        "Needs Implies dependency test case in conformance framework",
 }
 
 
@@ -221,7 +279,14 @@ def extract_python_errors(source: str) -> list[tuple[str, str]]:
 # 2. Extract error patterns from Go source
 # ---------------------------------------------------------------------------
 
-def extract_go_errors(strictcli_src: str, parse_src: str) -> list[tuple[str, str]]:
+def extract_go_errors(
+    strictcli_src: str,
+    parse_src: str,
+    check_src: str,
+    check_runner_src: str,
+    tagdsl_src: str,
+    config_src: str,
+) -> list[tuple[str, str]]:
     """Extract (category, format_string) pairs from Go source.
 
     Categories: 'registration' for panic(), 'parse' for error string returns.
@@ -270,6 +335,26 @@ def extract_go_errors(strictcli_src: str, parse_src: str) -> list[tuple[str, str
     for m in parse_sprintf_2.finditer(strictcli_src):
         results.append(("parse", m.group(1)))
 
+    # --- Registration errors from check.go (fmt.Errorf for TOML validation) ---
+    errorf_pat = re.compile(
+        r'fmt\.Errorf\(\s*"((?:[^"\\]|\\.)*)"',
+    )
+    for m in errorf_pat.finditer(check_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Registration errors from check_runner.go (fmt.Errorf for cycle detection) ---
+    for m in errorf_pat.finditer(check_runner_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Registration errors from tagdsl.go (fmt.Errorf for tag expression parsing) ---
+    for m in errorf_pat.finditer(tagdsl_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Config value coercion errors from config.go (fmt.Sprintf in return) ---
+    # return nil, fmt.Sprintf("...", args) -- coerceConfigValue
+    for m in parse_sprintf_2.finditer(config_src):
+        results.append(("registration", m.group(1)))
+
     return results
 
 
@@ -298,12 +383,18 @@ def normalize_python(fmt_str: str) -> str:
 def normalize_go(fmt_str: str) -> str:
     """Normalize a Go fmt.Sprintf format string to a signature.
 
-    Replaces %s, %d, %v, %q, %T with *.
+    First unescapes Go string escapes (\\\" -> \", \\n -> newline, etc.).
+    Then replaces %s, %d, %v, %q, %T with *.
     %q produces a Go-quoted string (with surrounding double quotes), so we
     treat it like * rather than "*".
     Then normalizes quoted placeholders: '*' becomes *.
     """
-    sig = re.sub(r"%[sdvqT]", "*", fmt_str)
+    # Unescape Go string literal escape sequences
+    sig = fmt_str.replace('\\"', '"')
+    sig = sig.replace('\\n', '\n')
+    sig = sig.replace('\\t', '\t')
+    sig = sig.replace('\\\\', '\\')
+    sig = re.sub(r"%[sdvqT]", "*", sig)
     # Normalize surrounding quotes on placeholders: '*' -> *
     sig = re.sub(r"'(\*)'", r"\1", sig)
     return sig
@@ -372,10 +463,18 @@ def main() -> int:
     py_source = PY_SOURCE.read_text()
     go_strictcli_source = GO_STRICTCLI.read_text()
     go_parse_source = GO_PARSE.read_text()
+    go_check_source = GO_CHECK.read_text()
+    go_check_runner_source = GO_CHECK_RUNNER.read_text()
+    go_tagdsl_source = GO_TAGDSL.read_text()
+    go_config_source = GO_CONFIG.read_text()
 
     # Extract raw error patterns
     py_raw = extract_python_errors(py_source)
-    go_raw = extract_go_errors(go_strictcli_source, go_parse_source)
+    go_raw = extract_go_errors(
+        go_strictcli_source, go_parse_source,
+        go_check_source, go_check_runner_source,
+        go_tagdsl_source, go_config_source,
+    )
 
     # Normalize to signatures
     py_items = [(cat, raw, normalize_python(raw)) for cat, raw in py_raw]
@@ -411,18 +510,31 @@ def main() -> int:
         )
 
     # --- Check 3: Test coverage ---
+    # Only parse-time errors (category='parse') can be tested through the
+    # conformance framework which exercises CLI behavior (argv -> stderr).
+    # Registration-time errors (panics in Go, ValueError in Python during
+    # app setup) are tested by each implementation's own unit tests.
     test_assertions = extract_test_stderr(CASES_DIR)
-    all_sigs = set(py_sigs.keys()) | set(go_sigs.keys())
 
-    # Exclude signatures that are in exclusion lists (one-impl-only or dead code)
+    # Build set of parse-time signatures only
+    parse_sigs: set[str] = set()
+    for sig, origins in py_sigs.items():
+        if any(cat == "parse" for cat, _ in origins):
+            parse_sigs.add(sig)
+    for sig, origins in go_sigs.items():
+        if any(cat == "parse" for cat, _ in origins):
+            parse_sigs.add(sig)
+
+    # Exclude signatures that are in exclusion lists
     excluded_sigs = (
         set(PY_ONLY_EXCLUSIONS.keys())
         | set(GO_ONLY_EXCLUSIONS.keys())
         | set(DEAD_CODE_EXCLUSIONS.keys())
+        | set(COVERAGE_DEFERRED_EXCLUSIONS.keys())
     )
 
     uncovered: list[str] = []
-    for sig in sorted(all_sigs - excluded_sigs):
+    for sig in sorted(parse_sigs - excluded_sigs):
         covered = any(
             signature_matches_assertion(sig, assertion)
             for assertion in test_assertions
@@ -448,19 +560,24 @@ def main() -> int:
         return 1
 
     # Summary on success
+    all_sigs = set(py_sigs.keys()) | set(go_sigs.keys())
     matched = set(py_sigs.keys()) & set(go_sigs.keys())
     py_excl = len([s for s in py_only if s in PY_ONLY_EXCLUSIONS])
     go_excl = len([s for s in go_only if s in GO_ONLY_EXCLUSIONS])
-    covered_count = len(all_sigs - excluded_sigs - set(uncovered))
+    coverable = parse_sigs - excluded_sigs
+    covered_count = len(coverable - set(uncovered))
 
     dead_excl = len([s for s in all_sigs if s in DEAD_CODE_EXCLUSIONS])
+    deferred_excl = len([s for s in parse_sigs if s in COVERAGE_DEFERRED_EXCLUSIONS])
 
     print("Error parity check passed.")
     print(f"  Matched signatures: {len(matched)}")
     print(f"  Python-only (excluded): {py_excl}")
     print(f"  Go-only (excluded): {go_excl}")
     print(f"  Dead code (excluded): {dead_excl}")
-    print(f"  Test coverage: {covered_count}/{len(all_sigs - excluded_sigs)} signatures covered")
+    print(f"  Coverage deferred: {deferred_excl}")
+    print(f"  Parse-time coverage: {covered_count}/{len(coverable)} signatures covered")
+    print(f"  Total signatures: {len(all_sigs)}")
     return 0
 
 
