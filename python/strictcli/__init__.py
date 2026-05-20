@@ -2788,7 +2788,7 @@ def _serialize_group(group: Group) -> dict:
 
 def _dump_schema(app: App) -> dict:
     """Produce a JSON-serializable dict representing the app's command tree."""
-    return {
+    schema = {
         "name": app.name,
         "version": app.version,
         "help": app.help,
@@ -2799,6 +2799,19 @@ def _dump_schema(app: App) -> dict:
         "groups": {name: _serialize_group(grp) for name, grp in app._groups.items()},
         "deprecated": {name: dep.message for name, dep in app._deprecated.items()},
     }
+    if app._checks_enabled:
+        schema["checks"] = {
+            name: {
+                "tags": cdef.tags,
+                "severity": cdef.severity,
+                "fast": cdef.fast,
+                "pure": cdef.pure,
+                "needs_network": cdef.needs_network,
+                "depends_on": cdef.depends_on,
+            }
+            for name, cdef in app._check_defs.items()
+        }
+    return schema
 
 
 def _write_schema(app: App) -> str:
