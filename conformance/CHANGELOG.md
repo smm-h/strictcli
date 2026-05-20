@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.3.0
+
+### Features
+
+- **New feature.** Check system conformance tests -- 14 test cases covering check registration, tag filtering, dependency ordering, output modes, and error handling.
+
 ## 0.2.0
 
 ### Features
