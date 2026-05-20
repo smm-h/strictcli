@@ -447,14 +447,30 @@ def generate(app_def: dict) -> str:
 
     Returns the script source as a string.
     """
+    has_checks = bool(app_def.get("checks_toml"))
+
     lines = []
     lines.append("import sys")
     lines.append("import os")
+    if has_checks:
+        lines.append("import pathlib")
+        lines.append("import tempfile")
     lines.append("")
     lines.append("# Add strictcli to path")
     lines.append("sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))")
     lines.append("import strictcli")
     lines.append("")
+
+    # Set up checks.toml in a temp directory if checks are configured
+    if has_checks:
+        checks_toml = app_def["checks_toml"]
+        lines.append("# Create temp dir with .strictcli/checks.toml and chdir to it")
+        lines.append("_tmpdir = tempfile.mkdtemp(prefix='strictcli_checks_')")
+        lines.append("os.makedirs(os.path.join(_tmpdir, '.strictcli'), exist_ok=True)")
+        lines.append(f"with open(os.path.join(_tmpdir, '.strictcli', 'checks.toml'), 'w') as _f:")
+        lines.append(f"    _f.write({checks_toml!r})")
+        lines.append("os.chdir(_tmpdir)")
+        lines.append("")
 
     # Build app
     global_flags = app_def.get("global_flags", [])
@@ -509,6 +525,24 @@ def generate(app_def: dict) -> str:
             lines.append(textwrap.indent(_emit_command_registration(
                 cmd_def, "app", global_flags=global_flags,
             ), "    "))
+
+    # Register checks if defined
+    if has_checks:
+        for check_def in app_def.get("checks", []):
+            cname = check_def["name"]
+            cstatus = check_def["check_returns"]
+            cmessage = check_def["check_message"]
+            cdetails = check_def.get("check_details", [])
+            lines.append(f"    @app.check({cname!r})")
+            lines.append(f"    def check_{cname.replace('-', '_')}(ctx):")
+            lines.append(f"        return strictcli.CheckResult(status={cstatus!r}, message={cmessage!r}, details={cdetails!r})")
+            lines.append("")
+
+        lines.append("    class _CheckCtx:")
+        lines.append("        project_root = pathlib.Path('.')")
+        lines.append("")
+        lines.append("    app.set_check_context(lambda: _CheckCtx())")
+        lines.append("")
 
     lines.append("    app.run()")
     lines.append("except ValueError as e:")

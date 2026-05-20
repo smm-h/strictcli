@@ -310,12 +310,16 @@ def generate(app_def: dict) -> str:
 
     Returns the source code as a string.
     """
+    has_checks = bool(app_def.get("checks_toml"))
+
     lines = []
     lines.append("package main")
     lines.append("")
     lines.append("import (")
     lines.append('\t"fmt"')
     lines.append('\t"os"')
+    if has_checks:
+        lines.append('\t"path/filepath"')
     lines.append('\t"strings"')
     lines.append("")
     lines.append('\t"github.com/smm-h/strictcli/go/strictcli"')
@@ -334,6 +338,18 @@ def generate(app_def: dict) -> str:
     lines.append('\t\t}')
     lines.append('\t}()')
     lines.append("")
+
+    # Set up checks.toml in a temp directory if checks are configured
+    if has_checks:
+        checks_toml = app_def["checks_toml"]
+        # Escape backticks and backslashes for Go raw strings — use double-quoted string instead
+        escaped_toml = checks_toml.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+        lines.append('\t// Create temp dir with .strictcli/checks.toml and chdir to it')
+        lines.append('\ttmpDir, _ := os.MkdirTemp("", "strictcli-checks-*")')
+        lines.append('\tos.MkdirAll(filepath.Join(tmpDir, ".strictcli"), 0o755)')
+        lines.append(f'\tos.WriteFile(filepath.Join(tmpDir, ".strictcli", "checks.toml"), []byte("{escaped_toml}"), 0o644)')
+        lines.append('\tos.Chdir(tmpDir)')
+        lines.append("")
 
     # Build app
     app_opts = []
@@ -382,8 +398,37 @@ def generate(app_def: dict) -> str:
         else:
             lines.extend(_emit_command_go(cmd_def, "app", "\t", global_flags))
 
+    # Register checks if defined
+    if has_checks:
+        for check_def in app_def.get("checks", []):
+            cname = check_def["name"]
+            cstatus = check_def["check_returns"]
+            cmessage = check_def["check_message"]
+            cdetails = check_def.get("check_details", [])
+            if cdetails:
+                details_items = ", ".join(f'"{d}"' for d in cdetails)
+                details_str = f"[]string{{{details_items}}}"
+            else:
+                details_str = "[]string{}"
+            lines.append(f'\tapp.RegisterCheck("{cname}", func(ctx strictcli.CheckContext) strictcli.CheckResult {{')
+            lines.append(f'\t\treturn strictcli.CheckResult{{Status: "{cstatus}", Message: "{cmessage}", Details: {details_str}}}')
+            lines.append('\t})')
+            lines.append("")
+
+        lines.append('\t// Check context')
+        lines.append('\tapp.SetCheckContext(func() strictcli.CheckContext {')
+        lines.append('\t\treturn &testCheckCtx{}')
+        lines.append('\t})')
+        lines.append("")
+
     lines.append("\tapp.Run()")
     lines.append("}")
     lines.append("")
+
+    # Emit check context type if needed
+    if has_checks:
+        lines.append("type testCheckCtx struct{}")
+        lines.append('func (c *testCheckCtx) ProjectRoot() string { return "." }')
+        lines.append("")
 
     return "\n".join(lines)
