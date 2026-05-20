@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.7.1
+
+### Features
+
+- **New feature.** Handlers with `**kwargs` signatures are accepted without strict parameter validation.
+
 ## 0.7.0
 
 ### Features
