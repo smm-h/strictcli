@@ -11,6 +11,7 @@ __all__ = [
 ]
 
 import contextlib
+import fnmatch
 import importlib.metadata
 import inspect
 import io
@@ -20,6 +21,7 @@ import re
 import subprocess
 import sys
 import tomllib
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol, runtime_checkable
@@ -599,6 +601,51 @@ class App:
         if self.config:
             self._config_data = _load_config(self.name)
             self._register_config_group()
+        # Discover checks TOML
+        checks_toml_path = Path.cwd() / ".strictcli" / "checks.toml"
+        if checks_toml_path.is_file():
+            self._check_defs: dict[str, _CheckDef] = _load_checks_toml(checks_toml_path)
+            self._checks_enabled = True
+        else:
+            self._check_defs = {}
+            self._checks_enabled = False
+
+    def check(self, name: str):
+        """Decorator to register a check implementation."""
+        def decorator(fn):
+            if not self._checks_enabled:
+                raise ValueError(
+                    f'cannot register check "{name}": '
+                    f"no .strictcli/checks.toml found"
+                )
+            if name not in self._check_defs:
+                raise ValueError(
+                    f'cannot register check "{name}": '
+                    f"not declared in .strictcli/checks.toml"
+                )
+            if self._check_defs[name].impl is not None:
+                raise ValueError(f'check "{name}": duplicate registration')
+            self._check_defs[name].impl = fn
+            return fn
+        return decorator
+
+    def _validate_check_registrations(self) -> str | None:
+        """Validate that all declared checks have registered implementations.
+
+        Returns an error message if any are missing, or None if all OK.
+        """
+        if not self._checks_enabled:
+            return None
+        missing = sorted(
+            name for name, cdef in self._check_defs.items()
+            if cdef.impl is None
+        )
+        if missing:
+            return (
+                "checks declared in .strictcli/checks.toml but not registered: "
+                + ", ".join(missing)
+            )
+        return None
 
     def command(
         self,
@@ -1124,6 +1171,10 @@ class App:
 
     def run(self) -> None:
         """Run the CLI application, reading from sys.argv."""
+        check_err = self._validate_check_registrations()
+        if check_err:
+            print(f"error: {check_err}", file=sys.stderr)
+            sys.exit(1)
         argv = sys.argv[1:]
         try:
             cmd, data = self._parse(argv)
@@ -1159,6 +1210,15 @@ class App:
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
         exit_code = 0
+
+        check_err = self._validate_check_registrations()
+        if check_err:
+            stderr_buf.write(f"error: {check_err}\n")
+            return Result(
+                stdout=stdout_buf.getvalue(),
+                stderr=stderr_buf.getvalue(),
+                exit_code=1,
+            )
 
         try:
             cmd, data = self._parse(argv)
@@ -2300,6 +2360,198 @@ def _match_tag_expr(expr: str, tags: set[str]) -> bool:
         raise ValueError("tag expression: empty expression")
     ast = _tagdsl_parse(tokens)
     return _tagdsl_evaluate(ast, tags)
+
+
+# ---------------------------------------------------------------------------
+# Check runner
+# ---------------------------------------------------------------------------
+
+
+def _filter_checks(
+    check_defs: dict[str, _CheckDef],
+    tag_expr: str | None,
+    name_glob: str | None,
+    run_all: bool,
+) -> set[str]:
+    """Filter checks by tag expression and/or name glob.
+
+    Returns the set of selected check names.
+    """
+    if run_all:
+        return set(check_defs.keys())
+
+    by_tag: set[str] | None = None
+    by_name: set[str] | None = None
+
+    if tag_expr is not None:
+        by_tag = {
+            name for name, cdef in check_defs.items()
+            if _match_tag_expr(tag_expr, set(cdef.tags))
+        }
+
+    if name_glob is not None:
+        by_name = {
+            name for name in check_defs
+            if fnmatch.fnmatch(name, name_glob)
+        }
+
+    if by_tag is not None and by_name is not None:
+        return by_tag & by_name
+    if by_tag is not None:
+        return by_tag
+    if by_name is not None:
+        return by_name
+    return set()
+
+
+def _resolve_check_order(
+    check_defs: dict[str, _CheckDef], selected: set[str],
+) -> list[str]:
+    """Resolve execution order via topological sort, pulling in dependencies.
+
+    If a selected check depends on an unselected check, the dependency is
+    pulled into the execution set. Raises ValueError on cycles.
+    """
+    # Expand selected to include all transitive dependencies
+    expanded: set[str] = set()
+    stack = list(selected)
+    while stack:
+        name = stack.pop()
+        if name in expanded:
+            continue
+        expanded.add(name)
+        for dep in check_defs[name].depends_on:
+            if dep not in expanded:
+                stack.append(dep)
+
+    # Build adjacency and in-degree for Kahn's algorithm
+    in_degree: dict[str, int] = {name: 0 for name in expanded}
+    dependents: dict[str, list[str]] = {name: [] for name in expanded}
+
+    for name in expanded:
+        for dep in check_defs[name].depends_on:
+            if dep in expanded:
+                dependents[dep].append(name)
+                in_degree[name] += 1
+
+    # Kahn's algorithm
+    queue: deque[str] = deque(
+        name for name in sorted(expanded) if in_degree[name] == 0
+    )
+    order: list[str] = []
+
+    while queue:
+        node = queue.popleft()
+        order.append(node)
+        for child in sorted(dependents[node]):
+            in_degree[child] -= 1
+            if in_degree[child] == 0:
+                queue.append(child)
+
+    if len(order) != len(expanded):
+        # Cycle detection: find a cycle for the error message
+        remaining = expanded - set(order)
+        cycle = _find_cycle(check_defs, remaining)
+        raise ValueError(f"check dependency cycle: {cycle}")
+
+    return order
+
+
+def _find_cycle(
+    check_defs: dict[str, _CheckDef], nodes: set[str],
+) -> str:
+    """Find and format a cycle among the given nodes for error reporting."""
+    # DFS to find a cycle path
+    visited: set[str] = set()
+    path: list[str] = []
+    path_set: set[str] = set()
+
+    def dfs(node: str) -> str | None:
+        visited.add(node)
+        path.append(node)
+        path_set.add(node)
+        for dep in check_defs[node].depends_on:
+            if dep not in nodes:
+                continue
+            if dep in path_set:
+                # Found cycle: extract from dep to current node back to dep
+                cycle_start = path.index(dep)
+                cycle_path = path[cycle_start:] + [dep]
+                return " -> ".join(cycle_path)
+            if dep not in visited:
+                result = dfs(dep)
+                if result:
+                    return result
+        path.pop()
+        path_set.discard(node)
+        return None
+
+    for node in sorted(nodes):
+        if node not in visited:
+            result = dfs(node)
+            if result:
+                return result
+    return " -> ".join(sorted(nodes))
+
+
+def _run_checks(
+    app: "App",
+    check_names: list[str],
+    context: CheckContext,
+    ignore_warnings: bool,
+) -> tuple[list[tuple[str, CheckResult]], int]:
+    """Execute checks in order, skipping dependents of failed checks.
+
+    Returns (results_list, exit_code). exit_code is 0 if all pass (or all
+    warn with ignore_warnings=True), 1 otherwise.
+    """
+    check_defs = app._check_defs
+    results: list[tuple[str, CheckResult]] = []
+    failed_checks: set[str] = set()
+    exit_code = 0
+
+    # Build reverse dependency map for this execution set
+    dependents_of: dict[str, set[str]] = {name: set() for name in check_names}
+    for name in check_names:
+        for dep in check_defs[name].depends_on:
+            if dep in dependents_of:
+                dependents_of[dep].add(name)
+
+    for name in check_names:
+        cdef = check_defs[name]
+
+        # Check if any dependency failed
+        failed_dep = None
+        for dep in cdef.depends_on:
+            if dep in failed_checks:
+                failed_dep = dep
+                break
+
+        if failed_dep is not None:
+            result = CheckResult(
+                status="skip",
+                message=f'skipped: dependency "{failed_dep}" failed',
+            )
+            failed_checks.add(name)
+            results.append((name, result))
+            exit_code = 1
+            continue
+
+        result = cdef.impl(context)
+        results.append((name, result))
+
+        if result.status == "fail":
+            failed_checks.add(name)
+            exit_code = 1
+        elif result.status == "warn":
+            if not ignore_warnings:
+                failed_checks.add(name)
+                exit_code = 1
+        elif result.status == "skip":
+            # Treat explicit skip from impl as non-failure (no cascade)
+            pass
+
+    return results, exit_code
 
 
 # ---------------------------------------------------------------------------
