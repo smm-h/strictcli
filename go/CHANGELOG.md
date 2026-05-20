@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.5.0
+
+### Features
+
+- **New feature.** Check system -- a first-class, security-hardened check/validation framework. Register checks in `.strictcli/checks.toml` (source of truth) with metadata (tags, severity, dependencies), implement them via `app.RegisterCheck()`, and run them with the auto-registered `check` command. Includes: tag-based filtering with a set-operation DSL (`&`, `|`, `^`, `-`, `!`), DAG-based dependency ordering, human/JSON output, `--list`/`--dry-run`/`--verbose` modes, `--ignore-warnings`, and `--dump-schema` integration. First external dependency: go-toml-edit for TOML parsing.
+
 ## 0.4.0
 
 ### Features
