@@ -81,6 +81,127 @@ def _coerce_config_value(value: object, flag: "Flag") -> object:
     raise ValueError(f"unsupported flag type {flag.type}")
 
 
+_CHECK_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+_CHECK_REQUIRED_FIELDS = {"tags", "severity", "fast", "pure", "needs_network", "depends_on"}
+_CHECK_VALID_SEVERITIES = {"error", "warn"}
+
+
+def _load_checks_toml(path: str | Path) -> dict[str, _CheckDef]:
+    """Parse and validate a checks.toml file, returning check definitions.
+
+    Raises ValueError on any schema violation, file error, or invalid TOML.
+    """
+    path = Path(path)
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"checks.toml: {exc}") from exc
+    try:
+        data = tomllib.loads(raw.decode())
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"checks.toml: {exc}") from exc
+
+    # Only [checks] is allowed at the top level
+    for key in data:
+        if key != "checks":
+            raise ValueError(f'checks.toml: unknown top-level key "{key}"')
+
+    if "checks" not in data:
+        return {}
+
+    checks_section = data["checks"]
+    if not isinstance(checks_section, dict):
+        raise ValueError("checks.toml: [checks] must be a table")
+
+    result: dict[str, _CheckDef] = {}
+
+    for name, fields in checks_section.items():
+        # Validate check name
+        if not _CHECK_NAME_RE.match(name):
+            raise ValueError(
+                f'checks.toml: invalid check name "{name}" '
+                f"(must match [a-z][a-z0-9-]*)"
+            )
+        if not isinstance(fields, dict):
+            raise ValueError(f'checks.toml: check "{name}" must be a table')
+
+        # No unknown fields
+        unknown = set(fields.keys()) - _CHECK_REQUIRED_FIELDS
+        if unknown:
+            raise ValueError(
+                f'checks.toml: check "{name}": unknown field "{sorted(unknown)[0]}"'
+            )
+
+        # Required fields
+        for req in sorted(_CHECK_REQUIRED_FIELDS):
+            if req not in fields:
+                raise ValueError(
+                    f'checks.toml: check "{name}": missing required field "{req}"'
+                )
+
+        # Validate tags
+        tags = fields["tags"]
+        if not isinstance(tags, list) or len(tags) == 0:
+            raise ValueError(
+                f'checks.toml: check "{name}": "tags" must be a non-empty list of strings'
+            )
+        for tag in tags:
+            if not isinstance(tag, str) or not tag.strip():
+                raise ValueError(
+                    f'checks.toml: check "{name}": "tags" entries must be non-empty strings'
+                )
+
+        # Validate severity
+        severity = fields["severity"]
+        if not isinstance(severity, str) or severity not in _CHECK_VALID_SEVERITIES:
+            raise ValueError(
+                f'checks.toml: check "{name}": "severity" must be "error" or "warn", '
+                f"got {severity!r}"
+            )
+
+        # Validate booleans
+        for bool_field in ("fast", "pure", "needs_network"):
+            val = fields[bool_field]
+            if not isinstance(val, bool):
+                raise ValueError(
+                    f'checks.toml: check "{name}": "{bool_field}" must be a boolean, '
+                    f"got {type(val).__name__}"
+                )
+
+        # Validate depends_on
+        depends_on = fields["depends_on"]
+        if not isinstance(depends_on, list):
+            raise ValueError(
+                f'checks.toml: check "{name}": "depends_on" must be a list of strings'
+            )
+        for dep in depends_on:
+            if not isinstance(dep, str):
+                raise ValueError(
+                    f'checks.toml: check "{name}": "depends_on" entries must be strings'
+                )
+
+        result[name] = _CheckDef(
+            name=name,
+            tags=tags,
+            severity=severity,
+            fast=fields["fast"],
+            pure=fields["pure"],
+            needs_network=fields["needs_network"],
+            depends_on=depends_on,
+        )
+
+    # Cross-validate depends_on references
+    for name, check_def in result.items():
+        for dep in check_def.depends_on:
+            if dep not in result:
+                raise ValueError(
+                    f'checks.toml: check "{name}": depends_on references '
+                    f'unknown check "{dep}"'
+                )
+
+    return result
+
+
 class _HelpRequested(Exception):
     """Raised when --help or -h is encountered."""
 
