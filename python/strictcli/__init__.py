@@ -1549,6 +1549,10 @@ def _build_and_validate_command(
 
     # Validate: handler signature matches declared flags and args
     sig = inspect.signature(handler)
+    has_var_keyword = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD
+        for p in sig.parameters.values()
+    )
     param_names = set(sig.parameters.keys())
 
     expected_names: set[str] = set()
@@ -1561,31 +1565,34 @@ def _build_and_validate_command(
         for gf in global_flags:
             expected_names.add(_flag_param_name(gf.name))
 
-    # Check each flag has a matching parameter
-    for f in all_flags:
-        pname = _flag_param_name(f.name)
-        if pname not in param_names:
-            raise ValueError(
-                f'command "{name}": handler missing parameter "{pname}" '
-                f'for flag "{f.name}"'
-            )
+    # Skip strict checks when handler accepts **kwargs -- it can receive
+    # any parameter, so missing/extra checks are not meaningful.
+    if not has_var_keyword:
+        # Check each flag has a matching parameter
+        for f in all_flags:
+            pname = _flag_param_name(f.name)
+            if pname not in param_names:
+                raise ValueError(
+                    f'command "{name}": handler missing parameter "{pname}" '
+                    f'for flag "{f.name}"'
+                )
 
-    # Check each arg has a matching parameter
-    for a in all_args:
-        if a.name not in param_names:
-            raise ValueError(
-                f'command "{name}": handler missing parameter "{a.name}" '
-                f'for arg "{a.name}"'
-            )
+        # Check each arg has a matching parameter
+        for a in all_args:
+            if a.name not in param_names:
+                raise ValueError(
+                    f'command "{name}": handler missing parameter "{a.name}" '
+                    f'for arg "{a.name}"'
+                )
 
-    # Check for extra parameters
-    extra = param_names - expected_names
-    if extra:
-        extra_name = sorted(extra)[0]
-        raise ValueError(
-            f'command "{name}": handler has extra parameter "{extra_name}" '
-            f"not matching any flag or arg"
-        )
+        # Check for extra parameters
+        extra = param_names - expected_names
+        if extra:
+            extra_name = sorted(extra)[0]
+            raise ValueError(
+                f'command "{name}": handler has extra parameter "{extra_name}" '
+                f"not matching any flag or arg"
+            )
 
     # Validate dependencies
     resolved_dependencies = list(dependencies) if dependencies else []
