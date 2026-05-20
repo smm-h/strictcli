@@ -1,6 +1,7 @@
 package strictcli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1216,6 +1217,405 @@ func TestRunChecks_WarnDependency_RunsWhenIgnored(t *testing.T) {
 	}
 	if results[1].result.Status != "pass" {
 		t.Fatalf("expected check-a pass, got %q", results[1].result.Status)
+	}
+}
+
+// --- Phase 6: check command tests ---
+
+const twoChecksToml = `
+[checks.version-consistency]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
+[checks.changelog-coverage]
+tags = ["changelog", "pre-push"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = ["version-consistency"]
+`
+
+// makeAppWithChecks creates an app with checks registered and a context factory set.
+// Both checks pass by default. Override impls as needed after calling this.
+func makeAppWithChecks(t *testing.T, toml string) *App {
+	t.Helper()
+	app := NewApp("testapp", "1.0.0", "test app")
+	if !app.checksEnabled {
+		t.Fatal("expected checksEnabled after setting up checks dir")
+	}
+	return app
+}
+
+func TestCheckCommand_NoFlags_ShowsHelp(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.SetCheckContext(func() CheckContext {
+		return &testCheckContext{root: "/tmp"}
+	})
+
+	r := app.Test([]string{"check"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "check") {
+		t.Fatalf("expected help output containing 'check', got %q", r.Stdout)
+	}
+	// Should mention --all flag in help
+	if !strings.Contains(r.Stdout, "--all") {
+		t.Fatalf("expected help output containing '--all', got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_List_Human(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	r := app.Test([]string{"check", "--list"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "NAME") {
+		t.Fatalf("expected header NAME, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "changelog-coverage") {
+		t.Fatalf("expected changelog-coverage in output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "version-consistency") {
+		t.Fatalf("expected version-consistency in output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "release") {
+		t.Fatalf("expected 'release' tag in output, got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_List_JSON(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	r := app.Test([]string{"check", "--list", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// Parse JSON output
+	var entries []struct {
+		Name     string   `json:"name"`
+		Tags     []string `json:"tags"`
+		Severity string   `json:"severity"`
+	}
+	output := strings.TrimSpace(r.Stdout)
+	if err := json.Unmarshal([]byte(output), &entries); err != nil {
+		t.Fatalf("failed to parse JSON: %v; output=%q", err, output)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	// Sorted alphabetically: changelog-coverage first
+	if entries[0].Name != "changelog-coverage" {
+		t.Fatalf("expected first entry 'changelog-coverage', got %q", entries[0].Name)
+	}
+	if entries[1].Name != "version-consistency" {
+		t.Fatalf("expected second entry 'version-consistency', got %q", entries[1].Name)
+	}
+}
+
+func TestCheckCommand_All_Passing(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "1.0.0 across 2 targets"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "all commits covered"}
+	})
+	app.SetCheckContext(func() CheckContext {
+		return &testCheckContext{root: "/tmp"}
+	})
+
+	r := app.Test([]string{"check", "--all"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q stdout=%q", r.ExitCode, r.Stderr, r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "PASS") {
+		t.Fatalf("expected PASS in output, got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_All_WithFailure(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "fail", Message: "version mismatch", Details: []string{"pyproject: 1.0.0", "package.json: 1.0.1"}}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		t.Fatal("changelog-coverage should not run if version-consistency fails")
+		return CheckResult{}
+	})
+	app.SetCheckContext(func() CheckContext {
+		return &testCheckContext{root: "/tmp"}
+	})
+
+	r := app.Test([]string{"check", "--all"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "FAIL") {
+		t.Fatalf("expected FAIL in output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "SKIP") {
+		t.Fatalf("expected SKIP in output (dependency skip), got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_TagFilter(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.SetCheckContext(func() CheckContext {
+		return &testCheckContext{root: "/tmp"}
+	})
+
+	// Only version-consistency has tag "release"
+	r := app.Test([]string{"check", "--tag", "release"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "version-consistency") {
+		t.Fatalf("expected version-consistency in output, got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_NameGlob(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.SetCheckContext(func() CheckContext {
+		return &testCheckContext{root: "/tmp"}
+	})
+
+	r := app.Test([]string{"check", "--name", "version-*"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "version-consistency") {
+		t.Fatalf("expected version-consistency in output, got %q", r.Stdout)
+	}
+	// Should NOT contain changelog-coverage since it's not matched by version-*
+	// (though it may appear as a pulled-in dependency -- version-consistency has no deps on it)
+}
+
+func TestCheckCommand_DryRun(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		t.Fatal("should not run in dry-run mode")
+		return CheckResult{}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		t.Fatal("should not run in dry-run mode")
+		return CheckResult{}
+	})
+
+	r := app.Test([]string{"check", "--all", "--dry-run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "Would run 2 checks") {
+		t.Fatalf("expected 'Would run 2 checks' in output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "version-consistency") {
+		t.Fatalf("expected version-consistency in plan, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "changelog-coverage") {
+		t.Fatalf("expected changelog-coverage in plan, got %q", r.Stdout)
+	}
+	// changelog-coverage should show dependency info
+	if !strings.Contains(r.Stdout, "depends on:") {
+		t.Fatalf("expected dependency info in plan, got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_All_JSON(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "covered"}
+	})
+	app.SetCheckContext(func() CheckContext {
+		return &testCheckContext{root: "/tmp"}
+	})
+
+	r := app.Test([]string{"check", "--all", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	var entries []struct {
+		Name    string   `json:"name"`
+		Status  string   `json:"status"`
+		Message string   `json:"message"`
+		Details []string `json:"details"`
+	}
+	output := strings.TrimSpace(r.Stdout)
+	if err := json.Unmarshal([]byte(output), &entries); err != nil {
+		t.Fatalf("failed to parse JSON: %v; output=%q", err, output)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	for _, e := range entries {
+		if e.Status != "pass" {
+			t.Fatalf("expected pass, got %q for %q", e.Status, e.Name)
+		}
+	}
+}
+
+func TestCheckCommand_All_Verbose(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok", Details: []string{"pyproject.toml: 1.0.0", "package.json: 1.0.0"}}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "covered"}
+	})
+	app.SetCheckContext(func() CheckContext {
+		return &testCheckContext{root: "/tmp"}
+	})
+
+	r := app.Test([]string{"check", "--all", "--verbose"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	// With verbose, passing check details should be shown
+	if !strings.Contains(r.Stdout, "pyproject.toml: 1.0.0") {
+		t.Fatalf("expected verbose details in output, got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_IgnoreWarnings(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "warn", Message: "tag not pushed"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.SetCheckContext(func() CheckContext {
+		return &testCheckContext{root: "/tmp"}
+	})
+
+	// Without --ignore-warnings, warn = exit 1
+	r := app.Test([]string{"check", "--all"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1 without --ignore-warnings, got %d", r.ExitCode)
+	}
+
+	// With --ignore-warnings, warn = exit 0
+	r = app.Test([]string{"check", "--all", "--ignore-warnings"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0 with --ignore-warnings, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestCheckCommand_NotInHelp_WithoutToml(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.Command("greet", "say hello", func(args map[string]interface{}) int {
+		return 0
+	})
+
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", r.ExitCode)
+	}
+	if strings.Contains(r.Stdout, "check") {
+		t.Fatalf("check command should NOT appear in help when no TOML, got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_NoContextFactory_Error(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	// Deliberately NOT calling SetCheckContext
+
+	r := app.Test([]string{"check", "--all"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1 without context factory, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "no check context factory set") {
+		t.Fatalf("expected error about missing context factory, got stderr=%q", r.Stderr)
 	}
 }
 
