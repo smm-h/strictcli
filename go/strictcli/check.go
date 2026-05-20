@@ -30,7 +30,7 @@ type checkDef struct {
 	pure         bool
 	needsNetwork bool
 	dependsOn    []string
-	impl         interface{} // registered implementation function, nil initially
+	impl         func(CheckContext) CheckResult // registered implementation, nil initially
 }
 
 // checkNameRe validates check names: lowercase letter followed by lowercase letters, digits, or hyphens.

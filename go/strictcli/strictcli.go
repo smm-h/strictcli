@@ -4,6 +4,8 @@ package strictcli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -155,6 +157,9 @@ type App struct {
 
 	configEnabled bool
 	configData    map[string]interface{}
+
+	checksEnabled bool
+	checkDefs     map[string]*checkDef
 }
 
 // --- Option types ---
@@ -519,7 +524,54 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		a.configData = loadConfig(a.Name)
 		a.registerConfigGroup()
 	}
+	// Discover .strictcli/checks.toml in the current working directory
+	if wd, err := os.Getwd(); err == nil {
+		checksPath := filepath.Join(wd, ".strictcli", "checks.toml")
+		if _, err := os.Stat(checksPath); err == nil {
+			defs, err := loadChecksToml(checksPath)
+			if err != nil {
+				panic(fmt.Sprintf("checks.toml: %s", err))
+			}
+			a.checkDefs = defs
+			a.checksEnabled = true
+		}
+	}
 	return a
+}
+
+// RegisterCheck registers a check implementation for a check declared in checks.toml.
+// Panics if no checks.toml was discovered, if the name is not declared, or if it's a duplicate.
+func (a *App) RegisterCheck(name string, fn func(CheckContext) CheckResult) {
+	if !a.checksEnabled {
+		panic(fmt.Sprintf("cannot register check %q: no .strictcli/checks.toml found", name))
+	}
+	def, ok := a.checkDefs[name]
+	if !ok {
+		panic(fmt.Sprintf("cannot register check %q: not declared in .strictcli/checks.toml", name))
+	}
+	if def.impl != nil {
+		panic(fmt.Sprintf("check %q: duplicate registration", name))
+	}
+	def.impl = fn
+}
+
+// validateCheckRegistrations checks that all declared checks have been registered.
+// Returns an error message listing unregistered checks, or empty string if all are registered.
+func (a *App) validateCheckRegistrations() string {
+	if !a.checksEnabled {
+		return ""
+	}
+	var missing []string
+	for name, def := range a.checkDefs {
+		if def.impl == nil {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return ""
+	}
+	sort.Strings(missing)
+	return fmt.Sprintf("checks declared in .strictcli/checks.toml but not registered: %s", strings.Join(missing, ", "))
 }
 
 // Command registers a top-level command.
@@ -701,6 +753,10 @@ func (g *Group) DeprecatedCommands() map[string]string {
 
 // Run executes the CLI, reading from os.Args.
 func (a *App) Run() {
+	if errMsg := a.validateCheckRegistrations(); errMsg != "" {
+		fmt.Fprintln(os.Stderr, "error: "+errMsg)
+		os.Exit(1)
+	}
 	argv := os.Args[1:]
 	pr := a.doParse(argv)
 
@@ -738,6 +794,9 @@ func (a *App) Run() {
 
 // Test runs the CLI with the given argv, capturing output and exit code.
 func (a *App) Test(argv []string) Result {
+	if errMsg := a.validateCheckRegistrations(); errMsg != "" {
+		return Result{Stderr: "error: " + errMsg + "\n", ExitCode: 1}
+	}
 	pr := a.doParse(argv)
 
 	if pr.helpText != "" {
