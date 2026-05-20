@@ -3,3 +3,4 @@
 {"commits":["65e89fa1dfcc702e02f2e25868320d74bf4b35bc"],"user_facing":false}
 {"commits":["0ab3b1b3c763ef341587171b94cd138108a2434d"],"user_facing":false}
 {"commits":["8b9e28981ddb8f8e5bc8cf69d205dd22dcbbfae0"],"user_facing":false}
+{"commits":["a5a5d2bdb4b6778f0cadfbf2ad3eed9478894204","af57140b7104078ed2a24d5b3d2cb3da16f15e5a","b9ad74cc353f060d9fcd2c6a98b6992a7e91fa6c","050c8b065d1e897c2adddd8b1bd5c5677d0f9805"],"user_facing":true,"description":"**New feature.** Check system conformance tests -- 14 test cases covering check registration, tag filtering, dependency ordering, output modes, and error handling.","type":"feature"}
