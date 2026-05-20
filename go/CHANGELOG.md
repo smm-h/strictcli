@@ -2,6 +2,10 @@
 
 # Changelog
 
+## 0.5.1
+
+- No user-facing changes.
+
 ## 0.5.0
 
 ### Features
