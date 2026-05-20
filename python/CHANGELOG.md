@@ -2,6 +2,10 @@
 
 # Changelog
 
+## 0.8.1
+
+- No user-facing changes.
+
 ## 0.8.0
 
 ### Features
