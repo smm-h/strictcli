@@ -1,0 +1,264 @@
+[
+  {
+    "name": "checks: list with 2 checks shows names and tags",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.format]\ntags = [\"dev\"]\nseverity = \"warn\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"},
+        {"name": "format", "check_returns": "pass", "check_message": "formatted"}
+      ]
+    },
+    "argv": ["check", "--list"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["lint", "format", "release", "dev", "SEVERITY"]
+    }
+  },
+  {
+    "name": "checks: list json outputs structured data",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.format]\ntags = [\"dev\"]\nseverity = \"warn\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"},
+        {"name": "format", "check_returns": "pass", "check_message": "formatted"}
+      ]
+    },
+    "argv": ["check", "--list", "--json"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["\"name\"", "\"tags\"", "\"severity\"", "lint", "format"]
+    }
+  },
+  {
+    "name": "checks: all passing exits 0",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.format]\ntags = [\"dev\"]\nseverity = \"warn\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"},
+        {"name": "format", "check_returns": "pass", "check_message": "formatted"}
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "PASS"
+    }
+  },
+  {
+    "name": "checks: one failing exits 1",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.format]\ntags = [\"dev\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "fail", "check_message": "lint errors found"},
+        {"name": "format", "check_returns": "pass", "check_message": "formatted"}
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": "FAIL"
+    }
+  },
+  {
+    "name": "checks: warning without ignore-warnings exits 1",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "warn", "check_message": "minor issues"}
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": "WARN"
+    }
+  },
+  {
+    "name": "checks: warning with ignore-warnings exits 0",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "warn", "check_message": "minor issues"}
+      ]
+    },
+    "argv": ["check", "--all", "--ignore-warnings"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "WARN"
+    }
+  },
+  {
+    "name": "checks: filter by tag runs only matching checks",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.format]\ntags = [\"dev\"]\nseverity = \"warn\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"},
+        {"name": "format", "check_returns": "pass", "check_message": "formatted"}
+      ]
+    },
+    "argv": ["check", "--tag", "release"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "lint",
+      "stdout_not_contains": "format"
+    }
+  },
+  {
+    "name": "checks: filter by name glob",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.format]\ntags = [\"dev\"]\nseverity = \"warn\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"},
+        {"name": "format", "check_returns": "pass", "check_message": "formatted"}
+      ]
+    },
+    "argv": ["check", "--name", "lin*"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "lint",
+      "stdout_not_contains": "format"
+    }
+  },
+  {
+    "name": "checks: dry-run shows plan and exits 0",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"}
+      ]
+    },
+    "argv": ["check", "--all", "--dry-run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["Would run", "lint"]
+    }
+  },
+  {
+    "name": "checks: json output for check results",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"}
+      ]
+    },
+    "argv": ["check", "--all", "--json"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["\"status\"", "\"pass\"", "\"name\"", "\"lint\""]
+    }
+  },
+  {
+    "name": "checks: dependency chain both run when dep passes",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.compile]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = [\"compile\"]\n",
+      "checks": [
+        {"name": "compile", "check_returns": "pass", "check_message": "compiled ok"},
+        {"name": "lint", "check_returns": "pass", "check_message": "lint ok"}
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["compile", "lint", "PASS"]
+    }
+  },
+  {
+    "name": "checks: dependency failure causes skip",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.compile]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = [\"compile\"]\n",
+      "checks": [
+        {"name": "compile", "check_returns": "fail", "check_message": "compile failed"},
+        {"name": "lint", "check_returns": "pass", "check_message": "lint ok"}
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": ["FAIL", "SKIP"]
+    }
+  },
+  {
+    "name": "checks: missing registration causes error",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.format]\ntags = [\"dev\"]\nseverity = \"warn\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"}
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "checks declared in .strictcli/checks.toml but not registered"
+    }
+  },
+  {
+    "name": "checks: dump-schema includes checks when checks enabled",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {"name": "lint", "check_returns": "pass", "check_message": "all good"}
+      ]
+    },
+    "argv": ["--dump-schema"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ".strictcli/schema.json"
+    }
+  }
+]
