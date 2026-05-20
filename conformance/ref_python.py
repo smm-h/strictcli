@@ -465,6 +465,8 @@ def generate(app_def: dict) -> str:
     ]
     if "env_prefix" in app_def:
         app_parts.append(f"env_prefix={app_def['env_prefix']!r}")
+    if app_def.get("config", False):
+        app_parts.append("config=True")
     if global_flags:
         gf_exprs = [_emit_flag(gf) for gf in global_flags]
         app_parts.append(f"flags=[{', '.join(gf_exprs)}]")

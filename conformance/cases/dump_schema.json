@@ -1,0 +1,42 @@
+[
+  {
+    "name": "dump-schema: --dump-schema exits 0",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["--dump-schema"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ".strictcli/schema.json"
+    }
+  },
+  {
+    "name": "dump-schema: --dump-schema outputs absolute path",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["--dump-schema"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "/"
+    }
+  }
+]

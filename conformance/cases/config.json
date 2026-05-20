@@ -1,0 +1,108 @@
+[
+  {
+    "name": "config: config path exits 0 when config enabled",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["config", "path"],
+    "env": {
+      "XDG_CONFIG_HOME": "/tmp/fake-config"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "/tmp/fake-config/myapp/config.json"
+    }
+  },
+  {
+    "name": "config: config is unknown command when config disabled",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["config"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown command"
+    }
+  },
+  {
+    "name": "config: config group appears in help when enabled",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["Groups:", "config"]
+    }
+  },
+  {
+    "name": "config: config group does not appear in help when disabled",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_not_contains": "config"
+    }
+  },
+  {
+    "name": "config: config help shows subcommands",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["config", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["path", "show", "set", "edit"]
+    }
+  }
+]

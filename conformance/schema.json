@@ -50,6 +50,11 @@
         "version": { "type": "string" },
         "help": { "type": "string" },
         "env_prefix": { "type": "string" },
+        "config": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, enable JSON config file support and auto-register config subcommands."
+        },
         "global_flags": {
           "type": "array",
           "items": { "$ref": "#/$defs/flag" },

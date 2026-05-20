@@ -339,6 +339,8 @@ def generate(app_def: dict) -> str:
     app_opts = []
     if "env_prefix" in app_def:
         app_opts.append(f'strictcli.WithEnvPrefix("{app_def["env_prefix"]}")')
+    if app_def.get("config", False):
+        app_opts.append("strictcli.WithConfig()")
     opts_str = ""
     if app_opts:
         opts_str = ", " + ", ".join(app_opts)
