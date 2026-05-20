@@ -55,12 +55,15 @@ needs_network = true
 depends_on = ["lint-code"]
 `)
 
-	defs, err := loadChecksToml(path)
+	defs, order, err := loadChecksToml(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(defs) != 2 {
 		t.Fatalf("expected 2 checks, got %d", len(defs))
+	}
+	if len(order) != 2 {
+		t.Fatalf("expected 2 names in order, got %d", len(order))
 	}
 
 	t.Run("lint-code fields", func(t *testing.T) {
@@ -201,7 +204,7 @@ needs_network = false
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := writeToml(t, dir, tc.toml)
-			_, err := loadChecksToml(path)
+			_, _, err := loadChecksToml(path)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -276,7 +279,7 @@ depends_on = []
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := writeToml(t, dir, tc.toml)
-			_, err := loadChecksToml(path)
+			_, _, err := loadChecksToml(path)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -299,7 +302,7 @@ needs_network = false
 depends_on = []
 extra_field = "bad"
 `)
-	_, err := loadChecksToml(path)
+	_, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for unknown field")
 	}
@@ -322,7 +325,7 @@ depends_on = []
 [metadata]
 version = "1.0"
 `)
-	_, err := loadChecksToml(path)
+	_, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for unknown top-level key")
 	}
@@ -355,7 +358,7 @@ needs_network = false
 depends_on = []
 `
 			path := writeToml(t, dir, toml)
-			_, err := loadChecksToml(path)
+			_, _, err := loadChecksToml(path)
 			if err == nil {
 				t.Fatal("expected error for invalid check name")
 			}
@@ -377,7 +380,7 @@ pure = true
 needs_network = false
 depends_on = ["nonexistent"]
 `)
-	_, err := loadChecksToml(path)
+	_, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for depends_on referencing unknown check")
 	}
@@ -397,7 +400,7 @@ pure = true
 needs_network = false
 depends_on = []
 `)
-	_, err := loadChecksToml(path)
+	_, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for empty tags")
 	}
@@ -407,7 +410,7 @@ depends_on = []
 }
 
 func TestLoadChecksToml_FileNotFound(t *testing.T) {
-	_, err := loadChecksToml("/nonexistent/checks.toml")
+	_, _, err := loadChecksToml("/nonexistent/checks.toml")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -419,7 +422,7 @@ func TestLoadChecksToml_MissingChecksKey(t *testing.T) {
 [something]
 foo = "bar"
 `)
-	_, err := loadChecksToml(path)
+	_, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for missing checks key")
 	}
@@ -431,7 +434,7 @@ foo = "bar"
 func TestLoadChecksToml_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	path := writeToml(t, dir, ``)
-	_, err := loadChecksToml(path)
+	_, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for empty file")
 	}

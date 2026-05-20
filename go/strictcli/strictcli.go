@@ -158,8 +158,10 @@ type App struct {
 	configEnabled bool
 	configData    map[string]interface{}
 
-	checksEnabled bool
-	checkDefs     map[string]*checkDef
+	checksEnabled       bool
+	checkDefs           map[string]*checkDef
+	checkOrder          []string // sorted check names for deterministic listing
+	checkContextFactory func() CheckContext
 }
 
 // --- Option types ---
@@ -528,12 +530,14 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	if wd, err := os.Getwd(); err == nil {
 		checksPath := filepath.Join(wd, ".strictcli", "checks.toml")
 		if _, err := os.Stat(checksPath); err == nil {
-			defs, err := loadChecksToml(checksPath)
+			defs, order, err := loadChecksToml(checksPath)
 			if err != nil {
 				panic(fmt.Sprintf("checks.toml: %s", err))
 			}
 			a.checkDefs = defs
+			a.checkOrder = order
 			a.checksEnabled = true
+			a.registerCheckCommand()
 		}
 	}
 	return a
@@ -553,6 +557,11 @@ func (a *App) RegisterCheck(name string, fn func(CheckContext) CheckResult) {
 		panic(fmt.Sprintf("check %q: duplicate registration", name))
 	}
 	def.impl = fn
+}
+
+// SetCheckContext sets the factory function that provides CheckContext to check implementations.
+func (a *App) SetCheckContext(factory func() CheckContext) {
+	a.checkContextFactory = factory
 }
 
 // validateCheckRegistrations checks that all declared checks have been registered.
