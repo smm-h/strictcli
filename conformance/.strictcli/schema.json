@@ -1,0 +1,19 @@
+{
+  "commands": {
+    "greet": {
+      "args": [],
+      "flags": [],
+      "help": "say hello",
+      "name": "greet",
+      "passthrough": false
+    }
+  },
+  "config": false,
+  "deprecated": {},
+  "env_prefix": null,
+  "global_flags": [],
+  "groups": {},
+  "help": "test app",
+  "name": "myapp",
+  "version": "1.0.0"
+}
