@@ -2130,6 +2130,179 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
 
 
 # ---------------------------------------------------------------------------
+# Tag DSL
+# ---------------------------------------------------------------------------
+
+_TAG_NAME_RE = re.compile(r"[a-z][a-z0-9-]*")
+
+
+def _tagdsl_tokenize(expr: str) -> list[tuple[str, str, int]]:
+    """Tokenize a tag expression into (type, value, position) tuples."""
+    tokens: list[tuple[str, str, int]] = []
+    i = 0
+    while i < len(expr):
+        ch = expr[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch == "&":
+            tokens.append(("AND", "&", i))
+            i += 1
+        elif ch == "|":
+            tokens.append(("OR", "|", i))
+            i += 1
+        elif ch == "^":
+            tokens.append(("XOR", "^", i))
+            i += 1
+        elif ch == "-":
+            tokens.append(("DIFF", "-", i))
+            i += 1
+        elif ch == "!":
+            tokens.append(("NOT", "!", i))
+            i += 1
+        elif ch == "(":
+            tokens.append(("LPAREN", "(", i))
+            i += 1
+        elif ch == ")":
+            tokens.append(("RPAREN", ")", i))
+            i += 1
+        else:
+            m = _TAG_NAME_RE.match(expr, i)
+            if m:
+                tokens.append(("IDENT", m.group(), i))
+                i = m.end()
+            else:
+                raise ValueError(
+                    f'tag expression: unexpected character "{ch}" at position {i}'
+                )
+    return tokens
+
+
+def _tagdsl_parse(tokens: list[tuple[str, str, int]]) -> tuple:
+    """Parse tag expression tokens into an AST using recursive descent.
+
+    Precedence (tightest first): NOT, AND, XOR, OR, DIFF.
+    """
+    pos = 0
+
+    def peek() -> tuple[str, str, int] | None:
+        nonlocal pos
+        if pos < len(tokens):
+            return tokens[pos]
+        return None
+
+    def consume() -> tuple[str, str, int]:
+        nonlocal pos
+        tok = tokens[pos]
+        pos += 1
+        return tok
+
+    def parse_atom() -> tuple:
+        tok = peek()
+        if tok is None:
+            raise ValueError("tag expression: unexpected end of expression")
+        if tok[0] == "NOT":
+            consume()
+            child = parse_atom()
+            return ("not", child)
+        if tok[0] == "LPAREN":
+            consume()
+            node = parse_diff()
+            closing = peek()
+            if closing is None or closing[0] != "RPAREN":
+                raise ValueError(
+                    f"tag expression: expected closing parenthesis"
+                )
+            consume()
+            return node
+        if tok[0] == "IDENT":
+            consume()
+            return ("ident", tok[1])
+        raise ValueError(
+            f'tag expression: unexpected token "{tok[1]}" at position {tok[2]}'
+        )
+
+    def parse_and() -> tuple:
+        left = parse_atom()
+        while True:
+            tok = peek()
+            if tok is None or tok[0] != "AND":
+                break
+            consume()
+            right = parse_atom()
+            left = ("and", left, right)
+        return left
+
+    def parse_xor() -> tuple:
+        left = parse_and()
+        while True:
+            tok = peek()
+            if tok is None or tok[0] != "XOR":
+                break
+            consume()
+            right = parse_and()
+            left = ("xor", left, right)
+        return left
+
+    def parse_or() -> tuple:
+        left = parse_xor()
+        while True:
+            tok = peek()
+            if tok is None or tok[0] != "OR":
+                break
+            consume()
+            right = parse_xor()
+            left = ("or", left, right)
+        return left
+
+    def parse_diff() -> tuple:
+        left = parse_or()
+        while True:
+            tok = peek()
+            if tok is None or tok[0] != "DIFF":
+                break
+            consume()
+            right = parse_or()
+            left = ("diff", left, right)
+        return left
+
+    result = parse_diff()
+    tok = peek()
+    if tok is not None:
+        raise ValueError(
+            f'tag expression: unexpected token "{tok[1]}" at position {tok[2]}'
+        )
+    return result
+
+
+def _tagdsl_evaluate(ast: tuple, tags: set[str]) -> bool:
+    """Evaluate a tag DSL AST against a set of tags."""
+    kind = ast[0]
+    if kind == "ident":
+        return ast[1] in tags
+    if kind == "not":
+        return not _tagdsl_evaluate(ast[1], tags)
+    if kind == "and":
+        return _tagdsl_evaluate(ast[1], tags) and _tagdsl_evaluate(ast[2], tags)
+    if kind == "or":
+        return _tagdsl_evaluate(ast[1], tags) or _tagdsl_evaluate(ast[2], tags)
+    if kind == "xor":
+        return _tagdsl_evaluate(ast[1], tags) != _tagdsl_evaluate(ast[2], tags)
+    if kind == "diff":
+        return _tagdsl_evaluate(ast[1], tags) and not _tagdsl_evaluate(ast[2], tags)
+    raise ValueError(f"tag expression: unknown AST node {kind!r}")
+
+
+def _match_tag_expr(expr: str, tags: set[str]) -> bool:
+    """Evaluate a tag expression against a set of tags. Returns bool."""
+    tokens = _tagdsl_tokenize(expr)
+    if not tokens:
+        raise ValueError("tag expression: empty expression")
+    ast = _tagdsl_parse(tokens)
+    return _tagdsl_evaluate(ast, tags)
+
+
+# ---------------------------------------------------------------------------
 # Schema serialization (--dump-schema)
 # ---------------------------------------------------------------------------
 
