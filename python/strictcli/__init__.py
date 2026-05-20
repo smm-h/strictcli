@@ -7,6 +7,7 @@ __version__ = "0.7.1"
 __all__ = [
     "App", "Flag", "Arg", "Tag", "MutexGroup", "CoRequired", "Requires",
     "Implies", "Passthrough", "DeprecatedCommand", "Result", "flag", "arg",
+    "CheckResult", "CheckContext",
 ]
 
 import contextlib
@@ -15,10 +16,13 @@ import inspect
 import io
 import json
 import os
+import re
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass, field
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Protocol, runtime_checkable
 
 
 # Sentinel for distinguishing "not provided" from actual values
@@ -398,6 +402,45 @@ class Result:
     stdout: str
     stderr: str
     exit_code: int
+
+
+@dataclass
+class CheckResult:
+    """Result of running a single check."""
+
+    status: str
+    message: str
+    details: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.status not in ("pass", "fail", "warn", "skip"):
+            raise ValueError(
+                f'CheckResult.status must be one of "pass", "fail", "warn", "skip", '
+                f"got {self.status!r}"
+            )
+        if not isinstance(self.message, str) or not self.message.strip():
+            raise ValueError("CheckResult.message must be a non-empty string")
+
+
+@runtime_checkable
+class CheckContext(Protocol):
+    """Minimal interface that tool-specific check contexts must satisfy."""
+
+    project_root: Path
+
+
+@dataclass
+class _CheckDef:
+    """Internal definition of a single check loaded from TOML."""
+
+    name: str
+    tags: list[str]
+    severity: str
+    fast: bool
+    pure: bool
+    needs_network: bool
+    depends_on: list[str]
+    impl: object | None = None
 
 
 @dataclass
