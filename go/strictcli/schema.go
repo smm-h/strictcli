@@ -130,7 +130,7 @@ func dumpSchema(app *App) map[string]interface{} {
 		envPrefix = app.EnvPrefix
 	}
 
-	return map[string]interface{}{
+	schema := map[string]interface{}{
 		"name":         app.Name,
 		"version":      app.Version,
 		"help":         app.Help,
@@ -141,6 +141,21 @@ func dumpSchema(app *App) map[string]interface{} {
 		"groups":       groups,
 		"deprecated":   deprecated,
 	}
+	if app.checksEnabled {
+		checksMap := make(map[string]interface{})
+		for name, def := range app.checkDefs {
+			checksMap[name] = map[string]interface{}{
+				"tags":          def.tags,
+				"severity":      def.severity,
+				"fast":          def.fast,
+				"pure":          def.pure,
+				"needs_network": def.needsNetwork,
+				"depends_on":    def.dependsOn,
+			}
+		}
+		schema["checks"] = checksMap
+	}
+	return schema
 }
 
 // writeSchema writes the schema to .strictcli/schema.json and returns the path.

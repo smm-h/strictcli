@@ -1619,6 +1619,141 @@ func TestCheckCommand_NoContextFactory_Error(t *testing.T) {
 	}
 }
 
+// --- Phase 7: Schema integration tests ---
+
+func TestDumpSchema_WithChecks(t *testing.T) {
+	cleanup := setupChecksDir(t, twoChecksToml)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.Command("noop", "does nothing", func(args map[string]interface{}) int {
+		return 0
+	})
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(".strictcli", "schema.json")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("failed to read schema.json: %v", err)
+	}
+
+	var schema map[string]interface{}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("failed to parse schema JSON: %v", err)
+	}
+
+	checksRaw, ok := schema["checks"]
+	if !ok {
+		t.Fatal("expected 'checks' key in schema, not found")
+	}
+	checks, ok := checksRaw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected checks to be a map, got %T", checksRaw)
+	}
+	if len(checks) != 2 {
+		t.Fatalf("expected 2 checks, got %d", len(checks))
+	}
+
+	// Verify version-consistency metadata
+	vcRaw, ok := checks["version-consistency"]
+	if !ok {
+		t.Fatal("expected version-consistency in checks")
+	}
+	vc := vcRaw.(map[string]interface{})
+	if vc["severity"] != "error" {
+		t.Errorf("expected severity 'error', got %v", vc["severity"])
+	}
+	if vc["fast"] != true {
+		t.Errorf("expected fast=true, got %v", vc["fast"])
+	}
+	if vc["pure"] != true {
+		t.Errorf("expected pure=true, got %v", vc["pure"])
+	}
+	if vc["needs_network"] != false {
+		t.Errorf("expected needs_network=false, got %v", vc["needs_network"])
+	}
+	vcTags, ok := vc["tags"].([]interface{})
+	if !ok {
+		t.Fatalf("expected tags to be array, got %T", vc["tags"])
+	}
+	if len(vcTags) != 1 || vcTags[0] != "release" {
+		t.Errorf("expected tags [release], got %v", vcTags)
+	}
+	vcDeps, ok := vc["depends_on"].([]interface{})
+	if !ok {
+		t.Fatalf("expected depends_on to be array, got %T", vc["depends_on"])
+	}
+	if len(vcDeps) != 0 {
+		t.Errorf("expected empty depends_on, got %v", vcDeps)
+	}
+
+	// Verify changelog-coverage metadata
+	ccRaw, ok := checks["changelog-coverage"]
+	if !ok {
+		t.Fatal("expected changelog-coverage in checks")
+	}
+	cc := ccRaw.(map[string]interface{})
+	if cc["severity"] != "error" {
+		t.Errorf("expected severity 'error', got %v", cc["severity"])
+	}
+	ccTags, ok := cc["tags"].([]interface{})
+	if !ok {
+		t.Fatalf("expected tags to be array, got %T", cc["tags"])
+	}
+	if len(ccTags) != 2 {
+		t.Errorf("expected 2 tags, got %v", ccTags)
+	}
+	ccDeps, ok := cc["depends_on"].([]interface{})
+	if !ok {
+		t.Fatalf("expected depends_on to be array, got %T", cc["depends_on"])
+	}
+	if len(ccDeps) != 1 || ccDeps[0] != "version-consistency" {
+		t.Errorf("expected depends_on [version-consistency], got %v", ccDeps)
+	}
+}
+
+func TestDumpSchema_WithoutChecks(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.Command("noop", "does nothing", func(args map[string]interface{}) int {
+		return 0
+	})
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(".strictcli", "schema.json")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("failed to read schema.json: %v", err)
+	}
+
+	var schema map[string]interface{}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("failed to parse schema JSON: %v", err)
+	}
+
+	if _, ok := schema["checks"]; ok {
+		t.Fatal("expected no 'checks' key in schema when checks are disabled")
+	}
+}
+
 // Ensure unused imports don't cause errors
 var _ = sort.Strings
 var _ = fmt.Sprintf
