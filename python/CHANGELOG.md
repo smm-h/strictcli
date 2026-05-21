@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.8.4
+
+### Fixes
+
+- **Fix.** Allow empty `tags = []` in `.strictcli/checks.toml`. Checks without tags are valid -- they are addressable by `--name` and included in `--all`.
+
 ## 0.8.3
 
 - No user-facing changes.
