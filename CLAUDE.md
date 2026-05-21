@@ -83,6 +83,27 @@ When adding a feature to one implementation, add it to both and add conformance 
 - Auto-version (Python only) — `App(name="x", help="...")` without an explicit `version` auto-detects from `importlib.metadata`.
 - `--help` / `-h` is recognized anywhere in argv, not just at token boundaries.
 - `Default(nil)` fix (Go only) — flags with `Default(nil)` display `[optional]` in help instead of `[default: <nil>]`.
+- Check system — first-class check/validation framework with double-entry security. See below.
+
+### Check system
+
+Registered via `.strictcli/checks.toml` (source of truth, committed to repo) + `@app.check("name")` (Python) / `app.RegisterCheck("name", fn)` (Go). Both must agree — declared but unregistered or registered but undeclared are errors.
+
+**TOML schema** (`.strictcli/checks.toml`): `[checks.<name>]` sections with required fields: `tags` (list of strings), `severity` ("error"/"warn"), `fast` (bool), `pure` (bool), `needs_network` (bool), `depends_on` (list of check names). Check names: `[a-z][a-z0-9-]*`. Every field must be explicit — no defaults section.
+
+**Check command**: auto-registered when TOML discovered in CWD. 8 flags: `--all`, `--tag <dsl>`, `--name <glob>`, `--list`, `--json`, `--ignore-warnings`, `--verbose`, `--dry-run`. No flags = show help. Hidden from help when no TOML exists.
+
+**Tag DSL**: `--tag` accepts a set-operation expression. Operators by precedence (tightest first): `!` (NOT), `&` (AND), `^` (XOR), `|` (OR), `-` (DIFF). Parentheses for grouping. Example: `--tag "(release | changelog) & !slow"`.
+
+**CheckResult**: `status` (pass/fail/warn/skip), `message` (str), `details` (list of str). Warn causes nonzero exit unless `--ignore-warnings`.
+
+**CheckContext**: protocol/interface with single required field `ProjectRoot() string` / `project_root: Path`. Tool sets a factory via `app.set_check_context(factory)` / `app.SetCheckContext(factory)`.
+
+**depends_on**: DAG resolution with cycle detection. Dependency failure skips dependents. Filtered-out dependencies are pulled back in when a selected check depends on them.
+
+**Schema integration**: `--dump-schema` includes a `checks` top-level key when checks are enabled.
+
+**Hooks**: strictcli does NOT manage `.git/hooks/`. External tools call `myapp check --tag pre-push` from their own hook scripts.
 
 ## Release workflow
 
