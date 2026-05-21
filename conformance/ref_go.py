@@ -316,6 +316,8 @@ def generate(app_def: dict) -> str:
     lines.append("package main")
     lines.append("")
     lines.append("import (")
+    if has_checks:
+        lines.append('\t"crypto/sha256"')
     lines.append('\t"fmt"')
     lines.append('\t"os"')
     if has_checks:
@@ -344,8 +346,9 @@ def generate(app_def: dict) -> str:
         checks_toml = app_def["checks_toml"]
         # Escape backticks and backslashes for Go raw strings — use double-quoted string instead
         escaped_toml = checks_toml.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-        lines.append('\t// Create temp dir with .strictcli/checks.toml and chdir to it')
-        lines.append('\ttmpDir, _ := os.MkdirTemp("", "strictcli-checks-*")')
+        lines.append('\t// Create deterministic temp dir with .strictcli/checks.toml and chdir to it')
+        lines.append(f'\thash := fmt.Sprintf("%x", sha256.Sum256([]byte("{escaped_toml}")))')
+        lines.append('\ttmpDir := filepath.Join(os.TempDir(), "strictcli-checks-"+hash[:12])')
         lines.append('\tos.MkdirAll(filepath.Join(tmpDir, ".strictcli"), 0o755)')
         lines.append(f'\tos.WriteFile(filepath.Join(tmpDir, ".strictcli", "checks.toml"), []byte("{escaped_toml}"), 0o644)')
         lines.append('\tos.Chdir(tmpDir)')

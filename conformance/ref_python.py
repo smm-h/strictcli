@@ -453,8 +453,8 @@ def generate(app_def: dict) -> str:
     lines.append("import sys")
     lines.append("import os")
     if has_checks:
+        lines.append("import hashlib")
         lines.append("import pathlib")
-        lines.append("import tempfile")
     lines.append("")
     lines.append("# Add strictcli to path")
     lines.append("sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))")
@@ -464,8 +464,9 @@ def generate(app_def: dict) -> str:
     # Set up checks.toml in a temp directory if checks are configured
     if has_checks:
         checks_toml = app_def["checks_toml"]
-        lines.append("# Create temp dir with .strictcli/checks.toml and chdir to it")
-        lines.append("_tmpdir = tempfile.mkdtemp(prefix='strictcli_checks_')")
+        lines.append("# Create deterministic temp dir with .strictcli/checks.toml and chdir to it")
+        lines.append(f"_hash = hashlib.sha256({checks_toml!r}.encode()).hexdigest()[:12]")
+        lines.append("_tmpdir = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'strictcli-checks-{_hash}')")
         lines.append("os.makedirs(os.path.join(_tmpdir, '.strictcli'), exist_ok=True)")
         lines.append(f"with open(os.path.join(_tmpdir, '.strictcli', 'checks.toml'), 'w') as _f:")
         lines.append(f"    _f.write({checks_toml!r})")
