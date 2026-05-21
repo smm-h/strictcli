@@ -143,9 +143,9 @@ def _load_checks_toml(path: str | Path) -> dict[str, _CheckDef]:
 
         # Validate tags
         tags = fields["tags"]
-        if not isinstance(tags, list) or len(tags) == 0:
+        if not isinstance(tags, list):
             raise ValueError(
-                f'checks.toml: check "{name}": "tags" must be a non-empty list of strings'
+                f'checks.toml: check "{name}": "tags" must be a list of strings'
             )
         for tag in tags:
             if not isinstance(tag, str) or not tag.strip():

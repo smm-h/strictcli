@@ -211,8 +211,8 @@ depends_on = []
 """
         f = tmp_path / "checks.toml"
         f.write_text(toml)
-        with pytest.raises(ValueError, match='"tags" must be a non-empty list'):
-            _load_checks_toml(f)
+        defs = _load_checks_toml(f)
+        assert defs["my-check"].tags == []
 
     def test_tags_with_empty_string(self, tmp_path):
         toml = """\
