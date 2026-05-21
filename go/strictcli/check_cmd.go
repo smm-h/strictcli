@@ -127,7 +127,11 @@ func (a *App) checkDryRun(runAll bool, tagExpr, nameGlob string) int {
 		return 1
 	}
 
-	fmt.Printf("Would run %d checks:\n", len(order))
+	noun := "checks"
+	if len(order) == 1 {
+		noun = "check"
+	}
+	fmt.Printf("Would run %d %s:\n", len(order), noun)
 	for i, name := range order {
 		def := a.checkDefs[name]
 		if len(def.dependsOn) > 0 {
@@ -180,12 +184,20 @@ func (a *App) checkOutputHuman(results []checkRunResult, verbose bool) {
 		"skip": "SKIP",
 	}
 
+	// Compute dynamic name column width
+	nameWidth := 0
+	for _, r := range results {
+		if len(r.name) > nameWidth {
+			nameWidth = len(r.name)
+		}
+	}
+
 	for _, r := range results {
 		label := statusLabel[r.result.Status]
 		if label == "" {
 			label = strings.ToUpper(r.result.Status)
 		}
-		fmt.Printf("%-4s  %-20s  %s\n", label, r.name, r.result.Message)
+		fmt.Printf("%-4s  %-*s    %s\n", label, nameWidth, r.name, r.result.Message)
 
 		showDetails := r.result.Status == "fail" || r.result.Status == "warn" || r.result.Status == "skip" || verbose
 		if showDetails {
