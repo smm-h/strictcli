@@ -714,6 +714,20 @@ class App:
 
             return exit_code
 
+        # Filter out extra flags that already exist as global flags to avoid
+        # collisions -- the handler receives global flag values automatically.
+        global_flag_names = {gf.name for gf in self._global_flags}
+        candidate_extra_flags = [
+            Flag(name="all", type=bool, help="Run all checks"),
+            Flag(name="tag", type=str, default="", help="Tag DSL expression to filter checks"),
+            Flag(name="name", type=str, default="", help="Glob pattern to filter by check name"),
+            Flag(name="list", type=bool, help="List all checks and their tags"),
+            Flag(name="json", type=bool, help="Output results as JSON"),
+            Flag(name="ignore-warnings", type=bool, help="Warn severity does not cause nonzero exit"),
+            Flag(name="verbose", type=bool, help="Show details for passing checks too"),
+            Flag(name="dry-run", type=bool, help="Show which checks would run without running them"),
+        ]
+        extra_flags = [f for f in candidate_extra_flags if f.name not in global_flag_names]
         check_cmd = _build_and_validate_command(
             "check",
             help="Run project checks",
@@ -725,16 +739,7 @@ class App:
             env_prefix=self.env_prefix,
             global_flags=self._global_flags,
             passthrough=None,
-            extra_flags=[
-                Flag(name="all", type=bool, help="Run all checks"),
-                Flag(name="tag", type=str, default="", help="Tag DSL expression to filter checks"),
-                Flag(name="name", type=str, default="", help="Glob pattern to filter by check name"),
-                Flag(name="list", type=bool, help="List all checks and their tags"),
-                Flag(name="json", type=bool, help="Output results as JSON"),
-                Flag(name="ignore-warnings", type=bool, help="Warn severity does not cause nonzero exit"),
-                Flag(name="verbose", type=bool, help="Show details for passing checks too"),
-                Flag(name="dry-run", type=bool, help="Show which checks would run without running them"),
-            ],
+            extra_flags=extra_flags,
         )
         self._commands["check"] = check_cmd
 
@@ -2099,6 +2104,20 @@ def _format_app_help(app: App) -> str:
             dep = app._deprecated[name]
             padding = max_len - len(name) + 4
             lines.append(f"  {name}{' ' * padding}{dep.message}")
+
+    if app._global_flags:
+        lines.append("")
+        lines.append("Global flags:")
+        flag_strs = []
+        for f in app._global_flags:
+            parts = [f"--{f.name}"]
+            if f.short:
+                parts.append(f"-{f.short}")
+            flag_strs.append((", ".join(parts), f.help))
+        max_flag_len = max(len(s[0]) for s in flag_strs)
+        for flag_str, help_text in flag_strs:
+            padding = max_flag_len - len(flag_str) + 4
+            lines.append(f"  {flag_str}{' ' * padding}{help_text}")
 
     lines.append("")
     lines.append(f"Use '{app.name} <command> --help' for more information.")
