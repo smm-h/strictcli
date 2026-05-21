@@ -109,7 +109,7 @@ func loadChecksToml(path string) (map[string]*checkDef, []string, error) {
 
 		def := &checkDef{name: name}
 
-		// Parse tags (required, non-empty []string)
+		// Parse tags (required, []string — may be empty)
 		if err := parseCheckTags(name, fields, def); err != nil {
 			return nil, nil, err
 		}
@@ -162,8 +162,8 @@ func parseCheckTags(name string, fields map[string]interface{}, def *checkDef) e
 		return fmt.Errorf("checks.toml: check %q: missing required field %q", name, "tags")
 	}
 	arr, ok := raw.([]interface{})
-	if !ok || len(arr) == 0 {
-		return fmt.Errorf("checks.toml: check %q: \"tags\" must be a non-empty list of strings", name)
+	if !ok {
+		return fmt.Errorf("checks.toml: check %q: \"tags\" must be a list of strings", name)
 	}
 	tags := make([]string, len(arr))
 	for i, v := range arr {

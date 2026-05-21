@@ -233,7 +233,7 @@ pure = true
 needs_network = false
 depends_on = []
 `,
-			wantErr: `checks.toml: check "foo": "tags" must be a non-empty list of strings`,
+			wantErr: `checks.toml: check "foo": "tags" must be a list of strings`,
 		},
 		{
 			name: "severity is integer",
@@ -401,12 +401,12 @@ pure = true
 needs_network = false
 depends_on = []
 `)
-	_, _, err := loadChecksToml(path)
-	if err == nil {
-		t.Fatal("expected error for empty tags")
+	defs, _, err := loadChecksToml(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), `"tags" must be a non-empty list of strings`) {
-		t.Errorf("expected error about empty tags, got %q", err.Error())
+	if len(defs["foo"].tags) != 0 {
+		t.Errorf("expected empty tags, got %v", defs["foo"].tags)
 	}
 }
 
