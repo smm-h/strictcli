@@ -2666,12 +2666,15 @@ _CHECK_STATUS_LABELS = {"pass": "PASS", "fail": "FAIL", "warn": "WARN", "skip": 
 
 def _check_list_mode(check_defs: dict[str, _CheckDef], json_mode: bool) -> None:
     """Print check listing in human or JSON format."""
+    # Sort alphabetically for deterministic output matching Go
+    sorted_defs = sorted(check_defs.values(), key=lambda c: c.name)
+
     if json_mode:
         items = [
             {"name": cdef.name, "tags": cdef.tags, "severity": cdef.severity}
-            for cdef in check_defs.values()
+            for cdef in sorted_defs
         ]
-        print(json.dumps(items))
+        print(json.dumps(items, separators=(",", ":")))
         return
 
     if not check_defs:
@@ -2679,14 +2682,14 @@ def _check_list_mode(check_defs: dict[str, _CheckDef], json_mode: bool) -> None:
         return
 
     # Compute column widths
-    name_width = max(len(cdef.name) for cdef in check_defs.values())
+    name_width = max(len(cdef.name) for cdef in sorted_defs)
     name_width = max(name_width, len("NAME"))
-    tags_width = max(len(", ".join(cdef.tags)) for cdef in check_defs.values())
+    tags_width = max(len(", ".join(cdef.tags)) for cdef in sorted_defs)
     tags_width = max(tags_width, len("TAGS"))
 
     header = f"{'NAME':<{name_width}}   {'TAGS':<{tags_width}}   SEVERITY"
     print(header)
-    for cdef in check_defs.values():
+    for cdef in sorted_defs:
         tags_str = ", ".join(cdef.tags)
         print(f"{cdef.name:<{name_width}}   {tags_str:<{tags_width}}   {cdef.severity}")
 
@@ -2737,7 +2740,7 @@ def _check_format_json(results: list[tuple[str, CheckResult]]) -> None:
         }
         for name, result in results
     ]
-    print(json.dumps(items))
+    print(json.dumps(items, separators=(",", ":")))
 
 
 # ---------------------------------------------------------------------------
