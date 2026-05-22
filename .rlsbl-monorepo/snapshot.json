@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-05-22T07:12:36Z",
+  "package_count": 3,
+  "packages": {
+    "strictcli": {
+      "path": "python",
+      "target": "pypi",
+      "version": "0.8.5",
+      "description": null,
+      "deps": [],
+      "rdeps": [],
+      "library": false,
+      "test_only": false
+    },
+    "go-strictcli": {
+      "path": "go",
+      "target": "go",
+      "version": "0.5.3",
+      "description": null,
+      "deps": [],
+      "rdeps": [],
+      "library": false,
+      "test_only": false
+    },
+    "conformance": {
+      "path": "conformance",
+      "target": "plain",
+      "version": "0.3.5",
+      "description": null,
+      "deps": [],
+      "rdeps": [],
+      "library": false,
+      "test_only": false
+    }
+  },
+  "graph": {
+    "leaf_nodes": [
+      "conformance",
+      "go-strictcli",
+      "strictcli"
+    ],
+    "root_nodes": [
+      "conformance",
+      "go-strictcli",
+      "strictcli"
+    ],
+    "max_depth": 0,
+    "topological_order": [
+      "conformance",
+      "go-strictcli",
+      "strictcli"
+    ]
+  }
+}
