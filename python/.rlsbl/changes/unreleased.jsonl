@@ -1,0 +1,1 @@
+{"commits":["eef4bcb494b80009b2e471f2b1465af98aa476e3"],"user_facing":true,"description":"**Fix.** Auto-registered `check` command no longer collides with app-level global flags (e.g., `--dry-run`).","type":"fix"}
