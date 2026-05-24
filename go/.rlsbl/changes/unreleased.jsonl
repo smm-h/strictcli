@@ -1,2 +1,3 @@
 {"commits":["fad001e35420a4aa0bd019a68448ce4c970d3f1e"],"user_facing":false}
 {"commits":["bb95ff55342e50eeec9a20c417b96e76df99e9c0","0f0524d47831254eb0579b55ea14aff204043546"],"user_facing":false}
+{"commits":["0bc0c1f80c5252846a685954052690451676815d"],"user_facing":true,"description":"**New feature.** Added config_path and config_format support (WithConfigPath, WithConfigFormat options).","type":"feature"}
