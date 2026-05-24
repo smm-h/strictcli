@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.5.4
+
+### Features
+
+- **New feature.** Parse error help suggestions now include the subcommand name (e.g., `try 'myapp stream --help'` instead of `try 'myapp --help'`).
+
 ## 0.5.3
 
 ### Fixes
