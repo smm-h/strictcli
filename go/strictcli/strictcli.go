@@ -542,6 +542,10 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	if a.configFormat == "" {
 		a.configFormat = "json"
 	}
+	if a.configFormat != "json" && a.configFormat != "toml" {
+		fmt.Fprintf(os.Stderr, "App.config_format must be \"json\" or \"toml\", got %q\n", a.configFormat)
+		os.Exit(1)
+	}
 	if a.configEnabled {
 		a.configData = loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		a.registerConfigGroup()
