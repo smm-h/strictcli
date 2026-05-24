@@ -1,1 +1,2 @@
 {"commits":["eef4bcb494b80009b2e471f2b1465af98aa476e3","e2e9804dd8b20925b04bdf7dc7ffbe774d7982df"],"user_facing":false}
+{"commits":["40478a9bc123d086ade4d0838d3fcb95918ff562"],"user_facing":true,"description":"**New feature.** Parse error help suggestions now include the subcommand name (e.g., `try 'myapp stream --help'` instead of `try 'myapp --help'`).","type":"feature"}
