@@ -125,7 +125,7 @@
         "--quiet",
         "mutually exclusive"
       ],
-      "stderr_equals": "error: --verbose and --quiet are mutually exclusive\ntry 'myapp --help'"
+      "stderr_equals": "error: --verbose and --quiet are mutually exclusive\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -168,7 +168,7 @@
         "--quiet",
         "required"
       ],
-      "stderr_equals": "error: one of --verbose, --quiet is required\ntry 'myapp --help'"
+      "stderr_equals": "error: one of --verbose, --quiet is required\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -303,7 +303,7 @@
         "--url",
         "mutually exclusive"
       ],
-      "stderr_equals": "error: --file and --url are mutually exclusive\ntry 'myapp --help'"
+      "stderr_equals": "error: --file and --url are mutually exclusive\ntry 'myapp fetch --help'"
     }
   },
   {

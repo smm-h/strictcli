@@ -301,7 +301,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "required",
-      "stderr_equals": "error: flag '--target' is required\ntry 'myapp --help'"
+      "stderr_equals": "error: flag '--target' is required\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -332,7 +332,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "boolean flag",
-      "stderr_equals": "error: flag '--verbose' is a boolean flag and does not take a value\ntry 'myapp --help'"
+      "stderr_equals": "error: flag '--verbose' is a boolean flag and does not take a value\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -364,7 +364,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown flag",
-      "stderr_equals": "error: unknown flag '--no-verbose'\ntry 'myapp --help'"
+      "stderr_equals": "error: unknown flag '--no-verbose'\ntry 'myapp cmd --help'"
     }
   },
   {

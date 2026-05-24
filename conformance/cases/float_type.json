@@ -152,7 +152,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "required",
-      "stderr_equals": "error: flag '--rate' is required\ntry 'myapp --help'"
+      "stderr_equals": "error: flag '--rate' is required\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -187,7 +187,7 @@
         "expected float",
         "'abc'"
       ],
-      "stderr_equals": "error: --rate: expected float, got 'abc'\ntry 'myapp --help'"
+      "stderr_equals": "error: --rate: expected float, got 'abc'\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -267,7 +267,11 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
-              "choices_float": [1.5, 2.5, 3.5]
+              "choices_float": [
+                1.5,
+                2.5,
+                3.5
+              ]
             }
           ],
           "handler_prints": "rate={rate}"
@@ -299,7 +303,11 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
-              "choices_float": [1.5, 2.5, 3.5]
+              "choices_float": [
+                1.5,
+                2.5,
+                3.5
+              ]
             }
           ],
           "handler_prints": "rate={rate}"

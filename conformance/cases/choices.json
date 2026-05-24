@@ -72,7 +72,7 @@
         "text",
         "json"
       ],
-      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp --help'"
+      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -184,7 +184,7 @@
         "invalid value",
         "9090"
       ],
-      "stderr_equals": "error: --port: invalid value '9090', must be one of: 80, 443, 8080\ntry 'myapp --help'"
+      "stderr_equals": "error: --port: invalid value '9090', must be one of: 80, 443, 8080\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -266,7 +266,7 @@
         "invalid value",
         "'xml'"
       ],
-      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp --help'"
+      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp cmd --help'"
     }
   }
 ]

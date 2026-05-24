@@ -92,7 +92,7 @@
         "expected integer",
         "'abc'"
       ],
-      "stderr_equals": "error: --port: expected integer, got 'abc'\ntry 'myapp --help'"
+      "stderr_equals": "error: --port: expected integer, got 'abc'\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -166,7 +166,7 @@
         "expected integer",
         "'abc'"
       ],
-      "stderr_equals": "error: --port: expected integer, got 'abc' (from env var 'MYAPP_PORT')\ntry 'myapp --help'"
+      "stderr_equals": "error: --port: expected integer, got 'abc' (from env var 'MYAPP_PORT')\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -196,7 +196,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "required",
-      "stderr_equals": "error: flag '--port' is required\ntry 'myapp --help'"
+      "stderr_equals": "error: flag '--port' is required\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -257,7 +257,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "expected integer",
-      "stderr_equals": "error: --port: expected integer, got 'abc'\ntry 'myapp --help'"
+      "stderr_equals": "error: --port: expected integer, got 'abc'\ntry 'myapp cmd --help'"
     }
   },
   {

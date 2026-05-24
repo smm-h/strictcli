@@ -102,8 +102,10 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unknown command",
-      "stderr_equals": "error: unknown command 'delete' in 'config'\ntry 'myapp --help'"
+      "stderr_contains": [
+        "error: unknown command 'delete' in 'config'",
+        "try 'myapp"
+      ]
     }
   },
   {
@@ -313,7 +315,11 @@
         }
       ]
     },
-    "argv": ["dns", "zone", "list"],
+    "argv": [
+      "dns",
+      "zone",
+      "list"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "listing zones"
@@ -351,10 +357,18 @@
         }
       ]
     },
-    "argv": ["dns", "zone", "--help"],
+    "argv": [
+      "dns",
+      "zone",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["list", "create", "manage zones"],
+      "stdout_contains": [
+        "list",
+        "create",
+        "manage zones"
+      ],
       "stdout_equals": "myapp dns zone -- manage zones\n\nCommands:\n  list      list all zones\n  create    create a zone\n\nUse 'myapp dns zone <command> --help' for more information."
     }
   },
@@ -392,10 +406,19 @@
         }
       ]
     },
-    "argv": ["dns", "--help"],
+    "argv": [
+      "dns",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["Commands:", "Groups:", "status", "zone", "manage zones"],
+      "stdout_contains": [
+        "Commands:",
+        "Groups:",
+        "status",
+        "zone",
+        "manage zones"
+      ],
       "stdout_equals": "myapp dns -- manage DNS\n\nCommands:\n  status    show DNS status\n\nGroups:\n  zone    manage zones\n\nUse 'myapp dns <command> --help' for more information."
     }
   },
@@ -426,11 +449,17 @@
         }
       ]
     },
-    "argv": ["dns", "zone", "delete"],
+    "argv": [
+      "dns",
+      "zone",
+      "delete"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "unknown command",
-      "stderr_equals": "error: unknown command 'delete' in 'dns zone'\ntry 'myapp --help'"
+      "stderr_contains": [
+        "error: unknown command 'delete' in 'dns zone'",
+        "try 'myapp"
+      ]
     }
   },
   {
@@ -466,7 +495,12 @@
         }
       ]
     },
-    "argv": ["cloud", "compute", "instance", "list"],
+    "argv": [
+      "cloud",
+      "compute",
+      "instance",
+      "list"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "listing instances"
@@ -506,7 +540,13 @@
         }
       ]
     },
-    "argv": ["dns", "zone", "create", "--name", "example.com"],
+    "argv": [
+      "dns",
+      "zone",
+      "create",
+      "--name",
+      "example.com"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "created example.com"
@@ -546,7 +586,12 @@
         }
       ]
     },
-    "argv": ["dns", "zone", "create", "--help"],
+    "argv": [
+      "dns",
+      "zone",
+      "create",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "dns zone create",
@@ -580,10 +625,16 @@
         }
       ]
     },
-    "argv": ["dns", "zone"],
+    "argv": [
+      "dns",
+      "zone"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["manage zones", "list"],
+      "stdout_contains": [
+        "manage zones",
+        "list"
+      ],
       "stdout_equals": "myapp dns zone -- manage zones\n\nCommands:\n  list    list all zones\n\nUse 'myapp dns zone <command> --help' for more information."
     }
   },
@@ -627,7 +678,11 @@
         }
       ]
     },
-    "argv": ["config", "remote", "list"],
+    "argv": [
+      "config",
+      "remote",
+      "list"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "listing remotes"

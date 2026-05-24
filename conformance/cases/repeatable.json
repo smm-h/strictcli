@@ -209,7 +209,7 @@
         "invalid value",
         "'delta'"
       ],
-      "stderr_equals": "error: --tag: invalid value 'delta', must be one of: alpha, beta\ntry 'myapp --help'"
+      "stderr_equals": "error: --tag: invalid value 'delta', must be one of: alpha, beta\ntry 'myapp cmd --help'"
     }
   },
   {

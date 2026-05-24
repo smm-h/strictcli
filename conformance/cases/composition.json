@@ -94,7 +94,7 @@
         "--url",
         "mutually exclusive"
       ],
-      "stderr_equals": "error: --file and --url are mutually exclusive\ntry 'myapp --help'"
+      "stderr_equals": "error: --file and --url are mutually exclusive\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -376,7 +376,7 @@
         "--system",
         "mutually exclusive"
       ],
-      "stderr_equals": "error: --local and --system are mutually exclusive\ntry 'myapp --help'"
+      "stderr_equals": "error: --local and --system are mutually exclusive\ntry 'myapp config set --help'"
     }
   },
   {
@@ -540,7 +540,7 @@
         "invalid value",
         "'xml'"
       ],
-      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json, csv\ntry 'myapp --help'"
+      "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json, csv\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -665,7 +665,7 @@
         "invalid value",
         "'trace'"
       ],
-      "stderr_equals": "error: --level: invalid value 'trace', must be one of: debug, info, warn, error\ntry 'myapp --help'"
+      "stderr_equals": "error: --level: invalid value 'trace', must be one of: debug, info, warn, error\ntry 'myapp cmd --help'"
     }
   },
   {

@@ -54,7 +54,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "missing required argument",
-      "stderr_equals": "error: missing required argument 'name'\ntry 'myapp --help'"
+      "stderr_equals": "error: missing required argument 'name'\ntry 'myapp greet --help'"
     }
   },
   {
@@ -112,7 +112,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unexpected argument",
-      "stderr_equals": "error: unexpected argument 'surprise'\ntry 'myapp --help'"
+      "stderr_equals": "error: unexpected argument 'surprise'\ntry 'myapp cmd --help'"
     }
   },
   {

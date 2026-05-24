@@ -88,7 +88,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "missing required argument",
-      "stderr_equals": "error: missing required argument 'files'\ntry 'myapp --help'"
+      "stderr_equals": "error: missing required argument 'files'\ntry 'myapp cmd --help'"
     }
   },
   {

@@ -27,7 +27,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown flag",
-      "stderr_equals": "error: unknown flag '--unknown'\ntry 'myapp --help'"
+      "stderr_equals": "error: unknown flag '--unknown'\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -51,7 +51,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown flag",
-      "stderr_equals": "error: unknown flag '-x'\ntry 'myapp --help'"
+      "stderr_equals": "error: unknown flag '-x'\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -84,7 +84,7 @@
         "--target",
         "required"
       ],
-      "stderr_equals": "error: flag '--target' is required\ntry 'myapp --help'"
+      "stderr_equals": "error: flag '--target' is required\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -108,7 +108,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unexpected argument",
-      "stderr_equals": "error: unexpected argument 'surprise'\ntry 'myapp --help'"
+      "stderr_equals": "error: unexpected argument 'surprise'\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -139,7 +139,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "requires a value",
-      "stderr_equals": "error: flag '--target' requires a value\ntry 'myapp --help'"
+      "stderr_equals": "error: flag '--target' requires a value\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -196,7 +196,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "boolean negation",
-      "stderr_equals": "error: flag '--no-verbose' is a boolean negation and does not take a value\ntry 'myapp --help'"
+      "stderr_equals": "error: flag '--no-verbose' is a boolean negation and does not take a value\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -287,7 +287,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown flag",
-      "stderr_equals": "error: unknown flag '--unknown'\ntry 'myapp --help'"
+      "stderr_equals": "error: unknown flag '--unknown'\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -316,7 +316,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_equals": "error: flag '--target' is required\ntry 'myapp --help'",
+      "stderr_equals": "error: flag '--target' is required\ntry 'myapp cmd --help'",
       "stderr_not_contains": "unknown flag"
     }
   }
