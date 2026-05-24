@@ -1,2 +1,3 @@
 {"commits":["bb95ff55342e50eeec9a20c417b96e76df99e9c0","0f0524d47831254eb0579b55ea14aff204043546"],"user_facing":false}
 {"commits":["0bc0c1f80c5252846a685954052690451676815d"],"user_facing":true,"description":"**New fields.** Added config_path and config_format to the conformance schema for App.","type":"feature"}
+{"commits":["2732196f195b787c8c1785c1d054e31d81be73f6"],"user_facing":false}
