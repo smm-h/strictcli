@@ -712,6 +712,48 @@ func TestErrorIncludesTryHint(t *testing.T) {
 	}
 }
 
+func TestErrorTryHintIncludesCommandPrefix(t *testing.T) {
+	// Parse error on a top-level command should show "try 'myapp cmd --help'"
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("target", "the target")))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "try 'myapp cmd --help'") {
+		t.Fatalf("stderr should contain 'try 'myapp cmd --help'', got %q", r.Stderr)
+	}
+}
+
+func TestErrorTryHintIncludesGroupCommandPrefix(t *testing.T) {
+	// Parse error on a group command should show "try 'myapp config set --help'"
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("set", "set a config value", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("key", "config key")))
+	r := app.Test([]string{"config", "set"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "try 'myapp config set --help'") {
+		t.Fatalf("stderr should contain 'try 'myapp config set --help'', got %q", r.Stderr)
+	}
+}
+
+func TestErrorTryHintUnknownCommandInGroup(t *testing.T) {
+	// Unknown command within a group should show "try 'myapp config --help'"
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("config", "manage configuration")
+	g.Command("show", "display config", func(args map[string]interface{}) int { return 0 })
+	r := app.Test([]string{"config", "delete"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "try 'myapp config --help'") {
+		t.Fatalf("stderr should contain 'try 'myapp config --help'', got %q", r.Stderr)
+	}
+}
+
 func TestBoolNegationWithValueRejected(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
 		WithFlags(BoolFlag("verbose", "be verbose")))

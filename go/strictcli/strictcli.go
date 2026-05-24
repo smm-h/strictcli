@@ -788,7 +788,11 @@ func (a *App) Run() {
 	}
 	if pr.parseErr != "" {
 		fmt.Fprintln(os.Stderr, "error: "+pr.parseErr)
-		fmt.Fprintf(os.Stderr, "try '%s --help'\n", a.Name)
+		prefix := pr.commandPrefix
+		if prefix == "" {
+			prefix = a.Name
+		}
+		fmt.Fprintf(os.Stderr, "try '%s --help'\n", prefix)
 		os.Exit(1)
 	}
 
@@ -822,7 +826,11 @@ func (a *App) Test(argv []string) Result {
 		return Result{Stdout: path + "\n", ExitCode: 0}
 	}
 	if pr.parseErr != "" {
-		stderr := fmt.Sprintf("error: %s\ntry '%s --help'\n", pr.parseErr, a.Name)
+		prefix := pr.commandPrefix
+		if prefix == "" {
+			prefix = a.Name
+		}
+		stderr := fmt.Sprintf("error: %s\ntry '%s --help'\n", pr.parseErr, prefix)
 		return Result{Stderr: stderr, ExitCode: 1}
 	}
 
@@ -870,6 +878,7 @@ type parseResult struct {
 	helpText        string
 	versionText     string
 	parseErr        string
+	commandPrefix   string
 	dumpSchema      bool
 }
 
@@ -956,7 +965,9 @@ func (a *App) doParse(argv []string) parseResult {
 			}
 			kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData)
 			if err != "" {
-				return parseResult{parseErr: err}
+				parts := append([]string{a.Name}, path...)
+				parts = append(parts, cmd.Name)
+				return parseResult{parseErr: err, commandPrefix: strings.Join(parts, " ")}
 			}
 			// Merge global values: post-command globals override pre-command ones
 			for k, v := range postGlobalValues {
@@ -975,7 +986,8 @@ func (a *App) doParse(argv []string) parseResult {
 
 		// Unknown command -- include path in error message
 		if len(path) > 0 {
-			return parseResult{parseErr: fmt.Sprintf("unknown command '%s' in '%s'", token, strings.Join(path, " "))}
+			prefix := strings.Join(append([]string{a.Name}, path...), " ")
+			return parseResult{parseErr: fmt.Sprintf("unknown command '%s' in '%s'", token, strings.Join(path, " ")), commandPrefix: prefix}
 		}
 		return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", token)}
 	}
