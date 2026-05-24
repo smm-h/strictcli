@@ -1,3 +1,4 @@
 {"commits":["40478a9bc123d086ade4d0838d3fcb95918ff562"],"user_facing":true,"description":"**New feature.** Go implementation now includes subcommand name in parse error help suggestions, matching Python.","type":"feature"}
 {"commits":["9e2a6468ee2e82338ccec5131f9aac83483c2c7d"],"user_facing":true,"description":"**Fix.** Unknown subcommand errors in groups now suggest group-level help (e.g., `try 'myapp config --help'`).","type":"fix"}
 {"commits":["cde530a82247eb67190fed61a35fc688eb6192b0","1ebf9fba80adee78890f15c2ca9c4db518677092","16abca558f7d9616b74f1be92cf7f78625dbf21f"],"user_facing":false}
+{"commits":["c33baefc772e1ada47d927423ad48d1556d13f53"],"user_facing":false}
