@@ -223,6 +223,10 @@ class _DumpSchemaRequested(Exception):
 class _ParseError(Exception):
     """Raised for user-facing parse errors."""
 
+    def __init__(self, message: str, command_prefix: str | None = None):
+        super().__init__(message)
+        self.command_prefix = command_prefix
+
 
 def _strict_int(s: str) -> int:
     """Parse an integer string strictly -- no leading/trailing whitespace allowed.
@@ -999,9 +1003,14 @@ class App:
             return cmd, rest
 
         # Step 3: parse remaining tokens for the resolved command
-        cmd, kwargs, post_global = _parse_command(
-            cmd, rest, self._global_flags, config_data=self._config_data,
-        )
+        try:
+            cmd, kwargs, post_global = _parse_command(
+                cmd, rest, self._global_flags, config_data=self._config_data,
+            )
+        except _ParseError as e:
+            prefix_parts = [self.name] + path + [cmd.name]
+            e.command_prefix = " ".join(prefix_parts)
+            raise
 
         # Step 4: merge global flag values into kwargs
         # Post-command global flags override pre-command ones
@@ -1292,7 +1301,8 @@ class App:
             sys.exit(0)
         except _ParseError as e:
             print(f"error: {e}", file=sys.stderr)
-            print(f"try '{self.name} --help'", file=sys.stderr)
+            prefix = e.command_prefix or self.name
+            print(f"try '{prefix} --help'", file=sys.stderr)
             sys.exit(1)
         else:
             if cmd.passthrough is not None:
@@ -1333,7 +1343,8 @@ class App:
             stdout_buf.write(path + "\n")
         except _ParseError as e:
             stderr_buf.write(f"error: {e}\n")
-            stderr_buf.write(f"try '{self.name} --help'\n")
+            prefix = e.command_prefix or self.name
+            stderr_buf.write(f"try '{prefix} --help'\n")
             exit_code = 1
         else:
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
