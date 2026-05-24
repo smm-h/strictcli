@@ -376,3 +376,328 @@ def test_config_int_as_float(tmp_path, monkeypatch):
     r = app.test(["run"])
     assert r.exit_code == 0
     assert "ratio=2.0" in r.stdout
+
+
+# --- Custom config_path tests ---
+
+def test_custom_config_path(tmp_path, monkeypatch):
+    """Custom config_path is used instead of XDG-computed path."""
+    config_file = tmp_path / "my-custom-config.json"
+    config_file.write_text(json.dumps({"target": "custom-path-val"}) + "\n")
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="default-val")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "target=custom-path-val" in r.stdout
+
+
+def test_custom_config_path_tilde_expansion(tmp_path, monkeypatch):
+    """Custom config_path expands ~ correctly."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    config_dir = tmp_path / ".myapp"
+    config_dir.mkdir()
+    config_file = config_dir / "settings.json"
+    config_file.write_text(json.dumps({"target": "tilde-val"}) + "\n")
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path="~/.myapp/settings.json",
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="default-val")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "target=tilde-val" in r.stdout
+
+
+def test_custom_config_path_config_path_command(tmp_path):
+    """config path command prints the custom path."""
+    config_file = tmp_path / "custom.json"
+    config_file.write_text("{}")
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+    )
+
+    @app.command("run", help="run something")
+    def run():
+        pass
+
+    r = app.test(["config", "path"])
+    assert r.exit_code == 0
+    assert str(config_file) in r.stdout
+
+
+def test_custom_config_path_config_set(tmp_path):
+    """config set writes to the custom path."""
+    config_file = tmp_path / "custom.json"
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="default-val")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["config", "set", "target", "written"])
+    assert r.exit_code == 0
+    assert config_file.exists()
+    data = json.loads(config_file.read_text())
+    assert data["target"] == "written"
+
+
+# --- TOML config format tests ---
+
+def test_toml_format_reads_correctly(tmp_path):
+    """TOML format config reads values correctly."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('target = "toml-value"\ncount = 42\nverbose = true\n')
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+        config_format="toml",
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="default-val")
+    @strictcli.flag("count", type=int, help="how many", default=1)
+    @strictcli.flag("verbose", type=bool, help="be verbose")
+    def run(target, count, verbose):
+        print(f"target={target} count={count} verbose={verbose}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "target=toml-value" in r.stdout
+    assert "count=42" in r.stdout
+    assert "verbose=True" in r.stdout
+
+
+def test_toml_format_set_writes_correctly(tmp_path):
+    """TOML format config set writes valid TOML."""
+    config_file = tmp_path / "config.toml"
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+        config_format="toml",
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="default-val")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["config", "set", "target", "toml-written"])
+    assert r.exit_code == 0
+    assert config_file.exists()
+
+    import tomllib
+    with open(config_file, "rb") as f:
+        data = tomllib.load(f)
+    assert data["target"] == "toml-written"
+
+
+def test_toml_format_set_preserves_existing(tmp_path):
+    """TOML format config set preserves existing keys."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('existing = "keep-me"\n')
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+        config_format="toml",
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="default-val")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["config", "set", "target", "new-val"])
+    assert r.exit_code == 0
+
+    import tomllib
+    with open(config_file, "rb") as f:
+        data = tomllib.load(f)
+    assert data["target"] == "new-val"
+    assert data["existing"] == "keep-me"
+
+
+def test_toml_format_config_path_command(tmp_path):
+    """config path prints the custom path for TOML format."""
+    config_file = tmp_path / "my-config.toml"
+    config_file.write_text("")
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+        config_format="toml",
+    )
+
+    @app.command("run", help="run something")
+    def run():
+        pass
+
+    r = app.test(["config", "path"])
+    assert r.exit_code == 0
+    assert str(config_file) in r.stdout
+
+
+def test_toml_format_xdg_default_path(tmp_path, monkeypatch):
+    """Without custom config_path, TOML format uses .toml extension in XDG path."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_format="toml",
+    )
+
+    @app.command("run", help="run something")
+    def run():
+        pass
+
+    r = app.test(["config", "path"])
+    assert r.exit_code == 0
+    expected = os.path.join(str(tmp_path), "testapp", "config.toml")
+    assert expected in r.stdout
+
+
+def test_invalid_toml_warning(tmp_path):
+    """Invalid TOML file prints warning and falls back to defaults."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("this is = not [ valid toml")
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+        config_format="toml",
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="default-val")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "target=default-val" in r.stdout
+
+
+def test_invalid_config_format():
+    """Invalid config_format raises ValueError."""
+    with pytest.raises(ValueError, match='config_format must be'):
+        strictcli.App(
+            name="testapp",
+            version="1.0.0",
+            help="test app",
+            config=True,
+            config_format="yaml",
+        )
+
+
+def test_default_json_unchanged(tmp_path, monkeypatch):
+    """Default behavior (JSON, XDG path) is unchanged."""
+    config_home = _write_config(tmp_path, "testapp", {"target": "json-default"})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = _make_config_app(config=True)
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "target=json-default" in r.stdout
+
+
+def test_toml_config_show(tmp_path):
+    """config show works with TOML format."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('target = "toml-show-val"\n')
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+        config_format="toml",
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="default-val")
+    @strictcli.flag("count", type=int, help="how many", default=1)
+    def run(target, count):
+        pass
+
+    r = app.test(["config", "show"])
+    assert r.exit_code == 0
+    assert "target = toml-show-val  (source: config)" in r.stdout
+    assert "count = 1  (source: default)" in r.stdout
+
+
+def test_toml_float_value(tmp_path):
+    """TOML config with float values works correctly."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('ratio = 0.75\n')
+
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+        config_format="toml",
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("ratio", type=float, help="ratio value", default=1.0)
+    def run(ratio):
+        print(f"ratio={ratio}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "ratio=0.75" in r.stdout

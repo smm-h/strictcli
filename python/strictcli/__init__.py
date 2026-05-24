@@ -36,27 +36,69 @@ class _MissingSentinel:
 _MISSING = _MissingSentinel()
 
 
-def _config_path(app_name: str) -> str:
-    """Compute the config file path for an app."""
-    config_home = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    return os.path.join(config_home, app_name, "config.json")
+def _config_path(app_name: str, *, override: str | None = None, config_format: str = "json") -> str:
+    """Compute the config file path for an app.
 
-
-def _load_config(app_name: str) -> dict:
-    """Load the JSON config file for an app.
-
-    Returns an empty dict if the file doesn't exist or contains invalid JSON.
-    Invalid JSON prints a warning to stderr.
+    If override is provided, expand ~ and return it directly.
+    Otherwise compute from XDG_CONFIG_HOME + app_name.
     """
-    path = _config_path(app_name)
+    if override is not None:
+        return os.path.expanduser(override)
+    config_home = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    ext = "toml" if config_format == "toml" else "json"
+    return os.path.join(config_home, app_name, f"config.{ext}")
+
+
+def _load_config(
+    app_name: str,
+    *,
+    config_path_override: str | None = None,
+    config_format: str = "json",
+) -> dict:
+    """Load the config file for an app.
+
+    Returns an empty dict if the file doesn't exist or contains invalid content.
+    Invalid content prints a warning to stderr.
+    """
+    path = _config_path(app_name, override=config_path_override, config_format=config_format)
     if not os.path.isfile(path):
         return {}
+    if config_format == "toml":
+        try:
+            with open(path, "rb") as f:
+                return tomllib.load(f)
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+            print(f"warning: invalid TOML in config file '{path}', ignoring", file=sys.stderr)
+            return {}
     try:
         with open(path) as f:
             return json.loads(f.read())
     except (json.JSONDecodeError, ValueError):
         print(f"warning: invalid JSON in config file '{path}', ignoring", file=sys.stderr)
         return {}
+
+
+def _write_toml_flat(data: dict, path: str) -> None:
+    """Write a flat dict as a TOML file.
+
+    Supports str, int, float, and bool values. This avoids requiring
+    a TOML writer dependency for the simple key=value configs that
+    'config set' produces.
+    """
+    lines: list[str] = []
+    for key, value in data.items():
+        if isinstance(value, bool):
+            lines.append(f"{key} = {str(value).lower()}")
+        elif isinstance(value, str):
+            escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'{key} = "{escaped}"')
+        elif isinstance(value, (int, float)):
+            lines.append(f"{key} = {value}")
+        else:
+            escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'{key} = "{escaped}"')
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n" if lines else "")
 
 
 def _coerce_config_value(value: object, flag: "Flag") -> object:
@@ -579,6 +621,8 @@ class App:
     version: str | None = None
     env_prefix: str | None = None
     config: bool = False
+    config_path: str | None = None
+    config_format: str = "json"
     flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
     _groups: dict[str, Group] = field(default_factory=dict)
@@ -600,10 +644,19 @@ class App:
             seen.add(f.name)
         self._global_flags: list[Flag] = list(self.flags)
         self._last_global_values: dict[str, object] = {}
+        # Validate config_format
+        if self.config_format not in ("json", "toml"):
+            raise ValueError(
+                f'App.config_format must be "json" or "toml", got {self.config_format!r}'
+            )
         # Load config and register config subcommands if enabled
         self._config_data: dict = {}
         if self.config:
-            self._config_data = _load_config(self.name)
+            self._config_data = _load_config(
+                self.name,
+                config_path_override=self.config_path,
+                config_format=self.config_format,
+            )
             self._register_config_group()
         # Discover checks TOML
         self._check_context_factory: Callable | None = None
@@ -843,12 +896,20 @@ class App:
         config_grp.commands["path"] = Command(
             name="path",
             help="Print the config file path",
-            handler=lambda **_kw: print(_config_path(app_ref.name)),
+            handler=lambda **_kw: print(_config_path(
+                app_ref.name,
+                override=app_ref.config_path,
+                config_format=app_ref.config_format,
+            )),
         )
 
         # config show
         def _config_show_handler(**_kw) -> None:
-            config_data = _load_config(app_ref.name)
+            config_data = _load_config(
+                app_ref.name,
+                config_path_override=app_ref.config_path,
+                config_format=app_ref.config_format,
+            )
             all_flags = app_ref._collect_all_flags()
             for f in all_flags:
                 param = _flag_param_name(f.name)
@@ -872,20 +933,34 @@ class App:
 
         # config set
         def _config_set_handler(key, value, **_kw) -> None:
-            path = _config_path(app_ref.name)
+            path = _config_path(
+                app_ref.name,
+                override=app_ref.config_path,
+                config_format=app_ref.config_format,
+            )
             dir_path = os.path.dirname(path)
             os.makedirs(dir_path, exist_ok=True)
             # Read existing config
             existing: dict = {}
             if os.path.isfile(path):
-                try:
-                    with open(path) as fh:
-                        existing = json.loads(fh.read())
-                except (json.JSONDecodeError, ValueError):
-                    existing = {}
+                if app_ref.config_format == "toml":
+                    try:
+                        with open(path, "rb") as fh:
+                            existing = tomllib.load(fh)
+                    except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+                        existing = {}
+                else:
+                    try:
+                        with open(path) as fh:
+                            existing = json.loads(fh.read())
+                    except (json.JSONDecodeError, ValueError):
+                        existing = {}
             existing[key] = value
-            with open(path, "w") as fh:
-                fh.write(json.dumps(existing, indent=2) + "\n")
+            if app_ref.config_format == "toml":
+                _write_toml_flat(existing, path)
+            else:
+                with open(path, "w") as fh:
+                    fh.write(json.dumps(existing, indent=2) + "\n")
 
         config_grp.commands["set"] = Command(
             name="set",
@@ -899,12 +974,20 @@ class App:
 
         # config edit
         def _config_edit_handler(**_kw) -> None:
-            path = _config_path(app_ref.name)
+            path = _config_path(
+                app_ref.name,
+                override=app_ref.config_path,
+                config_format=app_ref.config_format,
+            )
             dir_path = os.path.dirname(path)
             os.makedirs(dir_path, exist_ok=True)
             if not os.path.isfile(path):
-                with open(path, "w") as fh:
-                    fh.write("{}\n")
+                if app_ref.config_format == "toml":
+                    with open(path, "w") as fh:
+                        fh.write("")
+                else:
+                    with open(path, "w") as fh:
+                        fh.write("{}\n")
             editor = os.environ.get("EDITOR", "vi")
             subprocess.run([editor, path])
 
