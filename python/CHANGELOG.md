@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.9.0
+
+### Features
+
+- **New feature.** config_path and config_format options for TOML-based configuration file support.
+
 ## 0.8.7
 
 ### Features

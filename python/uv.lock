@@ -232,7 +232,7 @@ wheels = [
 
 [[package]]
 name = "strictcli"
-version = "0.8.7"
+version = "0.9.0"
 source = { editable = "." }
 
 [package.dev-dependencies]
