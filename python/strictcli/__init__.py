@@ -669,6 +669,11 @@ class App:
             self._check_defs = {}
             self._checks_enabled = False
 
+    @property
+    def config_file_path(self) -> str:
+        """Return the resolved config file path for this app."""
+        return _config_path(self.name, override=self.config_path, config_format=self.config_format)
+
     def check(self, name: str):
         """Decorator to register a check implementation."""
         def decorator(fn):
