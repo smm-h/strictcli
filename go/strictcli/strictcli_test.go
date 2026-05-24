@@ -3030,7 +3030,7 @@ func TestConfigXDGHome(t *testing.T) {
 	}()
 
 	// Verify configPath respects XDG_CONFIG_HOME
-	path := configPath("myapp")
+	path := configPath("myapp", "", "json")
 	expected := filepath.Join(tmpDir, "myapp", "config.json")
 	if path != expected {
 		t.Fatalf("expected path %q, got %q", expected, path)
@@ -3039,7 +3039,7 @@ func TestConfigXDGHome(t *testing.T) {
 	// Verify with a different XDG_CONFIG_HOME
 	otherDir := t.TempDir()
 	os.Setenv("XDG_CONFIG_HOME", otherDir)
-	path = configPath("myapp")
+	path = configPath("myapp", "", "json")
 	expected = filepath.Join(otherDir, "myapp", "config.json")
 	if path != expected {
 		t.Fatalf("expected path %q, got %q", expected, path)

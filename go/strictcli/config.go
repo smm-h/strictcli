@@ -9,7 +9,12 @@ import (
 )
 
 // configPath returns the full path to the config file for an app.
-func configPath(appName string) string {
+// If override is non-empty, it is returned as-is.
+// format should be "json" or "toml" and determines the file extension.
+func configPath(appName string, override string, format string) string {
+	if override != "" {
+		return override
+	}
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
 		home, err := os.UserHomeDir()
@@ -18,14 +23,18 @@ func configPath(appName string) string {
 		}
 		configHome = filepath.Join(home, ".config")
 	}
-	return filepath.Join(configHome, appName, "config.json")
+	ext := "json"
+	if format == "toml" {
+		ext = "toml"
+	}
+	return filepath.Join(configHome, appName, "config."+ext)
 }
 
-// loadConfig reads the JSON config file for an app.
-// Returns an empty map if the file doesn't exist or contains invalid JSON.
-// Invalid JSON prints a warning to stderr.
-func loadConfig(appName string) map[string]interface{} {
-	path := configPath(appName)
+// loadConfig reads the config file for an app.
+// Returns an empty map if the file doesn't exist or contains invalid data.
+// Invalid content prints a warning to stderr.
+func loadConfig(appName string, pathOverride string, format string) map[string]interface{} {
+	path := configPath(appName, pathOverride, format)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		// File doesn't exist or can't be read -- silent
@@ -136,13 +145,13 @@ func (a *App) registerConfigGroup() {
 
 	// config path
 	grp.Command("path", "Print the config file path", func(args map[string]interface{}) int {
-		fmt.Println(configPath(a.Name))
+		fmt.Println(configPath(a.Name, a.configPathOverride, a.configFormat))
 		return 0
 	})
 
 	// config show
 	grp.Command("show", "Show all config values with source attribution", func(args map[string]interface{}) int {
-		configData := loadConfig(a.Name)
+		configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		allFlags := a.collectAllFlags()
 		for _, f := range allFlags {
 			param := flagParamName(f.Name)
@@ -167,7 +176,7 @@ func (a *App) registerConfigGroup() {
 	grp.Command("set", "Set a config value", func(args map[string]interface{}) int {
 		key := args["key"].(string)
 		value := args["value"].(string)
-		path := configPath(a.Name)
+		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
@@ -197,7 +206,7 @@ func (a *App) registerConfigGroup() {
 
 	// config edit
 	grp.Command("edit", "Open the config file in $EDITOR", func(args map[string]interface{}) int {
-		path := configPath(a.Name)
+		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)

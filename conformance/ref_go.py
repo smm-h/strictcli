@@ -360,6 +360,10 @@ def generate(app_def: dict) -> str:
         app_opts.append(f'strictcli.WithEnvPrefix("{app_def["env_prefix"]}")')
     if app_def.get("config", False):
         app_opts.append("strictcli.WithConfig()")
+    if "config_path" in app_def and app_def["config_path"] is not None:
+        app_opts.append(f'strictcli.WithConfigPath("{app_def["config_path"]}")')
+    if "config_format" in app_def and app_def["config_format"] != "json":
+        app_opts.append(f'strictcli.WithConfigFormat("{app_def["config_format"]}")')
     opts_str = ""
     if app_opts:
         opts_str = ", " + ", ".join(app_opts)

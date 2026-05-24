@@ -484,6 +484,10 @@ def generate(app_def: dict) -> str:
         app_parts.append(f"env_prefix={app_def['env_prefix']!r}")
     if app_def.get("config", False):
         app_parts.append("config=True")
+    if "config_path" in app_def and app_def["config_path"] is not None:
+        app_parts.append(f"config_path={app_def['config_path']!r}")
+    if "config_format" in app_def and app_def["config_format"] != "json":
+        app_parts.append(f"config_format={app_def['config_format']!r}")
     if global_flags:
         gf_exprs = [_emit_flag(gf) for gf in global_flags]
         app_parts.append(f"flags=[{', '.join(gf_exprs)}]")

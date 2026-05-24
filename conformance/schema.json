@@ -53,7 +53,21 @@
         "config": {
           "type": "boolean",
           "default": false,
-          "description": "If true, enable JSON config file support and auto-register config subcommands."
+          "description": "If true, enable config file support and auto-register config subcommands."
+        },
+        "config_path": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ],
+          "default": null,
+          "description": "Override the default config file path. If null, uses XDG_CONFIG_HOME/<app>/config.<format>."
+        },
+        "config_format": {
+          "type": "string",
+          "enum": ["json", "toml"],
+          "default": "json",
+          "description": "Config file format: 'json' or 'toml'."
         },
         "global_flags": {
           "type": "array",

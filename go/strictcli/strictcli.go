@@ -155,8 +155,10 @@ type App struct {
 	deprecated    []deprecatedCmd
 	deprecatedMap map[string]string
 
-	configEnabled bool
-	configData    map[string]interface{}
+	configEnabled       bool
+	configPathOverride  string
+	configFormat        string
+	configData          map[string]interface{}
 
 	checksEnabled       bool
 	checkDefs           map[string]*checkDef
@@ -176,10 +178,24 @@ func WithEnvPrefix(prefix string) AppOption {
 	}
 }
 
-// WithConfig enables JSON config file support.
+// WithConfig enables config file support.
 func WithConfig() AppOption {
 	return func(a *App) {
 		a.configEnabled = true
+	}
+}
+
+// WithConfigPath overrides the default config file path.
+func WithConfigPath(path string) AppOption {
+	return func(a *App) {
+		a.configPathOverride = path
+	}
+}
+
+// WithConfigFormat sets the config file format ("json" or "toml").
+func WithConfigFormat(format string) AppOption {
+	return func(a *App) {
+		a.configFormat = format
 	}
 }
 
@@ -522,8 +538,12 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	for _, opt := range opts {
 		opt(a)
 	}
+	// Default config format to "json" if not set
+	if a.configFormat == "" {
+		a.configFormat = "json"
+	}
 	if a.configEnabled {
-		a.configData = loadConfig(a.Name)
+		a.configData = loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		a.registerConfigGroup()
 	}
 	// Discover .strictcli/checks.toml in the current working directory
