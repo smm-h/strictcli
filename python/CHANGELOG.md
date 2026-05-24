@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.8.6
+
+### Features
+
+- **New feature.** Parse error messages now suggest the correct subcommand help (e.g., `try 'app stream --help'` instead of `try 'app --help'`).
+
 ## 0.8.5
 
 ### Features
