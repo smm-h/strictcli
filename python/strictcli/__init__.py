@@ -983,7 +983,8 @@ class App:
             # Unknown command -- include path in error message
             if path:
                 raise _ParseError(
-                    f"unknown command '{token}' in '{' '.join(path)}'"
+                    f"unknown command '{token}' in '{' '.join(path)}'",
+                    command_prefix=f"{self.name} {' '.join(path)}",
                 )
             raise _ParseError(f"unknown command '{token}'")
         else:

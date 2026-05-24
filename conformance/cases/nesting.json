@@ -102,10 +102,8 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": [
-        "error: unknown command 'delete' in 'config'",
-        "try 'myapp"
-      ]
+      "stderr_contains": "unknown command",
+      "stderr_equals": "error: unknown command 'delete' in 'config'\ntry 'myapp config --help'"
     }
   },
   {
@@ -456,10 +454,8 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": [
-        "error: unknown command 'delete' in 'dns zone'",
-        "try 'myapp"
-      ]
+      "stderr_contains": "unknown command",
+      "stderr_equals": "error: unknown command 'delete' in 'dns zone'\ntry 'myapp dns zone --help'"
     }
   },
   {
