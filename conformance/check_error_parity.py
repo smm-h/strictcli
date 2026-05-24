@@ -94,6 +94,9 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # Python tag DSL uses tuple-based AST with runtime dispatch; Go uses typed interfaces
     'tag expression: unknown AST node *':
         "Python uses tuple-based AST with string dispatch; Go uses typed interfaces",
+    # Python uses !r (single quotes), Go uses %q (double quotes) for config_format value
+    'App.config_format must be "json" or "toml", got *':
+        "Go uses fmt.Fprintf+os.Exit with %q quoting; Python uses ValueError with !r quoting",
 }
 
 # Go-only: errors that have no Python counterpart by design
