@@ -1,0 +1,1 @@
+{"commits":["40478a9bc123d086ade4d0838d3fcb95918ff562"],"user_facing":true,"description":"**New feature.** Go implementation now includes subcommand name in parse error help suggestions, matching Python.","type":"feature"}
