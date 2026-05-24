@@ -3,3 +3,7 @@
 {"commits":["0bc0c1f80c5252846a685954052690451676815d"],"user_facing":true,"description":"**New feature.** Added config_path and config_format support (WithConfigPath, WithConfigFormat options).","type":"feature"}
 {"commits":["2732196f195b787c8c1785c1d054e31d81be73f6"],"user_facing":false}
 {"commits":["f53fa79fb38d1d7ace07305c06030800fe8173bc"],"user_facing":false}
+{"commits":["9a6eba57facd42e6f78230d5e1a4e46acba3f9b7","c8249918a9eae38a08a624c409cf96c6e66818a1","7ccae37d21414a46c87167f726c2279e61db6b09","2eb65bb7d36320cf1e398e42fa43a63e2d771042","77050e3cdb3cdd396bf83fee87768342903157f7"],"user_facing":false}
+{"commits":["9276de627df40c14d0a0f7f4cd6f934323d7ee47","a40e7421f7e51240f51c4a8ce9ed72e73af2dd94","034d46ccdb83e2e6abdfb27d50553128e8b194da","3d0745ec3da5d124465ae62a6edda1ba9c586909","e1512089774da17d8e1b50b38af9e00f2b04f401"],"user_facing":false}
+{"commits":["06ff387b1cf6e867e5cf926ad02c646f4020cd4d","0eacbbb26047b737ac9ff5a05ccc25f381c6917f","052392699e08e4edf48d688f244241c461d7eef7","4c64feea9c5efed933f46950a66985707d287c2c","a3058311994565626d720afb34f95f9230828500"],"user_facing":false}
+{"commits":["76e89079ca555173f31e16868a8f0e9da8dd86e9","81cfebb6de9674be9fafc0756c19d0dd8a6a29c1","b2317bcce29fdeabb0726e7db6865a917d596d91","905a378a3360abb1fd00fb009862a2d1875f388c"],"user_facing":false}
