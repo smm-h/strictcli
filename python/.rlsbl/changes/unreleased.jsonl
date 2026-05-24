@@ -1,1 +1,2 @@
 {"commits":["81c9f3996c118362a9a3952eeddb3a12310479e0"],"user_facing":true,"description":"**New feature.** Parse error messages now suggest the correct subcommand help (e.g., `try 'app stream --help'` instead of `try 'app --help'`).","type":"feature"}
+{"commits":["8089797a28ed0dc23c6f1365df464d1b2d5a9e0f","dda8012e14645ac6653b1599e41a609ea8f77b42"],"user_facing":false}
