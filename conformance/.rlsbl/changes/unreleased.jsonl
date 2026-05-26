@@ -1,1 +1,2 @@
 {"commits":["d80c3f3585de0248a6dbddc30d12b56e0b656976"],"user_facing":true,"description":"**Fix.** Conformance test subprocesses now use the correct working directory for fixture file resolution.","type":"fix"}
+{"commits":["feae73fae6f1e08f1355bc7c1b9beae842397517"],"user_facing":false}
