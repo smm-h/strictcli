@@ -1,0 +1,247 @@
+[
+  {
+    "name": "at-prefix: @file basic reads file content",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "msg",
+              "type": "str",
+              "help": "message"
+            }
+          ],
+          "handler_prints": "{msg}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--msg", "@fixtures/simple.txt"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "hello world"
+    }
+  },
+  {
+    "name": "at-prefix: @file multiline preserves internal newlines",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "msg",
+              "type": "str",
+              "help": "message"
+            }
+          ],
+          "handler_prints": "{msg}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--msg", "@fixtures/multiline.txt"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "line one\nline two\nline three"
+    }
+  },
+  {
+    "name": "at-prefix: @file strips trailing whitespace",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "msg",
+              "type": "str",
+              "help": "message"
+            }
+          ],
+          "handler_prints": "{msg}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--msg", "@fixtures/trailing_ws.txt"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "content"
+    }
+  },
+  {
+    "name": "at-prefix: @file empty file yields empty string",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "msg",
+              "type": "str",
+              "help": "message"
+            }
+          ],
+          "handler_prints": "[{msg}]"
+        }
+      ]
+    },
+    "argv": ["cmd", "--msg", "@fixtures/empty.txt"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "[]"
+    }
+  },
+  {
+    "name": "at-prefix: @@ escape strips leading @",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "msg",
+              "type": "str",
+              "help": "message"
+            }
+          ],
+          "handler_prints": "{msg}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--msg", "@@literal"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "@literal"
+    }
+  },
+  {
+    "name": "at-prefix: @@@ double escape",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "msg",
+              "type": "str",
+              "help": "message"
+            }
+          ],
+          "handler_prints": "{msg}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--msg", "@@@more"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "@@more"
+    }
+  },
+  {
+    "name": "at-prefix: @file with =form flag syntax",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "msg",
+              "type": "str",
+              "help": "message"
+            }
+          ],
+          "handler_prints": "{msg}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--msg=@fixtures/simple.txt"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "hello world"
+    }
+  },
+  {
+    "name": "at-prefix: @file not found error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "msg",
+              "type": "str",
+              "help": "message"
+            }
+          ],
+          "handler_prints": "{msg}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--msg", "@nonexistent.txt"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "file not found",
+      "stderr_equals": "error: --msg: file not found: nonexistent.txt\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "at-prefix: non-string flag ignores @ prefix",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "count"
+            }
+          ],
+          "handler_prints": "count={count}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--count", "@5"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "expected integer",
+      "stderr_equals": "error: --count: expected integer, got '@5'\ntry 'myapp cmd --help'"
+    }
+  }
+]

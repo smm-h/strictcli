@@ -164,6 +164,16 @@ COVERAGE_DEFERRED_EXCLUSIONS: dict[str, str] = {
     # Implies conflict requires specific flag interaction setup
     "flag '--*' implies '--**', but '--**' was explicitly provided":
         "Needs Implies dependency test case in conformance framework",
+    # @-prefix stdin and edge-case errors that require infrastructure not
+    # available in the conformance subprocess framework
+    '--*: cannot read stdin':
+        "Requires stdin piping to subprocess, not supported in conformance runner",
+    '--*: stdin (@-) can only be used once per invocation':
+        "Requires stdin piping to subprocess, not supported in conformance runner",
+    '--*: file exceeds 1 MB limit':
+        "Requires a >1MB fixture file, impractical for conformance suite",
+    '--*: cannot read file: *':
+        "Requires a file with restricted permissions, platform-dependent",
 }
 
 
@@ -318,6 +328,13 @@ def extract_go_errors(
         r'return\s+nil,\s*nil,\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
     )
     for m in parse_sprintf_3.finditer(parse_src):
+        results.append(("parse", m.group(1)))
+
+    # return "", fmt.Sprintf("...", args) -- resolveAtPrefix helper
+    parse_sprintf_str_err = re.compile(
+        r'return\s+"",\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
+    )
+    for m in parse_sprintf_str_err.finditer(parse_src):
         results.append(("parse", m.group(1)))
 
     # --- Parse errors from strictcli.go (extractGlobalFlags and doParse) ---
