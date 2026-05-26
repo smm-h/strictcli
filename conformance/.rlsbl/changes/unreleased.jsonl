@@ -10,6 +10,7 @@
 {"commits":["1179ab585f13a63254148ef67705df81ff07b99d"],"user_facing":false}
 {"commits":["6bf56e841883195ea6045386b21f93a4d1c8ee2d"],"user_facing":true,"description":"**New feature.** Added @-prefix conformance test cases and fixture files.","type":"feature"}
 {"commits":["5f8b3d49ab264aa26dbe8c6c1d1f1bebb955d73b"],"user_facing":true,"description":"**Fix.** Updated schema.json to reflect new defaults object format.","type":"fix"}
-{"commits":["faa8f348f03793084361365f15bd9f8be06046ff","ef852d540829f5fb248c380b649e8c15e56b849b","4294effc300d83eeba90c3cb90c6429fc443c929","e7e5bc79004fe8c0883fdc5c34a1f36eb8d97e75","05d896e80e8df10ee737f50ae735e99695bbc213","33dfbe42738b308dc01df908c8286b48eb97e12f"],"user_facing":false}
+{"commits":["faa8f348f03793084361365f15bd9f8be06046ff","ef852d540829f5fb248c380b649e8c15e56b849b","4294effc300d83eeba90c3cb90c6429fc443c929"],"user_facing":false}
+{"commits":["e7e5bc79004fe8c0883fdc5c34a1f36eb8d97e75","05d896e80e8df10ee737f50ae735e99695bbc213","33dfbe42738b308dc01df908c8286b48eb97e12f"],"user_facing":false}
 {"commits":["1e354f1681539c39d71e4df7d57090d6b32d3f59"],"user_facing":false}
 {"commits":["f2b61b9ca7eb86207a0631d01cb672c39dcb89a0"],"user_facing":false}
