@@ -3122,12 +3122,27 @@ func TestDumpSchemaContents(t *testing.T) {
 	if schema["help"] != "My great app" {
 		t.Fatalf("expected help 'My great app', got %v", schema["help"])
 	}
-	// env_prefix should be null when not set
-	if schema["env_prefix"] != nil {
-		t.Fatalf("expected env_prefix to be null, got %v", schema["env_prefix"])
+	// env_prefix should be omitted when not set (default is null)
+	if _, ok := schema["env_prefix"]; ok {
+		t.Fatalf("expected env_prefix to be omitted, got %v", schema["env_prefix"])
 	}
-	if schema["config"] != false {
-		t.Fatalf("expected config false, got %v", schema["config"])
+	// config should be omitted when false (default is false)
+	if _, ok := schema["config"]; ok {
+		t.Fatalf("expected config to be omitted, got %v", schema["config"])
+	}
+	// defaults object must be present
+	defaults, ok := schema["defaults"]
+	if !ok {
+		t.Fatal("expected 'defaults' key in schema")
+	}
+	defaultsMap, ok := defaults.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected defaults to be a map, got %T", defaults)
+	}
+	for _, key := range []string{"app", "flag", "arg", "command", "group"} {
+		if _, ok := defaultsMap[key]; !ok {
+			t.Fatalf("expected defaults to contain key %q", key)
+		}
 	}
 
 	// Commands
@@ -3145,8 +3160,9 @@ func TestDumpSchemaContents(t *testing.T) {
 	if deploy["help"] != "Deploy the app" {
 		t.Fatalf("expected help 'Deploy the app', got %v", deploy["help"])
 	}
-	if deploy["passthrough"] != false {
-		t.Fatalf("expected passthrough false, got %v", deploy["passthrough"])
+	// passthrough should be omitted when false (default)
+	if _, ok := deploy["passthrough"]; ok {
+		t.Fatalf("expected passthrough to be omitted, got %v", deploy["passthrough"])
 	}
 
 	// Flags
@@ -3171,8 +3187,9 @@ func TestDumpSchemaContents(t *testing.T) {
 	if choices[0] != "prod" || choices[1] != "staging" {
 		t.Fatalf("expected choices [prod, staging], got %v", choices)
 	}
-	if targetFlag["hidden"] != false {
-		t.Fatalf("expected hidden false, got %v", targetFlag["hidden"])
+	// hidden should be omitted when false (default)
+	if _, ok := targetFlag["hidden"]; ok {
+		t.Fatalf("expected hidden to be omitted, got %v", targetFlag["hidden"])
 	}
 
 	forceFlag := flags[1].(map[string]interface{})
@@ -3201,11 +3218,13 @@ func TestDumpSchemaContents(t *testing.T) {
 	if envArg["help"] != "Environment name" {
 		t.Fatalf("expected arg help 'Environment name', got %v", envArg["help"])
 	}
-	if envArg["required"] != true {
-		t.Fatalf("expected required true, got %v", envArg["required"])
+	// required should be omitted when true (default)
+	if _, ok := envArg["required"]; ok {
+		t.Fatalf("expected required to be omitted (default is true), got %v", envArg["required"])
 	}
-	if envArg["variadic"] != false {
-		t.Fatalf("expected variadic false, got %v", envArg["variadic"])
+	// variadic should be omitted when false (default)
+	if _, ok := envArg["variadic"]; ok {
+		t.Fatalf("expected variadic to be omitted (default is false), got %v", envArg["variadic"])
 	}
 }
 

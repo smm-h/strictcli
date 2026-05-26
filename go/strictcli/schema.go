@@ -15,132 +15,232 @@ var flagTypeName = map[FlagType]string{
 }
 
 // serializeFlag converts a Flag to a JSON-serializable map matching the Python format.
+// Fields matching their defaults are omitted; see buildSchemaDefaults().
 func serializeFlag(f Flag) map[string]interface{} {
 	m := map[string]interface{}{
-		"name":       f.Name,
-		"type":       flagTypeName[f.Type],
-		"help":       f.Help,
-		"short":      nilIfEmpty(f.Short),
-		"default":    f.Default,
-		"env":        nilIfEmpty(f.Env),
-		"choices":    nil,
-		"repeatable": f.Repeatable,
-		"negatable":  nil,
-		"hidden":     false,
+		"name": f.Name,
+		"type": flagTypeName[f.Type],
+		"help": f.Help,
 	}
+
+	// short: default nil (omit when empty string -> nil)
+	if f.Short != "" {
+		m["short"] = f.Short
+	}
+
+	// default: default nil (omit when nil, unless repeatable with no explicit default)
+	dflt := f.Default
+	if f.Repeatable && f.Default == nil && !f.hasDefault {
+		dflt = []interface{}{}
+	}
+	if dflt != nil {
+		m["default"] = dflt
+	}
+
+	// env: default nil (omit when empty string -> nil)
+	if f.Env != "" {
+		m["env"] = f.Env
+	}
+
+	// choices: default nil (omit when nil)
 	if f.Choices != nil {
 		m["choices"] = f.Choices
 	}
+
+	// repeatable: default false (omit when false)
+	if f.Repeatable {
+		m["repeatable"] = true
+	}
+
+	// negatable: default nil (omit when nil, i.e. non-bool flags)
+	// For bool flags, only omit when nil (which doesn't happen since BoolFlag sets it)
 	if f.Type == TypeBool {
 		m["negatable"] = f.Negatable
 	}
-	// Repeatable flags with no explicit default serialize as empty list
-	if f.Repeatable && f.Default == nil && !f.hasDefault {
-		m["default"] = []interface{}{}
+
+	// hidden: default false (always false in current impl, so always omitted)
+	// If hidden were ever true, we'd emit it here.
+
+	return m
+}
+
+// serializeArg converts an Arg to a JSON-serializable map.
+// Fields matching their defaults are omitted; see buildSchemaDefaults().
+func serializeArg(a Arg) map[string]interface{} {
+	m := map[string]interface{}{
+		"name": a.Name,
+		"help": a.Help,
+	}
+	// required: default true (omit when true)
+	if !a.Required {
+		m["required"] = false
+	}
+	// variadic: default false (omit when false)
+	if a.IsVariadic {
+		m["variadic"] = true
 	}
 	return m
 }
 
-// nilIfEmpty returns nil if s is empty, otherwise s.
-func nilIfEmpty(s string) interface{} {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
-// serializeArg converts an Arg to a JSON-serializable map.
-func serializeArg(a Arg) map[string]interface{} {
-	return map[string]interface{}{
-		"name":     a.Name,
-		"help":     a.Help,
-		"required": a.Required,
-		"variadic": a.IsVariadic,
-	}
-}
-
 // serializeCommand converts a Command to a JSON-serializable map.
+// Fields matching their defaults are omitted; see buildSchemaDefaults().
 func serializeCommand(cmd *Command) map[string]interface{} {
-	flags := make([]interface{}, 0, len(cmd.Flags))
-	for _, f := range cmd.Flags {
-		flags = append(flags, serializeFlag(f))
+	m := map[string]interface{}{
+		"name": cmd.Name,
+		"help": cmd.Help,
 	}
-	args := make([]interface{}, 0, len(cmd.Args))
-	for _, a := range cmd.Args {
-		args = append(args, serializeArg(a))
+	// passthrough: default false (omit when false)
+	if cmd.Passthrough {
+		m["passthrough"] = true
 	}
-	return map[string]interface{}{
-		"name":        cmd.Name,
-		"help":        cmd.Help,
-		"flags":       flags,
-		"args":        args,
-		"passthrough": cmd.Passthrough,
+	// flags: default [] (omit when empty)
+	if len(cmd.Flags) > 0 {
+		flags := make([]interface{}, 0, len(cmd.Flags))
+		for _, f := range cmd.Flags {
+			flags = append(flags, serializeFlag(f))
+		}
+		m["flags"] = flags
 	}
+	// args: default [] (omit when empty)
+	if len(cmd.Args) > 0 {
+		args := make([]interface{}, 0, len(cmd.Args))
+		for _, a := range cmd.Args {
+			args = append(args, serializeArg(a))
+		}
+		m["args"] = args
+	}
+	return m
 }
 
 // serializeGroup converts a Group to a JSON-serializable map (recursive).
+// Fields matching their defaults are omitted; see buildSchemaDefaults().
 func serializeGroup(grp *Group) map[string]interface{} {
-	commands := make(map[string]interface{})
-	for name, cmd := range grp.Commands {
-		commands[name] = serializeCommand(cmd)
+	m := map[string]interface{}{
+		"name": grp.Name,
+		"help": grp.Help,
 	}
-	groups := make(map[string]interface{})
-	for name, sub := range grp.Groups {
-		groups[name] = serializeGroup(sub)
+	// commands: default {} (omit when empty)
+	if len(grp.Commands) > 0 {
+		commands := make(map[string]interface{})
+		for name, cmd := range grp.Commands {
+			commands[name] = serializeCommand(cmd)
+		}
+		m["commands"] = commands
 	}
-	deprecated := make(map[string]interface{})
-	for name, msg := range grp.deprecatedMap {
-		deprecated[name] = msg
+	// groups: default {} (omit when empty)
+	if len(grp.Groups) > 0 {
+		groups := make(map[string]interface{})
+		for name, sub := range grp.Groups {
+			groups[name] = serializeGroup(sub)
+		}
+		m["groups"] = groups
 	}
+	// deprecated: default {} (omit when empty)
+	if len(grp.deprecatedMap) > 0 {
+		deprecated := make(map[string]interface{})
+		for name, msg := range grp.deprecatedMap {
+			deprecated[name] = msg
+		}
+		m["deprecated"] = deprecated
+	}
+	return m
+}
+
+// buildSchemaDefaults returns the canonical defaults object for the schema.
+// Consumers use this to reconstruct omitted fields.
+func buildSchemaDefaults() map[string]interface{} {
 	return map[string]interface{}{
-		"name":       grp.Name,
-		"help":       grp.Help,
-		"commands":   commands,
-		"groups":     groups,
-		"deprecated": deprecated,
+		"app": map[string]interface{}{
+			"env_prefix":   nil,
+			"config":       false,
+			"global_flags": []interface{}{},
+			"commands":     map[string]interface{}{},
+			"groups":       map[string]interface{}{},
+			"deprecated":   map[string]interface{}{},
+		},
+		"flag": map[string]interface{}{
+			"short":      nil,
+			"default":    nil,
+			"env":        nil,
+			"choices":    nil,
+			"repeatable": false,
+			"negatable":  nil,
+			"hidden":     false,
+		},
+		"arg": map[string]interface{}{
+			"required": true,
+			"variadic": false,
+		},
+		"command": map[string]interface{}{
+			"passthrough": false,
+			"flags":       []interface{}{},
+			"args":        []interface{}{},
+		},
+		"group": map[string]interface{}{
+			"commands":   map[string]interface{}{},
+			"groups":     map[string]interface{}{},
+			"deprecated": map[string]interface{}{},
+		},
 	}
 }
 
 // dumpSchema produces a JSON-serializable map representing the app's command tree.
+// Fields matching their defaults are omitted; see buildSchemaDefaults().
 func dumpSchema(app *App) map[string]interface{} {
-	globalFlags := make([]interface{}, 0, len(app.globalFlags))
-	for _, f := range app.globalFlags {
-		globalFlags = append(globalFlags, serializeFlag(f))
-	}
-
-	commands := make(map[string]interface{})
-	for name, cmd := range app.commands {
-		commands[name] = serializeCommand(cmd)
-	}
-
-	groups := make(map[string]interface{})
-	for name, grp := range app.groups {
-		groups[name] = serializeGroup(grp)
-	}
-
-	deprecated := make(map[string]interface{})
-	for name, msg := range app.deprecatedMap {
-		deprecated[name] = msg
-	}
-
-	var envPrefix interface{}
-	if app.EnvPrefix == "" {
-		envPrefix = nil
-	} else {
-		envPrefix = app.EnvPrefix
-	}
-
 	schema := map[string]interface{}{
-		"name":         app.Name,
-		"version":      app.Version,
-		"help":         app.Help,
-		"env_prefix":   envPrefix,
-		"config":       app.configEnabled,
-		"global_flags": globalFlags,
-		"commands":     commands,
-		"groups":       groups,
-		"deprecated":   deprecated,
+		"name":     app.Name,
+		"version":  app.Version,
+		"help":     app.Help,
+		"defaults": buildSchemaDefaults(),
 	}
+
+	// env_prefix: default nil (omit when empty -> nil)
+	if app.EnvPrefix != "" {
+		schema["env_prefix"] = app.EnvPrefix
+	}
+
+	// config: default false (omit when false)
+	if app.configEnabled {
+		schema["config"] = true
+	}
+
+	// global_flags: default [] (omit when empty)
+	if len(app.globalFlags) > 0 {
+		globalFlags := make([]interface{}, 0, len(app.globalFlags))
+		for _, f := range app.globalFlags {
+			globalFlags = append(globalFlags, serializeFlag(f))
+		}
+		schema["global_flags"] = globalFlags
+	}
+
+	// commands: default {} (omit when empty)
+	if len(app.commands) > 0 {
+		commands := make(map[string]interface{})
+		for name, cmd := range app.commands {
+			commands[name] = serializeCommand(cmd)
+		}
+		schema["commands"] = commands
+	}
+
+	// groups: default {} (omit when empty)
+	if len(app.groups) > 0 {
+		groups := make(map[string]interface{})
+		for name, grp := range app.groups {
+			groups[name] = serializeGroup(grp)
+		}
+		schema["groups"] = groups
+	}
+
+	// deprecated: default {} (omit when empty)
+	if len(app.deprecatedMap) > 0 {
+		deprecated := make(map[string]interface{})
+		for name, msg := range app.deprecatedMap {
+			deprecated[name] = msg
+		}
+		schema["deprecated"] = deprecated
+	}
+
+	// checks: only present when checks are enabled (not a default-omission case)
 	if app.checksEnabled {
 		checksMap := make(map[string]interface{})
 		for name, def := range app.checkDefs {
