@@ -2,6 +2,17 @@
 
 # Changelog
 
+## 0.4.0
+
+### Features
+
+- **New fields.** Added config_path and config_format to the conformance schema for App.
+- **New feature.** Added @-prefix conformance test cases and fixture files.
+
+### Fixes
+
+- **Fix.** Updated schema.json to reflect new defaults object format.
+
 ## 0.3.6
 
 - No user-facing changes.
