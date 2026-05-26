@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.6.0
+
+### Features
+
+- **New feature.** Added config_path and config_format support (WithConfigPath, WithConfigFormat options).
+- **New feature.** `--dump-schema` omits fields matching defaults and includes a top-level `defaults` object documenting what missing fields mean.
+- **New feature.** `@`-prefix for string flag values: `@path` reads from file, `@-` reads from stdin, `@@` escapes. 1 MB size limit, trailing whitespace stripped.
+
 ## 0.5.4
 
 ### Features
