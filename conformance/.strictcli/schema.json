@@ -1,18 +1,43 @@
 {
   "commands": {
     "greet": {
-      "args": [],
-      "flags": [],
       "help": "say hello",
-      "name": "greet",
-      "passthrough": false
+      "name": "greet"
     }
   },
-  "config": false,
-  "deprecated": {},
-  "env_prefix": null,
-  "global_flags": [],
-  "groups": {},
+  "defaults": {
+    "app": {
+      "commands": {},
+      "config": false,
+      "deprecated": {},
+      "env_prefix": null,
+      "global_flags": [],
+      "groups": {}
+    },
+    "arg": {
+      "required": true,
+      "variadic": false
+    },
+    "command": {
+      "args": [],
+      "flags": [],
+      "passthrough": false
+    },
+    "flag": {
+      "choices": null,
+      "default": null,
+      "env": null,
+      "hidden": false,
+      "negatable": null,
+      "repeatable": false,
+      "short": null
+    },
+    "group": {
+      "commands": {},
+      "deprecated": {},
+      "groups": {}
+    }
+  },
   "help": "test app",
   "name": "myapp",
   "version": "1.0.0"
