@@ -3456,3 +3456,360 @@ func TestDumpSchemaCreatesDir(t *testing.T) {
 		t.Fatal("schema.json was not created")
 	}
 }
+
+// --- @-prefix tests ---
+
+func TestAtPrefixFileBasic(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "input.txt")
+	os.WriteFile(tmpFile, []byte("hello world"), 0644)
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@" + tmpFile})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "hello world" {
+		t.Fatalf("expected 'hello world', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixFileMultiline(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "input.txt")
+	os.WriteFile(tmpFile, []byte("line1\nline2\nline3"), 0644)
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@" + tmpFile})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "line1\nline2\nline3" {
+		t.Fatalf("expected 'line1\\nline2\\nline3', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixFileEmpty(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "empty.txt")
+	os.WriteFile(tmpFile, []byte(""), 0644)
+
+	app := simpleApp("greet", "say hello", ">{msg}<",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@" + tmpFile})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "><" {
+		t.Fatalf("expected '><', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixFileTrailingWhitespace(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "input.txt")
+	os.WriteFile(tmpFile, []byte("hello  \n\n"), 0644)
+
+	app := simpleApp("greet", "say hello", ">{msg}<",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@" + tmpFile})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != ">hello<" {
+		t.Fatalf("expected '>hello<', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixStdin(t *testing.T) {
+	// Save original stdin and restore after test
+	origStdin := os.Stdin
+	defer func() { os.Stdin = origStdin }()
+
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	go func() {
+		w.Write([]byte("from stdin\n"))
+		w.Close()
+	}()
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	result := app.Test([]string{"greet", "--msg", "@-"})
+	if result.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stdout != "from stdin" {
+		t.Fatalf("expected 'from stdin', got %q", result.Stdout)
+	}
+}
+
+func TestAtPrefixEscapeSingle(t *testing.T) {
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@@foo"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "@foo" {
+		t.Fatalf("expected '@foo', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixEscapeDouble(t *testing.T) {
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@@@"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "@@" {
+		t.Fatalf("expected '@@', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixFileNotFound(t *testing.T) {
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@/nonexistent/path.txt"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--msg: file not found: /nonexistent/path.txt") {
+		t.Fatalf("expected file not found error, got %q", r.Stderr)
+	}
+}
+
+func TestAtPrefixFileTooLarge(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "large.txt")
+	// Write just over 1MB
+	data := make([]byte, 1024*1024+1)
+	for i := range data {
+		data[i] = 'x'
+	}
+	os.WriteFile(tmpFile, data, 0644)
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@" + tmpFile})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--msg: file exceeds 1 MB limit") {
+		t.Fatalf("expected file too large error, got %q", r.Stderr)
+	}
+}
+
+func TestAtPrefixStdinDuplicate(t *testing.T) {
+	origStdin := os.Stdin
+	defer func() { os.Stdin = origStdin }()
+
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	go func() {
+		w.Write([]byte("data"))
+		w.Close()
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("greet", "say hello", func(args map[string]interface{}) int {
+		fmt.Print(args["msg"])
+		return 0
+	}, WithFlags(
+		StringFlag("msg", "message"),
+		StringFlag("other", "other message"),
+	))
+	result := app.Test([]string{"greet", "--msg", "@-", "--other", "@-"})
+	if result.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "--other: stdin (@-) can only be used once per invocation") {
+		t.Fatalf("expected stdin duplicate error, got %q", result.Stderr)
+	}
+}
+
+func TestAtPrefixStdinDuplicateGlobalAndCommand(t *testing.T) {
+	origStdin := os.Stdin
+	defer func() { os.Stdin = origStdin }()
+
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	go func() {
+		w.Write([]byte("data"))
+		w.Close()
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(StringFlag("token", "auth token"))
+	app.Command("greet", "say hello", func(args map[string]interface{}) int {
+		fmt.Print(args["msg"])
+		return 0
+	}, WithFlags(StringFlag("msg", "message")))
+
+	result := app.Test([]string{"--token", "@-", "greet", "--msg", "@-"})
+	if result.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "--msg: stdin (@-) can only be used once per invocation") {
+		t.Fatalf("expected stdin duplicate error, got %q", result.Stderr)
+	}
+}
+
+func TestAtPrefixNonStringIgnored(t *testing.T) {
+	app := simpleApp("greet", "say hello", "{count}",
+		WithFlags(IntFlag("count", "count")))
+	r := app.Test([]string{"greet", "--count", "@5"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "expected integer") {
+		t.Fatalf("expected integer parse error, got %q", r.Stderr)
+	}
+}
+
+func TestAtPrefixEnvVar(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "env_input.txt")
+	os.WriteFile(tmpFile, []byte("env value"), 0644)
+
+	os.Setenv("TEST_MSG_AT", "@"+tmpFile)
+	defer os.Unsetenv("TEST_MSG_AT")
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message", Env("TEST_MSG_AT"), Prefixed(false))))
+	r := app.Test([]string{"greet"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "env value" {
+		t.Fatalf("expected 'env value', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixEnvVarEscape(t *testing.T) {
+	os.Setenv("TEST_MSG_ESC", "@@literal")
+	defer os.Unsetenv("TEST_MSG_ESC")
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message", Env("TEST_MSG_ESC"), Prefixed(false))))
+	r := app.Test([]string{"greet"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "@literal" {
+		t.Fatalf("expected '@literal', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixGlobalFlag(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "token.txt")
+	os.WriteFile(tmpFile, []byte("secret-token"), 0644)
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(StringFlag("token", "auth token"))
+	app.Command("greet", "say hello", func(args map[string]interface{}) int {
+		fmt.Print(args["token"])
+		return 0
+	})
+	r := app.Test([]string{"--token", "@" + tmpFile, "greet"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "secret-token" {
+		t.Fatalf("expected 'secret-token', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixEqualsForm(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "input.txt")
+	os.WriteFile(tmpFile, []byte("equals-value"), 0644)
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg=@" + tmpFile})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "equals-value" {
+		t.Fatalf("expected 'equals-value', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixShortForm(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "input.txt")
+	os.WriteFile(tmpFile, []byte("short-value"), 0644)
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message", Short("m"))))
+	r := app.Test([]string{"greet", "-m", "@" + tmpFile})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "short-value" {
+		t.Fatalf("expected 'short-value', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixDefaultNotResolved(t *testing.T) {
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message", Default("@not-a-file"))))
+	r := app.Test([]string{"greet"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "@not-a-file" {
+		t.Fatalf("expected '@not-a-file', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixFileIsDirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	app := simpleApp("greet", "say hello", "{msg}",
+		WithFlags(StringFlag("msg", "message")))
+	r := app.Test([]string{"greet", "--msg", "@" + dir})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--msg: cannot read file: "+dir) {
+		t.Fatalf("expected cannot read file error, got %q", r.Stderr)
+	}
+}
+
+func TestAtPrefixGlobalFlagEnv(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "token.txt")
+	os.WriteFile(tmpFile, []byte("env-token  \n"), 0644)
+
+	os.Setenv("TEST_TOKEN_AT", "@"+tmpFile)
+	defer os.Unsetenv("TEST_TOKEN_AT")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(StringFlag("token", "auth token", Env("TEST_TOKEN_AT"), Prefixed(false)))
+	app.Command("greet", "say hello", func(args map[string]interface{}) int {
+		fmt.Print(args["token"])
+		return 0
+	})
+	r := app.Test([]string{"greet"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "env-token" {
+		t.Fatalf("expected 'env-token', got %q", r.Stdout)
+	}
+}
+
+func TestAtPrefixGlobalEqualsForm(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "input.txt")
+	os.WriteFile(tmpFile, []byte("global-eq"), 0644)
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(StringFlag("token", "auth token"))
+	app.Command("greet", "say hello", func(args map[string]interface{}) int {
+		fmt.Print(args["token"])
+		return 0
+	})
+	r := app.Test([]string{"--token=@" + tmpFile, "greet"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "global-eq" {
+		t.Fatalf("expected 'global-eq', got %q", r.Stdout)
+	}
+}

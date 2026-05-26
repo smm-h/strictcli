@@ -164,6 +164,8 @@ type App struct {
 	checkDefs           map[string]*checkDef
 	checkOrder          []string // sorted check names for deterministic listing
 	checkContextFactory func() CheckContext
+
+	stdinConsumedBy *string // tracks which flag consumed stdin via @-
 }
 
 // --- Option types ---
@@ -909,6 +911,9 @@ type parseResult struct {
 // doParse parses argv and returns a parseResult.
 // Exactly one of: (cmd+kwargs), helpText, versionText, or parseErr will be non-zero.
 func (a *App) doParse(argv []string) parseResult {
+	// Reset stdin tracking for each parse invocation
+	a.stdinConsumedBy = nil
+
 	// App-level --help/-h and --version/-v (no global flags present)
 	if len(argv) == 0 || (len(argv) == 1 && (argv[0] == "--help" || argv[0] == "-h")) {
 		return parseResult{helpText: formatAppHelp(a)}
@@ -987,7 +992,7 @@ func (a *App) doParse(argv []string) parseResult {
 			if cmd.Passthrough {
 				return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
 			}
-			kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData)
+			kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy)
 			if err != "" {
 				parts := append([]string{a.Name}, path...)
 				parts = append(parts, cmd.Name)
@@ -1100,7 +1105,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if f.Type == TypeBool {
 					return nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
 				}
-				val, err := parseGlobalFlagValue(f, valuePart)
+				val, err := parseGlobalFlagValue(f, valuePart, &a.stdinConsumedBy)
 				if err != "" {
 					return nil, nil, err
 				}
@@ -1128,7 +1133,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if i+1 >= len(argv) {
 					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
-				val, err := parseGlobalFlagValue(f, argv[i+1])
+				val, err := parseGlobalFlagValue(f, argv[i+1], &a.stdinConsumedBy)
 				if err != "" {
 					return nil, nil, err
 				}
@@ -1147,7 +1152,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if i+1 >= len(argv) {
 					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
-				val, err := parseGlobalFlagValue(f, argv[i+1])
+				val, err := parseGlobalFlagValue(f, argv[i+1], &a.stdinConsumedBy)
 				if err != "" {
 					return nil, nil, err
 				}
@@ -1210,10 +1215,14 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 						globalValues[f.Name] = floatVal
 					}
 				default:
+					resolved, errStr := resolveAtPrefix(f.Name, envVal, &a.stdinConsumedBy)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
 					if f.Repeatable {
-						globalValues[f.Name] = []interface{}{envVal}
+						globalValues[f.Name] = []interface{}{resolved}
 					} else {
-						globalValues[f.Name] = envVal
+						globalValues[f.Name] = resolved
 					}
 				}
 				continue
@@ -1305,7 +1314,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 }
 
 // parseGlobalFlagValue parses a string value for a global flag.
-func parseGlobalFlagValue(f *Flag, raw string) (interface{}, string) {
+func parseGlobalFlagValue(f *Flag, raw string, stdinConsumedBy **string) (interface{}, string) {
 	switch f.Type {
 	case TypeInt:
 		intVal, err := strconv.Atoi(raw)
@@ -1316,7 +1325,11 @@ func parseGlobalFlagValue(f *Flag, raw string) (interface{}, string) {
 	case TypeFloat:
 		return parseFloatStrict(f.Name, raw)
 	default:
-		return raw, ""
+		resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
+		if errStr != "" {
+			return nil, errStr
+		}
+		return resolved, ""
 	}
 }
 

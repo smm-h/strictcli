@@ -2,18 +2,69 @@ package strictcli
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"strconv"
 	"strings"
 )
 
+const atPrefixMaxSize = 1024 * 1024 // 1 MB
+
+// resolveAtPrefix resolves @-prefix for string flag values.
+// @path reads from file, @- reads from stdin, @@literal strips leading @.
+// Returns (resolved value, error message). Error message is "" on success.
+// stdinConsumedBy is a pointer to a *string tracking which flag consumed stdin.
+func resolveAtPrefix(flagName, raw string, stdinConsumedBy **string) (string, string) {
+	if !strings.HasPrefix(raw, "@") {
+		return raw, ""
+	}
+	if strings.HasPrefix(raw, "@@") {
+		return raw[1:], "" // strip leading @
+	}
+	if raw == "@-" {
+		if *stdinConsumedBy != nil {
+			return "", fmt.Sprintf("--%s: stdin (@-) can only be used once per invocation", flagName)
+		}
+		data, err := io.ReadAll(io.LimitReader(os.Stdin, int64(atPrefixMaxSize+1)))
+		if err != nil {
+			return "", fmt.Sprintf("--%s: cannot read stdin", flagName)
+		}
+		if len(data) > atPrefixMaxSize {
+			return "", fmt.Sprintf("--%s: file exceeds 1 MB limit", flagName)
+		}
+		consumed := flagName
+		*stdinConsumedBy = &consumed
+		return strings.TrimRight(string(data), " \t\n\r"), ""
+	}
+	// @path
+	path := raw[1:]
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Sprintf("--%s: file not found: %s", flagName, path)
+		}
+		return "", fmt.Sprintf("--%s: cannot read file: %s", flagName, path)
+	}
+	if info.IsDir() {
+		return "", fmt.Sprintf("--%s: cannot read file: %s", flagName, path)
+	}
+	if info.Size() > int64(atPrefixMaxSize) {
+		return "", fmt.Sprintf("--%s: file exceeds 1 MB limit", flagName)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Sprintf("--%s: cannot read file: %s", flagName, path)
+	}
+	return strings.TrimRight(string(data), " \t\n\r"), ""
+}
+
 // parseCommand parses tokens against a resolved command's flags and args.
 // globalFlags are also recognized in post-command tokens and returned separately
 // in postGlobalValues so the caller can merge them with pre-command globals.
 // configData is an optional map of config values (may be nil).
 // Returns (kwargs, postGlobalValues, errorString).
-func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}) (map[string]interface{}, map[string]interface{}, string) {
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string) (map[string]interface{}, map[string]interface{}, string) {
 	// Build flag lookup maps
 	longLookup := make(map[string]*Flag)    // --flag-name -> Flag
 	shortLookup := make(map[string]*Flag)   // -x -> Flag
@@ -102,7 +153,11 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					}
 					storeValue(f, floatVal)
 				} else {
-					storeValue(f, valuePart)
+					resolved, errStr := resolveAtPrefix(f.Name, valuePart, stdinConsumedBy)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
+					storeValue(f, resolved)
 				}
 			} else if _, ok := negationLookup[flagPart]; ok {
 				return nil, nil, fmt.Sprintf("flag '%s' is a boolean negation and does not take a value", flagPart)
@@ -147,7 +202,11 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					}
 					storeValue(f, floatVal)
 				} else {
-					storeValue(f, raw)
+					resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
+					storeValue(f, resolved)
 				}
 				i += 2
 			}
@@ -181,7 +240,11 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					}
 					storeValue(f, floatVal)
 				} else {
-					storeValue(f, raw)
+					resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
+					storeValue(f, resolved)
 				}
 				i += 2
 			}
@@ -243,10 +306,14 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				cliSet[f.Name] = floatVal
 			}
 		default: // TypeStr
+			resolved, errStr := resolveAtPrefix(f.Name, envVal, stdinConsumedBy)
+			if errStr != "" {
+				return nil, nil, errStr
+			}
 			if f.Repeatable {
-				cliSet[f.Name] = []interface{}{envVal}
+				cliSet[f.Name] = []interface{}{resolved}
 			} else {
-				cliSet[f.Name] = envVal
+				cliSet[f.Name] = resolved
 			}
 		}
 	}
