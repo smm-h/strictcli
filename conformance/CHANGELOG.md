@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.4.1
+
+### Fixes
+
+- **Fix.** Conformance test subprocesses now use the correct working directory for fixture file resolution.
+
 ## 0.4.0
 
 ### Features
