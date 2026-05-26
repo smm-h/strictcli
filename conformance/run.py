@@ -227,6 +227,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             capture_output=True,
             text=True,
             env=env,
+            cwd=str(CONFORMANCE_DIR),
             timeout=10,
         )
         raw_result = result
