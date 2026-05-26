@@ -316,6 +316,50 @@ def _float_parse_error(
     return _ParseError(f"--{flag_name}: expected float, got {raw!r}{suffix}")
 
 
+_AT_PREFIX_MAX_SIZE = 1024 * 1024  # 1 MB
+
+
+def _resolve_at_prefix(
+    flag_name: str, raw: str, stdin_consumed_by: str | None,
+) -> tuple[str, str | None]:
+    """Resolve @-prefix for string flag values.
+
+    Returns (resolved_value, updated_stdin_consumed_by).
+    """
+    if not raw.startswith("@"):
+        return raw, stdin_consumed_by
+    if raw.startswith("@@"):
+        return raw[1:], stdin_consumed_by
+    if raw == "@-":
+        if stdin_consumed_by is not None:
+            raise _ParseError(
+                f"--{flag_name}: stdin (@-) can only be used once per invocation"
+            )
+        try:
+            data = sys.stdin.read(_AT_PREFIX_MAX_SIZE + 1)
+            if len(data) > _AT_PREFIX_MAX_SIZE:
+                raise _ParseError(f"--{flag_name}: file exceeds 1 MB limit")
+            return data.rstrip(), flag_name
+        except _ParseError:
+            raise
+        except Exception:
+            raise _ParseError(f"--{flag_name}: cannot read stdin")
+    # @path -- read file
+    path = raw[1:]
+    if not os.path.exists(path):
+        raise _ParseError(f"--{flag_name}: file not found: {path}")
+    try:
+        with open(path, "r") as f:
+            data = f.read(_AT_PREFIX_MAX_SIZE + 1)
+        if len(data) > _AT_PREFIX_MAX_SIZE:
+            raise _ParseError(f"--{flag_name}: file exceeds 1 MB limit")
+        return data.rstrip(), stdin_consumed_by
+    except _ParseError:
+        raise
+    except Exception:
+        raise _ParseError(f"--{flag_name}: cannot read file: {path}")
+
+
 def _require_non_empty_str(value: str, field_name: str, class_name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{class_name}.{field_name} must be a non-empty string")
@@ -1024,6 +1068,7 @@ class App:
             raise _DumpSchemaRequested()
 
         # Step 1.5: parse global flags before command routing
+        self._stdin_consumed_by: str | None = None
         global_values, remaining = self._parse_global_flags(argv)
         self._last_global_values = global_values
 
@@ -1092,9 +1137,13 @@ class App:
             return cmd, rest
 
         # Step 3: parse remaining tokens for the resolved command
+        # Pass stdin_consumed_by as a mutable single-element list so
+        # _parse_command can update the shared state.
+        stdin_state: list[str | None] = [self._stdin_consumed_by]
         try:
             cmd, kwargs, post_global = _parse_command(
                 cmd, rest, self._global_flags, config_data=self._config_data,
+                stdin_consumed_by=stdin_state,
             )
         except _ParseError as e:
             prefix_parts = [self.name] + path + [cmd.name]
@@ -1181,7 +1230,10 @@ class App:
                         except ValueError as e:
                             raise _float_parse_error(f.name, value_part, e)
                     else:
-                        _store_value(f, value_part)
+                        resolved, self._stdin_consumed_by = _resolve_at_prefix(
+                            f.name, value_part, self._stdin_consumed_by,
+                        )
+                        _store_value(f, resolved)
                     i += 1
                     continue
                 elif flag_part in negation_lookup:
@@ -1222,7 +1274,10 @@ class App:
                             except ValueError as e:
                                 raise _float_parse_error(f.name, raw, e)
                         else:
-                            _store_value(f, raw)
+                            resolved, self._stdin_consumed_by = _resolve_at_prefix(
+                                f.name, raw, self._stdin_consumed_by,
+                            )
+                            _store_value(f, resolved)
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -1250,7 +1305,10 @@ class App:
                             except ValueError as e:
                                 raise _float_parse_error(f.name, raw, e)
                         else:
-                            _store_value(f, raw)
+                            resolved, self._stdin_consumed_by = _resolve_at_prefix(
+                                f.name, raw, self._stdin_consumed_by,
+                            )
+                            _store_value(f, resolved)
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -1297,7 +1355,10 @@ class App:
                             raise _float_parse_error(f.name, env_val, e, env=f.env)
                         cli_set[f.name] = [coerced] if f.repeatable else coerced
                     else:
-                        cli_set[f.name] = [env_val] if f.repeatable else env_val
+                        resolved, self._stdin_consumed_by = _resolve_at_prefix(
+                            f.name, env_val, self._stdin_consumed_by,
+                        )
+                        cli_set[f.name] = [resolved] if f.repeatable else resolved
 
         # Resolve config values for global flags not set by CLI or env
         if self._config_data:
@@ -1471,12 +1532,18 @@ def _parse_command(
     tokens: list[str],
     global_flags: list[Flag] | None = None,
     config_data: dict | None = None,
+    stdin_consumed_by: list[str | None] | None = None,
 ) -> tuple[Command, dict[str, object], dict[str, object]]:
     """Parse tokens against a resolved command's flags and args.
 
     Returns (cmd, kwargs, global_cli_set) where global_cli_set contains
     any global flag values parsed from tokens appearing after the command name.
+
+    stdin_consumed_by is a mutable single-element list tracking which flag
+    has already consumed stdin via @-. Updated in-place.
     """
+    if stdin_consumed_by is None:
+        stdin_consumed_by = [None]
 
     # Build flag lookup dicts
     long_lookup: dict[str, Flag] = {}  # --flag-name -> Flag
@@ -1554,7 +1621,10 @@ def _parse_command(
                     except ValueError as e:
                         raise _float_parse_error(f.name, value_part, e)
                 else:
-                    _store_value(f, value_part)
+                    resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                        f.name, value_part, stdin_consumed_by[0],
+                    )
+                    _store_value(f, resolved)
             elif flag_part in negation_lookup:
                 raise _ParseError(
                     f"flag '{flag_part}' is a boolean negation and does not take a value"
@@ -1593,7 +1663,10 @@ def _parse_command(
                             except ValueError as e:
                                 raise _float_parse_error(f.name, raw, e)
                         else:
-                            _store_value(f, raw)
+                            resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                                f.name, raw, stdin_consumed_by[0],
+                            )
+                            _store_value(f, resolved)
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -1623,7 +1696,10 @@ def _parse_command(
                             except ValueError as e:
                                 raise _float_parse_error(f.name, raw, e)
                         else:
-                            _store_value(f, raw)
+                            resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                                f.name, raw, stdin_consumed_by[0],
+                            )
+                            _store_value(f, resolved)
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -1668,7 +1744,10 @@ def _parse_command(
                         raise _float_parse_error(f.name, env_val, e, env=f.env)
                     cli_set[f.name] = [coerced] if f.repeatable else coerced
                 else:
-                    cli_set[f.name] = [env_val] if f.repeatable else env_val
+                    resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                        f.name, env_val, stdin_consumed_by[0],
+                    )
+                    cli_set[f.name] = [resolved] if f.repeatable else resolved
 
     # Step 4.2: resolve config values for flags not set by CLI or env
     if config_data:
