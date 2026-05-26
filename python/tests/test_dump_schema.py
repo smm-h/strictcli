@@ -64,7 +64,7 @@ class TestSchemaContent:
         assert data["version"] == "2.3.4"
         assert data["help"] == "My great app"
 
-    def test_env_prefix_null_when_none(self, tmp_path, monkeypatch):
+    def test_env_prefix_omitted_when_none(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
@@ -74,7 +74,7 @@ class TestSchemaContent:
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
-        assert data["env_prefix"] is None
+        assert "env_prefix" not in data
 
     def test_env_prefix_when_set(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -88,7 +88,7 @@ class TestSchemaContent:
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         assert data["env_prefix"] == "MYAPP"
 
-    def test_config_field(self, tmp_path, monkeypatch):
+    def test_config_omitted_when_false(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         app_no_config = _make_app(config=False)
 
@@ -98,7 +98,7 @@ class TestSchemaContent:
 
         app_no_config.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
-        assert data["config"] is False
+        assert "config" not in data
 
 
 class TestSchemaCommands:
@@ -129,7 +129,7 @@ class TestSchemaCommands:
         assert target_flag["type"] == "str"
         assert target_flag["short"] == "t"
         assert target_flag["choices"] == ["prod", "staging"]
-        assert target_flag["hidden"] is False
+        assert "hidden" not in target_flag  # hidden=False is the default, omitted
 
         force_flag = cmd["flags"][1]
         assert force_flag["name"] == "force"
@@ -153,8 +153,8 @@ class TestSchemaCommands:
         arg = cmd["args"][0]
         assert arg["name"] == "name"
         assert arg["help"] == "Who to greet"
-        assert arg["required"] is True
-        assert arg["variadic"] is False
+        assert "required" not in arg  # required=True is the default, omitted
+        assert "variadic" not in arg  # variadic=False is the default, omitted
 
     def test_passthrough_command(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -182,7 +182,7 @@ class TestSchemaCommands:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["greet"]
-        assert cmd["passthrough"] is False
+        assert "passthrough" not in cmd  # passthrough=False is the default, omitted
 
 
 class TestSchemaGroups:
@@ -280,7 +280,7 @@ class TestSchemaGlobalFlags:
         assert output["type"] == "str"
         assert output["default"] == "text"
         assert output["choices"] == ["text", "json"]
-        assert output["negatable"] is None  # non-bool flag
+        assert "negatable" not in output  # non-bool flag, null is the default, omitted
 
 
 class TestSchemaDeprecated:
@@ -346,10 +346,10 @@ class TestSchemaEmptyApp:
         assert result.exit_code == 0
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         assert data["name"] == "testapp"
-        assert data["commands"] == {}
-        assert data["groups"] == {}
-        assert data["global_flags"] == []
-        assert data["deprecated"] == {}
+        assert "commands" not in data  # empty dict is the default, omitted
+        assert "groups" not in data  # empty dict is the default, omitted
+        assert "global_flags" not in data  # empty list is the default, omitted
+        assert "deprecated" not in data  # empty dict is the default, omitted
 
 
 class TestSchemaFlagTypes:
@@ -443,3 +443,222 @@ class TestDumpSchemaWithOtherArgs:
         result = app.test(["greet", "--dump-schema"])
         assert result.exit_code == 0
         assert (tmp_path / ".strictcli" / "schema.json").exists()
+
+
+class TestSchemaDefaults:
+    """Schema includes a top-level 'defaults' key documenting what missing fields mean."""
+
+    def test_defaults_key_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert "defaults" in data
+        assert isinstance(data["defaults"], dict)
+
+    def test_defaults_structure(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        defaults = data["defaults"]
+
+        # App defaults
+        assert defaults["app"]["env_prefix"] is None
+        assert defaults["app"]["config"] is False
+        assert defaults["app"]["global_flags"] == []
+        assert defaults["app"]["commands"] == {}
+        assert defaults["app"]["groups"] == {}
+        assert defaults["app"]["deprecated"] == {}
+
+        # Flag defaults
+        assert defaults["flag"]["short"] is None
+        assert defaults["flag"]["default"] is None
+        assert defaults["flag"]["env"] is None
+        assert defaults["flag"]["choices"] is None
+        assert defaults["flag"]["repeatable"] is False
+        assert defaults["flag"]["negatable"] is None
+        assert defaults["flag"]["hidden"] is False
+
+        # Arg defaults
+        assert defaults["arg"]["required"] is True
+        assert defaults["arg"]["variadic"] is False
+
+        # Command defaults
+        assert defaults["command"]["passthrough"] is False
+        assert defaults["command"]["flags"] == []
+        assert defaults["command"]["args"] == []
+
+        # Group defaults
+        assert defaults["group"]["commands"] == {}
+        assert defaults["group"]["groups"] == {}
+        assert defaults["group"]["deprecated"] == {}
+
+
+class TestSchemaOmitsDefaults:
+    """Fields matching their defaults are omitted from the schema output."""
+
+    def test_flag_null_fields_omitted(self, tmp_path, monkeypatch):
+        """A flag with all-default optional fields should only have name/type/help."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="A command")
+        @strictcli.flag("name", type=str, help="A name")
+        def cmd(name):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        flag = data["commands"]["cmd"]["flags"][0]
+        assert flag["name"] == "name"
+        assert flag["type"] == "str"
+        assert flag["help"] == "A name"
+        # All optional fields should be absent (they match defaults)
+        assert "short" not in flag
+        assert "default" not in flag
+        assert "env" not in flag
+        assert "choices" not in flag
+        assert "repeatable" not in flag
+        assert "negatable" not in flag
+        assert "hidden" not in flag
+
+    def test_command_empty_flags_and_args_omitted(self, tmp_path, monkeypatch):
+        """A command with no flags/args should omit those lists."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["noop"]
+        assert "flags" not in cmd
+        assert "args" not in cmd
+        assert "passthrough" not in cmd
+
+    def test_group_empty_subgroups_and_deprecated_omitted(self, tmp_path, monkeypatch):
+        """A group with no subgroups or deprecated commands omits those."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+        grp = app.group("stuff", help="Stuff management")
+
+        @grp.command("do", help="Do stuff")
+        def do_stuff():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        group_data = data["groups"]["stuff"]
+        assert "commands" in group_data  # has commands, so present
+        assert "groups" not in group_data  # empty, omitted
+        assert "deprecated" not in group_data  # empty, omitted
+
+    def test_arg_defaults_omitted(self, tmp_path, monkeypatch):
+        """An arg with required=True and variadic=False omits both."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="A command",
+                     args=[strictcli.Arg(name="target", help="The target")])
+        def cmd(target):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        arg = data["commands"]["cmd"]["args"][0]
+        assert arg["name"] == "target"
+        assert arg["help"] == "The target"
+        assert "required" not in arg
+        assert "variadic" not in arg
+
+
+class TestSchemaNonDefaultValues:
+    """Non-default values are present in the schema output."""
+
+    def test_arg_required_false_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="A command",
+                     args=[strictcli.Arg(name="target", help="The target",
+                                         required=False)])
+        def cmd(target):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        arg = data["commands"]["cmd"]["args"][0]
+        assert arg["required"] is False
+
+    def test_arg_variadic_true_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="A command",
+                     args=[strictcli.Arg(name="files", help="Files to process",
+                                         variadic=True)])
+        def cmd(files):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        arg = data["commands"]["cmd"]["args"][0]
+        assert arg["variadic"] is True
+
+    def test_passthrough_true_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("run", help="Run a command",
+                     passthrough=strictcli.Passthrough(
+                         handler=lambda name, args, globals: 0))
+        def run():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["run"]
+        assert cmd["passthrough"] is True
+
+    def test_flag_with_all_non_default_values(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="A command")
+        @strictcli.flag("level", type=int, help="Level", short="l",
+                        default=3, env="MY_LEVEL", choices=[1, 2, 3])
+        def cmd(level):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        flag = data["commands"]["cmd"]["flags"][0]
+        assert flag["short"] == "l"
+        assert flag["default"] == 3
+        assert flag["env"] == "MY_LEVEL"
+        assert flag["choices"] == [1, 2, 3]
+
+    def test_config_true_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app(config=True)
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert data["config"] is True

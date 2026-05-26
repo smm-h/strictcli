@@ -2870,66 +2870,158 @@ _TYPE_NAMES = {str: "str", bool: "bool", int: "int", float: "float"}
 
 
 def _serialize_flag(f: Flag) -> dict:
-    """Serialize a Flag to a JSON-serializable dict."""
-    return {
+    """Serialize a Flag to a JSON-serializable dict.
+
+    Identity fields (name, type, help) are always included.
+    Other fields are omitted when they match the schema defaults.
+    """
+    d: dict = {
         "name": f.name,
         "type": _TYPE_NAMES[f.type],
         "help": f.help,
-        "short": f.short,
-        "default": f.default,
-        "env": f.env,
-        "choices": f.choices,
-        "repeatable": f.repeatable,
-        "negatable": f.negatable if f.type is bool else None,
-        "hidden": False,
     }
+    if f.short is not None:
+        d["short"] = f.short
+    if f.default is not None:
+        d["default"] = f.default
+    if f.env is not None:
+        d["env"] = f.env
+    if f.choices is not None:
+        d["choices"] = f.choices
+    if f.repeatable:
+        d["repeatable"] = f.repeatable
+    negatable = f.negatable if f.type is bool else None
+    if negatable is not None:
+        d["negatable"] = negatable
+    # hidden is currently always False, so always omitted
+    return d
 
 
 def _serialize_arg(a: Arg) -> dict:
-    """Serialize an Arg to a JSON-serializable dict."""
-    return {
+    """Serialize an Arg to a JSON-serializable dict.
+
+    Identity fields (name, help) are always included.
+    Other fields are omitted when they match the schema defaults.
+    """
+    d: dict = {
         "name": a.name,
         "help": a.help,
-        "required": a.required,
-        "variadic": a.variadic,
     }
+    if not a.required:
+        d["required"] = a.required
+    if a.variadic:
+        d["variadic"] = a.variadic
+    return d
 
 
 def _serialize_command(cmd: Command) -> dict:
-    """Serialize a Command to a JSON-serializable dict."""
-    return {
+    """Serialize a Command to a JSON-serializable dict.
+
+    Identity fields (name, help) are always included.
+    Other fields are omitted when they match the schema defaults.
+    """
+    d: dict = {
         "name": cmd.name,
         "help": cmd.help,
-        "flags": [_serialize_flag(f) for f in cmd.flags],
-        "args": [_serialize_arg(a) for a in cmd.args],
-        "passthrough": cmd.passthrough is not None,
     }
+    if cmd.passthrough is not None:
+        d["passthrough"] = True
+    flags = [_serialize_flag(f) for f in cmd.flags]
+    if flags:
+        d["flags"] = flags
+    args = [_serialize_arg(a) for a in cmd.args]
+    if args:
+        d["args"] = args
+    return d
 
 
 def _serialize_group(group: Group) -> dict:
-    """Serialize a Group to a JSON-serializable dict (recursive)."""
-    return {
+    """Serialize a Group to a JSON-serializable dict (recursive).
+
+    Identity fields (name, help) are always included.
+    Other fields are omitted when they match the schema defaults.
+    """
+    d: dict = {
         "name": group.name,
         "help": group.help,
-        "commands": {name: _serialize_command(cmd) for name, cmd in group.commands.items()},
-        "groups": {name: _serialize_group(g) for name, g in group._groups.items()},
-        "deprecated": {name: dep.message for name, dep in group.deprecated.items()},
+    }
+    commands = {name: _serialize_command(cmd) for name, cmd in group.commands.items()}
+    if commands:
+        d["commands"] = commands
+    groups = {name: _serialize_group(g) for name, g in group._groups.items()}
+    if groups:
+        d["groups"] = groups
+    deprecated = {name: dep.message for name, dep in group.deprecated.items()}
+    if deprecated:
+        d["deprecated"] = deprecated
+    return d
+
+
+def _build_schema_defaults() -> dict:
+    """Return the defaults object documenting what 'missing' means in the schema."""
+    return {
+        "app": {
+            "env_prefix": None,
+            "config": False,
+            "global_flags": [],
+            "commands": {},
+            "groups": {},
+            "deprecated": {},
+        },
+        "flag": {
+            "short": None,
+            "default": None,
+            "env": None,
+            "choices": None,
+            "repeatable": False,
+            "negatable": None,
+            "hidden": False,
+        },
+        "arg": {
+            "required": True,
+            "variadic": False,
+        },
+        "command": {
+            "passthrough": False,
+            "flags": [],
+            "args": [],
+        },
+        "group": {
+            "commands": {},
+            "groups": {},
+            "deprecated": {},
+        },
     }
 
 
 def _dump_schema(app: App) -> dict:
-    """Produce a JSON-serializable dict representing the app's command tree."""
-    schema = {
+    """Produce a JSON-serializable dict representing the app's command tree.
+
+    Fields whose values match the schema defaults are omitted.
+    The top-level ``defaults`` key documents what each missing field means.
+    """
+    schema: dict = {
+        "defaults": _build_schema_defaults(),
         "name": app.name,
         "version": app.version,
         "help": app.help,
-        "env_prefix": app.env_prefix,
-        "config": app.config,
-        "global_flags": [_serialize_flag(f) for f in app._global_flags],
-        "commands": {name: _serialize_command(cmd) for name, cmd in app._commands.items()},
-        "groups": {name: _serialize_group(grp) for name, grp in app._groups.items()},
-        "deprecated": {name: dep.message for name, dep in app._deprecated.items()},
     }
+    if app.env_prefix is not None:
+        schema["env_prefix"] = app.env_prefix
+    if app.config:
+        schema["config"] = app.config
+    global_flags = [_serialize_flag(f) for f in app._global_flags]
+    if global_flags:
+        schema["global_flags"] = global_flags
+    commands = {name: _serialize_command(cmd) for name, cmd in app._commands.items()}
+    if commands:
+        schema["commands"] = commands
+    groups = {name: _serialize_group(grp) for name, grp in app._groups.items()}
+    if groups:
+        schema["groups"] = groups
+    deprecated = {name: dep.message for name, dep in app._deprecated.items()}
+    if deprecated:
+        schema["deprecated"] = deprecated
     if app._checks_enabled:
         schema["checks"] = {
             name: {
