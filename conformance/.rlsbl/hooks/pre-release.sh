@@ -6,3 +6,8 @@ set -euo pipefail
 #   - Check for uncommitted documentation
 #   - Verify external service connectivity
 #   - Run integration tests not covered by the test suite
+
+# Run conformance checks before release
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/conformance"
+conformance check --tag pre-release
