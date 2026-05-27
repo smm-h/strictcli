@@ -8,6 +8,7 @@ version = "0.4.1"
 description = "Conformance validation tool for strictcli"
 requires-python = ">=3.12"
 dependencies = ["strictcli", "jsonschema"]
+keywords = ["rlsbl"]
 
 [project.scripts]
 conformance = "conformance_tool:main"

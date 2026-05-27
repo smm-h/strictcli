@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.5.0
+
+### Features
+
+- **New feature.** Conformance CLI tool with strictcli check system. Install with `pip install -e conformance/` and run `conformance check --tag pre-release` for all validation checks.
+- **New feature.** Pre-release hooks run conformance checks automatically before every release.
+- **New feature.** CI workflow uses the conformance check command instead of direct script calls.
+
 ## 0.4.1
 
 ### Fixes
