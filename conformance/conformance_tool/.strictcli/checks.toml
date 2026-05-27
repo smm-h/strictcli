@@ -1,0 +1,39 @@
+[checks.api-surface]
+tags = ["pre-release", "fast", "parity"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
+[checks.error-parity]
+tags = ["pre-release", "fast", "parity"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
+[checks.conformance-python]
+tags = ["pre-release", "conformance", "python"]
+severity = "error"
+fast = false
+pure = false
+needs_network = false
+depends_on = []
+
+[checks.conformance-go]
+tags = ["pre-release", "conformance", "go"]
+severity = "error"
+fast = false
+pure = false
+needs_network = false
+depends_on = []
+
+[checks.conformance-parity]
+tags = ["pre-release", "conformance", "parity"]
+severity = "error"
+fast = false
+pure = false
+needs_network = false
+depends_on = ["conformance-python", "conformance-go"]
