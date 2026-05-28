@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-28T17:44:01Z",
+  "generated_at": "2026-05-28T17:53:59Z",
   "package_count": 3,
   "packages": {
     "strictcli": {
@@ -27,7 +27,7 @@
     "conformance": {
       "path": "conformance",
       "target": "plain",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "description": null,
       "deps": [
         "strictcli"
