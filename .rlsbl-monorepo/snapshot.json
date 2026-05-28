@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-05-27T15:01:03Z",
+  "generated_at": "2026-05-28T17:33:51Z",
   "package_count": 3,
   "packages": {
     "strictcli": {
       "path": "python",
       "target": "pypi",
-      "version": "0.10.0",
+      "version": "0.11.0",
       "description": null,
       "deps": [],
       "rdeps": [
