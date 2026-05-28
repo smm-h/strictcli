@@ -13,5 +13,8 @@ keywords = ["rlsbl"]
 [project.scripts]
 conformance = "conformance_tool:main"
 
+[tool.uv.sources]
+strictcli = { path = "../python", editable = true }
+
 [tool.setuptools]
 packages = ["conformance_tool"]
