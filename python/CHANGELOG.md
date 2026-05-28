@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.11.0
+
+### Features
+
+- **New feature.** `checks_path` parameter on `App` for explicit checks.toml location, replacing CWD-based discovery.
+
 ## 0.10.0
 
 ### Features
