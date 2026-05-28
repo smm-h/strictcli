@@ -2,6 +2,16 @@
 
 # Changelog
 
+## 0.6.0
+
+### Features
+
+- **Improvement.** Replaced os.chdir hack with checks_path parameter for cleaner check discovery.
+
+### Fixes
+
+- **Fix.** Temp files created in system temp directory instead of polluting the conformance directory.
+
 ## 0.5.0
 
 ### Features
