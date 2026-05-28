@@ -667,6 +667,7 @@ class App:
     config: bool = False
     config_path: str | None = None
     config_format: str = "json"
+    checks_path: str | Path | None = None
     flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
     _groups: dict[str, Group] = field(default_factory=dict)
@@ -704,7 +705,12 @@ class App:
             self._register_config_group()
         # Discover checks TOML
         self._check_context_factory: Callable | None = None
-        checks_toml_path = Path.cwd() / ".strictcli" / "checks.toml"
+        if self.checks_path is not None:
+            checks_toml_path = Path(self.checks_path).resolve()
+            if not checks_toml_path.is_file():
+                raise ValueError(f"checks_path does not exist: {self.checks_path}")
+        else:
+            checks_toml_path = Path.cwd() / ".strictcli" / "checks.toml"
         if checks_toml_path.is_file():
             self._check_defs: dict[str, _CheckDef] = _load_checks_toml(checks_toml_path)
             self._checks_enabled = True

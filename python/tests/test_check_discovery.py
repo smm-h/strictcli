@@ -63,6 +63,73 @@ class TestDiscovery:
             strictcli.App(name="testapp", version="1.0.0", help="test app")
 
 
+class TestChecksPath:
+    def test_explicit_path_discovers_checks(self, tmp_path, monkeypatch):
+        """checks_path points to a valid TOML in a non-CWD directory."""
+        # Put checks.toml somewhere that is NOT CWD/.strictcli/
+        custom_dir = tmp_path / "custom"
+        custom_dir.mkdir()
+        toml_file = custom_dir / "checks.toml"
+        toml_file.write_text(VALID_TOML)
+
+        # chdir to a directory with NO .strictcli/
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        monkeypatch.chdir(empty_dir)
+
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+        assert app._checks_enabled is True
+        assert "lint-code" in app._check_defs
+        assert "check-deps" in app._check_defs
+
+    def test_explicit_path_as_pathlib(self, tmp_path, monkeypatch):
+        """checks_path accepts a Path object."""
+        custom_dir = tmp_path / "custom"
+        custom_dir.mkdir()
+        toml_file = custom_dir / "checks.toml"
+        toml_file.write_text(VALID_TOML)
+
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        monkeypatch.chdir(empty_dir)
+
+        from pathlib import Path
+
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=Path(str(toml_file)),
+        )
+        assert app._checks_enabled is True
+        assert "lint-code" in app._check_defs
+
+    def test_nonexistent_path_raises(self, tmp_path, monkeypatch):
+        """checks_path pointing to a missing file raises ValueError."""
+        monkeypatch.chdir(tmp_path)
+        bad_path = tmp_path / "nope" / "checks.toml"
+
+        with pytest.raises(ValueError, match="checks_path does not exist"):
+            strictcli.App(
+                name="testapp", version="1.0.0", help="test app",
+                checks_path=str(bad_path),
+            )
+
+    def test_none_uses_cwd_discovery(self, tmp_path, monkeypatch):
+        """checks_path=None (default) falls back to CWD-based discovery."""
+        (tmp_path / ".strictcli").mkdir()
+        (tmp_path / ".strictcli" / "checks.toml").write_text(VALID_TOML)
+        monkeypatch.chdir(tmp_path)
+
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=None,
+        )
+        assert app._checks_enabled is True
+        assert "lint-code" in app._check_defs
+
+
 class TestCheckDecorator:
     def test_registers_implementation(self, tmp_path, monkeypatch):
         (tmp_path / ".strictcli").mkdir()
