@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.7.0
+
+### Features
+
+- **New feature.** `WithChecksPath` option for explicit checks.toml location, replacing CWD-based discovery.
+
 ## 0.6.0
 
 ### Features
