@@ -1754,6 +1754,62 @@ func TestDumpSchema_WithoutChecks(t *testing.T) {
 	}
 }
 
+// --- WithChecksPath tests ---
+
+func TestChecksPath_ValidPath(t *testing.T) {
+	// Create a temp dir with checks.toml (not in .strictcli/ subdirectory)
+	dir := t.TempDir()
+	tomlPath := filepath.Join(dir, "checks.toml")
+	if err := os.WriteFile(tomlPath, []byte(validChecksToml), 0644); err != nil {
+		t.Fatalf("failed to write checks.toml: %v", err)
+	}
+
+	// Chdir to a directory with NO .strictcli/ so CWD discovery won't find anything
+	origDir, _ := os.Getwd()
+	os.Chdir(t.TempDir())
+	defer os.Chdir(origDir)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithChecksPath(tomlPath))
+	if !app.checksEnabled {
+		t.Fatal("expected checksEnabled to be true with WithChecksPath")
+	}
+	if len(app.checkDefs) != 2 {
+		t.Fatalf("expected 2 check defs, got %d", len(app.checkDefs))
+	}
+	if app.checkDefs["lint-code"] == nil {
+		t.Fatal("expected lint-code check def")
+	}
+	if app.checkDefs["check-deps"] == nil {
+		t.Fatal("expected check-deps check def")
+	}
+}
+
+func TestChecksPath_NonexistentFile(t *testing.T) {
+	// Chdir to a directory with NO .strictcli/ so CWD discovery won't interfere
+	origDir, _ := os.Getwd()
+	os.Chdir(t.TempDir())
+	defer os.Chdir(origDir)
+
+	bogusPath := filepath.Join(t.TempDir(), "nonexistent", "checks.toml")
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for nonexistent checks_path")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("expected string panic, got %T: %v", r, r)
+		}
+		expected := "checks_path does not exist: " + bogusPath
+		if msg != expected {
+			t.Errorf("expected panic %q, got %q", expected, msg)
+		}
+	}()
+
+	NewApp("testapp", "1.0.0", "test app", WithChecksPath(bogusPath))
+}
+
 // Ensure unused imports don't cause errors
 var _ = sort.Strings
 var _ = fmt.Sprintf

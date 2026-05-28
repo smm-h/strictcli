@@ -161,6 +161,7 @@ type App struct {
 	configData          map[string]interface{}
 
 	checksEnabled       bool
+	checksPathOverride  string
 	checkDefs           map[string]*checkDef
 	checkOrder          []string // sorted check names for deterministic listing
 	checkContextFactory func() CheckContext
@@ -198,6 +199,13 @@ func WithConfigPath(path string) AppOption {
 func WithConfigFormat(format string) AppOption {
 	return func(a *App) {
 		a.configFormat = format
+	}
+}
+
+// WithChecksPath overrides CWD-based discovery of checks.toml with an explicit path.
+func WithChecksPath(path string) AppOption {
+	return func(a *App) {
+		a.checksPathOverride = path
 	}
 }
 
@@ -552,19 +560,28 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		a.configData = loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		a.registerConfigGroup()
 	}
-	// Discover .strictcli/checks.toml in the current working directory
-	if wd, err := os.Getwd(); err == nil {
-		checksPath := filepath.Join(wd, ".strictcli", "checks.toml")
-		if _, err := os.Stat(checksPath); err == nil {
-			defs, order, err := loadChecksToml(checksPath)
-			if err != nil {
-				panic(fmt.Sprintf("checks.toml: %s", err))
-			}
-			a.checkDefs = defs
-			a.checkOrder = order
-			a.checksEnabled = true
-			a.registerCheckCommand()
+	// Discover checks.toml: explicit path override or CWD-based discovery
+	var checksPath string
+	if a.checksPathOverride != "" {
+		if _, err := os.Stat(a.checksPathOverride); err != nil {
+			panic(fmt.Sprintf("checks_path does not exist: %s", a.checksPathOverride))
 		}
+		checksPath = a.checksPathOverride
+	} else if wd, err := os.Getwd(); err == nil {
+		candidate := filepath.Join(wd, ".strictcli", "checks.toml")
+		if _, err := os.Stat(candidate); err == nil {
+			checksPath = candidate
+		}
+	}
+	if checksPath != "" {
+		defs, order, err := loadChecksToml(checksPath)
+		if err != nil {
+			panic(fmt.Sprintf("checks.toml: %s", err))
+		}
+		a.checkDefs = defs
+		a.checkOrder = order
+		a.checksEnabled = true
+		a.registerCheckCommand()
 	}
 	return a
 }
