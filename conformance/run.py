@@ -102,7 +102,7 @@ def _build_go_binary(app_def: dict) -> str:
     source = _generate_go_source(app_def)
 
     # Create a temp directory with go.mod and main.go
-    build_dir = tempfile.mkdtemp(prefix="strictcli_go_", dir=str(CONFORMANCE_DIR))
+    build_dir = tempfile.mkdtemp(prefix="strictcli_go_")
     main_go = os.path.join(build_dir, "main.go")
     go_mod = os.path.join(build_dir, "go.mod")
     binary = os.path.join(build_dir, "app")
@@ -198,9 +198,17 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
 
     if target == "python":
         script = _generate_python_script(case["app"])
-        # Write script to temp file
+        # Fix the sys.path to use an absolute path so the script works from
+        # any directory (it's generated with a __file__-relative path by
+        # ref_python.py which only works inside the conformance dir).
+        python_dir = str(PROJECT_ROOT / "python")
+        script = script.replace(
+            "sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))",
+            f"sys.path.insert(0, {python_dir!r})",
+        )
+        # Write script to temp file (in system temp dir, not the project tree)
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", dir=str(CONFORMANCE_DIR), delete=False
+            mode="w", suffix=".py", prefix="strictcli_py_", delete=False
         ) as f:
             f.write(script)
             script_path = f.name
