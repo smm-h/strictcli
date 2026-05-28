@@ -16,5 +16,6 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.sum
       - run: go vet ./...
       - run: go test ./... -race -short -timeout=10m
