@@ -1,6 +1,5 @@
 """Conformance validation tool for strictcli -- dogfoods the check system."""
 
-import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -18,19 +17,12 @@ class ConformanceContext:
     project_root: Path
 
 
-# chdir so App discovers conformance_tool/.strictcli/checks.toml
-# instead of conformance/.strictcli/ (which would conflict with
-# generated test scripts that also run from conformance/).
-_prev_cwd = os.getcwd()
-os.chdir(TOOL_DIR)
-
 app = App(
     name="conformance",
     version=(CONFORMANCE_DIR / "VERSION").read_text().strip(),
     help="Conformance validation tool for strictcli",
+    checks_path=TOOL_DIR / ".strictcli" / "checks.toml",
 )
-
-os.chdir(_prev_cwd)
 
 app.set_check_context(lambda: ConformanceContext(project_root=PROJECT_ROOT))
 
