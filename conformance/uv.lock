@@ -135,7 +135,7 @@ wheels = [
 
 [[package]]
 name = "strictcli"
-version = "0.11.0"
+version = "0.12.0"
 source = { editable = "../python" }
 
 [package.metadata]
@@ -149,7 +149,7 @@ dev = [
 
 [[package]]
 name = "strictcli-conformance"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },

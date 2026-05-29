@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.7.0
+
+### Breaking
+
+- **Breaking.** Conformance generators and test cases updated for `WithChecks`/`checks_path` API and required `app` field.
+
 ## 0.6.0
 
 ### Features
