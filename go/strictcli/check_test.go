@@ -1878,33 +1878,11 @@ depends_on = []
 }
 
 func TestNewApp_NoWithChecks_CWDIgnored(t *testing.T) {
-	// Create a .strictcli/checks.toml in a temp dir and chdir to it.
-	// Without WithChecks, checks should NOT be enabled.
-	dir := t.TempDir()
-	scDir := filepath.Join(dir, ".strictcli")
-	if err := os.MkdirAll(scDir, 0755); err != nil {
-		t.Fatalf("failed to create .strictcli dir: %v", err)
-	}
-	tomlContent := `
-app = "testapp"
-[checks.foo]
-tags = ["a"]
-severity = "error"
-fast = true
-pure = true
-needs_network = false
-depends_on = []
-`
-	if err := os.WriteFile(filepath.Join(scDir, "checks.toml"), []byte(tomlContent), 0644); err != nil {
-		t.Fatalf("failed to write checks.toml: %v", err)
-	}
-	origDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(origDir)
-
+	// Without WithChecks, checks should NOT be enabled — regardless of what
+	// exists on disk. No need to chdir; the code never probes CWD.
 	app := NewApp("testapp", "1.0.0", "test app")
 	if app.checksEnabled {
-		t.Fatal("expected checksEnabled to be false when WithChecks is not used, even with CWD checks.toml")
+		t.Fatal("expected checksEnabled to be false when WithChecks is not used")
 	}
 }
 
