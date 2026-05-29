@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.12.0
+
+### Breaking
+
+- **Breaking.** CWD auto-discovery of checks.toml removed; checks must be explicitly enabled via `checks_path=`. checks.toml now requires a top-level `app` field matching the app name.
+
 ## 0.11.0
 
 ### Features
