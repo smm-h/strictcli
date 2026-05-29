@@ -135,9 +135,6 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
     # Go path.Match can return an error for invalid glob patterns
     'invalid glob pattern *: *':
         "Go-specific path.Match error; Python fnmatch never errors on patterns",
-    # Go requires [checks] key; Python returns empty dict for missing key
-    'checks.toml: missing required top-level key "checks"':
-        "Go requires [checks] key; Python returns empty dict when missing",
     # Go wraps float env var errors with a generic suffix pattern
     '* (from env var *)':
         "Go generic env var error wrapper; Python embeds env var in specific messages",
