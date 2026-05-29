@@ -1,8 +1,76 @@
 {
+  "checks": {
+    "lint": {
+      "depends_on": [],
+      "fast": true,
+      "needs_network": false,
+      "pure": true,
+      "severity": "error",
+      "tags": [
+        "release"
+      ]
+    }
+  },
   "commands": {
-    "greet": {
-      "help": "say hello",
-      "name": "greet"
+    "check": {
+      "flags": [
+        {
+          "default": false,
+          "help": "Run all checks",
+          "name": "all",
+          "negatable": true,
+          "type": "bool"
+        },
+        {
+          "default": "",
+          "help": "Tag DSL expression",
+          "name": "tag",
+          "type": "str"
+        },
+        {
+          "default": "",
+          "help": "Glob pattern for check names",
+          "name": "name",
+          "type": "str"
+        },
+        {
+          "default": false,
+          "help": "List checks and tags",
+          "name": "list",
+          "negatable": true,
+          "type": "bool"
+        },
+        {
+          "default": false,
+          "help": "JSON output",
+          "name": "json",
+          "negatable": true,
+          "type": "bool"
+        },
+        {
+          "default": false,
+          "help": "Warnings do not cause failure",
+          "name": "ignore-warnings",
+          "negatable": true,
+          "type": "bool"
+        },
+        {
+          "default": false,
+          "help": "Show all details",
+          "name": "verbose",
+          "negatable": true,
+          "type": "bool"
+        },
+        {
+          "default": false,
+          "help": "Show plan without executing",
+          "name": "dry-run",
+          "negatable": true,
+          "type": "bool"
+        }
+      ],
+      "help": "Run project checks",
+      "name": "check"
     }
   },
   "defaults": {
@@ -38,7 +106,7 @@
       "groups": {}
     }
   },
-  "help": "test app",
-  "name": "myapp",
+  "help": "test",
+  "name": "testapp",
   "version": "1.0.0"
 }
