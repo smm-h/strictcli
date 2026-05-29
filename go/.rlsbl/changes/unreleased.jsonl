@@ -1,1 +1,2 @@
 {"commits":["8a7a74881b5730f8aa0dc9fdbbabe7ecf66dc531","d604e97d59fa0e252bfd179a2e4d0f0f62757677"],"user_facing":true,"description":"**Breaking.** `WithChecksPath(path)` renamed to `WithChecks(path)`. CWD auto-discovery of checks.toml removed; checks must be explicitly enabled. checks.toml now requires a top-level `app` field matching the app name.","type":"breaking"}
+{"commits":["1521c56634138322707fbf9eec8845fc1641ff7d"],"user_facing":true,"description":"**Fix.** Removed double `checks.toml:` prefix in check system error messages.","type":"fix"}
