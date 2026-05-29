@@ -566,7 +566,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		}
 		appName, defs, order, err := loadChecksToml(a.checksPath)
 		if err != nil {
-			panic(fmt.Sprintf("checks.toml: %s", err))
+			panic(err.Error())
 		}
 		if appName != a.Name {
 			panic(fmt.Sprintf("checks.toml: app %q does not match app name %q", appName, a.Name))
