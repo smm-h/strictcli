@@ -87,11 +87,11 @@ When adding a feature to one implementation, add it to both and add conformance 
 
 ### Check system
 
-Registered via `.strictcli/checks.toml` (source of truth, committed to repo) + `@app.check("name")` (Python) / `app.RegisterCheck("name", fn)` (Go). Both must agree — declared but unregistered or registered but undeclared are errors.
+Enabled via `WithChecks(path)` (Go) / `checks_path=` (Python), pointing to a TOML file (source of truth, committed to repo). Checks are registered in code via `@app.check("name")` (Python) / `app.RegisterCheck("name", fn)` (Go). Both must agree — declared but unregistered or registered but undeclared are errors (double-entry security). The TOML file requires a top-level `app` field that must match the app name.
 
-**TOML schema** (`.strictcli/checks.toml`): `[checks.<name>]` sections with required fields: `tags` (list of strings), `severity` ("error"/"warn"), `fast` (bool), `pure` (bool), `needs_network` (bool), `depends_on` (list of check names). Check names: `[a-z][a-z0-9-]*`. Every field must be explicit — no defaults section.
+**TOML schema**: Required top-level `app` field (must match app name). `[checks.<name>]` sections with required fields: `tags` (list of strings), `severity` ("error"/"warn"), `fast` (bool), `pure` (bool), `needs_network` (bool), `depends_on` (list of check names). Check names: `[a-z][a-z0-9-]*`. Every field must be explicit — no defaults section. The `[checks]` section is optional — an `app` field with no checks is a valid TOML file.
 
-**Check command**: auto-registered when TOML discovered in CWD. 8 flags: `--all`, `--tag <dsl>`, `--name <glob>`, `--list`, `--json`, `--ignore-warnings`, `--verbose`, `--dry-run`. No flags = show help. Hidden from help when no TOML exists.
+**Check command**: auto-registered when checks are enabled via `WithChecks(path)` (Go) or `checks_path=` (Python). 8 flags: `--all`, `--tag <dsl>`, `--name <glob>`, `--list`, `--json`, `--ignore-warnings`, `--verbose`, `--dry-run`. No flags = show help. Hidden from help when no TOML exists.
 
 **Tag DSL**: `--tag` accepts a set-operation expression. Operators by precedence (tightest first): `!` (NOT), `&` (AND), `^` (XOR), `|` (OR), `-` (DIFF). Parentheses for grouping. Example: `--tag "(release | changelog) & !slow"`.
 
