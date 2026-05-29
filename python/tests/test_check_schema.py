@@ -6,6 +6,8 @@ import strictcli
 
 
 CHECKS_TOML = """\
+app = "testapp"
+
 [checks.lint-code]
 tags = ["code", "fast"]
 severity = "error"
@@ -28,11 +30,14 @@ class TestSchemaWithChecks:
     """--dump-schema includes checks key when checks are enabled."""
 
     def test_checks_key_present(self, tmp_path, monkeypatch):
-        (tmp_path / ".strictcli").mkdir()
-        (tmp_path / ".strictcli" / "checks.toml").write_text(CHECKS_TOML)
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(CHECKS_TOML)
         monkeypatch.chdir(tmp_path)
 
-        app = strictcli.App(name="testapp", version="1.0.0", help="test app")
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
 
         @app.check("lint-code")
         def lint_impl(ctx):
@@ -54,11 +59,14 @@ class TestSchemaWithChecks:
         assert len(data["checks"]) == 2
 
     def test_check_metadata_correct(self, tmp_path, monkeypatch):
-        (tmp_path / ".strictcli").mkdir()
-        (tmp_path / ".strictcli" / "checks.toml").write_text(CHECKS_TOML)
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(CHECKS_TOML)
         monkeypatch.chdir(tmp_path)
 
-        app = strictcli.App(name="testapp", version="1.0.0", help="test app")
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
 
         @app.check("lint-code")
         def lint_impl(ctx):

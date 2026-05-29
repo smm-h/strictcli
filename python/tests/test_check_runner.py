@@ -113,7 +113,7 @@ class TestRunChecks:
     def _make_app_with_checks(self, check_defs, tmp_path, monkeypatch):
         """Build an App with pre-populated check definitions."""
         # Write a minimal TOML so the app discovers checks
-        toml_lines = []
+        toml_lines = ['app = "testapp"', ""]
         for name, cdef in check_defs.items():
             tags_str = ", ".join(f'"{t}"' for t in cdef.tags)
             deps_str = ", ".join(f'"{d}"' for d in cdef.depends_on)
@@ -126,11 +126,13 @@ class TestRunChecks:
             toml_lines.append(f"depends_on = [{deps_str}]")
             toml_lines.append("")
 
-        (tmp_path / ".strictcli").mkdir(exist_ok=True)
-        (tmp_path / ".strictcli" / "checks.toml").write_text("\n".join(toml_lines))
-        monkeypatch.chdir(tmp_path)
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text("\n".join(toml_lines))
 
-        app = strictcli.App(name="testapp", version="1.0.0", help="test app")
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
         # Inject the impl functions from our check_defs
         for name, cdef in check_defs.items():
             if cdef.impl is not None:

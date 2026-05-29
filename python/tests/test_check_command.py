@@ -11,6 +11,8 @@ from strictcli import CheckResult
 
 
 TWO_CHECKS_TOML = """\
+app = "testapp"
+
 [checks.version-check]
 tags = ["release"]
 severity = "error"
@@ -29,6 +31,8 @@ depends_on = []
 """
 
 THREE_CHECKS_WITH_DEP_TOML = """\
+app = "testapp"
+
 [checks.base-check]
 tags = ["infra"]
 severity = "error"
@@ -66,11 +70,13 @@ def _setup_checks_app(tmp_path, monkeypatch, toml_content, register_impls=True,
 
     pass_results: dict mapping check name to CheckResult. If None, all return pass.
     """
-    (tmp_path / ".strictcli").mkdir(exist_ok=True)
-    (tmp_path / ".strictcli" / "checks.toml").write_text(toml_content)
-    monkeypatch.chdir(tmp_path)
+    toml_file = tmp_path / "checks.toml"
+    toml_file.write_text(toml_content)
 
-    app = strictcli.App(name="testapp", version="1.0.0", help="test app")
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test app",
+        checks_path=str(toml_file),
+    )
 
     if register_impls:
         if pass_results is None:
@@ -317,13 +323,15 @@ class TestCheckIgnoreWarnings:
 
 
 class TestCheckNoContextFactory:
-    def test_no_context_factory_error(self, tmp_path, monkeypatch):
+    def test_no_context_factory_error(self, tmp_path):
         """Running checks without set_check_context produces error."""
-        (tmp_path / ".strictcli").mkdir(exist_ok=True)
-        (tmp_path / ".strictcli" / "checks.toml").write_text(TWO_CHECKS_TOML)
-        monkeypatch.chdir(tmp_path)
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(TWO_CHECKS_TOML)
 
-        app = strictcli.App(name="testapp", version="1.0.0", help="test app")
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
         for name in app._check_defs:
             app._check_defs[name].impl = (
                 lambda ctx, n=name: CheckResult(status="pass", message=f"{n} OK")

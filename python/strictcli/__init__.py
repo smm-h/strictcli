@@ -130,8 +130,8 @@ _CHECK_REQUIRED_FIELDS = {"tags", "severity", "fast", "pure", "needs_network", "
 _CHECK_VALID_SEVERITIES = {"error", "warn"}
 
 
-def _load_checks_toml(path: str | Path) -> dict[str, _CheckDef]:
-    """Parse and validate a checks.toml file, returning check definitions.
+def _load_checks_toml(path: str | Path) -> tuple[str, dict[str, _CheckDef]]:
+    """Parse and validate a checks.toml file, returning (app_name, check_defs).
 
     Raises ValueError on any schema violation, file error, or invalid TOML.
     """
@@ -145,13 +145,20 @@ def _load_checks_toml(path: str | Path) -> dict[str, _CheckDef]:
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"checks.toml: {exc}") from exc
 
-    # Only [checks] is allowed at the top level
+    # Only "app" and [checks] are allowed at the top level
     for key in data:
-        if key != "checks":
+        if key not in ("app", "checks"):
             raise ValueError(f'checks.toml: unknown top-level key "{key}"')
 
+    # Validate required "app" field
+    if "app" not in data:
+        raise ValueError('checks.toml: missing required top-level key "app"')
+    if not isinstance(data["app"], str) or not data["app"]:
+        raise ValueError('checks.toml: "app" must be a non-empty string')
+    app_name = data["app"]
+
     if "checks" not in data:
-        return {}
+        return (app_name, {})
 
     checks_section = data["checks"]
     if not isinstance(checks_section, dict):
@@ -243,7 +250,7 @@ def _load_checks_toml(path: str | Path) -> dict[str, _CheckDef]:
                     f'unknown check "{dep}"'
                 )
 
-    return result
+    return (app_name, result)
 
 
 class _HelpRequested(Exception):
@@ -709,14 +716,15 @@ class App:
             checks_toml_path = Path(self.checks_path).resolve()
             if not checks_toml_path.is_file():
                 raise ValueError(f"checks_path does not exist: {self.checks_path}")
-        else:
-            checks_toml_path = Path.cwd() / ".strictcli" / "checks.toml"
-        if checks_toml_path.is_file():
-            self._check_defs: dict[str, _CheckDef] = _load_checks_toml(checks_toml_path)
+            app_name, self._check_defs = _load_checks_toml(checks_toml_path)
+            if app_name != self.name:
+                raise ValueError(
+                    f'checks.toml: app "{app_name}" does not match app name "{self.name}"'
+                )
             self._checks_enabled = True
             self._register_check_command()
         else:
-            self._check_defs = {}
+            self._check_defs: dict[str, _CheckDef] = {}
             self._checks_enabled = False
 
     @property
@@ -730,7 +738,7 @@ class App:
             if not self._checks_enabled:
                 raise ValueError(
                     f'cannot register check "{name}": '
-                    f"no .strictcli/checks.toml found"
+                    f"checks not enabled"
                 )
             if name not in self._check_defs:
                 raise ValueError(
@@ -756,7 +764,7 @@ class App:
         )
         if missing:
             return (
-                "checks declared in .strictcli/checks.toml but not registered: "
+                "checks declared in checks.toml but not registered: "
                 + ", ".join(missing)
             )
         return None
