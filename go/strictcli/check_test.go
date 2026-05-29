@@ -1598,6 +1598,7 @@ func TestCheckCommand_NoContextFactory_Error(t *testing.T) {
 // --- Phase 7: Schema integration tests ---
 
 func TestDumpSchema_WithChecks(t *testing.T) {
+	chdirTemp(t)
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
@@ -1698,6 +1699,7 @@ func TestDumpSchema_WithChecks(t *testing.T) {
 }
 
 func TestDumpSchema_WithoutChecks(t *testing.T) {
+	chdirTemp(t)
 	app := NewApp("testapp", "1.0.0", "test app")
 	app.Command("noop", "does nothing", func(args map[string]interface{}) int {
 		return 0
