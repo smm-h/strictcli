@@ -587,7 +587,7 @@ func (a *App) RegisterCheck(name string, fn func(CheckContext) CheckResult) {
 	}
 	def, ok := a.checkDefs[name]
 	if !ok {
-		panic(fmt.Sprintf("cannot register check %q: not declared in .strictcli/checks.toml", name))
+		panic(fmt.Sprintf("cannot register check %q: not declared in checks.toml", name))
 	}
 	if def.impl != nil {
 		panic(fmt.Sprintf("check %q: duplicate registration", name))

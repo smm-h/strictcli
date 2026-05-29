@@ -743,7 +743,7 @@ class App:
             if name not in self._check_defs:
                 raise ValueError(
                     f'cannot register check "{name}": '
-                    f"not declared in .strictcli/checks.toml"
+                    f"not declared in checks.toml"
                 )
             if self._check_defs[name].impl is not None:
                 raise ValueError(f'check "{name}": duplicate registration')

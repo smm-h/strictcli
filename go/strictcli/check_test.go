@@ -554,7 +554,7 @@ func TestRegisterCheck_UndeclaredName_Panics(t *testing.T) {
 			t.Fatal("expected panic for undeclared check name")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "not declared in .strictcli/checks.toml") {
+		if !strings.Contains(msg, "not declared in checks.toml") {
 			t.Fatalf("unexpected panic message: %s", msg)
 		}
 	}()
