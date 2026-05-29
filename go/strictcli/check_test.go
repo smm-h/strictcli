@@ -39,6 +39,8 @@ func writeToml(t *testing.T, dir, content string) string {
 func TestLoadChecksToml_Valid(t *testing.T) {
 	dir := t.TempDir()
 	path := writeToml(t, dir, `
+app = "testapp"
+
 [checks.lint-code]
 tags = ["code", "fast"]
 severity = "error"
@@ -56,7 +58,7 @@ needs_network = true
 depends_on = ["lint-code"]
 `)
 
-	defs, order, err := loadChecksToml(path)
+	_, defs, order, err := loadChecksToml(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,6 +132,7 @@ func TestLoadChecksToml_MissingField(t *testing.T) {
 		{
 			name: "missing tags",
 			toml: `
+app = "testapp"
 [checks.foo]
 severity = "error"
 fast = true
@@ -142,6 +145,7 @@ depends_on = []
 		{
 			name: "missing severity",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 fast = true
@@ -154,6 +158,7 @@ depends_on = []
 		{
 			name: "missing fast",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "error"
@@ -166,6 +171,7 @@ depends_on = []
 		{
 			name: "missing pure",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "error"
@@ -178,6 +184,7 @@ depends_on = []
 		{
 			name: "missing needs_network",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "error"
@@ -190,6 +197,7 @@ depends_on = []
 		{
 			name: "missing depends_on",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "error"
@@ -205,7 +213,7 @@ needs_network = false
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := writeToml(t, dir, tc.toml)
-			_, _, err := loadChecksToml(path)
+			_, _, _, err := loadChecksToml(path)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -225,6 +233,7 @@ func TestLoadChecksToml_WrongTypes(t *testing.T) {
 		{
 			name: "tags is string instead of array",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = "not-an-array"
 severity = "error"
@@ -238,6 +247,7 @@ depends_on = []
 		{
 			name: "severity is integer",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = 42
@@ -251,6 +261,7 @@ depends_on = []
 		{
 			name: "fast is string",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "error"
@@ -264,6 +275,7 @@ depends_on = []
 		{
 			name: "invalid severity value",
 			toml: `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "critical"
@@ -280,7 +292,7 @@ depends_on = []
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := writeToml(t, dir, tc.toml)
-			_, _, err := loadChecksToml(path)
+			_, _, _, err := loadChecksToml(path)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -294,6 +306,7 @@ depends_on = []
 func TestLoadChecksToml_UnknownFields(t *testing.T) {
 	dir := t.TempDir()
 	path := writeToml(t, dir, `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "error"
@@ -303,7 +316,7 @@ needs_network = false
 depends_on = []
 extra_field = "bad"
 `)
-	_, _, err := loadChecksToml(path)
+	_, _, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for unknown field")
 	}
@@ -315,6 +328,7 @@ extra_field = "bad"
 func TestLoadChecksToml_UnknownTopLevelKey(t *testing.T) {
 	dir := t.TempDir()
 	path := writeToml(t, dir, `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "error"
@@ -326,7 +340,7 @@ depends_on = []
 [metadata]
 version = "1.0"
 `)
-	_, _, err := loadChecksToml(path)
+	_, _, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for unknown top-level key")
 	}
@@ -350,6 +364,7 @@ func TestLoadChecksToml_InvalidCheckName(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			toml := `
+app = "testapp"
 [checks.` + tc.checkName + `]
 tags = ["a"]
 severity = "error"
@@ -359,7 +374,7 @@ needs_network = false
 depends_on = []
 `
 			path := writeToml(t, dir, toml)
-			_, _, err := loadChecksToml(path)
+			_, _, _, err := loadChecksToml(path)
 			if err == nil {
 				t.Fatal("expected error for invalid check name")
 			}
@@ -373,6 +388,7 @@ depends_on = []
 func TestLoadChecksToml_DependsOnValidation(t *testing.T) {
 	dir := t.TempDir()
 	path := writeToml(t, dir, `
+app = "testapp"
 [checks.foo]
 tags = ["a"]
 severity = "error"
@@ -381,7 +397,7 @@ pure = true
 needs_network = false
 depends_on = ["nonexistent"]
 `)
-	_, _, err := loadChecksToml(path)
+	_, _, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for depends_on referencing unknown check")
 	}
@@ -393,6 +409,7 @@ depends_on = ["nonexistent"]
 func TestLoadChecksToml_EmptyTags(t *testing.T) {
 	dir := t.TempDir()
 	path := writeToml(t, dir, `
+app = "testapp"
 [checks.foo]
 tags = []
 severity = "error"
@@ -401,7 +418,7 @@ pure = true
 needs_network = false
 depends_on = []
 `)
-	defs, _, err := loadChecksToml(path)
+	_, defs, _, err := loadChecksToml(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -411,7 +428,7 @@ depends_on = []
 }
 
 func TestLoadChecksToml_FileNotFound(t *testing.T) {
-	_, _, err := loadChecksToml("/nonexistent/checks.toml")
+	_, _, _, err := loadChecksToml("/nonexistent/checks.toml")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -423,7 +440,7 @@ func TestLoadChecksToml_MissingChecksKey(t *testing.T) {
 [something]
 foo = "bar"
 `)
-	_, _, err := loadChecksToml(path)
+	_, _, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for missing checks key")
 	}
@@ -435,37 +452,25 @@ foo = "bar"
 func TestLoadChecksToml_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	path := writeToml(t, dir, ``)
-	_, _, err := loadChecksToml(path)
+	_, _, _, err := loadChecksToml(path)
 	if err == nil {
 		t.Fatal("expected error for empty file")
 	}
-	if !strings.Contains(err.Error(), `missing required top-level key "checks"`) {
-		t.Errorf("expected error about missing checks key, got %q", err.Error())
+	if !strings.Contains(err.Error(), `missing required top-level key "app"`) {
+		t.Errorf("expected error about missing app key, got %q", err.Error())
 	}
 }
 
-// --- Helper: set up a temp dir with .strictcli/checks.toml and chdir to it ---
-
-func setupChecksDir(t *testing.T, tomlContent string) (cleanup func()) {
+// writeChecksFile writes TOML content to a temp file and returns its path.
+// Used with WithChecks(path) to enable the check system without CWD discovery.
+func writeChecksFile(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
-	scDir := filepath.Join(dir, ".strictcli")
-	if err := os.MkdirAll(scDir, 0755); err != nil {
-		t.Fatalf("failed to create .strictcli dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(scDir, "checks.toml"), []byte(tomlContent), 0644); err != nil {
+	path := filepath.Join(dir, "checks.toml")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write checks.toml: %v", err)
 	}
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get cwd: %v", err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("failed to chdir: %v", err)
-	}
-	return func() {
-		os.Chdir(origDir)
-	}
+	return path
 }
 
 // testCheckContext is a minimal CheckContext for testing.
@@ -478,6 +483,8 @@ func (c *testCheckContext) ProjectRoot() string { return c.root }
 // --- Phase 3: Discovery and Registration tests ---
 
 const validChecksToml = `
+app = "testapp"
+
 [checks.lint-code]
 tags = ["code", "fast"]
 severity = "error"
@@ -495,11 +502,10 @@ needs_network = true
 depends_on = ["lint-code"]
 `
 
-func TestNewApp_DiscoverChecksToml(t *testing.T) {
-	cleanup := setupChecksDir(t, validChecksToml)
-	defer cleanup()
+func TestNewApp_WithChecks(t *testing.T) {
+	checksPath := writeChecksFile(t, validChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	if !app.checksEnabled {
 		t.Fatal("expected checksEnabled to be true")
 	}
@@ -514,15 +520,10 @@ func TestNewApp_DiscoverChecksToml(t *testing.T) {
 	}
 }
 
-func TestNewApp_NoChecksToml(t *testing.T) {
-	dir := t.TempDir()
-	origDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(origDir)
-
+func TestNewApp_NoWithChecks(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
 	if app.checksEnabled {
-		t.Fatal("expected checksEnabled to be false when no checks.toml")
+		t.Fatal("expected checksEnabled to be false when no WithChecks")
 	}
 	if app.checkDefs != nil {
 		t.Fatal("expected checkDefs to be nil")
@@ -530,10 +531,9 @@ func TestNewApp_NoChecksToml(t *testing.T) {
 }
 
 func TestRegisterCheck_DeclaredName(t *testing.T) {
-	cleanup := setupChecksDir(t, validChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, validChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("lint-code", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -544,10 +544,9 @@ func TestRegisterCheck_DeclaredName(t *testing.T) {
 }
 
 func TestRegisterCheck_UndeclaredName_Panics(t *testing.T) {
-	cleanup := setupChecksDir(t, validChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, validChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 
 	defer func() {
 		r := recover()
@@ -566,10 +565,9 @@ func TestRegisterCheck_UndeclaredName_Panics(t *testing.T) {
 }
 
 func TestRegisterCheck_DuplicatePanics(t *testing.T) {
-	cleanup := setupChecksDir(t, validChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, validChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("lint-code", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass"}
 	})
@@ -591,20 +589,15 @@ func TestRegisterCheck_DuplicatePanics(t *testing.T) {
 }
 
 func TestRegisterCheck_NoToml_Panics(t *testing.T) {
-	dir := t.TempDir()
-	origDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(origDir)
-
 	app := NewApp("testapp", "1.0.0", "test app")
 
 	defer func() {
 		r := recover()
 		if r == nil {
-			t.Fatal("expected panic when no checks.toml")
+			t.Fatal("expected panic when checks not enabled")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "no .strictcli/checks.toml found") {
+		if !strings.Contains(msg, "checks not enabled") {
 			t.Fatalf("unexpected panic message: %s", msg)
 		}
 	}()
@@ -615,10 +608,9 @@ func TestRegisterCheck_NoToml_Panics(t *testing.T) {
 }
 
 func TestDoubleEntry_DeclaredButNotRegistered(t *testing.T) {
-	cleanup := setupChecksDir(t, validChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, validChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.Command("greet", "say hello", func(args map[string]interface{}) int {
 		fmt.Print("hello")
 		return 0
@@ -634,7 +626,7 @@ func TestDoubleEntry_DeclaredButNotRegistered(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "checks declared in .strictcli/checks.toml but not registered") {
+	if !strings.Contains(r.Stderr, "checks declared in checks.toml but not registered") {
 		t.Fatalf("expected error about unregistered checks, got %q", r.Stderr)
 	}
 	if !strings.Contains(r.Stderr, "check-deps") {
@@ -643,10 +635,9 @@ func TestDoubleEntry_DeclaredButNotRegistered(t *testing.T) {
 }
 
 func TestDoubleEntry_AllRegistered_NoError(t *testing.T) {
-	cleanup := setupChecksDir(t, validChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, validChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.Command("greet", "say hello", func(args map[string]interface{}) int {
 		fmt.Print("hello")
 		return 0
@@ -1223,6 +1214,8 @@ func TestRunChecks_WarnDependency_RunsWhenIgnored(t *testing.T) {
 // --- Phase 6: check command tests ---
 
 const twoChecksToml = `
+app = "testapp"
+
 [checks.version-consistency]
 tags = ["release"]
 severity = "error"
@@ -1240,11 +1233,11 @@ needs_network = false
 depends_on = ["version-consistency"]
 `
 
-// makeAppWithChecks creates an app with checks registered and a context factory set.
+// makeAppWithChecks creates an app with checks enabled via WithChecks(path).
 // Both checks pass by default. Override impls as needed after calling this.
-func makeAppWithChecks(t *testing.T, toml string) *App {
+func makeAppWithChecks(t *testing.T, checksPath string) *App {
 	t.Helper()
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	if !app.checksEnabled {
 		t.Fatal("expected checksEnabled after setting up checks dir")
 	}
@@ -1252,10 +1245,9 @@ func makeAppWithChecks(t *testing.T, toml string) *App {
 }
 
 func TestCheckCommand_NoFlags_ShowsHelp(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -1280,10 +1272,9 @@ func TestCheckCommand_NoFlags_ShowsHelp(t *testing.T) {
 }
 
 func TestCheckCommand_List_Human(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -1310,10 +1301,9 @@ func TestCheckCommand_List_Human(t *testing.T) {
 }
 
 func TestCheckCommand_List_JSON(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -1349,10 +1339,9 @@ func TestCheckCommand_List_JSON(t *testing.T) {
 }
 
 func TestCheckCommand_All_Passing(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "1.0.0 across 2 targets"}
 	})
@@ -1373,10 +1362,9 @@ func TestCheckCommand_All_Passing(t *testing.T) {
 }
 
 func TestCheckCommand_All_WithFailure(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "fail", Message: "version mismatch", Details: []string{"pyproject: 1.0.0", "package.json: 1.0.1"}}
 	})
@@ -1401,10 +1389,9 @@ func TestCheckCommand_All_WithFailure(t *testing.T) {
 }
 
 func TestCheckCommand_TagFilter(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -1426,10 +1413,9 @@ func TestCheckCommand_TagFilter(t *testing.T) {
 }
 
 func TestCheckCommand_NameGlob(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -1452,10 +1438,9 @@ func TestCheckCommand_NameGlob(t *testing.T) {
 }
 
 func TestCheckCommand_DryRun(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		t.Fatal("should not run in dry-run mode")
 		return CheckResult{}
@@ -1485,10 +1470,9 @@ func TestCheckCommand_DryRun(t *testing.T) {
 }
 
 func TestCheckCommand_All_JSON(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -1525,10 +1509,9 @@ func TestCheckCommand_All_JSON(t *testing.T) {
 }
 
 func TestCheckCommand_All_Verbose(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok", Details: []string{"pyproject.toml: 1.0.0", "package.json: 1.0.0"}}
 	})
@@ -1550,10 +1533,9 @@ func TestCheckCommand_All_Verbose(t *testing.T) {
 }
 
 func TestCheckCommand_IgnoreWarnings(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "warn", Message: "tag not pushed"}
 	})
@@ -1578,11 +1560,6 @@ func TestCheckCommand_IgnoreWarnings(t *testing.T) {
 }
 
 func TestCheckCommand_NotInHelp_WithoutToml(t *testing.T) {
-	dir := t.TempDir()
-	origDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(origDir)
-
 	app := NewApp("testapp", "1.0.0", "test app")
 	app.Command("greet", "say hello", func(args map[string]interface{}) int {
 		return 0
@@ -1598,10 +1575,9 @@ func TestCheckCommand_NotInHelp_WithoutToml(t *testing.T) {
 }
 
 func TestCheckCommand_NoContextFactory_Error(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -1622,10 +1598,9 @@ func TestCheckCommand_NoContextFactory_Error(t *testing.T) {
 // --- Phase 7: Schema integration tests ---
 
 func TestDumpSchema_WithChecks(t *testing.T) {
-	cleanup := setupChecksDir(t, twoChecksToml)
-	defer cleanup()
+	checksPath := writeChecksFile(t, twoChecksToml)
 
-	app := NewApp("testapp", "1.0.0", "test app")
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
 		return CheckResult{Status: "pass", Message: "ok"}
 	})
@@ -1723,11 +1698,6 @@ func TestDumpSchema_WithChecks(t *testing.T) {
 }
 
 func TestDumpSchema_WithoutChecks(t *testing.T) {
-	dir := t.TempDir()
-	origDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(origDir)
-
 	app := NewApp("testapp", "1.0.0", "test app")
 	app.Command("noop", "does nothing", func(args map[string]interface{}) int {
 		return 0
@@ -1754,24 +1724,14 @@ func TestDumpSchema_WithoutChecks(t *testing.T) {
 	}
 }
 
-// --- WithChecksPath tests ---
+// --- WithChecks tests ---
 
 func TestChecksPath_ValidPath(t *testing.T) {
-	// Create a temp dir with checks.toml (not in .strictcli/ subdirectory)
-	dir := t.TempDir()
-	tomlPath := filepath.Join(dir, "checks.toml")
-	if err := os.WriteFile(tomlPath, []byte(validChecksToml), 0644); err != nil {
-		t.Fatalf("failed to write checks.toml: %v", err)
-	}
+	tomlPath := writeChecksFile(t, validChecksToml)
 
-	// Chdir to a directory with NO .strictcli/ so CWD discovery won't find anything
-	origDir, _ := os.Getwd()
-	os.Chdir(t.TempDir())
-	defer os.Chdir(origDir)
-
-	app := NewApp("testapp", "1.0.0", "test app", WithChecksPath(tomlPath))
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(tomlPath))
 	if !app.checksEnabled {
-		t.Fatal("expected checksEnabled to be true with WithChecksPath")
+		t.Fatal("expected checksEnabled to be true with WithChecks")
 	}
 	if len(app.checkDefs) != 2 {
 		t.Fatalf("expected 2 check defs, got %d", len(app.checkDefs))
@@ -1785,11 +1745,6 @@ func TestChecksPath_ValidPath(t *testing.T) {
 }
 
 func TestChecksPath_NonexistentFile(t *testing.T) {
-	// Chdir to a directory with NO .strictcli/ so CWD discovery won't interfere
-	origDir, _ := os.Getwd()
-	os.Chdir(t.TempDir())
-	defer os.Chdir(origDir)
-
 	bogusPath := filepath.Join(t.TempDir(), "nonexistent", "checks.toml")
 
 	defer func() {
@@ -1807,7 +1762,170 @@ func TestChecksPath_NonexistentFile(t *testing.T) {
 		}
 	}()
 
-	NewApp("testapp", "1.0.0", "test app", WithChecksPath(bogusPath))
+	NewApp("testapp", "1.0.0", "test app", WithChecks(bogusPath))
+}
+
+// --- New tests for app field and explicit WithChecks ---
+
+func TestLoadChecksToml_MissingAppField(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `
+[checks.foo]
+tags = ["a"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+`)
+	_, _, _, err := loadChecksToml(path)
+	if err == nil {
+		t.Fatal("expected error for missing app field")
+	}
+	expected := `checks.toml: missing required top-level key "app"`
+	if err.Error() != expected {
+		t.Errorf("expected error %q, got %q", expected, err.Error())
+	}
+}
+
+func TestLoadChecksToml_AppFieldWrongType(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `
+app = 42
+[checks.foo]
+tags = ["a"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+`)
+	_, _, _, err := loadChecksToml(path)
+	if err == nil {
+		t.Fatal("expected error for wrong app type")
+	}
+	expected := `checks.toml: "app" must be a non-empty string`
+	if err.Error() != expected {
+		t.Errorf("expected error %q, got %q", expected, err.Error())
+	}
+}
+
+func TestLoadChecksToml_AppFieldEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `
+app = ""
+[checks.foo]
+tags = ["a"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+`)
+	_, _, _, err := loadChecksToml(path)
+	if err == nil {
+		t.Fatal("expected error for empty app field")
+	}
+	expected := `checks.toml: "app" must be a non-empty string`
+	if err.Error() != expected {
+		t.Errorf("expected error %q, got %q", expected, err.Error())
+	}
+}
+
+func TestLoadChecksToml_AppFieldOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `app = "testapp"`)
+	appName, defs, order, err := loadChecksToml(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if appName != "testapp" {
+		t.Errorf("expected app name 'testapp', got %q", appName)
+	}
+	if len(defs) != 0 {
+		t.Errorf("expected 0 check defs, got %d", len(defs))
+	}
+	if len(order) != 0 {
+		t.Errorf("expected 0 order entries, got %d", len(order))
+	}
+}
+
+func TestNewApp_AppMismatch(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `
+app = "wrong"
+[checks.foo]
+tags = ["a"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+`)
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for app name mismatch")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, `app "wrong" does not match app name "testapp"`) {
+			t.Fatalf("unexpected panic message: %s", msg)
+		}
+	}()
+
+	NewApp("testapp", "1.0.0", "test app", WithChecks(path))
+}
+
+func TestNewApp_NoWithChecks_CWDIgnored(t *testing.T) {
+	// Create a .strictcli/checks.toml in a temp dir and chdir to it.
+	// Without WithChecks, checks should NOT be enabled.
+	dir := t.TempDir()
+	scDir := filepath.Join(dir, ".strictcli")
+	if err := os.MkdirAll(scDir, 0755); err != nil {
+		t.Fatalf("failed to create .strictcli dir: %v", err)
+	}
+	tomlContent := `
+app = "testapp"
+[checks.foo]
+tags = ["a"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+`
+	if err := os.WriteFile(filepath.Join(scDir, "checks.toml"), []byte(tomlContent), 0644); err != nil {
+		t.Fatalf("failed to write checks.toml: %v", err)
+	}
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	app := NewApp("testapp", "1.0.0", "test app")
+	if app.checksEnabled {
+		t.Fatal("expected checksEnabled to be false when WithChecks is not used, even with CWD checks.toml")
+	}
+}
+
+func TestRegisterCheck_NotEnabled_Message(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app")
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic when checks not enabled")
+		}
+		msg := fmt.Sprintf("%v", r)
+		expected := `cannot register check "foo": checks not enabled`
+		if msg != expected {
+			t.Fatalf("expected panic %q, got %q", expected, msg)
+		}
+	}()
+
+	app.RegisterCheck("foo", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass"}
+	})
 }
 
 // Ensure unused imports don't cause errors

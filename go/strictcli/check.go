@@ -47,35 +47,46 @@ var knownCheckFields = map[string]bool{
 	"depends_on":    true,
 }
 
-// loadChecksToml parses a checks.toml file and returns validated check definitions
-// along with check names in sorted order (for deterministic listing).
-func loadChecksToml(path string) (map[string]*checkDef, []string, error) {
+// loadChecksToml parses a checks.toml file and returns the app name, validated check definitions,
+// and check names in sorted order (for deterministic listing).
+func loadChecksToml(path string) (string, map[string]*checkDef, []string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 
 	// Unmarshal into a generic map for strict validation
 	var raw map[string]interface{}
 	if err := tomledit.Unmarshal(data, &raw); err != nil {
-		return nil, nil, fmt.Errorf("checks.toml: %s", err)
+		return "", nil, nil, fmt.Errorf("checks.toml: %s", err)
 	}
 
-	// Validate only "checks" as a top-level key
+	// Validate top-level keys: only "app" and "checks" are allowed
 	for key := range raw {
-		if key != "checks" {
-			return nil, nil, fmt.Errorf("checks.toml: unknown top-level key %q", key)
+		if key != "checks" && key != "app" {
+			return "", nil, nil, fmt.Errorf("checks.toml: unknown top-level key %q", key)
 		}
 	}
 
+	// Validate required "app" field
+	appRaw, ok := raw["app"]
+	if !ok {
+		return "", nil, nil, fmt.Errorf("checks.toml: missing required top-level key \"app\"")
+	}
+	appName, ok := appRaw.(string)
+	if !ok || appName == "" {
+		return "", nil, nil, fmt.Errorf("checks.toml: \"app\" must be a non-empty string")
+	}
+
+	// Handle missing [checks] section gracefully — a file with just app = "x" is valid
 	checksRaw, ok := raw["checks"]
 	if !ok {
-		return nil, nil, fmt.Errorf("checks.toml: missing required top-level key \"checks\"")
+		return appName, make(map[string]*checkDef), nil, nil
 	}
 
 	checksMap, ok := checksRaw.(map[string]interface{})
 	if !ok {
-		return nil, nil, fmt.Errorf("checks.toml: [checks] must be a table")
+		return "", nil, nil, fmt.Errorf("checks.toml: [checks] must be a table")
 	}
 
 	result := make(map[string]*checkDef, len(checksMap))
@@ -92,18 +103,18 @@ func loadChecksToml(path string) (map[string]*checkDef, []string, error) {
 
 		// Validate check name
 		if !checkNameRe.MatchString(name) {
-			return nil, nil, fmt.Errorf("checks.toml: invalid check name %q (must match [a-z][a-z0-9-]*)", name)
+			return "", nil, nil, fmt.Errorf("checks.toml: invalid check name %q (must match [a-z][a-z0-9-]*)", name)
 		}
 
 		fields, ok := val.(map[string]interface{})
 		if !ok {
-			return nil, nil, fmt.Errorf("checks.toml: check %q must be a table", name)
+			return "", nil, nil, fmt.Errorf("checks.toml: check %q must be a table", name)
 		}
 
 		// Reject unknown fields
 		for field := range fields {
 			if !knownCheckFields[field] {
-				return nil, nil, fmt.Errorf("checks.toml: check %q: unknown field %q", name, field)
+				return "", nil, nil, fmt.Errorf("checks.toml: check %q: unknown field %q", name, field)
 			}
 		}
 
@@ -111,32 +122,32 @@ func loadChecksToml(path string) (map[string]*checkDef, []string, error) {
 
 		// Parse tags (required, []string — may be empty)
 		if err := parseCheckTags(name, fields, def); err != nil {
-			return nil, nil, err
+			return "", nil, nil, err
 		}
 
 		// Parse severity (required, "error" or "warn")
 		if err := parseCheckSeverity(name, fields, def); err != nil {
-			return nil, nil, err
+			return "", nil, nil, err
 		}
 
 		// Parse fast (required, bool)
 		if err := parseCheckBool(name, fields, "fast", &def.fast); err != nil {
-			return nil, nil, err
+			return "", nil, nil, err
 		}
 
 		// Parse pure (required, bool)
 		if err := parseCheckBool(name, fields, "pure", &def.pure); err != nil {
-			return nil, nil, err
+			return "", nil, nil, err
 		}
 
 		// Parse needs_network (required, bool)
 		if err := parseCheckBool(name, fields, "needs_network", &def.needsNetwork); err != nil {
-			return nil, nil, err
+			return "", nil, nil, err
 		}
 
 		// Parse depends_on (required, []string, can be empty)
 		if err := parseCheckDependsOn(name, fields, def); err != nil {
-			return nil, nil, err
+			return "", nil, nil, err
 		}
 
 		result[name] = def
@@ -147,12 +158,12 @@ func loadChecksToml(path string) (map[string]*checkDef, []string, error) {
 		def := result[name]
 		for _, dep := range def.dependsOn {
 			if _, ok := result[dep]; !ok {
-				return nil, nil, fmt.Errorf("checks.toml: check %q: depends_on references unknown check %q", name, dep)
+				return "", nil, nil, fmt.Errorf("checks.toml: check %q: depends_on references unknown check %q", name, dep)
 			}
 		}
 	}
 
-	return result, names, nil
+	return appName, result, names, nil
 }
 
 // parseCheckTags extracts and validates the "tags" field.

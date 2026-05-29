@@ -4,7 +4,6 @@ package strictcli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -161,7 +160,7 @@ type App struct {
 	configData          map[string]interface{}
 
 	checksEnabled       bool
-	checksPathOverride  string
+	checksPath          string
 	checkDefs           map[string]*checkDef
 	checkOrder          []string // sorted check names for deterministic listing
 	checkContextFactory func() CheckContext
@@ -202,10 +201,10 @@ func WithConfigFormat(format string) AppOption {
 	}
 }
 
-// WithChecksPath overrides CWD-based discovery of checks.toml with an explicit path.
-func WithChecksPath(path string) AppOption {
+// WithChecks enables the check system with an explicit path to checks.toml.
+func WithChecks(path string) AppOption {
 	return func(a *App) {
-		a.checksPathOverride = path
+		a.checksPath = path
 	}
 }
 
@@ -560,23 +559,17 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		a.configData = loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		a.registerConfigGroup()
 	}
-	// Discover checks.toml: explicit path override or CWD-based discovery
-	var checksPath string
-	if a.checksPathOverride != "" {
-		if _, err := os.Stat(a.checksPathOverride); err != nil {
-			panic(fmt.Sprintf("checks_path does not exist: %s", a.checksPathOverride))
+	// Enable check system only when WithChecks(path) was provided
+	if a.checksPath != "" {
+		if _, err := os.Stat(a.checksPath); err != nil {
+			panic(fmt.Sprintf("checks_path does not exist: %s", a.checksPath))
 		}
-		checksPath = a.checksPathOverride
-	} else if wd, err := os.Getwd(); err == nil {
-		candidate := filepath.Join(wd, ".strictcli", "checks.toml")
-		if _, err := os.Stat(candidate); err == nil {
-			checksPath = candidate
-		}
-	}
-	if checksPath != "" {
-		defs, order, err := loadChecksToml(checksPath)
+		appName, defs, order, err := loadChecksToml(a.checksPath)
 		if err != nil {
 			panic(fmt.Sprintf("checks.toml: %s", err))
+		}
+		if appName != a.Name {
+			panic(fmt.Sprintf("checks.toml: app %q does not match app name %q", appName, a.Name))
 		}
 		a.checkDefs = defs
 		a.checkOrder = order
@@ -590,7 +583,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 // Panics if no checks.toml was discovered, if the name is not declared, or if it's a duplicate.
 func (a *App) RegisterCheck(name string, fn func(CheckContext) CheckResult) {
 	if !a.checksEnabled {
-		panic(fmt.Sprintf("cannot register check %q: no .strictcli/checks.toml found", name))
+		panic(fmt.Sprintf("cannot register check %q: checks not enabled", name))
 	}
 	def, ok := a.checkDefs[name]
 	if !ok {
@@ -623,7 +616,7 @@ func (a *App) validateCheckRegistrations() string {
 		return ""
 	}
 	sort.Strings(missing)
-	return fmt.Sprintf("checks declared in .strictcli/checks.toml but not registered: %s", strings.Join(missing, ", "))
+	return fmt.Sprintf("checks declared in checks.toml but not registered: %s", strings.Join(missing, ", "))
 }
 
 // Command registers a top-level command.
