@@ -341,17 +341,15 @@ def generate(app_def: dict) -> str:
     lines.append('\t}()')
     lines.append("")
 
-    # Set up checks.toml in a temp directory if checks are configured
+    # Write checks.toml to a temp file and pass via WithChecks(path)
     if has_checks:
         checks_toml = app_def["checks_toml"]
-        # Escape backticks and backslashes for Go raw strings — use double-quoted string instead
+        # Escape for Go double-quoted string
         escaped_toml = checks_toml.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
-        lines.append('\t// Create deterministic temp dir with .strictcli/checks.toml and chdir to it')
-        lines.append(f'\thash := fmt.Sprintf("%x", sha256.Sum256([]byte("{escaped_toml}")))')
-        lines.append('\ttmpDir := filepath.Join(os.TempDir(), "strictcli-checks-"+hash[:12])')
-        lines.append('\tos.MkdirAll(filepath.Join(tmpDir, ".strictcli"), 0o755)')
-        lines.append(f'\tos.WriteFile(filepath.Join(tmpDir, ".strictcli", "checks.toml"), []byte("{escaped_toml}"), 0o644)')
-        lines.append('\tos.Chdir(tmpDir)')
+        lines.append('\t// Write checks.toml to a deterministic temp path')
+        lines.append(f'\tchecksHash := fmt.Sprintf("%x", sha256.Sum256([]byte("{escaped_toml}")))')
+        lines.append(f'\tchecksPath := filepath.Join(os.TempDir(), "strictcli-checks-"+checksHash[:12]+".toml")')
+        lines.append(f'\tos.WriteFile(checksPath, []byte("{escaped_toml}"), 0o644)')
         lines.append("")
 
     # Build app
@@ -364,6 +362,8 @@ def generate(app_def: dict) -> str:
         app_opts.append(f'strictcli.WithConfigPath("{app_def["config_path"]}")')
     if "config_format" in app_def and app_def["config_format"] != "json":
         app_opts.append(f'strictcli.WithConfigFormat("{app_def["config_format"]}")')
+    if has_checks:
+        app_opts.append('strictcli.WithChecks(checksPath)')
     opts_str = ""
     if app_opts:
         opts_str = ", " + ", ".join(app_opts)

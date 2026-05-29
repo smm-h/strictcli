@@ -1,3 +1,5 @@
+app = "conformance"
+
 [checks.api-surface]
 tags = ["pre-release", "fast", "parity"]
 severity = "error"

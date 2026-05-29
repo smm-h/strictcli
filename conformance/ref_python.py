@@ -461,16 +461,14 @@ def generate(app_def: dict) -> str:
     lines.append("import strictcli")
     lines.append("")
 
-    # Set up checks.toml in a temp directory if checks are configured
+    # Write checks.toml to a temp file and pass via checks_path=
     if has_checks:
         checks_toml = app_def["checks_toml"]
-        lines.append("# Create deterministic temp dir with .strictcli/checks.toml and chdir to it")
+        lines.append("# Write checks.toml to a deterministic temp path")
         lines.append(f"_hash = hashlib.sha256({checks_toml!r}.encode()).hexdigest()[:12]")
-        lines.append("_tmpdir = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'strictcli-checks-{_hash}')")
-        lines.append("os.makedirs(os.path.join(_tmpdir, '.strictcli'), exist_ok=True)")
-        lines.append(f"with open(os.path.join(_tmpdir, '.strictcli', 'checks.toml'), 'w') as _f:")
+        lines.append("_checks_path = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'strictcli-checks-{_hash}.toml')")
+        lines.append(f"with open(_checks_path, 'w') as _f:")
         lines.append(f"    _f.write({checks_toml!r})")
-        lines.append("os.chdir(_tmpdir)")
         lines.append("")
 
     # Build app
@@ -488,6 +486,8 @@ def generate(app_def: dict) -> str:
         app_parts.append(f"config_path={app_def['config_path']!r}")
     if "config_format" in app_def and app_def["config_format"] != "json":
         app_parts.append(f"config_format={app_def['config_format']!r}")
+    if has_checks:
+        app_parts.append("checks_path=_checks_path")
     if global_flags:
         gf_exprs = [_emit_flag(gf) for gf in global_flags]
         app_parts.append(f"flags=[{', '.join(gf_exprs)}]")
