@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.13.0
+
+### Features
+
+- **New feature.** Schema dump (--dump-schema) now includes a project_id field read from pyproject.toml, providing provenance for schema validation.
+
 ## 0.12.0
 
 ### Breaking
