@@ -2,6 +2,12 @@
 
 # Changelog
 
+## 0.9.0
+
+### Features
+
+- **New feature.** Schema dump (--dump-schema) now includes a project_id field read from go.mod, providing provenance for schema validation.
+
 ## 0.8.0
 
 ### Breaking
