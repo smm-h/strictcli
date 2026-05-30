@@ -1,0 +1,1 @@
+{"commits":["12ad7c022938b07cf1f44b20bdbe9de0ae6a84be"],"user_facing":true,"description":"**New feature.** Schema dump (--dump-schema) now includes a project_id field read from pyproject.toml, providing provenance for schema validation.","type":"feature"}
