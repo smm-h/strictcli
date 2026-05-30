@@ -5,7 +5,16 @@ from __future__ import annotations
 import json
 import os
 
+import pytest
 import strictcli
+
+_PYPROJECT_TOML = '[project]\nname = "testproject"\n'
+
+
+@pytest.fixture(autouse=True)
+def _pyproject_in_tmp(tmp_path):
+    """Ensure every test that uses tmp_path has a pyproject.toml for project_id."""
+    (tmp_path / "pyproject.toml").write_text(_PYPROJECT_TOML)
 
 
 def _make_app(**kwargs):
@@ -662,3 +671,60 @@ class TestSchemaNonDefaultValues:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         assert data["config"] is True
+
+
+class TestSchemaProjectId:
+    """Schema contains project_id from pyproject.toml."""
+
+    def test_project_id_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert data["project_id"] == "testproject"
+
+    def test_project_id_custom_name(self, tmp_path, monkeypatch):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "my-custom-tool"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert data["project_id"] == "my-custom-tool"
+
+    def test_project_id_error_no_pyproject(self, tmp_path, monkeypatch):
+        os.remove(tmp_path / "pyproject.toml")
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code != 0
+        assert "project_id" in result.stderr
+
+    def test_project_id_error_no_project_name(self, tmp_path, monkeypatch):
+        (tmp_path / "pyproject.toml").write_text("[tool.something]\nkey = 1\n")
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code != 0
+        assert "project_id" in result.stderr

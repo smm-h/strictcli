@@ -1460,7 +1460,11 @@ class App:
             print(_format_version(self))
             sys.exit(0)
         except _DumpSchemaRequested:
-            path = _write_schema(self)
+            try:
+                path = _write_schema(self)
+            except RuntimeError as e:
+                print(f"error: {e}", file=sys.stderr)
+                sys.exit(1)
             print(path)
             sys.exit(0)
         except _ParseError as e:
@@ -1503,8 +1507,13 @@ class App:
         except _VersionRequested:
             stdout_buf.write(_format_version(self) + "\n")
         except _DumpSchemaRequested:
-            path = _write_schema(self)
-            stdout_buf.write(path + "\n")
+            try:
+                path = _write_schema(self)
+            except RuntimeError as e:
+                stderr_buf.write(f"error: {e}\n")
+                exit_code = 1
+            else:
+                stdout_buf.write(path + "\n")
         except _ParseError as e:
             stderr_buf.write(f"error: {e}\n")
             prefix = e.command_prefix or self.name
@@ -3087,14 +3096,35 @@ def _build_schema_defaults() -> dict:
     }
 
 
+def _read_project_id() -> str:
+    """Read project name from pyproject.toml in the current working directory."""
+    pyproject_path = Path(os.getcwd()) / "pyproject.toml"
+    if not pyproject_path.exists():
+        raise RuntimeError(
+            "Cannot determine project_id: pyproject.toml not found "
+            "or missing [project].name"
+        )
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+    project_name = data.get("project", {}).get("name")
+    if not project_name:
+        raise RuntimeError(
+            "Cannot determine project_id: pyproject.toml not found "
+            "or missing [project].name"
+        )
+    return project_name
+
+
 def _dump_schema(app: App) -> dict:
     """Produce a JSON-serializable dict representing the app's command tree.
 
     Fields whose values match the schema defaults are omitted.
     The top-level ``defaults`` key documents what each missing field means.
     """
+    project_id = _read_project_id()
     schema: dict = {
         "defaults": _build_schema_defaults(),
+        "project_id": project_id,
         "name": app.name,
         "version": app.version,
         "help": app.help,

@@ -2,7 +2,14 @@
 
 import json
 
+import pytest
 import strictcli
+
+
+@pytest.fixture(autouse=True)
+def _pyproject_in_tmp(tmp_path):
+    """Ensure every test that uses tmp_path has a pyproject.toml for project_id."""
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproject"\n')
 
 
 CHECKS_TOML = """\
