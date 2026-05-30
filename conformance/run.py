@@ -191,6 +191,22 @@ def _check_equals(actual: str, expected: str, stream_name: str) -> list[str]:
     return errors
 
 
+def _make_project_dir(target: str, app_name: str) -> str:
+    """Create a temp directory with the project file needed for --dump-schema.
+
+    Go binaries require go.mod; Python binaries require pyproject.toml.
+    Returns the path to the temp directory.
+    """
+    d = tempfile.mkdtemp(prefix="strictcli_proj_")
+    if target == "go":
+        with open(os.path.join(d, "go.mod"), "w") as f:
+            f.write(f"module {app_name}\n\ngo 1.21\n")
+    elif target == "python":
+        with open(os.path.join(d, "pyproject.toml"), "w") as f:
+            f.write(f'[project]\nname = "{app_name}"\n')
+    return d
+
+
 def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.CompletedProcess | None]:
     """Run a single test case. Returns (passed, error_messages, raw_result)."""
     errors = []
@@ -224,6 +240,15 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     else:
         return False, [f"  unsupported target: {target}"], None
 
+    # --dump-schema needs go.mod (Go) or pyproject.toml (Python) in the CWD
+    # to determine project_id. Create a temp dir with the right project file.
+    proj_dir = None
+    if "--dump-schema" in case["argv"]:
+        proj_dir = _make_project_dir(target, case["app"]["name"])
+        run_cwd = proj_dir
+    else:
+        run_cwd = str(CONFORMANCE_DIR)
+
     try:
         # Build environment: inherit current env, overlay test env
         env = os.environ.copy()
@@ -235,7 +260,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             capture_output=True,
             text=True,
             env=env,
-            cwd=str(CONFORMANCE_DIR),
+            cwd=run_cwd,
             timeout=10,
         )
         raw_result = result
@@ -286,6 +311,8 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     finally:
         if cleanup_path is not None:
             os.unlink(cleanup_path)
+        if proj_dir is not None:
+            shutil.rmtree(proj_dir, ignore_errors=True)
 
     return len(errors) == 0, errors, raw_result
 
