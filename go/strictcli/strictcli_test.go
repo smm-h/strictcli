@@ -3049,11 +3049,16 @@ func TestConfigXDGHome(t *testing.T) {
 // --- Dump schema tests ---
 
 // chdirTemp changes to a temporary directory and restores the original on cleanup.
+// It also creates a go.mod file so that --dump-schema can read project_id.
 func chdirTemp(t *testing.T) string {
 	t.Helper()
 	tmpDir := t.TempDir()
 	origDir, err := os.Getwd()
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Create go.mod for project_id resolution
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module example.com/testproject\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chdir(tmpDir); err != nil {
@@ -3454,6 +3459,94 @@ func TestDumpSchemaCreatesDir(t *testing.T) {
 	schemaFile := filepath.Join(schemaDir, "schema.json")
 	if _, err := os.Stat(schemaFile); os.IsNotExist(err) {
 		t.Fatal("schema.json was not created")
+	}
+}
+
+func TestDumpSchemaProjectId(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "A test app")
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(tmpDir, ".strictcli", "schema.json")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]interface{}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	projectID, ok := schema["project_id"]
+	if !ok {
+		t.Fatal("expected 'project_id' key in schema")
+	}
+	if projectID != "example.com/testproject" {
+		t.Fatalf("expected project_id 'example.com/testproject', got %v", projectID)
+	}
+}
+
+func TestDumpSchemaProjectIdCustomModule(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module github.com/user/mytools\n"), 0644)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	app := NewApp("myapp", "1.0.0", "A test app")
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	schemaPath := filepath.Join(tmpDir, ".strictcli", "schema.json")
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]interface{}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if schema["project_id"] != "github.com/user/mytools" {
+		t.Fatalf("expected project_id 'github.com/user/mytools', got %v", schema["project_id"])
+	}
+}
+
+func TestDumpSchemaProjectIdNoGoMod(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No go.mod in tmpDir
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	app := NewApp("myapp", "1.0.0", "A test app")
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode == 0 {
+		t.Fatal("expected non-zero exit code when go.mod is missing")
+	}
+	if !strings.Contains(r.Stderr, "project_id") {
+		t.Fatalf("expected stderr to mention 'project_id', got %q", r.Stderr)
 	}
 }
 

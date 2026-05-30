@@ -1,9 +1,12 @@
 package strictcli
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // flagTypeName maps FlagType to its string representation for schema output.
@@ -184,14 +187,40 @@ func buildSchemaDefaults() map[string]interface{} {
 	}
 }
 
+// readProjectID reads the module path from go.mod in the current working directory.
+func readProjectID() (string, error) {
+	f, err := os.Open("go.mod")
+	if err != nil {
+		return "", fmt.Errorf("Cannot determine project_id: go.mod not found")
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("Cannot determine project_id: error reading go.mod: %w", err)
+	}
+	return "", fmt.Errorf("Cannot determine project_id: no module directive in go.mod")
+}
+
 // dumpSchema produces a JSON-serializable map representing the app's command tree.
 // Fields matching their defaults are omitted; see buildSchemaDefaults().
-func dumpSchema(app *App) map[string]interface{} {
+func dumpSchema(app *App) (map[string]interface{}, error) {
+	projectID, err := readProjectID()
+	if err != nil {
+		return nil, err
+	}
 	schema := map[string]interface{}{
-		"name":     app.Name,
-		"version":  app.Version,
-		"help":     app.Help,
-		"defaults": buildSchemaDefaults(),
+		"project_id": projectID,
+		"name":       app.Name,
+		"version":    app.Version,
+		"help":       app.Help,
+		"defaults":   buildSchemaDefaults(),
 	}
 
 	// env_prefix: default nil (omit when empty -> nil)
@@ -255,12 +284,15 @@ func dumpSchema(app *App) map[string]interface{} {
 		}
 		schema["checks"] = checksMap
 	}
-	return schema
+	return schema, nil
 }
 
 // writeSchema writes the schema to .strictcli/schema.json and returns the path.
 func writeSchema(app *App) (string, error) {
-	schema := dumpSchema(app)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		return "", err
+	}
 	data, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
 		return "", err
