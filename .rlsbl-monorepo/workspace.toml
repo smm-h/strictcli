@@ -9,4 +9,5 @@ name = "go-strictcli"
 [[projects]]
 path = "conformance/"
 name = "conformance"
+internal = true
 watch = ["python/**", "go/**"]
