@@ -5,18 +5,18 @@ name: CI
 on:
   workflow_call:
 
-defaults:
-  run:
-    working-directory: go
-
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+    - uses: actions/checkout@v6
       # go.mod: go {{go.minRequiredGo}}
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go/go.mod
-      - run: go vet ./...
-      - run: go test ./... -race -short -timeout=10m
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: go/go.mod
+        cache-dependency-path: go.sum
+    - run: go vet ./...
+    - run: go test ./... -race -short -timeout=10m
+    defaults:
+      run:
+        working-directory: go
