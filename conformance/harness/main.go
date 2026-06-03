@@ -167,9 +167,17 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 			case "bool":
 				opts = append(opts, strictcli.Default(v.(bool)))
 			case "int":
-				opts = append(opts, strictcli.Default(int(v.(float64))))
+				if f, ok := v.(float64); ok {
+					opts = append(opts, strictcli.Default(int(f)))
+				} else {
+					opts = append(opts, strictcli.Default(v))
+				}
 			case "float":
-				opts = append(opts, strictcli.Default(v.(float64)))
+				if f, ok := v.(float64); ok {
+					opts = append(opts, strictcli.Default(f))
+				} else {
+					opts = append(opts, strictcli.Default(v))
+				}
 			default: // str
 				opts = append(opts, strictcli.Default(v.(string)))
 			}
