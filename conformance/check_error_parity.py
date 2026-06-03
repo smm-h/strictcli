@@ -97,6 +97,9 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # Python uses !r (single quotes), Go uses %q (double quotes) for config_format value
     'App.config_format must be "json" or "toml", got *':
         "Go uses fmt.Fprintf+os.Exit with %q quoting; Python uses ValueError with !r quoting",
+    # Python uses field names (checks_path/checks_embed); Go uses option function names
+    'cannot use both checks_path and checks_embed':
+        "Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names (checks_path/checks_embed)",
 }
 
 # Go-only: errors that have no Python counterpart by design
@@ -138,6 +141,9 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
     # Go wraps float env var errors with a generic suffix pattern
     '* (from env var *)':
         "Go generic env var error wrapper; Python embeds env var in specific messages",
+    # Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names
+    'cannot use both WithChecks and WithChecksEmbed':
+        "Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names (checks_path/checks_embed)",
 }
 
 # Dead code: errors present in both implementations but unreachable at runtime.
