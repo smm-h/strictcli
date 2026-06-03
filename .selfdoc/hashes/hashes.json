@@ -1,0 +1,14 @@
+{
+  "en/gen-index.md": {
+    "content": "c50b88b1b524e70056426394e032212dd1beab8d508492ccc0393a6e0f733240",
+    "description": "bb3cd9d34f014c0674a9285c25ee14b5b4abc5cf941f0d83594c301405e8f3b6"
+  },
+  "en/go-strictcli.md": {
+    "content": "6249073947087c650556512cb5027b0c910bcd6d34d81272aa479f2b19c9b16f",
+    "description": "bfb10482afc2d53c69236c5b3845694e0e2df47e499ddbca24403634e2f37d37"
+  },
+  "en/python-strictcli.md": {
+    "content": "e91103e670d0279c3546af8906ea1f957f2e08a5adfb75c10fe3df5efd4bc584",
+    "description": "2dd559b655515f7f804630d777694359a18d2ec5f7e4e860dea48bd7c53c16d5"
+  }
+}
