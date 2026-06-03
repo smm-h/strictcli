@@ -1908,6 +1908,94 @@ func TestRegisterCheck_NotEnabled_Message(t *testing.T) {
 	})
 }
 
+// --- WithChecksEmbed tests ---
+
+func TestNewApp_WithChecksEmbed(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app", WithChecksEmbed([]byte(validChecksToml)))
+	if !app.checksEnabled {
+		t.Fatal("expected checksEnabled to be true")
+	}
+	if len(app.checkDefs) != 2 {
+		t.Fatalf("expected 2 check defs, got %d", len(app.checkDefs))
+	}
+	if app.checkDefs["lint-code"] == nil {
+		t.Fatal("expected lint-code check def")
+	}
+	if app.checkDefs["check-deps"] == nil {
+		t.Fatal("expected check-deps check def")
+	}
+}
+
+func TestWithChecksEmbed_And_WithChecks_Panics(t *testing.T) {
+	checksPath := writeChecksFile(t, validChecksToml)
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic when both WithChecks and WithChecksEmbed are used")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("expected string panic, got %T: %v", r, r)
+		}
+		expected := "cannot use both WithChecks and WithChecksEmbed"
+		if msg != expected {
+			t.Errorf("expected panic %q, got %q", expected, msg)
+		}
+	}()
+
+	NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath), WithChecksEmbed([]byte(validChecksToml)))
+}
+
+func TestWithChecksEmbed_InvalidToml(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for invalid TOML data")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("expected string panic, got %T: %v", r, r)
+		}
+		if !strings.Contains(msg, "checks.toml:") {
+			t.Errorf("expected panic message to contain 'checks.toml:', got %q", msg)
+		}
+	}()
+
+	NewApp("testapp", "1.0.0", "test app", WithChecksEmbed([]byte("not valid toml {{{{")))
+}
+
+func TestWithChecksEmbed_WrongAppName(t *testing.T) {
+	toml := `
+app = "wrong"
+
+[checks.lint-code]
+tags = ["code"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+`
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for wrong app name")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("expected string panic, got %T: %v", r, r)
+		}
+		expected := `checks.toml: app "wrong" does not match app name "testapp"`
+		if msg != expected {
+			t.Errorf("expected panic %q, got %q", expected, msg)
+		}
+	}()
+
+	NewApp("testapp", "1.0.0", "test app", WithChecksEmbed([]byte(toml)))
+}
+
 // Ensure unused imports don't cause errors
 var _ = sort.Strings
 var _ = fmt.Sprintf

@@ -47,14 +47,18 @@ var knownCheckFields = map[string]bool{
 	"depends_on":    true,
 }
 
-// loadChecksToml parses a checks.toml file and returns the app name, validated check definitions,
-// and check names in sorted order (for deterministic listing).
+// loadChecksToml reads a checks.toml file from disk and parses it.
 func loadChecksToml(path string) (string, map[string]*checkDef, []string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", nil, nil, err
 	}
+	return parseChecksToml(data)
+}
 
+// parseChecksToml parses TOML bytes and returns the app name, validated check definitions,
+// and check names in sorted order (for deterministic listing).
+func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error) {
 	// Unmarshal into a generic map for strict validation
 	var raw map[string]interface{}
 	if err := tomledit.Unmarshal(data, &raw); err != nil {

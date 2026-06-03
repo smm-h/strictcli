@@ -161,6 +161,7 @@ type App struct {
 
 	checksEnabled       bool
 	checksPath          string
+	checksEmbed         []byte
 	checkDefs           map[string]*checkDef
 	checkOrder          []string // sorted check names for deterministic listing
 	checkContextFactory func() CheckContext
@@ -205,6 +206,13 @@ func WithConfigFormat(format string) AppOption {
 func WithChecks(path string) AppOption {
 	return func(a *App) {
 		a.checksPath = path
+	}
+}
+
+// WithChecksEmbed enables the check system with inline TOML data (e.g., from //go:embed).
+func WithChecksEmbed(data []byte) AppOption {
+	return func(a *App) {
+		a.checksEmbed = data
 	}
 }
 
@@ -559,12 +567,27 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		a.configData = loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		a.registerConfigGroup()
 	}
-	// Enable check system only when WithChecks(path) was provided
+	// Enable check system when WithChecks(path) or WithChecksEmbed(data) was provided
+	if a.checksPath != "" && len(a.checksEmbed) > 0 {
+		panic("cannot use both WithChecks and WithChecksEmbed")
+	}
 	if a.checksPath != "" {
 		if _, err := os.Stat(a.checksPath); err != nil {
 			panic(fmt.Sprintf("checks_path does not exist: %s", a.checksPath))
 		}
 		appName, defs, order, err := loadChecksToml(a.checksPath)
+		if err != nil {
+			panic(err.Error())
+		}
+		if appName != a.Name {
+			panic(fmt.Sprintf("checks.toml: app %q does not match app name %q", appName, a.Name))
+		}
+		a.checkDefs = defs
+		a.checkOrder = order
+		a.checksEnabled = true
+		a.registerCheckCommand()
+	} else if len(a.checksEmbed) > 0 {
+		appName, defs, order, err := parseChecksToml(a.checksEmbed)
 		if err != nil {
 			panic(err.Error())
 		}
