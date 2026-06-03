@@ -33,6 +33,41 @@ GO_PKG_DIR = PROJECT_ROOT / "go"
 # Cache directory for compiled Go binaries (keyed by app-def hash)
 GO_BUILD_CACHE: dict[str, str] = {}
 
+# Go harness: single pre-built binary for all test cases
+HARNESS_DIR = CONFORMANCE_DIR / "harness"
+HARNESS_BINARY: str | None = None
+
+
+def _ensure_harness() -> str:
+    """Build the Go harness binary if not already built. Returns path to binary."""
+    global HARNESS_BINARY
+    if HARNESS_BINARY is not None:
+        return HARNESS_BINARY
+
+    binary = str(HARNESS_DIR / "harness")
+
+    # Build the harness
+    result = subprocess.run(
+        ["go", "build", "-o", binary, "."],
+        cwd=str(HARNESS_DIR),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"harness build failed:\n{result.stderr}")
+
+    HARNESS_BINARY = binary
+    return binary
+
+
+def _cleanup_harness() -> None:
+    """Remove the compiled harness binary."""
+    global HARNESS_BINARY
+    if HARNESS_BINARY and os.path.exists(HARNESS_BINARY):
+        os.unlink(HARNESS_BINARY)
+    HARNESS_BINARY = None
+
 
 def _load_schema() -> tuple[dict, dict]:
     """Load the conformance schema and return (full_schema, test_case_schema).
@@ -230,13 +265,21 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             script_path = f.name
         argv = [sys.executable, script_path] + case["argv"]
         cleanup_path = script_path
+        extra_env = {}
     elif target == "go":
         try:
-            binary = _build_go_binary(case["app"])
+            binary = _ensure_harness()
         except RuntimeError as e:
-            return False, [f"  build error: {e}"], None
+            return False, [f"  harness build error: {e}"], None
+        # Write app definition to a temp file for the harness
+        app_def_file = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", prefix="strictcli_def_", delete=False
+        )
+        json.dump(case["app"], app_def_file, sort_keys=True)
+        app_def_file.close()
+        extra_env = {"CONFORMANCE_APP_DEF": app_def_file.name}
         argv = [binary] + case["argv"]
-        cleanup_path = None  # binary lives in cache, cleaned up at exit
+        cleanup_path = app_def_file.name
     else:
         return False, [f"  unsupported target: {target}"], None
 
@@ -250,10 +293,11 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         run_cwd = str(CONFORMANCE_DIR)
 
     try:
-        # Build environment: inherit current env, overlay test env
+        # Build environment: inherit current env, overlay test env and target extras
         env = os.environ.copy()
         test_env = case.get("env", {})
         env.update(test_env)
+        env.update(extra_env)
 
         result = subprocess.run(
             argv,
@@ -432,7 +476,7 @@ def _run_both_mode(cases: list[tuple[str, dict]], verbose: bool) -> int:
         print()
 
     # Cleanup
-    _cleanup_go_cache()
+    _cleanup_harness()
 
     # Summary
     total = passed + parity_failures + consistent_failures
@@ -481,7 +525,7 @@ def _run_single_mode(cases: list[tuple[str, dict]], target: str, verbose: bool) 
         print()
 
     # Cleanup
-    _cleanup_go_cache()
+    _cleanup_harness()
 
     # Summary
     total = passed + failed
