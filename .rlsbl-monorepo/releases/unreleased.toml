@@ -2,8 +2,12 @@
 bump = "minor"
 description = "WithChecksEmbed for inline TOML data"
 context = "Deployed Go binaries that use strictcli's check system previously panicked when .strictcli/checks.toml was missing from the working directory. WithChecksEmbed(data []byte) lets consumers embed the TOML at compile time via //go:embed, eliminating the filesystem dependency."
+include = ["go"]
+exclude = []
 
 [packages.strictcli]
 bump = "minor"
 description = "checks_embed for inline TOML data"
 context = "Adds checks_embed parameter as an alternative to checks_path, allowing TOML bytes to be passed directly without requiring a file on disk."
+include = ["pypi", "npm"]
+exclude = []
