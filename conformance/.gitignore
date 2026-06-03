@@ -14,5 +14,6 @@ dist/
 .env.local
 *.local-only
 strictcli_go_*/
+harness/harness
 tmp*.py
 .venv/
