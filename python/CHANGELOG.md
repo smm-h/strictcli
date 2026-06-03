@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.14.0
+
+checks_embed for inline TOML data
+
+<details>
+<summary>Context</summary>
+
+Adds checks_embed parameter as an alternative to checks_path, allowing TOML bytes to be passed directly without requiring a file on disk.
+
+</details>
+
+### Features
+
+- **New feature.** `checks_embed` parameter accepts raw TOML bytes, enabling inline checks configuration without a file on disk.
+
 ## 0.13.0
 
 ### Features
