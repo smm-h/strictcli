@@ -130,37 +130,32 @@ _CHECK_REQUIRED_FIELDS = {"tags", "severity", "fast", "pure", "needs_network", "
 _CHECK_VALID_SEVERITIES = {"error", "warn"}
 
 
-def _load_checks_toml(path: str | Path) -> tuple[str, dict[str, _CheckDef]]:
-    """Parse and validate a checks.toml file, returning (app_name, check_defs).
+def _parse_checks_toml(data: bytes) -> tuple[str, dict[str, _CheckDef]]:
+    """Parse and validate checks TOML data, returning (app_name, check_defs).
 
-    Raises ValueError on any schema violation, file error, or invalid TOML.
+    Raises ValueError on any schema violation or invalid TOML.
     """
-    path = Path(path)
     try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        raise ValueError(f"checks.toml: {exc}") from exc
-    try:
-        data = tomllib.loads(raw.decode())
+        parsed = tomllib.loads(data.decode())
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"checks.toml: {exc}") from exc
 
     # Only "app" and [checks] are allowed at the top level
-    for key in data:
+    for key in parsed:
         if key not in ("app", "checks"):
             raise ValueError(f'checks.toml: unknown top-level key "{key}"')
 
     # Validate required "app" field
-    if "app" not in data:
+    if "app" not in parsed:
         raise ValueError('checks.toml: missing required top-level key "app"')
-    if not isinstance(data["app"], str) or not data["app"]:
+    if not isinstance(parsed["app"], str) or not parsed["app"]:
         raise ValueError('checks.toml: "app" must be a non-empty string')
-    app_name = data["app"]
+    app_name = parsed["app"]
 
-    if "checks" not in data:
+    if "checks" not in parsed:
         return (app_name, {})
 
-    checks_section = data["checks"]
+    checks_section = parsed["checks"]
     if not isinstance(checks_section, dict):
         raise ValueError("checks.toml: [checks] must be a table")
 
@@ -251,6 +246,19 @@ def _load_checks_toml(path: str | Path) -> tuple[str, dict[str, _CheckDef]]:
                 )
 
     return (app_name, result)
+
+
+def _load_checks_toml(path: str | Path) -> tuple[str, dict[str, _CheckDef]]:
+    """Read and parse a checks.toml file, returning (app_name, check_defs).
+
+    Raises ValueError on any file error, schema violation, or invalid TOML.
+    """
+    path = Path(path)
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"checks.toml: {exc}") from exc
+    return _parse_checks_toml(raw)
 
 
 class _HelpRequested(Exception):
@@ -675,6 +683,7 @@ class App:
     config_path: str | None = None
     config_format: str = "json"
     checks_path: str | Path | None = None
+    checks_embed: bytes | None = None
     flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
     _groups: dict[str, Group] = field(default_factory=dict)
@@ -712,11 +721,21 @@ class App:
             self._register_config_group()
         # Discover checks TOML
         self._check_context_factory: Callable | None = None
+        if self.checks_path is not None and self.checks_embed is not None:
+            raise ValueError("cannot use both checks_path and checks_embed")
         if self.checks_path is not None:
             checks_toml_path = Path(self.checks_path).resolve()
             if not checks_toml_path.is_file():
                 raise ValueError(f"checks_path does not exist: {self.checks_path}")
             app_name, self._check_defs = _load_checks_toml(checks_toml_path)
+            if app_name != self.name:
+                raise ValueError(
+                    f'checks.toml: app "{app_name}" does not match app name "{self.name}"'
+                )
+            self._checks_enabled = True
+            self._register_check_command()
+        elif self.checks_embed is not None:
+            app_name, self._check_defs = _parse_checks_toml(self.checks_embed)
             if app_name != self.name:
                 raise ValueError(
                     f'checks.toml: app "{app_name}" does not match app name "{self.name}"'

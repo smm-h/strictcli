@@ -293,3 +293,54 @@ depends_on = []
                 name="testapp", version="1.0.0", help="test app",
                 checks_path=str(toml_file),
             )
+
+
+class TestChecksEmbed:
+    def test_checks_embed_enables_checks(self, tmp_path, monkeypatch):
+        """checks_embed with valid TOML bytes enables checks."""
+        monkeypatch.chdir(tmp_path)
+
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_embed=VALID_TOML.encode(),
+        )
+        assert app._checks_enabled is True
+        assert "lint-code" in app._check_defs
+        assert "check-deps" in app._check_defs
+
+    def test_checks_embed_and_checks_path_raises(self, tmp_path, monkeypatch):
+        """Using both checks_path and checks_embed raises ValueError."""
+        monkeypatch.chdir(tmp_path)
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(VALID_TOML)
+
+        with pytest.raises(ValueError, match="cannot use both checks_path and checks_embed"):
+            strictcli.App(
+                name="testapp", version="1.0.0", help="test app",
+                checks_path=str(toml_file),
+                checks_embed=VALID_TOML.encode(),
+            )
+
+    def test_checks_embed_invalid_toml(self, tmp_path, monkeypatch):
+        """checks_embed with garbage bytes raises ValueError."""
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(ValueError, match="checks.toml:"):
+            strictcli.App(
+                name="testapp", version="1.0.0", help="test app",
+                checks_embed=b"\x80\x81 not valid toml {{{{",
+            )
+
+    def test_checks_embed_wrong_app_name(self, tmp_path, monkeypatch):
+        """checks_embed with mismatched app name raises ValueError."""
+        monkeypatch.chdir(tmp_path)
+        wrong_toml = 'app = "wrong"\n'
+
+        with pytest.raises(
+            ValueError,
+            match=r'checks.toml: app "wrong" does not match app name "testapp"',
+        ):
+            strictcli.App(
+                name="testapp", version="1.0.0", help="test app",
+                checks_embed=wrong_toml.encode(),
+            )
