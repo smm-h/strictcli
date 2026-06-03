@@ -41,6 +41,8 @@ IMPL_EXCLUSIONS: dict[str, str] = {
     "PassthroughHandler": "runtime-only (Go)",
     "hasDefault": "private implementation detail (Go)",
     "type": "Python Flag.type uses native types; schema uses 'type' string enum",
+    "checks_embed": "runtime-only (bytes data, not serializable to JSON schema)",
+    "checksEmbed": "runtime-only (Go field for WithChecksEmbed, not serializable to JSON schema)",
 }
 
 # Per-entity exclusions: fields present in one implementation but not
@@ -424,7 +426,7 @@ def check_option_funcs_coverage(
         "WithArgs", "WithFlags", "WithTags", "WithMutex", "WithDependencies",
         "WithPassthrough", "WithEnvPrefix", "WithConfig",
         "WithConfigPath", "WithConfigFormat",
-        "WithChecks",
+        "WithChecks", "WithChecksEmbed",
     }
     actual = go_fields.get("_option_funcs", set())
     unknown = actual - known_option_funcs
