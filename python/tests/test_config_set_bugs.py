@@ -79,3 +79,164 @@ def test_config_set_rejects_unknown_key(tmp_path):
     r = app.test(["config", "set", "nonexistent", "value"])
     assert r.exit_code != 0, f"expected nonzero exit code, got {r.exit_code}"
     assert "nonexistent" in r.stderr, f"expected error about unknown key in stderr, got: {r.stderr!r}"
+
+
+def _make_app(tmp_path, **extra_flags):
+    """Helper: create an app with common typed flags for config set tests."""
+    config_file = tmp_path / "config.json"
+    app = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("debug", type=bool, help="debug mode", default=False)
+    @strictcli.flag("count", type=int, help="how many", default=0)
+    @strictcli.flag("rate", type=float, help="the rate", default=0.0)
+    @strictcli.flag("name", type=str, help="the name", default="")
+    def run(debug, count, rate, name):
+        pass
+
+    return app, config_file
+
+
+def test_config_set_typed_bool(tmp_path):
+    """config set coerces boolean values and stores them as JSON booleans."""
+    app, config_file = _make_app(tmp_path)
+
+    for true_val in ("true", "yes", "1", "True", "YES"):
+        r = app.test(["config", "set", "debug", true_val])
+        assert r.exit_code == 0, f"exit_code={r.exit_code} for '{true_val}': {r.stderr}"
+        data = json.loads(config_file.read_text())
+        assert data["debug"] is True, f"expected True for '{true_val}', got {data['debug']!r}"
+
+    for false_val in ("false", "no", "0", "False", "NO"):
+        r = app.test(["config", "set", "debug", false_val])
+        assert r.exit_code == 0, f"exit_code={r.exit_code} for '{false_val}': {r.stderr}"
+        data = json.loads(config_file.read_text())
+        assert data["debug"] is False, f"expected False for '{false_val}', got {data['debug']!r}"
+
+
+def test_config_set_typed_int(tmp_path):
+    """config set coerces integer values and stores them as JSON integers."""
+    app, config_file = _make_app(tmp_path)
+
+    r = app.test(["config", "set", "count", "42"])
+    assert r.exit_code == 0
+    data = json.loads(config_file.read_text())
+    assert isinstance(data["count"], int)
+    assert data["count"] == 42
+
+    r = app.test(["config", "set", "count", "0"])
+    assert r.exit_code == 0
+    data = json.loads(config_file.read_text())
+    assert isinstance(data["count"], int)
+    assert data["count"] == 0
+
+
+def test_config_set_typed_float(tmp_path):
+    """config set coerces float values and stores them as JSON floats."""
+    app, config_file = _make_app(tmp_path)
+
+    r = app.test(["config", "set", "rate", "3.14"])
+    assert r.exit_code == 0
+    data = json.loads(config_file.read_text())
+    assert isinstance(data["rate"], float)
+    assert data["rate"] == 3.14
+
+    # Integer-like value stored as float when flag type is float
+    r = app.test(["config", "set", "rate", "3"])
+    assert r.exit_code == 0
+    data = json.loads(config_file.read_text())
+    assert isinstance(data["rate"], float)
+    assert data["rate"] == 3.0
+
+
+def test_config_set_bad_value(tmp_path):
+    """config set rejects values that don't parse as the flag's type."""
+    app, _ = _make_app(tmp_path)
+
+    # Bad int
+    r = app.test(["config", "set", "count", "abc"])
+    assert r.exit_code != 0
+    assert "expected integer, got 'abc'" in r.stderr
+
+    # Bad bool
+    r = app.test(["config", "set", "debug", "maybe"])
+    assert r.exit_code != 0
+    assert "expected boolean, got 'maybe'" in r.stderr
+
+    # Bad float
+    r = app.test(["config", "set", "rate", "xyz"])
+    assert r.exit_code != 0
+    assert "expected float, got 'xyz'" in r.stderr
+
+    # NaN rejected for float
+    r = app.test(["config", "set", "rate", "nan"])
+    assert r.exit_code != 0
+    assert "NaN is not allowed" in r.stderr
+
+    # Inf rejected for float
+    r = app.test(["config", "set", "rate", "inf"])
+    assert r.exit_code != 0
+    assert "Inf is not allowed" in r.stderr
+
+
+def test_config_set_unknown_key_error(tmp_path):
+    """config set error format for unknown keys matches Go exactly."""
+    app, _ = _make_app(tmp_path)
+
+    r = app.test(["config", "set", "xyz", "value"])
+    assert r.exit_code == 1
+    assert r.stderr.strip() == "config set: unknown key 'xyz'"
+
+    r = app.test(["config", "set", "nonexistent_flag", "42"])
+    assert r.exit_code == 1
+    assert r.stderr.strip() == "config set: unknown key 'nonexistent_flag'"
+
+
+def test_config_set_round_trip_typed(tmp_path):
+    """Values set via config set are read back with correct types by a new app."""
+    app, config_file = _make_app(tmp_path)
+
+    app.test(["config", "set", "debug", "true"])
+    app.test(["config", "set", "count", "42"])
+    app.test(["config", "set", "rate", "3.14"])
+    app.test(["config", "set", "name", "hello"])
+
+    # Create a fresh app pointing at the same config file
+    app2 = strictcli.App(
+        name="testapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+    )
+
+    received = {}
+
+    @app2.command("run", help="run something")
+    @strictcli.flag("debug", type=bool, help="debug mode", default=False)
+    @strictcli.flag("count", type=int, help="how many", default=0)
+    @strictcli.flag("rate", type=float, help="the rate", default=0.0)
+    @strictcli.flag("name", type=str, help="the name", default="")
+    def run(debug, count, rate, name):
+        received["debug"] = debug
+        received["count"] = count
+        received["rate"] = rate
+        received["name"] = name
+
+    r = app2.test(["run"])
+    assert r.exit_code == 0
+
+    assert received["debug"] is True
+    assert isinstance(received["debug"], bool)
+    assert received["count"] == 42
+    assert isinstance(received["count"], int)
+    assert received["rate"] == 3.14
+    assert isinstance(received["rate"], float)
+    assert received["name"] == "hello"
+    assert isinstance(received["name"], str)
