@@ -138,7 +138,8 @@ def test_repeatable_with_env_var(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag(
-        "record", help="a record", repeatable=True, unique=False, env="MYAPP_RECORD",
+        "record", help="a record", repeatable=True, unique=False,
+        env="MYAPP_RECORD", env_separator=",",
     )
     def cmd(record):
         print(f"record={record!r}")
@@ -196,7 +197,8 @@ def test_repeatable_env_var_with_type_int(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag(
-        "port", type=int, help="a port", repeatable=True, unique=False, env="MYAPP_PORT",
+        "port", type=int, help="a port", repeatable=True, unique=False,
+        env="MYAPP_PORT", env_separator=",",
     )
     def cmd(port):
         print(f"port={port!r}")
@@ -205,3 +207,51 @@ def test_repeatable_env_var_with_type_int(monkeypatch):
     r = app.test(["cmd"])
     assert r.exit_code == 0
     assert "port=[8080]" in r.stdout
+
+
+def test_env_separator_requires_repeatable():
+    """env_separator on a non-repeatable flag raises ValueError."""
+    with pytest.raises(ValueError, match='env_separator requires repeatable=True'):
+        strictcli.Flag(
+            name="tag", type=str, help="a tag",
+            env="MYAPP_TAG", env_separator=",",
+        )
+
+
+def test_env_separator_requires_env():
+    """env_separator without env raises ValueError."""
+    with pytest.raises(ValueError, match='env_separator requires env'):
+        strictcli.Flag(
+            name="tag", type=str, help="a tag",
+            repeatable=True, unique=False, env_separator=",",
+        )
+
+
+def test_repeatable_env_requires_separator():
+    """repeatable flag with env but no env_separator raises ValueError."""
+    with pytest.raises(
+        ValueError,
+        match='repeatable flag with env requires env_separator',
+    ):
+        strictcli.Flag(
+            name="tag", type=str, help="a tag",
+            repeatable=True, unique=False, env="MYAPP_TAG",
+        )
+
+
+def test_env_separator_must_be_single_char():
+    """env_separator must be exactly one character."""
+    with pytest.raises(ValueError, match='env_separator must be a single character'):
+        strictcli.Flag(
+            name="tag", type=str, help="a tag",
+            repeatable=True, unique=False, env="MYAPP_TAG", env_separator="::",
+        )
+
+
+def test_env_separator_cannot_be_backslash():
+    """env_separator cannot be a backslash."""
+    with pytest.raises(ValueError, match='env_separator cannot be a backslash'):
+        strictcli.Flag(
+            name="tag", type=str, help="a tag",
+            repeatable=True, unique=False, env="MYAPP_TAG", env_separator="\\",
+        )

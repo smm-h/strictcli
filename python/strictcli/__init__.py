@@ -501,6 +501,7 @@ class Flag:
     short: str | None = None
     default: object = None
     env: str | None = None
+    env_separator: str | None = None
     prefixed: bool = True
     negatable: bool = True
     choices: list | None = None
@@ -527,6 +528,19 @@ class Flag:
             raise ValueError(f'Flag "{self.name}": unique requires repeatable=True')
         if isinstance(self.unique, _MissingSentinel) and not self.repeatable:
             self.unique = False
+        # Validate env_separator
+        if self.env_separator is not None and not self.repeatable:
+            raise ValueError(f'Flag "{self.name}": env_separator requires repeatable=True')
+        if self.env_separator is not None and self.env is None:
+            raise ValueError(f'Flag "{self.name}": env_separator requires env')
+        if self.repeatable and self.env is not None and self.env_separator is None:
+            raise ValueError(
+                f'Flag "{self.name}": repeatable flag with env requires env_separator'
+            )
+        if self.env_separator is not None and len(self.env_separator) != 1:
+            raise ValueError(f'Flag "{self.name}": env_separator must be a single character')
+        if self.env_separator == "\\":
+            raise ValueError(f'Flag "{self.name}": env_separator cannot be a backslash')
         # Validate choices
         if self.choices is not None:
             if self.type is bool:
@@ -2396,6 +2410,7 @@ def flag(
     default: object = _MISSING,
     help: str,
     env: str | None = None,
+    env_separator: str | None = None,
     prefixed: bool = True,
     negatable: object = _MISSING,
     choices: list | None = None,
@@ -2413,6 +2428,7 @@ def flag(
             default=default,
             help=help,
             env=env,
+            env_separator=env_separator,
             prefixed=prefixed,
             negatable=negatable,
             choices=choices,
