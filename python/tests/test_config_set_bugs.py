@@ -198,6 +198,30 @@ def test_config_set_unknown_key_error(tmp_path):
     assert r.stderr.strip() == "config set: unknown key 'nonexistent_flag'"
 
 
+def test_config_set_negative_int(tmp_path):
+    """config set accepts negative integers like -7 as positional values."""
+    app, config_file = _make_app(tmp_path)
+
+    r = app.test(["config", "set", "count", "-7"])
+    assert r.exit_code == 0, f"exit_code={r.exit_code}, stderr={r.stderr!r}"
+
+    data = json.loads(config_file.read_text())
+    assert isinstance(data["count"], int), f"expected int, got {type(data['count']).__name__}"
+    assert data["count"] == -7
+
+
+def test_config_set_negative_float(tmp_path):
+    """config set accepts negative floats like -3.14 as positional values."""
+    app, config_file = _make_app(tmp_path)
+
+    r = app.test(["config", "set", "rate", "-3.14"])
+    assert r.exit_code == 0, f"exit_code={r.exit_code}, stderr={r.stderr!r}"
+
+    data = json.loads(config_file.read_text())
+    assert isinstance(data["rate"], float), f"expected float, got {type(data['rate']).__name__}"
+    assert data["rate"] == -3.14
+
+
 def test_config_set_round_trip_typed(tmp_path):
     """Values set via config set are read back with correct types by a new app."""
     app, config_file = _make_app(tmp_path)
