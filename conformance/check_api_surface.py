@@ -99,6 +99,7 @@ GO_TO_SCHEMA: dict[str, str] = {
     "IsVariadic": "variadic",
     "Negatable": "negatable",
     "EnvPrefix": "env_prefix",
+    "EnvSeparator": "env_separator",
     "Choices": "choices_str",  # schema splits into choices_str/choices_int
     "Type": "type",
 }
@@ -126,6 +127,7 @@ SCHEMA_TO_GO: dict[str, str] = {
     "variadic": "IsVariadic",
     "negatable": "Negatable",
     "env_prefix": "EnvPrefix",
+    "env_separator": "EnvSeparator",
     "type": "Type",
     "depends_on": "DependsOn",
     "app.commands": "commands",  # Go App.commands (unexported, set via method)
@@ -430,6 +432,7 @@ def check_option_funcs_coverage(
         "WithPassthrough", "WithEnvPrefix", "WithConfig",
         "WithConfigPath", "WithConfigFormat",
         "WithChecks", "WithChecksEmbed",
+        "Unique", "EnvSeparator",
     }
     actual = go_fields.get("_option_funcs", set())
     unknown = actual - known_option_funcs

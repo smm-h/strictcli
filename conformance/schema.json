@@ -274,6 +274,12 @@
           "type": "boolean",
           "default": true,
           "description": "Whether --no-flagname negation is supported. Only meaningful for bool-type flags."
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "env_separator": {
+          "type": "string"
         }
       }
     },
