@@ -633,3 +633,78 @@ func parseFloatStrict(flagName, raw string) (interface{}, string) {
 	}
 	return floatVal, ""
 }
+
+// splitEscaped splits value on sep, treating backslash as escape character.
+// Escaped sep becomes literal sep. Escaped backslash becomes literal backslash.
+// Trailing backslash with nothing to escape becomes literal backslash.
+func splitEscaped(value string, sep byte) []string {
+	var parts []string
+	var current []byte
+	i := 0
+	for i < len(value) {
+		if value[i] == '\\' {
+			if i+1 < len(value) {
+				next := value[i+1]
+				if next == sep {
+					current = append(current, sep)
+					i += 2
+				} else if next == '\\' {
+					current = append(current, '\\', '\\')
+					i += 2
+				} else {
+					current = append(current, '\\', next)
+					i += 2
+				}
+			} else {
+				// Trailing backslash
+				current = append(current, '\\', '\\')
+				i++
+			}
+		} else if value[i] == sep {
+			parts = append(parts, string(current))
+			current = current[:0]
+			i++
+		} else {
+			current = append(current, value[i])
+			i++
+		}
+	}
+	parts = append(parts, string(current))
+	return parts
+}
+
+// findDuplicate returns the first duplicate value in the slice, or nil if all unique.
+func findDuplicate(values []interface{}) interface{} {
+	seen := make(map[interface{}]bool, len(values))
+	for _, v := range values {
+		if seen[v] {
+			return v
+		}
+		seen[v] = true
+	}
+	return nil
+}
+
+// formatValueForError formats a value for inclusion in error messages (without quotes).
+// Floats always include a decimal point. Bools are lowercase.
+func formatValueForError(value interface{}) string {
+	switch v := value.(type) {
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case float64:
+		s := strconv.FormatFloat(v, 'f', -1, 64)
+		if !strings.Contains(s, ".") {
+			s += ".0"
+		}
+		return s
+	case int:
+		return strconv.Itoa(v)
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}

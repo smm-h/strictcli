@@ -111,6 +111,8 @@ func typeName(v interface{}) string {
 		return "str"
 	case nil:
 		return "null"
+	case []interface{}:
+		return "array"
 	default:
 		return fmt.Sprintf("%T", v)
 	}

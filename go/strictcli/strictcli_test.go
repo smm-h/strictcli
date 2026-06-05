@@ -4638,3 +4638,278 @@ func TestConfigSetNegativeFloat(t *testing.T) {
 	}
 	assertConfigValue(t, path, "rate", float64(-3.14))
 }
+
+// --- splitEscaped tests ---
+
+func TestSplitEscapedBasic(t *testing.T) {
+	got := splitEscaped("a,b,c", ',')
+	want := []string{"a", "b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("index %d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestSplitEscapedEscapedSep(t *testing.T) {
+	got := splitEscaped("a\\,b,c", ',')
+	want := []string{"a,b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("index %d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestSplitEscapedEmptyString(t *testing.T) {
+	got := splitEscaped("", ',')
+	if len(got) != 1 || got[0] != "" {
+		t.Fatalf("got %v, want [\"\"]", got)
+	}
+}
+
+func TestSplitEscapedSepOnly(t *testing.T) {
+	got := splitEscaped(",", ',')
+	want := []string{"", ""}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("index %d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestSplitEscapedSingleValue(t *testing.T) {
+	got := splitEscaped("a", ',')
+	if len(got) != 1 || got[0] != "a" {
+		t.Fatalf("got %v, want [\"a\"]", got)
+	}
+}
+
+func TestSplitEscapedEscapedBackslash(t *testing.T) {
+	got := splitEscaped("a\\\\", ',')
+	if len(got) != 1 || got[0] != "a\\\\" {
+		t.Fatalf("got %v, want [\"a\\\\\\\\\"]", got)
+	}
+}
+
+func TestSplitEscapedEscapedBackslashThenSep(t *testing.T) {
+	got := splitEscaped("a\\\\,b", ',')
+	want := []string{"a\\\\", "b"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("index %d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestSplitEscapedTrailingBackslash(t *testing.T) {
+	got := splitEscaped("a\\", ',')
+	if len(got) != 1 || got[0] != "a\\\\" {
+		t.Fatalf("got %v, want [\"a\\\\\\\\\"]", got)
+	}
+}
+
+func TestSplitEscapedMultipleEscapedSeps(t *testing.T) {
+	got := splitEscaped("a\\,b\\,c", ',')
+	if len(got) != 1 || got[0] != "a,b,c" {
+		t.Fatalf("got %v, want [\"a,b,c\"]", got)
+	}
+}
+
+func TestSplitEscapedDifferentSep(t *testing.T) {
+	got := splitEscaped("a:b:c", ':')
+	want := []string{"a", "b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("index %d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestSplitEscapedDifferentSepEscaped(t *testing.T) {
+	got := splitEscaped("a\\:b:c", ':')
+	want := []string{"a:b", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("index %d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// --- findDuplicate tests ---
+
+func TestFindDuplicateNone(t *testing.T) {
+	got := findDuplicate([]interface{}{1, 2, 3})
+	if got != nil {
+		t.Fatalf("got %v, want nil", got)
+	}
+}
+
+func TestFindDuplicateHasDup(t *testing.T) {
+	got := findDuplicate([]interface{}{1, 2, 2, 3})
+	if got != 2 {
+		t.Fatalf("got %v, want 2", got)
+	}
+}
+
+func TestFindDuplicateFirstDup(t *testing.T) {
+	got := findDuplicate([]interface{}{1, 2, 3, 2, 1})
+	if got != 2 {
+		t.Fatalf("got %v, want 2", got)
+	}
+}
+
+func TestFindDuplicateEmpty(t *testing.T) {
+	got := findDuplicate([]interface{}{})
+	if got != nil {
+		t.Fatalf("got %v, want nil", got)
+	}
+}
+
+func TestFindDuplicateSingleElement(t *testing.T) {
+	got := findDuplicate([]interface{}{1})
+	if got != nil {
+		t.Fatalf("got %v, want nil", got)
+	}
+}
+
+func TestFindDuplicateStrings(t *testing.T) {
+	got := findDuplicate([]interface{}{"a", "b", "a"})
+	if got != "a" {
+		t.Fatalf("got %v, want \"a\"", got)
+	}
+}
+
+func TestFindDuplicateAllSame(t *testing.T) {
+	got := findDuplicate([]interface{}{5, 5, 5})
+	if got != 5 {
+		t.Fatalf("got %v, want 5", got)
+	}
+}
+
+// --- formatValueForError tests ---
+
+func TestFormatValueForErrorString(t *testing.T) {
+	got := formatValueForError("hello")
+	if got != "hello" {
+		t.Fatalf("got %q, want %q", got, "hello")
+	}
+}
+
+func TestFormatValueForErrorInt(t *testing.T) {
+	got := formatValueForError(3)
+	if got != "3" {
+		t.Fatalf("got %q, want %q", got, "3")
+	}
+}
+
+func TestFormatValueForErrorFloatWhole(t *testing.T) {
+	got := formatValueForError(float64(3))
+	if got != "3.0" {
+		t.Fatalf("got %q, want %q", got, "3.0")
+	}
+}
+
+func TestFormatValueForErrorFloatFractional(t *testing.T) {
+	got := formatValueForError(3.5)
+	if got != "3.5" {
+		t.Fatalf("got %q, want %q", got, "3.5")
+	}
+}
+
+func TestFormatValueForErrorBoolTrue(t *testing.T) {
+	got := formatValueForError(true)
+	if got != "true" {
+		t.Fatalf("got %q, want %q", got, "true")
+	}
+}
+
+func TestFormatValueForErrorBoolFalse(t *testing.T) {
+	got := formatValueForError(false)
+	if got != "false" {
+		t.Fatalf("got %q, want %q", got, "false")
+	}
+}
+
+func TestFormatValueForErrorNegativeInt(t *testing.T) {
+	got := formatValueForError(-7)
+	if got != "-7" {
+		t.Fatalf("got %q, want %q", got, "-7")
+	}
+}
+
+func TestFormatValueForErrorNegativeFloat(t *testing.T) {
+	got := formatValueForError(-3.14)
+	if got != "-3.14" {
+		t.Fatalf("got %q, want %q", got, "-3.14")
+	}
+}
+
+func TestFormatValueForErrorZeroFloat(t *testing.T) {
+	got := formatValueForError(float64(0))
+	if got != "0.0" {
+		t.Fatalf("got %q, want %q", got, "0.0")
+	}
+}
+
+// --- typeName tests (extended with array) ---
+
+func TestConfigTypeNameStr(t *testing.T) {
+	if got := typeName("hello"); got != "str" {
+		t.Fatalf("got %q, want %q", got, "str")
+	}
+}
+
+func TestConfigTypeNameBool(t *testing.T) {
+	if got := typeName(true); got != "bool" {
+		t.Fatalf("got %q, want %q", got, "bool")
+	}
+}
+
+func TestConfigTypeNameInt(t *testing.T) {
+	if got := typeName(int64(42)); got != "int" {
+		t.Fatalf("got %q, want %q", got, "int")
+	}
+}
+
+func TestConfigTypeNameFloat(t *testing.T) {
+	if got := typeName(float64(3.14)); got != "float" {
+		t.Fatalf("got %q, want %q", got, "float")
+	}
+}
+
+func TestConfigTypeNameNull(t *testing.T) {
+	if got := typeName(nil); got != "null" {
+		t.Fatalf("got %q, want %q", got, "null")
+	}
+}
+
+func TestConfigTypeNameArray(t *testing.T) {
+	if got := typeName([]interface{}{1, 2, 3}); got != "array" {
+		t.Fatalf("got %q, want %q", got, "array")
+	}
+}
+
+func TestConfigTypeNameBoolFalse(t *testing.T) {
+	if got := typeName(false); got != "bool" {
+		t.Fatalf("got %q, want %q", got, "bool")
+	}
+}
