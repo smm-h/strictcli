@@ -1,1 +1,2 @@
 {"commits":["face7b1fcf296fcd3ba1d5d7b15194c71f79ac0c"],"user_facing":true,"description":"**Breaking.** Config set now accepts negative numeric values. Unknown single-dash tokens produce 'unexpected argument' instead of 'unknown flag'.","type":"breaking"}
+{"commits":["d4bbb758e89f174279d3d1a281ded985c47c958a"],"user_facing":true,"description":"**Fix.** Config show now outputs lowercase true/false for bool values, matching Go implementation.","type":"fix"}
