@@ -4091,3 +4091,238 @@ func TestConfigSetRejectsUnknownKey(t *testing.T) {
 		t.Errorf("stderr should mention the unknown key 'nonexistent', got %q", r.Stderr)
 	}
 }
+
+func TestTomlConfigPrecedence(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// TOML config sets port=9999
+	writeTomlConfig(t, tmpDir, "tomlprecapp", "port = 9999\n")
+
+	app := NewApp("tomlprecapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Env("TOMLPREC_PORT"), Default(8080)),
+	))
+
+	// Config value should win over default
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=9999") {
+		t.Fatalf("expected config value 9999, got %q", r.Stdout)
+	}
+
+	// CLI value should win over config
+	r = app.Test([]string{"serve", "--port", "3000"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=3000") {
+		t.Fatalf("expected CLI value 3000, got %q", r.Stdout)
+	}
+
+	// Env should win over config
+	os.Setenv("TOMLPREC_PORT", "5555")
+	defer os.Unsetenv("TOMLPREC_PORT")
+	r = app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=5555") {
+		t.Fatalf("expected env value 5555, got %q", r.Stdout)
+	}
+}
+
+func TestTomlConfigInvalidToml(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Write invalid TOML
+	dir := filepath.Join(tmpDir, "tomlbadapp")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.toml"), []byte("= invalid toml [[["), 0o644)
+
+	// Capture stderr during NewApp to verify warning
+	oldStderr := os.Stderr
+	stderrR, stderrW, _ := os.Pipe()
+	os.Stderr = stderrW
+
+	app := NewApp("tomlbadapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	stderrW.Close()
+	var stderrBuf [4096]byte
+	n, _ := stderrR.Read(stderrBuf[:])
+	stderrR.Close()
+	os.Stderr = oldStderr
+	stderrOut := string(stderrBuf[:n])
+
+	// Warning should mention invalid TOML
+	if !strings.Contains(stderrOut, "warning: invalid TOML") {
+		t.Fatalf("expected warning about invalid TOML, got stderr=%q", stderrOut)
+	}
+
+	// Should fall back to defaults
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=8080") {
+		t.Fatalf("expected default value 8080, got %q", r.Stdout)
+	}
+}
+
+func TestTomlConfigShow(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeTomlConfig(t, tmpDir, "tomlshowapp", "port = 9999\n")
+
+	app := NewApp("tomlshowapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+		StringFlag("host", "hostname", Default("localhost")),
+	))
+
+	r := app.Test([]string{"config", "show"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// port should show config source with value from TOML
+	if !strings.Contains(r.Stdout, "port = 9999") {
+		t.Fatalf("expected port=9999 in output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "(source: config)") {
+		t.Fatalf("expected source: config in output, got %q", r.Stdout)
+	}
+
+	// host should show default source
+	if !strings.Contains(r.Stdout, "host = localhost") {
+		t.Fatalf("expected host=localhost in output, got %q", r.Stdout)
+	}
+}
+
+func TestTomlConfigPath(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("tomlpathapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run something", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"config", "path"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	expected := filepath.Join(tmpDir, "tomlpathapp", "config.toml")
+	if !strings.Contains(r.Stdout, expected) {
+		t.Fatalf("expected path %q in stdout, got %q", expected, r.Stdout)
+	}
+}
+
+func TestTomlConfigSetRoundTrip(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	_ = tmpDir
+
+	app := NewApp("tomlrtapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	// Set a value via config set
+	r := app.Test([]string{"config", "set", "name", "bob"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// Load the config and verify it round-trips
+	config := loadConfig("tomlrtapp", "", "toml")
+	if config["name"] != "bob" {
+		t.Fatalf("expected name=bob from loadConfig, got %v", config["name"])
+	}
+}
+
+func TestTomlConfigEmptyFile(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Write an empty TOML file
+	writeTomlConfig(t, tmpDir, "tomlemptyapp", "")
+
+	app := NewApp("tomlemptyapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	// Empty TOML file should load without errors, using defaults
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=8080") {
+		t.Fatalf("expected default value 8080, got %q", r.Stdout)
+	}
+}
+
+func TestTomlConfigSetOverwrite(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("tomlowapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		StringFlag("color", "a color", Default("")),
+	))
+
+	// Set initial value
+	r := app.Test([]string{"config", "set", "color", "red"})
+	if r.ExitCode != 0 {
+		t.Fatalf("first config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// Overwrite with new value
+	r = app.Test([]string{"config", "set", "color", "blue"})
+	if r.ExitCode != 0 {
+		t.Fatalf("second config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// Verify only the latest value persists
+	path := filepath.Join(tmpDir, "tomlowapp", "config.toml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "blue") {
+		t.Fatalf("expected 'blue' in config file, got:\n%s", content)
+	}
+	if strings.Contains(content, "red") {
+		t.Fatalf("'red' should have been overwritten, got:\n%s", content)
+	}
+
+	// Also verify via loadConfig
+	config := loadConfig("tomlowapp", "", "toml")
+	if config["color"] != "blue" {
+		t.Fatalf("expected color=blue from loadConfig, got %v", config["color"])
+	}
+}
