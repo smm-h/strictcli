@@ -5196,3 +5196,69 @@ func TestEnvSeparatorHelpText(t *testing.T) {
 		t.Fatalf("stdout should contain '[env: MY_TAGS (sep: ,)]', got %q", r.Stdout)
 	}
 }
+
+// --- Unique CLI enforcement tests ---
+
+func TestUniqueDuplicateError(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(true))))
+	r := app.Test([]string{"cmd", "--tag", "a", "--tag", "a"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--tag: duplicate value 'a'") {
+		t.Fatalf("stderr should contain '--tag: duplicate value \\'a\\'', got %q", r.Stderr)
+	}
+}
+
+func TestUniqueDistinctValues(t *testing.T) {
+	app := simpleApp("cmd", "a command", "tags={tag}",
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(true))))
+	r := app.Test([]string{"cmd", "--tag", "a", "--tag", "b"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=a,b") {
+		t.Fatalf("stdout should contain 'tags=a,b', got %q", r.Stdout)
+	}
+}
+
+func TestUniqueIntDedup(t *testing.T) {
+	app := simpleApp("cmd", "a command", "counts={count}",
+		WithFlags(IntFlag("count", "a count", Repeatable(), Unique(true))))
+	r := app.Test([]string{"cmd", "--count", "1", "--count", "1"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--count: duplicate value '1'") {
+		t.Fatalf("stderr should contain '--count: duplicate value \\'1\\'', got %q", r.Stderr)
+	}
+}
+
+func TestUniqueGlobalFlag(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(StringFlag("tag", "a tag", Repeatable(), Unique(true)))
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	})
+	// Distinct values should succeed
+	r := app.Test([]string{"--tag", "a", "--tag", "b", "cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=a,b") {
+		t.Fatalf("stdout should contain 'tags=a,b', got %q", r.Stdout)
+	}
+	// Duplicate values should fail
+	app2 := NewApp("myapp", "1.0.0", "test app")
+	app2.GlobalFlag(StringFlag("tag", "a tag", Repeatable(), Unique(true)))
+	app2.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	r2 := app2.Test([]string{"--tag", "a", "--tag", "a", "cmd"})
+	if r2.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r2.ExitCode)
+	}
+	if !strings.Contains(r2.Stderr, "--tag: duplicate value 'a'") {
+		t.Fatalf("stderr should contain '--tag: duplicate value \\'a\\'', got %q", r2.Stderr)
+	}
+}

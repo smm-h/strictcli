@@ -1144,16 +1144,22 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		}
 	}
 
-	storeValue := func(f *Flag, value interface{}) {
+	storeValue := func(f *Flag, value interface{}) string {
 		if f.Repeatable {
 			if existing, ok := globalValues[f.Name]; ok {
 				globalValues[f.Name] = append(existing.([]interface{}), value)
 			} else {
 				globalValues[f.Name] = []interface{}{value}
 			}
+			if f.Unique {
+				if dup := findDuplicate(globalValues[f.Name].([]interface{})); dup != nil {
+					return fmt.Sprintf("--%s: duplicate value '%s'", f.Name, formatValueForError(dup))
+				}
+			}
 		} else {
 			globalValues[f.Name] = value
 		}
+		return ""
 	}
 
 	i := 0
@@ -1183,7 +1189,9 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if err != "" {
 					return nil, nil, err
 				}
-				storeValue(f, val)
+				if errStr := storeValue(f, val); errStr != "" {
+					return nil, nil, errStr
+				}
 				i++
 				continue
 			}
@@ -1211,7 +1219,9 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if err != "" {
 					return nil, nil, err
 				}
-				storeValue(f, val)
+				if errStr := storeValue(f, val); errStr != "" {
+					return nil, nil, errStr
+				}
 				i += 2
 			}
 			continue
@@ -1230,7 +1240,9 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if err != "" {
 					return nil, nil, err
 				}
-				storeValue(f, val)
+				if errStr := storeValue(f, val); errStr != "" {
+					return nil, nil, errStr
+				}
 				i += 2
 			}
 			continue

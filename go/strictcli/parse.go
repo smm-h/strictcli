@@ -100,16 +100,22 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	cliSet := make(map[string]interface{})
 	var positionals []string
 
-	storeValue := func(f *Flag, value interface{}) {
+	storeValue := func(f *Flag, value interface{}) string {
 		if f.Repeatable {
 			if existing, ok := cliSet[f.Name]; ok {
 				cliSet[f.Name] = append(existing.([]interface{}), value)
 			} else {
 				cliSet[f.Name] = []interface{}{value}
 			}
+			if f.Unique {
+				if dup := findDuplicate(cliSet[f.Name].([]interface{})); dup != nil {
+					return fmt.Sprintf("--%s: duplicate value '%s'", f.Name, formatValueForError(dup))
+				}
+			}
 		} else {
 			cliSet[f.Name] = value
 		}
+		return ""
 	}
 
 	i := 0
@@ -145,19 +151,25 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					if err != nil {
 						return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 					}
-					storeValue(f, intVal)
+					if errStr := storeValue(f, intVal); errStr != "" {
+						return nil, nil, errStr
+					}
 				} else if f.Type == TypeFloat {
 					floatVal, errStr := parseFloatStrict(f.Name, valuePart)
 					if errStr != "" {
 						return nil, nil, errStr
 					}
-					storeValue(f, floatVal)
+					if errStr := storeValue(f, floatVal); errStr != "" {
+						return nil, nil, errStr
+					}
 				} else {
 					resolved, errStr := resolveAtPrefix(f.Name, valuePart, stdinConsumedBy)
 					if errStr != "" {
 						return nil, nil, errStr
 					}
-					storeValue(f, resolved)
+					if errStr := storeValue(f, resolved); errStr != "" {
+						return nil, nil, errStr
+					}
 				}
 			} else if _, ok := negationLookup[flagPart]; ok {
 				return nil, nil, fmt.Sprintf("flag '%s' is a boolean negation and does not take a value", flagPart)
@@ -194,19 +206,25 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					if err != nil {
 						return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 					}
-					storeValue(f, intVal)
+					if errStr := storeValue(f, intVal); errStr != "" {
+						return nil, nil, errStr
+					}
 				} else if f.Type == TypeFloat {
 					floatVal, errStr := parseFloatStrict(f.Name, raw)
 					if errStr != "" {
 						return nil, nil, errStr
 					}
-					storeValue(f, floatVal)
+					if errStr := storeValue(f, floatVal); errStr != "" {
+						return nil, nil, errStr
+					}
 				} else {
 					resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
 					if errStr != "" {
 						return nil, nil, errStr
 					}
-					storeValue(f, resolved)
+					if errStr := storeValue(f, resolved); errStr != "" {
+						return nil, nil, errStr
+					}
 				}
 				i += 2
 			}
@@ -229,19 +247,25 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 						if err != nil {
 							return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 						}
-						storeValue(f, intVal)
+						if errStr := storeValue(f, intVal); errStr != "" {
+							return nil, nil, errStr
+						}
 					} else if f.Type == TypeFloat {
 						floatVal, errStr := parseFloatStrict(f.Name, raw)
 						if errStr != "" {
 							return nil, nil, errStr
 						}
-						storeValue(f, floatVal)
+						if errStr := storeValue(f, floatVal); errStr != "" {
+							return nil, nil, errStr
+						}
 					} else {
 						resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
 						if errStr != "" {
 							return nil, nil, errStr
 						}
-						storeValue(f, resolved)
+						if errStr := storeValue(f, resolved); errStr != "" {
+							return nil, nil, errStr
+						}
 					}
 					i += 2
 				}
