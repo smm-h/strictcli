@@ -317,7 +317,7 @@ func (a *App) registerConfigGroup() {
 			value = args["value"].(string)
 		}
 		if useClear && useDefault {
-			fmt.Fprintln(os.Stderr, "--clear and --default are mutually exclusive")
+			fmt.Fprintln(os.Stderr, "config set: --clear and --default are mutually exclusive")
 			return 1
 		}
 		if hasValue && useClear {

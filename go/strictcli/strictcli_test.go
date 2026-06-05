@@ -6149,7 +6149,7 @@ func TestConfigSetClearAndDefaultError(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "--clear and --default are mutually exclusive") {
+	if !strings.Contains(r.Stderr, "config set: --clear and --default are mutually exclusive") {
 		t.Fatalf("expected mutex error, got %q", r.Stderr)
 	}
 }

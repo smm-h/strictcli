@@ -1297,4 +1297,4 @@ def test_config_set_clear_and_default_error(tmp_path, monkeypatch):
     app = _make_config_set_app()
     r = app.test(["config", "set", "tags", "--clear", "--default"])
     assert r.exit_code == 1
-    assert "--clear and --default are mutually exclusive" in r.stderr
+    assert "config set: --clear and --default are mutually exclusive" in r.stderr

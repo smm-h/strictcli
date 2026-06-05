@@ -1247,7 +1247,7 @@ class App:
             # Validate: exactly one of (value, --clear, --default)
             has_value = value is not None
             if use_clear and use_default:
-                print("--clear and --default are mutually exclusive",
+                print("config set: --clear and --default are mutually exclusive",
                       file=sys.stderr)
                 return 1
             if has_value and use_clear:
