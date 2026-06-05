@@ -270,18 +270,14 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 		switch f.Type {
 		case TypeBool:
-			lower := strings.ToLower(envVal)
-			switch lower {
-			case "1", "true", "yes":
-				cliSet[f.Name] = true
-			case "0", "false", "no":
-				cliSet[f.Name] = false
-			default:
+			boolVal, err := parseBoolStrict(envVal)
+			if err != nil {
 				return nil, nil, fmt.Sprintf(
 					"invalid boolean value '%s' for env var '%s' (flag '--%s')",
 					envVal, f.Env, f.Name,
 				)
 			}
+			cliSet[f.Name] = boolVal
 		case TypeInt:
 			intVal, err := strconv.Atoi(envVal)
 			if err != nil {
@@ -580,21 +576,60 @@ func formatChoices(choices []interface{}) string {
 	return strings.Join(parts, ", ")
 }
 
-// parseFloatStrict parses a string as float64 with strict validation:
-// rejects leading/trailing whitespace, NaN, and +/-Inf.
-func parseFloatStrict(flagName, raw string) (interface{}, string) {
-	if raw != strings.TrimSpace(raw) {
-		return nil, fmt.Sprintf("--%s: expected float, got '%s'", flagName, raw)
+// parseBoolStrict parses a string as a boolean with strict validation.
+// Accepts: 1, true, yes (case-insensitive) -> true
+// Accepts: 0, false, no (case-insensitive) -> false
+// Everything else returns an error.
+func parseBoolStrict(s string) (bool, error) {
+	switch strings.ToLower(s) {
+	case "1", "true", "yes":
+		return true, nil
+	case "0", "false", "no":
+		return false, nil
+	default:
+		return false, fmt.Errorf("expected boolean, got '%s'", s)
 	}
-	floatVal, err := strconv.ParseFloat(raw, 64)
+}
+
+// parseIntStrict parses a string as an integer with strict validation.
+// Uses strconv.Atoi which rejects leading/trailing whitespace.
+func parseIntStrict(s string) (int, error) {
+	intVal, err := strconv.Atoi(s)
 	if err != nil {
-		return nil, fmt.Sprintf("--%s: expected float, got '%s'", flagName, raw)
+		return 0, fmt.Errorf("expected integer, got '%s'", s)
+	}
+	return intVal, nil
+}
+
+// parseFloatStrictValue parses a string as float64 with strict validation:
+// rejects leading/trailing whitespace, NaN, and +/-Inf.
+func parseFloatStrictValue(s string) (float64, error) {
+	if s != strings.TrimSpace(s) {
+		return 0, fmt.Errorf("expected float, got '%s'", s)
+	}
+	floatVal, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, fmt.Errorf("expected float, got '%s'", s)
 	}
 	if math.IsNaN(floatVal) {
-		return nil, fmt.Sprintf("--%s: NaN is not allowed", flagName)
+		return 0, fmt.Errorf("NaN is not allowed")
 	}
 	if math.IsInf(floatVal, 0) {
-		return nil, fmt.Sprintf("--%s: Inf is not allowed", flagName)
+		return 0, fmt.Errorf("Inf is not allowed")
+	}
+	return floatVal, nil
+}
+
+// parseFloatStrict parses a string as float64 with strict validation,
+// returning flag-contextualized error messages.
+func parseFloatStrict(flagName, raw string) (interface{}, string) {
+	floatVal, err := parseFloatStrictValue(raw)
+	if err != nil {
+		msg := err.Error()
+		if msg == "NaN is not allowed" || msg == "Inf is not allowed" {
+			return nil, fmt.Sprintf("--%s: %s", flagName, msg)
+		}
+		return nil, fmt.Sprintf("--%s: expected float, got '%s'", flagName, raw)
 	}
 	return floatVal, ""
 }

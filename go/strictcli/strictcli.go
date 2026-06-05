@@ -1212,18 +1212,14 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 			if ok {
 				switch f.Type {
 				case TypeBool:
-					lower := strings.ToLower(envVal)
-					switch lower {
-					case "1", "true", "yes":
-						globalValues[f.Name] = true
-					case "0", "false", "no":
-						globalValues[f.Name] = false
-					default:
+					boolVal, err := parseBoolStrict(envVal)
+					if err != nil {
 						return nil, nil, fmt.Sprintf(
 							"invalid boolean value '%s' for env var '%s' (flag '--%s')",
 							envVal, f.Env, f.Name,
 						)
 					}
+					globalValues[f.Name] = boolVal
 				case TypeInt:
 					intVal, err := strconv.Atoi(envVal)
 					if err != nil {
