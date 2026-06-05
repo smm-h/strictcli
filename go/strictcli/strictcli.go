@@ -30,10 +30,13 @@ type Flag struct {
 	Negatable  bool
 	Choices    []interface{}
 	Validate   func(interface{}) error
-	Repeatable bool
+	Repeatable   bool
+	Unique       bool
+	EnvSeparator string
 
 	// hasDefault distinguishes between "default explicitly set to nil" and "no default"
 	hasDefault bool
+	hasUnique  bool
 }
 
 // Arg represents a positional argument.
@@ -265,6 +268,22 @@ func Repeatable() FlagOption {
 	}
 }
 
+// Unique controls whether a repeatable flag rejects duplicate values.
+func Unique(b bool) FlagOption {
+	return func(f *Flag) {
+		f.Unique = b
+		f.hasUnique = true
+	}
+}
+
+// EnvSeparator sets the character used to split an env var value into multiple
+// values for a repeatable flag (e.g., "," to split "a,b,c" into ["a","b","c"]).
+func EnvSeparator(sep string) FlagOption {
+	return func(f *Flag) {
+		f.EnvSeparator = sep
+	}
+}
+
 // ValidateFn sets a validation function for a flag.
 func ValidateFn(fn func(interface{}) error) FlagOption {
 	return func(f *Flag) {
@@ -439,6 +458,29 @@ func validateFlagConfig(f *Flag) {
 	}
 	if f.Repeatable && f.Type == TypeBool {
 		panic(fmt.Sprintf("Flag %q: repeatable is incompatible with type=bool", f.Name))
+	}
+	// Unique requires repeatable; repeatable requires explicit unique
+	if f.Repeatable && !f.hasUnique {
+		panic(fmt.Sprintf("Flag %q: repeatable requires explicit unique (unique=True or unique=False)", f.Name))
+	}
+	if f.hasUnique && !f.Repeatable {
+		panic(fmt.Sprintf("Flag %q: unique requires repeatable=True", f.Name))
+	}
+	// EnvSeparator validations
+	if f.EnvSeparator != "" && !f.Repeatable {
+		panic(fmt.Sprintf("Flag %q: env_separator requires repeatable=True", f.Name))
+	}
+	if f.EnvSeparator != "" && f.Env == "" {
+		panic(fmt.Sprintf("Flag %q: env_separator requires env", f.Name))
+	}
+	if f.Repeatable && f.Env != "" && f.EnvSeparator == "" {
+		panic(fmt.Sprintf("Flag %q: repeatable flag with env requires env_separator", f.Name))
+	}
+	if f.EnvSeparator != "" && len(f.EnvSeparator) != 1 {
+		panic(fmt.Sprintf("Flag %q: env_separator must be a single character", f.Name))
+	}
+	if f.EnvSeparator == "\\" {
+		panic(fmt.Sprintf("Flag %q: env_separator cannot be a backslash", f.Name))
 	}
 	if f.Choices != nil {
 		if f.Type == TypeBool {

@@ -55,6 +55,16 @@ func serializeFlag(f Flag) map[string]interface{} {
 		m["repeatable"] = true
 	}
 
+	// unique: default false (omit when false)
+	if f.Unique {
+		m["unique"] = true
+	}
+
+	// env_separator: default "" (omit when empty)
+	if f.EnvSeparator != "" {
+		m["env_separator"] = f.EnvSeparator
+	}
+
 	// negatable: default nil (omit when nil, i.e. non-bool flags)
 	// For bool flags, only omit when nil (which doesn't happen since BoolFlag sets it)
 	if f.Type == TypeBool {

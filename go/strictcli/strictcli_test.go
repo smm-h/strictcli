@@ -774,7 +774,7 @@ func TestBoolNegationWithValueRejected(t *testing.T) {
 
 func TestRepeatableSingle(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false))))
 	r := app.Test([]string{"cmd", "--tag", "alpha"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -786,7 +786,7 @@ func TestRepeatableSingle(t *testing.T) {
 
 func TestRepeatableMultiple(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false))))
 	r := app.Test([]string{"cmd", "--tag", "alpha", "--tag", "beta", "--tag", "gamma"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -798,7 +798,7 @@ func TestRepeatableMultiple(t *testing.T) {
 
 func TestRepeatableZero(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false))))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -810,7 +810,7 @@ func TestRepeatableZero(t *testing.T) {
 
 func TestRepeatableInt(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ports={port}",
-		WithFlags(IntFlag("port", "a port", Repeatable())))
+		WithFlags(IntFlag("port", "a port", Repeatable(), Unique(false))))
 	r := app.Test([]string{"cmd", "--port", "80", "--port", "443"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -822,7 +822,7 @@ func TestRepeatableInt(t *testing.T) {
 
 func TestRepeatableWithChoicesValid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Repeatable(), Choices("alpha", "beta", "gamma"))))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Choices("alpha", "beta", "gamma"))))
 	r := app.Test([]string{"cmd", "--tag", "alpha", "--tag", "gamma"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -834,7 +834,7 @@ func TestRepeatableWithChoicesValid(t *testing.T) {
 
 func TestRepeatableWithChoicesInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Repeatable(), Choices("alpha", "beta"))))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Choices("alpha", "beta"))))
 	r := app.Test([]string{"cmd", "--tag", "alpha", "--tag", "delta"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -849,7 +849,7 @@ func TestRepeatableWithChoicesInvalid(t *testing.T) {
 
 func TestRepeatableEquals(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false))))
 	r := app.Test([]string{"cmd", "--tag=alpha", "--tag=beta"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -861,7 +861,7 @@ func TestRepeatableEquals(t *testing.T) {
 
 func TestRepeatableShortFlag(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Short("t"), Repeatable())))
+		WithFlags(StringFlag("tag", "a tag", Short("t"), Repeatable(), Unique(false))))
 	r := app.Test([]string{"cmd", "-t", "alpha", "-t", "beta"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -873,7 +873,7 @@ func TestRepeatableShortFlag(t *testing.T) {
 
 func TestRepeatableInHelp(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false))))
 	r := app.Test([]string{"cmd", "--help"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -891,7 +891,7 @@ func TestRepeatableEnv(t *testing.T) {
 	app.Command("cmd", "a command", func(args map[string]interface{}) int {
 		fmt.Print("tags=" + formatValue(args["tag"]))
 		return 0
-	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Env("MYAPP_TAG"))))
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("MYAPP_TAG"), EnvSeparator(","))))
 
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
@@ -2330,7 +2330,7 @@ func TestFloatFlagRepeatable(t *testing.T) {
 	app.Command("cmd", "a command", func(args map[string]interface{}) int {
 		fmt.Print("vals=" + formatValue(args["val"]))
 		return 0
-	}, WithFlags(FloatFlag("val", "a value", Repeatable())))
+	}, WithFlags(FloatFlag("val", "a value", Repeatable(), Unique(false))))
 
 	r := app.Test([]string{"cmd", "--val", "1.1", "--val", "2.2", "--val", "3.3"})
 	if r.ExitCode != 0 {
@@ -5030,4 +5030,127 @@ func TestConfigTypeNameBoolFalse(t *testing.T) {
 	if got := typeName(false); got != "bool" {
 		t.Fatalf("got %q, want %q", got, "bool")
 	}
+}
+
+// --- Unique tests ---
+
+func TestUniqueRequiresRepeatable(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Unique on non-repeatable flag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, `unique requires repeatable=True`) {
+			t.Fatalf("panic message should mention unique requires repeatable=True, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("tag", "a tag", Unique(true))))
+}
+
+func TestRepeatableRequiresExplicitUnique(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for Repeatable without Unique, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, `repeatable requires explicit unique (unique=True or unique=False)`) {
+			t.Fatalf("panic message should mention explicit unique, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("tag", "a tag", Repeatable())))
+}
+
+// --- EnvSeparator tests ---
+
+func TestEnvSeparatorRequiresRepeatable(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for EnvSeparator on non-repeatable flag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, `env_separator requires repeatable=True`) {
+			t.Fatalf("panic message should mention env_separator requires repeatable=True, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("tag", "a tag", Env("MYAPP_TAG"), EnvSeparator(","))))
+}
+
+func TestEnvSeparatorRequiresEnv(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for EnvSeparator without Env, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, `env_separator requires env`) {
+			t.Fatalf("panic message should mention env_separator requires env, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), EnvSeparator(","))))
+}
+
+func TestRepeatableEnvRequiresSeparator(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for repeatable+env without EnvSeparator, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, `repeatable flag with env requires env_separator`) {
+			t.Fatalf("panic message should mention env_separator requirement, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("MYAPP_TAG"))))
+}
+
+func TestEnvSeparatorMustBeSingleChar(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for multi-char EnvSeparator, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, `env_separator must be a single character`) {
+			t.Fatalf("panic message should mention single character, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("MYAPP_TAG"), EnvSeparator("::"))))
+}
+
+func TestEnvSeparatorCannotBeBackslash(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for backslash EnvSeparator, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, `env_separator cannot be a backslash`) {
+			t.Fatalf("panic message should mention backslash, got %q", msg)
+		}
+	}()
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("MYAPP_TAG"), EnvSeparator("\\"))))
 }
