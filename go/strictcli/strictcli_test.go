@@ -681,8 +681,11 @@ func TestUnknownShortFlag(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "unknown flag") {
-		t.Fatalf("stderr should contain 'unknown flag', got %q", r.Stderr)
+	// Tokens starting with single "-" that don't match any known flag are
+	// treated as positional args (to support negative numbers like -7).
+	// A command with no args then errors with "unexpected argument".
+	if !strings.Contains(r.Stderr, "unexpected argument") {
+		t.Fatalf("stderr should contain 'unexpected argument', got %q", r.Stderr)
 	}
 }
 
@@ -4598,4 +4601,40 @@ func TestTomlConfigSetWritesTypedValues(t *testing.T) {
 			t.Errorf("TOML file should not contain stringified value %s, got:\n%s", bad, content)
 		}
 	}
+}
+
+func TestConfigSetNegativeInt(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("negintapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		IntFlag("count", "a count", Default(0)),
+	))
+
+	path := filepath.Join(tmpDir, "negintapp", "config.json")
+
+	r := app.Test([]string{"config", "set", "count", "-7"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set count -7: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "count", float64(-7))
+}
+
+func TestConfigSetNegativeFloat(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("negfloatapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		FloatFlag("rate", "a rate", Default(0.0)),
+	))
+
+	path := filepath.Join(tmpDir, "negfloatapp", "config.json")
+
+	r := app.Test([]string{"config", "set", "rate", "-3.14"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set rate -3.14: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "rate", float64(-3.14))
 }
