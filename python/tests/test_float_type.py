@@ -258,3 +258,35 @@ def test_float_flag_scientific_notation():
     r = app.test(["cmd", "--rate", "1e-3"])
     assert r.exit_code == 0
     assert "rate=0.001" in r.stdout
+
+
+def test_float_flag_nan_from_env_includes_env_suffix(monkeypatch):
+    """NaN from env var includes '(from env var ...)' suffix in error."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
+    def cmd(rate):
+        print(f"rate={rate}")
+
+    monkeypatch.setenv("MYAPP_RATE", "nan")
+    r = app.test(["cmd"])
+    assert r.exit_code == 1
+    assert "NaN is not allowed" in r.stderr
+    assert "(from env var 'MYAPP_RATE')" in r.stderr
+
+
+def test_float_flag_inf_from_env_includes_env_suffix(monkeypatch):
+    """Inf from env var includes '(from env var ...)' suffix in error."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
+    def cmd(rate):
+        print(f"rate={rate}")
+
+    monkeypatch.setenv("MYAPP_RATE", "inf")
+    r = app.test(["cmd"])
+    assert r.exit_code == 1
+    assert "Inf is not allowed" in r.stderr
+    assert "(from env var 'MYAPP_RATE')" in r.stderr
