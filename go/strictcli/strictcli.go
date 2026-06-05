@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -1221,11 +1220,11 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 					}
 					globalValues[f.Name] = boolVal
 				case TypeInt:
-					intVal, err := strconv.Atoi(envVal)
+					intVal, err := parseIntStrict(envVal)
 					if err != nil {
 						return nil, nil, fmt.Sprintf(
-							"--%s: expected integer, got '%s' (from env var '%s')",
-							f.Name, envVal, f.Env,
+							"--%s: %s (from env var '%s')",
+							f.Name, err.Error(), f.Env,
 						)
 					}
 					if f.Repeatable {
@@ -1346,9 +1345,9 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 func parseGlobalFlagValue(f *Flag, raw string, stdinConsumedBy **string) (interface{}, string) {
 	switch f.Type {
 	case TypeInt:
-		intVal, err := strconv.Atoi(raw)
+		intVal, err := parseIntStrict(raw)
 		if err != nil {
-			return nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
+			return nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 		}
 		return intVal, ""
 	case TypeFloat:

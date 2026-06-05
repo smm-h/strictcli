@@ -141,9 +141,9 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					return nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
 				}
 				if f.Type == TypeInt {
-					intVal, err := strconv.Atoi(valuePart)
+					intVal, err := parseIntStrict(valuePart)
 					if err != nil {
-						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, valuePart)
+						return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 					}
 					storeValue(f, intVal)
 				} else if f.Type == TypeFloat {
@@ -190,9 +190,9 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				}
 				raw := tokens[i+1]
 				if f.Type == TypeInt {
-					intVal, err := strconv.Atoi(raw)
+					intVal, err := parseIntStrict(raw)
 					if err != nil {
-						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
+						return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 					}
 					storeValue(f, intVal)
 				} else if f.Type == TypeFloat {
@@ -228,9 +228,9 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				}
 				raw := tokens[i+1]
 				if f.Type == TypeInt {
-					intVal, err := strconv.Atoi(raw)
+					intVal, err := parseIntStrict(raw)
 					if err != nil {
-						return nil, nil, fmt.Sprintf("--%s: expected integer, got '%s'", f.Name, raw)
+						return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
 					}
 					storeValue(f, intVal)
 				} else if f.Type == TypeFloat {
@@ -279,11 +279,11 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			}
 			cliSet[f.Name] = boolVal
 		case TypeInt:
-			intVal, err := strconv.Atoi(envVal)
+			intVal, err := parseIntStrict(envVal)
 			if err != nil {
 				return nil, nil, fmt.Sprintf(
-					"--%s: expected integer, got '%s' (from env var '%s')",
-					f.Name, envVal, f.Env,
+					"--%s: %s (from env var '%s')",
+					f.Name, err.Error(), f.Env,
 				)
 			}
 			if f.Repeatable {
