@@ -782,3 +782,123 @@ def test_config_show_both_flags_error(tmp_path, monkeypatch):
     r = app.test(["config", "show", "--plain", "--json"])
     assert r.exit_code == 1
     assert "mutually exclusive" in r.stderr
+
+
+# --- config array coercion for repeatable flags ---
+
+
+def _make_repeatable_config_app(tmp_path, monkeypatch, config_data,
+                                flag_type=str, flag_name="tags"):
+    """Helper: app with config and a repeatable flag."""
+    config_home = _write_config(tmp_path, "repapp", config_data)
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = strictcli.App(
+        name="repapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag(flag_name, type=flag_type, help="the flag",
+                     repeatable=True, unique=False)
+    def run(**kwargs):
+        val = kwargs[flag_name.replace("-", "_")]
+        print(f"val={val}")
+
+    return app
+
+
+def test_config_array_for_repeatable_string(tmp_path, monkeypatch):
+    """Config array for repeatable str flag is coerced correctly."""
+    app = _make_repeatable_config_app(tmp_path, monkeypatch,
+                                       {"tags": ["a", "b", "c"]})
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "val=['a', 'b', 'c']" in r.stdout
+
+
+def test_config_array_for_repeatable_int(tmp_path, monkeypatch):
+    """Config array for repeatable int flag is coerced correctly."""
+    app = _make_repeatable_config_app(tmp_path, monkeypatch,
+                                       {"nums": [1, 2, 3]},
+                                       flag_type=int, flag_name="nums")
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "val=[1, 2, 3]" in r.stdout
+
+
+def test_config_array_for_repeatable_float(tmp_path, monkeypatch):
+    """Config array for repeatable float flag is coerced correctly."""
+    app = _make_repeatable_config_app(tmp_path, monkeypatch,
+                                       {"rates": [1.5, 2.5]},
+                                       flag_type=float, flag_name="rates")
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "val=[1.5, 2.5]" in r.stdout
+
+
+def test_config_array_for_non_repeatable_error(tmp_path, monkeypatch):
+    """Array value for non-repeatable flag errors."""
+    config_home = _write_config(tmp_path, "scalarapp", {"target": ["a", "b"]})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = strictcli.App(
+        name="scalarapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("target", type=str, help="the target", default="x")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "expected scalar, got array" in r.stderr
+
+
+def test_config_scalar_for_repeatable_error(tmp_path, monkeypatch):
+    """Scalar value for repeatable flag errors."""
+    app = _make_repeatable_config_app(tmp_path, monkeypatch,
+                                       {"tags": "single"})
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "expected array for repeatable flag" in r.stderr
+
+
+def test_config_array_bad_element_type(tmp_path, monkeypatch):
+    """Array with wrong element type errors with element index."""
+    app = _make_repeatable_config_app(tmp_path, monkeypatch,
+                                       {"tags": ["a", 123]})
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "element 1: expected str, got int" in r.stderr
+
+
+def test_config_empty_array(tmp_path, monkeypatch):
+    """Empty array for repeatable flag gives empty list."""
+    app = _make_repeatable_config_app(tmp_path, monkeypatch,
+                                       {"tags": []})
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "val=[]" in r.stdout
+
+
+def test_config_single_element_array(tmp_path, monkeypatch):
+    """Single-element array for repeatable flag works."""
+    app = _make_repeatable_config_app(tmp_path, monkeypatch,
+                                       {"tags": ["a"]})
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "val=['a']" in r.stdout
+
+
+def test_config_array_precedence_cli_wins(tmp_path, monkeypatch):
+    """CLI values override config array entirely."""
+    app = _make_repeatable_config_app(tmp_path, monkeypatch,
+                                       {"tags": ["a", "b", "c"]})
+    r = app.test(["run", "--tags", "x", "--tags", "y"])
+    assert r.exit_code == 0
+    assert "val=['x', 'y']" in r.stdout
