@@ -69,6 +69,9 @@ SCHEMA_TEST_ONLY: set[str] = {
     # (e.g. error parity checks) -- not part of the strictcli API.
     "checks",
     "checks_toml",
+    # config_content provides inline config file content for test cases --
+    # not a real App parameter (the test runner writes it to a temp file).
+    "config_content",
 }
 
 # Per-entity schema fields that are JSON discriminators, not real API fields:
