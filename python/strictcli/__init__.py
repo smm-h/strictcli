@@ -315,12 +315,18 @@ def _strict_int(s: str) -> int:
     Python's int() silently strips whitespace; Go's strconv.Atoi does not.
     This matches Go's stricter behavior. Additionally, the result is
     range-checked to fit in a signed 64-bit integer, matching Go's int/int64.
+
+    All errors raise ValueError with the same message format as Go's
+    parseIntStrict: "expected integer, got '<value>'".
     """
     if s != s.strip():
-        raise ValueError(f"invalid literal for int() with base 10: {s!r}")
-    n = int(s)
+        raise ValueError(f"expected integer, got '{s}'")
+    try:
+        n = int(s)
+    except ValueError:
+        raise ValueError(f"expected integer, got '{s}'") from None
     if n < -(2**63) or n > 2**63 - 1:
-        raise ValueError("integer out of range")
+        raise ValueError(f"expected integer, got '{s}'")
     return n
 
 
@@ -1069,10 +1075,7 @@ class App:
                 if matched_flag.type == bool:
                     typed_value = _strict_bool(value)
                 elif matched_flag.type == int:
-                    try:
-                        typed_value = _strict_int(value)
-                    except ValueError:
-                        raise ValueError(f"expected integer, got '{value}'")
+                    typed_value = _strict_int(value)
                 elif matched_flag.type == float:
                     try:
                         typed_value = _strict_float(value)
@@ -1304,10 +1307,8 @@ class App:
                     if f.type is int:
                         try:
                             _store_value(f, _strict_int(value_part))
-                        except ValueError:
-                            raise _ParseError(
-                                f"--{f.name}: expected integer, got {value_part!r}"
-                            )
+                        except ValueError as e:
+                            raise _ParseError(f"--{f.name}: {e}")
                     elif f.type is float:
                         try:
                             _store_value(f, _strict_float(value_part))
@@ -1348,10 +1349,8 @@ class App:
                         if f.type is int:
                             try:
                                 _store_value(f, _strict_int(raw))
-                            except ValueError:
-                                raise _ParseError(
-                                    f"--{f.name}: expected integer, got {raw!r}"
-                                )
+                            except ValueError as e:
+                                raise _ParseError(f"--{f.name}: {e}")
                         elif f.type is float:
                             try:
                                 _store_value(f, _strict_float(raw))
@@ -1379,10 +1378,8 @@ class App:
                         if f.type is int:
                             try:
                                 _store_value(f, _strict_int(raw))
-                            except ValueError:
-                                raise _ParseError(
-                                    f"--{f.name}: expected integer, got {raw!r}"
-                                )
+                            except ValueError as e:
+                                raise _ParseError(f"--{f.name}: {e}")
                         elif f.type is float:
                             try:
                                 _store_value(f, _strict_float(raw))
@@ -1423,10 +1420,9 @@ class App:
                     elif f.type is int:
                         try:
                             coerced = _strict_int(env_val)
-                        except ValueError:
+                        except ValueError as e:
                             raise _ParseError(
-                                f"--{f.name}: expected integer, got {env_val!r} "
-                                f"(from env var '{f.env}')"
+                                f"--{f.name}: {e} (from env var '{f.env}')"
                             )
                         cli_set[f.name] = [coerced] if f.repeatable else coerced
                     elif f.type is float:
@@ -1703,8 +1699,8 @@ def _parse_command(
                 if f.type is int:
                     try:
                         _store_value(f, _strict_int(value_part))
-                    except ValueError:
-                        raise _ParseError(f"--{f.name}: expected integer, got {value_part!r}")
+                    except ValueError as e:
+                        raise _ParseError(f"--{f.name}: {e}")
                 elif f.type is float:
                     try:
                         _store_value(f, _strict_float(value_part))
@@ -1745,8 +1741,8 @@ def _parse_command(
                         if f.type is int:
                             try:
                                 _store_value(f, _strict_int(raw))
-                            except ValueError:
-                                raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
+                            except ValueError as e:
+                                raise _ParseError(f"--{f.name}: {e}")
                         elif f.type is float:
                             try:
                                 _store_value(f, _strict_float(raw))
@@ -1777,8 +1773,8 @@ def _parse_command(
                     if f.type is int:
                         try:
                             _store_value(f, _strict_int(raw))
-                        except ValueError:
-                            raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
+                        except ValueError as e:
+                            raise _ParseError(f"--{f.name}: {e}")
                     elif f.type is float:
                         try:
                             _store_value(f, _strict_float(raw))
@@ -1817,10 +1813,9 @@ def _parse_command(
                 elif f.type is int:
                     try:
                         coerced = _strict_int(env_val)
-                    except ValueError:
+                    except ValueError as e:
                         raise _ParseError(
-                            f"--{f.name}: expected integer, got {env_val!r} "
-                            f"(from env var '{f.env}')"
+                            f"--{f.name}: {e} (from env var '{f.env}')"
                         )
                     cli_set[f.name] = [coerced] if f.repeatable else coerced
                 elif f.type is float:
