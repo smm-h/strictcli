@@ -183,7 +183,34 @@ def test_config_show(tmp_path, monkeypatch):
     assert r.exit_code == 0
     assert "target = from-config  (source: config)" in r.stdout
     assert "count = 1  (source: default)" in r.stdout
-    assert "verbose = False  (source: default)" in r.stdout
+    assert "verbose = false  (source: default)" in r.stdout
+
+
+# --- Test 10b: config show formats bools as lowercase (Go parity) ---
+
+def test_config_show_lowercase_bools(tmp_path, monkeypatch):
+    """Config show formats bools as lowercase true/false, matching Go output."""
+    config_home = _write_config(tmp_path, "testapp", {"verbose": True})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = _make_config_app(config=True)
+    r = app.test(["config", "show"])
+    assert r.exit_code == 0
+    # Bool from config must be lowercase
+    assert "verbose = true  (source: config)" in r.stdout
+    # None (no default for bool) must show as <nil>
+    assert "verbose = True" not in r.stdout
+    assert "verbose = False" not in r.stdout
+
+
+def test_config_show_bool_false_default_lowercase(tmp_path, monkeypatch):
+    """Config show formats default False bool as lowercase false."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_app(config=True)
+    r = app.test(["config", "show"])
+    assert r.exit_code == 0
+    # verbose has no explicit default, defaults to False -- must be lowercase
+    assert "verbose = false  (source: default)" in r.stdout
+    assert "verbose = False" not in r.stdout
 
 
 # --- Test 11: config respects XDG_CONFIG_HOME ---
