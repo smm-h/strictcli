@@ -53,6 +53,11 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
         opts.append(f"strictcli.Choices({args})")
     if flag_def.get("repeatable", False):
         opts.append("strictcli.Repeatable()")
+    if "unique" in flag_def:
+        val = "true" if flag_def["unique"] else "false"
+        opts.append(f"strictcli.Unique({val})")
+    if "env_separator" in flag_def:
+        opts.append(f'strictcli.EnvSeparator("{flag_def["env_separator"]}")')
     if "negatable" in flag_def and not flag_def["negatable"]:
         opts.append("strictcli.NegatableOpt(false)")
     return opts

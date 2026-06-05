@@ -213,6 +213,12 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	if v, ok := fd["repeatable"]; ok && v.(bool) {
 		opts = append(opts, strictcli.Repeatable())
 	}
+	if v, ok := fd["unique"]; ok {
+		opts = append(opts, strictcli.Unique(v.(bool)))
+	}
+	if v, ok := fd["env_separator"]; ok {
+		opts = append(opts, strictcli.EnvSeparator(v.(string)))
+	}
 	if v, ok := fd["negatable"]; ok && !v.(bool) {
 		opts = append(opts, strictcli.NegatableOpt(false))
 	}

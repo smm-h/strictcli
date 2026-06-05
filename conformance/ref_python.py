@@ -58,6 +58,12 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
     if flag_def.get("repeatable", False):
         parts.append("repeatable=True")
 
+    if "unique" in flag_def:
+        parts.append(f"unique={flag_def['unique']}")
+
+    if "env_separator" in flag_def:
+        parts.append(f"env_separator={flag_def['env_separator']!r}")
+
     if "negatable" in flag_def and not flag_def["negatable"]:
         parts.append("negatable=False")
 
@@ -388,6 +394,10 @@ def _emit_command_registration(
             fd_parts.append(f"choices={f['choices_float']!r}")
         if f.get("repeatable", False):
             fd_parts.append("repeatable=True")
+        if "unique" in f:
+            fd_parts.append(f"unique={f['unique']}")
+        if "env_separator" in f:
+            fd_parts.append(f"env_separator={f['env_separator']!r}")
         if "negatable" in f and not f["negatable"]:
             fd_parts.append("negatable=False")
         flag_decorators.append(
