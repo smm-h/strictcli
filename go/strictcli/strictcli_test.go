@@ -4536,3 +4536,66 @@ func TestTomlConfigSetOverwrite(t *testing.T) {
 		t.Fatalf("expected color=blue from loadConfig, got %v", config["color"])
 	}
 }
+
+func TestTomlConfigSetWritesTypedValues(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("tomltypesapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		IntFlag("count", "a count", Default(0)),
+		BoolFlag("debug", "enable debug", Default(false)),
+		FloatFlag("rate", "a rate", Default(0.0)),
+		StringFlag("name", "a name", Default("")),
+	))
+
+	// Set each type via config set
+	for _, tc := range []struct {
+		key, val string
+	}{
+		{"count", "42"},
+		{"debug", "true"},
+		{"rate", "3.14"},
+		{"name", "alice"},
+	} {
+		r := app.Test([]string{"config", "set", tc.key, tc.val})
+		if r.ExitCode != 0 {
+			t.Fatalf("config set %s %s failed: exit %d, stderr=%q", tc.key, tc.val, r.ExitCode, r.Stderr)
+		}
+	}
+
+	// Read the raw TOML file from disk
+	path := filepath.Join(tmpDir, "tomltypesapp", "config.toml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+	content := string(data)
+
+	// Assert native TOML types (not stringified)
+	mustContain := []string{
+		"count = 42",
+		"debug = true",
+		"rate = 3.14",
+		`name = "alice"`,
+	}
+	for _, want := range mustContain {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected TOML file to contain %q, got:\n%s", want, content)
+		}
+	}
+
+	// Assert values are NOT written as quoted strings
+	mustNotContain := []string{
+		`"42"`,
+		`"true"`,
+		`"3.14"`,
+	}
+	for _, bad := range mustNotContain {
+		if strings.Contains(content, bad) {
+			t.Errorf("TOML file should not contain stringified value %s, got:\n%s", bad, content)
+		}
+	}
+}
