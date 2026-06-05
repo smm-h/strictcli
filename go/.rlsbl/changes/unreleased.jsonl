@@ -9,3 +9,4 @@
 {"commits":["3b15268fb1ed1b35cb0057663f67961a97f2d258"],"user_facing":false}
 {"commits":["cdc010316ce356628e2592b493ccc368dd782b48"],"user_facing":true,"description":"**Fix.** `config set` mutex error messages now include the `config set:` prefix for consistency.","type":"fix"}
 {"commits":["3d4033202ea363da28ec2fa96861d94b6b7f4f72"],"user_facing":true,"description":"**Fix.** `typeName` now correctly reports whole float64 values (e.g. `3.0`) as `int` type for config validation.","type":"fix"}
+{"commits":["98bfea68b1b971b42a31ecb1d08ecc3b55df86f2","1d9ee273ce05153c7c9e23b8297c6fccdb342c21","237959317366da75aca71919ae8d66d498cb95e9"],"user_facing":false}
