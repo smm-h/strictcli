@@ -90,6 +90,10 @@
           "default": null,
           "description": "Override CWD-based discovery of checks.toml with an explicit path."
         },
+        "config_content": {
+          "type": "string",
+          "description": "Raw config file content to write before running the test"
+        },
         "checks_toml": {
           "type": "string",
           "description": "Raw TOML content to write as .strictcli/checks.toml for check conformance tests."

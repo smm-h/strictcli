@@ -247,8 +247,23 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     errors = []
     raw_result = None
 
+    # Handle config_content: write to a temp file and override config_path
+    config_tmp_path = None
+    app_def = case["app"]
+    if "config_content" in app_def:
+        config_format = app_def.get("config_format", "json")
+        ext = ".toml" if config_format == "toml" else ".json"
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=ext, prefix="strictcli_cfg_", delete=False
+        ) as cfg_f:
+            cfg_f.write(app_def["config_content"])
+            config_tmp_path = cfg_f.name
+        # Shallow copy so we don't mutate the original case
+        app_def = dict(app_def)
+        app_def["config_path"] = config_tmp_path
+
     if target == "python":
-        script = _generate_python_script(case["app"])
+        script = _generate_python_script(app_def)
         # Fix the sys.path to use an absolute path so the script works from
         # any directory (it's generated with a __file__-relative path by
         # ref_python.py which only works inside the conformance dir).
@@ -275,7 +290,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         app_def_file = tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", prefix="strictcli_def_", delete=False
         )
-        json.dump(case["app"], app_def_file, sort_keys=True)
+        json.dump(app_def, app_def_file, sort_keys=True)
         app_def_file.close()
         extra_env = {"CONFORMANCE_APP_DEF": app_def_file.name}
         argv = [binary] + case["argv"]
@@ -287,7 +302,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     # to determine project_id. Create a temp dir with the right project file.
     proj_dir = None
     if "--dump-schema" in case["argv"]:
-        proj_dir = _make_project_dir(target, case["app"]["name"])
+        proj_dir = _make_project_dir(target, app_def["name"])
         run_cwd = proj_dir
     else:
         run_cwd = str(CONFORMANCE_DIR)
@@ -355,6 +370,8 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     finally:
         if cleanup_path is not None:
             os.unlink(cleanup_path)
+        if config_tmp_path is not None:
+            os.unlink(config_tmp_path)
         if proj_dir is not None:
             shutil.rmtree(proj_dir, ignore_errors=True)
 
