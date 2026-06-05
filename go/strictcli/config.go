@@ -202,7 +202,50 @@ func (a *App) registerConfigGroup() {
 		}
 		// Read existing config
 		existing := loadConfig(a.Name, a.configPathOverride, a.configFormat)
-		existing[key] = value
+
+		// Look up the key against registered flags
+		allFlags := a.collectAllFlags()
+		var matchedFlag *Flag
+		for i := range allFlags {
+			if flagParamName(allFlags[i].Name) == key {
+				matchedFlag = &allFlags[i]
+				break
+			}
+		}
+		if matchedFlag == nil {
+			fmt.Fprintf(os.Stderr, "config set: unknown key '%s'\n", key)
+			return 1
+		}
+
+		// Coerce the string value to the flag's type
+		var typedValue interface{}
+		switch matchedFlag.Type {
+		case TypeBool:
+			v, err := parseBoolStrict(value)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+				return 1
+			}
+			typedValue = v
+		case TypeInt:
+			v, err := parseIntStrict(value)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+				return 1
+			}
+			typedValue = v
+		case TypeFloat:
+			v, err := parseFloatStrictValue(value)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+				return 1
+			}
+			typedValue = v
+		case TypeStr:
+			typedValue = value
+		}
+
+		existing[key] = typedValue
 		var data []byte
 		var err error
 		switch a.configFormat {
