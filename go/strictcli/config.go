@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	tomledit "github.com/smm-h/go-toml-edit"
 )
 
 // configPath returns the full path to the config file for an app.
@@ -41,9 +43,17 @@ func loadConfig(appName string, pathOverride string, format string) map[string]i
 		return map[string]interface{}{}
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: invalid JSON in config file '%s', ignoring\n", path)
-		return map[string]interface{}{}
+	switch format {
+	case "toml":
+		if err := tomledit.Unmarshal(data, &result); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: invalid TOML in config file '%s', ignoring\n", path)
+			return map[string]interface{}{}
+		}
+	default:
+		if err := json.Unmarshal(data, &result); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: invalid JSON in config file '%s', ignoring\n", path)
+			return map[string]interface{}{}
+		}
 	}
 	return result
 }
@@ -56,9 +66,12 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 		if b, ok := value.(bool); ok {
 			return b, ""
 		}
-		return nil, fmt.Sprintf("expected boolean, got %s", jsonTypeName(value))
+		return nil, fmt.Sprintf("expected boolean, got %s", typeName(value))
 	case TypeInt:
-		// JSON numbers decode as float64; accept only whole numbers
+		// TOML integers decode as int64; JSON numbers decode as float64
+		if val, ok := value.(int64); ok {
+			return int(val), ""
+		}
 		if fv, ok := value.(float64); ok {
 			intVal := int(fv)
 			if float64(intVal) == fv {
@@ -66,27 +79,32 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 			}
 			return nil, "expected integer, got float"
 		}
-		return nil, fmt.Sprintf("expected integer, got %s", jsonTypeName(value))
+		return nil, fmt.Sprintf("expected integer, got %s", typeName(value))
 	case TypeFloat:
-		// Accept float64 (JSON numbers always decode as float64)
+		// TOML integers decode as int64; JSON numbers decode as float64
+		if val, ok := value.(int64); ok {
+			return float64(val), ""
+		}
 		if fv, ok := value.(float64); ok {
 			return fv, ""
 		}
-		return nil, fmt.Sprintf("expected float, got %s", jsonTypeName(value))
+		return nil, fmt.Sprintf("expected float, got %s", typeName(value))
 	case TypeStr:
 		if s, ok := value.(string); ok {
 			return s, ""
 		}
-		return nil, fmt.Sprintf("expected string, got %s", jsonTypeName(value))
+		return nil, fmt.Sprintf("expected string, got %s", typeName(value))
 	}
 	return nil, fmt.Sprintf("unsupported flag type %d", f.Type)
 }
 
-// jsonTypeName returns a human-readable type name for a JSON-decoded value.
-func jsonTypeName(v interface{}) string {
+// typeName returns a human-readable type name for a config-decoded value.
+func typeName(v interface{}) string {
 	switch v.(type) {
 	case bool:
 		return "bool"
+	case int64:
+		return "int"
 	case float64:
 		return "float"
 	case string:
@@ -183,18 +201,24 @@ func (a *App) registerConfigGroup() {
 			return 1
 		}
 		// Read existing config
-		existing := make(map[string]interface{})
-		if data, err := os.ReadFile(path); err == nil {
-			// Ignore JSON errors -- start fresh if invalid
-			json.Unmarshal(data, &existing)
-		}
+		existing := loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		existing[key] = value
-		data, err := json.MarshalIndent(existing, "", "  ")
+		var data []byte
+		var err error
+		switch a.configFormat {
+		case "toml":
+			data, err = tomledit.Marshal(existing)
+		default:
+			data, err = json.MarshalIndent(existing, "", "  ")
+			if err == nil {
+				data = append(data, '\n')
+			}
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: cannot marshal config: %s\n", err)
 			return 1
 		}
-		if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
 			return 1
 		}
@@ -213,7 +237,11 @@ func (a *App) registerConfigGroup() {
 			return 1
 		}
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
+			emptyContent := "{}\n"
+			if a.configFormat == "toml" {
+				emptyContent = ""
+			}
+			if err := os.WriteFile(path, []byte(emptyContent), 0o644); err != nil {
 				fmt.Fprintf(os.Stderr, "error: cannot create config file: %s\n", err)
 				return 1
 			}
