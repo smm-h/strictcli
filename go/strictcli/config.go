@@ -482,11 +482,12 @@ func formatConfigValue(v interface{}) string {
 		}
 		return "false"
 	case []interface{}:
-		data, err := json.Marshal(val)
-		if err != nil {
-			return fmt.Sprintf("%v", val)
+		parts := make([]string, len(val))
+		for i, v := range val {
+			b, _ := json.Marshal(v)
+			parts[i] = string(b)
 		}
-		return strings.ReplaceAll(string(data), ",", ", ")
+		return "[" + strings.Join(parts, ", ") + "]"
 	case string:
 		return val
 	default:
