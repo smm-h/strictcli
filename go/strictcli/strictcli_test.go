@@ -5910,6 +5910,34 @@ func TestConfigSetRepeatableInt(t *testing.T) {
 	}
 }
 
+func TestConfigSetRepeatableFloat(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "rates", "1.5,2.5,3.0"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	path := filepath.Join(tmpDir, "repapp", "config.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	arr, ok := config["rates"].([]interface{})
+	if !ok {
+		t.Fatalf("rates should be an array, got %T", config["rates"])
+	}
+	if len(arr) != 3 || arr[0] != float64(1.5) || arr[1] != float64(2.5) || arr[2] != float64(3.0) {
+		t.Fatalf("expected [1.5,2.5,3.0], got %v", arr)
+	}
+}
+
 func TestConfigSetEscapedComma(t *testing.T) {
 	tmpDir, cleanup := configTestSetup(t)
 	defer cleanup()

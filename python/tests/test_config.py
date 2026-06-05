@@ -1153,6 +1153,18 @@ def test_config_set_repeatable_int(tmp_path, monkeypatch):
     assert data["counts"] == [1, 2, 3]
 
 
+def test_config_set_repeatable_float(tmp_path, monkeypatch):
+    """Config set writes a float array for a repeatable flag."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "rates", "1.5,2.5,3.0"])
+    assert r.exit_code == 0
+
+    config_file = tmp_path / "repapp" / "config.json"
+    data = json.loads(config_file.read_text())
+    assert data["rates"] == [1.5, 2.5, 3.0]
+
+
 def test_config_set_escaped_comma(tmp_path, monkeypatch):
     r"""Config set handles escaped commas: a\,b,c -> ["a,b", "c"]."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
