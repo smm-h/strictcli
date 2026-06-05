@@ -2937,7 +2937,9 @@ func TestConfigSetCreatesFile(t *testing.T) {
 	defer cleanup()
 
 	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
-	app.Command("greet", "say hello", func(args map[string]interface{}) int { return 0 })
+	app.Command("greet", "say hello", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		StringFlag("theme", "color theme", Default("")),
+	))
 
 	// Run config set
 	r := app.Test([]string{"config", "set", "theme", "dark"})
@@ -4089,6 +4091,214 @@ func TestConfigSetRejectsUnknownKey(t *testing.T) {
 	}
 	if !strings.Contains(r.Stderr, "nonexistent") {
 		t.Errorf("stderr should mention the unknown key 'nonexistent', got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetTypedBool(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("boolapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		BoolFlag("debug", "debug mode", Default(false)),
+	))
+
+	path := filepath.Join(tmpDir, "boolapp", "config.json")
+
+	// "true" -> bool true
+	r := app.Test([]string{"config", "set", "debug", "true"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set debug true: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "debug", true)
+
+	// "yes" -> bool true
+	r = app.Test([]string{"config", "set", "debug", "yes"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set debug yes: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "debug", true)
+
+	// "1" -> bool true
+	r = app.Test([]string{"config", "set", "debug", "1"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set debug 1: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "debug", true)
+
+	// "false" -> bool false
+	r = app.Test([]string{"config", "set", "debug", "false"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set debug false: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "debug", false)
+}
+
+func TestConfigSetTypedInt(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("intapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		IntFlag("count", "a count", Default(0)),
+	))
+
+	path := filepath.Join(tmpDir, "intapp", "config.json")
+
+	r := app.Test([]string{"config", "set", "count", "42"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set count 42: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "count", float64(42))
+}
+
+func TestConfigSetTypedFloat(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("floatapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		FloatFlag("rate", "a rate", Default(0.0)),
+	))
+
+	path := filepath.Join(tmpDir, "floatapp", "config.json")
+
+	// "3.14" -> float64(3.14)
+	r := app.Test([]string{"config", "set", "rate", "3.14"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set rate 3.14: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "rate", float64(3.14))
+
+	// "3" -> float64(3) (stored as 3.0 in JSON)
+	r = app.Test([]string{"config", "set", "rate", "3"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set rate 3: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	assertConfigValue(t, path, "rate", float64(3))
+}
+
+func TestConfigSetBadValue(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("badvalapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		IntFlag("count", "a count", Default(0)),
+		BoolFlag("debug", "debug mode", Default(false)),
+		FloatFlag("rate", "a rate", Default(0.0)),
+	))
+
+	// Bad int
+	r := app.Test([]string{"config", "set", "count", "abc"})
+	if r.ExitCode == 0 {
+		t.Errorf("config set count abc: expected nonzero exit")
+	}
+	if !strings.Contains(r.Stderr, "expected integer") {
+		t.Errorf("stderr should mention 'expected integer', got %q", r.Stderr)
+	}
+
+	// Bad bool
+	r = app.Test([]string{"config", "set", "debug", "maybe"})
+	if r.ExitCode == 0 {
+		t.Errorf("config set debug maybe: expected nonzero exit")
+	}
+	if !strings.Contains(r.Stderr, "expected boolean") {
+		t.Errorf("stderr should mention 'expected boolean', got %q", r.Stderr)
+	}
+
+	// Bad float
+	r = app.Test([]string{"config", "set", "rate", "xyz"})
+	if r.ExitCode == 0 {
+		t.Errorf("config set rate xyz: expected nonzero exit")
+	}
+	if !strings.Contains(r.Stderr, "expected float") {
+		t.Errorf("stderr should mention 'expected float', got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetUnknownKeyError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("unkapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	r := app.Test([]string{"config", "set", "xyz", "value"})
+	if r.ExitCode == 0 {
+		t.Errorf("expected nonzero exit for unknown key")
+	}
+	if !strings.Contains(r.Stderr, "unknown key 'xyz'") {
+		t.Errorf("stderr should contain \"unknown key 'xyz'\", got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetRoundTripTyped(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// buildApp creates a fresh app instance each time, so configData
+	// is loaded from disk at construction time.
+	buildApp := func() *App {
+		app := NewApp("rtapp", "1.0.0", "test app", WithConfig())
+		app.Command("show", "show values", func(args map[string]interface{}) int {
+			fmt.Printf("count=%d verbose=%t rate=%.2f name=%s",
+				args["count"], args["verbose"], args["rate"], args["name"])
+			return 0
+		}, WithFlags(
+			IntFlag("count", "a count", Default(0)),
+			BoolFlag("verbose", "verbose mode", Default(false)),
+			FloatFlag("rate", "a rate", Default(0.0)),
+			StringFlag("name", "a name", Default("")),
+		))
+		return app
+	}
+
+	// Set typed values via config set
+	for _, cmd := range [][]string{
+		{"config", "set", "count", "7"},
+		{"config", "set", "verbose", "true"},
+		{"config", "set", "rate", "2.5"},
+		{"config", "set", "name", "hello"},
+	} {
+		app := buildApp()
+		r := app.Test(cmd)
+		if r.ExitCode != 0 {
+			t.Fatalf("config set %v: exit %d, stderr=%q", cmd, r.ExitCode, r.Stderr)
+		}
+	}
+
+	// Build a fresh app that loads the config from disk, then run a command
+	app := buildApp()
+	r := app.Test([]string{"show"})
+	if r.ExitCode != 0 {
+		t.Fatalf("show: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	expected := "count=7 verbose=true rate=2.50 name=hello"
+	if r.Stdout != expected {
+		t.Errorf("expected %q, got %q", expected, r.Stdout)
+	}
+}
+
+// assertConfigValue reads the JSON config file and checks that key has the expected value.
+func assertConfigValue(t *testing.T, path, key string, expected interface{}) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist at %s: %v", path, err)
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("config file should be valid JSON: %v", err)
+	}
+	val, ok := config[key]
+	if !ok {
+		t.Fatalf("config should have key '%s'", key)
+	}
+	if val != expected {
+		t.Errorf("config['%s'] = %v (%T), expected %v (%T)", key, val, val, expected, expected)
 	}
 }
 
