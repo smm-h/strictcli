@@ -1,0 +1,1 @@
+{"commits":["face7b1fcf296fcd3ba1d5d7b15194c71f79ac0c"],"user_facing":true,"description":"**Breaking.** Config set now accepts negative numeric values. Unknown single-dash tokens produce 'unexpected argument' instead of 'unknown flag'.","type":"breaking"}
