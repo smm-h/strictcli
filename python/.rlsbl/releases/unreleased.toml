@@ -1,8 +1,0 @@
-# Version bump type: patch, minor, or major
-bump = "minor"
-# Short description of this release (required)
-description = "unique and env_separator flag fields, config array coercion, config set repeatable support"
-# Optional context explaining why these changes were made
-context = "Breaking: config show now requires --plain or --json. New features: unique field enforces no duplicate values on repeatable flags, env_separator controls how env vars are split into arrays, config arrays are coerced to declared types, config set supports repeatable flags with --clear and --default."
-include = ["pypi", "npm"]
-exclude = []
