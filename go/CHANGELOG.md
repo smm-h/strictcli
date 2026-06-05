@@ -2,16 +2,30 @@
 
 # Changelog
 
-## 0.10.0
+## 0.11.0
 
-WithChecksEmbed for inline TOML data
+TOML config support and config set type coercion
 
 <details>
 <summary>Context</summary>
 
-Deployed Go binaries that use strictcli's check system previously panicked when .strictcli/checks.toml was missing from the working directory. WithChecksEmbed(data []byte) lets consumers embed the TOML at compile time via //go:embed, eliminating the filesystem dependency.
+WithConfigFormat("toml") now correctly parses TOML config files (previously always JSON-parsed). config set validates keys and coerces values to flag types. Both are breaking: TOML configs that silently fell back to defaults will now resolve values, and unknown keys in config set are rejected.
 
 </details>
+
+### Breaking
+
+- **Breaking.** `config set` now validates keys against registered flags and rejects unknown keys.
+
+### Features
+
+- **New feature.** `config set` coerces values to the flag's declared type (int, bool, float) before writing to config.
+
+### Fixes
+
+- **Bug fix.** `WithConfigFormat("toml")` now correctly parses TOML config files. Previously, config files were always parsed as JSON regardless of the format setting.
+
+## 0.10.0
 
 ### Features
 
