@@ -2,16 +2,26 @@
 
 # Changelog
 
-## 0.15.0
+## 0.15.1
 
-Config set type coercion and key validation
+Config show bool parity and negative values in config set
 
 <details>
 <summary>Context</summary>
 
-config set now validates keys against registered flags and coerces string values to the flag's declared type before writing. This is a breaking change: unknown keys are rejected.
+config show now outputs lowercase true/false matching Go. config set accepts negative numeric values.
 
 </details>
+
+### Breaking
+
+- **Breaking.** Config set now accepts negative numeric values. Unknown single-dash tokens produce 'unexpected argument' instead of 'unknown flag'.
+
+### Fixes
+
+- **Fix.** Config show now outputs lowercase true/false for bool values, matching Go implementation.
+
+## 0.15.0
 
 ### Breaking
 
