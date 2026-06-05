@@ -387,6 +387,12 @@ func formatConfigValue(v interface{}) string {
 			return "true"
 		}
 		return "false"
+	case []interface{}:
+		data, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return string(data)
 	case string:
 		return val
 	default:

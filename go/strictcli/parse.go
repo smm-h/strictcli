@@ -417,6 +417,13 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				if errStr != "" {
 					return nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
 				}
+				if f.Unique {
+					if arr, ok := coerced.([]interface{}); ok {
+						if dup := findDuplicate(arr); dup != nil {
+							return nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
+						}
+					}
+				}
 				cliSet[f.Name] = coerced
 			}
 		}

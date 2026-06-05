@@ -1391,6 +1391,13 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if errStr != "" {
 					return nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
 				}
+				if f.Unique {
+					if arr, ok := coerced.([]interface{}); ok {
+						if dup := findDuplicate(arr); dup != nil {
+							return nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
+						}
+					}
+				}
 				globalValues[f.Name] = coerced
 			}
 		}

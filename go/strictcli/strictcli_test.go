@@ -5446,6 +5446,129 @@ func TestConfigArrayPrecedenceCLIWins(t *testing.T) {
 	}
 }
 
+// --- config array unique enforcement ---
+
+func TestConfigUniqueEnforcement(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "cfguniqapp", map[string]interface{}{
+		"tags": []interface{}{"a", "b", "a"},
+	})
+	app := NewApp("cfguniqapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(true))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "duplicate value 'a'") {
+		t.Fatalf("expected 'duplicate value' in stderr, got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "config value error") {
+		t.Fatalf("expected 'config value error' in stderr, got %q", r.Stderr)
+	}
+}
+
+func TestConfigUniqueNoDuplicates(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "cfguniqokapp", map[string]interface{}{
+		"tags": []interface{}{"a", "b", "c"},
+	})
+	app := NewApp("cfguniqokapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Print("val=" + formatValue(args["tags"]))
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(true))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "val=a,b,c") {
+		t.Fatalf("expected val=a,b,c, got %q", r.Stdout)
+	}
+}
+
+func TestConfigShowPlainArray(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "cfgshowapp", map[string]interface{}{
+		"tags": []interface{}{"a", "b", "c"},
+	})
+	app := NewApp("cfgshowapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(false))))
+	r := app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, `tags = ["a","b","c"]  (source: config)`) {
+		t.Fatalf("expected array display in stdout, got %q", r.Stdout)
+	}
+}
+
+func TestConfigShowJSONArray(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "cfgjsonshowapp", map[string]interface{}{
+		"tags": []interface{}{"x", "y"},
+	})
+	app := NewApp("cfgjsonshowapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(false))))
+	r := app.Test([]string{"config", "show", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	var data map[string]struct {
+		Value  interface{} `json:"value"`
+		Source string      `json:"source"`
+	}
+	if err := json.Unmarshal([]byte(r.Stdout), &data); err != nil {
+		t.Fatalf("failed to parse JSON: %s\nstdout=%q", err, r.Stdout)
+	}
+	entry, ok := data["tags"]
+	if !ok {
+		t.Fatal("expected 'tags' key in JSON output")
+	}
+	if entry.Source != "config" {
+		t.Fatalf("expected source 'config', got %q", entry.Source)
+	}
+	arr, ok := entry.Value.([]interface{})
+	if !ok {
+		t.Fatalf("expected array value, got %T", entry.Value)
+	}
+	if len(arr) != 2 || arr[0].(string) != "x" || arr[1].(string) != "y" {
+		t.Fatalf("expected [x, y], got %v", arr)
+	}
+}
+
+func TestConfigUniqueEnforcementGlobalFlag(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "cfgglbuniqapp", map[string]interface{}{
+		"tags": []interface{}{"a", "b", "a"},
+	})
+	app := NewApp("cfgglbuniqapp", "1.0.0", "test app", WithConfig())
+	app.GlobalFlag(StringFlag("tags", "the tags", Repeatable(), Unique(true)))
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	})
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "duplicate value 'a'") {
+		t.Fatalf("expected 'duplicate value' in stderr, got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "config value error") {
+		t.Fatalf("expected 'config value error' in stderr, got %q", r.Stderr)
+	}
+}
+
 // --- Env separator parsing tests ---
 
 func TestEnvSeparatorSplitsValue(t *testing.T) {
