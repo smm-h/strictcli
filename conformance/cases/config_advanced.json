@@ -367,5 +367,31 @@
       "exit_code": 1,
       "stderr_contains": "one of --plain, --json is required"
     }
+  },
+  {
+    "name": "config: config show with both --plain and --json fails",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_format": "toml",
+      "config_content": "",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "count", "help": "a count", "type": "int", "default": 0}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "show", "--plain", "--json"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "mutually exclusive"
+    }
   }
 ]
