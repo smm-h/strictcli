@@ -3,3 +3,4 @@
 {"commits":["b475ee32ba1d8df5fbaccfb8802c148d54605028"],"user_facing":false}
 {"commits":["a5370705a2150e55d857da4efb87a9a73daea1fb"],"user_facing":false}
 {"commits":["1163e94f50d258dcec544c39848dec8a83caa564"],"user_facing":true,"description":"**Breaking.** `config set` now validates keys against registered flags and rejects unknown keys.","type":"breaking"}
+{"commits":["1163e94f50d258dcec544c39848dec8a83caa564"],"user_facing":true,"description":"**New feature.** `config set` coerces values to the flag's declared type (int, bool, float) before writing to config.","type":"feature"}
