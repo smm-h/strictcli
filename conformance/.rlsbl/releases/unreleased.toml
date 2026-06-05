@@ -1,8 +1,0 @@
-# Version bump type: patch, minor, or major
-bump = "minor"
-# Short description of this release (required)
-description = "Config content support and TOML config test cases"
-# Optional context explaining why these changes were made
-context = "Added config_content field to conformance schema and 10 new test cases exercising TOML config loading, precedence, config show, and config set error handling."
-include = ["plain"]
-exclude = []
