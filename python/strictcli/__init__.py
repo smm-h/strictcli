@@ -1765,40 +1765,39 @@ def _parse_command(
             continue
 
         # -x (short form)
-        if tok.startswith("-") and len(tok) == 2:
-            if tok in short_lookup:
-                f = short_lookup[tok]
-                if f.type is bool:
-                    cli_set[f.name] = True
-                    i += 1
-                else:
-                    # str/int/float flag: consume next token as value
-                    if i + 1 < len(tokens):
-                        raw = tokens[i + 1]
-                        if f.type is int:
-                            try:
-                                _store_value(f, _strict_int(raw))
-                            except ValueError:
-                                raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
-                        elif f.type is float:
-                            try:
-                                _store_value(f, _strict_float(raw))
-                            except ValueError as e:
-                                raise _float_parse_error(f.name, raw, e)
-                        else:
-                            resolved, stdin_consumed_by[0] = _resolve_at_prefix(
-                                f.name, raw, stdin_consumed_by[0],
-                            )
-                            _store_value(f, resolved)
-                        i += 2
-                    else:
-                        raise _ParseError(f"flag '{tok}' requires a value")
+        if tok.startswith("-") and len(tok) == 2 and tok in short_lookup:
+            f = short_lookup[tok]
+            if f.type is bool:
+                cli_set[f.name] = True
+                i += 1
             else:
-                raise _ParseError(f"unknown flag '{tok}'")
+                # str/int/float flag: consume next token as value
+                if i + 1 < len(tokens):
+                    raw = tokens[i + 1]
+                    if f.type is int:
+                        try:
+                            _store_value(f, _strict_int(raw))
+                        except ValueError:
+                            raise _ParseError(f"--{f.name}: expected integer, got {raw!r}")
+                    elif f.type is float:
+                        try:
+                            _store_value(f, _strict_float(raw))
+                        except ValueError as e:
+                            raise _float_parse_error(f.name, raw, e)
+                    else:
+                        resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                            f.name, raw, stdin_consumed_by[0],
+                        )
+                        _store_value(f, resolved)
+                    i += 2
+                else:
+                    raise _ParseError(f"flag '{tok}' requires a value")
             continue
 
-        # Unknown flag-like token
-        raise _ParseError(f"unknown flag '{tok}'")
+        # Token starts with "-" but doesn't match any known flag;
+        # treat as a positional arg (e.g. negative numbers like -7, -3.14)
+        positionals.append(tok)
+        i += 1
 
     # Step 4: resolve env vars for flags not set by CLI
     for f in cmd.flags:
