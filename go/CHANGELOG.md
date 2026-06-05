@@ -2,16 +2,22 @@
 
 # Changelog
 
-## 0.11.0
+## 0.11.1
 
-TOML config support and config set type coercion
+Config show bool parity, negative values in config set, parseIntStrict wiring
 
 <details>
 <summary>Context</summary>
 
-WithConfigFormat("toml") now correctly parses TOML config files (previously always JSON-parsed). config set validates keys and coerces values to flag types. Both are breaking: TOML configs that silently fell back to defaults will now resolve values, and unknown keys in config set are rejected.
+config show now outputs lowercase bools matching Python. config set accepts negative numeric values. Wired parseIntStrict to all int parsing sites. Error message change: unknown single-dash tokens now produce 'unexpected argument' instead of 'unknown flag'.
 
 </details>
+
+### Breaking
+
+- **Breaking.** Config set now accepts negative numeric values. Unknown single-dash tokens produce 'unexpected argument' instead of 'unknown flag'.
+
+## 0.11.0
 
 ### Breaking
 
