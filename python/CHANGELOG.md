@@ -2,16 +2,35 @@
 
 # Changelog
 
-## 0.15.1
+## 0.16.0
 
-Config show bool parity and negative values in config set
+unique and env_separator flag fields, config array coercion, config set repeatable support
 
 <details>
 <summary>Context</summary>
 
-config show now outputs lowercase true/false matching Go. config set accepts negative numeric values.
+Breaking: config show now requires --plain or --json. New features: unique field enforces no duplicate values on repeatable flags, env_separator controls how env vars are split into arrays, config arrays are coerced to declared types, config set supports repeatable flags with --clear and --default.
 
 </details>
+
+### Breaking
+
+- **Config show.** `config show` now requires explicit `--plain` or `--json` flag instead of defaulting to plain text.
+
+### Features
+
+- **New flag field.** `unique` field on repeatable flags enforces no duplicate values at CLI parse time and in config arrays.
+- **New flag field.** `env_separator` on repeatable flags controls how environment variable values are split into arrays.
+- **Config arrays.** Config values for repeatable flags are now coerced from strings to the declared type.
+- **Config set.** Repeatable flags can now be managed with `config set`, including `--clear` to reset and `--default` to restore default values.
+
+### Fixes
+
+- **Fix.** Float NaN/Inf env var error messages now include the environment variable suffix.
+- **Fix.** Config error messages now use consistent type names and array formatting.
+- **Fix.** Flag collection no longer includes config group pseudo-flags, preventing incorrect behavior in commands that enumerate all flags.
+
+## 0.15.1
 
 ### Breaking
 
