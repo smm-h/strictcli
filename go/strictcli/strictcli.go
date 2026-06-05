@@ -1274,37 +1274,103 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 					}
 					globalValues[f.Name] = boolVal
 				case TypeInt:
-					intVal, err := parseIntStrict(envVal)
-					if err != nil {
-						return nil, nil, fmt.Sprintf(
-							"--%s: %s (from env var '%s')",
-							f.Name, err.Error(), f.Env,
-						)
-					}
-					if f.Repeatable {
-						globalValues[f.Name] = []interface{}{intVal}
+					if f.Repeatable && f.EnvSeparator != "" {
+						parts := splitEscaped(envVal, f.EnvSeparator[0])
+						coercedList := make([]interface{}, 0, len(parts))
+						for _, element := range parts {
+							intVal, err := parseIntStrict(element)
+							if err != nil {
+								return nil, nil, fmt.Sprintf(
+									"--%s: %s (from env var '%s')",
+									f.Name, err.Error(), f.Env,
+								)
+							}
+							coercedList = append(coercedList, intVal)
+						}
+						if f.Unique {
+							if dup := findDuplicate(coercedList); dup != nil {
+								return nil, nil, fmt.Sprintf(
+									"--%s: duplicate value '%s' (from env var '%s')",
+									f.Name, formatValueForError(dup), f.Env,
+								)
+							}
+						}
+						globalValues[f.Name] = coercedList
 					} else {
-						globalValues[f.Name] = intVal
+						intVal, err := parseIntStrict(envVal)
+						if err != nil {
+							return nil, nil, fmt.Sprintf(
+								"--%s: %s (from env var '%s')",
+								f.Name, err.Error(), f.Env,
+							)
+						}
+						if f.Repeatable {
+							globalValues[f.Name] = []interface{}{intVal}
+						} else {
+							globalValues[f.Name] = intVal
+						}
 					}
 				case TypeFloat:
-					floatVal, errStr := parseFloatStrict(f.Name, envVal)
-					if errStr != "" {
-						return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
-					}
-					if f.Repeatable {
-						globalValues[f.Name] = []interface{}{floatVal}
+					if f.Repeatable && f.EnvSeparator != "" {
+						parts := splitEscaped(envVal, f.EnvSeparator[0])
+						coercedList := make([]interface{}, 0, len(parts))
+						for _, element := range parts {
+							floatVal, errStr := parseFloatStrict(f.Name, element)
+							if errStr != "" {
+								return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+							}
+							coercedList = append(coercedList, floatVal)
+						}
+						if f.Unique {
+							if dup := findDuplicate(coercedList); dup != nil {
+								return nil, nil, fmt.Sprintf(
+									"--%s: duplicate value '%s' (from env var '%s')",
+									f.Name, formatValueForError(dup), f.Env,
+								)
+							}
+						}
+						globalValues[f.Name] = coercedList
 					} else {
-						globalValues[f.Name] = floatVal
+						floatVal, errStr := parseFloatStrict(f.Name, envVal)
+						if errStr != "" {
+							return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+						}
+						if f.Repeatable {
+							globalValues[f.Name] = []interface{}{floatVal}
+						} else {
+							globalValues[f.Name] = floatVal
+						}
 					}
 				default:
-					resolved, errStr := resolveAtPrefix(f.Name, envVal, &a.stdinConsumedBy)
-					if errStr != "" {
-						return nil, nil, errStr
-					}
-					if f.Repeatable {
-						globalValues[f.Name] = []interface{}{resolved}
+					if f.Repeatable && f.EnvSeparator != "" {
+						parts := splitEscaped(envVal, f.EnvSeparator[0])
+						coercedList := make([]interface{}, 0, len(parts))
+						for _, element := range parts {
+							resolved, errStr := resolveAtPrefix(f.Name, element, &a.stdinConsumedBy)
+							if errStr != "" {
+								return nil, nil, errStr
+							}
+							coercedList = append(coercedList, resolved)
+						}
+						if f.Unique {
+							if dup := findDuplicate(coercedList); dup != nil {
+								return nil, nil, fmt.Sprintf(
+									"--%s: duplicate value '%s' (from env var '%s')",
+									f.Name, formatValueForError(dup), f.Env,
+								)
+							}
+						}
+						globalValues[f.Name] = coercedList
 					} else {
-						globalValues[f.Name] = resolved
+						resolved, errStr := resolveAtPrefix(f.Name, envVal, &a.stdinConsumedBy)
+						if errStr != "" {
+							return nil, nil, errStr
+						}
+						if f.Repeatable {
+							globalValues[f.Name] = []interface{}{resolved}
+						} else {
+							globalValues[f.Name] = resolved
+						}
 					}
 				}
 				continue

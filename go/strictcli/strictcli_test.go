@@ -5445,3 +5445,249 @@ func TestConfigArrayPrecedenceCLIWins(t *testing.T) {
 		t.Fatalf("expected val=x,y, got %q", r.Stdout)
 	}
 }
+
+// --- Env separator parsing tests ---
+
+func TestEnvSeparatorSplitsValue(t *testing.T) {
+	os.Setenv("TAGS", "a,b,c")
+	defer os.Unsetenv("TAGS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("TAGS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=a,b,c") {
+		t.Fatalf("stdout should contain 'tags=a,b,c', got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorEscapedSeparator(t *testing.T) {
+	os.Setenv("TAGS", "a\\,b,c")
+	defer os.Unsetenv("TAGS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("TAGS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=a,b,c") {
+		t.Fatalf("stdout should contain 'tags=a,b,c', got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorSingleValue(t *testing.T) {
+	os.Setenv("TAGS", "a")
+	defer os.Unsetenv("TAGS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("TAGS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=a") {
+		t.Fatalf("stdout should contain 'tags=a', got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorIntCoercion(t *testing.T) {
+	os.Setenv("COUNTS", "1,2,3")
+	defer os.Unsetenv("COUNTS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("counts=" + formatValue(args["count"]))
+		return 0
+	}, WithFlags(IntFlag("count", "a count", Repeatable(), Unique(false), Env("COUNTS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "counts=1,2,3") {
+		t.Fatalf("stdout should contain 'counts=1,2,3', got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorIntCoercionError(t *testing.T) {
+	os.Setenv("COUNTS", "1,abc,3")
+	defer os.Unsetenv("COUNTS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(IntFlag("count", "a count", Repeatable(), Unique(false), Env("COUNTS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--count: expected integer, got 'abc' (from env var 'COUNTS')") {
+		t.Fatalf("stderr should contain per-element int error, got %q", r.Stderr)
+	}
+}
+
+func TestEnvSeparatorUniqueDuplicateError(t *testing.T) {
+	os.Setenv("TAGS", "a,b,a")
+	defer os.Unsetenv("TAGS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(true), Env("TAGS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--tag: duplicate value 'a' (from env var 'TAGS')") {
+		t.Fatalf("stderr should contain duplicate error, got %q", r.Stderr)
+	}
+}
+
+func TestEnvSeparatorUniqueNoDuplicate(t *testing.T) {
+	os.Setenv("TAGS", "a,b,c")
+	defer os.Unsetenv("TAGS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(true), Env("TAGS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=a,b,c") {
+		t.Fatalf("stdout should contain 'tags=a,b,c', got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorCliOverridesEnv(t *testing.T) {
+	os.Setenv("TAGS", "x,y,z")
+	defer os.Unsetenv("TAGS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("TAGS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd", "--tag", "from-cli"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=from-cli") {
+		t.Fatalf("stdout should contain 'tags=from-cli', got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorColonSeparator(t *testing.T) {
+	os.Setenv("PATHS", "/usr/bin:/usr/local/bin:/home/user/bin")
+	defer os.Unsetenv("PATHS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("paths=" + formatValue(args["path"]))
+		return 0
+	}, WithFlags(StringFlag("path", "a path", Repeatable(), Unique(false), Env("PATHS"), Prefixed(false), EnvSeparator(":"))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "paths=/usr/bin,/usr/local/bin,/home/user/bin") {
+		t.Fatalf("stdout should contain paths, got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorGlobalFlag(t *testing.T) {
+	os.Setenv("TAGS", "a,b,c")
+	defer os.Unsetenv("TAGS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("TAGS"), Prefixed(false), EnvSeparator(",")))
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	})
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=a,b,c") {
+		t.Fatalf("stdout should contain 'tags=a,b,c', got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorFloatCoercion(t *testing.T) {
+	os.Setenv("RATES", "1.5,2.5,3.5")
+	defer os.Unsetenv("RATES")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("rates=" + formatValue(args["rate"]))
+		return 0
+	}, WithFlags(FloatFlag("rate", "a rate", Repeatable(), Unique(false), Env("RATES"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "rates=1.5,2.5,3.5") {
+		t.Fatalf("stdout should contain 'rates=1.5,2.5,3.5', got %q", r.Stdout)
+	}
+}
+
+func TestEnvSeparatorFloatCoercionError(t *testing.T) {
+	os.Setenv("RATES", "1.5,abc")
+	defer os.Unsetenv("RATES")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(FloatFlag("rate", "a rate", Repeatable(), Unique(false), Env("RATES"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--rate: expected float, got 'abc' (from env var 'RATES')") {
+		t.Fatalf("stderr should contain per-element float error, got %q", r.Stderr)
+	}
+}
+
+func TestEnvSeparatorFloatNanError(t *testing.T) {
+	os.Setenv("RATES", "1.5,NaN")
+	defer os.Unsetenv("RATES")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(FloatFlag("rate", "a rate", Repeatable(), Unique(false), Env("RATES"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--rate: NaN is not allowed (from env var 'RATES')") {
+		t.Fatalf("stderr should contain NaN error, got %q", r.Stderr)
+	}
+}

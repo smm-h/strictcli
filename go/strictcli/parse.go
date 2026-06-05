@@ -303,37 +303,103 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			}
 			cliSet[f.Name] = boolVal
 		case TypeInt:
-			intVal, err := parseIntStrict(envVal)
-			if err != nil {
-				return nil, nil, fmt.Sprintf(
-					"--%s: %s (from env var '%s')",
-					f.Name, err.Error(), f.Env,
-				)
-			}
-			if f.Repeatable {
-				cliSet[f.Name] = []interface{}{intVal}
+			if f.Repeatable && f.EnvSeparator != "" {
+				parts := splitEscaped(envVal, f.EnvSeparator[0])
+				coercedList := make([]interface{}, 0, len(parts))
+				for _, element := range parts {
+					intVal, err := parseIntStrict(element)
+					if err != nil {
+						return nil, nil, fmt.Sprintf(
+							"--%s: %s (from env var '%s')",
+							f.Name, err.Error(), f.Env,
+						)
+					}
+					coercedList = append(coercedList, intVal)
+				}
+				if f.Unique {
+					if dup := findDuplicate(coercedList); dup != nil {
+						return nil, nil, fmt.Sprintf(
+							"--%s: duplicate value '%s' (from env var '%s')",
+							f.Name, formatValueForError(dup), f.Env,
+						)
+					}
+				}
+				cliSet[f.Name] = coercedList
 			} else {
-				cliSet[f.Name] = intVal
+				intVal, err := parseIntStrict(envVal)
+				if err != nil {
+					return nil, nil, fmt.Sprintf(
+						"--%s: %s (from env var '%s')",
+						f.Name, err.Error(), f.Env,
+					)
+				}
+				if f.Repeatable {
+					cliSet[f.Name] = []interface{}{intVal}
+				} else {
+					cliSet[f.Name] = intVal
+				}
 			}
 		case TypeFloat:
-			floatVal, errStr := parseFloatStrict(f.Name, envVal)
-			if errStr != "" {
-				return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
-			}
-			if f.Repeatable {
-				cliSet[f.Name] = []interface{}{floatVal}
+			if f.Repeatable && f.EnvSeparator != "" {
+				parts := splitEscaped(envVal, f.EnvSeparator[0])
+				coercedList := make([]interface{}, 0, len(parts))
+				for _, element := range parts {
+					floatVal, errStr := parseFloatStrict(f.Name, element)
+					if errStr != "" {
+						return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+					}
+					coercedList = append(coercedList, floatVal)
+				}
+				if f.Unique {
+					if dup := findDuplicate(coercedList); dup != nil {
+						return nil, nil, fmt.Sprintf(
+							"--%s: duplicate value '%s' (from env var '%s')",
+							f.Name, formatValueForError(dup), f.Env,
+						)
+					}
+				}
+				cliSet[f.Name] = coercedList
 			} else {
-				cliSet[f.Name] = floatVal
+				floatVal, errStr := parseFloatStrict(f.Name, envVal)
+				if errStr != "" {
+					return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+				}
+				if f.Repeatable {
+					cliSet[f.Name] = []interface{}{floatVal}
+				} else {
+					cliSet[f.Name] = floatVal
+				}
 			}
 		default: // TypeStr
-			resolved, errStr := resolveAtPrefix(f.Name, envVal, stdinConsumedBy)
-			if errStr != "" {
-				return nil, nil, errStr
-			}
-			if f.Repeatable {
-				cliSet[f.Name] = []interface{}{resolved}
+			if f.Repeatable && f.EnvSeparator != "" {
+				parts := splitEscaped(envVal, f.EnvSeparator[0])
+				coercedList := make([]interface{}, 0, len(parts))
+				for _, element := range parts {
+					resolved, errStr := resolveAtPrefix(f.Name, element, stdinConsumedBy)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
+					coercedList = append(coercedList, resolved)
+				}
+				if f.Unique {
+					if dup := findDuplicate(coercedList); dup != nil {
+						return nil, nil, fmt.Sprintf(
+							"--%s: duplicate value '%s' (from env var '%s')",
+							f.Name, formatValueForError(dup), f.Env,
+						)
+					}
+				}
+				cliSet[f.Name] = coercedList
 			} else {
-				cliSet[f.Name] = resolved
+				resolved, errStr := resolveAtPrefix(f.Name, envVal, stdinConsumedBy)
+				if errStr != "" {
+					return nil, nil, errStr
+				}
+				if f.Repeatable {
+					cliSet[f.Name] = []interface{}{resolved}
+				} else {
+					cliSet[f.Name] = resolved
+				}
 			}
 		}
 	}
