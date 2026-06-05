@@ -1219,7 +1219,7 @@ class App:
         )
 
         # config set
-        def _config_set_handler(key, value, **_kw) -> int:
+        def _config_set_handler(key, value=None, **_kw) -> int:
             path = _config_path(
                 app_ref.name,
                 override=app_ref.config_path,
@@ -1245,25 +1245,114 @@ class App:
                 print(f"config set: unknown key '{key}'", file=sys.stderr)
                 return 1
 
-            # Coerce the string value to the flag's type
-            try:
-                if matched_flag.type == bool:
-                    typed_value = _strict_bool(value)
-                elif matched_flag.type == int:
-                    typed_value = _strict_int(value)
-                elif matched_flag.type == float:
-                    try:
-                        typed_value = _strict_float(value)
-                    except ValueError as fe:
-                        msg = str(fe)
-                        if msg in ("NaN is not allowed", "Inf is not allowed"):
-                            raise
-                        raise ValueError(f"expected float, got '{value}'") from fe
-                else:  # str
-                    typed_value = value
-            except ValueError as e:
-                print(f"config set: key '{key}': {e}", file=sys.stderr)
+            use_clear = _kw.get("clear", False)
+            use_default = _kw.get("default", False)
+
+            # Validate: exactly one of (value, --clear, --default)
+            has_value = value is not None
+            if use_clear and use_default:
+                print("--clear and --default are mutually exclusive",
+                      file=sys.stderr)
                 return 1
+            if has_value and use_clear:
+                print("config set: cannot provide a value with --clear",
+                      file=sys.stderr)
+                return 1
+            if has_value and use_default:
+                print("config set: cannot provide a value with --default",
+                      file=sys.stderr)
+                return 1
+            if not has_value and not use_clear and not use_default:
+                print("config set: provide a value, --clear, or --default",
+                      file=sys.stderr)
+                return 1
+
+            # --clear: repeatable flags only, writes []
+            if use_clear:
+                if not matched_flag.repeatable:
+                    print("config set: --clear is only for repeatable flags",
+                          file=sys.stderr)
+                    return 1
+                existing[key] = []
+                if app_ref.config_format == "toml":
+                    _write_toml_flat(existing, path)
+                else:
+                    with open(path, "w") as fh:
+                        fh.write(json.dumps(existing, indent=2) + "\n")
+                return 0
+
+            # --default: remove the key from config
+            if use_default:
+                if key not in existing:
+                    print(f"config set: key '{key}' not in config",
+                          file=sys.stderr)
+                    return 1
+                del existing[key]
+                if app_ref.config_format == "toml":
+                    _write_toml_flat(existing, path)
+                else:
+                    with open(path, "w") as fh:
+                        fh.write(json.dumps(existing, indent=2) + "\n")
+                return 0
+
+            # Coerce the string value to the flag's type
+            if matched_flag.repeatable:
+                # Split on comma, coerce each element
+                parts = _split_escaped(value, ",")
+                try:
+                    if matched_flag.type == int:
+                        typed_value = [_strict_int(p) for p in parts]
+                    elif matched_flag.type == float:
+                        coerced = []
+                        for p in parts:
+                            try:
+                                coerced.append(_strict_float(p))
+                            except ValueError as fe:
+                                msg = str(fe)
+                                if msg in ("NaN is not allowed",
+                                           "Inf is not allowed"):
+                                    raise
+                                raise ValueError(
+                                    f"expected float, got '{p}'"
+                                ) from fe
+                        typed_value = coerced
+                    else:  # str
+                        typed_value = parts
+                except ValueError as e:
+                    print(f"config set: key '{key}': {e}", file=sys.stderr)
+                    return 1
+                # Unique enforcement
+                if matched_flag.unique:
+                    dup = _find_duplicate(typed_value)
+                    if dup is not None:
+                        print(
+                            f"config set: key '{key}': duplicate value "
+                            f"'{_format_value_for_error(dup)}'",
+                            file=sys.stderr,
+                        )
+                        return 1
+            else:
+                try:
+                    if matched_flag.type == bool:
+                        typed_value = _strict_bool(value)
+                    elif matched_flag.type == int:
+                        typed_value = _strict_int(value)
+                    elif matched_flag.type == float:
+                        try:
+                            typed_value = _strict_float(value)
+                        except ValueError as fe:
+                            msg = str(fe)
+                            if msg in ("NaN is not allowed",
+                                       "Inf is not allowed"):
+                                raise
+                            raise ValueError(
+                                f"expected float, got '{value}'"
+                            ) from fe
+                    else:  # str
+                        typed_value = value
+                except ValueError as e:
+                    print(f"config set: key '{key}': {e}", file=sys.stderr)
+                    return 1
 
             existing[key] = typed_value
             if app_ref.config_format == "toml":
@@ -1279,7 +1368,15 @@ class App:
             handler=_config_set_handler,
             args=[
                 Arg(name="key", help="Config key to set"),
-                Arg(name="value", help="Value to set"),
+                Arg(name="value",
+                    help="Value to set (comma-separated for repeatable flags)",
+                    required=False),
+            ],
+            flags=[
+                Flag(name="clear", type=bool,
+                     help="Clear a repeatable flag (set to empty list)"),
+                Flag(name="default", type=bool,
+                     help="Reset a key to its default (remove from config)"),
             ],
         )
 

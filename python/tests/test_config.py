@@ -1094,3 +1094,207 @@ def test_toml_write_array_with_special_chars(tmp_path):
     with open(path, "rb") as f:
         data = tomllib.load(f)
     assert data["paths"] == ['C:\\Users\\me', 'say "hello"', "back\\slash"]
+
+
+# --- Config set: repeatable flag support ---
+
+
+def _make_config_set_app(config_path=None, config_format="json"):
+    """Helper: app with config support and repeatable flags for config set tests."""
+    kwargs = {"config": True}
+    if config_path is not None:
+        kwargs["config_path"] = config_path
+    if config_format != "json":
+        kwargs["config_format"] = config_format
+    app = strictcli.App(
+        name="repapp",
+        version="1.0.0",
+        help="test app with repeatable flags",
+        **kwargs,
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("tags", type=str, help="tags", repeatable=True, unique=False,
+                    default=[])
+    @strictcli.flag("counts", type=int, help="counts", repeatable=True,
+                    unique=False, default=[])
+    @strictcli.flag("rates", type=float, help="rates", repeatable=True,
+                    unique=False, default=[])
+    @strictcli.flag("ids", type=int, help="unique ids", repeatable=True,
+                    unique=True, default=[])
+    @strictcli.flag("name", type=str, help="name", default="default")
+    def run(tags, counts, rates, ids, name):
+        print(f"tags={tags} counts={counts} rates={rates} ids={ids} name={name}")
+
+    return app
+
+
+def test_config_set_repeatable_string(tmp_path, monkeypatch):
+    """Config set writes a string array for a repeatable flag."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "tags", "a,b,c"])
+    assert r.exit_code == 0
+
+    config_file = tmp_path / "repapp" / "config.json"
+    data = json.loads(config_file.read_text())
+    assert data["tags"] == ["a", "b", "c"]
+
+
+def test_config_set_repeatable_int(tmp_path, monkeypatch):
+    """Config set writes an int array for a repeatable flag."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "counts", "1,2,3"])
+    assert r.exit_code == 0
+
+    config_file = tmp_path / "repapp" / "config.json"
+    data = json.loads(config_file.read_text())
+    assert data["counts"] == [1, 2, 3]
+
+
+def test_config_set_escaped_comma(tmp_path, monkeypatch):
+    r"""Config set handles escaped commas: a\,b,c -> ["a,b", "c"]."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "tags", "a\\,b,c"])
+    assert r.exit_code == 0
+
+    config_file = tmp_path / "repapp" / "config.json"
+    data = json.loads(config_file.read_text())
+    assert data["tags"] == ["a,b", "c"]
+
+
+def test_config_set_repeatable_unique_valid(tmp_path, monkeypatch):
+    """Config set accepts distinct values for a unique repeatable flag."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "ids", "1,2,3"])
+    assert r.exit_code == 0
+
+    config_file = tmp_path / "repapp" / "config.json"
+    data = json.loads(config_file.read_text())
+    assert data["ids"] == [1, 2, 3]
+
+
+def test_config_set_repeatable_unique_duplicate(tmp_path, monkeypatch):
+    """Config set rejects duplicate values for a unique repeatable flag."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "ids", "1,2,1"])
+    assert r.exit_code == 1
+    assert "config set: key 'ids': duplicate value '1'" in r.stderr
+
+
+def test_config_set_round_trip_json(tmp_path, monkeypatch):
+    """Config set then show --json round-trips an array correctly."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "tags", "x,y"])
+    assert r.exit_code == 0
+
+    r = app.test(["config", "show", "--json"])
+    assert r.exit_code == 0
+    data = json.loads(r.stdout)
+    assert data["tags"]["value"] == ["x", "y"]
+    assert data["tags"]["source"] == "config"
+
+
+def test_config_set_round_trip_toml(tmp_path):
+    """Config set then show --plain round-trips an array with TOML format."""
+    config_file = tmp_path / "config.toml"
+    app = _make_config_set_app(
+        config_path=str(config_file), config_format="toml",
+    )
+    r = app.test(["config", "set", "tags", "a,b"])
+    assert r.exit_code == 0
+    assert config_file.exists()
+
+    r = app.test(["config", "show", "--plain"])
+    assert r.exit_code == 0
+    assert 'tags = ["a", "b"]  (source: config)' in r.stdout
+
+
+# --- Config set: --clear and --default ---
+
+
+def test_config_set_clear_repeatable(tmp_path, monkeypatch):
+    """--clear writes [] for a repeatable flag."""
+    config_home = _write_config(tmp_path, "repapp", {"tags": ["a", "b"]})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "tags", "--clear"])
+    assert r.exit_code == 0
+
+    config_file = tmp_path / "repapp" / "config.json"
+    data = json.loads(config_file.read_text())
+    assert data["tags"] == []
+
+
+def test_config_set_clear_scalar_error(tmp_path, monkeypatch):
+    """--clear errors on a scalar (non-repeatable) flag."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "name", "--clear"])
+    assert r.exit_code == 1
+    assert "config set: --clear is only for repeatable flags" in r.stderr
+
+
+def test_config_set_default_removes_key(tmp_path, monkeypatch):
+    """--default removes the key from config."""
+    config_home = _write_config(tmp_path, "repapp", {"name": "alice", "tags": ["x"]})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "name", "--default"])
+    assert r.exit_code == 0
+
+    config_file = tmp_path / "repapp" / "config.json"
+    data = json.loads(config_file.read_text())
+    assert "name" not in data
+    # Other keys preserved
+    assert data["tags"] == ["x"]
+
+
+def test_config_set_default_nonexistent_key_error(tmp_path, monkeypatch):
+    """--default errors when the key is not in config."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "name", "--default"])
+    assert r.exit_code == 1
+    assert "config set: key 'name' not in config" in r.stderr
+
+
+def test_config_set_no_args_error(tmp_path, monkeypatch):
+    """No value, no --clear, no --default gives an error."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "name"])
+    assert r.exit_code == 1
+    assert "config set: provide a value, --clear, or --default" in r.stderr
+
+
+def test_config_set_value_with_clear_error(tmp_path, monkeypatch):
+    """Providing value + --clear is an error."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "tags", "a,b", "--clear"])
+    assert r.exit_code == 1
+    assert "config set: cannot provide a value with --clear" in r.stderr
+
+
+def test_config_set_value_with_default_error(tmp_path, monkeypatch):
+    """Providing value + --default is an error."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "name", "alice", "--default"])
+    assert r.exit_code == 1
+    assert "config set: cannot provide a value with --default" in r.stderr
+
+
+def test_config_set_clear_and_default_error(tmp_path, monkeypatch):
+    """--clear and --default together is an error."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_set_app()
+    r = app.test(["config", "set", "tags", "--clear", "--default"])
+    assert r.exit_code == 1
+    assert "--clear and --default are mutually exclusive" in r.stderr
