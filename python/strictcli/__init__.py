@@ -1099,16 +1099,37 @@ class App:
         )
 
         # config show
-        def _config_show_handler(**_kw) -> None:
+        def _config_show_handler(**_kw) -> int:
+            use_plain = _kw.get("plain", False)
+            use_json = _kw.get("json", False)
+            if not use_plain and not use_json:
+                print("config show: specify --plain or --json", file=sys.stderr)
+                return 1
             config_data = _load_config(
                 app_ref.name,
                 config_path_override=app_ref.config_path,
                 config_format=app_ref.config_format,
             )
             all_flags = app_ref._collect_all_flags()
+            if use_json:
+                result = {}
+                for f in all_flags:
+                    param = _flag_param_name(f.name)
+                    if param in config_data:
+                        value = config_data[param]
+                        source = "config"
+                    elif f.default is not None:
+                        value = f.default
+                        source = "default"
+                    else:
+                        value = None
+                        source = "default"
+                    result[param] = {"value": value, "source": source}
+                print(json.dumps(result, indent=2, sort_keys=True))
+                return 0
+            # --plain
             for f in all_flags:
                 param = _flag_param_name(f.name)
-                # Determine source and value
                 if param in config_data:
                     value = config_data[param]
                     source = "config"
@@ -1119,11 +1140,19 @@ class App:
                     value = None
                     source = "default"
                 print(f"{param} = {_format_config_value(value)}  (source: {source})")
+            return 0
 
+        config_show_flags = [
+            Flag(name="plain", type=bool, help="Human-readable output"),
+            Flag(name="json", type=bool, help="JSON output"),
+        ]
+        config_show_mutex = [MutexGroup(flags=config_show_flags)]
         config_grp.commands["show"] = Command(
             name="show",
             help="Show all config values with source attribution",
             handler=_config_show_handler,
+            flags=config_show_flags,
+            mutex=config_show_mutex,
         )
 
         # config set

@@ -179,7 +179,7 @@ def test_config_show(tmp_path, monkeypatch):
     config_home = _write_config(tmp_path, "testapp", {"target": "from-config"})
     monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
     app = _make_config_app(config=True)
-    r = app.test(["config", "show"])
+    r = app.test(["config", "show", "--plain"])
     assert r.exit_code == 0
     assert "target = from-config  (source: config)" in r.stdout
     assert "count = 1  (source: default)" in r.stdout
@@ -193,7 +193,7 @@ def test_config_show_lowercase_bools(tmp_path, monkeypatch):
     config_home = _write_config(tmp_path, "testapp", {"verbose": True})
     monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
     app = _make_config_app(config=True)
-    r = app.test(["config", "show"])
+    r = app.test(["config", "show", "--plain"])
     assert r.exit_code == 0
     # Bool from config must be lowercase
     assert "verbose = true  (source: config)" in r.stdout
@@ -206,7 +206,7 @@ def test_config_show_bool_false_default_lowercase(tmp_path, monkeypatch):
     """Config show formats default False bool as lowercase false."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_app(config=True)
-    r = app.test(["config", "show"])
+    r = app.test(["config", "show", "--plain"])
     assert r.exit_code == 0
     # verbose has no explicit default, defaults to False -- must be lowercase
     assert "verbose = false  (source: default)" in r.stdout
@@ -700,7 +700,7 @@ def test_toml_config_show(tmp_path):
     def run(target, count):
         pass
 
-    r = app.test(["config", "show"])
+    r = app.test(["config", "show", "--plain"])
     assert r.exit_code == 0
     assert "target = toml-show-val  (source: config)" in r.stdout
     assert "count = 1  (source: default)" in r.stdout
@@ -728,3 +728,57 @@ def test_toml_float_value(tmp_path):
     r = app.test(["run"])
     assert r.exit_code == 0
     assert "ratio=0.75" in r.stdout
+
+
+# --- config show --json output ---
+
+def test_config_show_json(tmp_path, monkeypatch):
+    """config show --json produces JSON output with sorted keys."""
+    config_home = _write_config(tmp_path, "testapp", {"target": "from-config"})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = _make_config_app(config=True)
+    r = app.test(["config", "show", "--json"])
+    assert r.exit_code == 0
+    data = json.loads(r.stdout)
+    assert data["target"] == {"value": "from-config", "source": "config"}
+    assert data["count"] == {"value": 1, "source": "default"}
+    assert data["verbose"] == {"value": False, "source": "default"}
+    # Keys must be sorted
+    keys = list(data.keys())
+    assert keys == sorted(keys)
+
+
+def test_config_show_json_bool_values(tmp_path, monkeypatch):
+    """config show --json preserves typed values (bools, ints)."""
+    config_home = _write_config(tmp_path, "testapp", {"verbose": True, "count": 42})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = _make_config_app(config=True)
+    r = app.test(["config", "show", "--json"])
+    assert r.exit_code == 0
+    data = json.loads(r.stdout)
+    assert data["verbose"]["value"] is True
+    assert data["verbose"]["source"] == "config"
+    assert data["count"]["value"] == 42
+    assert data["count"]["source"] == "config"
+
+
+# --- config show no-flags error ---
+
+def test_config_show_no_flags_error(tmp_path, monkeypatch):
+    """config show without --plain or --json errors."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_app(config=True)
+    r = app.test(["config", "show"])
+    assert r.exit_code == 1
+    assert "one of --plain, --json is required" in r.stderr
+
+
+# --- config show both-flags error ---
+
+def test_config_show_both_flags_error(tmp_path, monkeypatch):
+    """config show with both --plain and --json errors (mutex)."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_app(config=True)
+    r = app.test(["config", "show", "--plain", "--json"])
+    assert r.exit_code == 1
+    assert "mutually exclusive" in r.stderr
