@@ -7,3 +7,4 @@
 {"commits":["f20669b78e4efdda8675ae21083a70220cd54070"],"user_facing":true,"description":"**Fix.** Config error messages now use consistent type names and array formatting.","type":"fix"}
 {"commits":["3eb963c59761ecf453ee0f152d3e6121816a7eb7"],"user_facing":true,"description":"**Fix.** Config array values now use correct comma formatting.","type":"fix"}
 {"commits":["3b15268fb1ed1b35cb0057663f67961a97f2d258"],"user_facing":false}
+{"commits":["cdc010316ce356628e2592b493ccc368dd782b48"],"user_facing":true,"description":"**Fix.** `config set` mutex error messages now include the `config set:` prefix for consistency.","type":"fix"}
