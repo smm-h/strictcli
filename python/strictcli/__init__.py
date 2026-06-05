@@ -1419,6 +1419,11 @@ class App:
             if f.repeatable:
                 if f.name not in cli_set:
                     cli_set[f.name] = []
+                if f.unique and value in cli_set[f.name]:
+                    raise _ParseError(
+                        f"--{f.name}: duplicate value "
+                        f"'{_format_value_for_error(value)}'"
+                    )
                 cli_set[f.name].append(value)
             else:
                 cli_set[f.name] = value
@@ -1803,6 +1808,11 @@ def _parse_command(
         if f.repeatable:
             if f.name not in cli_set:
                 cli_set[f.name] = []
+            if f.unique and value in cli_set[f.name]:
+                raise _ParseError(
+                    f"--{f.name}: duplicate value "
+                    f"'{_format_value_for_error(value)}'"
+                )
             cli_set[f.name].append(value)
         else:
             cli_set[f.name] = value
@@ -2620,11 +2630,16 @@ def _build_flag_meta(f: Flag) -> str:
     meta_parts: list[str] = []
     if f.repeatable:
         meta_parts.append("repeatable")
+    if f.unique is True:
+        meta_parts.append("unique")
     if f.choices is not None:
         choices_str = ", ".join(str(c) for c in f.choices)
         meta_parts.append(f"choices: {choices_str}")
     if f.env is not None:
-        meta_parts.append(f"env: {f.env}")
+        if f.env_separator is not None:
+            meta_parts.append(f"env: {f.env} (sep: {f.env_separator})")
+        else:
+            meta_parts.append(f"env: {f.env}")
     if f.type is bool:
         meta_parts.append(f"default: {'true' if f.default else 'false'}")
     elif f.repeatable:
@@ -3193,6 +3208,10 @@ def _serialize_flag(f: Flag) -> dict:
         d["choices"] = f.choices
     if f.repeatable:
         d["repeatable"] = f.repeatable
+    if f.unique is True:
+        d["unique"] = True
+    if f.env_separator is not None:
+        d["env_separator"] = f.env_separator
     negatable = f.negatable if f.type is bool else None
     if negatable is not None:
         d["negatable"] = negatable
@@ -3277,6 +3296,8 @@ def _build_schema_defaults() -> dict:
             "env": None,
             "choices": None,
             "repeatable": False,
+            "unique": False,
+            "env_separator": None,
             "negatable": None,
             "hidden": False,
         },
