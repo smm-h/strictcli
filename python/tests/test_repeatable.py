@@ -255,3 +255,20 @@ def test_env_separator_cannot_be_backslash():
             name="tag", type=str, help="a tag",
             repeatable=True, unique=False, env="MYAPP_TAG", env_separator="\\",
         )
+
+
+def test_env_separator_shown_in_help():
+    """Help text shows [env: MY_TAGS (sep: ,)] for repeatable flag with env_separator."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "tags", help="tags to apply", repeatable=True, unique=False,
+        env="MY_TAGS", env_separator=",",
+    )
+    def cmd(tags):
+        print(f"tags={tags!r}")
+
+    r = app.test(["cmd", "--help"])
+    assert r.exit_code == 0
+    assert "[env: MY_TAGS (sep: ,)]" in r.stdout
