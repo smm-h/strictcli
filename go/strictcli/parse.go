@@ -215,44 +215,44 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 		// -x (short form)
 		if strings.HasPrefix(tok, "-") && len(tok) == 2 {
-			f, ok := shortLookup[tok]
-			if !ok {
-				return nil, nil, fmt.Sprintf("unknown flag '%s'", tok)
-			}
-			if f.Type == TypeBool {
-				cliSet[f.Name] = true
-				i++
-			} else {
-				if i+1 >= len(tokens) {
-					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
-				}
-				raw := tokens[i+1]
-				if f.Type == TypeInt {
-					intVal, err := parseIntStrict(raw)
-					if err != nil {
-						return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
-					}
-					storeValue(f, intVal)
-				} else if f.Type == TypeFloat {
-					floatVal, errStr := parseFloatStrict(f.Name, raw)
-					if errStr != "" {
-						return nil, nil, errStr
-					}
-					storeValue(f, floatVal)
+			if f, ok := shortLookup[tok]; ok {
+				if f.Type == TypeBool {
+					cliSet[f.Name] = true
+					i++
 				} else {
-					resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
-					if errStr != "" {
-						return nil, nil, errStr
+					if i+1 >= len(tokens) {
+						return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 					}
-					storeValue(f, resolved)
+					raw := tokens[i+1]
+					if f.Type == TypeInt {
+						intVal, err := parseIntStrict(raw)
+						if err != nil {
+							return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
+						}
+						storeValue(f, intVal)
+					} else if f.Type == TypeFloat {
+						floatVal, errStr := parseFloatStrict(f.Name, raw)
+						if errStr != "" {
+							return nil, nil, errStr
+						}
+						storeValue(f, floatVal)
+					} else {
+						resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
+						if errStr != "" {
+							return nil, nil, errStr
+						}
+						storeValue(f, resolved)
+					}
+					i += 2
 				}
-				i += 2
+				continue
 			}
-			continue
 		}
 
-		// Unknown flag-like token
-		return nil, nil, fmt.Sprintf("unknown flag '%s'", tok)
+		// Token starts with "-" but doesn't match any known flag;
+		// treat as a positional arg (e.g. negative numbers like -7, -3.14)
+		positionals = append(positionals, tok)
+		i++
 	}
 
 	// Resolve env vars for flags not set by CLI
