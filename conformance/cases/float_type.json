@@ -357,5 +357,38 @@
       "exit_code": 0,
       "stdout_equals": "temp=-40.5"
     }
+  },
+  {
+    "name": "float: reject NaN from env var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "env": "MYAPP_RATE"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_RATE": "nan"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "NaN is not allowed (from env var 'MYAPP_RATE')"
+    }
   }
 ]
