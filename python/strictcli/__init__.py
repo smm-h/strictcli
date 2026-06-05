@@ -1029,7 +1029,7 @@ class App:
         )
 
         # config set
-        def _config_set_handler(key, value, **_kw) -> None:
+        def _config_set_handler(key, value, **_kw) -> int:
             path = _config_path(
                 app_ref.name,
                 override=app_ref.config_path,
@@ -1038,26 +1038,53 @@ class App:
             dir_path = os.path.dirname(path)
             os.makedirs(dir_path, exist_ok=True)
             # Read existing config
-            existing: dict = {}
-            if os.path.isfile(path):
-                if app_ref.config_format == "toml":
+            existing = _load_config(
+                app_ref.name,
+                config_path_override=app_ref.config_path,
+                config_format=app_ref.config_format,
+            )
+
+            # Look up the key against registered flags
+            all_flags = app_ref._collect_all_flags()
+            matched_flag = None
+            for f in all_flags:
+                if _flag_param_name(f.name) == key:
+                    matched_flag = f
+                    break
+            if matched_flag is None:
+                print(f"config set: unknown key '{key}'", file=sys.stderr)
+                return 1
+
+            # Coerce the string value to the flag's type
+            try:
+                if matched_flag.type == bool:
+                    typed_value = _strict_bool(value)
+                elif matched_flag.type == int:
                     try:
-                        with open(path, "rb") as fh:
-                            existing = tomllib.load(fh)
-                    except (tomllib.TOMLDecodeError, UnicodeDecodeError):
-                        existing = {}
-                else:
+                        typed_value = _strict_int(value)
+                    except ValueError:
+                        raise ValueError(f"expected integer, got '{value}'")
+                elif matched_flag.type == float:
                     try:
-                        with open(path) as fh:
-                            existing = json.loads(fh.read())
-                    except (json.JSONDecodeError, ValueError):
-                        existing = {}
-            existing[key] = value
+                        typed_value = _strict_float(value)
+                    except ValueError as fe:
+                        msg = str(fe)
+                        if msg in ("NaN is not allowed", "Inf is not allowed"):
+                            raise
+                        raise ValueError(f"expected float, got '{value}'") from fe
+                else:  # str
+                    typed_value = value
+            except ValueError as e:
+                print(f"config set: key '{key}': {e}", file=sys.stderr)
+                return 1
+
+            existing[key] = typed_value
             if app_ref.config_format == "toml":
                 _write_toml_flat(existing, path)
             else:
                 with open(path, "w") as fh:
                     fh.write(json.dumps(existing, indent=2) + "\n")
+            return 0
 
         config_grp.commands["set"] = Command(
             name="set",
