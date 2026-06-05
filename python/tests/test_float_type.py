@@ -235,7 +235,7 @@ def test_float_flag_repeatable():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("weight", type=float, help="a weight", repeatable=True)
+    @strictcli.flag("weight", type=float, help="a weight", repeatable=True, unique=False)
     def cmd(weight):
         print(f"weight={weight}")
 

@@ -7,6 +7,7 @@ import strictcli
 
 def _make_app_with_repeatable(**flag_kwargs):
     """Helper: app with a single command that has one repeatable flag."""
+    flag_kwargs.setdefault("unique", False)
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
@@ -46,7 +47,7 @@ def test_repeatable_with_type_int():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("port", type=int, help="a port", repeatable=True)
+    @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False)
     def cmd(port):
         print(f"port={port!r}")
 
@@ -78,7 +79,7 @@ def test_repeatable_bad_int_value():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("port", type=int, help="a port", repeatable=True)
+    @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False)
     def cmd(port):
         print(f"port={port!r}")
 
@@ -96,6 +97,33 @@ def test_repeatable_with_bool_raises():
         )
 
 
+def test_unique_requires_repeatable():
+    """unique=True on a non-repeatable flag raises ValueError."""
+    with pytest.raises(ValueError, match='unique requires repeatable=True'):
+        strictcli.Flag(
+            name="tag", type=str, help="a tag", unique=True,
+        )
+
+
+def test_unique_false_requires_repeatable():
+    """unique=False on a non-repeatable flag raises ValueError."""
+    with pytest.raises(ValueError, match='unique requires repeatable=True'):
+        strictcli.Flag(
+            name="tag", type=str, help="a tag", unique=False,
+        )
+
+
+def test_repeatable_requires_explicit_unique():
+    """repeatable=True without unique raises ValueError."""
+    with pytest.raises(
+        ValueError,
+        match='repeatable requires explicit unique',
+    ):
+        strictcli.Flag(
+            name="tag", type=str, help="a tag", repeatable=True,
+        )
+
+
 def test_repeatable_shown_in_help():
     """Repeatable is shown in help output."""
     app = _make_app_with_repeatable()
@@ -110,7 +138,7 @@ def test_repeatable_with_env_var(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag(
-        "record", help="a record", repeatable=True, env="MYAPP_RECORD",
+        "record", help="a record", repeatable=True, unique=False, env="MYAPP_RECORD",
     )
     def cmd(record):
         print(f"record={record!r}")
@@ -168,7 +196,7 @@ def test_repeatable_env_var_with_type_int(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag(
-        "port", type=int, help="a port", repeatable=True, env="MYAPP_PORT",
+        "port", type=int, help="a port", repeatable=True, unique=False, env="MYAPP_PORT",
     )
     def cmd(port):
         print(f"port={port!r}")

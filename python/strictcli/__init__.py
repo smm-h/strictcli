@@ -506,6 +506,7 @@ class Flag:
     choices: list | None = None
     validate: Callable | None = None
     repeatable: bool = False
+    unique: object = _MISSING
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
@@ -514,6 +515,18 @@ class Flag:
         # Validate repeatable
         if self.repeatable and self.type is bool:
             raise ValueError(f'Flag "{self.name}": repeatable is incompatible with type=bool')
+        # Validate unique
+        if self.repeatable and isinstance(self.unique, _MissingSentinel):
+            raise ValueError(
+                f'Flag "{self.name}": repeatable requires explicit unique '
+                f"(unique=True or unique=False)"
+            )
+        if not isinstance(self.unique, _MissingSentinel) and self.unique is not True and self.unique is not False:
+            raise ValueError(f'Flag "{self.name}": unique must be True or False')
+        if (self.unique is True or self.unique is False) and not self.repeatable:
+            raise ValueError(f'Flag "{self.name}": unique requires repeatable=True')
+        if isinstance(self.unique, _MissingSentinel) and not self.repeatable:
+            self.unique = False
         # Validate choices
         if self.choices is not None:
             if self.type is bool:
@@ -2388,6 +2401,7 @@ def flag(
     choices: list | None = None,
     validate: Callable | None = None,
     repeatable: bool = False,
+    unique: object = _MISSING,
 ) -> Callable:
     """Module-level decorator to attach a Flag to a command handler."""
 
@@ -2404,6 +2418,7 @@ def flag(
             choices=choices,
             validate=validate,
             repeatable=repeatable,
+            unique=unique,
         )
         if not hasattr(func, "_strictcli_flags"):
             func._strictcli_flags = []

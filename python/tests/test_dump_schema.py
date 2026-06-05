@@ -399,7 +399,7 @@ class TestSchemaFlagTypes:
         app = _make_app()
 
         @app.command("cmd", help="A command")
-        @strictcli.flag("tag", type=str, help="A tag", repeatable=True)
+        @strictcli.flag("tag", type=str, help="A tag", repeatable=True, unique=False)
         def cmd(tag):
             pass
 
