@@ -171,8 +171,48 @@ func (a *App) registerConfigGroup() {
 
 	// config show
 	grp.Command("show", "Show all config values with source attribution", func(args map[string]interface{}) int {
+		usePlain := args["plain"].(bool)
+		useJSON := args["json"].(bool)
+		if !usePlain && !useJSON {
+			fmt.Fprintln(os.Stderr, "config show: specify --plain or --json")
+			return 1
+		}
 		configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		allFlags := a.collectAllFlags()
+
+		type entry struct {
+			Value  interface{} `json:"value"`
+			Source string      `json:"source"`
+		}
+
+		if useJSON {
+			result := make(map[string]entry)
+			for _, f := range allFlags {
+				param := flagParamName(f.Name)
+				var value interface{}
+				var source string
+				if v, ok := configData[param]; ok {
+					value = v
+					source = "config"
+				} else if f.hasDefault && f.Default != nil {
+					value = f.Default
+					source = "default"
+				} else {
+					value = nil
+					source = "default"
+				}
+				result[param] = entry{Value: value, Source: source}
+			}
+			data, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %s\n", err)
+				return 1
+			}
+			fmt.Println(string(data))
+			return 0
+		}
+
+		// --plain
 		for _, f := range allFlags {
 			param := flagParamName(f.Name)
 			var value interface{}
@@ -190,7 +230,12 @@ func (a *App) registerConfigGroup() {
 			fmt.Printf("%s = %v  (source: %s)\n", param, formatConfigValue(value), source)
 		}
 		return 0
-	})
+	}, WithMutex(
+		MutexGroup{Flags: []Flag{
+			BoolFlag("plain", "Human-readable output"),
+			BoolFlag("json", "JSON output"),
+		}},
+	))
 
 	// config set
 	grp.Command("set", "Set a config value", func(args map[string]interface{}) int {

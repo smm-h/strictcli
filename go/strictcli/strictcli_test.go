@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -3000,7 +3001,7 @@ func TestConfigShow(t *testing.T) {
 		StringFlag("host", "hostname", Default("localhost")),
 	))
 
-	r := app.Test([]string{"config", "show"})
+	r := app.Test([]string{"config", "show", "--plain"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4408,7 +4409,7 @@ func TestTomlConfigShow(t *testing.T) {
 		StringFlag("host", "hostname", Default("localhost")),
 	))
 
-	r := app.Test([]string{"config", "show"})
+	r := app.Test([]string{"config", "show", "--plain"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4424,6 +4425,123 @@ func TestTomlConfigShow(t *testing.T) {
 	// host should show default source
 	if !strings.Contains(r.Stdout, "host = localhost") {
 		t.Fatalf("expected host=localhost in output, got %q", r.Stdout)
+	}
+}
+
+func TestConfigShowJSON(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{
+		"port": float64(9999),
+	})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+		StringFlag("host", "hostname", Default("localhost")),
+		BoolFlag("verbose", "verbose output"),
+	))
+
+	r := app.Test([]string{"config", "show", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	var data map[string]struct {
+		Value  interface{} `json:"value"`
+		Source string      `json:"source"`
+	}
+	if err := json.Unmarshal([]byte(r.Stdout), &data); err != nil {
+		t.Fatalf("failed to parse JSON: %s\nstdout=%q", err, r.Stdout)
+	}
+
+	// port should be from config
+	portEntry, ok := data["port"]
+	if !ok {
+		t.Fatal("expected 'port' key in JSON output")
+	}
+	if portEntry.Source != "config" {
+		t.Fatalf("expected port source 'config', got %q", portEntry.Source)
+	}
+	// JSON numbers are float64
+	if portEntry.Value.(float64) != 9999 {
+		t.Fatalf("expected port value 9999, got %v", portEntry.Value)
+	}
+
+	// host should be default
+	hostEntry, ok := data["host"]
+	if !ok {
+		t.Fatal("expected 'host' key in JSON output")
+	}
+	if hostEntry.Source != "default" {
+		t.Fatalf("expected host source 'default', got %q", hostEntry.Source)
+	}
+	if hostEntry.Value.(string) != "localhost" {
+		t.Fatalf("expected host value 'localhost', got %v", hostEntry.Value)
+	}
+
+	// verbose (bool with no explicit default) should be default with false value
+	verboseEntry, ok := data["verbose"]
+	if !ok {
+		t.Fatal("expected 'verbose' key in JSON output")
+	}
+	if verboseEntry.Source != "default" {
+		t.Fatalf("expected verbose source 'default', got %q", verboseEntry.Source)
+	}
+
+	// Keys must be sorted (check JSON string)
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i := 1; i < len(keys); i++ {
+		if keys[i-1] > keys[i] {
+			t.Fatalf("JSON keys not sorted: %v", keys)
+		}
+	}
+}
+
+func TestConfigShowNoFlagsError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	r := app.Test([]string{"config", "show"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "one of --plain, --json is required") {
+		t.Fatalf("expected 'one of --plain, --json is required' in stderr, got %q", r.Stderr)
+	}
+}
+
+func TestConfigShowBothFlagsError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	r := app.Test([]string{"config", "show", "--plain", "--json"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "mutually exclusive") {
+		t.Fatalf("expected 'mutually exclusive' in stderr, got %q", r.Stderr)
 	}
 }
 
