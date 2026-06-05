@@ -5377,8 +5377,8 @@ func TestConfigArrayBadElementType(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "element 1: expected str, got float") {
-		t.Fatalf("expected 'element 1: expected str, got float' in stderr, got %q", r.Stderr)
+	if !strings.Contains(r.Stderr, "element 1: expected str, got int") {
+		t.Fatalf("expected 'element 1: expected str, got int' in stderr, got %q", r.Stderr)
 	}
 }
 

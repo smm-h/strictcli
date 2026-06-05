@@ -3,6 +3,7 @@ package strictcli
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -131,6 +132,10 @@ func typeName(v interface{}) string {
 	case int64:
 		return "int"
 	case float64:
+		fv := v.(float64)
+		if math.Floor(fv) == fv && !math.IsInf(fv, 0) && !math.IsNaN(fv) {
+			return "int"
+		}
 		return "float"
 	case string:
 		return "str"
