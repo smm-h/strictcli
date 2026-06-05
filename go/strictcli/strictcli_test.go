@@ -5154,3 +5154,45 @@ func TestEnvSeparatorCannotBeBackslash(t *testing.T) {
 	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
 		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("MYAPP_TAG"), EnvSeparator("\\"))))
 }
+
+// --- Unique help text and enforcement tests ---
+
+func TestUniqueHelpText(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(true))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	// [unique] must appear after [repeatable]
+	if !strings.Contains(r.Stdout, "[repeatable] [unique]") {
+		t.Fatalf("stdout should contain '[repeatable] [unique]', got %q", r.Stdout)
+	}
+}
+
+func TestUniqueHelpTextNotShownWhenFalse(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if strings.Contains(r.Stdout, "[unique]") {
+		t.Fatalf("stdout should NOT contain '[unique]' when unique=false, got %q", r.Stdout)
+	}
+}
+
+// --- Env separator help text test ---
+
+func TestEnvSeparatorHelpText(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("MY_TAGS"), Prefixed(false), EnvSeparator(","))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "[env: MY_TAGS (sep: ,)]") {
+		t.Fatalf("stdout should contain '[env: MY_TAGS (sep: ,)]', got %q", r.Stdout)
+	}
+}

@@ -269,11 +269,18 @@ func buildFlagMeta(f Flag) string {
 	if f.Repeatable {
 		metaParts = append(metaParts, "repeatable")
 	}
+	if f.Unique {
+		metaParts = append(metaParts, "unique")
+	}
 	if f.Choices != nil {
 		metaParts = append(metaParts, "choices: "+formatChoices(f.Choices))
 	}
 	if f.Env != "" {
-		metaParts = append(metaParts, "env: "+f.Env)
+		if f.EnvSeparator != "" {
+			metaParts = append(metaParts, fmt.Sprintf("env: %s (sep: %s)", f.Env, f.EnvSeparator))
+		} else {
+			metaParts = append(metaParts, "env: "+f.Env)
+		}
 	}
 	if f.Type == TypeBool {
 		if def, ok := f.Default.(bool); ok && def {
