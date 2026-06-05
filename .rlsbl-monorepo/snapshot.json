@@ -1,11 +1,14 @@
 {
-  "generated_at": "2026-06-03T15:53:59Z",
+  "generated_at": "2026-06-05T16:31:45Z",
   "package_count": 3,
   "packages": {
     "strictcli": {
       "path": "python",
-      "target": "pypi",
-      "version": "0.13.0",
+      "targets": [
+        "pypi",
+        "npm"
+      ],
+      "version": "0.15.0",
       "description": null,
       "deps": [],
       "rdeps": [
@@ -17,8 +20,10 @@
     },
     "go-strictcli": {
       "path": "go",
-      "target": "go",
-      "version": "0.10.0",
+      "targets": [
+        "go"
+      ],
+      "version": "0.11.1",
       "description": null,
       "deps": [],
       "rdeps": [],
@@ -28,8 +33,10 @@
     },
     "conformance": {
       "path": "conformance",
-      "target": "plain",
-      "version": "0.7.0",
+      "targets": [
+        "plain"
+      ],
+      "version": "0.8.0",
       "description": null,
       "deps": [
         "strictcli"
