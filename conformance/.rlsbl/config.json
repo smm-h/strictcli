@@ -3,5 +3,6 @@
     "plain"
   ],
   "private": false,
-  "push_timeout": 300
+  "push_timeout": 300,
+  "pipelines": {}
 }
