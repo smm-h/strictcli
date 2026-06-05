@@ -3906,3 +3906,188 @@ func TestAtPrefixGlobalEqualsForm(t *testing.T) {
 		t.Fatalf("expected 'global-eq', got %q", r.Stdout)
 	}
 }
+
+// --- Red tests: Config TOML and type coercion bugs ---
+
+// writeTomlConfig writes a TOML config file for the given app name under the given XDG dir.
+func writeTomlConfig(t *testing.T, xdgDir, appName string, content string) {
+	t.Helper()
+	dir := filepath.Join(xdgDir, appName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write TOML config: %v", err)
+	}
+}
+
+// Bug 0.1: loadConfig always uses json.Unmarshal, so TOML files are parsed as JSON,
+// fail silently, and all flags get default values.
+func TestTomlConfigLoading(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	tomlContent := "verbose = 3\ndebug = true\nrate = 1.5\nthreshold = 3\n"
+	writeTomlConfig(t, tmpDir, "tomlapp", tomlContent)
+
+	app := NewApp("tomlapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Printf("verbose=%v debug=%v rate=%v threshold=%v",
+			args["verbose"], args["debug"], args["rate"], args["threshold"])
+		return 0
+	}, WithFlags(
+		IntFlag("verbose", "verbosity level", Default(0)),
+		BoolFlag("debug", "enable debug mode", Default(false)),
+		FloatFlag("rate", "rate value", Default(0.0)),
+		FloatFlag("threshold", "threshold value", Default(0.0)),
+	))
+
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// These assertions should pass if TOML loading works, but currently fail
+	// because loadConfig uses json.Unmarshal which silently fails on TOML.
+	if !strings.Contains(r.Stdout, "verbose=3") {
+		t.Errorf("expected verbose=3 from TOML config, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "debug=true") {
+		t.Errorf("expected debug=true from TOML config, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "rate=1.5") {
+		t.Errorf("expected rate=1.5 from TOML config, got %q", r.Stdout)
+	}
+	// TOML integer 3 assigned to a float flag should become 3 (float)
+	if !strings.Contains(r.Stdout, "threshold=3") {
+		t.Errorf("expected threshold=3 from TOML config, got %q", r.Stdout)
+	}
+}
+
+// Bug 0.2: config set always writes JSON (json.MarshalIndent) regardless of format.
+func TestConfigSetWritesToml(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("tomlsetapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	r := app.Test([]string{"config", "set", "name", "alice"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// Read the config file and verify it is TOML, not JSON
+	path := filepath.Join(tmpDir, "tomlsetapp", "config.toml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+
+	content := string(data)
+	// TOML format should not contain JSON braces
+	if strings.Contains(content, "{") || strings.Contains(content, "}") {
+		t.Errorf("config file should be TOML, not JSON; got:\n%s", content)
+	}
+	// Should contain a TOML key-value pair
+	if !strings.Contains(content, "name") || !strings.Contains(content, "alice") {
+		t.Errorf("config file should contain name = alice; got:\n%s", content)
+	}
+}
+
+// Bug 0.3: config set stores raw string values from argv, so the file has
+// "42", "true", "3.14" as JSON strings instead of typed JSON values.
+func TestConfigSetWritesTypedValues(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := NewApp("typedapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		IntFlag("count", "a count", Default(0)),
+		BoolFlag("verbose", "verbose mode", Default(false)),
+		FloatFlag("rate", "a rate", Default(0.0)),
+	))
+
+	// Set each value via config set
+	r := app.Test([]string{"config", "set", "count", "42"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set count: expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	r = app.Test([]string{"config", "set", "verbose", "true"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set verbose: expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	r = app.Test([]string{"config", "set", "rate", "3.14"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set rate: expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	// Read and parse the JSON config file
+	path := filepath.Join(tmpDir, "typedapp", "config.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("config file should be valid JSON: %v", err)
+	}
+
+	// count should be a JSON number (float64 after Go JSON decode), not string "42"
+	if countVal, ok := config["count"]; !ok {
+		t.Fatal("config should have 'count' key")
+	} else if _, isString := countVal.(string); isString {
+		t.Errorf("count should be a JSON number, not string %q", countVal)
+	} else if countVal != float64(42) {
+		t.Errorf("count should be 42, got %v (%T)", countVal, countVal)
+	}
+
+	// verbose should be a JSON bool, not string "true"
+	if verboseVal, ok := config["verbose"]; !ok {
+		t.Fatal("config should have 'verbose' key")
+	} else if _, isString := verboseVal.(string); isString {
+		t.Errorf("verbose should be a JSON bool, not string %q", verboseVal)
+	} else if verboseVal != true {
+		t.Errorf("verbose should be true, got %v (%T)", verboseVal, verboseVal)
+	}
+
+	// rate should be a JSON number (float64), not string "3.14"
+	if rateVal, ok := config["rate"]; !ok {
+		t.Fatal("config should have 'rate' key")
+	} else if _, isString := rateVal.(string); isString {
+		t.Errorf("rate should be a JSON number, not string %q", rateVal)
+	} else if rateVal != float64(3.14) {
+		t.Errorf("rate should be 3.14, got %v (%T)", rateVal, rateVal)
+	}
+}
+
+// Bug 0.5: config set accepts any key without validation against registered flags.
+func TestConfigSetRejectsUnknownKey(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	_ = tmpDir
+
+	app := NewApp("rejectapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	// Setting a key that doesn't correspond to any registered flag should fail
+	r := app.Test([]string{"config", "set", "nonexistent", "value"})
+	if r.ExitCode == 0 {
+		t.Errorf("expected nonzero exit code for unknown config key, got 0")
+	}
+	if !strings.Contains(r.Stderr, "nonexistent") {
+		t.Errorf("stderr should mention the unknown key 'nonexistent', got %q", r.Stderr)
+	}
+}
