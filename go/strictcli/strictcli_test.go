@@ -5504,7 +5504,7 @@ func TestConfigShowPlainArray(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, `tags = ["a","b","c"]  (source: config)`) {
+	if !strings.Contains(r.Stdout, `tags = ["a", "b", "c"]  (source: config)`) {
 		t.Fatalf("expected array display in stdout, got %q", r.Stdout)
 	}
 }

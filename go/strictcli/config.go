@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	tomledit "github.com/smm-h/go-toml-edit"
 )
@@ -392,7 +393,7 @@ func formatConfigValue(v interface{}) string {
 		if err != nil {
 			return fmt.Sprintf("%v", val)
 		}
-		return string(data)
+		return strings.ReplaceAll(string(data), ",", ", ")
 	case string:
 		return val
 	default:

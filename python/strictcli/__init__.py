@@ -117,19 +117,19 @@ def _coerce_config_scalar(value: object, flag_type: type) -> object:
     if flag_type is bool:
         if isinstance(value, bool):
             return value
-        raise ValueError(f"expected boolean, got {type(value).__name__}")
+        raise ValueError(f"expected boolean, got {_config_typename(value)}")
     if flag_type is int:
         if isinstance(value, int) and not isinstance(value, bool):
             return value
-        raise ValueError(f"expected integer, got {type(value).__name__}")
+        raise ValueError(f"expected integer, got {_config_typename(value)}")
     if flag_type is float:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value)
-        raise ValueError(f"expected float, got {type(value).__name__}")
+        raise ValueError(f"expected float, got {_config_typename(value)}")
     if flag_type is str:
         if isinstance(value, str):
             return value
-        raise ValueError(f"expected string, got {type(value).__name__}")
+        raise ValueError(f"expected string, got {_config_typename(value)}")
     raise ValueError(f"unsupported flag type {flag_type}")
 
 
