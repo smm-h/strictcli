@@ -285,6 +285,21 @@ class _ParseError(Exception):
         self.command_prefix = command_prefix
 
 
+def _strict_bool(s: str) -> bool:
+    """Parse a boolean string strictly.
+
+    Accepts: 1, true, yes (case-insensitive) -> True
+    Accepts: 0, false, no (case-insensitive) -> False
+    Everything else raises ValueError.
+    """
+    lower = s.lower()
+    if lower in ("1", "true", "yes"):
+        return True
+    if lower in ("0", "false", "no"):
+        return False
+    raise ValueError(f"expected boolean, got '{s}'")
+
+
 def _strict_int(s: str) -> int:
     """Parse an integer string strictly -- no leading/trailing whitespace allowed.
 
@@ -1362,12 +1377,9 @@ class App:
                 env_val = os.environ.get(f.env)
                 if env_val is not None:
                     if f.type is bool:
-                        lower = env_val.lower()
-                        if lower in ("1", "true", "yes"):
-                            cli_set[f.name] = True
-                        elif lower in ("0", "false", "no"):
-                            cli_set[f.name] = False
-                        else:
+                        try:
+                            cli_set[f.name] = _strict_bool(env_val)
+                        except ValueError:
                             raise _ParseError(
                                 f"invalid boolean value {env_val!r} for env var "
                                 f"'{f.env}' (flag '--{f.name}')"
@@ -1760,12 +1772,9 @@ def _parse_command(
             env_val = os.environ.get(f.env)
             if env_val is not None:
                 if f.type is bool:
-                    lower = env_val.lower()
-                    if lower in ("1", "true", "yes"):
-                        cli_set[f.name] = True
-                    elif lower in ("0", "false", "no"):
-                        cli_set[f.name] = False
-                    else:
+                    try:
+                        cli_set[f.name] = _strict_bool(env_val)
+                    except ValueError:
                         raise _ParseError(
                             f"invalid boolean value {env_val!r} for env var "
                             f"'{f.env}' (flag '--{f.name}')"
