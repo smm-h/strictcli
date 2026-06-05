@@ -1,13 +1,20 @@
 [packages.go-strictcli]
 bump = "minor"
-description = "WithChecksEmbed for inline TOML data"
-context = "Deployed Go binaries that use strictcli's check system previously panicked when .strictcli/checks.toml was missing from the working directory. WithChecksEmbed(data []byte) lets consumers embed the TOML at compile time via //go:embed, eliminating the filesystem dependency."
+description = "TOML config support and config set type coercion"
+context = "WithConfigFormat(\"toml\") now correctly parses TOML config files (previously always JSON-parsed). config set validates keys and coerces values to flag types. Both are breaking: TOML configs that silently fell back to defaults will now resolve values, and unknown keys in config set are rejected."
 include = ["go"]
 exclude = []
 
 [packages.strictcli]
 bump = "minor"
-description = "checks_embed for inline TOML data"
-context = "Adds checks_embed parameter as an alternative to checks_path, allowing TOML bytes to be passed directly without requiring a file on disk."
+description = "Config set type coercion and key validation"
+context = "config set now validates keys against registered flags and coerces string values to the flag's declared type before writing. This is a breaking change: unknown keys are rejected."
 include = ["pypi", "npm"]
+exclude = []
+
+[packages.conformance]
+bump = "minor"
+description = "Config content support and TOML config test cases"
+context = "Added config_content field to conformance schema and 10 new test cases exercising TOML config loading, precedence, config show, and config set error handling."
+include = ["plain"]
 exclude = []
