@@ -1,0 +1,364 @@
+[
+  {
+    "name": "env separator: split on comma",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "env": "TAGS",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "TAGS": "a,b,c"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=a,b,c"
+    }
+  },
+  {
+    "name": "env separator: escaped separator",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "env": "TAGS",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "TAGS": "a\\,b,c"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=a,b,c"
+    }
+  },
+  {
+    "name": "env separator: single value (no separator in value)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "env": "TAGS",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "TAGS": "a"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=a"
+    }
+  },
+  {
+    "name": "env separator: int coercion per element",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "a count",
+              "repeatable": true,
+              "unique": false,
+              "env": "COUNTS",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "counts={count}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "COUNTS": "1,2,3"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "counts=1,2,3"
+    }
+  },
+  {
+    "name": "env separator: CLI overrides env entirely",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "env": "TAGS",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--tag",
+      "from-cli"
+    ],
+    "env": {
+      "TAGS": "x,y,z"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=from-cli"
+    }
+  },
+  {
+    "name": "env separator: unique enforcement from env",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": true,
+              "env": "TAGS",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "TAGS": "a,b,a"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "--tag: duplicate value 'a' (from env var 'TAGS')"
+    }
+  },
+  {
+    "name": "env separator: int coercion error per element",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "a count",
+              "repeatable": true,
+              "unique": false,
+              "env": "COUNTS",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "counts={count}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "COUNTS": "1,abc,3"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "--count: expected integer, got 'abc' (from env var 'COUNTS')"
+    }
+  },
+  {
+    "name": "env separator: colon separator",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "path",
+              "type": "str",
+              "help": "a path",
+              "repeatable": true,
+              "unique": false,
+              "env": "PATHS",
+              "env_separator": ":"
+            }
+          ],
+          "handler_prints": "paths={path}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "PATHS": "/usr/bin:/usr/local/bin"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "paths=/usr/bin,/usr/local/bin"
+    }
+  },
+  {
+    "name": "env separator: float coercion per element",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "a rate",
+              "repeatable": true,
+              "unique": false,
+              "env": "RATES",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "rates={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "RATES": "1.5,2.5,3.5"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rates=1.5,2.5,3.5"
+    }
+  },
+  {
+    "name": "env separator: float NaN error per element",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "a rate",
+              "repeatable": true,
+              "unique": false,
+              "env": "RATES",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "rates={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "RATES": "1.5,NaN"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "--rate: NaN is not allowed (from env var 'RATES')"
+    }
+  }
+]
