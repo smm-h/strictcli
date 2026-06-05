@@ -78,25 +78,33 @@ def _load_config(
         return {}
 
 
+def _toml_format_scalar(value: object) -> str:
+    """Format a scalar value as a TOML literal."""
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, str):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    if isinstance(value, (int, float)):
+        return str(value)
+    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _write_toml_flat(data: dict, path: str) -> None:
     """Write a flat dict as a TOML file.
 
-    Supports str, int, float, and bool values. This avoids requiring
+    Supports str, int, float, bool, and list values. This avoids requiring
     a TOML writer dependency for the simple key=value configs that
     'config set' produces.
     """
     lines: list[str] = []
     for key, value in data.items():
-        if isinstance(value, bool):
-            lines.append(f"{key} = {str(value).lower()}")
-        elif isinstance(value, str):
-            escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-            lines.append(f'{key} = "{escaped}"')
-        elif isinstance(value, (int, float)):
-            lines.append(f"{key} = {value}")
+        if isinstance(value, list):
+            elements = ", ".join(_toml_format_scalar(elem) for elem in value)
+            lines.append(f"{key} = [{elements}]")
         else:
-            escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
-            lines.append(f'{key} = "{escaped}"')
+            lines.append(f"{key} = {_toml_format_scalar(value)}")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n" if lines else "")
 
@@ -155,6 +163,8 @@ def _format_config_value(value: object) -> str:
     """Format a config value for display, matching Go's formatConfigValue."""
     if value is None:
         return "<nil>"
+    if isinstance(value, list):
+        return json.dumps(value)
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
@@ -1678,6 +1688,14 @@ class App:
                         raise _ParseError(
                             f"--{f.name}: config value error: {e}"
                         )
+                    if f.unique and isinstance(coerced, list):
+                        dup = _find_duplicate(coerced)
+                        if dup is not None:
+                            raise _ParseError(
+                                f"--{f.name}: config value error: "
+                                f"duplicate value "
+                                f"'{_format_value_for_error(dup)}'"
+                            )
                     cli_set[f.name] = coerced
 
         # Apply defaults for global flags not set by CLI or env
@@ -2134,6 +2152,14 @@ def _parse_command(
                     raise _ParseError(
                         f"--{f.name}: config value error: {e}"
                     )
+                if f.unique and isinstance(coerced, list):
+                    dup = _find_duplicate(coerced)
+                    if dup is not None:
+                        raise _ParseError(
+                            f"--{f.name}: config value error: "
+                            f"duplicate value "
+                            f"'{_format_value_for_error(dup)}'"
+                        )
                 cli_set[f.name] = coerced
 
     # Step 4.5: enforce mutex group constraints (before defaults are applied,

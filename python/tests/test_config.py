@@ -2,6 +2,7 @@
 
 import json
 import os
+import tomllib
 
 import pytest
 
@@ -902,3 +903,194 @@ def test_config_array_precedence_cli_wins(tmp_path, monkeypatch):
     r = app.test(["run", "--tags", "x", "--tags", "y"])
     assert r.exit_code == 0
     assert "val=['x', 'y']" in r.stdout
+
+
+# --- config array unique enforcement ---
+
+
+def _make_unique_config_app(tmp_path, monkeypatch, config_data,
+                            flag_type=str, flag_name="tags",
+                            unique=True):
+    """Helper: app with config and a unique repeatable flag."""
+    config_home = _write_config(tmp_path, "uniqcfgapp", config_data)
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = strictcli.App(
+        name="uniqcfgapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag(flag_name, type=flag_type, help="the flag",
+                     repeatable=True, unique=unique)
+    def run(**kwargs):
+        val = kwargs[flag_name.replace("-", "_")]
+        print(f"val={val}")
+
+    return app
+
+
+def test_config_unique_enforcement(tmp_path, monkeypatch):
+    """Config array with duplicates for unique flag errors."""
+    app = _make_unique_config_app(tmp_path, monkeypatch,
+                                  {"tags": ["a", "b", "a"]}, unique=True)
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "duplicate value 'a'" in r.stderr
+    assert "config value error" in r.stderr
+
+
+def test_config_unique_no_duplicates(tmp_path, monkeypatch):
+    """Config array without duplicates for unique flag succeeds."""
+    app = _make_unique_config_app(tmp_path, monkeypatch,
+                                  {"tags": ["a", "b", "c"]}, unique=True)
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "val=['a', 'b', 'c']" in r.stdout
+
+
+def test_config_show_plain_array(tmp_path, monkeypatch):
+    """Config show --plain displays arrays as JSON array syntax."""
+    config_home = _write_config(tmp_path, "showcfgapp", {"tags": ["a", "b", "c"]})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = strictcli.App(
+        name="showcfgapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("tags", type=str, help="the tags",
+                     repeatable=True, unique=False)
+    def run(**kwargs):
+        pass
+
+    r = app.test(["config", "show", "--plain"])
+    assert r.exit_code == 0
+    assert 'tags = ["a", "b", "c"]  (source: config)' in r.stdout
+
+
+def test_config_show_json_array(tmp_path, monkeypatch):
+    """Config show --json includes array values correctly."""
+    config_home = _write_config(tmp_path, "jsonshowapp",
+                                {"tags": ["x", "y"]})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = strictcli.App(
+        name="jsonshowapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("tags", type=str, help="the tags",
+                     repeatable=True, unique=False)
+    def run(**kwargs):
+        pass
+
+    r = app.test(["config", "show", "--json"])
+    assert r.exit_code == 0
+    data = json.loads(r.stdout)
+    assert data["tags"]["value"] == ["x", "y"]
+    assert data["tags"]["source"] == "config"
+
+
+def test_config_unique_enforcement_global_flag(tmp_path, monkeypatch):
+    """Global flag unique enforcement from config works."""
+    config_home = _write_config(tmp_path, "globuniqapp",
+                                {"tags": ["a", "b", "a"]})
+    monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
+    app = strictcli.App(
+        name="globuniqapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        flags=[
+            strictcli.Flag(
+                name="tags", type=str, help="the tags",
+                repeatable=True, unique=True,
+            ),
+        ],
+    )
+
+    @app.command("run", help="run something")
+    def run(**kwargs):
+        print(f"tags={kwargs['tags']}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "duplicate value 'a'" in r.stderr
+    assert "config value error" in r.stderr
+
+
+# --- TOML array write round-trip tests ---
+
+
+def test_toml_write_string_array(tmp_path):
+    """_write_toml_flat writes string arrays and they round-trip."""
+    path = str(tmp_path / "config.toml")
+    strictcli._write_toml_flat({"tags": ["a", "b"]}, path)
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    assert data["tags"] == ["a", "b"]
+
+
+def test_toml_write_int_array(tmp_path):
+    """_write_toml_flat writes int arrays and they round-trip."""
+    path = str(tmp_path / "config.toml")
+    strictcli._write_toml_flat({"nums": [1, 2, 3]}, path)
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    assert data["nums"] == [1, 2, 3]
+
+
+def test_toml_write_float_array(tmp_path):
+    """_write_toml_flat writes float arrays and they round-trip."""
+    path = str(tmp_path / "config.toml")
+    strictcli._write_toml_flat({"rates": [1.5, 2.5]}, path)
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    assert data["rates"] == [1.5, 2.5]
+
+
+def test_toml_write_empty_array(tmp_path):
+    """_write_toml_flat writes empty arrays and they round-trip."""
+    path = str(tmp_path / "config.toml")
+    strictcli._write_toml_flat({"items": []}, path)
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    assert data["items"] == []
+
+
+def test_toml_write_mixed_scalars_and_arrays(tmp_path):
+    """_write_toml_flat writes mixed scalar and array values correctly."""
+    path = str(tmp_path / "config.toml")
+    strictcli._write_toml_flat({
+        "name": "test",
+        "count": 42,
+        "rate": 3.14,
+        "debug": True,
+        "tags": ["a", "b", "c"],
+        "nums": [1, 2],
+    }, path)
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    assert data["name"] == "test"
+    assert data["count"] == 42
+    assert data["rate"] == 3.14
+    assert data["debug"] is True
+    assert data["tags"] == ["a", "b", "c"]
+    assert data["nums"] == [1, 2]
+
+
+def test_toml_write_array_with_special_chars(tmp_path):
+    """_write_toml_flat writes string arrays with special chars correctly."""
+    path = str(tmp_path / "config.toml")
+    strictcli._write_toml_flat({
+        "paths": ['C:\\Users\\me', 'say "hello"', "back\\slash"],
+    }, path)
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    assert data["paths"] == ['C:\\Users\\me', 'say "hello"', "back\\slash"]
