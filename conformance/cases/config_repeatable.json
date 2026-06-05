@@ -1,0 +1,152 @@
+[
+  {
+    "name": "config repeatable: JSON array from config is applied",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"tags\": [\"a\", \"b\", \"c\"]}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "tags={tags}",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=a,b,c"
+    }
+  },
+  {
+    "name": "config repeatable: unique enforcement rejects duplicate in config",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"tags\": [\"a\", \"b\", \"a\"]}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "tags={tags}",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": true}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "duplicate value 'a'"
+    }
+  },
+  {
+    "name": "config repeatable: CLI overrides config array",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"tags\": [\"a\", \"b\", \"c\"]}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "tags={tags}",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+          ]
+        }
+      ]
+    },
+    "argv": ["run", "--tags", "x", "--tags", "y"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=x,y"
+    }
+  },
+  {
+    "name": "config repeatable: config show --plain displays array",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"tags\": [\"a\", \"b\", \"c\"]}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "show", "--plain"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "(source: config)"
+    }
+  },
+  {
+    "name": "config repeatable: int array from config",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"ports\": [80, 443, 8080]}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ports={ports}",
+          "flags": [
+            {"name": "ports", "help": "the ports", "type": "int", "repeatable": true, "unique": false}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "ports=80,443,8080"
+    }
+  },
+  {
+    "name": "config repeatable: empty array from config",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"tags\": []}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "tags={tags}",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags="
+    }
+  }
+]
