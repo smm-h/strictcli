@@ -220,12 +220,7 @@ func (a *App) registerConfigGroup() {
 
 	// config show
 	grp.Command("show", "Show all config values with source attribution", func(args map[string]interface{}) int {
-		usePlain := args["plain"].(bool)
 		useJSON := args["json"].(bool)
-		if !usePlain && !useJSON {
-			fmt.Fprintln(os.Stderr, "config show: specify --plain or --json")
-			return 1
-		}
 		configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		allFlags := a.collectAllFlags()
 

@@ -1163,11 +1163,7 @@ class App:
 
         # config show
         def _config_show_handler(**_kw) -> int:
-            use_plain = _kw.get("plain", False)
             use_json = _kw.get("json", False)
-            if not use_plain and not use_json:
-                print("config show: specify --plain or --json", file=sys.stderr)
-                return 1
             config_data = _load_config(
                 app_ref.name,
                 config_path_override=app_ref.config_path,
