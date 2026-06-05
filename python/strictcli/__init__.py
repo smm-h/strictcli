@@ -134,6 +134,87 @@ def _format_config_value(value: object) -> str:
     return str(value)
 
 
+def _split_escaped(value: str, sep: str) -> list[str]:
+    """Split value on sep, treating backslash as escape character.
+
+    Escaped sep becomes literal sep. Escaped backslash becomes literal backslash.
+    Trailing backslash with nothing to escape becomes literal backslash.
+    """
+    parts: list[str] = []
+    current: list[str] = []
+    i = 0
+    while i < len(value):
+        if value[i] == "\\":
+            if i + 1 < len(value):
+                next_ch = value[i + 1]
+                if next_ch == sep:
+                    current.append(sep)
+                    i += 2
+                elif next_ch == "\\":
+                    current.append("\\\\")
+                    i += 2
+                else:
+                    current.append("\\")
+                    current.append(next_ch)
+                    i += 2
+            else:
+                # Trailing backslash
+                current.append("\\\\")
+                i += 1
+        elif value[i] == sep:
+            parts.append("".join(current))
+            current = []
+            i += 1
+        else:
+            current.append(value[i])
+            i += 1
+    parts.append("".join(current))
+    return parts
+
+
+def _find_duplicate(values: list) -> object | None:
+    """Return the first duplicate value in the list, or None if all unique."""
+    seen: set = set()
+    for v in values:
+        if v in seen:
+            return v
+        seen.add(v)
+    return None
+
+
+def _format_value_for_error(value: object) -> str:
+    """Format a value for inclusion in error messages (without quotes).
+
+    Floats always include a decimal point. Bools are lowercase.
+    Strings are returned as-is.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        s = str(value)
+        if "." not in s:
+            s += ".0"
+        return s
+    return str(value)
+
+
+def _config_typename(value: object) -> str:
+    """Return a type name for config values, matching Go's typeName."""
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    if value is None:
+        return "null"
+    if isinstance(value, list):
+        return "array"
+    return type(value).__name__
+
+
 _CHECK_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _CHECK_REQUIRED_FIELDS = {"tags", "severity", "fast", "pure", "needs_network", "depends_on"}
 _CHECK_VALID_SEVERITIES = {"error", "warn"}
@@ -355,9 +436,9 @@ def _float_parse_error(
     Otherwise, produce the generic "expected float, got ..." message.
     """
     msg = str(exc)
-    if msg in ("NaN is not allowed", "Inf is not allowed"):
-        return _ParseError(f"--{flag_name}: {msg}")
     suffix = f" (from env var '{env}')" if env else ""
+    if msg in ("NaN is not allowed", "Inf is not allowed"):
+        return _ParseError(f"--{flag_name}: {msg}{suffix}")
     return _ParseError(f"--{flag_name}: expected float, got {raw!r}{suffix}")
 
 
@@ -989,7 +1070,9 @@ class App:
             for sub in grp._groups.values():
                 _collect_from_group(sub)
 
-        for grp in self._groups.values():
+        for name, grp in self._groups.items():
+            if name == "config":
+                continue  # skip auto-generated config group
             _collect_from_group(grp)
         return flags
 
