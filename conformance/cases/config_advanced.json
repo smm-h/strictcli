@@ -21,7 +21,7 @@
         }
       ]
     },
-    "argv": ["config", "show"],
+    "argv": ["config", "show", "--plain"],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -53,7 +53,7 @@
         }
       ]
     },
-    "argv": ["config", "show"],
+    "argv": ["config", "show", "--plain"],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -166,7 +166,7 @@
         }
       ]
     },
-    "argv": ["config", "show"],
+    "argv": ["config", "show", "--plain"],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -276,6 +276,96 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "config set: key 'debug'"
+    }
+  },
+  {
+    "name": "config: config show --plain output",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_format": "toml",
+      "config_content": "count = 10",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "count", "help": "a count", "type": "int", "default": 0},
+            {"name": "name", "help": "a name", "type": "str", "default": "world"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "show", "--plain"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "count = 10  (source: config)",
+        "name = world  (source: default)"
+      ]
+    }
+  },
+  {
+    "name": "config: config show --json output",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_format": "toml",
+      "config_content": "count = 10",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "count", "help": "a count", "type": "int", "default": 0},
+            {"name": "name", "help": "a name", "type": "str", "default": "world"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "show", "--json"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "\"count\"",
+        "\"source\": \"config\"",
+        "\"value\": 10",
+        "\"name\"",
+        "\"source\": \"default\"",
+        "\"value\": \"world\""
+      ]
+    }
+  },
+  {
+    "name": "config: config show no flags error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_format": "toml",
+      "config_content": "",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "count", "help": "a count", "type": "int", "default": 0}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "show"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "one of --plain, --json is required"
     }
   }
 ]
