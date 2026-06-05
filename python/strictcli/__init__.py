@@ -125,6 +125,15 @@ def _coerce_config_value(value: object, flag: "Flag") -> object:
     raise ValueError(f"unsupported flag type {flag.type}")
 
 
+def _format_config_value(value: object) -> str:
+    """Format a config value for display, matching Go's formatConfigValue."""
+    if value is None:
+        return "<nil>"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 _CHECK_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _CHECK_REQUIRED_FIELDS = {"tags", "severity", "fast", "pure", "needs_network", "depends_on"}
 _CHECK_VALID_SEVERITIES = {"error", "warn"}
@@ -1020,7 +1029,7 @@ class App:
                 else:
                     value = None
                     source = "default"
-                print(f"{param} = {value}  (source: {source})")
+                print(f"{param} = {_format_config_value(value)}  (source: {source})")
 
         config_grp.commands["show"] = Command(
             name="show",
