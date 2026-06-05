@@ -5815,6 +5815,28 @@ func TestEnvSeparatorFloatNanError(t *testing.T) {
 	}
 }
 
+func TestEnvSeparatorAtPrefixPerElement(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "input.txt")
+	os.WriteFile(tmpFile, []byte("from-file"), 0644)
+
+	os.Setenv("TAGS", "@"+tmpFile+",literal-value")
+	defer os.Unsetenv("TAGS")
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tag=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("TAGS"), Prefixed(false), EnvSeparator(","))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tag=from-file,literal-value") {
+		t.Fatalf("stdout should contain 'tag=from-file,literal-value', got %q", r.Stdout)
+	}
+}
+
 // --- Config set: repeatable flag support + --clear and --default ---
 
 // configSetApp creates a test app with repeatable and scalar flags for config set tests.
