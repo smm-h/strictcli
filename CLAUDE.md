@@ -12,6 +12,8 @@ This is an rlsbl monorepo (`.rlsbl-monorepo/workspace.toml`). Each sub-project h
 | `go/` | Go implementation | `VERSION` | go | `go test ./... -race` in `go/` |
 | `conformance/` | Cross-language conformance suite | n/a | plain | `python conformance/run.py --target python` / `--target go` |
 
+**Note:** `conformance/` is a `dev_node` project. It has no changelog, no user-facing changes, and does not participate in the changelog system. It is not released independently -- releases happen only as part of monorepo batch releases (`rlsbl monorepo release`) if at all.
+
 ## Building and testing
 
 ```bash
