@@ -766,5 +766,223 @@
       "exit_code": 1,
       "stderr_contains": "command \"cmd\": Requires flag and depends_on cannot be the same (\"output\")"
     }
+  },
+  {
+    "name": "registration: unique on non-repeatable flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "unique": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unique requires repeatable=True",
+      "stderr_equals": "error: Flag \"tag\": unique requires repeatable=True"
+    }
+  },
+  {
+    "name": "registration: repeatable without unique",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "repeatable requires explicit unique",
+      "stderr_equals": "error: Flag \"tag\": repeatable requires explicit unique (unique=True or unique=False)"
+    }
+  },
+  {
+    "name": "registration: env_separator without repeatable",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "env": "MYAPP_TAG",
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "env_separator requires repeatable=True",
+      "stderr_equals": "error: Flag \"tag\": env_separator requires repeatable=True"
+    }
+  },
+  {
+    "name": "registration: env_separator without env",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "env_separator": ","
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "env_separator requires env",
+      "stderr_equals": "error: Flag \"tag\": env_separator requires env"
+    }
+  },
+  {
+    "name": "registration: repeatable with env but no env_separator",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "env": "MYAPP_TAG"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "repeatable flag with env requires env_separator",
+      "stderr_equals": "error: Flag \"tag\": repeatable flag with env requires env_separator"
+    }
+  },
+  {
+    "name": "registration: env_separator multi-char",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "env": "MYAPP_TAG",
+              "env_separator": "::"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "env_separator must be a single character",
+      "stderr_equals": "error: Flag \"tag\": env_separator must be a single character"
+    }
+  },
+  {
+    "name": "registration: env_separator backslash",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "env": "MYAPP_TAG",
+              "env_separator": "\\"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "env_separator cannot be a backslash",
+      "stderr_equals": "error: Flag \"tag\": env_separator cannot be a backslash"
+    }
   }
 ]
