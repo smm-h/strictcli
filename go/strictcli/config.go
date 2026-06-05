@@ -181,8 +181,8 @@ func (a *App) registerConfigGroup() {
 		allFlags := a.collectAllFlags()
 
 		type entry struct {
-			Value  interface{} `json:"value"`
 			Source string      `json:"source"`
+			Value  interface{} `json:"value"`
 		}
 
 		if useJSON {
