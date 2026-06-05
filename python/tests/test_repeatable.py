@@ -272,3 +272,265 @@ def test_env_separator_shown_in_help():
     r = app.test(["cmd", "--help"])
     assert r.exit_code == 0
     assert "[env: MY_TAGS (sep: ,)]" in r.stdout
+
+
+# --- Env separator parsing tests ---
+
+
+def test_env_separator_splits_value(monkeypatch):
+    """TAGS=a,b,c with env_separator=',' produces ['a', 'b', 'c']."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "tag", help="a tag", repeatable=True, unique=False,
+        env="TAGS", env_separator=",",
+    )
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    monkeypatch.setenv("TAGS", "a,b,c")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "tag=['a', 'b', 'c']" in r.stdout
+
+
+def test_env_separator_escaped_separator(monkeypatch):
+    r"""TAGS=a\,b,c produces ['a,b', 'c'] (escaped separator)."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "tag", help="a tag", repeatable=True, unique=False,
+        env="TAGS", env_separator=",",
+    )
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    monkeypatch.setenv("TAGS", "a\\,b,c")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "tag=['a,b', 'c']" in r.stdout
+
+
+def test_env_separator_single_value(monkeypatch):
+    """TAGS=a with env_separator=',' produces ['a'] (no separator in value)."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "tag", help="a tag", repeatable=True, unique=False,
+        env="TAGS", env_separator=",",
+    )
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    monkeypatch.setenv("TAGS", "a")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "tag=['a']" in r.stdout
+
+
+def test_env_separator_int_coercion(monkeypatch):
+    """COUNTS=1,2,3 with int type and env_separator=',' produces [1, 2, 3]."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "count", type=int, help="a count", repeatable=True, unique=False,
+        env="COUNTS", env_separator=",",
+    )
+    def cmd(count):
+        print(f"count={count!r}")
+
+    monkeypatch.setenv("COUNTS", "1,2,3")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "count=[1, 2, 3]" in r.stdout
+
+
+def test_env_separator_int_coercion_error(monkeypatch):
+    """COUNTS=1,abc,3 with int type produces per-element coercion error."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "count", type=int, help="a count", repeatable=True, unique=False,
+        env="COUNTS", env_separator=",",
+    )
+    def cmd(count):
+        print(f"count={count!r}")
+
+    monkeypatch.setenv("COUNTS", "1,abc,3")
+    r = app.test(["cmd"])
+    assert r.exit_code == 1
+    assert "--count: expected integer, got 'abc' (from env var 'COUNTS')" in r.stderr
+
+
+def test_env_separator_unique_duplicate_error(monkeypatch):
+    """TAGS=a,b,a with unique=True produces duplicate error."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "tag", help="a tag", repeatable=True, unique=True,
+        env="TAGS", env_separator=",",
+    )
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    monkeypatch.setenv("TAGS", "a,b,a")
+    r = app.test(["cmd"])
+    assert r.exit_code == 1
+    assert "--tag: duplicate value 'a' (from env var 'TAGS')" in r.stderr
+
+
+def test_env_separator_unique_no_duplicate(monkeypatch):
+    """TAGS=a,b,c with unique=True succeeds when all values are distinct."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "tag", help="a tag", repeatable=True, unique=True,
+        env="TAGS", env_separator=",",
+    )
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    monkeypatch.setenv("TAGS", "a,b,c")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "tag=['a', 'b', 'c']" in r.stdout
+
+
+def test_env_separator_cli_overrides_env(monkeypatch):
+    """CLI value completely replaces env (first source wins, no merging)."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "tag", help="a tag", repeatable=True, unique=False,
+        env="TAGS", env_separator=",",
+    )
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    monkeypatch.setenv("TAGS", "x,y,z")
+    r = app.test(["cmd", "--tag", "from-cli"])
+    assert r.exit_code == 0
+    assert "tag=['from-cli']" in r.stdout
+
+
+def test_env_separator_colon_separator(monkeypatch):
+    """Test with env_separator=':' to verify it's not hardcoded to comma."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "path", help="a path", repeatable=True, unique=False,
+        env="PATHS", env_separator=":",
+    )
+    def cmd(path):
+        print(f"path={path!r}")
+
+    monkeypatch.setenv("PATHS", "/usr/bin:/usr/local/bin:/home/user/bin")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "path=['/usr/bin', '/usr/local/bin', '/home/user/bin']" in r.stdout
+
+
+def test_env_separator_at_prefix_per_element(monkeypatch, tmp_path):
+    """String flag: TAGS=@file.txt,b resolves @file.txt per-element."""
+    content_file = tmp_path / "file.txt"
+    content_file.write_text("from-file")
+
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "tag", help="a tag", repeatable=True, unique=False,
+        env="TAGS", env_separator=",",
+    )
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    monkeypatch.setenv("TAGS", f"@{content_file},b")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "tag=['from-file', 'b']" in r.stdout
+
+
+def test_env_separator_global_flag(monkeypatch):
+    """Env separator on global repeatable flag splits correctly."""
+    app = strictcli.App(
+        name="test", version="1.0.0", help="test app",
+        flags=[
+            strictcli.Flag(
+                name="tag", type=str, help="a tag", repeatable=True,
+                unique=False, env="TAGS", env_separator=",",
+            ),
+        ],
+    )
+
+    @app.command("cmd", help="a command")
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    monkeypatch.setenv("TAGS", "a,b,c")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "tag=['a', 'b', 'c']" in r.stdout
+
+
+def test_env_separator_float_coercion(monkeypatch):
+    """RATES=1.5,2.5,3.5 with float type and env_separator=',' produces [1.5, 2.5, 3.5]."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "rate", type=float, help="a rate", repeatable=True, unique=False,
+        env="RATES", env_separator=",",
+    )
+    def cmd(rate):
+        print(f"rate={rate!r}")
+
+    monkeypatch.setenv("RATES", "1.5,2.5,3.5")
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "rate=[1.5, 2.5, 3.5]" in r.stdout
+
+
+def test_env_separator_float_coercion_error(monkeypatch):
+    """RATES=1.5,abc with float type produces per-element coercion error."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "rate", type=float, help="a rate", repeatable=True, unique=False,
+        env="RATES", env_separator=",",
+    )
+    def cmd(rate):
+        print(f"rate={rate!r}")
+
+    monkeypatch.setenv("RATES", "1.5,abc")
+    r = app.test(["cmd"])
+    assert r.exit_code == 1
+    assert "--rate: expected float, got 'abc' (from env var 'RATES')" in r.stderr
+
+
+def test_env_separator_float_nan_error(monkeypatch):
+    """RATES=1.5,NaN with float type produces NaN error."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag(
+        "rate", type=float, help="a rate", repeatable=True, unique=False,
+        env="RATES", env_separator=",",
+    )
+    def cmd(rate):
+        print(f"rate={rate!r}")
+
+    monkeypatch.setenv("RATES", "1.5,NaN")
+    r = app.test(["cmd"])
+    assert r.exit_code == 1
+    assert "--rate: NaN is not allowed (from env var 'RATES')" in r.stderr

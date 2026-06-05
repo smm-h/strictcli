@@ -101,28 +101,54 @@ def _write_toml_flat(data: dict, path: str) -> None:
         f.write("\n".join(lines) + "\n" if lines else "")
 
 
+def _coerce_config_scalar(value: object, flag_type: type) -> object:
+    """Coerce a single JSON config value to the given type.
+
+    Returns the coerced value, or raises ValueError if coercion fails.
+    """
+    if flag_type is bool:
+        if isinstance(value, bool):
+            return value
+        raise ValueError(f"expected boolean, got {type(value).__name__}")
+    if flag_type is int:
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        raise ValueError(f"expected integer, got {type(value).__name__}")
+    if flag_type is float:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+        raise ValueError(f"expected float, got {type(value).__name__}")
+    if flag_type is str:
+        if isinstance(value, str):
+            return value
+        raise ValueError(f"expected string, got {type(value).__name__}")
+    raise ValueError(f"unsupported flag type {flag_type}")
+
+
 def _coerce_config_value(value: object, flag: "Flag") -> object:
     """Coerce a JSON config value to the flag's type.
 
     Returns the coerced value, or raises ValueError if coercion fails.
+    Handles both scalar and array values for repeatable flags.
     """
-    if flag.type is bool:
-        if isinstance(value, bool):
-            return value
-        raise ValueError(f"expected boolean, got {type(value).__name__}")
-    if flag.type is int:
-        if isinstance(value, int) and not isinstance(value, bool):
-            return value
-        raise ValueError(f"expected integer, got {type(value).__name__}")
-    if flag.type is float:
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value)
-        raise ValueError(f"expected float, got {type(value).__name__}")
-    if flag.type is str:
-        if isinstance(value, str):
-            return value
-        raise ValueError(f"expected string, got {type(value).__name__}")
-    raise ValueError(f"unsupported flag type {flag.type}")
+    if isinstance(value, list):
+        if not flag.repeatable:
+            raise ValueError("expected scalar, got array")
+        result = []
+        for i, elem in enumerate(value):
+            try:
+                result.append(_coerce_config_scalar(elem, flag.type))
+            except ValueError:
+                raise ValueError(
+                    f"element {i}: expected {flag.type.__name__}, "
+                    f"got {_config_typename(elem)}"
+                )
+        return result
+    if flag.repeatable:
+        raise ValueError(
+            f"expected array for repeatable flag, got {_config_typename(value)}"
+        )
+    return _coerce_config_scalar(value, flag.type)
 
 
 def _format_config_value(value: object) -> str:
@@ -1562,24 +1588,82 @@ class App:
                                 f"'{f.env}' (flag '--{f.name}')"
                             )
                     elif f.type is int:
-                        try:
-                            coerced = _strict_int(env_val)
-                        except ValueError as e:
-                            raise _ParseError(
-                                f"--{f.name}: {e} (from env var '{f.env}')"
-                            )
-                        cli_set[f.name] = [coerced] if f.repeatable else coerced
+                        if f.repeatable and f.env_separator is not None:
+                            parts = _split_escaped(env_val, f.env_separator)
+                            coerced_list = []
+                            for element in parts:
+                                try:
+                                    coerced_list.append(_strict_int(element))
+                                except ValueError as e:
+                                    raise _ParseError(
+                                        f"--{f.name}: {e} (from env var '{f.env}')"
+                                    )
+                            if f.unique:
+                                dup = _find_duplicate(coerced_list)
+                                if dup is not None:
+                                    raise _ParseError(
+                                        f"--{f.name}: duplicate value "
+                                        f"'{_format_value_for_error(dup)}' "
+                                        f"(from env var '{f.env}')"
+                                    )
+                            cli_set[f.name] = coerced_list
+                        else:
+                            try:
+                                coerced = _strict_int(env_val)
+                            except ValueError as e:
+                                raise _ParseError(
+                                    f"--{f.name}: {e} (from env var '{f.env}')"
+                                )
+                            cli_set[f.name] = [coerced] if f.repeatable else coerced
                     elif f.type is float:
-                        try:
-                            coerced = _strict_float(env_val)
-                        except ValueError as e:
-                            raise _float_parse_error(f.name, env_val, e, env=f.env)
-                        cli_set[f.name] = [coerced] if f.repeatable else coerced
+                        if f.repeatable and f.env_separator is not None:
+                            parts = _split_escaped(env_val, f.env_separator)
+                            coerced_list = []
+                            for element in parts:
+                                try:
+                                    coerced_list.append(_strict_float(element))
+                                except ValueError as e:
+                                    raise _float_parse_error(
+                                        f.name, element, e, env=f.env,
+                                    )
+                            if f.unique:
+                                dup = _find_duplicate(coerced_list)
+                                if dup is not None:
+                                    raise _ParseError(
+                                        f"--{f.name}: duplicate value "
+                                        f"'{_format_value_for_error(dup)}' "
+                                        f"(from env var '{f.env}')"
+                                    )
+                            cli_set[f.name] = coerced_list
+                        else:
+                            try:
+                                coerced = _strict_float(env_val)
+                            except ValueError as e:
+                                raise _float_parse_error(f.name, env_val, e, env=f.env)
+                            cli_set[f.name] = [coerced] if f.repeatable else coerced
                     else:
-                        resolved, self._stdin_consumed_by = _resolve_at_prefix(
-                            f.name, env_val, self._stdin_consumed_by,
-                        )
-                        cli_set[f.name] = [resolved] if f.repeatable else resolved
+                        if f.repeatable and f.env_separator is not None:
+                            parts = _split_escaped(env_val, f.env_separator)
+                            coerced_list = []
+                            for element in parts:
+                                resolved, self._stdin_consumed_by = _resolve_at_prefix(
+                                    f.name, element, self._stdin_consumed_by,
+                                )
+                                coerced_list.append(resolved)
+                            if f.unique:
+                                dup = _find_duplicate(coerced_list)
+                                if dup is not None:
+                                    raise _ParseError(
+                                        f"--{f.name}: duplicate value "
+                                        f"'{_format_value_for_error(dup)}' "
+                                        f"(from env var '{f.env}')"
+                                    )
+                            cli_set[f.name] = coerced_list
+                        else:
+                            resolved, self._stdin_consumed_by = _resolve_at_prefix(
+                                f.name, env_val, self._stdin_consumed_by,
+                            )
+                            cli_set[f.name] = [resolved] if f.repeatable else resolved
 
         # Resolve config values for global flags not set by CLI or env
         if self._config_data:
@@ -1960,24 +2044,82 @@ def _parse_command(
                             f"'{f.env}' (flag '--{f.name}')"
                         )
                 elif f.type is int:
-                    try:
-                        coerced = _strict_int(env_val)
-                    except ValueError as e:
-                        raise _ParseError(
-                            f"--{f.name}: {e} (from env var '{f.env}')"
-                        )
-                    cli_set[f.name] = [coerced] if f.repeatable else coerced
+                    if f.repeatable and f.env_separator is not None:
+                        parts = _split_escaped(env_val, f.env_separator)
+                        coerced_list = []
+                        for element in parts:
+                            try:
+                                coerced_list.append(_strict_int(element))
+                            except ValueError as e:
+                                raise _ParseError(
+                                    f"--{f.name}: {e} (from env var '{f.env}')"
+                                )
+                        if f.unique:
+                            dup = _find_duplicate(coerced_list)
+                            if dup is not None:
+                                raise _ParseError(
+                                    f"--{f.name}: duplicate value "
+                                    f"'{_format_value_for_error(dup)}' "
+                                    f"(from env var '{f.env}')"
+                                )
+                        cli_set[f.name] = coerced_list
+                    else:
+                        try:
+                            coerced = _strict_int(env_val)
+                        except ValueError as e:
+                            raise _ParseError(
+                                f"--{f.name}: {e} (from env var '{f.env}')"
+                            )
+                        cli_set[f.name] = [coerced] if f.repeatable else coerced
                 elif f.type is float:
-                    try:
-                        coerced = _strict_float(env_val)
-                    except ValueError as e:
-                        raise _float_parse_error(f.name, env_val, e, env=f.env)
-                    cli_set[f.name] = [coerced] if f.repeatable else coerced
+                    if f.repeatable and f.env_separator is not None:
+                        parts = _split_escaped(env_val, f.env_separator)
+                        coerced_list = []
+                        for element in parts:
+                            try:
+                                coerced_list.append(_strict_float(element))
+                            except ValueError as e:
+                                raise _float_parse_error(
+                                    f.name, element, e, env=f.env,
+                                )
+                        if f.unique:
+                            dup = _find_duplicate(coerced_list)
+                            if dup is not None:
+                                raise _ParseError(
+                                    f"--{f.name}: duplicate value "
+                                    f"'{_format_value_for_error(dup)}' "
+                                    f"(from env var '{f.env}')"
+                                )
+                        cli_set[f.name] = coerced_list
+                    else:
+                        try:
+                            coerced = _strict_float(env_val)
+                        except ValueError as e:
+                            raise _float_parse_error(f.name, env_val, e, env=f.env)
+                        cli_set[f.name] = [coerced] if f.repeatable else coerced
                 else:
-                    resolved, stdin_consumed_by[0] = _resolve_at_prefix(
-                        f.name, env_val, stdin_consumed_by[0],
-                    )
-                    cli_set[f.name] = [resolved] if f.repeatable else resolved
+                    if f.repeatable and f.env_separator is not None:
+                        parts = _split_escaped(env_val, f.env_separator)
+                        coerced_list = []
+                        for element in parts:
+                            resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                                f.name, element, stdin_consumed_by[0],
+                            )
+                            coerced_list.append(resolved)
+                        if f.unique:
+                            dup = _find_duplicate(coerced_list)
+                            if dup is not None:
+                                raise _ParseError(
+                                    f"--{f.name}: duplicate value "
+                                    f"'{_format_value_for_error(dup)}' "
+                                    f"(from env var '{f.env}')"
+                                )
+                        cli_set[f.name] = coerced_list
+                    else:
+                        resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                            f.name, env_val, stdin_consumed_by[0],
+                        )
+                        cli_set[f.name] = [resolved] if f.repeatable else resolved
 
     # Step 4.2: resolve config values for flags not set by CLI or env
     if config_data:
