@@ -24,7 +24,9 @@
                     "test_val",
                     "other_val",
                     "third_val"
-                  ]
+                  ],
+                  "unique": false,
+                  "env_separator": ","
                 },
                 {
                   "name": "alt0",
@@ -107,7 +109,8 @@
               "name": "flag2",
               "type": "int",
               "help": "test flag 2",
-              "repeatable": true
+              "repeatable": true,
+              "unique": false
             }
           ]
         }
@@ -223,7 +226,8 @@
                 "test_val",
                 "other_val",
                 "third_val"
-              ]
+              ],
+              "unique": false
             }
           ]
         }

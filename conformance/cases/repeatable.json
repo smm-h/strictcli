@@ -14,7 +14,8 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
-              "repeatable": true
+              "repeatable": true,
+              "unique": false
             }
           ],
           "handler_prints": "tags={tag}"
@@ -46,7 +47,8 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
-              "repeatable": true
+              "repeatable": true,
+              "unique": false
             }
           ],
           "handler_prints": "tags={tag}"
@@ -82,7 +84,8 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
-              "repeatable": true
+              "repeatable": true,
+              "unique": false
             }
           ],
           "handler_prints": "tags={tag}"
@@ -112,7 +115,8 @@
               "name": "port",
               "type": "int",
               "help": "a port",
-              "repeatable": true
+              "repeatable": true,
+              "unique": false
             }
           ],
           "handler_prints": "ports={port}"
@@ -151,7 +155,8 @@
                 "alpha",
                 "beta",
                 "gamma"
-              ]
+              ],
+              "unique": false
             }
           ],
           "handler_prints": "tags={tag}"
@@ -189,7 +194,8 @@
               "choices_str": [
                 "alpha",
                 "beta"
-              ]
+              ],
+              "unique": false
             }
           ],
           "handler_prints": "tags={tag}"
@@ -227,7 +233,8 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
-              "repeatable": true
+              "repeatable": true,
+              "unique": false
             }
           ],
           "handler_prints": "tags={tag}"
@@ -260,7 +267,8 @@
               "type": "str",
               "short": "t",
               "help": "a tag",
-              "repeatable": true
+              "repeatable": true,
+              "unique": false
             }
           ],
           "handler_prints": "tags={tag}"
@@ -294,7 +302,8 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
-              "repeatable": true
+              "repeatable": true,
+              "unique": false
             }
           ],
           "handler_prints": "ok"
@@ -328,7 +337,9 @@
               "type": "str",
               "help": "a tag",
               "repeatable": true,
-              "env": "MYAPP_TAG"
+              "env": "MYAPP_TAG",
+              "unique": false,
+              "env_separator": ","
             }
           ],
           "handler_prints": "tags={tag}"
