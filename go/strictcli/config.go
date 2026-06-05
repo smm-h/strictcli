@@ -58,10 +58,10 @@ func loadConfig(appName string, pathOverride string, format string) map[string]i
 	return result
 }
 
-// coerceConfigValue coerces a JSON-decoded value to the flag's type.
+// coerceConfigScalar coerces a single JSON-decoded value to the given flag type.
 // Returns the coerced value and an error string (empty on success).
-func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
-	switch f.Type {
+func coerceConfigScalar(value interface{}, flagType FlagType) (interface{}, string) {
+	switch flagType {
 	case TypeBool:
 		if b, ok := value.(bool); ok {
 			return b, ""
@@ -95,7 +95,31 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 		}
 		return nil, fmt.Sprintf("expected string, got %s", typeName(value))
 	}
-	return nil, fmt.Sprintf("unsupported flag type %d", f.Type)
+	return nil, fmt.Sprintf("unsupported flag type %d", flagType)
+}
+
+// coerceConfigValue coerces a JSON-decoded value to the flag's type.
+// Handles both scalar values and arrays (for repeatable flags).
+// Returns the coerced value and an error string (empty on success).
+func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
+	if arr, ok := value.([]interface{}); ok {
+		if !f.Repeatable {
+			return nil, "expected scalar, got array"
+		}
+		result := make([]interface{}, len(arr))
+		for i, elem := range arr {
+			coerced, errStr := coerceConfigScalar(elem, f.Type)
+			if errStr != "" {
+				return nil, fmt.Sprintf("element %d: expected %s, got %s", i, flagTypeName[f.Type], typeName(elem))
+			}
+			result[i] = coerced
+		}
+		return result, ""
+	}
+	if f.Repeatable {
+		return nil, fmt.Sprintf("expected array for repeatable flag, got %s", typeName(value))
+	}
+	return coerceConfigScalar(value, f.Type)
 }
 
 // typeName returns a human-readable type name for a config-decoded value.

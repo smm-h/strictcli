@@ -5262,3 +5262,186 @@ func TestUniqueGlobalFlag(t *testing.T) {
 		t.Fatalf("stderr should contain '--tag: duplicate value \\'a\\'', got %q", r2.Stderr)
 	}
 }
+
+// --- config array coercion for repeatable flags ---
+
+func TestConfigArrayForRepeatableString(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "arrstrapp", map[string]interface{}{
+		"tags": []interface{}{"a", "b", "c"},
+	})
+	app := NewApp("arrstrapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Print("val=" + formatValue(args["tags"]))
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(false))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "val=a,b,c") {
+		t.Fatalf("expected val=a,b,c, got %q", r.Stdout)
+	}
+}
+
+func TestConfigArrayForRepeatableInt(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "arrintapp", map[string]interface{}{
+		"nums": []interface{}{float64(1), float64(2), float64(3)},
+	})
+	app := NewApp("arrintapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Print("val=" + formatValue(args["nums"]))
+		return 0
+	}, WithFlags(IntFlag("nums", "the nums", Repeatable(), Unique(false))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "val=1,2,3") {
+		t.Fatalf("expected val=1,2,3, got %q", r.Stdout)
+	}
+}
+
+func TestConfigArrayForRepeatableFloat(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "arrfloatapp", map[string]interface{}{
+		"rates": []interface{}{1.5, 2.5},
+	})
+	app := NewApp("arrfloatapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Print("val=" + formatValue(args["rates"]))
+		return 0
+	}, WithFlags(FloatFlag("rates", "the rates", Repeatable(), Unique(false))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "val=1.5,2.5") {
+		t.Fatalf("expected val=1.5,2.5, got %q", r.Stdout)
+	}
+}
+
+func TestConfigArrayForNonRepeatableError(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "arrscalarapp", map[string]interface{}{
+		"target": []interface{}{"a", "b"},
+	})
+	app := NewApp("arrscalarapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("target", "the target", Default("x"))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "expected scalar, got array") {
+		t.Fatalf("expected 'expected scalar, got array' in stderr, got %q", r.Stderr)
+	}
+}
+
+func TestConfigScalarForRepeatableError(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "screpapp", map[string]interface{}{
+		"tags": "single",
+	})
+	app := NewApp("screpapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(false))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "expected array for repeatable flag") {
+		t.Fatalf("expected 'expected array for repeatable flag' in stderr, got %q", r.Stderr)
+	}
+}
+
+func TestConfigArrayBadElementType(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "arrbadapp", map[string]interface{}{
+		"tags": []interface{}{"a", float64(123)},
+	})
+	app := NewApp("arrbadapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(false))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "element 1: expected str, got float") {
+		t.Fatalf("expected 'element 1: expected str, got float' in stderr, got %q", r.Stderr)
+	}
+}
+
+func TestConfigEmptyArray(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "arremptyapp", map[string]interface{}{
+		"tags": []interface{}{},
+	})
+	app := NewApp("arremptyapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Print("val=" + formatValue(args["tags"]))
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(false))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "val=") {
+		t.Fatalf("expected val= in stdout, got %q", r.Stdout)
+	}
+	// Empty array should produce empty string from formatValue
+	if r.Stdout != "val=" {
+		t.Fatalf("expected exactly 'val=', got %q", r.Stdout)
+	}
+}
+
+func TestConfigSingleElementArray(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "arroneapp", map[string]interface{}{
+		"tags": []interface{}{"a"},
+	})
+	app := NewApp("arroneapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Print("val=" + formatValue(args["tags"]))
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(false))))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "val=a") {
+		t.Fatalf("expected val=a, got %q", r.Stdout)
+	}
+}
+
+func TestConfigArrayPrecedenceCLIWins(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "arrprecapp", map[string]interface{}{
+		"tags": []interface{}{"a", "b", "c"},
+	})
+	app := NewApp("arrprecapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		fmt.Print("val=" + formatValue(args["tags"]))
+		return 0
+	}, WithFlags(StringFlag("tags", "the tags", Repeatable(), Unique(false))))
+	r := app.Test([]string{"run", "--tags", "x", "--tags", "y"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "val=x,y") {
+		t.Fatalf("expected val=x,y, got %q", r.Stdout)
+	}
+}
