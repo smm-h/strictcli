@@ -100,6 +100,9 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # Python uses field names (checks_path/checks_embed); Go uses option function names
     'cannot use both checks_path and checks_embed':
         "Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names (checks_path/checks_embed)",
+    # Python validates unique as bool at registration; Go uses typed bool field
+    'Flag *: unique must be True or False':
+        "Go uses typed bool field for Unique; no runtime type check needed",
 }
 
 # Go-only: errors that have no Python counterpart by design
@@ -144,6 +147,10 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
     # Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names
     'cannot use both WithChecks and WithChecksEmbed':
         "Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names (checks_path/checks_embed)",
+    # Go has a plain-string return for non-whole float->int coercion in config;
+    # Python covers this generically via 'expected integer, got *'
+    'expected integer, got float':
+        "Go plain-string return in coerceConfigScalar; Python generic 'expected integer, got *'",
 }
 
 # Dead code: errors present in both implementations but unreachable at runtime.
@@ -161,8 +168,10 @@ DEAD_CODE_EXCLUSIONS: dict[str, str] = {
 # fixtures, multi-flag interaction scenarios). These are temporarily excluded
 # from coverage checks but remain parity-checked.
 COVERAGE_DEFERRED_EXCLUSIONS: dict[str, str] = {
-    # Config value coercion error requires writing a config file fixture
+    # Config value coercion errors require writing a config file fixture
     '--*: config value error: *':
+        "Needs config file fixture support in conformance framework",
+    '--*: config value error: duplicate value *':
         "Needs config file fixture support in conformance framework",
     # Implies conflict requires specific flag interaction setup
     "flag '--*' implies '--**', but '--**' was explicitly provided":
@@ -373,9 +382,40 @@ def extract_go_errors(
     for m in errorf_pat.finditer(tagdsl_src):
         results.append(("registration", m.group(1)))
 
+    # --- Single-return parse errors from parse.go (storeValue helper) ---
+    # return fmt.Sprintf("...", args) -- storeValue duplicate detection
+    parse_sprintf_1 = re.compile(
+        r'return\s+fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
+    )
+    for m in parse_sprintf_1.finditer(parse_src):
+        fmt_str = m.group(1)
+        # Skip formatValueForError's fallback (not an error message)
+        if fmt_str == "%v":
+            continue
+        results.append(("parse", fmt_str))
+
+    # --- Single-return parse errors from strictcli.go (storeValue in extractGlobalFlags) ---
+    for m in parse_sprintf_1.finditer(strictcli_src):
+        fmt_str = m.group(1)
+        if fmt_str == "%v":
+            continue
+        # Skip registration errors (already captured by panic patterns)
+        # and the checks_declared error (already captured)
+        if fmt_str.startswith("checks declared"):
+            continue
+        results.append(("parse", fmt_str))
+
     # --- Config value coercion errors from config.go (fmt.Sprintf in return) ---
     # return nil, fmt.Sprintf("...", args) -- coerceConfigValue
     for m in parse_sprintf_2.finditer(config_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Config value coercion errors from config.go (plain string in return) ---
+    # return nil, "..." -- coerceConfigValue/coerceConfigScalar
+    config_plain_err = re.compile(
+        r'return\s+nil,\s*"((?:[^"\\]|\\.)*)"',
+    )
+    for m in config_plain_err.finditer(config_src):
         results.append(("registration", m.group(1)))
 
     return results
