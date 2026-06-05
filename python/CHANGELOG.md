@@ -2,16 +2,26 @@
 
 # Changelog
 
-## 0.14.0
+## 0.15.0
 
-checks_embed for inline TOML data
+Config set type coercion and key validation
 
 <details>
 <summary>Context</summary>
 
-Adds checks_embed parameter as an alternative to checks_path, allowing TOML bytes to be passed directly without requiring a file on disk.
+config set now validates keys against registered flags and coerces string values to the flag's declared type before writing. This is a breaking change: unknown keys are rejected.
 
 </details>
+
+### Breaking
+
+- **Breaking.** `config set` now validates keys against registered flags and rejects unknown keys.
+
+### Features
+
+- **New feature.** `config set` coerces values to the flag's declared type (int, bool, float) before writing to config.
+
+## 0.14.0
 
 ### Features
 
