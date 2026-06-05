@@ -184,6 +184,30 @@ func (a *App) collectAllFlags() []Flag {
 	return flags
 }
 
+// writeConfigFile marshals the config map and writes it to disk.
+func writeConfigFile(data map[string]interface{}, path string, format string) int {
+	var raw []byte
+	var err error
+	switch format {
+	case "toml":
+		raw, err = tomledit.Marshal(data)
+	default:
+		raw, err = json.MarshalIndent(data, "", "  ")
+		if err == nil {
+			raw = append(raw, '\n')
+		}
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: cannot marshal config: %s\n", err)
+		return 1
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
+		return 1
+	}
+	return 0
+}
+
 // registerConfigGroup registers the auto-generated 'config' command group.
 func (a *App) registerConfigGroup() {
 	grp := a.Group("config", "Manage configuration")
@@ -265,7 +289,6 @@ func (a *App) registerConfigGroup() {
 	// config set
 	grp.Command("set", "Set a config value", func(args map[string]interface{}) int {
 		key := args["key"].(string)
-		value := args["value"].(string)
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
@@ -289,58 +312,128 @@ func (a *App) registerConfigGroup() {
 			return 1
 		}
 
+		useClear := args["clear"].(bool)
+		useDefault := args["default"].(bool)
+
+		// Validate: exactly one of (value, --clear, --default)
+		hasValue := args["value"] != nil
+		var value string
+		if hasValue {
+			value = args["value"].(string)
+		}
+		if useClear && useDefault {
+			fmt.Fprintln(os.Stderr, "--clear and --default are mutually exclusive")
+			return 1
+		}
+		if hasValue && useClear {
+			fmt.Fprintln(os.Stderr, "config set: cannot provide a value with --clear")
+			return 1
+		}
+		if hasValue && useDefault {
+			fmt.Fprintln(os.Stderr, "config set: cannot provide a value with --default")
+			return 1
+		}
+		if !hasValue && !useClear && !useDefault {
+			fmt.Fprintln(os.Stderr, "config set: provide a value, --clear, or --default")
+			return 1
+		}
+
+		// --clear: repeatable flags only, writes []
+		if useClear {
+			if !matchedFlag.Repeatable {
+				fmt.Fprintln(os.Stderr, "config set: --clear is only for repeatable flags")
+				return 1
+			}
+			existing[key] = []interface{}{}
+			return writeConfigFile(existing, path, a.configFormat)
+		}
+
+		// --default: remove the key from config
+		if useDefault {
+			if _, ok := existing[key]; !ok {
+				fmt.Fprintf(os.Stderr, "config set: key '%s' not in config\n", key)
+				return 1
+			}
+			delete(existing, key)
+			return writeConfigFile(existing, path, a.configFormat)
+		}
+
 		// Coerce the string value to the flag's type
 		var typedValue interface{}
-		switch matchedFlag.Type {
-		case TypeBool:
-			v, err := parseBoolStrict(value)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-				return 1
+		if matchedFlag.Repeatable {
+			// Split on comma, coerce each element
+			parts := splitEscaped(value, ',')
+			coerced := make([]interface{}, len(parts))
+			switch matchedFlag.Type {
+			case TypeInt:
+				for i, p := range parts {
+					v, err := parseIntStrict(p)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+						return 1
+					}
+					coerced[i] = v
+				}
+			case TypeFloat:
+				for i, p := range parts {
+					v, err := parseFloatStrictValue(p)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+						return 1
+					}
+					coerced[i] = v
+				}
+			case TypeStr:
+				for i, p := range parts {
+					coerced[i] = p
+				}
 			}
-			typedValue = v
-		case TypeInt:
-			v, err := parseIntStrict(value)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-				return 1
+			// Unique enforcement
+			if matchedFlag.Unique {
+				if dup := findDuplicate(coerced); dup != nil {
+					fmt.Fprintf(os.Stderr, "config set: key '%s': duplicate value '%s'\n",
+						key, formatValueForError(dup))
+					return 1
+				}
 			}
-			typedValue = v
-		case TypeFloat:
-			v, err := parseFloatStrictValue(value)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-				return 1
+			typedValue = coerced
+		} else {
+			switch matchedFlag.Type {
+			case TypeBool:
+				v, err := parseBoolStrict(value)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+					return 1
+				}
+				typedValue = v
+			case TypeInt:
+				v, err := parseIntStrict(value)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+					return 1
+				}
+				typedValue = v
+			case TypeFloat:
+				v, err := parseFloatStrictValue(value)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+					return 1
+				}
+				typedValue = v
+			case TypeStr:
+				typedValue = value
 			}
-			typedValue = v
-		case TypeStr:
-			typedValue = value
 		}
 
 		existing[key] = typedValue
-		var data []byte
-		var err error
-		switch a.configFormat {
-		case "toml":
-			data, err = tomledit.Marshal(existing)
-		default:
-			data, err = json.MarshalIndent(existing, "", "  ")
-			if err == nil {
-				data = append(data, '\n')
-			}
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: cannot marshal config: %s\n", err)
-			return 1
-		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
-			return 1
-		}
-		return 0
+		return writeConfigFile(existing, path, a.configFormat)
 	}, WithArgs(
 		NewArg("key", "Config key to set"),
-		NewArg("value", "Value to set"),
+		NewArg("value", "Value to set (comma-separated for repeatable flags)",
+			ArgRequired(false)),
+	), WithFlags(
+		BoolFlag("clear", "Clear a repeatable flag (set to empty list)"),
+		BoolFlag("default", "Reset a key to its default (remove from config)"),
 	))
 
 	// config edit

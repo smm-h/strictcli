@@ -5814,3 +5814,342 @@ func TestEnvSeparatorFloatNanError(t *testing.T) {
 		t.Fatalf("stderr should contain NaN error, got %q", r.Stderr)
 	}
 }
+
+// --- Config set: repeatable flag support + --clear and --default ---
+
+// configSetApp creates a test app with repeatable and scalar flags for config set tests.
+func configSetApp() *App {
+	app := NewApp("repapp", "1.0.0", "test app with repeatable flags", WithConfig())
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		StringFlag("tags", "tags", Repeatable(), Unique(false), Default([]interface{}{})),
+		IntFlag("counts", "counts", Repeatable(), Unique(false), Default([]interface{}{})),
+		FloatFlag("rates", "rates", Repeatable(), Unique(false), Default([]interface{}{})),
+		IntFlag("ids", "unique ids", Repeatable(), Unique(true), Default([]interface{}{})),
+		StringFlag("name", "name", Default("default")),
+	))
+	return app
+}
+
+func TestConfigSetRepeatableString(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "tags", "a,b,c"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	path := filepath.Join(tmpDir, "repapp", "config.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	arr, ok := config["tags"].([]interface{})
+	if !ok {
+		t.Fatalf("tags should be an array, got %T", config["tags"])
+	}
+	if len(arr) != 3 || arr[0] != "a" || arr[1] != "b" || arr[2] != "c" {
+		t.Fatalf("expected [a,b,c], got %v", arr)
+	}
+}
+
+func TestConfigSetRepeatableInt(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "counts", "1,2,3"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	path := filepath.Join(tmpDir, "repapp", "config.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	arr, ok := config["counts"].([]interface{})
+	if !ok {
+		t.Fatalf("counts should be an array, got %T", config["counts"])
+	}
+	if len(arr) != 3 || arr[0] != float64(1) || arr[1] != float64(2) || arr[2] != float64(3) {
+		t.Fatalf("expected [1,2,3], got %v", arr)
+	}
+}
+
+func TestConfigSetEscapedComma(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "tags", `a\,b,c`})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	path := filepath.Join(tmpDir, "repapp", "config.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	arr, ok := config["tags"].([]interface{})
+	if !ok {
+		t.Fatalf("tags should be an array, got %T", config["tags"])
+	}
+	if len(arr) != 2 || arr[0] != "a,b" || arr[1] != "c" {
+		t.Fatalf("expected [a,b c], got %v", arr)
+	}
+}
+
+func TestConfigSetRepeatableUniqueValid(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "ids", "1,2,3"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigSetRepeatableUniqueDuplicate(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "ids", "1,2,1"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config set: key 'ids': duplicate value '1'") {
+		t.Fatalf("expected duplicate error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetRoundTripJSON(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "tags", "x,y"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	r = app.Test([]string{"config", "show", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config show failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	var result map[string]struct {
+		Value  interface{} `json:"value"`
+		Source string      `json:"source"`
+	}
+	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+	entry, ok := result["tags"]
+	if !ok {
+		t.Fatal("tags key missing from config show output")
+	}
+	if entry.Source != "config" {
+		t.Fatalf("expected source=config, got %q", entry.Source)
+	}
+	arr, ok := entry.Value.([]interface{})
+	if !ok {
+		t.Fatalf("tags value should be array, got %T", entry.Value)
+	}
+	if len(arr) != 2 || arr[0] != "x" || arr[1] != "y" {
+		t.Fatalf("expected [x,y], got %v", arr)
+	}
+}
+
+func TestConfigSetRoundTripTOML(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	configFile := filepath.Join(tmpDir, "config.toml")
+	app := NewApp("reptoml", "1.0.0", "test app", WithConfig(),
+		WithConfigFormat("toml"), WithConfigPath(configFile))
+	app.Command("run", "run something", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(
+		StringFlag("tags", "tags", Repeatable(), Unique(false), Default([]interface{}{})),
+	))
+
+	r := app.Test([]string{"config", "set", "tags", "a,b"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	r = app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config show failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, `tags = ["a", "b"]  (source: config)`) {
+		t.Fatalf("expected tags array in plain output, got %q", r.Stdout)
+	}
+}
+
+func TestConfigSetClearRepeatable(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "repapp", map[string]interface{}{
+		"tags": []interface{}{"a", "b"},
+	})
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "tags", "--clear"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	path := filepath.Join(tmpDir, "repapp", "config.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	arr, ok := config["tags"].([]interface{})
+	if !ok {
+		t.Fatalf("tags should be an array, got %T", config["tags"])
+	}
+	if len(arr) != 0 {
+		t.Fatalf("expected empty array, got %v", arr)
+	}
+}
+
+func TestConfigSetClearScalarError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "name", "--clear"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config set: --clear is only for repeatable flags") {
+		t.Fatalf("expected scalar error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetDefaultRemovesKey(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "repapp", map[string]interface{}{
+		"name": "alice",
+		"tags": []interface{}{"x"},
+	})
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "name", "--default"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+
+	path := filepath.Join(tmpDir, "repapp", "config.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("config file should exist: %v", err)
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, exists := config["name"]; exists {
+		t.Fatal("name key should have been removed from config")
+	}
+	// Other keys preserved
+	if _, exists := config["tags"]; !exists {
+		t.Fatal("tags key should still exist")
+	}
+}
+
+func TestConfigSetDefaultNonexistentKeyError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "name", "--default"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config set: key 'name' not in config") {
+		t.Fatalf("expected not-in-config error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetNoArgsError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "name"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config set: provide a value, --clear, or --default") {
+		t.Fatalf("expected provide-a-value error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetValueWithClearError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "tags", "a,b", "--clear"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config set: cannot provide a value with --clear") {
+		t.Fatalf("expected value-with-clear error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetValueWithDefaultError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "name", "alice", "--default"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config set: cannot provide a value with --default") {
+		t.Fatalf("expected value-with-default error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigSetClearAndDefaultError(t *testing.T) {
+	_, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	app := configSetApp()
+	r := app.Test([]string{"config", "set", "tags", "--clear", "--default"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--clear and --default are mutually exclusive") {
+		t.Fatalf("expected mutex error, got %q", r.Stderr)
+	}
+}
