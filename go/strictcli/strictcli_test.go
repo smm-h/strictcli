@@ -6420,3 +6420,51 @@ func TestRepeatableDefaultValid(t *testing.T) {
 		t.Fatalf("expected 'tags=x,y', got %q", r.Stdout)
 	}
 }
+
+func TestRepeatableDefaultShownInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{"x", "y"}))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "[default: x, y]") {
+		t.Fatalf("stdout should contain '[default: x, y]', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableNoDefaultNotInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if strings.Contains(r.Stdout, "[default") {
+		t.Fatalf("stdout should not contain '[default', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableDefaultIntInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(IntFlag("count", "a count", Repeatable(), Unique(false), Default([]interface{}{1, 2, 3}))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "[default: 1, 2, 3]") {
+		t.Fatalf("stdout should contain '[default: 1, 2, 3]', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableDefaultFloatInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(FloatFlag("score", "a score", Repeatable(), Unique(false), Default([]interface{}{1.5, 2.5}))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "[default: 1.5, 2.5]") {
+		t.Fatalf("stdout should contain '[default: 1.5, 2.5]', got %q", r.Stdout)
+	}
+}

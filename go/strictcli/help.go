@@ -289,7 +289,16 @@ func buildFlagMeta(f Flag) string {
 			metaParts = append(metaParts, "default: false")
 		}
 	} else if f.Repeatable {
-		// Repeatable flags are never required; no default shown
+		// Repeatable flags are never required; show default only if non-empty
+		if f.hasDefault && f.Default != nil {
+			if items, ok := f.Default.([]interface{}); ok && len(items) > 0 {
+				parts := make([]string, len(items))
+				for i, elem := range items {
+					parts[i] = formatValueForError(elem)
+				}
+				metaParts = append(metaParts, fmt.Sprintf("default: %s", strings.Join(parts, ", ")))
+			}
+		}
 	} else if f.hasDefault && f.Default != nil {
 		metaParts = append(metaParts, fmt.Sprintf("default: %v", f.Default))
 	} else if f.hasDefault {
