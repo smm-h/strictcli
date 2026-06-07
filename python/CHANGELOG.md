@@ -2,16 +2,16 @@
 
 # Changelog
 
+## 0.16.1
+
+Error message fixes and help text improvements
+
+### Fixes
+
+- **Fix.** `config set` mutex error messages now include the `config set:` prefix for consistency.
+- **Fix.** Config set help text now mentions backslash escaping for values containing commas in repeatable flags.
+
 ## 0.16.0
-
-unique and env_separator flag fields, config array coercion, config set repeatable support
-
-<details>
-<summary>Context</summary>
-
-Breaking: config show now requires --plain or --json. New features: unique field enforces no duplicate values on repeatable flags, env_separator controls how env vars are split into arrays, config arrays are coerced to declared types, config set supports repeatable flags with --clear and --default.
-
-</details>
 
 ### Breaking
 
