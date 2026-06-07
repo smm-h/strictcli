@@ -1,1 +1,2 @@
 {"commits":["f3d823ccff62b2e785a64f6f976f17480e182b12"],"user_facing":false}
+{"commits":["6a48e05d23653524d1465797992a8492a9769f91"],"user_facing":true,"description":"**Fix.** Repeatable flag defaults are now correctly applied to handlers (previously always received empty list).","type":"fix"}
