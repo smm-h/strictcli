@@ -588,3 +588,18 @@ def test_repeatable_default_valid():
     r = app.test(["cmd"])
     assert r.exit_code == 0
     assert "record=['a', 'b']" in r.stdout
+
+
+def test_repeatable_default_applied():
+    """Regression guard: repeatable flag default is applied when no CLI/env value."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag("tag", help="a tag", repeatable=True, unique=False,
+                    default=["a", "b"])
+    def cmd(tag):
+        print(f"tag={tag!r}")
+
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "tag=['a', 'b']" in r.stdout
