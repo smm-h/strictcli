@@ -588,6 +588,38 @@ class Flag:
                     raise ValueError(
                         f'Flag "{self.name}": choice {c!r} is not of type {self.type.__name__}'
                     )
+        # Validate repeatable flag defaults
+        if self.repeatable and not isinstance(self.default, _MissingSentinel):
+            if self.default is not None:
+                if not isinstance(self.default, list):
+                    raise ValueError(
+                        f'Flag "{self.name}": repeatable flag default must be a list'
+                    )
+                if len(self.default) == 0:
+                    raise ValueError(
+                        f'Flag "{self.name}": explicit empty default is redundant '
+                        f"for repeatable flags, omit the default"
+                    )
+                # Validate element types
+                type_name = {str: "str", int: "int", float: "float"}[self.type]
+                for i, elem in enumerate(self.default):
+                    if self.type is str:
+                        if not isinstance(elem, str):
+                            raise ValueError(
+                                f'Flag "{self.name}": default element {i} is not of type {type_name}'
+                            )
+                    elif self.type is int:
+                        if not isinstance(elem, int) or isinstance(elem, bool):
+                            raise ValueError(
+                                f'Flag "{self.name}": default element {i} is not of type {type_name}'
+                            )
+                    elif self.type is float:
+                        if not isinstance(elem, (int, float)) or isinstance(elem, bool):
+                            raise ValueError(
+                                f'Flag "{self.name}": default element {i} is not of type {type_name}'
+                            )
+                        if isinstance(elem, int):
+                            self.default[i] = float(elem)
         # Validate default type for int flags
         if self.type is int and not isinstance(self.default, _MissingSentinel) and self.default is not None:
             if not self.repeatable and not isinstance(self.default, int):

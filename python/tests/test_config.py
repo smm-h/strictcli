@@ -1114,14 +1114,13 @@ def _make_config_set_app(config_path=None, config_format="json"):
     )
 
     @app.command("run", help="run something")
-    @strictcli.flag("tags", type=str, help="tags", repeatable=True, unique=False,
-                    default=[])
+    @strictcli.flag("tags", type=str, help="tags", repeatable=True, unique=False)
     @strictcli.flag("counts", type=int, help="counts", repeatable=True,
-                    unique=False, default=[])
+                    unique=False)
     @strictcli.flag("rates", type=float, help="rates", repeatable=True,
-                    unique=False, default=[])
+                    unique=False)
     @strictcli.flag("ids", type=int, help="unique ids", repeatable=True,
-                    unique=True, default=[])
+                    unique=True)
     @strictcli.flag("name", type=str, help="name", default="default")
     def run(tags, counts, rates, ids, name):
         print(f"tags={tags} counts={counts} rates={rates} ids={ids} name={name}")

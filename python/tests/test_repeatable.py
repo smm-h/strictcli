@@ -534,3 +534,57 @@ def test_env_separator_float_nan_error(monkeypatch):
     r = app.test(["cmd"])
     assert r.exit_code == 1
     assert "--rate: NaN is not allowed (from env var 'RATES')" in r.stderr
+
+
+# --- Repeatable flag default validation ---
+
+
+def test_repeatable_default_must_be_list():
+    """Repeatable flag with non-list default raises ValueError."""
+    with pytest.raises(ValueError, match='Flag "record": repeatable flag default must be a list'):
+        _make_app_with_repeatable(type=str, default="not a list")
+
+
+def test_repeatable_default_empty_list_error():
+    """Repeatable flag with explicit default=[] raises ValueError."""
+    with pytest.raises(
+        ValueError,
+        match='Flag "record": explicit empty default is redundant for repeatable flags, omit the default',
+    ):
+        _make_app_with_repeatable(type=str, default=[])
+
+
+def test_repeatable_default_wrong_element_type_str():
+    """Repeatable str flag with default=[1] raises ValueError at element 0."""
+    with pytest.raises(ValueError, match='Flag "record": default element 0 is not of type str'):
+        _make_app_with_repeatable(type=str, default=[1])
+
+
+def test_repeatable_default_wrong_element_type_int():
+    """Repeatable int flag with default=["x"] raises ValueError."""
+    with pytest.raises(ValueError, match='Flag "record": default element 0 is not of type int'):
+        _make_app_with_repeatable(type=int, default=["x"])
+
+
+def test_repeatable_default_int_coerced_to_float():
+    """Repeatable float flag with default=[1, 2] coerces to [1.0, 2.0]."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag("val", type=float, help="a value", repeatable=True, unique=False,
+                    default=[1, 2])
+    def cmd(val):
+        print(f"val={val!r}")
+
+    # The flag object should have coerced defaults
+    flag_obj = app._commands["cmd"].flags[0]
+    assert flag_obj.default == [1.0, 2.0]
+    assert all(isinstance(x, float) for x in flag_obj.default)
+
+
+def test_repeatable_default_valid():
+    """Repeatable flag with valid non-empty default succeeds."""
+    app = _make_app_with_repeatable(type=str, default=["a", "b"])
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "record=['a', 'b']" in r.stdout
