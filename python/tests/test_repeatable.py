@@ -603,3 +603,35 @@ def test_repeatable_default_applied():
     r = app.test(["cmd"])
     assert r.exit_code == 0
     assert "tag=['a', 'b']" in r.stdout
+
+
+def test_repeatable_default_shown_in_help():
+    """Repeatable flag with non-empty default shows it in help text."""
+    app = _make_app_with_repeatable(type=str, default=["x", "y"])
+    r = app.test(["cmd", "--help"])
+    assert r.exit_code == 0
+    assert "[default: x, y]" in r.stdout
+
+
+def test_repeatable_no_default_not_in_help():
+    """Repeatable flag with no explicit default shows no default in help."""
+    app = _make_app_with_repeatable(type=str)
+    r = app.test(["cmd", "--help"])
+    assert r.exit_code == 0
+    assert "[default" not in r.stdout
+
+
+def test_repeatable_default_int_in_help():
+    """Repeatable int flag with default shows formatted ints in help."""
+    app = _make_app_with_repeatable(type=int, default=[1, 2, 3])
+    r = app.test(["cmd", "--help"])
+    assert r.exit_code == 0
+    assert "[default: 1, 2, 3]" in r.stdout
+
+
+def test_repeatable_default_float_in_help():
+    """Repeatable float flag with default shows formatted floats in help."""
+    app = _make_app_with_repeatable(type=float, default=[1.5, 2.5])
+    r = app.test(["cmd", "--help"])
+    assert r.exit_code == 0
+    assert "[default: 1.5, 2.5]" in r.stdout

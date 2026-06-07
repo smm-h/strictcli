@@ -2936,8 +2936,10 @@ def _build_flag_meta(f: Flag) -> str:
     if f.type is bool:
         meta_parts.append(f"default: {'true' if f.default else 'false'}")
     elif f.repeatable:
-        # Repeatable flags are never required; no default shown
-        pass
+        # Repeatable flags are never required; show default only if non-empty
+        if f.default:
+            joined = ", ".join(_format_value_for_error(elem) for elem in f.default)
+            meta_parts.append(f"default: {joined}")
     elif f.default is not None:
         meta_parts.append(f"default: {f.default}")
     else:
