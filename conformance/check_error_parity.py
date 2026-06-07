@@ -103,6 +103,9 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # Python validates unique as bool at registration; Go uses typed bool field
     'Flag *: unique must be True or False':
         "Go uses typed bool field for Unique; no runtime type check needed",
+    # Python validates repeatable default element types generically
+    'Flag *: default element * is not of type *':
+        "Go validates default elements with type-specific messages (str/int/float)",
 }
 
 # Go-only: errors that have no Python counterpart by design
@@ -119,6 +122,13 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
         "Go uses %T format verb; Python uses type(x).__name__",
     'Flag *: type=float requires a float64 default, got *':
         "Go uses 'float64' type name; Python uses 'float'",
+    # Go has type-specific default element validation messages that Python covers generically
+    'Flag *: default element * is not of type str':
+        "Go type-specific default element validation (Python uses generic pattern)",
+    'Flag *: default element * is not of type int':
+        "Go type-specific default element validation (Python uses generic pattern)",
+    'Flag *: default element * is not of type float':
+        "Go type-specific default element validation (Python uses generic pattern)",
     # Go has entity-specific help validation messages; Python uses generic
     # _require_non_empty_str producing '{class_name}.{field_name} must be...'
     'App.help must be a non-empty string':

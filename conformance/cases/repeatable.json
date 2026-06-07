@@ -390,5 +390,105 @@
       "stdout_contains": "[default: x, y]",
       "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --tag <str>    a tag [repeatable] [default: x, y]"
     }
+  },
+  {
+    "name": "repeatable: default applied at runtime",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "default": ["x", "y"]
+            }
+          ],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=x,y"
+    }
+  },
+  {
+    "name": "repeatable: CLI overrides default (no merge)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "default": ["x", "y"]
+            }
+          ],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--tag",
+      "z"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=z"
+    }
+  },
+  {
+    "name": "repeatable: config overrides default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"tag\": [\"from-config\"]}",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "default": ["x", "y"]
+            }
+          ],
+          "handler_prints": "tags={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=from-config"
+    }
   }
 ]
