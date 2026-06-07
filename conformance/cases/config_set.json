@@ -1,0 +1,176 @@
+[
+  {
+    "name": "config set: duplicate value on unique repeatable flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": true}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "tags", "a,a"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config set: key 'tags': duplicate value 'a'"
+    }
+  },
+  {
+    "name": "config set: --clear on repeatable flag succeeds",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"tags\": [\"x\", \"y\"]}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "tags", "--clear"],
+    "expect": {
+      "exit_code": 0
+    }
+  },
+  {
+    "name": "config set: --clear on scalar flag errors",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "count", "help": "a count", "type": "int", "default": 0}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "count", "--clear"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config set: --clear is only for repeatable flags"
+    }
+  },
+  {
+    "name": "config set: --default when key not in config errors",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "count", "help": "a count", "type": "int", "default": 0}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "count", "--default"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config set: key 'count' not in config"
+    }
+  },
+  {
+    "name": "config set: value with --clear errors",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "tags", "a,b", "--clear"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config set: cannot provide a value with --clear"
+    }
+  },
+  {
+    "name": "config set: value with --default errors",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "count", "help": "a count", "type": "int", "default": 0}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "count", "42", "--default"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config set: cannot provide a value with --default"
+    }
+  },
+  {
+    "name": "config set: --clear with --default errors",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "tags", "--clear", "--default"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config set: --clear and --default are mutually exclusive"
+    }
+  }
+]
