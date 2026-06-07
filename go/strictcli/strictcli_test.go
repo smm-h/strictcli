@@ -5845,10 +5845,10 @@ func configSetApp() *App {
 	app.Command("run", "run something", func(args map[string]interface{}) int {
 		return 0
 	}, WithFlags(
-		StringFlag("tags", "tags", Repeatable(), Unique(false), Default([]interface{}{})),
-		IntFlag("counts", "counts", Repeatable(), Unique(false), Default([]interface{}{})),
-		FloatFlag("rates", "rates", Repeatable(), Unique(false), Default([]interface{}{})),
-		IntFlag("ids", "unique ids", Repeatable(), Unique(true), Default([]interface{}{})),
+		StringFlag("tags", "tags", Repeatable(), Unique(false)),
+		IntFlag("counts", "counts", Repeatable(), Unique(false)),
+		FloatFlag("rates", "rates", Repeatable(), Unique(false)),
+		IntFlag("ids", "unique ids", Repeatable(), Unique(true)),
 		StringFlag("name", "name", Default("default")),
 	))
 	return app
@@ -6201,5 +6201,27 @@ func TestConfigSetClearAndDefaultError(t *testing.T) {
 	}
 	if !strings.Contains(r.Stderr, "config set: --clear and --default are mutually exclusive") {
 		t.Fatalf("expected mutex error, got %q", r.Stderr)
+	}
+}
+
+// --- Repeatable default tests ---
+
+func TestRepeatableDefaultApplied(t *testing.T) {
+	// Register a repeatable string flag with a non-empty default
+	// Run with no CLI args, no env, no config
+	// Handler should receive ["a", "b"] (the declared default)
+	// BUG: currently receives [] (empty slice)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{"a", "b"}))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "tags=a,b" {
+		t.Fatalf("expected stdout 'tags=a,b', got %q", r.Stdout)
 	}
 }
