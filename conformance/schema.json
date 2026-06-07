@@ -249,7 +249,8 @@
             { "type": "string" },
             { "type": "boolean" },
             { "type": "number" },
-            { "type": "null" }
+            { "type": "null" },
+            { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "type": "number" }] } }
           ]
         },
         "env": { "type": "string" },

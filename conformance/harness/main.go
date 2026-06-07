@@ -162,6 +162,20 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	if v, ok := fd["default"]; ok {
 		if v == nil {
 			opts = append(opts, strictcli.Default(nil))
+		} else if arr, ok := v.([]interface{}); ok {
+			// Array default (repeatable flags).
+			converted := make([]interface{}, len(arr))
+			for i, elem := range arr {
+				switch ftype {
+				case "int":
+					converted[i] = int(elem.(float64))
+				case "float":
+					converted[i] = elem.(float64)
+				default: // str
+					converted[i] = elem.(string)
+				}
+			}
+			opts = append(opts, strictcli.Default(converted))
 		} else {
 			switch ftype {
 			case "bool":

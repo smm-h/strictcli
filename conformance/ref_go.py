@@ -29,6 +29,17 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
                 opts.append("strictcli.Default(true)")
             else:
                 opts.append("strictcli.Default(false)")
+        elif isinstance(default, list):
+            elems = []
+            for elem in default:
+                if isinstance(elem, str):
+                    elems.append(f'"{elem}"')
+                elif isinstance(elem, float):
+                    elems.append(f"{elem}")
+                elif isinstance(elem, int):
+                    elems.append(f"{elem}")
+            joined = ", ".join(elems)
+            opts.append("strictcli.Default([]interface{}{" + joined + "})")
         elif isinstance(default, float):
             opts.append(f"strictcli.Default({default})")
         elif isinstance(default, int):

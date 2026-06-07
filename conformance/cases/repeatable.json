@@ -356,5 +356,39 @@
       "exit_code": 0,
       "stdout_equals": "tags=fromenv"
     }
+  },
+  {
+    "name": "repeatable: default shown in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tag",
+              "type": "str",
+              "help": "a tag",
+              "repeatable": true,
+              "unique": false,
+              "default": ["x", "y"]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "[default: x, y]",
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --tag <str>    a tag [repeatable] [default: x, y]"
+    }
   }
 ]
