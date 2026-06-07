@@ -1,2 +1,3 @@
 {"commits":["f3d823ccff62b2e785a64f6f976f17480e182b12"],"user_facing":false}
 {"commits":["6a48e05d23653524d1465797992a8492a9769f91"],"user_facing":true,"description":"**Fix.** Repeatable flag defaults are now correctly applied to handlers (previously always received empty list).","type":"fix"}
+{"commits":["03b5825ee27da681c12d1e16f5f538b5b05f4cb2"],"user_facing":true,"description":"**Breaking.** Explicit empty default on repeatable flags (`Default([]interface{}{})`) is now a registration error. Omit the default instead.","type":"breaking"}
