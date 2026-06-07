@@ -2,16 +2,24 @@
 
 # Changelog
 
+## 0.12.1
+
+Fix repeatable flag defaults not applied to handlers
+
+### Breaking
+
+- **Breaking.** Explicit empty default on repeatable flags (`Default([]interface{}{})`) is now a registration error. Omit the default instead.
+
+### Features
+
+- **New.** Registration validates repeatable flag default element types match the flag's declared type.
+- **New.** Help text now displays non-empty repeatable flag defaults as `[default: a, b, c]`.
+
+### Fixes
+
+- **Fix.** Repeatable flag defaults are now correctly applied to handlers (previously always received empty list).
+
 ## 0.12.0
-
-Array config support, unique flag enforcement, env var delimiter, config set repeatable
-
-<details>
-<summary>Context</summary>
-
-Major additions: Unique field on repeatable flags enforces no duplicates at parse time and in config. EnvSeparator controls how env var values split into arrays. Config values for repeatable flags are coerced from strings to declared types. config set now supports repeatable flags with --clear and --default. Breaking: config show requires --plain or --json.
-
-</details>
 
 ### Breaking
 
