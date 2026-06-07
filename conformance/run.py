@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -386,6 +387,16 @@ def _cleanup_go_cache() -> None:
     GO_BUILD_CACHE.clear()
 
 
+def _normalize_temp_paths(s: str) -> str:
+    """Replace temp directory paths with a placeholder so cross-target comparison ignores them."""
+    tmpdir = re.escape(tempfile.gettempdir())
+    return re.sub(
+        tmpdir + r"/strictcli_[a-z]+_[a-zA-Z0-9_]+",
+        "<TMPDIR>",
+        s,
+    )
+
+
 def _compare_outputs(
     py_result: subprocess.CompletedProcess | None,
     go_result: subprocess.CompletedProcess | None,
@@ -395,15 +406,15 @@ def _compare_outputs(
     if py_result is None or go_result is None:
         return warnings
 
-    py_stdout = _normalize(py_result.stdout)
-    go_stdout = _normalize(go_result.stdout)
+    py_stdout = _normalize_temp_paths(_normalize(py_result.stdout))
+    go_stdout = _normalize_temp_paths(_normalize(go_result.stdout))
     if py_stdout != go_stdout:
         warnings.append("  stdout divergence:")
         warnings.append(f"    python: {py_stdout!r}")
         warnings.append(f"    go:     {go_stdout!r}")
 
-    py_stderr = _normalize(py_result.stderr)
-    go_stderr = _normalize(go_result.stderr)
+    py_stderr = _normalize_temp_paths(_normalize(py_result.stderr))
+    go_stderr = _normalize_temp_paths(_normalize(go_result.stderr))
     if py_stderr != go_stderr:
         warnings.append("  stderr divergence:")
         warnings.append(f"    python: {py_stderr!r}")
