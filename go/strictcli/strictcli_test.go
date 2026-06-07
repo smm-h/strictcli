@@ -6226,6 +6226,92 @@ func TestRepeatableDefaultApplied(t *testing.T) {
 	}
 }
 
+func TestRepeatableDefaultOverriddenByCLI(t *testing.T) {
+	// CLI values completely replace the default
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{"a", "b"}))))
+
+	r := app.Test([]string{"cmd", "--tag", "x", "--tag", "y"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "tags=x,y" {
+		t.Fatalf("expected stdout 'tags=x,y', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableDefaultOverriddenByEnv(t *testing.T) {
+	// Env value replaces the default
+	os.Setenv("MYAPP_TAG", "fromenv1,fromenv2")
+	defer os.Unsetenv("MYAPP_TAG")
+
+	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Env("MYAPP_TAG"), EnvSeparator(","), Default([]interface{}{"a", "b"}))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "tags=fromenv1,fromenv2" {
+		t.Fatalf("expected stdout 'tags=fromenv1,fromenv2', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableDefaultGlobalFlag(t *testing.T) {
+	// Global flag with default, handler receives it
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{"x", "y"})))
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	})
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "tags=x,y" {
+		t.Fatalf("expected stdout 'tags=x,y', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableDefaultNotMutated(t *testing.T) {
+	// Run the command twice, verify the second run still gets the original default
+	// (copy prevents mutation)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		vals := args["tag"].([]interface{})
+		fmt.Print("tags=" + formatValue(vals))
+		// Attempt to mutate the slice
+		if len(vals) > 0 {
+			vals[0] = "MUTATED"
+		}
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{"a", "b"}))))
+
+	r1 := app.Test([]string{"cmd"})
+	if r1.ExitCode != 0 {
+		t.Fatalf("run 1: expected exit 0, got %d: stderr=%q", r1.ExitCode, r1.Stderr)
+	}
+	if r1.Stdout != "tags=a,b" {
+		t.Fatalf("run 1: expected stdout 'tags=a,b', got %q", r1.Stdout)
+	}
+
+	r2 := app.Test([]string{"cmd"})
+	if r2.ExitCode != 0 {
+		t.Fatalf("run 2: expected exit 0, got %d: stderr=%q", r2.ExitCode, r2.Stderr)
+	}
+	if r2.Stdout != "tags=a,b" {
+		t.Fatalf("run 2: expected stdout 'tags=a,b', got %q (mutation leaked)", r2.Stdout)
+	}
+}
+
 // --- Repeatable flag default validation ---
 
 func TestRepeatableDefaultMustBeSlice(t *testing.T) {

@@ -521,7 +521,12 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			continue
 		}
 		if f.Repeatable {
-			cliSet[f.Name] = []interface{}{}
+			if f.hasDefault && f.Default != nil {
+				src := f.Default.([]interface{})
+				cliSet[f.Name] = append([]interface{}{}, src...)
+			} else {
+				cliSet[f.Name] = []interface{}{}
+			}
 		} else if f.Type == TypeBool {
 			cliSet[f.Name] = f.Default
 		} else if f.hasDefault && f.Default != nil {
