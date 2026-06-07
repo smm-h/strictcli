@@ -2,9 +2,19 @@
 
 # Changelog
 
-## 0.16.1
+## 0.17.0
 
-Error message fixes and help text improvements
+Repeatable flag default validation and help text display
+
+### Breaking
+
+- **Breaking.** Repeatable flag defaults are now validated at registration: must be a list, `default=[]` is rejected as redundant, and element types must match the flag type.
+
+### Features
+
+- **New.** Help text now displays non-empty repeatable flag defaults as `[default: a, b, c]`.
+
+## 0.16.1
 
 ### Fixes
 
