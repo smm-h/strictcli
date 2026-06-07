@@ -2,16 +2,38 @@
 
 # Changelog
 
-## 0.11.1
+## 0.12.0
 
-Config show bool parity, negative values in config set, parseIntStrict wiring
+Array config support, unique flag enforcement, env var delimiter, config set repeatable
 
 <details>
 <summary>Context</summary>
 
-config show now outputs lowercase bools matching Python. config set accepts negative numeric values. Wired parseIntStrict to all int parsing sites. Error message change: unknown single-dash tokens now produce 'unexpected argument' instead of 'unknown flag'.
+Major additions: Unique field on repeatable flags enforces no duplicates at parse time and in config. EnvSeparator controls how env var values split into arrays. Config values for repeatable flags are coerced from strings to declared types. config set now supports repeatable flags with --clear and --default. Breaking: config show requires --plain or --json.
 
 </details>
+
+### Breaking
+
+- **Config show.** `config show` now requires explicit `--plain` or `--json` flag instead of defaulting to plain text.
+
+### Features
+
+- **New flag fields.** `Unique` field on repeatable flags enforces no duplicate values at CLI parse time and in config arrays.
+- **New flag field.** `EnvSeparator` on repeatable flags controls how environment variable values are split into arrays.
+- **Config arrays.** Config values for repeatable flags are now coerced from strings to the declared type.
+- **Config set.** Repeatable flags can now be managed with `config set`, including `--clear` to reset and `--default` to restore default values.
+
+### Fixes
+
+- **Fix.** Config show JSON output now uses consistent field ordering.
+- **Fix.** Config error messages now use consistent type names and array formatting.
+- **Fix.** Config array values now use correct comma formatting.
+- **Fix.** `config set` mutex error messages now include the `config set:` prefix for consistency.
+- **Fix.** `typeName` now correctly reports whole float64 values (e.g. `3.0`) as `int` type for config validation.
+- **Fix.** Config set help text now mentions backslash escaping for values containing commas in repeatable flags.
+
+## 0.11.1
 
 ### Breaking
 
