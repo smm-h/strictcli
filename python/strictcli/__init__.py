@@ -1365,7 +1365,7 @@ class App:
             args=[
                 Arg(name="key", help="Config key to set"),
                 Arg(name="value",
-                    help="Value to set (comma-separated for repeatable flags)",
+                    help="Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
                     required=False),
             ],
             flags=[

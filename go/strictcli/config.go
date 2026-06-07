@@ -429,7 +429,7 @@ func (a *App) registerConfigGroup() {
 		return writeConfigFile(existing, path, a.configFormat)
 	}, WithArgs(
 		NewArg("key", "Config key to set"),
-		NewArg("value", "Value to set (comma-separated for repeatable flags)",
+		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
 			ArgRequired(false)),
 	), WithFlags(
 		BoolFlag("clear", "Clear a repeatable flag (set to empty list)"),
