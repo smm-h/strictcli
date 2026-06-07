@@ -6038,7 +6038,7 @@ func TestConfigSetRoundTripTOML(t *testing.T) {
 	app.Command("run", "run something", func(args map[string]interface{}) int {
 		return 0
 	}, WithFlags(
-		StringFlag("tags", "tags", Repeatable(), Unique(false), Default([]interface{}{})),
+		StringFlag("tags", "tags", Repeatable(), Unique(false)),
 	))
 
 	r := app.Test([]string{"config", "set", "tags", "a,b"})
@@ -6223,5 +6223,114 @@ func TestRepeatableDefaultApplied(t *testing.T) {
 	}
 	if r.Stdout != "tags=a,b" {
 		t.Fatalf("expected stdout 'tags=a,b', got %q", r.Stdout)
+	}
+}
+
+// --- Repeatable flag default validation ---
+
+func TestRepeatableDefaultMustBeSlice(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if msg != `Flag "tag": repeatable flag default must be a list` {
+			t.Fatalf("unexpected panic: %s", msg)
+		}
+	}()
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default("not a slice"))))
+}
+
+func TestRepeatableDefaultEmptySliceError(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if msg != `Flag "tag": explicit empty default is redundant for repeatable flags, omit the default` {
+			t.Fatalf("unexpected panic: %s", msg)
+		}
+	}()
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{}))))
+}
+
+func TestRepeatableDefaultWrongElementTypeStr(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if msg != `Flag "tag": default element 0 is not of type str` {
+			t.Fatalf("unexpected panic: %s", msg)
+		}
+	}()
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{1}))))
+}
+
+func TestRepeatableDefaultWrongElementTypeInt(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if msg != `Flag "port": default element 0 is not of type int` {
+			t.Fatalf("unexpected panic: %s", msg)
+		}
+	}()
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		return 0
+	}, WithFlags(IntFlag("port", "a port", Repeatable(), Unique(false), Default([]interface{}{"x"}))))
+}
+
+func TestRepeatableDefaultIntCoercedToFloat(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		vals := args["rate"].([]interface{})
+		for _, v := range vals {
+			if _, ok := v.(float64); !ok {
+				fmt.Printf("not float64: %T\n", v)
+				return 1
+			}
+		}
+		fmt.Print("ok")
+		return 0
+	}, WithFlags(FloatFlag("rate", "a rate", Repeatable(), Unique(false), Default([]interface{}{1, 2}))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q stdout=%q", r.ExitCode, r.Stderr, r.Stdout)
+	}
+	if r.Stdout != "ok" {
+		t.Fatalf("expected 'ok', got %q", r.Stdout)
+	}
+}
+
+func TestRepeatableDefaultValid(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("tags=" + formatValue(args["tag"]))
+		return 0
+	}, WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{"x", "y"}))))
+
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "tags=x,y" {
+		t.Fatalf("expected 'tags=x,y', got %q", r.Stdout)
 	}
 }

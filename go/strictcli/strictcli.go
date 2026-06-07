@@ -543,6 +543,34 @@ func validateFlagConfig(f *Flag) {
 			}
 		}
 	}
+	// Validate repeatable flag defaults
+	if f.Repeatable && f.hasDefault && f.Default != nil {
+		slice, ok := f.Default.([]interface{})
+		if !ok {
+			panic(fmt.Sprintf("Flag %q: repeatable flag default must be a list", f.Name))
+		}
+		if len(slice) == 0 {
+			panic(fmt.Sprintf("Flag %q: explicit empty default is redundant for repeatable flags, omit the default", f.Name))
+		}
+		for i, elem := range slice {
+			switch f.Type {
+			case TypeStr:
+				if _, ok := elem.(string); !ok {
+					panic(fmt.Sprintf("Flag %q: default element %d is not of type str", f.Name, i))
+				}
+			case TypeInt:
+				if _, ok := elem.(int); !ok {
+					panic(fmt.Sprintf("Flag %q: default element %d is not of type int", f.Name, i))
+				}
+			case TypeFloat:
+				if intVal, ok := elem.(int); ok {
+					slice[i] = float64(intVal)
+				} else if _, ok := elem.(float64); !ok {
+					panic(fmt.Sprintf("Flag %q: default element %d is not of type float", f.Name, i))
+				}
+			}
+		}
+	}
 	// For non-bool, non-repeatable: negatable is forced off
 	if f.Type != TypeBool {
 		f.Negatable = false
@@ -1410,7 +1438,12 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 			continue
 		}
 		if f.Repeatable {
-			globalValues[f.Name] = []interface{}{}
+			if f.hasDefault && f.Default != nil {
+				src := f.Default.([]interface{})
+				globalValues[f.Name] = append([]interface{}{}, src...)
+			} else {
+				globalValues[f.Name] = []interface{}{}
+			}
 		} else if f.Type == TypeBool {
 			if f.hasDefault {
 				globalValues[f.Name] = f.Default
