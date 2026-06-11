@@ -27,6 +27,7 @@ GO_STRICTCLI = PROJECT_ROOT / "go" / "strictcli" / "strictcli.go"
 GO_PARSE = PROJECT_ROOT / "go" / "strictcli" / "parse.go"
 GO_CHECK = PROJECT_ROOT / "go" / "strictcli" / "check.go"
 GO_CHECK_RUNNER = PROJECT_ROOT / "go" / "strictcli" / "check_runner.go"
+GO_CHECK_PUBLIC = PROJECT_ROOT / "go" / "strictcli" / "check_public.go"
 GO_TAGDSL = PROJECT_ROOT / "go" / "strictcli" / "tagdsl.go"
 GO_CONFIG = PROJECT_ROOT / "go" / "strictcli" / "config.go"
 CASES_DIR = CONFORMANCE_DIR / "cases"
@@ -319,6 +320,7 @@ def extract_go_errors(
     parse_src: str,
     check_src: str,
     check_runner_src: str,
+    check_public_src: str,
     tagdsl_src: str,
     config_src: str,
 ) -> list[tuple[str, str]]:
@@ -386,6 +388,14 @@ def extract_go_errors(
 
     # --- Registration errors from check_runner.go (fmt.Errorf for cycle detection) ---
     for m in errorf_pat.finditer(check_runner_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Registration errors from check_public.go (fmt.Errorf for public API) ---
+    for m in errorf_pat.finditer(check_public_src):
+        # Skip pure format-string wrappers like fmt.Errorf("%s", errMsg)
+        # that just re-wrap an existing error message without adding content.
+        if m.group(1) == "%s":
+            continue
         results.append(("registration", m.group(1)))
 
     # --- Registration errors from tagdsl.go (fmt.Errorf for tag expression parsing) ---
@@ -538,6 +548,7 @@ def main() -> int:
     go_parse_source = GO_PARSE.read_text()
     go_check_source = GO_CHECK.read_text()
     go_check_runner_source = GO_CHECK_RUNNER.read_text()
+    go_check_public_source = GO_CHECK_PUBLIC.read_text()
     go_tagdsl_source = GO_TAGDSL.read_text()
     go_config_source = GO_CONFIG.read_text()
 
@@ -546,7 +557,8 @@ def main() -> int:
     go_raw = extract_go_errors(
         go_strictcli_source, go_parse_source,
         go_check_source, go_check_runner_source,
-        go_tagdsl_source, go_config_source,
+        go_check_public_source, go_tagdsl_source,
+        go_config_source,
     )
 
     # Normalize to signatures
