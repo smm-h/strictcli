@@ -2,9 +2,26 @@
 
 # Changelog
 
-## 0.12.1
+## 0.13.0
 
-Fix repeatable flag defaults not applied to handlers
+Public API for running checks programmatically, skip behavior fix
+
+<details>
+<summary>Context</summary>
+
+Adds App.RunChecks(), FormatCheckResults(), FormatCheckResultsJSON(), CheckRunResult, and RunChecksOptions. Also fixes a bug where explicit skip from a check implementation incorrectly set exit code to 1 and cascaded to dependents.
+
+</details>
+
+### Features
+
+- **New.** Public API for running checks programmatically: `App.RunChecks()`, `FormatCheckResults()`, `FormatCheckResultsJSON()`, `CheckRunResult`, `RunChecksOptions`.
+
+### Fixes
+
+- **Fix.** Explicit skip from check implementation no longer sets exit code to 1 or cascades to dependents.
+
+## 0.12.1
 
 ### Breaking
 
