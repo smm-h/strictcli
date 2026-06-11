@@ -14,6 +14,8 @@
       "env": null,
       "choices": null,
       "repeatable": false,
+      "unique": false,
+      "env_separator": null,
       "negatable": null,
       "hidden": false
     },
@@ -34,7 +36,7 @@
   },
   "project_id": "strictcli-conformance",
   "name": "conformance",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "help": "Conformance validation tool for strictcli",
   "commands": {
     "check": {
