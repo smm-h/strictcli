@@ -7,7 +7,8 @@ __version__ = "0.17.0"
 __all__ = [
     "App", "Flag", "Arg", "Tag", "MutexGroup", "CoRequired", "Requires",
     "Implies", "Passthrough", "DeprecatedCommand", "Result", "flag", "arg",
-    "CheckResult", "CheckContext",
+    "CheckResult", "CheckContext", "CheckRunResult",
+    "format_check_results", "format_check_results_json",
 ]
 
 import contextlib
@@ -854,6 +855,14 @@ class CheckResult:
             )
         if not isinstance(self.message, str) or not self.message.strip():
             raise ValueError("CheckResult.message must be a non-empty string")
+
+
+@dataclass(frozen=True)
+class CheckRunResult:
+    """A named check result returned by App.run_checks()."""
+
+    name: str
+    result: CheckResult
 
 
 @runtime_checkable
