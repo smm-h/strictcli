@@ -2076,6 +2076,506 @@ func TestRunChecks_ExplicitSkip_NoCascade(t *testing.T) {
 	}
 }
 
+// --- RunChecks public API tests ---
+
+func makeAppWithRegisteredChecks(t *testing.T, toml string) *App {
+	t.Helper()
+	checksPath := writeChecksFile(t, toml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	return app
+}
+
+const threeChecksToml = `
+app = "testapp"
+
+[checks.check-a]
+tags = ["fast"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
+[checks.check-b]
+tags = ["slow"]
+severity = "error"
+fast = false
+pure = true
+needs_network = false
+depends_on = ["check-a"]
+
+[checks.check-c]
+tags = ["fast"]
+severity = "warn"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+`
+
+func TestRunChecks_AllPass(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+	for _, r := range results {
+		if r.Result.Status != "pass" {
+			t.Fatalf("expected pass for %q, got %q", r.Name, r.Result.Status)
+		}
+	}
+}
+
+func TestRunChecks_OneFail(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "fail", Message: "broken"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	// check-a fails, check-b depends on check-a so it's skipped
+	foundFail := false
+	for _, r := range results {
+		if r.Result.Status == "fail" {
+			foundFail = true
+		}
+	}
+	if !foundFail {
+		t.Fatal("expected at least one fail status")
+	}
+}
+
+func TestRunChecks_TagFiltering(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		t.Fatal("check-b should not run with tag=fast")
+		return CheckResult{}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	// Only "fast" tagged checks: check-a and check-c
+	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{TagExpr: "fast"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+}
+
+func TestRunChecks_NameGlob(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		t.Fatal("check-b should not run with glob check-a")
+		return CheckResult{}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{NameGlob: "check-a"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Name != "check-a" {
+		t.Fatalf("expected check-a, got %q", results[0].Name)
+	}
+}
+
+func TestRunChecks_RunAll(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results for RunAll, got %d", len(results))
+	}
+}
+
+func TestRunChecks_DependencyOrdering(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	callOrder := []string{}
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		callOrder = append(callOrder, "check-a")
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		callOrder = append(callOrder, "check-b")
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		callOrder = append(callOrder, "check-c")
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	_, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// check-b depends on check-a, so check-a must come before check-b
+	aIdx := -1
+	bIdx := -1
+	for i, name := range callOrder {
+		if name == "check-a" {
+			aIdx = i
+		}
+		if name == "check-b" {
+			bIdx = i
+		}
+	}
+	if aIdx == -1 || bIdx == -1 {
+		t.Fatalf("expected both check-a and check-b in call order, got %v", callOrder)
+	}
+	if aIdx >= bIdx {
+		t.Fatalf("expected check-a before check-b, got order %v", callOrder)
+	}
+}
+
+func TestRunChecks_DependencyFailureCascade(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "fail", Message: "broken"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		t.Fatal("check-b should be skipped due to check-a failure")
+		return CheckResult{}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	// Find check-b result -- it should be skip
+	for _, r := range results {
+		if r.Name == "check-b" {
+			if r.Result.Status != "skip" {
+				t.Fatalf("expected check-b to be skipped, got %q", r.Result.Status)
+			}
+			return
+		}
+	}
+	t.Fatal("check-b not found in results")
+}
+
+func TestRunChecks_WarnWithIgnoreWarningsFalse(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "warn", Message: "minor issue"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	_, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, IgnoreWarnings: false})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1 for warn without IgnoreWarnings, got %d", exitCode)
+	}
+}
+
+func TestRunChecks_WarnWithIgnoreWarningsTrue(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "warn", Message: "minor issue"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	_, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, IgnoreWarnings: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0 for warn with IgnoreWarnings, got %d", exitCode)
+	}
+}
+
+func TestRunChecks_NoMatches(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{NameGlob: "nonexistent-*"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0 for no matches, got %d", exitCode)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestRunChecks_ErrorWhenChecksNotEnabled(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app")
+
+	ctx := &testCheckContext{root: "/tmp"}
+	_, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	if err == nil {
+		t.Fatal("expected error when checks not enabled")
+	}
+	if !strings.Contains(err.Error(), "checks are not enabled") {
+		t.Fatalf("expected 'checks are not enabled' error, got %q", err.Error())
+	}
+}
+
+func TestRunChecks_ErrorWhenRegistrationsIncomplete(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, threeChecksToml)
+	// Only register one of three checks
+	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+		return CheckResult{Status: "pass", Message: "ok"}
+	})
+
+	ctx := &testCheckContext{root: "/tmp"}
+	_, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	if err == nil {
+		t.Fatal("expected error when registrations incomplete")
+	}
+	if !strings.Contains(err.Error(), "checks declared in checks.toml but not registered") {
+		t.Fatalf("expected registration error, got %q", err.Error())
+	}
+}
+
+// --- FormatCheckResults tests ---
+
+func TestFormatCheckResults_NonEmpty(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "all good"}},
+		{Name: "check-b", Result: CheckResult{Status: "fail", Message: "broken"}},
+	}
+	out := FormatCheckResults(results, false)
+	if out == "" {
+		t.Fatal("expected non-empty output")
+	}
+	if !strings.Contains(out, "PASS") {
+		t.Fatalf("expected PASS label, got %q", out)
+	}
+	if !strings.Contains(out, "FAIL") {
+		t.Fatalf("expected FAIL label, got %q", out)
+	}
+}
+
+func TestFormatCheckResults_Labels(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "a", Result: CheckResult{Status: "pass", Message: "ok"}},
+		{Name: "b", Result: CheckResult{Status: "fail", Message: "bad"}},
+		{Name: "c", Result: CheckResult{Status: "warn", Message: "hmm"}},
+		{Name: "d", Result: CheckResult{Status: "skip", Message: "skipped"}},
+	}
+	out := FormatCheckResults(results, false)
+	if !strings.Contains(out, "PASS") {
+		t.Fatalf("expected PASS, got %q", out)
+	}
+	if !strings.Contains(out, "FAIL") {
+		t.Fatalf("expected FAIL, got %q", out)
+	}
+	if !strings.Contains(out, "WARN") {
+		t.Fatalf("expected WARN, got %q", out)
+	}
+	if !strings.Contains(out, "SKIP") {
+		t.Fatalf("expected SKIP, got %q", out)
+	}
+}
+
+func TestFormatCheckResults_VerboseShowsPassDetails(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok", Details: []string{"detail-line-1"}}},
+	}
+	// Without verbose, pass details should NOT appear
+	nonVerbose := FormatCheckResults(results, false)
+	if strings.Contains(nonVerbose, "detail-line-1") {
+		t.Fatalf("expected no details without verbose, got %q", nonVerbose)
+	}
+	// With verbose, pass details should appear
+	verbose := FormatCheckResults(results, true)
+	if !strings.Contains(verbose, "detail-line-1") {
+		t.Fatalf("expected details with verbose, got %q", verbose)
+	}
+}
+
+func TestFormatCheckResults_NoTrailingNewline(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok"}},
+	}
+	out := FormatCheckResults(results, false)
+	if strings.HasSuffix(out, "\n") {
+		t.Fatalf("expected no trailing newline, got %q", out)
+	}
+}
+
+func TestFormatCheckResults_EmptyInput(t *testing.T) {
+	out := FormatCheckResults(nil, false)
+	if out != "" {
+		t.Fatalf("expected empty string for nil input, got %q", out)
+	}
+	out = FormatCheckResults([]CheckRunResult{}, false)
+	if out != "" {
+		t.Fatalf("expected empty string for empty input, got %q", out)
+	}
+}
+
+// --- FormatCheckResultsJSON tests ---
+
+func TestFormatCheckResultsJSON_ValidJSON(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok"}},
+		{Name: "check-b", Result: CheckResult{Status: "fail", Message: "bad", Details: []string{"line1"}}},
+	}
+	out := FormatCheckResultsJSON(results)
+	var parsed []map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v; output=%q", err, out)
+	}
+	if len(parsed) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(parsed))
+	}
+}
+
+func TestFormatCheckResultsJSON_EmptyDetailsNotNull(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok"}},
+	}
+	out := FormatCheckResultsJSON(results)
+	// Verify details is [] not null
+	if strings.Contains(out, `"details":null`) {
+		t.Fatalf("expected details to be [], not null, got %q", out)
+	}
+	if !strings.Contains(out, `"details":[]`) {
+		t.Fatalf("expected details:[], got %q", out)
+	}
+}
+
+func TestFormatCheckResultsJSON_NoTrailingNewline(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok"}},
+	}
+	out := FormatCheckResultsJSON(results)
+	if strings.HasSuffix(out, "\n") {
+		t.Fatalf("expected no trailing newline, got %q", out)
+	}
+}
+
+func TestFormatCheckResultsJSON_FieldValues(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "check-a", Result: CheckResult{Status: "fail", Message: "broken", Details: []string{"d1", "d2"}}},
+	}
+	out := FormatCheckResultsJSON(results)
+	var parsed []struct {
+		Name    string   `json:"name"`
+		Status  string   `json:"status"`
+		Message string   `json:"message"`
+		Details []string `json:"details"`
+	}
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+	if len(parsed) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(parsed))
+	}
+	e := parsed[0]
+	if e.Name != "check-a" {
+		t.Errorf("expected name 'check-a', got %q", e.Name)
+	}
+	if e.Status != "fail" {
+		t.Errorf("expected status 'fail', got %q", e.Status)
+	}
+	if e.Message != "broken" {
+		t.Errorf("expected message 'broken', got %q", e.Message)
+	}
+	if len(e.Details) != 2 || e.Details[0] != "d1" || e.Details[1] != "d2" {
+		t.Errorf("expected details [d1, d2], got %v", e.Details)
+	}
+}
+
 // Ensure unused imports don't cause errors
 var _ = sort.Strings
 var _ = fmt.Sprintf
