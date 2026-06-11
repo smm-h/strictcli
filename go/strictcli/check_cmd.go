@@ -150,25 +150,27 @@ func (a *App) checkRun(runAll bool, tagExpr, nameGlob string, jsonOut, ignoreWar
 		return 1
 	}
 
-	selected, err := filterChecks(a.checkDefs, tagExpr, nameGlob, runAll)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
-		return 1
-	}
-
-	order, err := resolveCheckOrder(a.checkDefs, selected)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
-		return 1
-	}
-
 	ctx := a.checkContextFactory()
-	results, exitCode := runChecks(a.checkDefs, order, ctx, ignoreWarnings)
+	results, exitCode, err := a.RunChecks(ctx, RunChecksOptions{
+		TagExpr:        tagExpr,
+		NameGlob:       nameGlob,
+		RunAll:         runAll,
+		IgnoreWarnings: ignoreWarnings,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		return 1
+	}
+
+	if len(results) == 0 {
+		fmt.Println("No checks matched the given filters.")
+		return 0
+	}
 
 	if jsonOut {
-		a.checkOutputJSON(results)
+		fmt.Println(FormatCheckResultsJSON(results))
 	} else {
-		a.checkOutputHuman(results, verbose)
+		fmt.Println(FormatCheckResults(results, verbose))
 	}
 
 	return exitCode
