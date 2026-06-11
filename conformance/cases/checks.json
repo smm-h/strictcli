@@ -531,5 +531,160 @@
         "lint"
       ]
     }
+  },
+  {
+    "name": "checks: mixed pass/fail/warn with ignore-warnings exits 1",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.check-a]\ntags = [\"all\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.check-b]\ntags = [\"all\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.check-c]\ntags = [\"all\"]\nseverity = \"warn\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "check-a",
+          "check_returns": "pass",
+          "check_message": "a passed"
+        },
+        {
+          "name": "check-b",
+          "check_returns": "fail",
+          "check_message": "b failed"
+        },
+        {
+          "name": "check-c",
+          "check_returns": "warn",
+          "check_message": "c warned"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--all",
+      "--ignore-warnings"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": [
+        "PASS",
+        "FAIL",
+        "WARN"
+      ]
+    }
+  },
+  {
+    "name": "checks: multi-level dependency chain with mid-chain failure",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.check-a]\ntags = [\"all\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.check-b]\ntags = [\"all\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = [\"check-a\"]\n\n[checks.check-c]\ntags = [\"all\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = [\"check-b\"]\n",
+      "checks": [
+        {
+          "name": "check-a",
+          "check_returns": "pass",
+          "check_message": "a passed"
+        },
+        {
+          "name": "check-b",
+          "check_returns": "fail",
+          "check_message": "b failed"
+        },
+        {
+          "name": "check-c",
+          "check_returns": "pass",
+          "check_message": "c passed"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--all"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": [
+        "PASS",
+        "FAIL",
+        "SKIP",
+        "check-a",
+        "check-b",
+        "check-c"
+      ]
+    }
+  },
+  {
+    "name": "checks: tag and glob intersection filtering",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.check-alpha]\ntags = [\"x\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.check-beta]\ntags = [\"x\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.check-gamma]\ntags = [\"y\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "check-alpha",
+          "check_returns": "pass",
+          "check_message": "alpha passed"
+        },
+        {
+          "name": "check-beta",
+          "check_returns": "pass",
+          "check_message": "beta passed"
+        },
+        {
+          "name": "check-gamma",
+          "check_returns": "pass",
+          "check_message": "gamma passed"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--tag",
+      "x",
+      "--name",
+      "check-a*"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "check-alpha",
+      "stdout_not_contains": [
+        "check-beta",
+        "check-gamma"
+      ]
+    }
+  },
+  {
+    "name": "checks: verbose output shows pass details",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "lint",
+          "check_returns": "pass",
+          "check_message": "all good",
+          "check_details": ["checked 42 files", "no issues found"]
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--all",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "PASS",
+        "checked 42 files",
+        "no issues found"
+      ]
+    }
   }
 ]
