@@ -24,7 +24,7 @@ from pathlib import Path
 CONFORMANCE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CONFORMANCE_DIR.parent
 SCHEMA_PATH = CONFORMANCE_DIR / "schema.json"
-GO_SOURCE = PROJECT_ROOT / "go" / "strictcli" / "strictcli.go"
+GO_SOURCE_DIR = PROJECT_ROOT / "go" / "strictcli"
 
 # ---------------------------------------------------------------------------
 # Known exclusions (present in implementations but intentionally absent from
@@ -177,8 +177,13 @@ def get_python_fields() -> dict[str, set[str]]:
 # ---------------------------------------------------------------------------
 
 def get_go_source() -> str:
-    """Return the Go source text."""
-    return GO_SOURCE.read_text()
+    """Return the combined Go source text from all non-test files."""
+    parts = []
+    for p in sorted(GO_SOURCE_DIR.glob("*.go")):
+        if p.name.endswith("_test.go"):
+            continue
+        parts.append(p.read_text())
+    return "\n".join(parts)
 
 
 def get_go_fields(source: str) -> dict[str, set[str]]:
@@ -446,6 +451,167 @@ def check_option_funcs_coverage(
 
 
 # ---------------------------------------------------------------------------
+# 5. Cross-implementation parity for public check runner API
+# ---------------------------------------------------------------------------
+
+# Types that exist in both implementations but NOT in the conformance schema.
+# (python_class, go_struct, {python_field: go_field})
+CHECK_RUNNER_TYPES: list[tuple[str, str, dict[str, str]]] = [
+    ("CheckRunResult", "CheckRunResult", {
+        "name": "Name",
+        "result": "Result",
+    }),
+    ("RunChecksOptions", "RunChecksOptions", {
+        "tag_expr": "TagExpr",
+        "name_glob": "NameGlob",
+        "run_all": "RunAll",
+        "ignore_warnings": "IgnoreWarnings",
+    }),
+]
+
+# Methods on App that must exist in both implementations.
+# (python_method, go_method)
+CHECK_RUNNER_APP_METHODS: list[tuple[str, str]] = [
+    ("run_checks", "RunChecks"),
+]
+
+# Module-level (Python) / package-level (Go) functions.
+# (python_func, go_func)
+CHECK_RUNNER_FUNCTIONS: list[tuple[str, str]] = [
+    ("format_check_results", "FormatCheckResults"),
+    ("format_check_results_json", "FormatCheckResultsJSON"),
+]
+
+
+def get_python_check_runner_types() -> dict[str, set[str]]:
+    """Return {class_name: {field_names}} for Python check runner dataclasses."""
+    sys.path.insert(0, str(PROJECT_ROOT / "python"))
+    import strictcli
+
+    result: dict[str, set[str]] = {}
+    for cls in [strictcli.CheckRunResult]:
+        fields = {f.name for f in dataclasses.fields(cls)}
+        result[cls.__name__] = fields
+    return result
+
+
+def get_python_module_functions() -> set[str]:
+    """Return the set of public function names in the strictcli module."""
+    sys.path.insert(0, str(PROJECT_ROOT / "python"))
+    import strictcli
+    return {
+        name for name, obj in inspect.getmembers(strictcli, inspect.isfunction)
+        if not name.startswith("_")
+    }
+
+
+def get_python_app_methods() -> set[str]:
+    """Return the set of public method names on the App class."""
+    sys.path.insert(0, str(PROJECT_ROOT / "python"))
+    import strictcli
+    return {
+        name for name, obj in inspect.getmembers(strictcli.App, predicate=inspect.isfunction)
+        if not name.startswith("_")
+    }
+
+
+def get_go_exported_funcs(source: str) -> set[str]:
+    """Return exported package-level function names (not methods) from Go source."""
+    # Match: func FuncName(...) but NOT func (receiver) FuncName(...)
+    pattern = re.compile(r"^func\s+([A-Z]\w*)\(", re.MULTILINE)
+    return {m.group(1) for m in pattern.finditer(source)}
+
+
+def get_go_app_methods(source: str) -> set[str]:
+    """Return exported method names on App from Go source."""
+    # Match: func (a *App) MethodName(... or func (a App) MethodName(...
+    pattern = re.compile(r"^func\s+\(\w+\s+\*?App\)\s+([A-Z]\w*)\(", re.MULTILINE)
+    return {m.group(1) for m in pattern.finditer(source)}
+
+
+def check_check_runner_types(
+    go_source: str,
+    go_fields: dict[str, set[str]],
+) -> list[str]:
+    """Check that check runner types have matching fields in Python and Go."""
+    errors: list[str] = []
+    py_types = get_python_check_runner_types()
+
+    for py_cls, go_struct, field_map in CHECK_RUNNER_TYPES:
+        # Check Python fields exist
+        py_set = py_types.get(py_cls, set())
+        if not py_set and py_cls == "RunChecksOptions":
+            # RunChecksOptions is not a Python dataclass -- it's kwargs on run_checks().
+            # Check that the method signature has the right parameters instead.
+            py_app_methods = get_python_app_methods()
+            if "run_checks" not in py_app_methods:
+                errors.append(
+                    f"Python App.run_checks() not found (needed for RunChecksOptions parity)"
+                )
+            else:
+                import strictcli
+                sig = inspect.signature(strictcli.App.run_checks)
+                py_params = set(sig.parameters.keys()) - {"self"}
+                for py_field in field_map:
+                    if py_field not in py_params:
+                        errors.append(
+                            f"RunChecksOptions field '{py_field}' not in Python "
+                            f"App.run_checks() parameters: {sorted(py_params)}"
+                        )
+        else:
+            for py_field in field_map:
+                if py_field not in py_set:
+                    errors.append(
+                        f"Python {py_cls}.{py_field} not found "
+                        f"(expected fields: {sorted(py_set)})"
+                    )
+
+        # Check Go fields exist
+        go_set = go_fields.get(go_struct, set())
+        if not go_set:
+            errors.append(f"Go struct {go_struct} not found in source")
+        else:
+            for go_field in field_map.values():
+                if go_field not in go_set:
+                    errors.append(
+                        f"Go {go_struct}.{go_field} not found "
+                        f"(expected fields: {sorted(go_set)})"
+                    )
+
+    return errors
+
+
+def check_check_runner_methods(go_source: str) -> list[str]:
+    """Check that App methods for the check runner exist in both implementations."""
+    errors: list[str] = []
+    py_methods = get_python_app_methods()
+    go_methods = get_go_app_methods(go_source)
+
+    for py_method, go_method in CHECK_RUNNER_APP_METHODS:
+        if py_method not in py_methods:
+            errors.append(f"Python App.{py_method}() not found")
+        if go_method not in go_methods:
+            errors.append(f"Go App.{go_method}() not found")
+
+    return errors
+
+
+def check_check_runner_functions(go_source: str) -> list[str]:
+    """Check that package/module-level functions for the check runner exist in both."""
+    errors: list[str] = []
+    py_funcs = get_python_module_functions()
+    go_funcs = get_go_exported_funcs(go_source)
+
+    for py_func, go_func in CHECK_RUNNER_FUNCTIONS:
+        if py_func not in py_funcs:
+            errors.append(f"Python module function '{py_func}' not found")
+        if go_func not in go_funcs:
+            errors.append(f"Go package function '{go_func}' not found")
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -460,6 +626,9 @@ def main() -> int:
     all_errors.extend(check_go_in_schema(go_fields, schema_fields))
     all_errors.extend(check_schema_in_impls(py_fields, go_fields, schema_fields, go_source))
     all_errors.extend(check_option_funcs_coverage(go_fields))
+    all_errors.extend(check_check_runner_types(go_source, go_fields))
+    all_errors.extend(check_check_runner_methods(go_source))
+    all_errors.extend(check_check_runner_functions(go_source))
 
     if all_errors:
         print(f"API surface check FAILED ({len(all_errors)} issue(s)):\n")
@@ -482,6 +651,11 @@ def main() -> int:
         print(f"  {schema_def}: schema={s_count} python={py_count} go={go_count}")
     option_count = len(go_fields.get("_option_funcs", set()))
     print(f"  Go option functions: {option_count}")
+    # Print check runner parity summary
+    for py_cls, go_struct, field_map in CHECK_RUNNER_TYPES:
+        print(f"  {py_cls}/{go_struct}: {len(field_map)} fields (cross-impl parity)")
+    print(f"  App methods (check runner): {len(CHECK_RUNNER_APP_METHODS)}")
+    print(f"  Package functions (check runner): {len(CHECK_RUNNER_FUNCTIONS)}")
     return 0
 
 
