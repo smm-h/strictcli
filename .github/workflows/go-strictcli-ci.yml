@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-      # go.mod: go {{go.minRequiredGo}}
+      # go.mod: go 1.25.7
     - uses: actions/setup-go@v6
       with:
         go-version-file: go/go.mod

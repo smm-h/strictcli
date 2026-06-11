@@ -46,3 +46,24 @@ jobs:
     defaults:
       run:
         working-directory: python
+  go-strictcli-goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: go/go.mod
+    - uses: goreleaser/goreleaser-action@v7
+      with:
+        version: ~> v2
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+    if: startsWith(github.event.release.tag_name, 'go/v')
+    defaults:
+      run:
+        working-directory: go
