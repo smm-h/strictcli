@@ -1996,6 +1996,86 @@ depends_on = []
 	NewApp("testapp", "1.0.0", "test app", WithChecksEmbed([]byte(toml)))
 }
 
+// --- Explicit skip behavior tests ---
+
+func TestRunChecks_ExplicitSkip_ExitZero(t *testing.T) {
+	defs := makeCheckDefs(map[string]struct {
+		tags      []string
+		severity  string
+		dependsOn []string
+		impl      func(CheckContext) CheckResult
+	}{
+		"check-a": {
+			tags:      []string{"fast"},
+			severity:  "error",
+			dependsOn: []string{},
+			impl: func(ctx CheckContext) CheckResult {
+				return CheckResult{Status: "skip", Message: "not applicable"}
+			},
+		},
+	})
+
+	ctx := &testCheckContext{root: "/tmp/test"}
+	results, exitCode := runChecks(defs, []string{"check-a"}, ctx, false)
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0 for explicit skip, got %d", exitCode)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].result.Status != "skip" {
+		t.Fatalf("expected skip, got %q", results[0].result.Status)
+	}
+}
+
+func TestRunChecks_ExplicitSkip_NoCascade(t *testing.T) {
+	bRan := false
+	defs := makeCheckDefs(map[string]struct {
+		tags      []string
+		severity  string
+		dependsOn []string
+		impl      func(CheckContext) CheckResult
+	}{
+		"check-a": {
+			tags:      []string{"fast"},
+			severity:  "error",
+			dependsOn: []string{},
+			impl: func(ctx CheckContext) CheckResult {
+				return CheckResult{Status: "skip", Message: "not applicable"}
+			},
+		},
+		"check-b": {
+			tags:      []string{"fast"},
+			severity:  "error",
+			dependsOn: []string{"check-a"},
+			impl: func(ctx CheckContext) CheckResult {
+				bRan = true
+				return CheckResult{Status: "pass", Message: "ok"}
+			},
+		},
+	})
+
+	ctx := &testCheckContext{root: "/tmp/test"}
+	results, exitCode := runChecks(defs, []string{"check-a", "check-b"}, ctx, false)
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !bRan {
+		t.Fatal("expected check-b to run (not cascade-skipped)")
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].result.Status != "skip" {
+		t.Fatalf("expected check-a skip, got %q", results[0].result.Status)
+	}
+	if results[1].result.Status != "pass" {
+		t.Fatalf("expected check-b pass, got %q", results[1].result.Status)
+	}
+}
+
 // Ensure unused imports don't cause errors
 var _ = sort.Strings
 var _ = fmt.Sprintf
