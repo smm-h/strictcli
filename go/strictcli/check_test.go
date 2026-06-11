@@ -707,8 +707,8 @@ func TestRunChecks_SinglePass(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	if results[0].result.Status != "pass" {
-		t.Fatalf("expected pass, got %q", results[0].result.Status)
+	if results[0].Result.Status != "pass" {
+		t.Fatalf("expected pass, got %q", results[0].Result.Status)
 	}
 }
 
@@ -735,8 +735,8 @@ func TestRunChecks_SingleFail(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
 	}
-	if results[0].result.Status != "fail" {
-		t.Fatalf("expected fail, got %q", results[0].result.Status)
+	if results[0].Result.Status != "fail" {
+		t.Fatalf("expected fail, got %q", results[0].Result.Status)
 	}
 }
 
@@ -824,14 +824,14 @@ func TestRunChecks_DependencyFailure_Skip(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
-	if results[0].result.Status != "fail" {
-		t.Fatalf("expected check-b fail, got %q", results[0].result.Status)
+	if results[0].Result.Status != "fail" {
+		t.Fatalf("expected check-b fail, got %q", results[0].Result.Status)
 	}
-	if results[1].result.Status != "skip" {
-		t.Fatalf("expected check-a skip, got %q", results[1].result.Status)
+	if results[1].Result.Status != "skip" {
+		t.Fatalf("expected check-a skip, got %q", results[1].Result.Status)
 	}
-	if !strings.Contains(results[1].result.Message, `dependency "check-b" failed`) {
-		t.Fatalf("expected skip message about check-b, got %q", results[1].result.Message)
+	if !strings.Contains(results[1].Result.Message, `dependency "check-b" failed`) {
+		t.Fatalf("expected skip message about check-b, got %q", results[1].Result.Message)
 	}
 }
 
@@ -879,14 +879,14 @@ func TestRunChecks_TransitiveSkip(t *testing.T) {
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
-	if results[0].result.Status != "fail" {
-		t.Fatalf("expected check-c fail, got %q", results[0].result.Status)
+	if results[0].Result.Status != "fail" {
+		t.Fatalf("expected check-c fail, got %q", results[0].Result.Status)
 	}
-	if results[1].result.Status != "skip" {
-		t.Fatalf("expected check-b skip, got %q", results[1].result.Status)
+	if results[1].Result.Status != "skip" {
+		t.Fatalf("expected check-b skip, got %q", results[1].Result.Status)
 	}
-	if results[2].result.Status != "skip" {
-		t.Fatalf("expected check-a skip, got %q", results[2].result.Status)
+	if results[2].Result.Status != "skip" {
+		t.Fatalf("expected check-a skip, got %q", results[2].Result.Status)
 	}
 }
 
@@ -1167,8 +1167,8 @@ func TestRunChecks_WarnDependency_SkipsDependent(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
 	}
-	if results[1].result.Status != "skip" {
-		t.Fatalf("expected check-a to be skipped, got %q", results[1].result.Status)
+	if results[1].Result.Status != "skip" {
+		t.Fatalf("expected check-a to be skipped, got %q", results[1].Result.Status)
 	}
 }
 
@@ -1203,11 +1203,11 @@ func TestRunChecks_WarnDependency_RunsWhenIgnored(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0 (warnings ignored), got %d", exitCode)
 	}
-	if results[0].result.Status != "warn" {
-		t.Fatalf("expected check-b warn, got %q", results[0].result.Status)
+	if results[0].Result.Status != "warn" {
+		t.Fatalf("expected check-b warn, got %q", results[0].Result.Status)
 	}
-	if results[1].result.Status != "pass" {
-		t.Fatalf("expected check-a pass, got %q", results[1].result.Status)
+	if results[1].Result.Status != "pass" {
+		t.Fatalf("expected check-a pass, got %q", results[1].Result.Status)
 	}
 }
 
@@ -2024,8 +2024,8 @@ func TestRunChecks_ExplicitSkip_ExitZero(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	if results[0].result.Status != "skip" {
-		t.Fatalf("expected skip, got %q", results[0].result.Status)
+	if results[0].Result.Status != "skip" {
+		t.Fatalf("expected skip, got %q", results[0].Result.Status)
 	}
 }
 
@@ -2068,11 +2068,11 @@ func TestRunChecks_ExplicitSkip_NoCascade(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
-	if results[0].result.Status != "skip" {
-		t.Fatalf("expected check-a skip, got %q", results[0].result.Status)
+	if results[0].Result.Status != "skip" {
+		t.Fatalf("expected check-a skip, got %q", results[0].Result.Status)
 	}
-	if results[1].result.Status != "pass" {
-		t.Fatalf("expected check-b pass, got %q", results[1].result.Status)
+	if results[1].Result.Status != "pass" {
+		t.Fatalf("expected check-b pass, got %q", results[1].Result.Status)
 	}
 }
 

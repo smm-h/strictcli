@@ -175,7 +175,7 @@ func (a *App) checkRun(runAll bool, tagExpr, nameGlob string, jsonOut, ignoreWar
 }
 
 // checkOutputHuman prints human-readable check results.
-func (a *App) checkOutputHuman(results []checkRunResult, verbose bool) {
+func (a *App) checkOutputHuman(results []CheckRunResult, verbose bool) {
 	// Status labels are fixed 4 chars, uppercase
 	statusLabel := map[string]string{
 		"pass": "PASS",
@@ -187,21 +187,21 @@ func (a *App) checkOutputHuman(results []checkRunResult, verbose bool) {
 	// Compute dynamic name column width
 	nameWidth := 0
 	for _, r := range results {
-		if len(r.name) > nameWidth {
-			nameWidth = len(r.name)
+		if len(r.Name) > nameWidth {
+			nameWidth = len(r.Name)
 		}
 	}
 
 	for _, r := range results {
-		label := statusLabel[r.result.Status]
+		label := statusLabel[r.Result.Status]
 		if label == "" {
-			label = strings.ToUpper(r.result.Status)
+			label = strings.ToUpper(r.Result.Status)
 		}
-		fmt.Printf("%-4s  %-*s    %s\n", label, nameWidth, r.name, r.result.Message)
+		fmt.Printf("%-4s  %-*s    %s\n", label, nameWidth, r.Name, r.Result.Message)
 
-		showDetails := r.result.Status == "fail" || r.result.Status == "warn" || r.result.Status == "skip" || verbose
+		showDetails := r.Result.Status == "fail" || r.Result.Status == "warn" || r.Result.Status == "skip" || verbose
 		if showDetails {
-			for _, detail := range r.result.Details {
+			for _, detail := range r.Result.Details {
 				fmt.Printf("        %s\n", detail)
 			}
 		}
@@ -209,7 +209,7 @@ func (a *App) checkOutputHuman(results []checkRunResult, verbose bool) {
 }
 
 // checkOutputJSON prints check results as a JSON array.
-func (a *App) checkOutputJSON(results []checkRunResult) {
+func (a *App) checkOutputJSON(results []CheckRunResult) {
 	type jsonResult struct {
 		Name    string   `json:"name"`
 		Status  string   `json:"status"`
@@ -219,14 +219,14 @@ func (a *App) checkOutputJSON(results []checkRunResult) {
 
 	entries := make([]jsonResult, len(results))
 	for i, r := range results {
-		details := r.result.Details
+		details := r.Result.Details
 		if details == nil {
 			details = []string{}
 		}
 		entries[i] = jsonResult{
-			Name:    r.name,
-			Status:  r.result.Status,
-			Message: r.result.Message,
+			Name:    r.Name,
+			Status:  r.Result.Status,
+			Message: r.Result.Message,
 			Details: details,
 		}
 	}

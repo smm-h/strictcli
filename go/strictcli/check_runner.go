@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-// checkRunResult holds the outcome of running a single check.
-type checkRunResult struct {
-	name   string
-	result CheckResult
+// CheckRunResult holds the outcome of running a single check.
+type CheckRunResult struct {
+	Name   string
+	Result CheckResult
 }
 
 // resolveCheckOrder builds a DAG from depends_on, expands the selected set to include
@@ -169,8 +169,8 @@ func findCycle(checkDefs map[string]*checkDef, expanded map[string]bool, inDegre
 
 // runChecks executes checks in order, skipping dependents of failed/warned checks.
 // Returns results and an exit code (0 = all pass or all warn with ignoreWarnings, 1 otherwise).
-func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext, ignoreWarnings bool) ([]checkRunResult, int) {
-	results := make([]checkRunResult, 0, len(order))
+func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext, ignoreWarnings bool) ([]CheckRunResult, int) {
+	results := make([]CheckRunResult, 0, len(order))
 	// Track checks whose dependents should be cascade-skipped.
 	// A check is "failed" for cascade purposes if it returned fail,
 	// or warn without ignoreWarnings, or was itself cascade-skipped.
@@ -192,7 +192,7 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 
 		if skipReason != "" {
 			r := CheckResult{Status: "skip", Message: skipReason}
-			results = append(results, checkRunResult{name: name, result: r})
+			results = append(results, CheckRunResult{Name: name, Result: r})
 			failedChecks[name] = true
 			exitCode = 1
 			continue
@@ -200,7 +200,7 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 
 		// Run the check
 		r := def.impl(ctx)
-		results = append(results, checkRunResult{name: name, result: r})
+		results = append(results, CheckRunResult{Name: name, Result: r})
 
 		switch r.Status {
 		case "fail":
