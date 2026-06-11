@@ -3485,40 +3485,6 @@ def _check_dry_run_mode(
             print(f"  {i}. {name}")
 
 
-def _check_format_human(
-    results: list[tuple[str, CheckResult]], verbose: bool,
-) -> None:
-    """Print check results in human-readable aligned format."""
-    if not results:
-        return
-
-    name_width = max(len(name) for name, _ in results)
-
-    for name, result in results:
-        label = _CHECK_STATUS_LABELS[result.status]
-        print(f"{label}  {name:<{name_width}}    {result.message}")
-
-        show_details = result.details and (
-            verbose or result.status in ("fail", "warn", "skip")
-        )
-        if show_details:
-            for detail in result.details:
-                print(f"        {detail}")
-
-
-def _check_format_json(results: list[tuple[str, CheckResult]]) -> None:
-    """Print check results as JSON."""
-    items = [
-        {
-            "name": name,
-            "status": result.status,
-            "message": result.message,
-            "details": result.details,
-        }
-        for name, result in results
-    ]
-    print(json.dumps(items, separators=(",", ":")))
-
 
 def format_check_results(
     results: list[CheckRunResult], verbose: bool = False,
