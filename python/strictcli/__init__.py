@@ -1089,14 +1089,19 @@ class App:
                 )
                 return 1
             context = app_ref._check_context_factory()
-            results, exit_code = _run_checks(
+            raw_results, exit_code = _run_checks(
                 app_ref._check_defs, order, context, ignore_warnings,
             )
 
+            results_wrapped = [
+                CheckRunResult(name=n, result=r) for n, r in raw_results
+            ]
             if json:
-                _check_format_json(results)
+                print(format_check_results_json(results_wrapped))
             else:
-                _check_format_human(results, verbose)
+                output = format_check_results(results_wrapped, verbose)
+                if output:
+                    print(output)
 
             return exit_code
 
