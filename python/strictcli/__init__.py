@@ -3515,6 +3515,44 @@ def _check_format_json(results: list[tuple[str, CheckResult]]) -> None:
     print(json.dumps(items, separators=(",", ":")))
 
 
+def format_check_results(
+    results: list[CheckRunResult], verbose: bool = False,
+) -> str:
+    """Format check results as a human-readable aligned string."""
+    if not results:
+        return ""
+
+    name_width = max(len(r.name) for r in results)
+    lines: list[str] = []
+
+    for r in results:
+        label = _CHECK_STATUS_LABELS[r.result.status]
+        lines.append(f"{label}  {r.name:<{name_width}}    {r.result.message}")
+
+        show_details = r.result.details and (
+            verbose or r.result.status in ("fail", "warn", "skip")
+        )
+        if show_details:
+            for detail in r.result.details:
+                lines.append(f"        {detail}")
+
+    return "\n".join(lines)
+
+
+def format_check_results_json(results: list[CheckRunResult]) -> str:
+    """Format check results as a JSON string."""
+    items = [
+        {
+            "name": r.name,
+            "status": r.result.status,
+            "message": r.result.message,
+            "details": r.result.details if r.result.details is not None else [],
+        }
+        for r in results
+    ]
+    return json.dumps(items, separators=(",", ":"))
+
+
 # ---------------------------------------------------------------------------
 # Schema serialization (--dump-schema)
 # ---------------------------------------------------------------------------
