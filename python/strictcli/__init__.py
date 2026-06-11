@@ -1010,6 +1010,38 @@ class App:
         """
         self._check_context_factory = factory
 
+    def run_checks(
+        self,
+        context: CheckContext,
+        *,
+        tag_expr: str | None = None,
+        name_glob: str | None = None,
+        run_all: bool = False,
+        ignore_warnings: bool = False,
+    ) -> tuple[list[CheckRunResult], int]:
+        """Run checks programmatically with filtering and dependency resolution.
+
+        Returns (results, exit_code) where results is a list of CheckRunResult
+        and exit_code is 0 if all pass (or all warn with ignore_warnings), else 1.
+        """
+        if not self._checks_enabled:
+            raise ValueError("checks are not enabled on this App")
+        err = self._validate_check_registrations()
+        if err:
+            raise ValueError(err)
+        selected = _filter_checks(self._check_defs, tag_expr, name_glob, run_all)
+        if not selected:
+            return ([], 0)
+        order = _resolve_check_order(self._check_defs, selected)
+        raw_results, exit_code = _run_checks(
+            self._check_defs, order, context, ignore_warnings,
+        )
+        results = [
+            CheckRunResult(name=name, result=result)
+            for name, result in raw_results
+        ]
+        return (results, exit_code)
+
     def _register_check_command(self) -> None:
         """Register the auto-generated 'check' command when checks.toml exists."""
         app_ref = self  # capture for closure
