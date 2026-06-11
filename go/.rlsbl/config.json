@@ -5,6 +5,9 @@
   "private": false,
   "push_timeout": 300,
   "pipelines": {
-    "go": {"type": "go", "local": false}
+    "go": {
+      "type": "go",
+      "local": false
+    }
   }
 }
