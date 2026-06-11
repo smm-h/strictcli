@@ -1058,7 +1058,7 @@ class App:
                 return 1
             context = app_ref._check_context_factory()
             results, exit_code = _run_checks(
-                app_ref, order, context, ignore_warnings,
+                app_ref._check_defs, order, context, ignore_warnings,
             )
 
             if json:
@@ -3339,7 +3339,7 @@ def _find_cycle(
 
 
 def _run_checks(
-    app: "App",
+    check_defs: dict,
     check_names: list[str],
     context: CheckContext,
     ignore_warnings: bool,
@@ -3349,7 +3349,6 @@ def _run_checks(
     Returns (results_list, exit_code). exit_code is 0 if all pass (or all
     warn with ignore_warnings=True), 1 otherwise.
     """
-    check_defs = app._check_defs
     results: list[tuple[str, CheckResult]] = []
     failed_checks: set[str] = set()
     exit_code = 0

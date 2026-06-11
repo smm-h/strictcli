@@ -148,7 +148,7 @@ class TestRunChecks:
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = _run_checks(app, ["a"], ctx, ignore_warnings=False)
+        results, exit_code = _run_checks(app._check_defs, ["a"], ctx, ignore_warnings=False)
         assert exit_code == 0
         assert len(results) == 1
         assert results[0][0] == "a"
@@ -163,7 +163,7 @@ class TestRunChecks:
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = _run_checks(app, ["a"], ctx, ignore_warnings=False)
+        results, exit_code = _run_checks(app._check_defs, ["a"], ctx, ignore_warnings=False)
         assert exit_code == 1
         assert results[0][1].status == "fail"
 
@@ -182,7 +182,7 @@ class TestRunChecks:
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
         order = _resolve_check_order(app._check_defs, {"a", "b"})
-        results, exit_code = _run_checks(app, order, ctx, ignore_warnings=False)
+        results, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 0
         statuses = {name: r.status for name, r in results}
         assert statuses["a"] == "pass"
@@ -203,7 +203,7 @@ class TestRunChecks:
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
         order = _resolve_check_order(app._check_defs, {"a", "b"})
-        results, exit_code = _run_checks(app, order, ctx, ignore_warnings=False)
+        results, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 1
         statuses = {name: r.status for name, r in results}
         assert statuses["b"] == "fail"
@@ -232,7 +232,7 @@ class TestRunChecks:
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
         order = _resolve_check_order(app._check_defs, {"a", "b", "c"})
-        results, exit_code = _run_checks(app, order, ctx, ignore_warnings=False)
+        results, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 1
         statuses = {name: r.status for name, r in results}
         assert statuses["c"] == "fail"
@@ -249,7 +249,7 @@ class TestRunChecks:
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = _run_checks(app, ["a"], ctx, ignore_warnings=True)
+        results, exit_code = _run_checks(app._check_defs, ["a"], ctx, ignore_warnings=True)
         assert exit_code == 0
         assert results[0][1].status == "warn"
 
@@ -263,7 +263,7 @@ class TestRunChecks:
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = _run_checks(app, ["a"], ctx, ignore_warnings=False)
+        results, exit_code = _run_checks(app._check_defs, ["a"], ctx, ignore_warnings=False)
         assert exit_code == 1
         assert results[0][1].status == "warn"
 
@@ -282,7 +282,7 @@ class TestRunChecks:
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
         order = _resolve_check_order(app._check_defs, {"a", "b"})
-        results, exit_code = _run_checks(app, order, ctx, ignore_warnings=False)
+        results, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 1
         statuses = {name: r.status for name, r in results}
         assert statuses["b"] == "warn"
@@ -303,7 +303,7 @@ class TestRunChecks:
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
         ctx = SimpleContext(project_root=tmp_path)
         order = _resolve_check_order(app._check_defs, {"a", "b"})
-        results, exit_code = _run_checks(app, order, ctx, ignore_warnings=True)
+        results, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=True)
         assert exit_code == 0
         statuses = {name: r.status for name, r in results}
         assert statuses["b"] == "warn"
