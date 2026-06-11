@@ -1,1 +1,2 @@
 {"commits":["ab63f2e29d95b834aef6e3307d23b53e3f845afe","fc7ae2927aa12b7627c3119c818d9a7e89209e39","db1924cbd143285c857324a8fcf2110718080bfa"],"user_facing":true,"description":"**New.** Public API for running checks programmatically: `App.run_checks()`, `format_check_results()`, `format_check_results_json()`, `CheckRunResult`.","type":"feature"}
+{"commits":["6407ea33c3a16a83dcd7c362cda8e98980074a73","edfcf45b0eb1ba4896fcff1d31ea9993c9b363a1","fcaae9bb7895805308a6b9299158ada7f6d45f3b","b6720d2dd1063bff0b49f6d5624608672c0cac33"],"user_facing":false}
