@@ -111,7 +111,7 @@
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string" },
-        "check_returns": { "enum": ["pass", "fail", "warn"] },
+        "check_returns": { "enum": ["pass", "fail", "warn", "skip"] },
         "check_message": { "type": "string" },
         "check_details": {
           "type": "array",
