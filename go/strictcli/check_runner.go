@@ -171,22 +171,20 @@ func findCycle(checkDefs map[string]*checkDef, expanded map[string]bool, inDegre
 // Returns results and an exit code (0 = all pass or all warn with ignoreWarnings, 1 otherwise).
 func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext, ignoreWarnings bool) ([]checkRunResult, int) {
 	results := make([]checkRunResult, 0, len(order))
-	// Track status of each check for dependency skip logic
-	statuses := make(map[string]string) // name -> status
+	// Track checks whose dependents should be cascade-skipped.
+	// A check is "failed" for cascade purposes if it returned fail,
+	// or warn without ignoreWarnings, or was itself cascade-skipped.
+	// Explicit skip from a check impl is NOT a failure -- dependents still run.
+	failedChecks := make(map[string]bool)
 
 	exitCode := 0
 	for _, name := range order {
 		def := checkDefs[name]
 
-		// Check if any dependency failed or warned (non-pass) -- skip if so
+		// Check if any dependency failed -- skip if so
 		skipReason := ""
 		for _, dep := range def.dependsOn {
-			depStatus := statuses[dep]
-			if depStatus == "fail" || depStatus == "skip" {
-				skipReason = fmt.Sprintf("skipped: dependency %q failed", dep)
-				break
-			}
-			if depStatus == "warn" && !ignoreWarnings {
+			if failedChecks[dep] {
 				skipReason = fmt.Sprintf("skipped: dependency %q failed", dep)
 				break
 			}
@@ -195,7 +193,7 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 		if skipReason != "" {
 			r := CheckResult{Status: "skip", Message: skipReason}
 			results = append(results, checkRunResult{name: name, result: r})
-			statuses[name] = "skip"
+			failedChecks[name] = true
 			exitCode = 1
 			continue
 		}
@@ -203,17 +201,18 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 		// Run the check
 		r := def.impl(ctx)
 		results = append(results, checkRunResult{name: name, result: r})
-		statuses[name] = r.Status
 
 		switch r.Status {
 		case "fail":
+			failedChecks[name] = true
 			exitCode = 1
 		case "warn":
 			if !ignoreWarnings {
+				failedChecks[name] = true
 				exitCode = 1
 			}
 		case "skip":
-			exitCode = 1
+			// Explicit skip from impl: not a failure, no cascade, no exit code change
 		}
 	}
 
