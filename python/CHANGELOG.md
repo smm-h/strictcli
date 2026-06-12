@@ -2,16 +2,27 @@
 
 # Changelog
 
-## 0.19.0
+## 0.20.0
 
-Renamed Tag to FlagSet
+Frozen Command, command tags, tag contracts
 
 <details>
 <summary>Context</summary>
 
-Breaking: Tag class renamed to FlagSet, tags= parameter renamed to flag_sets= across all API surfaces. The Tag name was misleading — it implied labeling/annotation, but the type is actually a reusable bundle of flags.
+Breaking: Command dataclass is now frozen=True with tuple fields (was mutable list). New: command tags (string labels with group inheritance) and tag contracts (registration-time validation that tagged commands have required flags).
 
 </details>
+
+### Breaking
+
+- **Breaking.** Command dataclass is now `frozen=True` with `tuple` fields instead of `list`.
+
+### Features
+
+- **New.** Command tags: string labels on commands and groups with group-to-command inheritance.
+- **New.** Tag contracts: registration-time validation that tagged commands have required flags.
+
+## 0.19.0
 
 ### Breaking
 
@@ -19,11 +30,22 @@ Breaking: Tag class renamed to FlagSet, tags= parameter renamed to flag_sets= ac
 
 ## 0.18.0
 
+Public API for running checks programmatically
+
+<details>
+<summary>Context</summary>
+
+Adds App.run_checks(), format_check_results(), format_check_results_json(), and CheckRunResult — a stable public API replacing the private _filter_checks/_resolve_check_order/_run_checks/_check_format_human functions that consumers like rlsbl were forced to use.
+
+</details>
+
 ### Features
 
 - **New.** Public API for running checks programmatically: `App.run_checks()`, `format_check_results()`, `format_check_results_json()`, `CheckRunResult`.
 
 ## 0.17.0
+
+Repeatable flag default validation and help text display
 
 ### Breaking
 
@@ -35,12 +57,23 @@ Breaking: Tag class renamed to FlagSet, tags= parameter renamed to flag_sets= ac
 
 ## 0.16.1
 
+Error message fixes and help text improvements
+
 ### Fixes
 
 - **Fix.** `config set` mutex error messages now include the `config set:` prefix for consistency.
 - **Fix.** Config set help text now mentions backslash escaping for values containing commas in repeatable flags.
 
 ## 0.16.0
+
+unique and env_separator flag fields, config array coercion, config set repeatable support
+
+<details>
+<summary>Context</summary>
+
+Breaking: config show now requires --plain or --json. New features: unique field enforces no duplicate values on repeatable flags, env_separator controls how env vars are split into arrays, config arrays are coerced to declared types, config set supports repeatable flags with --clear and --default.
+
+</details>
 
 ### Breaking
 
@@ -61,6 +94,15 @@ Breaking: Tag class renamed to FlagSet, tags= parameter renamed to flag_sets= ac
 
 ## 0.15.1
 
+Config show bool parity and negative values in config set
+
+<details>
+<summary>Context</summary>
+
+config show now outputs lowercase true/false matching Go. config set accepts negative numeric values.
+
+</details>
+
 ### Breaking
 
 - **Breaking.** Config set now accepts negative numeric values. Unknown single-dash tokens produce 'unexpected argument' instead of 'unknown flag'.
@@ -70,6 +112,15 @@ Breaking: Tag class renamed to FlagSet, tags= parameter renamed to flag_sets= ac
 - **Fix.** Config show now outputs lowercase true/false for bool values, matching Go implementation.
 
 ## 0.15.0
+
+Config set type coercion and key validation
+
+<details>
+<summary>Context</summary>
+
+config set now validates keys against registered flags and coerces string values to the flag's declared type before writing. This is a breaking change: unknown keys are rejected.
+
+</details>
 
 ### Breaking
 
