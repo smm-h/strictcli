@@ -3684,6 +3684,9 @@ def _serialize_command(cmd: Command) -> dict:
     args = [_serialize_arg(a) for a in cmd.args]
     if args:
         d["args"] = args
+    tags = sorted(cmd.tags)
+    if tags:
+        d["tags"] = tags
     return d
 
 
@@ -3706,6 +3709,9 @@ def _serialize_group(group: Group) -> dict:
     deprecated = {name: dep.message for name, dep in group.deprecated.items()}
     if deprecated:
         d["deprecated"] = deprecated
+    tags = sorted(group.tags)
+    if tags:
+        d["tags"] = tags
     return d
 
 
@@ -3739,11 +3745,13 @@ def _build_schema_defaults() -> dict:
             "passthrough": False,
             "flags": [],
             "args": [],
+            "tags": [],
         },
         "group": {
             "commands": {},
             "groups": {},
             "deprecated": {},
+            "tags": [],
         },
     }
 
