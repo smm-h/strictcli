@@ -345,7 +345,7 @@
     }
   },
   {
-    "name": "passthrough: with tags only is registration error",
+    "name": "passthrough: with flag sets only is registration error",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -356,7 +356,7 @@
           "help": "checkout a branch",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}",
-          "tags": [
+          "flag_sets": [
             {
               "name": "output",
               "flags": [
@@ -377,7 +377,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "passthrough",
-      "stderr_equals": "error: command \"checkout\": passthrough commands cannot have tags"
+      "stderr_equals": "error: command \"checkout\": passthrough commands cannot have flag sets"
     }
   },
   {

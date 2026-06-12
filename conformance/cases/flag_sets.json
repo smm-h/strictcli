@@ -1,0 +1,167 @@
+[
+  {
+    "name": "flag sets: single flag from tag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flag_sets": [
+            {
+              "name": "verbose",
+              "flags": [
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "verbose output"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=true"
+    }
+  },
+  {
+    "name": "flag sets: multiple flags from tag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flag_sets": [
+            {
+              "name": "output",
+              "flags": [
+                {
+                  "name": "format",
+                  "type": "str",
+                  "help": "output format",
+                  "default": "text"
+                },
+                {
+                  "name": "color",
+                  "type": "bool",
+                  "help": "use color"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "format={format} color={color}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--format",
+      "json",
+      "--color"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "format=json",
+        "color=true"
+      ],
+      "stdout_equals": "format=json color=true"
+    }
+  },
+  {
+    "name": "flag sets: flag set flags with defaults",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "flag_sets": [
+            {
+              "name": "auth",
+              "flags": [
+                {
+                  "name": "token",
+                  "type": "str",
+                  "help": "auth token",
+                  "default": "none"
+                },
+                {
+                  "name": "insecure",
+                  "type": "bool",
+                  "help": "skip TLS verification"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "token={token} insecure={insecure}"
+        }
+      ]
+    },
+    "argv": [
+      "deploy"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "token=none",
+        "insecure=false"
+      ],
+      "stdout_equals": "token=none insecure=false"
+    }
+  },
+  {
+    "name": "flag sets: flag set flags shown in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flag_sets": [
+            {
+              "name": "debug",
+              "flags": [
+                {
+                  "name": "debug",
+                  "type": "bool",
+                  "help": "enable debug mode"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "--debug",
+        "enable debug mode"
+      ],
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --debug, --no-debug    enable debug mode [default: false]"
+    }
+  }
+]

@@ -418,7 +418,7 @@
     }
   },
   {
-    "name": "composition: tags + env, tag flag set via env var",
+    "name": "composition: flag sets + env, flag set flag set via env var",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -428,7 +428,7 @@
         {
           "name": "cmd",
           "help": "a command",
-          "tags": [
+          "flag_sets": [
             {
               "name": "output",
               "flags": [
@@ -458,7 +458,7 @@
     }
   },
   {
-    "name": "composition: tags + choices, valid choice accepted",
+    "name": "composition: flag sets + choices, valid choice accepted",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -467,7 +467,7 @@
         {
           "name": "cmd",
           "help": "a command",
-          "tags": [
+          "flag_sets": [
             {
               "name": "output",
               "flags": [
@@ -499,7 +499,7 @@
     }
   },
   {
-    "name": "composition: tags + choices, invalid choice rejected",
+    "name": "composition: flag sets + choices, invalid choice rejected",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -508,7 +508,7 @@
         {
           "name": "cmd",
           "help": "a command",
-          "tags": [
+          "flag_sets": [
             {
               "name": "output",
               "flags": [
@@ -544,7 +544,7 @@
     }
   },
   {
-    "name": "composition: tags + repeatable, multiple occurrences",
+    "name": "composition: flag sets + repeatable, multiple occurrences",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -553,7 +553,7 @@
         {
           "name": "cmd",
           "help": "a command",
-          "tags": [
+          "flag_sets": [
             {
               "name": "filter",
               "flags": [
@@ -716,7 +716,7 @@
     }
   },
   {
-    "name": "composition: nesting + tags, tag flag in nested command",
+    "name": "composition: nesting + flag sets, flag set flag in nested command",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -730,7 +730,7 @@
             {
               "name": "query",
               "help": "run a query",
-              "tags": [
+              "flag_sets": [
                 {
                   "name": "output",
                   "flags": [
