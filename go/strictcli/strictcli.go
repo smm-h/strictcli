@@ -172,6 +172,7 @@ type App struct {
 	checkContextFactory func() CheckContext
 
 	stdinConsumedBy *string // tracks which flag consumed stdin via @-
+	tagContracts    map[string]string // tag name -> required flag name
 }
 
 // --- Option types ---
@@ -750,6 +751,18 @@ func (a *App) SetCheckContext(factory func() CheckContext) {
 	a.checkContextFactory = factory
 }
 
+// TagContract declares that any command tagged with the given tag must have a flag
+// with the given name. Validated at Run/Test time.
+func (a *App) TagContract(tag, requiresFlag string) {
+	if !identifierRe.MatchString(tag) {
+		panic(fmt.Sprintf("invalid tag name %q: must match [a-z][a-z0-9-]*", tag))
+	}
+	if a.tagContracts == nil {
+		a.tagContracts = make(map[string]string)
+	}
+	a.tagContracts[tag] = requiresFlag
+}
+
 // validateCheckRegistrations checks that all declared checks have been registered.
 // Returns an error message listing unregistered checks, or empty string if all are registered.
 func (a *App) validateCheckRegistrations() string {
@@ -767,6 +780,66 @@ func (a *App) validateCheckRegistrations() string {
 	}
 	sort.Strings(missing)
 	return fmt.Sprintf("checks declared in checks.toml but not registered: %s", strings.Join(missing, ", "))
+}
+
+// validateTagContracts checks that commands with a given tag have the required flag.
+// Returns an error message listing violations, or empty string if all contracts are satisfied.
+func (a *App) validateTagContracts() string {
+	if len(a.tagContracts) == 0 {
+		return ""
+	}
+	var violations []string
+	// Check top-level commands
+	for _, cmd := range a.commands {
+		if v := checkCommandTagContract(cmd, a.tagContracts); v != "" {
+			violations = append(violations, v)
+		}
+	}
+	// Check commands in groups recursively
+	for _, g := range a.groups {
+		violations = append(violations, checkGroupTagContracts(g, a.tagContracts)...)
+	}
+	if len(violations) == 0 {
+		return ""
+	}
+	sort.Strings(violations)
+	return strings.Join(violations, "; ")
+}
+
+func checkCommandTagContract(cmd *Command, contracts map[string]string) string {
+	if cmd.Passthrough {
+		return ""
+	}
+	for _, tag := range cmd.tags {
+		requiredFlag, ok := contracts[tag]
+		if !ok {
+			continue
+		}
+		found := false
+		for _, f := range cmd.flags {
+			if f.Name == requiredFlag {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Sprintf("command %q: tag %q requires flag \"--%s\"", cmd.Name, tag, requiredFlag)
+		}
+	}
+	return ""
+}
+
+func checkGroupTagContracts(g *Group, contracts map[string]string) []string {
+	var violations []string
+	for _, cmd := range g.Commands {
+		if v := checkCommandTagContract(cmd, contracts); v != "" {
+			violations = append(violations, v)
+		}
+	}
+	for _, sub := range g.Groups {
+		violations = append(violations, checkGroupTagContracts(sub, contracts)...)
+	}
+	return violations
 }
 
 // Command registers a top-level command.
@@ -960,6 +1033,10 @@ func (a *App) Run() {
 		fmt.Fprintln(os.Stderr, "error: "+errMsg)
 		os.Exit(1)
 	}
+	if errMsg := a.validateTagContracts(); errMsg != "" {
+		fmt.Fprintln(os.Stderr, "error: "+errMsg)
+		os.Exit(1)
+	}
 	argv := os.Args[1:]
 	pr := a.doParse(argv)
 
@@ -1002,6 +1079,9 @@ func (a *App) Run() {
 // Test runs the CLI with the given argv, capturing output and exit code.
 func (a *App) Test(argv []string) Result {
 	if errMsg := a.validateCheckRegistrations(); errMsg != "" {
+		return Result{Stderr: "error: " + errMsg + "\n", ExitCode: 1}
+	}
+	if errMsg := a.validateTagContracts(); errMsg != "" {
 		return Result{Stderr: "error: " + errMsg + "\n", ExitCode: 1}
 	}
 	pr := a.doParse(argv)
