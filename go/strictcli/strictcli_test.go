@@ -1190,11 +1190,11 @@ func TestAppHelpShowsGroups(t *testing.T) {
 	}
 }
 
-// --- Tag tests ---
+// --- FlagSet tests ---
 
-func TestTagSingleFlag(t *testing.T) {
+func TestFlagSetSingleFlag(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose}",
-		WithTags(Tag{
+		WithFlagSets(FlagSet{
 			Name: "verbose",
 			Flags: []Flag{BoolFlag("verbose", "verbose output")},
 		}))
@@ -1207,9 +1207,9 @@ func TestTagSingleFlag(t *testing.T) {
 	}
 }
 
-func TestTagMultipleFlags(t *testing.T) {
+func TestFlagSetMultipleFlags(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format} color={color}",
-		WithTags(Tag{
+		WithFlagSets(FlagSet{
 			Name: "output",
 			Flags: []Flag{
 				StringFlag("format", "output format", Default("text")),
@@ -1228,9 +1228,9 @@ func TestTagMultipleFlags(t *testing.T) {
 	}
 }
 
-func TestTagFlagsWithDefaults(t *testing.T) {
+func TestFlagSetFlagsWithDefaults(t *testing.T) {
 	app := simpleApp("deploy", "deploy the app", "token={token} insecure={insecure}",
-		WithTags(Tag{
+		WithFlagSets(FlagSet{
 			Name: "auth",
 			Flags: []Flag{
 				StringFlag("token", "auth token", Default("none")),
@@ -1249,9 +1249,9 @@ func TestTagFlagsWithDefaults(t *testing.T) {
 	}
 }
 
-func TestTagFlagsInHelp(t *testing.T) {
+func TestFlagSetFlagsInHelp(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithTags(Tag{
+		WithFlagSets(FlagSet{
 			Name:  "debug",
 			Flags: []Flag{BoolFlag("debug", "enable debug mode")},
 		}))

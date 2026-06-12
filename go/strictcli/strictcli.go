@@ -50,8 +50,8 @@ type Arg struct {
 	hasDefault bool
 }
 
-// Tag is a reusable bundle of flags.
-type Tag struct {
+// FlagSet is a reusable bundle of flags.
+type FlagSet struct {
 	Name  string
 	Flags []Flag
 }
@@ -99,7 +99,7 @@ type Command struct {
 	Handler            func(map[string]interface{}) int
 	Flags              []Flag
 	Args               []Arg
-	Tags               []Tag
+	FlagSets           []FlagSet
 	Mutex              []MutexGroup
 	Dependencies       []Dependency
 	Passthrough        bool
@@ -340,10 +340,10 @@ func WithFlags(flags ...Flag) CmdOption {
 	}
 }
 
-// WithTags adds tags (flag bundles) to a command.
-func WithTags(tags ...Tag) CmdOption {
+// WithFlagSets adds flag sets (reusable flag bundles) to a command.
+func WithFlagSets(flagSets ...FlagSet) CmdOption {
 	return func(c *Command) {
-		c.Tags = append(c.Tags, tags...)
+		c.FlagSets = append(c.FlagSets, flagSets...)
 	}
 }
 
@@ -733,8 +733,8 @@ func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ..
 	for _, opt := range opts {
 		opt(cmd)
 	}
-	// Passthrough commands cannot have flags, args, tags, or mutex
-	if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.Tags) > 0 || len(cmd.Mutex) > 0 {
+	// Passthrough commands cannot have flags, args, flag sets, or mutex
+	if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.FlagSets) > 0 || len(cmd.Mutex) > 0 {
 		var parts []string
 		if len(cmd.Flags) > 0 {
 			parts = append(parts, "flags")
@@ -742,8 +742,8 @@ func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ..
 		if len(cmd.Args) > 0 {
 			parts = append(parts, "args")
 		}
-		if len(cmd.Tags) > 0 {
-			parts = append(parts, "tags")
+		if len(cmd.FlagSets) > 0 {
+			parts = append(parts, "flag sets")
 		}
 		if len(cmd.Mutex) > 0 {
 			parts = append(parts, "mutex groups")
@@ -1536,9 +1536,9 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 		opt(cmd)
 	}
 
-	// Passthrough commands cannot have flags, args, tags, or mutex
+	// Passthrough commands cannot have flags, args, flag sets, or mutex
 	if cmd.Passthrough {
-		if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.Tags) > 0 || len(cmd.Mutex) > 0 {
+		if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.FlagSets) > 0 || len(cmd.Mutex) > 0 {
 			var parts []string
 			if len(cmd.Flags) > 0 {
 				parts = append(parts, "flags")
@@ -1546,8 +1546,8 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 			if len(cmd.Args) > 0 {
 				parts = append(parts, "args")
 			}
-			if len(cmd.Tags) > 0 {
-				parts = append(parts, "tags")
+			if len(cmd.FlagSets) > 0 {
+				parts = append(parts, "flag sets")
 			}
 			if len(cmd.Mutex) > 0 {
 				parts = append(parts, "mutex groups")
@@ -1557,11 +1557,11 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 		return cmd
 	}
 
-	// Merge tag flags and mutex flags into a unified all-flags list for validation
+	// Merge flag set flags and mutex flags into a unified all-flags list for validation
 	allFlags := make([]Flag, 0, len(cmd.Flags))
 	allFlags = append(allFlags, cmd.Flags...)
-	for _, tag := range cmd.Tags {
-		allFlags = append(allFlags, tag.Flags...)
+	for _, fs := range cmd.FlagSets {
+		allFlags = append(allFlags, fs.Flags...)
 	}
 
 	// Validate mutex groups
