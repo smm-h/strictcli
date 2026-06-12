@@ -2,16 +2,22 @@
 
 # Changelog
 
-## 0.13.0
+## 0.14.0
 
-Public API for running checks programmatically, skip behavior fix
+Renamed Tag to FlagSet
 
 <details>
 <summary>Context</summary>
 
-Adds App.RunChecks(), FormatCheckResults(), FormatCheckResultsJSON(), CheckRunResult, and RunChecksOptions. Also fixes a bug where explicit skip from a check implementation incorrectly set exit code to 1 and cascaded to dependents.
+Breaking: Tag struct renamed to FlagSet, WithTags function renamed to WithFlagSets, Command.Tags field renamed to Command.FlagSets. The Tag name was misleading — it implied labeling/annotation, but the type is actually a reusable bundle of flags.
 
 </details>
+
+### Breaking
+
+- **Breaking.** Renamed `Tag` to `FlagSet`, `WithTags` to `WithFlagSets`, and `Command.Tags` field to `Command.FlagSets`.
+
+## 0.13.0
 
 ### Features
 
