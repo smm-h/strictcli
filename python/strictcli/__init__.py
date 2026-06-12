@@ -764,11 +764,16 @@ class Group:
     deprecated: dict[str, DeprecatedCommand] = field(default_factory=dict)
     env_prefix: str | None = None
     _global_flags: list[Flag] = field(default_factory=list)
+    tags: frozenset[str] = frozenset()
+    _accumulated_tags: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
+        for tag in self.tags:
+            if not _IDENTIFIER_RE.match(tag):
+                raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
 
-    def group(self, name: str, *, help: str) -> Group:
+    def group(self, name: str, *, help: str, tags: set[str] | None = None) -> Group:
         """Create and register a child subgroup."""
         if name in self.commands:
             raise ValueError(
@@ -778,8 +783,11 @@ class Group:
             raise ValueError(
                 f'group "{name}" is already registered'
             )
+        own_tags = frozenset(tags or set())
         grp = Group(name=name, help=help, env_prefix=self.env_prefix,
-                     _global_flags=self._global_flags)
+                     _global_flags=self._global_flags,
+                     tags=own_tags,
+                     _accumulated_tags=self._accumulated_tags | own_tags)
         self._groups[name] = grp
         return grp
 
@@ -829,7 +837,7 @@ class Group:
                 global_flags=self._global_flags,
                 passthrough=passthrough,
                 tags=tags,
-                inherited_tags=None,
+                inherited_tags=self._accumulated_tags,
             )
             self.commands[name] = cmd
             return func
@@ -1175,10 +1183,13 @@ class App:
 
         return decorator
 
-    def group(self, name: str, *, help: str) -> Group:
+    def group(self, name: str, *, help: str, tags: set[str] | None = None) -> Group:
         """Create and register a command group."""
+        own_tags = frozenset(tags or set())
         grp = Group(name=name, help=help, env_prefix=self.env_prefix,
-                     _global_flags=self._global_flags)
+                     _global_flags=self._global_flags,
+                     tags=own_tags,
+                     _accumulated_tags=own_tags)
         self._groups[name] = grp
         return grp
 
