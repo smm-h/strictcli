@@ -1,0 +1,1 @@
+{"commits":["d7e4e6e05cfb18dcaa11b7863da7b0464fdf3dca"],"user_facing":true,"description":"**Breaking.** Command collection fields (`Flags`, `Args`, `FlagSets`, `Mutex`, `Dependencies`) are now unexported.","type":"breaking"}
