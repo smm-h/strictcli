@@ -1,0 +1,20 @@
+[packages.strictcli]
+bump = "minor"
+description = "Frozen Command, command tags, tag contracts"
+context = "Breaking: Command dataclass is now frozen=True with tuple fields (was mutable list). New: command tags (string labels with group inheritance) and tag contracts (registration-time validation that tagged commands have required flags)."
+include = ["pypi", "npm"]
+exclude = []
+
+[packages.go-strictcli]
+bump = "minor"
+description = "Unexported Command fields, command tags, tag contracts"
+context = "Breaking: Command collection fields (Flags, Args, FlagSets, Mutex, Dependencies) are now unexported. New: command tags via WithTags(), group inheritance via variadic tags on App.Group()/Group.Group(), and tag contracts via App.TagContract()."
+include = ["go"]
+exclude = []
+
+[packages.conformance]
+bump = "minor"
+description = "Command tags conformance cases and tooling updates"
+context = "Added conformance cases for command tags, group inheritance, tag contracts. Updated schema, code generators, harness, API surface checker, and error parity checker."
+include = ["plain"]
+exclude = []
