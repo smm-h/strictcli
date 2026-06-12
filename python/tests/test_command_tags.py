@@ -1,0 +1,419 @@
+"""Tests for command tags: frozen storage, validation, group inheritance, tag contracts, and schema output."""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import FrozenInstanceError
+
+import pytest
+import strictcli
+
+_PYPROJECT_TOML = '[project]\nname = "testproject"\n'
+
+
+def _make_app(**kwargs):
+    """Create a minimal app for testing."""
+    defaults = dict(name="testapp", help="A test app", version="1.0.0")
+    defaults.update(kwargs)
+    return strictcli.App(**defaults)
+
+
+# ---------------------------------------------------------------------------
+# 1. Frozen Command tests
+# ---------------------------------------------------------------------------
+
+
+class TestFrozenCommand:
+    """Command dataclass is frozen; flags/args stored as tuples."""
+
+    def test_command_flags_is_tuple(self):
+        app = _make_app()
+
+        @app.command("cmd", help="a command")
+        @strictcli.flag("verbose", type=bool, help="be verbose")
+        def cmd(verbose):
+            pass
+
+        c = app._commands["cmd"]
+        assert isinstance(c.flags, tuple)
+
+    def test_command_args_is_tuple(self):
+        app = _make_app()
+
+        @app.command("cmd", help="a command", args=[strictcli.Arg(name="name", help="a name")])
+        def cmd(name):
+            pass
+
+        c = app._commands["cmd"]
+        assert isinstance(c.args, tuple)
+
+    def test_command_frozen_assignment(self):
+        app = _make_app()
+
+        @app.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        c = app._commands["cmd"]
+        with pytest.raises(FrozenInstanceError):
+            c.flags = ()
+
+
+# ---------------------------------------------------------------------------
+# 2. Tag storage and validation
+# ---------------------------------------------------------------------------
+
+
+class TestTagStorageAndValidation:
+    """Tags are stored as frozenset; invalid names are rejected."""
+
+    def test_command_tags_frozenset(self):
+        app = _make_app()
+
+        @app.command("cmd", help="a command", tags={"json"})
+        def cmd():
+            pass
+
+        c = app._commands["cmd"]
+        assert c.tags == frozenset({"json"})
+
+    def test_invalid_tag_uppercase(self):
+        app = _make_app()
+        with pytest.raises(ValueError, match="invalid tag name"):
+
+            @app.command("cmd", help="a command", tags={"JSON"})
+            def cmd():
+                pass
+
+    def test_invalid_tag_underscore(self):
+        app = _make_app()
+        with pytest.raises(ValueError, match="invalid tag name"):
+
+            @app.command("cmd", help="a command", tags={"my_tag"})
+            def cmd():
+                pass
+
+    def test_invalid_tag_starts_with_digit(self):
+        app = _make_app()
+        with pytest.raises(ValueError, match="invalid tag name"):
+
+            @app.command("cmd", help="a command", tags={"1abc"})
+            def cmd():
+                pass
+
+    def test_invalid_tag_empty(self):
+        app = _make_app()
+        with pytest.raises(ValueError, match="invalid tag name"):
+
+            @app.command("cmd", help="a command", tags={""})
+            def cmd():
+                pass
+
+    def test_invalid_tag_starts_with_dash(self):
+        app = _make_app()
+        with pytest.raises(ValueError, match="invalid tag name"):
+
+            @app.command("cmd", help="a command", tags={"-abc"})
+            def cmd():
+                pass
+
+    def test_valid_tag_names(self):
+        """Several valid tag names should register without error."""
+        app = _make_app()
+
+        @app.command("c1", help="h", tags={"json"})
+        def c1():
+            pass
+
+        @app.command("c2", help="h", tags={"a"})
+        def c2():
+            pass
+
+        @app.command("c3", help="h", tags={"my-tag"})
+        def c3():
+            pass
+
+        @app.command("c4", help="h", tags={"a1"})
+        def c4():
+            pass
+
+        assert app._commands["c1"].tags == frozenset({"json"})
+        assert app._commands["c2"].tags == frozenset({"a"})
+        assert app._commands["c3"].tags == frozenset({"my-tag"})
+        assert app._commands["c4"].tags == frozenset({"a1"})
+
+
+# ---------------------------------------------------------------------------
+# 3. Group inheritance
+# ---------------------------------------------------------------------------
+
+
+class TestGroupTagInheritance:
+    """Tags cascade from groups to commands and accumulate through nesting."""
+
+    def test_group_tag_inherited(self):
+        app = _make_app()
+        grp = app.group("grp", help="a group", tags={"json"})
+
+        @grp.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        c = grp.commands["cmd"]
+        assert c.tags == frozenset({"json"})
+
+    def test_nested_group_tag_cascade(self):
+        app = _make_app()
+        parent = app.group("parent", help="parent group", tags={"a"})
+        child = parent.group("child", help="child group", tags={"b"})
+
+        @child.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        c = child.commands["cmd"]
+        assert "a" in c.tags
+        assert "b" in c.tags
+
+    def test_command_merges_own_and_group_tags(self):
+        app = _make_app()
+        grp = app.group("grp", help="a group", tags={"json"})
+
+        @grp.command("cmd", help="a command", tags={"verbose"})
+        def cmd():
+            pass
+
+        c = grp.commands["cmd"]
+        assert c.tags == frozenset({"json", "verbose"})
+
+    def test_command_no_tags_under_tagged_group(self):
+        app = _make_app()
+        grp = app.group("grp", help="a group", tags={"json"})
+
+        @grp.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        c = grp.commands["cmd"]
+        assert c.tags == frozenset({"json"})
+
+    def test_group_tags_shows_own_only(self):
+        """A child group's .tags is only its own tags, not accumulated from parents."""
+        app = _make_app()
+        parent = app.group("parent", help="parent group", tags={"admin"})
+        child = parent.group("child", help="child group", tags={"json"})
+
+        assert child.tags == frozenset({"json"})
+
+    def test_sibling_groups_different_tags(self):
+        app = _make_app()
+        grp_a = app.group("alpha", help="group a", tags={"fast"})
+        grp_b = app.group("beta", help="group b", tags={"slow"})
+
+        @grp_a.command("cmd", help="a command")
+        def cmd_a():
+            pass
+
+        @grp_b.command("cmd", help="a command")
+        def cmd_b():
+            pass
+
+        assert grp_a.commands["cmd"].tags == frozenset({"fast"})
+        assert grp_b.commands["cmd"].tags == frozenset({"slow"})
+
+
+# ---------------------------------------------------------------------------
+# 4. Tag contracts
+# ---------------------------------------------------------------------------
+
+
+class TestTagContracts:
+    """tag_contract enforces that tagged commands have required flags."""
+
+    def test_contract_satisfied(self):
+        app = _make_app()
+        app.tag_contract("json", requires_flag="json")
+
+        @app.command("cmd", help="a command", tags={"json"})
+        @strictcli.flag("json", type=bool, help="output json")
+        def cmd(json):
+            pass
+
+        result = app.test(["cmd"])
+        assert result.exit_code == 0
+
+    def test_contract_violated(self):
+        app = _make_app()
+        app.tag_contract("json", requires_flag="json")
+
+        @app.command("foo", help="a command", tags={"json"})
+        def foo():
+            pass
+
+        result = app.test(["foo"])
+        assert result.exit_code == 1
+        assert "requires flag" in result.stderr
+
+    def test_contract_error_message_exact(self):
+        app = _make_app()
+        app.tag_contract("json", requires_flag="json")
+
+        @app.command("foo", help="a command", tags={"json"})
+        def foo():
+            pass
+
+        result = app.test(["foo"])
+        assert result.exit_code == 1
+        assert 'command "foo": tag "json" requires flag "--json"' in result.stderr
+
+    def test_contract_on_inherited_tag(self):
+        app = _make_app()
+        app.tag_contract("json", requires_flag="json")
+        grp = app.group("grp", help="a group", tags={"json"})
+
+        @grp.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        result = app.test(["grp", "cmd"])
+        assert result.exit_code == 1
+        assert 'requires flag "--json"' in result.stderr
+
+    def test_contract_untagged_not_checked(self):
+        app = _make_app()
+        app.tag_contract("json", requires_flag="json")
+
+        @app.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        result = app.test(["cmd"])
+        assert result.exit_code == 0
+
+    def test_contract_passthrough_exempt(self):
+        app = _make_app()
+        app.tag_contract("json", requires_flag="json")
+        grp = app.group("grp", help="a group", tags={"json"})
+
+        @grp.command("run", help="run something",
+                     passthrough=strictcli.Passthrough(
+                         handler=lambda name, args, globals: 0))
+        def run():
+            pass
+
+        result = app.test(["grp", "run"])
+        assert result.exit_code == 0
+
+    def test_contract_ordering_independent(self):
+        """Registering commands before calling tag_contract still catches violations."""
+        app = _make_app()
+
+        @app.command("foo", help="a command", tags={"json"})
+        def foo():
+            pass
+
+        app.tag_contract("json", requires_flag="json")
+
+        result = app.test(["foo"])
+        assert result.exit_code == 1
+        assert 'requires flag "--json"' in result.stderr
+
+    def test_contract_multiple(self):
+        # Both contracts satisfied: should pass
+        app_good = _make_app()
+        app_good.tag_contract("json", requires_flag="json")
+        app_good.tag_contract("verbose", requires_flag="verbose")
+
+        @app_good.command("good", help="has both flags", tags={"json", "verbose"})
+        @strictcli.flag("json", type=bool, help="output json")
+        @strictcli.flag("verbose", type=bool, help="be verbose")
+        def good(json, verbose):
+            pass
+
+        result = app_good.test(["good"])
+        assert result.exit_code == 0
+
+        # One contract violated: should fail
+        app_bad = _make_app()
+        app_bad.tag_contract("json", requires_flag="json")
+        app_bad.tag_contract("verbose", requires_flag="verbose")
+
+        @app_bad.command("bad", help="missing verbose flag", tags={"json", "verbose"})
+        @strictcli.flag("json", type=bool, help="output json")
+        def bad(json):
+            pass
+
+        result = app_bad.test(["bad"])
+        assert result.exit_code == 1
+        assert "requires flag" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# 5. Schema output
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _pyproject_in_tmp(tmp_path):
+    """Ensure every test that uses tmp_path has a pyproject.toml for project_id."""
+    (tmp_path / "pyproject.toml").write_text(_PYPROJECT_TOML)
+
+
+class TestSchemaTagOutput:
+    """Tags appear correctly in --dump-schema output."""
+
+    def test_schema_tagged_command(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="a command", tags={"beta", "admin"})
+        def cmd():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert data["commands"]["cmd"]["tags"] == ["admin", "beta"]
+
+    def test_schema_untagged_command(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert "tags" not in data["commands"]["cmd"]
+
+    def test_schema_group_own_tags(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+        grp = app.group("admin", help="admin group", tags={"admin"})
+
+        @grp.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert data["groups"]["admin"]["tags"] == ["admin"]
+
+    def test_schema_defaults_include_tags(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="a command")
+        def cmd():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        defaults = data["defaults"]
+        assert defaults["command"]["tags"] == []
+        assert defaults["group"]["tags"] == []
