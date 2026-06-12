@@ -1,0 +1,235 @@
+[
+  {
+    "name": "command-tags: basic tags on command",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "tags": ["json"],
+          "handler_prints": "hello",
+          "flags": [
+            { "name": "name", "help": "who to greet" }
+          ]
+        }
+      ]
+    },
+    "argv": ["greet", "--name", "world"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "hello\n"
+    }
+  },
+  {
+    "name": "command-tags: tags on command with schema dump",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "tags": ["json", "api"],
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["--dump-schema"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ".strictcli/schema.json"
+    }
+  },
+  {
+    "name": "command-tags: group inheritance via execution",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "groups": [
+        {
+          "name": "admin",
+          "help": "admin commands",
+          "tags": ["admin"],
+          "commands": [
+            {
+              "name": "reset",
+              "help": "reset data",
+              "handler_prints": "reset done"
+            }
+          ]
+        }
+      ],
+      "commands": []
+    },
+    "argv": ["admin", "reset"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "reset done\n"
+    }
+  },
+  {
+    "name": "command-tags: group inheritance with schema dump",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "groups": [
+        {
+          "name": "admin",
+          "help": "admin commands",
+          "tags": ["admin"],
+          "commands": [
+            {
+              "name": "reset",
+              "help": "reset data",
+              "handler_prints": "reset done"
+            }
+          ]
+        }
+      ],
+      "commands": []
+    },
+    "argv": ["--dump-schema"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ".strictcli/schema.json"
+    }
+  },
+  {
+    "name": "command-tags: nested group inheritance via execution",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "groups": [
+        {
+          "name": "cloud",
+          "help": "cloud commands",
+          "tags": ["cloud"],
+          "groups": [
+            {
+              "name": "compute",
+              "help": "compute commands",
+              "tags": ["compute"],
+              "commands": [
+                {
+                  "name": "list",
+                  "help": "list vms",
+                  "handler_prints": "listing vms"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "commands": []
+    },
+    "argv": ["cloud", "compute", "list"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "listing vms\n"
+    }
+  },
+  {
+    "name": "command-tags: tag contract satisfied",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "tag_contracts": {
+        "json": { "requires_flag": "json" }
+      },
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "tags": ["json"],
+          "handler_prints": "hello",
+          "flags": [
+            { "name": "json", "type": "bool", "help": "output as json", "default": false }
+          ]
+        }
+      ]
+    },
+    "argv": ["greet"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "hello\n"
+    }
+  },
+  {
+    "name": "command-tags: tag contract violated",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "tag_contracts": {
+        "json": { "requires_flag": "json" }
+      },
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "tags": ["json"],
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["greet"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"greet\": tag \"json\" requires flag \"--json\""
+    }
+  },
+  {
+    "name": "command-tags: passthrough exempt from tag contract",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "tag_contracts": {
+        "json": { "requires_flag": "json" }
+      },
+      "commands": [
+        {
+          "name": "run",
+          "help": "run something",
+          "tags": ["json"],
+          "passthrough": true
+        }
+      ]
+    },
+    "argv": ["run", "hello"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "run"
+    }
+  },
+  {
+    "name": "command-tags: invalid tag name",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "tags": ["BAD"],
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["greet"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "invalid tag name"
+    }
+  }
+]
