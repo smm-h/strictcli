@@ -252,7 +252,7 @@ def _config_typename(value: object) -> str:
     return type(value).__name__
 
 
-_CHECK_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+_IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _CHECK_REQUIRED_FIELDS = {"tags", "severity", "fast", "pure", "needs_network", "depends_on"}
 _CHECK_VALID_SEVERITIES = {"error", "warn"}
 
@@ -290,7 +290,7 @@ def _parse_checks_toml(data: bytes) -> tuple[str, dict[str, _CheckDef]]:
 
     for name, fields in checks_section.items():
         # Validate check name
-        if not _CHECK_NAME_RE.match(name):
+        if not _IDENTIFIER_RE.match(name):
             raise ValueError(
                 f'checks.toml: invalid check name "{name}" '
                 f"(must match [a-z][a-z0-9-]*)"
@@ -744,9 +744,13 @@ class Command:
     mutex: tuple[MutexGroup, ...] = ()
     dependencies: tuple[CoRequired | Requires | Implies, ...] = ()
     passthrough: Passthrough | None = None
+    tags: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
+        for tag in self.tags:
+            if not _IDENTIFIER_RE.match(tag):
+                raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
 
 
 @dataclass
