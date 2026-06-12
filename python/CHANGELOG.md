@@ -2,16 +2,22 @@
 
 # Changelog
 
-## 0.18.0
+## 0.19.0
 
-Public API for running checks programmatically
+Renamed Tag to FlagSet
 
 <details>
 <summary>Context</summary>
 
-Adds App.run_checks(), format_check_results(), format_check_results_json(), and CheckRunResult — a stable public API replacing the private _filter_checks/_resolve_check_order/_run_checks/_check_format_human functions that consumers like rlsbl were forced to use.
+Breaking: Tag class renamed to FlagSet, tags= parameter renamed to flag_sets= across all API surfaces. The Tag name was misleading — it implied labeling/annotation, but the type is actually a reusable bundle of flags.
 
 </details>
+
+### Breaking
+
+- **Breaking.** Renamed `Tag` to `FlagSet` and `tags=` parameter to `flag_sets=` across all API surfaces.
+
+## 0.18.0
 
 ### Features
 
