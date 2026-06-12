@@ -139,7 +139,21 @@ SCHEMA_TO_GO: dict[str, str] = {
     "app.config_format": "configFormat",  # Go App.configFormat (unexported, set via WithConfigFormat())
     "app.checks_path": "checksPath",  # Go App.checksPath (unexported, set via WithChecks())
     "app.tag_contracts": "tagContracts",  # Go App.tagContracts (unexported, set via TagContract())
+    "command.flags": "flags",  # Go Command.flags (unexported)
+    "command.args": "args",  # Go Command.args (unexported)
+    "command.flag_sets": "flagSets",  # Go Command.flagSets (unexported)
+    "command.mutex": "mutex",  # Go Command.mutex (unexported)
+    "command.dependencies": "dependencies",  # Go Command.dependencies (unexported)
+    "command.tags": "tags",  # Go Command.tags (unexported)
+    "group.tags": "tags",  # Go Group.tags (unexported)
     "group.commands": "Commands",  # Go Group.Commands (exported)
+}
+
+# Schema fields that map to Python runtime attributes (set in __post_init__,
+# not dataclass fields). These pass the Python check unconditionally since
+# get_python_fields() only collects dataclass fields.
+SCHEMA_PYTHON_RUNTIME_ATTRS: dict[str, str] = {
+    "app.tag_contracts": "_tag_contracts (set in __post_init__, not a dataclass field)",
 }
 
 
@@ -384,6 +398,10 @@ def check_schema_in_impls(
             # Check Python
             py_name = _resolve_schema_to_python(schema_def, field)
             py_check = py_name in py_set or f"_{py_name}" in py_set
+            # Also accept runtime attributes (set in __post_init__, not dataclass fields)
+            qualified_py = f"{schema_def}.{field}"
+            if not py_check and qualified_py in SCHEMA_PYTHON_RUNTIME_ATTRS:
+                py_check = True
             if not py_check:
                 errors.append(
                     f"Schema {schema_def}.{field} (as '{py_name}') "
