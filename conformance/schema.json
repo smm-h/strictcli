@@ -102,6 +102,17 @@
           "type": "array",
           "items": { "$ref": "#/$defs/check" },
           "description": "Check stub definitions for code generation."
+        },
+        "tag_contracts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "requires_flag": { "type": "string" }
+            },
+            "required": ["requires_flag"],
+            "additionalProperties": false
+          }
         }
       }
     },
@@ -127,6 +138,10 @@
       "properties": {
         "name": { "type": "string" },
         "help": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "commands": {
           "type": "array",
           "items": { "$ref": "#/$defs/command" }
@@ -144,6 +159,10 @@
       "properties": {
         "name": { "type": "string" },
         "help": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "deprecated": {
           "type": "boolean",
           "default": false,
@@ -211,7 +230,8 @@
           "mutex": false,
           "dependencies": false,
           "passthrough": false,
-          "passthrough_handler_prints": false
+          "passthrough_handler_prints": false,
+          "tags": false
         }
       }
     },
