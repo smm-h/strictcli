@@ -1,0 +1,1 @@
+{"commits":["9e7e116531923a9db84c2f9e7fc6326a9bf01079","a68465be720ee0728e72a09f5ba6bd3d563a9600"],"user_facing":true,"description":"**Breaking.** Command dataclass is now `frozen=True` with `tuple` fields instead of `list`.","type":"breaking"}
