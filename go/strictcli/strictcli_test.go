@@ -6468,3 +6468,395 @@ func TestRepeatableDefaultFloatInHelp(t *testing.T) {
 		t.Fatalf("stdout should contain '[default: 1.5, 2.5]', got %q", r.Stdout)
 	}
 }
+
+// --- Tag storage and validation ---
+
+func TestWithTagsStoresTags(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("json"))
+	cmd := app.Commands()["cmd"]
+	if len(cmd.tags) != 1 || cmd.tags[0] != "json" {
+		t.Fatalf("expected tags [json], got %v", cmd.tags)
+	}
+}
+
+func TestWithTagsInvalidPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for invalid tag, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "invalid tag name") {
+			t.Fatalf("expected panic about invalid tag name, got %q", msg)
+		}
+	}()
+	NewApp("myapp", "1.0.0", "test app").Command("cmd", "a command",
+		func(args map[string]interface{}) int { return 0 },
+		WithTags("INVALID"))
+}
+
+func TestWithTagsDeduplicates(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("json", "json"))
+	cmd := app.Commands()["cmd"]
+	if len(cmd.tags) != 1 {
+		t.Fatalf("expected 1 tag after dedup, got %d: %v", len(cmd.tags), cmd.tags)
+	}
+}
+
+func TestWithTagsValidNames(t *testing.T) {
+	// These should all be valid tag names
+	validTags := []string{"json", "xml", "a", "abc-def", "a1", "tag-with-numbers-123"}
+	for _, tag := range validTags {
+		app := NewApp("myapp", "1.0.0", "test app")
+		app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+			WithTags(tag))
+		cmd := app.Commands()["cmd"]
+		found := false
+		for _, ct := range cmd.tags {
+			if ct == tag {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("tag %q should be stored", tag)
+		}
+	}
+}
+
+func TestWithTagsInvalidNames(t *testing.T) {
+	invalidTags := []string{"", "A", "1abc", "-abc", "abc_def", "abc def"}
+	for _, tag := range invalidTags {
+		func() {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatalf("expected panic for invalid tag %q, got none", tag)
+				}
+			}()
+			NewApp("myapp", "1.0.0", "test app").Command("cmd", "a command",
+				func(args map[string]interface{}) int { return 0 },
+				WithTags(tag))
+		}()
+	}
+}
+
+// --- Group inheritance ---
+
+func TestGroupTagInheritance(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("grp", "a group", "json")
+	g.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	cmd := g.Commands["cmd"]
+	found := false
+	for _, tag := range cmd.tags {
+		if tag == "json" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("command should inherit group tag 'json', got %v", cmd.tags)
+	}
+}
+
+func TestNestedGroupTagCascade(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("outer", "outer group", "json")
+	inner := g.Group("inner", "inner group", "xml")
+	inner.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	cmd := inner.Commands["cmd"]
+	hasJson := false
+	hasXml := false
+	for _, tag := range cmd.tags {
+		if tag == "json" {
+			hasJson = true
+		}
+		if tag == "xml" {
+			hasXml = true
+		}
+	}
+	if !hasJson || !hasXml {
+		t.Fatalf("command should inherit both json and xml tags, got %v", cmd.tags)
+	}
+}
+
+func TestCommandAndGroupTagsMerge(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("grp", "a group", "json")
+	g.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("xml"))
+	cmd := g.Commands["cmd"]
+	hasJson := false
+	hasXml := false
+	for _, tag := range cmd.tags {
+		if tag == "json" {
+			hasJson = true
+		}
+		if tag == "xml" {
+			hasXml = true
+		}
+	}
+	if !hasJson || !hasXml {
+		t.Fatalf("command should have both json and xml tags, got %v", cmd.tags)
+	}
+}
+
+func TestGroupOwnTagsOnly(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("outer", "outer group", "json")
+	inner := g.Group("inner", "inner group", "xml")
+	inner.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	// inner's own tags should be just ["xml"], not ["json", "xml"]
+	if len(inner.tags) != 1 || inner.tags[0] != "xml" {
+		t.Fatalf("inner group own tags should be [xml], got %v", inner.tags)
+	}
+	// But inner's accumulated tags should include both
+	hasJson := false
+	hasXml := false
+	for _, tag := range inner.accumulatedTags {
+		if tag == "json" {
+			hasJson = true
+		}
+		if tag == "xml" {
+			hasXml = true
+		}
+	}
+	if !hasJson || !hasXml {
+		t.Fatalf("inner group accumulated tags should have both json and xml, got %v", inner.accumulatedTags)
+	}
+}
+
+// --- Tag contracts ---
+
+func TestTagContractSatisfied(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("json", "json")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("ok")
+		return 0
+	}, WithTags("json"), WithFlags(BoolFlag("json", "output json")))
+	r := app.Test([]string{"cmd", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestTagContractViolated(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("json", "json")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("json"))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, `command "cmd": tag "json" requires flag "--json"`) {
+		t.Fatalf("expected tag contract error, got %q", r.Stderr)
+	}
+}
+
+func TestTagContractExactErrorMessage(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("json", "json")
+	app.Command("foo", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("json"))
+	r := app.Test([]string{"foo"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	expected := `command "foo": tag "json" requires flag "--json"`
+	if !strings.Contains(r.Stderr, expected) {
+		t.Fatalf("expected error %q in stderr, got %q", expected, r.Stderr)
+	}
+}
+
+func TestTagContractOnInheritedTag(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("json", "json")
+	g := app.Group("grp", "a group", "json")
+	// Command inherits "json" tag from group but has no --json flag -> violation
+	g.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	r := app.Test([]string{"grp", "cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1 for inherited tag contract violation, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, `tag "json" requires flag "--json"`) {
+		t.Fatalf("expected tag contract error for inherited tag, got %q", r.Stderr)
+	}
+}
+
+func TestTagContractUntaggedCommandNotChecked(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("json", "json")
+	// Command has no tags -- should not be affected by the contract
+	app.Command("cmd", "a command", func(args map[string]interface{}) int {
+		fmt.Print("ok")
+		return 0
+	})
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0 for untagged command, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestTagContractPassthroughExempt(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("json", "json")
+	app.Passthrough("cmd", "a command", func(name string, args []string, globals map[string]interface{}) int {
+		return 0
+	}, WithTags("json"))
+	// Passthrough commands are exempt from tag contracts
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0 for passthrough (exempt from contracts), got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestTagContractRegisteredAfterCommands(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	// Register command first, then the contract
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("json"))
+	app.TagContract("json", "json")
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1 for contract registered after command, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, `tag "json" requires flag "--json"`) {
+		t.Fatalf("expected tag contract error, got %q", r.Stderr)
+	}
+}
+
+func TestTagContractMultipleContracts(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("json", "json")
+	app.TagContract("verbose", "verbose")
+	// Command has "json" tag but not --json flag, and "verbose" tag but not --verbose flag
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("json", "verbose"))
+	r := app.Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	// Should report at least one violation
+	if !strings.Contains(r.Stderr, "requires flag") {
+		t.Fatalf("expected tag contract error, got %q", r.Stderr)
+	}
+}
+
+func TestTagContractInvalidTagPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for invalid tag in TagContract, got none")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "invalid tag name") {
+			t.Fatalf("expected panic about invalid tag name, got %q", msg)
+		}
+	}()
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("INVALID", "json")
+}
+
+// --- Schema output ---
+
+func TestSchemaTaggedCommand(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("xml", "json"))
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	tags, ok := cmd["tags"]
+	if !ok {
+		t.Fatal("expected 'tags' in command schema")
+	}
+	tagArr := tags.([]interface{})
+	if len(tagArr) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(tagArr))
+	}
+	// Tags should be sorted alphabetically
+	if tagArr[0] != "json" || tagArr[1] != "xml" {
+		t.Fatalf("expected tags [json, xml], got %v", tagArr)
+	}
+}
+
+func TestSchemaTagsSorted(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithTags("zebra", "alpha", "middle"))
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	tagArr := cmd["tags"].([]interface{})
+	if len(tagArr) != 3 {
+		t.Fatalf("expected 3 tags, got %d", len(tagArr))
+	}
+	if tagArr[0] != "alpha" || tagArr[1] != "middle" || tagArr[2] != "zebra" {
+		t.Fatalf("expected tags [alpha, middle, zebra], got %v", tagArr)
+	}
+}
+
+func TestSchemaGroupOwnTags(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("grp", "a group", "beta", "alpha")
+	g.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	groups := schema["groups"].(map[string]interface{})
+	grp := groups["grp"].(map[string]interface{})
+	tags, ok := grp["tags"]
+	if !ok {
+		t.Fatal("expected 'tags' in group schema")
+	}
+	tagArr := tags.([]interface{})
+	if len(tagArr) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(tagArr))
+	}
+	// Tags should be sorted
+	if tagArr[0] != "alpha" || tagArr[1] != "beta" {
+		t.Fatalf("expected tags [alpha, beta], got %v", tagArr)
+	}
+}
+
+func TestSchemaNoTagsOmitted(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	if _, ok := cmd["tags"]; ok {
+		t.Fatal("tags should be omitted when empty")
+	}
+}
+
+func TestSchemaTagsInDefaults(t *testing.T) {
+	defaults := buildSchemaDefaults()
+	cmdDefaults := defaults["command"].(map[string]interface{})
+	if _, ok := cmdDefaults["tags"]; !ok {
+		t.Fatal("expected 'tags' in command defaults")
+	}
+	grpDefaults := defaults["group"].(map[string]interface{})
+	if _, ok := grpDefaults["tags"]; !ok {
+		t.Fatal("expected 'tags' in group defaults")
+	}
+}
