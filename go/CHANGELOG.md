@@ -2,22 +2,42 @@
 
 # Changelog
 
-## 0.14.0
+## 0.15.0
 
-Renamed Tag to FlagSet
+Unexported Command fields, command tags, tag contracts
 
 <details>
 <summary>Context</summary>
 
-Breaking: Tag struct renamed to FlagSet, WithTags function renamed to WithFlagSets, Command.Tags field renamed to Command.FlagSets. The Tag name was misleading — it implied labeling/annotation, but the type is actually a reusable bundle of flags.
+Breaking: Command collection fields (Flags, Args, FlagSets, Mutex, Dependencies) are now unexported. New: command tags via WithTags(), group inheritance via variadic tags on App.Group()/Group.Group(), and tag contracts via App.TagContract().
 
 </details>
+
+### Breaking
+
+- **Breaking.** Command collection fields (`Flags`, `Args`, `FlagSets`, `Mutex`, `Dependencies`) are now unexported.
+
+### Features
+
+- **New.** Command tags: string labels on commands and groups with group-to-command inheritance via `WithTags()` and variadic tags on `App.Group()`/`Group.Group()`.
+- **New.** Tag contracts: `App.TagContract()` validates at run time that tagged commands have required flags.
+
+## 0.14.0
 
 ### Breaking
 
 - **Breaking.** Renamed `Tag` to `FlagSet`, `WithTags` to `WithFlagSets`, and `Command.Tags` field to `Command.FlagSets`.
 
 ## 0.13.0
+
+Public API for running checks programmatically, skip behavior fix
+
+<details>
+<summary>Context</summary>
+
+Adds App.RunChecks(), FormatCheckResults(), FormatCheckResultsJSON(), CheckRunResult, and RunChecksOptions. Also fixes a bug where explicit skip from a check implementation incorrectly set exit code to 1 and cascaded to dependents.
+
+</details>
 
 ### Features
 
@@ -28,6 +48,8 @@ Breaking: Tag struct renamed to FlagSet, WithTags function renamed to WithFlagSe
 - **Fix.** Explicit skip from check implementation no longer sets exit code to 1 or cascades to dependents.
 
 ## 0.12.1
+
+Fix repeatable flag defaults not applied to handlers
 
 ### Breaking
 
@@ -43,6 +65,15 @@ Breaking: Tag struct renamed to FlagSet, WithTags function renamed to WithFlagSe
 - **Fix.** Repeatable flag defaults are now correctly applied to handlers (previously always received empty list).
 
 ## 0.12.0
+
+Array config support, unique flag enforcement, env var delimiter, config set repeatable
+
+<details>
+<summary>Context</summary>
+
+Major additions: Unique field on repeatable flags enforces no duplicates at parse time and in config. EnvSeparator controls how env var values split into arrays. Config values for repeatable flags are coerced from strings to declared types. config set now supports repeatable flags with --clear and --default. Breaking: config show requires --plain or --json.
+
+</details>
 
 ### Breaking
 
@@ -66,11 +97,29 @@ Breaking: Tag struct renamed to FlagSet, WithTags function renamed to WithFlagSe
 
 ## 0.11.1
 
+Config show bool parity, negative values in config set, parseIntStrict wiring
+
+<details>
+<summary>Context</summary>
+
+config show now outputs lowercase bools matching Python. config set accepts negative numeric values. Wired parseIntStrict to all int parsing sites. Error message change: unknown single-dash tokens now produce 'unexpected argument' instead of 'unknown flag'.
+
+</details>
+
 ### Breaking
 
 - **Breaking.** Config set now accepts negative numeric values. Unknown single-dash tokens produce 'unexpected argument' instead of 'unknown flag'.
 
 ## 0.11.0
+
+TOML config support and config set type coercion
+
+<details>
+<summary>Context</summary>
+
+WithConfigFormat("toml") now correctly parses TOML config files (previously always JSON-parsed). config set validates keys and coerces values to flag types. Both are breaking: TOML configs that silently fell back to defaults will now resolve values, and unknown keys in config set are rejected.
+
+</details>
 
 ### Breaking
 
