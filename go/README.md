@@ -70,7 +70,7 @@ Flags:
 - **Short aliases** -- single-character short forms (`-v`, `-o`)
 - **Positional arguments** -- required, optional, and variadic
 - **Environment variables** -- first-class env var backing with prefix enforcement
-- **Tags** -- reusable bundles of flags shared across commands
+- **FlagSets** -- reusable bundles of flags shared across commands
 - **Mutex groups** -- mutually exclusive flags (exactly one required)
 - **CoRequired** -- flags that must appear together or not at all
 - **Requires** -- flag A depends on flag B being present
@@ -96,7 +96,7 @@ Flags:
 | `Group` | Container for nested commands |
 | `Flag` | Flag declaration (use constructors below) |
 | `Arg` | Positional argument |
-| `Tag` | Reusable bundle of flags |
+| `FlagSet` | Reusable bundle of flags |
 | `MutexGroup` | Mutually exclusive flag group |
 | `CoRequired` | Flags that must appear together |
 | `Requires` | One flag depends on another |
@@ -140,7 +140,7 @@ arg  := strictcli.NewArg(name, help string, opts ...ArgOption)
 |----------|-------------|
 | `WithFlags(flags...)` | Add flags to a command |
 | `WithArgs(args...)` | Add positional arguments |
-| `WithTags(tags...)` | Attach tag bundles |
+| `WithFlagSets(flagSets...)` | Attach flag set bundles |
 | `WithMutex(groups...)` | Add mutex groups |
 | `WithDependencies(deps...)` | Add CoRequired/Requires constraints |
 | `WithPassthrough(handler)` | Mark as passthrough command |

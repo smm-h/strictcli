@@ -204,12 +204,12 @@ Values resolve in this order: CLI argument > environment variable > default. If 
 
 Bool flags from env vars accept `1`, `true`, `yes` (case-insensitive) for `True` and `0`, `false`, `no` for `False`. Any other value is an error.
 
-## Tags
+## FlagSets
 
-Tags are reusable bundles of flags that can be applied to multiple commands:
+FlagSets are reusable bundles of flags that can be applied to multiple commands:
 
 ```python
-auth_tag = strictcli.Tag(
+auth_flags = strictcli.FlagSet(
     name="auth",
     flags=[
         strictcli.Flag(name="token", type=str, help="auth token", env="MYAPP_TOKEN", default=""),
@@ -217,16 +217,16 @@ auth_tag = strictcli.Tag(
     ],
 )
 
-@app.command("deploy", help="deploy the app", tags=[auth_tag])
+@app.command("deploy", help="deploy the app", flag_sets=[auth_flags])
 def deploy(token, insecure):
     print(f"token={'set' if token else 'unset'}, insecure={insecure}")
 
-@app.command("status", help="check status", tags=[auth_tag])
+@app.command("status", help="check status", flag_sets=[auth_flags])
 def status(token, insecure):
     print(f"checking status")
 ```
 
-Both commands now have `--token` and `--insecure` flags. Tag flags appear in help output and are parsed like any other flag.
+Both commands now have `--token` and `--insecure` flags. FlagSet flags appear in help output and are parsed like any other flag.
 
 ## Mutex Groups
 
