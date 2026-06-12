@@ -731,18 +731,18 @@ class DeprecatedCommand:
     message: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class Command:
     """A leaf command with a handler."""
 
     name: str
     help: str
     handler: Callable | None
-    flags: list[Flag] = field(default_factory=list)
-    args: list[Arg] = field(default_factory=list)
-    flag_sets: list[FlagSet] = field(default_factory=list)
-    mutex: list[MutexGroup] = field(default_factory=list)
-    dependencies: list[CoRequired | Requires | Implies] = field(default_factory=list)
+    flags: tuple[Flag, ...] = ()
+    args: tuple[Arg, ...] = ()
+    flag_sets: tuple[FlagSet, ...] = ()
+    mutex: tuple[MutexGroup, ...] = ()
+    dependencies: tuple[CoRequired | Requires | Implies, ...] = ()
     passthrough: Passthrough | None = None
 
     def __post_init__(self) -> None:
@@ -1288,8 +1288,8 @@ class App:
             name="show",
             help="Show all config values with source attribution",
             handler=_config_show_handler,
-            flags=config_show_flags,
-            mutex=config_show_mutex,
+            flags=tuple(config_show_flags),
+            mutex=tuple(config_show_mutex),
         )
 
         # config set
@@ -1440,18 +1440,18 @@ class App:
             name="set",
             help="Set a config value",
             handler=_config_set_handler,
-            args=[
+            args=(
                 Arg(name="key", help="Config key to set"),
                 Arg(name="value",
                     help="Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
                     required=False),
-            ],
-            flags=[
+            ),
+            flags=(
                 Flag(name="clear", type=bool,
                      help="Clear a repeatable flag (set to empty list)"),
                 Flag(name="default", type=bool,
                      help="Reset a key to its default (remove from config)"),
-            ],
+            ),
         )
 
         # config edit
@@ -2743,11 +2743,11 @@ def _build_and_validate_command(
         name=name,
         help=help,
         handler=handler,
-        flags=all_flags,
-        args=all_args,
-        flag_sets=resolved_flag_sets,
-        mutex=resolved_mutex,
-        dependencies=resolved_dependencies,
+        flags=tuple(all_flags),
+        args=tuple(all_args),
+        flag_sets=tuple(resolved_flag_sets),
+        mutex=tuple(resolved_mutex),
+        dependencies=tuple(resolved_dependencies),
     )
 
 
