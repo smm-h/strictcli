@@ -976,6 +976,8 @@ class App:
             self._check_defs: dict[str, _CheckDef] = {}
             self._checks_enabled = False
 
+        self._tag_contracts: dict[str, str] = {}
+
     @property
     def config_file_path(self) -> str:
         """Return the resolved config file path for this app."""
@@ -1017,6 +1019,50 @@ class App:
                 + ", ".join(missing)
             )
         return None
+
+    def tag_contract(self, tag: str, *, requires_flag: str) -> None:
+        """Declare that any command with the given tag must have the named flag."""
+        if not _IDENTIFIER_RE.match(tag):
+            raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
+        self._tag_contracts[tag] = requires_flag
+
+    def _validate_tag_contracts(self) -> str | None:
+        """Check that all tag contracts are satisfied.
+
+        Returns an error message if any command violates a contract, or None.
+        """
+        if not self._tag_contracts:
+            return None
+
+        def _check_commands(commands: dict) -> str | None:
+            for cmd in commands.values():
+                if cmd.passthrough is not None:
+                    continue
+                for tag in cmd.tags:
+                    if tag in self._tag_contracts:
+                        required_flag = self._tag_contracts[tag]
+                        flag_names = {f.name for f in cmd.flags}
+                        if required_flag not in flag_names:
+                            return (
+                                f'command "{cmd.name}": tag "{tag}" requires '
+                                f'flag "--{required_flag}"'
+                            )
+            return None
+
+        def _check_groups(groups: dict) -> str | None:
+            for group in groups.values():
+                err = _check_commands(group.commands)
+                if err:
+                    return err
+                err = _check_groups(group._groups)
+                if err:
+                    return err
+            return None
+
+        err = _check_commands(self._commands)
+        if err:
+            return err
+        return _check_groups(self._groups)
 
     def set_check_context(self, factory: Callable) -> None:
         """Set the factory function that creates CheckContext for check runs.
@@ -1945,6 +1991,10 @@ class App:
         if check_err:
             print(f"error: {check_err}", file=sys.stderr)
             sys.exit(1)
+        tag_err = self._validate_tag_contracts()
+        if tag_err:
+            print(f"error: {tag_err}", file=sys.stderr)
+            sys.exit(1)
         argv = sys.argv[1:]
         try:
             cmd, data = self._parse(argv)
@@ -1989,6 +2039,15 @@ class App:
         check_err = self._validate_check_registrations()
         if check_err:
             stderr_buf.write(f"error: {check_err}\n")
+            return Result(
+                stdout=stdout_buf.getvalue(),
+                stderr=stderr_buf.getvalue(),
+                exit_code=1,
+            )
+
+        tag_err = self._validate_tag_contracts()
+        if tag_err:
+            stderr_buf.write(f"error: {tag_err}\n")
             return Result(
                 stdout=stdout_buf.getvalue(),
                 stderr=stderr_buf.getvalue(),
