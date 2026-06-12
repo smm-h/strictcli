@@ -423,6 +423,10 @@ def extract_go_errors(
         # and the checks_declared error (already captured)
         if fmt_str.startswith("checks declared"):
             continue
+        # Skip tag contract error -- Python equivalent uses return (not raise),
+        # so it's also not extracted. Parity is maintained by conformance cases.
+        if 'tag %q requires flag' in fmt_str:
+            continue
         results.append(("parse", fmt_str))
 
     # --- Config value coercion errors from config.go (fmt.Sprintf in return) ---
