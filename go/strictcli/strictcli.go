@@ -102,6 +102,7 @@ type Command struct {
 	flagSets           []FlagSet
 	mutex              []MutexGroup
 	dependencies       []Dependency
+	tags               []string
 	Passthrough        bool
 	PassthroughHandler PassthroughHandler
 }
@@ -366,6 +367,22 @@ func WithPassthrough(handler PassthroughHandler) CmdOption {
 	return func(c *Command) {
 		c.Passthrough = true
 		c.PassthroughHandler = handler
+	}
+}
+
+// WithTags adds tags to a command.
+func WithTags(tags ...string) CmdOption {
+	return func(c *Command) {
+		seen := make(map[string]bool)
+		for _, t := range tags {
+			if !identifierRe.MatchString(t) {
+				panic(fmt.Sprintf("invalid tag name %q: must match [a-z][a-z0-9-]*", t))
+			}
+			if !seen[t] {
+				c.tags = append(c.tags, t)
+				seen[t] = true
+			}
+		}
 	}
 }
 

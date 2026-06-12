@@ -34,8 +34,8 @@ type checkDef struct {
 	impl         func(CheckContext) CheckResult // registered implementation, nil initially
 }
 
-// checkNameRe validates check names: lowercase letter followed by lowercase letters, digits, or hyphens.
-var checkNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+// identifierRe validates identifier names (check names, tag names): lowercase letter followed by lowercase letters, digits, or hyphens.
+var identifierRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 // knownCheckFields enumerates the allowed fields in a check definition table.
 var knownCheckFields = map[string]bool{
@@ -106,7 +106,7 @@ func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error
 		val := checksMap[name]
 
 		// Validate check name
-		if !checkNameRe.MatchString(name) {
+		if !identifierRe.MatchString(name) {
 			return "", nil, nil, fmt.Errorf("checks.toml: invalid check name %q (must match [a-z][a-z0-9-]*)", name)
 		}
 
