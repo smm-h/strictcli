@@ -116,6 +116,7 @@ SCHEMA_TO_PYTHON: dict[str, str] = {
     "app.global_flags": "flags",  # schema app.global_flags = Python App.flags
     "app.commands": "_commands",  # schema app.commands = Python App._commands
     "app.groups": "_groups",  # schema app.groups = Python App._groups
+    "app.tag_contracts": "_tag_contracts",
 }
 
 # Schema field name -> Go exported field name
@@ -137,6 +138,7 @@ SCHEMA_TO_GO: dict[str, str] = {
     "app.config_path": "configPathOverride",  # Go App.configPathOverride (unexported, set via WithConfigPath())
     "app.config_format": "configFormat",  # Go App.configFormat (unexported, set via WithConfigFormat())
     "app.checks_path": "checksPath",  # Go App.checksPath (unexported, set via WithChecks())
+    "app.tag_contracts": "tagContracts",  # Go App.tagContracts (unexported, set via TagContract())
     "group.commands": "Commands",  # Go Group.Commands (exported)
 }
 
@@ -437,6 +439,7 @@ def check_option_funcs_coverage(
         "WithPassthrough", "WithEnvPrefix", "WithConfig",
         "WithConfigPath", "WithConfigFormat",
         "WithChecks", "WithChecksEmbed",
+        "WithTags",
         "Unique", "EnvSeparator",
     }
     actual = go_fields.get("_option_funcs", set())
@@ -473,6 +476,7 @@ CHECK_RUNNER_TYPES: list[tuple[str, str, dict[str, str]]] = [
 # (python_method, go_method)
 CHECK_RUNNER_APP_METHODS: list[tuple[str, str]] = [
     ("run_checks", "RunChecks"),
+    ("tag_contract", "TagContract"),
 ]
 
 # Module-level (Python) / package-level (Go) functions.
