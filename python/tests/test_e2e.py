@@ -4,8 +4,8 @@ import strictcli
 
 
 def _build_rlsbl_app():
-    """Build a mini rlsbl-like CLI app with commands, groups, tags, and env vars."""
-    auth_tag = strictcli.Tag(
+    """Build a mini rlsbl-like CLI app with commands, groups, flag sets, and env vars."""
+    auth_flag_set = strictcli.FlagSet(
         name="auth",
         flags=[
             strictcli.Flag(
@@ -26,7 +26,7 @@ def _build_rlsbl_app():
     )
 
     # Top-level commands
-    @app.command("status", help="show release status", tags=[auth_tag])
+    @app.command("status", help="show release status", flag_sets=[auth_flag_set])
     def status(token):
         print(f"status: token={'set' if token else 'unset'}")
 
@@ -34,7 +34,7 @@ def _build_rlsbl_app():
         "release",
         help="create a new release",
         args=[strictcli.Arg(name="bump", help="version bump type")],
-        tags=[auth_tag],
+        flag_sets=[auth_flag_set],
     )
     @strictcli.flag("dry-run", type=bool, help="preview without making changes")
     @strictcli.flag("yes", type=bool, help="non-interactive mode")
@@ -264,9 +264,9 @@ def test_e2e_kwargs_handler_defaults():
     assert "replicas=1" in r.stdout
 
 
-def test_e2e_kwargs_handler_with_tags():
-    """Command with **kwargs handler and tags receives tag flag values."""
-    auth_tag = strictcli.Tag(
+def test_e2e_kwargs_handler_with_flag_sets():
+    """Command with **kwargs handler and flag sets receives flag set flag values."""
+    auth_flag_set = strictcli.FlagSet(
         name="auth",
         flags=[
             strictcli.Flag(name="token", type=str, help="auth token", default=""),
@@ -275,7 +275,7 @@ def test_e2e_kwargs_handler_with_tags():
 
     app = strictcli.App(name="kw", version="1.0.0", help="kwargs test app")
 
-    @app.command("push", help="push changes", tags=[auth_tag])
+    @app.command("push", help="push changes", flag_sets=[auth_flag_set])
     def push_handler(**kwargs):
         print(f"token={kwargs['token']}")
         return 0

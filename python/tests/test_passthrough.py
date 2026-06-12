@@ -190,22 +190,22 @@ class TestPassthroughWithArgsRaisesValueError:
             assert "args" in str(e)
 
 
-class TestPassthroughWithTagsRaisesValueError:
-    def test_tags(self):
+class TestPassthroughWithFlagSetsRaisesValueError:
+    def test_flag_sets(self):
         pt = strictcli.Passthrough(handler=lambda n, a, g: 0)
-        tag = strictcli.Tag(
+        flag_set = strictcli.FlagSet(
             name="auth",
             flags=[strictcli.Flag(name="token", type=str, help="token", default="")],
         )
         app = _build_app()
         try:
-            @app.command("exec", help="run", passthrough=pt, tags=[tag])
+            @app.command("exec", help="run", passthrough=pt, flag_sets=[flag_set])
             def exec_cmd(token):
                 pass
             assert False, "should have raised ValueError"
         except ValueError as e:
             assert "passthrough" in str(e)
-            assert "tags" in str(e)
+            assert "flag sets" in str(e)
 
 
 class TestPassthroughWithMutexRaisesValueError:

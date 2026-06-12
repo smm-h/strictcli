@@ -115,14 +115,14 @@ def test_env_prefix_correct():
     assert app._commands["cmd"].flags[0].env == "MYAPP_TARGET"
 
 
-def test_tag_merging():
-    """Command inherits tag flags."""
-    verbose_tag = strictcli.Tag(
+def test_flag_set_merging():
+    """Command inherits flag set flags."""
+    verbose_flag_set = strictcli.FlagSet(
         name="verbose", flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")]
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", tags=[verbose_tag])
+    @app.command("cmd", help="a command", flag_sets=[verbose_flag_set])
     def cmd(verbose):
         pass
 
