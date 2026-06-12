@@ -254,6 +254,11 @@ def _emit_cmd_options(cmd_def: dict, indent: str) -> list[str]:
         inner = ", ".join(dep_exprs)
         opts.append(f"strictcli.WithDependencies({inner})")
 
+    # Tags
+    if cmd_def.get("tags"):
+        tag_args = ", ".join(f'"{t}"' for t in cmd_def["tags"])
+        opts.append(f"strictcli.WithTags({tag_args})")
+
     return opts
 
 
@@ -399,7 +404,11 @@ def generate(app_def: dict) -> str:
     def _emit_group_go(group_def: dict, parent_var: str, indent: str) -> None:
         _go_group_counter[0] += 1
         gvar = f"group_{group_def['name'].replace('-', '_')}_{_go_group_counter[0]}"
-        lines.append(f'{indent}{gvar} := {parent_var}.Group("{group_def["name"]}", "{group_def["help"]}")')
+        tags_arg = ""
+        if group_def.get("tags"):
+            tag_args = ", ".join(f'"{t}"' for t in group_def["tags"])
+            tags_arg = f", {tag_args}"
+        lines.append(f'{indent}{gvar} := {parent_var}.Group("{group_def["name"]}", "{group_def["help"]}"{tags_arg})')
         lines.append("")
         for cmd_def in group_def.get("commands", []):
             if cmd_def.get("deprecated"):
@@ -420,6 +429,12 @@ def generate(app_def: dict) -> str:
             lines.append("")
         else:
             lines.extend(_emit_command_go(cmd_def, "app", "\t", global_flags))
+
+    # Register tag contracts.
+    for tag, contract in app_def.get("tag_contracts", {}).items():
+        lines.append(f'\tapp.TagContract("{tag}", "{contract["requires_flag"]}")')
+    if app_def.get("tag_contracts"):
+        lines.append("")
 
     # Register checks if defined
     if has_checks:
