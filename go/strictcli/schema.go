@@ -107,17 +107,17 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 		m["passthrough"] = true
 	}
 	// flags: default [] (omit when empty)
-	if len(cmd.Flags) > 0 {
-		flags := make([]interface{}, 0, len(cmd.Flags))
-		for _, f := range cmd.Flags {
+	if len(cmd.flags) > 0 {
+		flags := make([]interface{}, 0, len(cmd.flags))
+		for _, f := range cmd.flags {
 			flags = append(flags, serializeFlag(f))
 		}
 		m["flags"] = flags
 	}
 	// args: default [] (omit when empty)
-	if len(cmd.Args) > 0 {
-		args := make([]interface{}, 0, len(cmd.Args))
-		for _, a := range cmd.Args {
+	if len(cmd.args) > 0 {
+		args := make([]interface{}, 0, len(cmd.args))
+		for _, a := range cmd.args {
 			args = append(args, serializeArg(a))
 		}
 		m["args"] = args

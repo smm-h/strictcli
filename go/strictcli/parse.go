@@ -70,8 +70,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	shortLookup := make(map[string]*Flag)   // -x -> Flag
 	negationLookup := make(map[string]*Flag) // --no-flag-name -> Flag
 
-	for i := range cmd.Flags {
-		f := &cmd.Flags[i]
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
 		longLookup["--"+f.Name] = f
 		if f.Short != "" {
 			shortLookup["-"+f.Short] = f
@@ -280,8 +280,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	}
 
 	// Resolve env vars for flags not set by CLI
-	for i := range cmd.Flags {
-		f := &cmd.Flags[i]
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
 		if _, ok := cliSet[f.Name]; ok {
 			continue
 		}
@@ -406,8 +406,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 	// Resolve config values for flags not set by CLI or env
 	if configData != nil {
-		for i := range cmd.Flags {
-			f := &cmd.Flags[i]
+		for i := range cmd.flags {
+			f := &cmd.flags[i]
 			if _, ok := cliSet[f.Name]; ok {
 				continue
 			}
@@ -430,7 +430,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	}
 
 	// Enforce mutex group constraints (before defaults)
-	for _, mg := range cmd.Mutex {
+	for _, mg := range cmd.mutex {
 		var setFlags []string
 		for _, f := range mg.Flags {
 			if _, ok := cliSet[f.Name]; ok {
@@ -450,7 +450,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	}
 
 	// Resolve Implies dependencies (before general dependency validation)
-	for _, dep := range cmd.Dependencies {
+	for _, dep := range cmd.dependencies {
 		if d, ok := dep.(Implies); ok {
 			if _, triggerSet := cliSet[d.Flag]; triggerSet {
 				if targetVal, targetSet := cliSet[d.Implies]; targetSet {
@@ -478,7 +478,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	}
 
 	// Enforce dependency constraints
-	for _, dep := range cmd.Dependencies {
+	for _, dep := range cmd.dependencies {
 		switch d := dep.(type) {
 		case CoRequired:
 			var setFlags []string
@@ -508,15 +508,15 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 	// Build set of flag names belonging to mutex groups
 	mutexFlagNames := make(map[string]bool)
-	for _, mg := range cmd.Mutex {
+	for _, mg := range cmd.mutex {
 		for _, f := range mg.Flags {
 			mutexFlagNames[f.Name] = true
 		}
 	}
 
 	// Apply defaults
-	for i := range cmd.Flags {
-		f := &cmd.Flags[i]
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
 		if _, ok := cliSet[f.Name]; ok {
 			continue
 		}
@@ -542,8 +542,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	}
 
 	// Validate choices
-	for i := range cmd.Flags {
-		f := &cmd.Flags[i]
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
 		if f.Choices == nil {
 			continue
 		}
@@ -575,8 +575,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	}
 
 	// Custom validation
-	for i := range cmd.Flags {
-		f := &cmd.Flags[i]
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
 		if f.Validate == nil {
 			continue
 		}
@@ -604,7 +604,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	// Resolve positional args
 	argValues := make(map[string]interface{})
 	posIdx := 0
-	for _, a := range cmd.Args {
+	for _, a := range cmd.args {
 		if a.IsVariadic {
 			// Collect all remaining positionals
 			remaining := positionals[posIdx:]
@@ -640,11 +640,11 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 	// Build kwargs dict (command flags only)
 	kwargs := make(map[string]interface{})
-	for i := range cmd.Flags {
-		f := &cmd.Flags[i]
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
 		kwargs[flagParamName(f.Name)] = cliSet[f.Name]
 	}
-	for _, a := range cmd.Args {
+	for _, a := range cmd.args {
 		if v, ok := argValues[a.Name]; ok {
 			kwargs[a.Name] = v
 		}

@@ -133,11 +133,11 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 		return strings.Join(lines, "\n")
 	}
 
-	if len(cmd.Args) > 0 {
+	if len(cmd.args) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Arguments:")
 		maxLen := 0
-		for _, a := range cmd.Args {
+		for _, a := range cmd.args {
 			displayName := a.Name
 			if a.IsVariadic {
 				displayName = a.Name + "..."
@@ -146,7 +146,7 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 				maxLen = len(displayName)
 			}
 		}
-		for _, a := range cmd.Args {
+		for _, a := range cmd.args {
 			displayName := a.Name
 			if a.IsVariadic {
 				displayName = a.Name + "..."
@@ -166,7 +166,7 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 
 	// Collect flag names that belong to mutex groups
 	mutexFlagNames := make(map[string]bool)
-	for _, mg := range cmd.Mutex {
+	for _, mg := range cmd.mutex {
 		for _, f := range mg.Flags {
 			mutexFlagNames[f.Name] = true
 		}
@@ -174,7 +174,7 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 
 	// Regular flags (not in any mutex group)
 	var regularFlags []Flag
-	for _, f := range cmd.Flags {
+	for _, f := range cmd.flags {
 		if !mutexFlagNames[f.Name] {
 			regularFlags = append(regularFlags, f)
 		}
@@ -199,7 +199,7 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 	}
 
 	// Mutex groups
-	for _, mg := range cmd.Mutex {
+	for _, mg := range cmd.mutex {
 		lines = append(lines, "")
 		lines = append(lines, "Flags (mutually exclusive):")
 		specs := make([]string, len(mg.Flags))

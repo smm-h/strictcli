@@ -158,7 +158,7 @@ func (a *App) collectAllFlags() []Flag {
 	}
 	for _, name := range a.cmdOrder {
 		cmd := a.commands[name]
-		for _, f := range cmd.Flags {
+		for _, f := range cmd.flags {
 			if !seen[f.Name] {
 				flags = append(flags, f)
 				seen[f.Name] = true
@@ -169,7 +169,7 @@ func (a *App) collectAllFlags() []Flag {
 	collectFromGroup = func(grp *Group) {
 		for _, name := range grp.order {
 			cmd := grp.Commands[name]
-			for _, f := range cmd.Flags {
+			for _, f := range cmd.flags {
 				if !seen[f.Name] {
 					flags = append(flags, f)
 					seen[f.Name] = true

@@ -97,11 +97,11 @@ type Command struct {
 	Name               string
 	Help               string
 	Handler            func(map[string]interface{}) int
-	Flags              []Flag
-	Args               []Arg
-	FlagSets           []FlagSet
-	Mutex              []MutexGroup
-	Dependencies       []Dependency
+	flags              []Flag
+	args               []Arg
+	flagSets           []FlagSet
+	mutex              []MutexGroup
+	dependencies       []Dependency
 	Passthrough        bool
 	PassthroughHandler PassthroughHandler
 }
@@ -329,35 +329,35 @@ type CmdOption func(*Command)
 // WithArgs adds positional arguments to a command.
 func WithArgs(args ...Arg) CmdOption {
 	return func(c *Command) {
-		c.Args = append(c.Args, args...)
+		c.args = append(c.args, args...)
 	}
 }
 
 // WithFlags adds flags to a command.
 func WithFlags(flags ...Flag) CmdOption {
 	return func(c *Command) {
-		c.Flags = append(c.Flags, flags...)
+		c.flags = append(c.flags, flags...)
 	}
 }
 
 // WithFlagSets adds flag sets (reusable flag bundles) to a command.
 func WithFlagSets(flagSets ...FlagSet) CmdOption {
 	return func(c *Command) {
-		c.FlagSets = append(c.FlagSets, flagSets...)
+		c.flagSets = append(c.flagSets, flagSets...)
 	}
 }
 
 // WithMutex adds mutex groups to a command.
 func WithMutex(groups ...MutexGroup) CmdOption {
 	return func(c *Command) {
-		c.Mutex = append(c.Mutex, groups...)
+		c.mutex = append(c.mutex, groups...)
 	}
 }
 
 // WithDependencies adds dependency constraints to a command.
 func WithDependencies(deps ...Dependency) CmdOption {
 	return func(c *Command) {
-		c.Dependencies = append(c.Dependencies, deps...)
+		c.dependencies = append(c.dependencies, deps...)
 	}
 }
 
@@ -734,18 +734,18 @@ func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ..
 		opt(cmd)
 	}
 	// Passthrough commands cannot have flags, args, flag sets, or mutex
-	if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.FlagSets) > 0 || len(cmd.Mutex) > 0 {
+	if len(cmd.flags) > 0 || len(cmd.args) > 0 || len(cmd.flagSets) > 0 || len(cmd.mutex) > 0 {
 		var parts []string
-		if len(cmd.Flags) > 0 {
+		if len(cmd.flags) > 0 {
 			parts = append(parts, "flags")
 		}
-		if len(cmd.Args) > 0 {
+		if len(cmd.args) > 0 {
 			parts = append(parts, "args")
 		}
-		if len(cmd.FlagSets) > 0 {
+		if len(cmd.flagSets) > 0 {
 			parts = append(parts, "flag sets")
 		}
-		if len(cmd.Mutex) > 0 {
+		if len(cmd.mutex) > 0 {
 			parts = append(parts, "mutex groups")
 		}
 		panic(fmt.Sprintf("command %q: passthrough commands cannot have %s", name, strings.Join(parts, ", ")))
@@ -1538,18 +1538,18 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 
 	// Passthrough commands cannot have flags, args, flag sets, or mutex
 	if cmd.Passthrough {
-		if len(cmd.Flags) > 0 || len(cmd.Args) > 0 || len(cmd.FlagSets) > 0 || len(cmd.Mutex) > 0 {
+		if len(cmd.flags) > 0 || len(cmd.args) > 0 || len(cmd.flagSets) > 0 || len(cmd.mutex) > 0 {
 			var parts []string
-			if len(cmd.Flags) > 0 {
+			if len(cmd.flags) > 0 {
 				parts = append(parts, "flags")
 			}
-			if len(cmd.Args) > 0 {
+			if len(cmd.args) > 0 {
 				parts = append(parts, "args")
 			}
-			if len(cmd.FlagSets) > 0 {
+			if len(cmd.flagSets) > 0 {
 				parts = append(parts, "flag sets")
 			}
-			if len(cmd.Mutex) > 0 {
+			if len(cmd.mutex) > 0 {
 				parts = append(parts, "mutex groups")
 			}
 			panic(fmt.Sprintf("command %q: passthrough commands cannot have %s", name, strings.Join(parts, ", ")))
@@ -1558,15 +1558,15 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 	}
 
 	// Merge flag set flags and mutex flags into a unified all-flags list for validation
-	allFlags := make([]Flag, 0, len(cmd.Flags))
-	allFlags = append(allFlags, cmd.Flags...)
-	for _, fs := range cmd.FlagSets {
+	allFlags := make([]Flag, 0, len(cmd.flags))
+	allFlags = append(allFlags, cmd.flags...)
+	for _, fs := range cmd.flagSets {
 		allFlags = append(allFlags, fs.Flags...)
 	}
 
 	// Validate mutex groups
 	mutexFlagNames := make(map[string]bool)
-	for _, mg := range cmd.Mutex {
+	for _, mg := range cmd.mutex {
 		if len(mg.Flags) < 2 {
 			panic(fmt.Sprintf("command %q: mutex group must have at least 2 flags, got %d", name, len(mg.Flags)))
 		}
@@ -1597,7 +1597,7 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 
 	// Check duplicate arg names
 	seenArgs := make(map[string]bool)
-	for _, a := range cmd.Args {
+	for _, a := range cmd.args {
 		if seenArgs[a.Name] {
 			panic(fmt.Sprintf("command %q: duplicate arg name %q", name, a.Name))
 		}
@@ -1606,7 +1606,7 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 
 	// Validate variadic args: first check count, then check position
 	variadicCount := 0
-	for _, a := range cmd.Args {
+	for _, a := range cmd.args {
 		if a.IsVariadic {
 			variadicCount++
 		}
@@ -1614,8 +1614,8 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 	if variadicCount > 1 {
 		panic(fmt.Sprintf("command %q: at most one variadic arg is allowed", name))
 	}
-	for i, a := range cmd.Args {
-		if a.IsVariadic && i != len(cmd.Args)-1 {
+	for i, a := range cmd.args {
+		if a.IsVariadic && i != len(cmd.args)-1 {
 			panic(fmt.Sprintf("command %q: variadic arg %q must be the last arg", name, a.Name))
 		}
 	}
@@ -1643,7 +1643,7 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 	}
 
 	// Validate dependencies
-	for _, dep := range cmd.Dependencies {
+	for _, dep := range cmd.dependencies {
 		switch d := dep.(type) {
 		case CoRequired:
 			if len(d.Flags) < 2 {
@@ -1699,7 +1699,7 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 	}
 
 	// Store the resolved allFlags on the command for parsing
-	cmd.Flags = allFlags
+	cmd.flags = allFlags
 
 	return cmd
 }
