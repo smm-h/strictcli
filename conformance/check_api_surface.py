@@ -155,7 +155,7 @@ def get_python_fields() -> dict[str, set[str]]:
 
     result: dict[str, set[str]] = {}
     for cls in [
-        strictcli.Flag, strictcli.Arg, strictcli.Tag,
+        strictcli.Flag, strictcli.Arg, strictcli.FlagSet,
         strictcli.MutexGroup, strictcli.CoRequired, strictcli.Requires,
         strictcli.App, strictcli.Group,
         Command,
@@ -249,7 +249,7 @@ def get_schema_fields() -> dict[str, set[str]]:
 ENTITY_MAP: list[tuple[str, str, str]] = [
     ("flag", "Flag", "Flag"),
     ("arg", "Arg", "Arg"),
-    ("tag", "Tag", "Tag"),
+    ("flag_set", "FlagSet", "FlagSet"),
     ("mutex_group", "MutexGroup", "MutexGroup"),
     ("co_required", "CoRequired", "CoRequired"),
     ("requires", "Requires", "Requires"),
@@ -433,7 +433,7 @@ def check_option_funcs_coverage(
         "Short", "Default", "Env", "Prefixed", "Choices", "Repeatable",
         "ValidateFn", "NegatableOpt",
         "ArgRequired", "ArgDefault", "Variadic",
-        "WithArgs", "WithFlags", "WithTags", "WithMutex", "WithDependencies",
+        "WithArgs", "WithFlags", "WithFlagSets", "WithMutex", "WithDependencies",
         "WithPassthrough", "WithEnvPrefix", "WithConfig",
         "WithConfigPath", "WithConfigFormat",
         "WithChecks", "WithChecksEmbed",

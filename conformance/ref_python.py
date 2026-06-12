@@ -70,13 +70,13 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
     return f"{indent}strictcli.Flag({', '.join(parts)})"
 
 
-def _emit_tag(tag_def: dict, indent: str = "") -> str:
-    """Emit a strictcli.Tag(...) expression."""
-    flag_lines = [_emit_flag(f, indent + "        ") for f in tag_def["flags"]]
+def _emit_flag_set(fs_def: dict, indent: str = "") -> str:
+    """Emit a strictcli.FlagSet(...) expression."""
+    flag_lines = [_emit_flag(f, indent + "        ") for f in fs_def["flags"]]
     flags_str = ",\n".join(flag_lines)
     return (
-        f"{indent}strictcli.Tag(\n"
-        f"{indent}    name={tag_def['name']!r},\n"
+        f"{indent}strictcli.FlagSet(\n"
+        f"{indent}    name={fs_def['name']!r},\n"
         f"{indent}    flags=[\n"
         f"{flags_str},\n"
         f"{indent}    ],\n"
@@ -103,11 +103,11 @@ def _collect_params(cmd_def: dict, global_flags: list[dict] | None = None) -> li
     # Global flags (passed as kwargs to all handlers)
     for f in (global_flags or []):
         params.append(_flag_param(f["name"]))
-    # Flags from direct flags, tags, and mutex groups
+    # Flags from direct flags, flag sets, and mutex groups
     for f in cmd_def.get("flags", []):
         params.append(_flag_param(f["name"]))
-    for tag in cmd_def.get("tags", []):
-        for f in tag["flags"]:
+    for fs in cmd_def.get("flag_sets", []):
+        for f in fs["flags"]:
             params.append(_flag_param(f["name"]))
     for mg in cmd_def.get("mutex", []):
         for f in mg["flags"]:
@@ -119,11 +119,11 @@ def _collect_params(cmd_def: dict, global_flags: list[dict] | None = None) -> li
 
 
 def _collect_all_flag_defs(cmd_def: dict, global_flags: list[dict] | None = None) -> list[dict]:
-    """Collect all flag definitions (global, direct, from tags, from mutex)."""
+    """Collect all flag definitions (global, direct, from flag sets, from mutex)."""
     flags = list(global_flags or [])
     flags.extend(cmd_def.get("flags", []))
-    for tag in cmd_def.get("tags", []):
-        flags.extend(tag["flags"])
+    for fs in cmd_def.get("flag_sets", []):
+        flags.extend(fs["flags"])
     for mg in cmd_def.get("mutex", []):
         flags.extend(mg["flags"])
     return flags
@@ -230,7 +230,7 @@ def _emit_command_registration(
         lines.append(f"{indent}    {cmd_def['name']!r},")
         lines.append(f"{indent}    help={cmd_def['help']!r},")
 
-        # If the test case also specifies flags/args/tags/mutex (registration error tests),
+        # If the test case also specifies flags/args/flag_sets/mutex (registration error tests),
         # include them so the error is triggered
         if cmd_def.get("args"):
             arg_exprs = []
@@ -247,10 +247,10 @@ def _emit_command_registration(
                 f"{indent}    args=[{', '.join(arg_exprs)}],"
             )
 
-        if cmd_def.get("tags"):
-            tag_exprs = [_emit_tag(t, indent + "        ") for t in cmd_def["tags"]]
-            lines.append(f"{indent}    tags=[")
-            for te in tag_exprs:
+        if cmd_def.get("flag_sets"):
+            fs_exprs = [_emit_flag_set(t, indent + "        ") for t in cmd_def["flag_sets"]]
+            lines.append(f"{indent}    flag_sets=[")
+            for te in fs_exprs:
                 lines.append(f"{te},")
             lines.append(f"{indent}    ],")
 
@@ -326,11 +326,11 @@ def _emit_command_registration(
             f"{indent}    args=[{', '.join(arg_exprs)}],"
         )
 
-    # tags
-    if cmd_def.get("tags"):
-        tag_exprs = [_emit_tag(t, indent + "        ") for t in cmd_def["tags"]]
-        decorator_parts.append(f"{indent}    tags=[")
-        for te in tag_exprs:
+    # flag sets
+    if cmd_def.get("flag_sets"):
+        fs_exprs = [_emit_flag_set(t, indent + "        ") for t in cmd_def["flag_sets"]]
+        decorator_parts.append(f"{indent}    flag_sets=[")
+        for te in fs_exprs:
             decorator_parts.append(f"{te},")
         decorator_parts.append(f"{indent}    ],")
 

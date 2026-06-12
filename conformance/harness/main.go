@@ -295,16 +295,16 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 		opts = append(opts, strictcli.WithFlags(flagList...))
 	}
 
-	// Tags.
-	if tags, ok := cmdDef["tags"]; ok {
-		for _, t := range tags.([]interface{}) {
+	// Flag sets.
+	if flagSets, ok := cmdDef["flag_sets"]; ok {
+		for _, t := range flagSets.([]interface{}) {
 			td := t.(map[string]interface{})
-			tagName := td["name"].(string)
-			var tagFlags []strictcli.Flag
+			fsName := td["name"].(string)
+			var fsFlags []strictcli.Flag
 			for _, f := range td["flags"].([]interface{}) {
-				tagFlags = append(tagFlags, buildFlag(f.(map[string]interface{})))
+				fsFlags = append(fsFlags, buildFlag(f.(map[string]interface{})))
 			}
-			opts = append(opts, strictcli.WithTags(strictcli.Tag{Name: tagName, Flags: tagFlags}))
+			opts = append(opts, strictcli.WithFlagSets(strictcli.FlagSet{Name: fsName, Flags: fsFlags}))
 		}
 	}
 
@@ -351,7 +351,7 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 	return opts
 }
 
-// collectAllFlagDefs gathers all flag definitions for a command (global + direct + tags + mutex).
+// collectAllFlagDefs gathers all flag definitions for a command (global + direct + flag sets + mutex).
 func collectAllFlagDefs(cmdDef map[string]interface{}, globalFlags []map[string]interface{}) []map[string]interface{} {
 	var all []map[string]interface{}
 
@@ -365,9 +365,9 @@ func collectAllFlagDefs(cmdDef map[string]interface{}, globalFlags []map[string]
 		}
 	}
 
-	// Tag flags.
-	if tags, ok := cmdDef["tags"]; ok {
-		for _, t := range tags.([]interface{}) {
+	// Flag set flags.
+	if flagSets, ok := cmdDef["flag_sets"]; ok {
+		for _, t := range flagSets.([]interface{}) {
 			td := t.(map[string]interface{})
 			for _, f := range td["flags"].([]interface{}) {
 				all = append(all, f.(map[string]interface{}))

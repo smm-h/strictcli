@@ -109,11 +109,11 @@ def _emit_arg(arg_def: dict) -> str:
 
 
 def _collect_all_flag_defs(cmd_def: dict, global_flags: list[dict] | None = None) -> list[dict]:
-    """Collect all flag definitions (global, direct, from tags, from mutex)."""
+    """Collect all flag definitions (global, direct, from flag sets, from mutex)."""
     flags = list(global_flags or [])
     flags.extend(cmd_def.get("flags", []))
-    for tag in cmd_def.get("tags", []):
-        flags.extend(tag["flags"])
+    for fs in cmd_def.get("flag_sets", []):
+        flags.extend(fs["flags"])
     for mg in cmd_def.get("mutex", []):
         flags.extend(mg["flags"])
     return flags
@@ -221,12 +221,12 @@ def _emit_cmd_options(cmd_def: dict, indent: str) -> list[str]:
         inner = ", ".join(flag_exprs)
         opts.append(f"strictcli.WithFlags({inner})")
 
-    # Tags
-    if cmd_def.get("tags"):
-        for tag in cmd_def["tags"]:
-            flag_exprs = [_emit_flag(f) for f in tag["flags"]]
+    # Flag sets
+    if cmd_def.get("flag_sets"):
+        for fs in cmd_def["flag_sets"]:
+            flag_exprs = [_emit_flag(f) for f in fs["flags"]]
             inner = ", ".join(flag_exprs)
-            opts.append(f'strictcli.WithTags(strictcli.Tag{{Name: "{tag["name"]}", Flags: []strictcli.Flag{{{inner}}}}})')
+            opts.append(f'strictcli.WithFlagSets(strictcli.FlagSet{{Name: "{fs["name"]}", Flags: []strictcli.Flag{{{inner}}}}})')
 
     # Mutex groups
     if cmd_def.get("mutex"):
@@ -301,7 +301,7 @@ def _emit_command_go(
             lines.append(f'{indent}\tfmt.Printf("%s:%s\\n", name, strings.Join(args, ","))')
         lines.append(f'{indent}\treturn {exit_code}')
         lines.append(f'{indent}}}')
-        # Build CmdOptions: WithPassthrough first, then any flags/args/tags/mutex opts
+        # Build CmdOptions: WithPassthrough first, then any flags/args/flag_sets/mutex opts
         pt_opts = [f"strictcli.WithPassthrough({handler_var})"]
         pt_opts.extend(_emit_cmd_options(cmd_def, indent + "\t"))
         lines.append(f'{indent}{target}.Command("{cmd_def["name"]}", "{cmd_def["help"]}", nil, {", ".join(pt_opts)})')

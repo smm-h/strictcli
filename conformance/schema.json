@@ -147,7 +147,7 @@
         "deprecated": {
           "type": "boolean",
           "default": false,
-          "description": "If true, this is a deprecated command. It must have deprecated_message and must NOT have handler_prints, handler_exit_code, flags, args, tags, mutex, dependencies, passthrough, or passthrough_handler_prints."
+          "description": "If true, this is a deprecated command. It must have deprecated_message and must NOT have handler_prints, handler_exit_code, flags, args, flag_sets, mutex, dependencies, passthrough, or passthrough_handler_prints."
         },
         "deprecated_message": {
           "type": "string",
@@ -179,9 +179,9 @@
           "type": "array",
           "items": { "$ref": "#/$defs/flag" }
         },
-        "tags": {
+        "flag_sets": {
           "type": "array",
-          "items": { "$ref": "#/$defs/tag" }
+          "items": { "$ref": "#/$defs/flag_set" }
         },
         "mutex": {
           "type": "array",
@@ -207,7 +207,7 @@
           "handler_exit_code": false,
           "flags": false,
           "args": false,
-          "tags": false,
+          "flag_sets": false,
           "mutex": false,
           "dependencies": false,
           "passthrough": false,
@@ -284,7 +284,7 @@
         }
       }
     },
-    "tag": {
+    "flag_set": {
       "type": "object",
       "required": ["name", "flags"],
       "additionalProperties": false,
