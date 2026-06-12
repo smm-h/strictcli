@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"path/filepath"
 	"strings"
 )
@@ -122,6 +123,17 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 		}
 		m["args"] = args
 	}
+	// tags: default [] (omit when empty)
+	if len(cmd.tags) > 0 {
+		sorted := make([]string, len(cmd.tags))
+		copy(sorted, cmd.tags)
+		sort.Strings(sorted)
+		tags := make([]interface{}, len(sorted))
+		for i, t := range sorted {
+			tags[i] = t
+		}
+		m["tags"] = tags
+	}
 	return m
 }
 
@@ -155,6 +167,17 @@ func serializeGroup(grp *Group) map[string]interface{} {
 			deprecated[name] = msg
 		}
 		m["deprecated"] = deprecated
+	}
+	// tags: default [] (omit when empty) — own tags only, not accumulated
+	if len(grp.tags) > 0 {
+		sorted := make([]string, len(grp.tags))
+		copy(sorted, grp.tags)
+		sort.Strings(sorted)
+		tags := make([]interface{}, len(sorted))
+		for i, t := range sorted {
+			tags[i] = t
+		}
+		m["tags"] = tags
 	}
 	return m
 }
@@ -190,11 +213,13 @@ func buildSchemaDefaults() map[string]interface{} {
 			"passthrough": false,
 			"flags":       []interface{}{},
 			"args":        []interface{}{},
+			"tags":        []interface{}{},
 		},
 		"group": map[string]interface{}{
 			"commands":   map[string]interface{}{},
 			"groups":     map[string]interface{}{},
 			"deprecated": map[string]interface{}{},
+			"tags":       []interface{}{},
 		},
 	}
 }
