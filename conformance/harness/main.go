@@ -88,6 +88,14 @@ func main() {
 		}
 	}
 
+	// Register tag contracts.
+	if tc, ok := appDef["tag_contracts"]; ok {
+		for tag, contract := range tc.(map[string]interface{}) {
+			cd := contract.(map[string]interface{})
+			app.TagContract(tag, cd["requires_flag"].(string))
+		}
+	}
+
 	// Register checks.
 	if _, ok := appDef["checks_toml"]; ok {
 		if checks, ok := appDef["checks"]; ok {
@@ -348,6 +356,15 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 		opts = append(opts, strictcli.WithDependencies(depList...))
 	}
 
+	// Tags.
+	if tags, ok := cmdDef["tags"]; ok {
+		var tagList []string
+		for _, t := range tags.([]interface{}) {
+			tagList = append(tagList, t.(string))
+		}
+		opts = append(opts, strictcli.WithTags(tagList...))
+	}
+
 	return opts
 }
 
@@ -563,7 +580,13 @@ func registerCommand(cmdDef map[string]interface{}, t target, globalFlags []map[
 func buildGroup(groupDef map[string]interface{}, app *strictcli.App, globalFlags []map[string]interface{}) {
 	name := groupDef["name"].(string)
 	help := groupDef["help"].(string)
-	group := app.Group(name, help)
+	var tags []string
+	if t, ok := groupDef["tags"]; ok {
+		for _, item := range t.([]interface{}) {
+			tags = append(tags, item.(string))
+		}
+	}
+	group := app.Group(name, help, tags...)
 	populateGroup(groupDef, group, globalFlags)
 }
 
@@ -571,7 +594,13 @@ func buildGroup(groupDef map[string]interface{}, app *strictcli.App, globalFlags
 func buildSubGroup(groupDef map[string]interface{}, parent *strictcli.Group, globalFlags []map[string]interface{}) {
 	name := groupDef["name"].(string)
 	help := groupDef["help"].(string)
-	group := parent.Group(name, help)
+	var tags []string
+	if t, ok := groupDef["tags"]; ok {
+		for _, item := range t.([]interface{}) {
+			tags = append(tags, item.(string))
+		}
+	}
+	group := parent.Group(name, help, tags...)
 	populateGroup(groupDef, group, globalFlags)
 }
 
