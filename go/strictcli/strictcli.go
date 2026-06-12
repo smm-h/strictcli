@@ -115,11 +115,13 @@ type deprecatedCmd struct {
 
 // Group is a container for nested commands and subgroups (arbitrary depth).
 type Group struct {
-	Name      string
-	Help      string
-	Commands  map[string]*Command
-	Groups    map[string]*Group
-	envPrefix string
+	Name            string
+	Help            string
+	Commands        map[string]*Command
+	Groups          map[string]*Group
+	tags            []string
+	accumulatedTags []string // own tags union all ancestor tags; passed as inheritedTags to children
+	envPrefix       string
 
 	// globalFlags is a reference to the app's global flags for collision checking
 	globalFlags []Flag
@@ -384,6 +386,45 @@ func WithTags(tags ...string) CmdOption {
 			}
 		}
 	}
+}
+
+// validateAndDedup validates tag names and removes duplicates, preserving order.
+func validateAndDedup(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(tags))
+	for _, t := range tags {
+		if !identifierRe.MatchString(t) {
+			panic(fmt.Sprintf("invalid tag name %q: must match [a-z][a-z0-9-]*", t))
+		}
+		if !seen[t] {
+			result = append(result, t)
+			seen[t] = true
+		}
+	}
+	return result
+}
+
+// mergeTags merges two tag slices, deduplicates, and sorts.
+func mergeTags(a, b []string) []string {
+	seen := make(map[string]bool)
+	for _, t := range a {
+		seen[t] = true
+	}
+	for _, t := range b {
+		seen[t] = true
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(seen))
+	for t := range seen {
+		result = append(result, t)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // --- Flag constructors ---
@@ -730,7 +771,7 @@ func (a *App) validateCheckRegistrations() string {
 
 // Command registers a top-level command.
 func (a *App) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
-	cmd := buildAndValidateCommand(name, help, handler, a.EnvPrefix, a.globalFlags, opts)
+	cmd := buildAndValidateCommand(name, help, handler, a.EnvPrefix, a.globalFlags, nil, opts)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
@@ -767,6 +808,7 @@ func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ..
 		}
 		panic(fmt.Sprintf("command %q: passthrough commands cannot have %s", name, strings.Join(parts, ", ")))
 	}
+	cmd.tags = mergeTags(nil, cmd.tags)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
@@ -783,18 +825,21 @@ func (a *App) GlobalFlag(f Flag) {
 }
 
 // Group creates and registers a command group.
-func (a *App) Group(name, help string) *Group {
+func (a *App) Group(name, help string, tags ...string) *Group {
 	if strings.TrimSpace(help) == "" {
 		panic("Group.help must be a non-empty string")
 	}
+	validTags := validateAndDedup(tags)
 	grp := &Group{
-		Name:          name,
-		Help:          help,
-		Commands:      make(map[string]*Command),
-		Groups:        make(map[string]*Group),
-		envPrefix:     a.EnvPrefix,
-		globalFlags:   a.globalFlags,
-		deprecatedMap: make(map[string]string),
+		Name:            name,
+		Help:            help,
+		Commands:        make(map[string]*Command),
+		Groups:          make(map[string]*Group),
+		tags:            validTags,
+		accumulatedTags: validTags,
+		envPrefix:       a.EnvPrefix,
+		globalFlags:     a.globalFlags,
+		deprecatedMap:   make(map[string]string),
 	}
 	a.groups[name] = grp
 	a.groupOrder = append(a.groupOrder, name)
@@ -802,7 +847,7 @@ func (a *App) Group(name, help string) *Group {
 }
 
 // Group creates and registers a child subgroup.
-func (g *Group) Group(name, help string) *Group {
+func (g *Group) Group(name, help string, tags ...string) *Group {
 	if strings.TrimSpace(help) == "" {
 		panic("Group.help must be a non-empty string")
 	}
@@ -812,14 +857,18 @@ func (g *Group) Group(name, help string) *Group {
 	if _, ok := g.Groups[name]; ok {
 		panic(fmt.Sprintf("group %q is already registered", name))
 	}
+	validTags := validateAndDedup(tags)
+	accumulated := mergeTags(g.accumulatedTags, validTags)
 	sub := &Group{
-		Name:          name,
-		Help:          help,
-		Commands:      make(map[string]*Command),
-		Groups:        make(map[string]*Group),
-		envPrefix:     g.envPrefix,
-		globalFlags:   g.globalFlags,
-		deprecatedMap: make(map[string]string),
+		Name:            name,
+		Help:            help,
+		Commands:        make(map[string]*Command),
+		Groups:          make(map[string]*Group),
+		tags:            validTags,
+		accumulatedTags: accumulated,
+		envPrefix:       g.envPrefix,
+		globalFlags:     g.globalFlags,
+		deprecatedMap:   make(map[string]string),
 	}
 	g.Groups[name] = sub
 	g.groupOrder = append(g.groupOrder, name)
@@ -831,7 +880,7 @@ func (g *Group) Command(name, help string, handler func(map[string]interface{}) 
 	if _, ok := g.Groups[name]; ok {
 		panic(fmt.Sprintf("command %q collides with an existing group", name))
 	}
-	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, opts)
+	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
 }
@@ -1539,7 +1588,7 @@ func parseGlobalFlagValue(f *Flag, raw string, stdinConsumedBy **string) (interf
 }
 
 // buildAndValidateCommand creates and validates a Command.
-func buildAndValidateCommand(name, help string, handler func(map[string]interface{}) int, envPrefix string, globalFlags []Flag, opts []CmdOption) *Command {
+func buildAndValidateCommand(name, help string, handler func(map[string]interface{}) int, envPrefix string, globalFlags []Flag, inheritedTags []string, opts []CmdOption) *Command {
 	if strings.TrimSpace(help) == "" {
 		panic(fmt.Sprintf("command %q: missing help text", name))
 	}
@@ -1571,6 +1620,7 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 			}
 			panic(fmt.Sprintf("command %q: passthrough commands cannot have %s", name, strings.Join(parts, ", ")))
 		}
+		cmd.tags = mergeTags(inheritedTags, cmd.tags)
 		return cmd
 	}
 
@@ -1717,6 +1767,8 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 
 	// Store the resolved allFlags on the command for parsing
 	cmd.flags = allFlags
+
+	cmd.tags = mergeTags(inheritedTags, cmd.tags)
 
 	return cmd
 }
