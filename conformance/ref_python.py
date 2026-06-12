@@ -278,6 +278,9 @@ def _emit_command_registration(
                     )
             lines.append(f"{indent}    dependencies=[{', '.join(dep_exprs)}],")
 
+        if cmd_def.get("tags"):
+            tag_set = ", ".join(repr(t) for t in cmd_def["tags"])
+            lines.append(f"{indent}    tags={{{tag_set}}},")
         lines.append(f"{indent}    passthrough=strictcli.Passthrough(handler={handler_name}),")
         lines.append(f"{indent})")
 
@@ -359,6 +362,11 @@ def _emit_command_registration(
                     f"strictcli.Implies(flag={dep['flag']!r}, implies={dep['implies']!r}, value={val})"
                 )
         decorator_parts.append(f"{indent}    dependencies=[{', '.join(dep_exprs)}],")
+
+    # tags
+    if cmd_def.get("tags"):
+        tag_set = ", ".join(repr(t) for t in cmd_def["tags"])
+        decorator_parts.append(f"{indent}    tags={{{tag_set}}},")
 
     decorator_parts.append(f"{indent})")
 
@@ -509,8 +517,12 @@ def generate(app_def: dict) -> str:
     # Register groups first (recursive helper for nested groups)
     def _emit_group(group_def: dict, parent_var: str, indent: str) -> None:
         gvar = f"group_{group_def['name'].replace('-', '_')}"
+        tags_arg = ""
+        if group_def.get("tags"):
+            tag_set = ", ".join(repr(t) for t in group_def["tags"])
+            tags_arg = f", tags={{{tag_set}}}"
         lines.append(
-            f"{indent}{gvar} = {parent_var}.group({group_def['name']!r}, help={group_def['help']!r})"
+            f"{indent}{gvar} = {parent_var}.group({group_def['name']!r}, help={group_def['help']!r}{tags_arg})"
         )
         lines.append("")
         for cmd_def in group_def.get("commands", []):
@@ -540,6 +552,12 @@ def generate(app_def: dict) -> str:
             lines.append(textwrap.indent(_emit_command_registration(
                 cmd_def, "app", global_flags=global_flags,
             ), "    "))
+
+    # Register tag contracts
+    for tag, contract in app_def.get("tag_contracts", {}).items():
+        lines.append(f"    app.tag_contract({tag!r}, requires_flag={contract['requires_flag']!r})")
+    if app_def.get("tag_contracts"):
+        lines.append("")
 
     # Register checks if defined
     if has_checks:
