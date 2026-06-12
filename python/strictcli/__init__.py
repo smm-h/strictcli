@@ -813,6 +813,7 @@ class Group:
         mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
+        tags: set[str] | None = None,
     ) -> Callable:
         """Decorator to register a command within this group."""
 
@@ -827,6 +828,8 @@ class Group:
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
+                tags=tags,
+                inherited_tags=None,
             )
             self.commands[name] = cmd
             return func
@@ -1148,6 +1151,7 @@ class App:
         mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
+        tags: set[str] | None = None,
     ) -> Callable:
         """Decorator to register a top-level command."""
 
@@ -1163,6 +1167,8 @@ class App:
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
+                tags=tags,
+                inherited_tags=None,
             )
             self._commands[name] = cmd
             return func
@@ -2494,10 +2500,14 @@ def _build_and_validate_command(
     global_flags: list[Flag] | None = None,
     passthrough: Passthrough | None = None,
     extra_flags: list[Flag] | None = None,
+    tags: set[str] | None = None,
+    inherited_tags: frozenset[str] | None = None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
         raise ValueError(f'command "{name}": missing help text')
+
+    effective_tags = (inherited_tags or frozenset()) | frozenset(tags or set())
 
     # Passthrough commands must not have flags, args, flag sets, or mutex groups
     if passthrough is not None:
@@ -2526,6 +2536,7 @@ def _build_and_validate_command(
             help=help,
             handler=None,
             passthrough=passthrough,
+            tags=effective_tags,
         )
 
     # Collect flags attached by @strictcli.flag decorators
@@ -2752,6 +2763,7 @@ def _build_and_validate_command(
         flag_sets=tuple(resolved_flag_sets),
         mutex=tuple(resolved_mutex),
         dependencies=tuple(resolved_dependencies),
+        tags=effective_tags,
     )
 
 
