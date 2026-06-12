@@ -5,7 +5,7 @@ from __future__ import annotations
 __version__ = "0.18.0"
 
 __all__ = [
-    "App", "Flag", "Arg", "Tag", "MutexGroup", "CoRequired", "Requires",
+    "App", "Flag", "Arg", "FlagSet", "MutexGroup", "CoRequired", "Requires",
     "Implies", "Passthrough", "DeprecatedCommand", "Result", "flag", "arg",
     "CheckResult", "CheckContext", "CheckRunResult",
     "format_check_results", "format_check_results_json",
@@ -677,7 +677,7 @@ class Arg:
 
 
 @dataclass
-class Tag:
+class FlagSet:
     """A reusable bundle of flags."""
 
     name: str
@@ -740,7 +740,7 @@ class Command:
     handler: Callable | None
     flags: list[Flag] = field(default_factory=list)
     args: list[Arg] = field(default_factory=list)
-    tags: list[Tag] = field(default_factory=list)
+    flag_sets: list[FlagSet] = field(default_factory=list)
     mutex: list[MutexGroup] = field(default_factory=list)
     dependencies: list[CoRequired | Requires | Implies] = field(default_factory=list)
     passthrough: Passthrough | None = None
@@ -805,7 +805,7 @@ class Group:
         *,
         help: str,
         args: list[Arg] | None = None,
-        tags: list[Tag] | None = None,
+        flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
@@ -818,7 +818,7 @@ class Group:
                     f'command "{name}" collides with an existing group'
                 )
             cmd = _build_and_validate_command(
-                name, help=help, handler=func, args=args, tags=tags, mutex=mutex,
+                name, help=help, handler=func, args=args, flag_sets=flag_sets, mutex=mutex,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
@@ -1124,7 +1124,7 @@ class App:
             help="Run project checks",
             handler=_check_handler,
             args=None,
-            tags=None,
+            flag_sets=None,
             mutex=None,
             dependencies=None,
             env_prefix=self.env_prefix,
@@ -1140,7 +1140,7 @@ class App:
         *,
         help: str,
         args: list[Arg] | None = None,
-        tags: list[Tag] | None = None,
+        flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
@@ -1153,7 +1153,7 @@ class App:
                 help=help,
                 handler=func,
                 args=args,
-                tags=tags,
+                flag_sets=flag_sets,
                 mutex=mutex,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
@@ -2483,7 +2483,7 @@ def _build_and_validate_command(
     help: str,
     handler: Callable,
     args: list[Arg] | None,
-    tags: list[Tag] | None,
+    flag_sets: list[FlagSet] | None,
     mutex: list[MutexGroup] | None,
     dependencies: list[CoRequired | Requires | Implies] | None = None,
     env_prefix: str | None,
@@ -2495,22 +2495,22 @@ def _build_and_validate_command(
     if not help or not help.strip():
         raise ValueError(f'command "{name}": missing help text')
 
-    # Passthrough commands must not have flags, args, tags, or mutex groups
+    # Passthrough commands must not have flags, args, flag sets, or mutex groups
     if passthrough is not None:
         decorator_flags = list(getattr(handler, "_strictcli_flags", []))
         decorator_args = list(getattr(handler, "_strictcli_args", []))
         has_flags = bool(decorator_flags)
         has_args = bool(args) or bool(decorator_args)
-        has_tags = bool(tags)
+        has_flag_sets = bool(flag_sets)
         has_mutex = bool(mutex)
-        if has_flags or has_args or has_tags or has_mutex:
+        if has_flags or has_args or has_flag_sets or has_mutex:
             parts = []
             if has_flags:
                 parts.append("flags")
             if has_args:
                 parts.append("args")
-            if has_tags:
-                parts.append("tags")
+            if has_flag_sets:
+                parts.append("flag sets")
             if has_mutex:
                 parts.append("mutex groups")
             raise ValueError(
@@ -2535,11 +2535,11 @@ def _build_and_validate_command(
     all_args = list(args) if args else []
     all_args.extend(decorator_args)
 
-    # Merge tags into flags
-    resolved_tags = list(tags) if tags else []
-    tag_flags: list[Flag] = []
-    for tag in resolved_tags:
-        tag_flags.extend(tag.flags)
+    # Merge flag sets into flags
+    resolved_flag_sets = list(flag_sets) if flag_sets else []
+    flag_set_flags: list[Flag] = []
+    for flag_set in resolved_flag_sets:
+        flag_set_flags.extend(flag_set.flags)
 
     # Resolve mutex groups and merge their flags
     resolved_mutex = list(mutex) if mutex else []
@@ -2563,13 +2563,13 @@ def _build_and_validate_command(
                 )
             mutex_flag_names.add(f.name)
 
-    # All flags: decorator flags + tag flags + mutex flags + extra flags
-    all_flags = decorator_flags + tag_flags + mutex_flags
+    # All flags: decorator flags + flag set flags + mutex flags + extra flags
+    all_flags = decorator_flags + flag_set_flags + mutex_flags
     if extra_flags:
         all_flags.extend(extra_flags)
 
     # Validate: no duplicate flag names (catches mutex flags overlapping with
-    # regular flags or tag flags)
+    # regular flags or flag set flags)
     seen_flag_names: set[str] = set()
     for f in all_flags:
         if f.name in seen_flag_names:
@@ -2745,7 +2745,7 @@ def _build_and_validate_command(
         handler=handler,
         flags=all_flags,
         args=all_args,
-        tags=resolved_tags,
+        flag_sets=resolved_flag_sets,
         mutex=resolved_mutex,
         dependencies=resolved_dependencies,
     )
