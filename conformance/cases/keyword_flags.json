@@ -1,0 +1,32 @@
+[
+  {
+    "name": "keyword flags: global flag handled correctly",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "global",
+              "type": "bool",
+              "help": "use global scope"
+            }
+          ],
+          "handler_prints": "global={global}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--global"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "global=true"
+    }
+  }
+]
