@@ -1,1 +1,2 @@
 {"commits":["88874b77625f9f096a9e7c38212cb65ab7bd4188"],"user_facing":false}
+{"commits":["0e5647f165e7b5ebb4bb135bd664f072306b282a"],"user_facing":true,"description":"**Fix.** Flags named after Python keywords (`--global`, `--class`, `--import`) now produce valid parameter names with a trailing underscore (e.g., `global_`).","type":"fix"}
