@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.20.1
+
+Fix keyword collision in flag parameter names
+
+<details>
+<summary>Context</summary>
+
+Flags named after Python keywords (--global, --class, --import, etc.) now produce valid parameter names with a trailing underscore per PEP 8 convention.
+
+</details>
+
+### Fixes
+
+- **Fix.** Flags named after Python keywords (`--global`, `--class`, `--import`) now produce valid parameter names with a trailing underscore (e.g., `global_`).
+
 ## 0.20.0
 
 Frozen Command, command tags, tag contracts
