@@ -8,12 +8,20 @@ app.run().
 from __future__ import annotations
 
 import json
+import keyword
 import textwrap
 
 
 def _flag_param(name: str) -> str:
-    """Convert a flag name to a Python parameter name (e.g. dry-run -> dry_run)."""
-    return name.replace("-", "_")
+    """Convert a flag name to a Python parameter name (e.g. dry-run -> dry_run).
+
+    If the result is a Python keyword (e.g. 'global', 'class'), appends '_'
+    per PEP 8 convention to match strictcli's _flag_param_name().
+    """
+    result = name.replace("-", "_")
+    if keyword.iskeyword(result):
+        result += "_"
+    return result
 
 
 def _emit_flag(flag_def: dict, indent: str = "") -> str:
