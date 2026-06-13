@@ -1,0 +1,8 @@
+# Version bump type: patch, minor, or major
+bump = "patch"
+# Short description of this release (required)
+description = "Fix keyword collision in flag parameter names"
+# Optional context explaining why these changes were made
+context = "Flags named after Python keywords (--global, --class, --import, etc.) now produce valid parameter names with a trailing underscore per PEP 8 convention."
+include = ["pypi", "npm"]
+exclude = []
