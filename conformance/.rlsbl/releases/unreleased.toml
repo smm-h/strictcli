@@ -1,8 +1,0 @@
-# Version bump type: patch, minor, or major
-bump = "minor"
-# Short description of this release (required)
-description = "Command tags conformance cases and tooling updates"
-# Optional context explaining why these changes were made
-context = "Added conformance cases for command tags, group inheritance, tag contracts. Updated schema, code generators, harness, API surface checker, and error parity checker."
-include = ["plain"]
-exclude = []
