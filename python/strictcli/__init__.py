@@ -12,6 +12,7 @@ __all__ = [
 ]
 
 import contextlib
+import keyword
 import fnmatch
 import importlib.metadata
 import inspect
@@ -2553,8 +2554,15 @@ def _parse_command(
 
 
 def _flag_param_name(flag_name: str) -> str:
-    """Convert a flag name like '--dry-run' to a Python parameter name 'dry_run'."""
-    return flag_name.lstrip("-").replace("-", "_")
+    """Convert a flag name like '--dry-run' to a Python parameter name 'dry_run'.
+
+    If the result is a Python keyword (e.g. 'global', 'class'), appends '_'
+    per PEP 8 convention (e.g. 'global_', 'class_').
+    """
+    name = flag_name.lstrip("-").replace("-", "_")
+    if keyword.iskeyword(name):
+        name += "_"
+    return name
 
 
 def _build_and_validate_command(
