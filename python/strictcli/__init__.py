@@ -1289,7 +1289,7 @@ class App:
         """Register the auto-generated 'config' command group."""
         config_grp = Group(
             name="config",
-            help="Manage configuration",
+            help="Manage persistent configuration values stored in the config file",
             env_prefix=self.env_prefix,
             _global_flags=self._global_flags,
         )
@@ -1299,7 +1299,7 @@ class App:
         # config path
         config_grp.commands["path"] = Command(
             name="path",
-            help="Print the config file path",
+            help="Print the absolute path to the config file for this application",
             handler=lambda **_kw: print(_config_path(
                 app_ref.name,
                 override=app_ref.config_path,
@@ -1348,13 +1348,13 @@ class App:
             return 0
 
         config_show_flags = [
-            Flag(name="plain", type=bool, help="Human-readable output"),
-            Flag(name="json", type=bool, help="JSON output"),
+            Flag(name="plain", type=bool, help="Display config values in a human-readable table format"),
+            Flag(name="json", type=bool, help="Display config values as a JSON object with source metadata"),
         ]
         config_show_mutex = [MutexGroup(flags=config_show_flags)]
         config_grp.commands["show"] = Command(
             name="show",
-            help="Show all config values with source attribution",
+            help="Show all config values with their sources (config file, env, or default)",
             handler=_config_show_handler,
             flags=tuple(config_show_flags),
             mutex=tuple(config_show_mutex),
@@ -1506,19 +1506,19 @@ class App:
 
         config_grp.commands["set"] = Command(
             name="set",
-            help="Set a config value",
+            help="Set a persistent config value that overrides the default for a flag",
             handler=_config_set_handler,
             args=(
-                Arg(name="key", help="Config key to set"),
+                Arg(name="key", help="The config key to set, matching a registered flag name"),
                 Arg(name="value",
                     help="Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
                     required=False),
             ),
             flags=(
                 Flag(name="clear", type=bool,
-                     help="Clear a repeatable flag (set to empty list)"),
+                     help="Clear a repeatable flag by setting its value to an empty list"),
                 Flag(name="default", type=bool,
-                     help="Reset a key to its default (remove from config)"),
+                     help="Reset a key to its default value by removing it from the config file"),
             ),
         )
 
@@ -1543,7 +1543,7 @@ class App:
 
         config_grp.commands["edit"] = Command(
             name="edit",
-            help="Open the config file in $EDITOR",
+            help="Open the config file for manual editing in $EDITOR (creates if missing)",
             handler=_config_edit_handler,
         )
 
