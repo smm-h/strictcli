@@ -1171,19 +1171,19 @@ class App:
         # collisions -- the handler receives global flag values automatically.
         global_flag_names = {gf.name for gf in self._global_flags}
         candidate_extra_flags = [
-            Flag(name="all", type=bool, help="Run all checks"),
-            Flag(name="tag", type=str, default="", help="Tag DSL expression to filter checks"),
-            Flag(name="name", type=str, default="", help="Glob pattern to filter by check name"),
-            Flag(name="list", type=bool, help="List all checks and their tags"),
-            Flag(name="json", type=bool, help="Output results as JSON"),
-            Flag(name="ignore-warnings", type=bool, help="Warn severity does not cause nonzero exit"),
-            Flag(name="verbose", type=bool, help="Show details for passing checks too"),
-            Flag(name="dry-run", type=bool, help="Show which checks would run without running them"),
+            Flag(name="all", type=bool, help="Run every registered check regardless of tag or name filters"),
+            Flag(name="tag", type=str, default="", help="Tag DSL expression to select checks (e.g. 'changelog & !quality')"),
+            Flag(name="name", type=str, default="", help="Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')"),
+            Flag(name="list", type=bool, help="List all registered checks with their tags and exit without running"),
+            Flag(name="json", type=bool, help="Output check results as machine-readable JSON instead of human text"),
+            Flag(name="ignore-warnings", type=bool, help="Treat warn-severity results as passing so they do not cause nonzero exit"),
+            Flag(name="verbose", type=bool, help="Show full details for passing checks in addition to failures and warnings"),
+            Flag(name="dry-run", type=bool, help="Show which checks would run based on current filters without executing them"),
         ]
         extra_flags = [f for f in candidate_extra_flags if f.name not in global_flag_names]
         check_cmd = _build_and_validate_command(
             "check",
-            help="Run project checks",
+            help="Run project checks registered via the check framework and report results",
             handler=_check_handler,
             args=None,
             flag_sets=None,
