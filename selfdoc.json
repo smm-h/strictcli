@@ -1,9 +1,35 @@
 {
   "source": [
-    {"path": "python/strictcli/", "language": "python"},
-    {"path": "go/strictcli/", "language": "go"}
+    {
+      "path": "python/strictcli/",
+      "language": "python"
+    },
+    {
+      "path": "go/strictcli/",
+      "language": "go"
+    }
   ],
   "base_url": "https://strictcli.smmh.dev",
-  "versions": [{"version": "0.13.0", "indexed": true}],
-  "locales": [{"code": "en", "label": "English", "default": true}]
+  "versions": [
+    {
+      "version": "0.13.0",
+      "indexed": true
+    }
+  ],
+  "locales": [
+    {
+      "code": "en",
+      "label": "English",
+      "default": true
+    }
+  ],
+  "topology": {
+    "slug": "strictcli",
+    "docs_base": "https://docs.smmh.dev",
+    "posts_base": "https://blog.smmh.dev",
+    "assembly": "smm-h/selfdoc-cache"
+  },
+  "assembly": {
+    "repo": "smm-h/selfdoc-cache"
+  }
 }
