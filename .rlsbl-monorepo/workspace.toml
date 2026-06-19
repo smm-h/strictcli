@@ -1,13 +1,22 @@
+[[releasables]]
+name = "strictcli"
+
+[[releasables]]
+name = "go-strictcli"
+
 [[projects]]
 path = "python/"
 name = "strictcli"
+releasable = "strictcli"
 
 [[projects]]
 path = "go/"
 name = "go-strictcli"
+releasable = "go-strictcli"
 
 [[projects]]
 path = "conformance/"
 name = "conformance"
 watch = ["python/**", "go/**"]
 dev_node = true
+releasable = false
