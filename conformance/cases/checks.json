@@ -712,5 +712,89 @@
         "no issues found"
       ]
     }
+  },
+  {
+    "name": "checks: scope field is accepted in checks.toml",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.scoped-check]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\nscope = \"changelog\"\n",
+      "checks": [
+        {
+          "name": "scoped-check",
+          "check_returns": "pass",
+          "check_message": "scoped check ok"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--all"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "PASS"
+      ]
+    }
+  },
+  {
+    "name": "checks: scope field appears in list json output",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.scoped-check]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\nscope = \"changelog\"\n",
+      "checks": [
+        {
+          "name": "scoped-check",
+          "check_returns": "pass",
+          "check_message": "scoped check ok"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--list",
+      "--json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "\"scope\"",
+        "changelog"
+      ]
+    }
+  },
+  {
+    "name": "checks: scope field absent defaults to no scope in json",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.no-scope]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "no-scope",
+          "check_returns": "pass",
+          "check_message": "no scope ok"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--list",
+      "--json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_not_contains": [
+        "\"scope\""
+      ]
+    }
   }
 ]
