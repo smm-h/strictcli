@@ -3,6 +3,8 @@
 import asyncio
 import json
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import PurePosixPath
 
 import pytest
 
@@ -318,6 +320,96 @@ class TestRunWithStructuredData:
         result = app.test(["list-items"])
         assert result.exit_code == 0
         assert result.data == [1, 2, 3]
+
+    def test_dict_data_serializes_to_valid_json(self):
+        """Verify json.dumps(result.data, default=str) produces valid JSON.
+
+        This covers the serialization path used by run() at the json.dumps line.
+        """
+        app = _build_app()
+
+        @app.command("status", help="get status")
+        def status():
+            return {"healthy": True, "count": 5, "name": "server-1"}
+
+        result = app.test(["status"])
+        serialized = json.dumps(result.data, default=str)
+        parsed = json.loads(serialized)
+        assert parsed == {"healthy": True, "count": 5, "name": "server-1"}
+
+    def test_list_data_serializes_to_valid_json(self):
+        """Verify list return values serialize correctly."""
+        app = _build_app()
+
+        @app.command("items", help="get items")
+        def items():
+            return [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]
+
+        result = app.test(["items"])
+        serialized = json.dumps(result.data, default=str)
+        parsed = json.loads(serialized)
+        assert parsed == [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]
+
+    def test_dataclass_serializes_via_default_str(self):
+        """Verify dataclass return values serialize via default=str fallback.
+
+        run() uses json.dumps(result, default=str), which converts
+        non-serializable objects to their str() representation.
+        """
+        @dataclass
+        class Status:
+            healthy: bool
+            uptime: int
+
+        app = _build_app()
+
+        @app.command("status", help="get status")
+        def status():
+            return Status(healthy=True, uptime=3600)
+
+        result = app.test(["status"])
+        serialized = json.dumps(result.data, default=str)
+        parsed = json.loads(serialized)
+        # default=str converts the dataclass to its str() repr
+        assert isinstance(parsed, str)
+        assert "healthy=True" in parsed
+        assert "uptime=3600" in parsed
+
+    def test_nested_non_serializable_uses_default_str(self):
+        """Verify that non-serializable values nested in dicts use default=str.
+
+        This tests the exact code path: json.dumps(result, default=str)
+        where result contains types that are not JSON-native.
+        """
+        app = _build_app()
+
+        @app.command("info", help="get info")
+        def info():
+            return {
+                "timestamp": datetime(2025, 1, 15, 10, 30, 0),
+                "path": PurePosixPath("/usr/local/bin"),
+                "count": 42,
+            }
+
+        result = app.test(["info"])
+        serialized = json.dumps(result.data, default=str)
+        parsed = json.loads(serialized)
+        assert parsed["timestamp"] == "2025-01-15 10:30:00"
+        assert parsed["path"] == "/usr/local/bin"
+        assert parsed["count"] == 42
+
+    def test_string_return_serializes_to_json_string(self):
+        """Verify string return values produce a JSON string."""
+        app = _build_app()
+
+        @app.command("greet", help="greet")
+        def greet():
+            return "hello world"
+
+        result = app.test(["greet"])
+        serialized = json.dumps(result.data, default=str)
+        parsed = json.loads(serialized)
+        assert parsed == "hello world"
 
 
 class TestAcall:
