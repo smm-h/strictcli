@@ -398,6 +398,62 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 		schema["tag_contracts"] = tagContracts
 	}
 
+	// config_fields: only present when config fields are declared
+	if len(app.configFields) > 0 {
+		cfFields := make([]interface{}, 0, len(app.configFieldOrder))
+		for _, name := range app.configFieldOrder {
+			cf := app.configFields[name]
+			entry := map[string]interface{}{
+				"name":     cf.Name,
+				"type":     flagTypeName[cf.Type],
+				"help":     cf.Help,
+				"required": cf.Required,
+			}
+			if cf.HasDefault {
+				entry["default"] = cf.Default
+			}
+			// Find which commands bind this field
+			var boundCommands []string
+			for _, cmdName := range app.cmdOrder {
+				cmd := app.commands[cmdName]
+				for _, f := range cmd.configFields {
+					if f == name {
+						boundCommands = append(boundCommands, cmdName)
+						break
+					}
+				}
+			}
+			// Search groups recursively
+			var searchGroup func(g *Group, prefix string)
+			searchGroup = func(g *Group, prefix string) {
+				for _, cmdName := range g.order {
+					cmd := g.Commands[cmdName]
+					for _, f := range cmd.configFields {
+						if f == name {
+							boundCommands = append(boundCommands, prefix+cmdName)
+							break
+						}
+					}
+				}
+				for _, grpName := range g.groupOrder {
+					searchGroup(g.Groups[grpName], prefix+grpName+" ")
+				}
+			}
+			for _, grpName := range app.groupOrder {
+				searchGroup(app.groups[grpName], grpName+" ")
+			}
+			if len(boundCommands) > 0 {
+				cmds := make([]interface{}, len(boundCommands))
+				for i, c := range boundCommands {
+					cmds[i] = c
+				}
+				entry["commands"] = cmds
+			}
+			cfFields = append(cfFields, entry)
+		}
+		schema["config_fields"] = cfFields
+	}
+
 	// checks: only present when checks are enabled (not a default-omission case)
 	if app.checksEnabled {
 		checksMap := make(map[string]interface{})

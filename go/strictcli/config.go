@@ -434,6 +434,23 @@ func (a *App) registerConfigGroup() {
 				}
 				result[param] = entry{Value: value, Source: source}
 			}
+			// Include config fields
+			for _, name := range a.configFieldOrder {
+				cf := a.configFields[name]
+				var value interface{}
+				var source string
+				if v, ok := configData[name]; ok {
+					value = v
+					source = "config"
+				} else if cf.HasDefault && cf.Default != nil {
+					value = cf.Default
+					source = "default"
+				} else {
+					value = nil
+					source = "default"
+				}
+				result[name] = entry{Value: value, Source: source}
+			}
 			data, err := json.MarshalIndent(result, "", "  ")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
@@ -460,6 +477,23 @@ func (a *App) registerConfigGroup() {
 			}
 			fmt.Printf("%s = %v  (source: %s)\n", param, formatConfigValue(value), source)
 		}
+		// Include config fields
+		for _, name := range a.configFieldOrder {
+			cf := a.configFields[name]
+			var value interface{}
+			var source string
+			if v, ok := configData[name]; ok {
+				value = v
+				source = "config"
+			} else if cf.HasDefault && cf.Default != nil {
+				value = cf.Default
+				source = "default"
+			} else {
+				value = nil
+				source = "default"
+			}
+			fmt.Printf("%s = %v  (source: %s)\n", name, formatConfigValue(value), source)
+		}
 		return 0
 	}, WithMutex(
 		MutexGroup{Flags: []Flag{
@@ -469,7 +503,7 @@ func (a *App) registerConfigGroup() {
 	))
 
 	// config set
-	grp.Command("set", "Set a persistent config value that overrides the default for a flag", func(args map[string]interface{}) int {
+	grp.Command("set", "Set a persistent config value for a flag or config field", func(args map[string]interface{}) int {
 		key := args["key"].(string)
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
@@ -480,16 +514,20 @@ func (a *App) registerConfigGroup() {
 		// Read existing config
 		existing := loadConfig(a.Name, a.configPathOverride, a.configFormat)
 
-		// Look up the key against registered flags
+		// Look up the key against registered flags and config fields
 		allFlags := a.collectAllFlags()
 		var matchedFlag *Flag
+		var matchedConfigField *ConfigField
 		for i := range allFlags {
 			if flagParamName(allFlags[i].Name) == key {
 				matchedFlag = &allFlags[i]
 				break
 			}
 		}
-		if matchedFlag == nil {
+		if matchedFlag == nil && a.configFields != nil {
+			matchedConfigField = a.configFields[key]
+		}
+		if matchedFlag == nil && matchedConfigField == nil {
 			fmt.Fprintf(os.Stderr, "config set: unknown key '%s'\n", key)
 			return 1
 		}
@@ -520,6 +558,12 @@ func (a *App) registerConfigGroup() {
 			return 1
 		}
 
+		// Config fields do not support --clear (not repeatable)
+		if matchedConfigField != nil && useClear {
+			fmt.Fprintln(os.Stderr, "config set: --clear is only for repeatable flags")
+			return 1
+		}
+
 		// --clear: repeatable flags only, writes []
 		if useClear {
 			if !matchedFlag.Repeatable {
@@ -540,7 +584,39 @@ func (a *App) registerConfigGroup() {
 			return writeConfigFile(existing, path, a.configFormat)
 		}
 
-		// Coerce the string value to the flag's type
+		// Config field: coerce to config field type
+		if matchedConfigField != nil {
+			var typedValue interface{}
+			switch matchedConfigField.Type {
+			case TypeBool:
+				v, err := parseBoolStrict(value)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+					return 1
+				}
+				typedValue = v
+			case TypeInt:
+				v, err := parseIntStrict(value)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+					return 1
+				}
+				typedValue = v
+			case TypeFloat:
+				v, err := parseFloatStrictValue(value)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
+					return 1
+				}
+				typedValue = v
+			case TypeStr:
+				typedValue = value
+			}
+			existing[key] = typedValue
+			return writeConfigFile(existing, path, a.configFormat)
+		}
+
+		// Flag: coerce the string value to the flag's type
 		var typedValue interface{}
 		if matchedFlag.Repeatable {
 			// Split on comma, coerce each element
@@ -610,7 +686,7 @@ func (a *App) registerConfigGroup() {
 		existing[key] = typedValue
 		return writeConfigFile(existing, path, a.configFormat)
 	}, WithArgs(
-		NewArg("key", "The config key to set, matching a registered flag name"),
+		NewArg("key", "The config key to set, matching a registered flag or config field name"),
 		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
 			ArgRequired(false)),
 	), WithFlags(
@@ -650,6 +726,251 @@ func (a *App) registerConfigGroup() {
 		}
 		return 0
 	}, WithInteractive())
+
+	// config init
+	grp.Command("init", "Generate a template config file with all known keys and helpful comments", func(args map[string]interface{}) int {
+		path := configPath(a.Name, a.configPathOverride, a.configFormat)
+		if _, err := os.Stat(path); err == nil {
+			fmt.Fprintf(os.Stderr, "error: config file already exists: %s\n", path)
+			return 1
+		}
+		dirPath := filepath.Dir(path)
+		if err := os.MkdirAll(dirPath, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
+			return 1
+		}
+
+		allFlags := a.collectAllFlags()
+
+		if a.configFormat == "toml" {
+			content := a.generateTomlTemplate(allFlags)
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
+				return 1
+			}
+		} else {
+			content := a.generateJSONTemplate(allFlags)
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
+				return 1
+			}
+		}
+		fmt.Println(path)
+		return 0
+	})
+}
+
+// validateConfigFieldValues validates that bound config fields for a command
+// are present and have correct types in the config data. Also validates that
+// all keys in the config file are known (match a flag, config field, or
+// framework field).
+// Returns an error message or empty string on success.
+func (a *App) validateConfigFieldValues(cmd *Command) string {
+	configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
+
+	// Validate bound required config fields are present with correct types
+	for _, fieldName := range cmd.configFields {
+		cf, ok := a.configFields[fieldName]
+		if !ok {
+			// Should not happen — validated by validateConfigFieldBindings
+			continue
+		}
+		val, exists := configData[fieldName]
+		if !exists {
+			if cf.Required {
+				return fmt.Sprintf("config field '%s' is required but not set in config file", fieldName)
+			}
+			continue
+		}
+		// Validate type
+		if _, errStr := coerceConfigScalar(val, cf.Type); errStr != "" {
+			return fmt.Sprintf("config field '%s': %s", fieldName, errStr)
+		}
+	}
+
+	// Validate no unknown keys
+	if len(configData) > 0 {
+		// Build set of all known keys: flags (using param names), config fields, framework fields
+		knownKeys := make(map[string]bool)
+		allFlags := a.collectAllFlags()
+		for _, f := range allFlags {
+			knownKeys[flagParamName(f.Name)] = true
+		}
+		for name := range a.configFields {
+			knownKeys[name] = true
+		}
+		if a.frameworkFields != nil {
+			for name := range a.frameworkFields {
+				knownKeys[name] = true
+			}
+		}
+		for key := range configData {
+			if !knownKeys[key] {
+				return fmt.Sprintf("unknown key '%s' in config file", key)
+			}
+		}
+	}
+
+	return ""
+}
+
+// generateTomlTemplate generates a TOML template config file with comments.
+// Config fields with dot-names are organized into TOML sections.
+// Required fields are left empty, optional fields get their defaults.
+func (a *App) generateTomlTemplate(allFlags []Flag) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Configuration for %s\n\n", a.Name))
+
+	// Write flags as top-level keys
+	for _, f := range allFlags {
+		param := flagParamName(f.Name)
+		sb.WriteString(fmt.Sprintf("# %s (type: %s)\n", f.Help, flagTypeName[f.Type]))
+		if f.hasDefault && f.Default != nil {
+			sb.WriteString(fmt.Sprintf("%s = %s\n", param, formatTomlValue(f.Default)))
+		} else {
+			sb.WriteString(fmt.Sprintf("# %s = \n", param))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Write config fields, grouping dot-names into TOML sections
+	type sectionEntry struct {
+		key  string
+		cf   *ConfigField
+	}
+	sections := make(map[string][]sectionEntry) // section -> entries
+	var topLevel []*ConfigField                  // non-dotted fields
+	var sectionOrder []string
+
+	for _, name := range a.configFieldOrder {
+		cf := a.configFields[name]
+		if idx := strings.LastIndex(name, "."); idx != -1 {
+			section := name[:idx]
+			key := name[idx+1:]
+			if _, ok := sections[section]; !ok {
+				sectionOrder = append(sectionOrder, section)
+			}
+			sections[section] = append(sections[section], sectionEntry{key: key, cf: cf})
+		} else {
+			topLevel = append(topLevel, cf)
+		}
+	}
+
+	// Write non-dotted config fields
+	for _, cf := range topLevel {
+		sb.WriteString(fmt.Sprintf("# %s (type: %s)\n", cf.Help, flagTypeName[cf.Type]))
+		if cf.HasDefault && cf.Default != nil {
+			sb.WriteString(fmt.Sprintf("%s = %s\n", cf.Name, formatTomlValue(cf.Default)))
+		} else if cf.Required {
+			sb.WriteString(fmt.Sprintf("# %s =  # REQUIRED\n", cf.Name))
+		} else {
+			sb.WriteString(fmt.Sprintf("# %s = \n", cf.Name))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Write sectioned config fields
+	for _, section := range sectionOrder {
+		entries := sections[section]
+		sb.WriteString(fmt.Sprintf("[%s]\n", section))
+		for _, e := range entries {
+			sb.WriteString(fmt.Sprintf("# %s (type: %s)\n", e.cf.Help, flagTypeName[e.cf.Type]))
+			if e.cf.HasDefault && e.cf.Default != nil {
+				sb.WriteString(fmt.Sprintf("%s = %s\n", e.key, formatTomlValue(e.cf.Default)))
+			} else if e.cf.Required {
+				sb.WriteString(fmt.Sprintf("# %s =  # REQUIRED\n", e.key))
+			} else {
+				sb.WriteString(fmt.Sprintf("# %s = \n", e.key))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
+}
+
+// generateJSONTemplate generates a JSON template config file.
+// Config fields with dot-names are nested into objects.
+// Required fields are left empty (null), optional fields get their defaults.
+func (a *App) generateJSONTemplate(allFlags []Flag) string {
+	result := make(map[string]interface{})
+
+	// Add flags
+	for _, f := range allFlags {
+		param := flagParamName(f.Name)
+		if f.hasDefault && f.Default != nil {
+			result[param] = f.Default
+		} else {
+			result[param] = nil
+		}
+	}
+
+	// Add config fields, nesting dot-names into objects
+	for _, name := range a.configFieldOrder {
+		cf := a.configFields[name]
+		if strings.Contains(name, ".") {
+			// Nest into objects
+			parts := strings.Split(name, ".")
+			current := result
+			for i, part := range parts {
+				if i == len(parts)-1 {
+					if cf.HasDefault && cf.Default != nil {
+						current[part] = cf.Default
+					} else {
+						current[part] = nil
+					}
+				} else {
+					if sub, ok := current[part]; ok {
+						if subMap, ok := sub.(map[string]interface{}); ok {
+							current = subMap
+						} else {
+							// Conflict: key already exists as non-object
+							break
+						}
+					} else {
+						subMap := make(map[string]interface{})
+						current[part] = subMap
+						current = subMap
+					}
+				}
+			}
+		} else {
+			if cf.HasDefault && cf.Default != nil {
+				result[name] = cf.Default
+			} else {
+				result[name] = nil
+			}
+		}
+	}
+
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return "{}\n"
+	}
+	return string(data) + "\n"
+}
+
+// formatTomlValue formats a Go value as a TOML value string.
+func formatTomlValue(v interface{}) string {
+	switch val := v.(type) {
+	case string:
+		return fmt.Sprintf("%q", val)
+	case bool:
+		if val {
+			return "true"
+		}
+		return "false"
+	case int:
+		return fmt.Sprintf("%d", val)
+	case float64:
+		s := fmt.Sprintf("%v", val)
+		if !strings.Contains(s, ".") {
+			s += ".0"
+		}
+		return s
+	default:
+		return fmt.Sprintf("%v", val)
+	}
 }
 
 // formatConfigValue formats a value for config show output.

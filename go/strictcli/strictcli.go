@@ -116,6 +116,7 @@ type Command struct {
 	mutex              []MutexGroup
 	dependencies       []Dependency
 	tags               []string
+	configFields       []string // bound config field names
 	Passthrough        bool
 	PassthroughHandler PassthroughHandler
 	Hidden             bool
@@ -424,6 +425,15 @@ func WithHidden() CmdOption {
 func WithInteractive() CmdOption {
 	return func(c *Command) {
 		c.Interactive = true
+	}
+}
+
+// WithConfigFields binds config fields to a command. At startup, bound required
+// config fields are validated to be present with correct types in the config file.
+// Each field name must exist in app.configFields (validated at Run/Test time).
+func WithConfigFields(fields ...string) CmdOption {
+	return func(c *Command) {
+		c.configFields = append(c.configFields, fields...)
 	}
 }
 
@@ -932,6 +942,45 @@ func (a *App) validateCheckRegistrations() string {
 	return fmt.Sprintf("checks declared in checks.toml but not registered: %s", strings.Join(missing, ", "))
 }
 
+// validateConfigFieldBindings checks that all WithConfigFields references point to
+// declared config fields. Returns an error message listing violations, or empty
+// string if all bindings are valid.
+func (a *App) validateConfigFieldBindings() string {
+	var violations []string
+	// Check top-level commands
+	for _, name := range a.cmdOrder {
+		cmd := a.commands[name]
+		for _, field := range cmd.configFields {
+			if a.configFields == nil || a.configFields[field] == nil {
+				violations = append(violations, fmt.Sprintf("command %q: config field %q is not declared", cmd.Name, field))
+			}
+		}
+	}
+	// Check commands in groups recursively
+	var checkGroup func(g *Group, path string)
+	checkGroup = func(g *Group, path string) {
+		for _, name := range g.order {
+			cmd := g.Commands[name]
+			for _, field := range cmd.configFields {
+				if a.configFields == nil || a.configFields[field] == nil {
+					violations = append(violations, fmt.Sprintf("command %q: config field %q is not declared", cmd.Name, field))
+				}
+			}
+		}
+		for _, name := range g.groupOrder {
+			checkGroup(g.Groups[name], path+name+" ")
+		}
+	}
+	for _, name := range a.groupOrder {
+		checkGroup(a.groups[name], name+" ")
+	}
+	if len(violations) == 0 {
+		return ""
+	}
+	sort.Strings(violations)
+	return strings.Join(violations, "; ")
+}
+
 // validateTagContracts checks that commands with a given tag have the required flag.
 // Returns an error message listing violations, or empty string if all contracts are satisfied.
 func (a *App) validateTagContracts() string {
@@ -1215,6 +1264,10 @@ func (a *App) Run() {
 		fmt.Fprintln(os.Stderr, "error: "+errMsg)
 		os.Exit(1)
 	}
+	if errMsg := a.validateConfigFieldBindings(); errMsg != "" {
+		fmt.Fprintln(os.Stderr, "error: "+errMsg)
+		os.Exit(1)
+	}
 	argv := os.Args[1:]
 	pr := a.doParse(argv)
 
@@ -1273,6 +1326,9 @@ func (a *App) Test(argv []string) Result {
 		return Result{Stderr: "error: " + errMsg + "\n", ExitCode: 1}
 	}
 	if errMsg := a.validateTagContracts(); errMsg != "" {
+		return Result{Stderr: "error: " + errMsg + "\n", ExitCode: 1}
+	}
+	if errMsg := a.validateConfigFieldBindings(); errMsg != "" {
 		return Result{Stderr: "error: " + errMsg + "\n", ExitCode: 1}
 	}
 	pr := a.doParse(argv)
@@ -1424,6 +1480,15 @@ func (a *App) doParse(argv []string) parseResult {
 	if cmd.Passthrough {
 		return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
 	}
+
+	// Validate config fields for non-config subcommands
+	isConfigSubcommand := a.configEnabled && len(path) > 0 && path[0] == "config"
+	if a.configEnabled && !isConfigSubcommand && len(cmd.configFields) > 0 {
+		if errMsg := a.validateConfigFieldValues(cmd); errMsg != "" {
+			return parseResult{parseErr: errMsg}
+		}
+	}
+
 	kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy)
 	if err != "" {
 		parts := append([]string{a.Name}, path...)

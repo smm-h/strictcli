@@ -1,6 +1,7 @@
 package strictcli
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -361,5 +362,599 @@ func TestConfigFieldNameWithUnderscoresNonPrefix(t *testing.T) {
 	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	if _, ok := app.configFields["api_key"]; !ok {
 		t.Fatal("config field 'api_key' not registered")
+	}
+}
+
+// === 5c: Per-command config field binding ===
+
+func TestWithConfigFieldsStoresOnCommand(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("api-key", "region"))
+
+	cmd := app.commands["deploy"]
+	if len(cmd.configFields) != 2 {
+		t.Fatalf("expected 2 config fields, got %d", len(cmd.configFields))
+	}
+	if cmd.configFields[0] != "api-key" || cmd.configFields[1] != "region" {
+		t.Fatalf("unexpected config fields: %v", cmd.configFields)
+	}
+}
+
+func TestWithConfigFieldsValidationAtRunTime(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+	// Bind a config field that doesn't exist — should fail at Test() time
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("nonexistent"))
+
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config field \"nonexistent\" is not declared") {
+		t.Fatalf("expected undeclared config field error, got: %s", r.Stderr)
+	}
+}
+
+func TestWithConfigFieldsValidBinding(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("region"))
+
+	// Should succeed since "region" is declared and has a default
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestWithConfigFieldsInGroup(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+	app.ConfigField("api-key", ConfigFieldHelp("API key"), ConfigFieldDefault("default-key"))
+
+	grp := app.Group("infra", "Infrastructure commands")
+	grp.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("api-key"))
+
+	// Should validate correctly
+	r := app.Test([]string{"infra", "deploy"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestWithConfigFieldsInGroupUnknownField(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+
+	grp := app.Group("infra", "Infrastructure commands")
+	grp.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("ghost-field"))
+
+	r := app.Test([]string{"infra", "deploy"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config field \"ghost-field\" is not declared") {
+		t.Fatalf("expected undeclared config field error, got: %s", r.Stderr)
+	}
+}
+
+// === 5d: Config field validation at startup ===
+
+func TestConfigFieldValidationRequiredFieldMissing(t *testing.T) {
+	// Create a temp config file with no api-key
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("api-key"))
+
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config field 'api-key' is required but not set") {
+		t.Fatalf("expected required field error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationRequiredFieldPresent(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"api-key": "my-secret"}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("api-key"))
+
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationTypeMismatch(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"port": "not-a-number"}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt))
+	app.Command("serve", "Start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("port"))
+
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config field 'port'") {
+		t.Fatalf("expected type mismatch error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationOptionalFieldMissing(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("region"))
+
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0 (optional field), got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationUnknownKeyInConfig(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"api-key": "secret", "bogus_key": "value"}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("api-key"))
+
+	r := app.Test([]string{"deploy"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown key 'bogus_key'") {
+		t.Fatalf("expected unknown key error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationConfigSubcommandExempt(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	// No config file exists — config subcommands should still work
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("api-key", ConfigFieldHelp("API key")) // required, not set
+
+	r := app.Test([]string{"config", "path"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config subcommand should be exempt from validation, got exit %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationNoConfigFieldsSkipsValidation(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"random_key": true}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	// Command has no config fields bound — validation should not run
+	app.Command("status", "Show status", func(args map[string]interface{}) int {
+		return 0
+	})
+
+	r := app.Test([]string{"status"})
+	if r.ExitCode != 0 {
+		t.Fatalf("no config fields bound — should skip validation, got exit %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+// === 5e: Config show and config set with config fields ===
+
+func TestConfigShowIncludesConfigFields(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"region": "eu-west-1"}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+
+	r := app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "region = eu-west-1") {
+		t.Fatalf("expected region in output, got: %s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "source: config") {
+		t.Fatalf("expected source: config, got: %s", r.Stdout)
+	}
+	// api-key should show as nil/default since it's not in the file
+	if !strings.Contains(r.Stdout, "api-key") {
+		t.Fatalf("expected api-key in output, got: %s", r.Stdout)
+	}
+}
+
+func TestConfigShowJSONIncludesConfigFields(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"region": "eu-west-1"}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+
+	r := app.Test([]string{"config", "show", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, `"region"`) {
+		t.Fatalf("expected region in JSON output, got: %s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, `"eu-west-1"`) {
+		t.Fatalf("expected eu-west-1 in JSON output, got: %s", r.Stdout)
+	}
+}
+
+func TestConfigSetConfigField(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+
+	r := app.Test([]string{"config", "set", "region", "eu-west-1"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	// Verify it was written
+	data, _ := os.ReadFile(configFile)
+	if !strings.Contains(string(data), `"eu-west-1"`) {
+		t.Fatalf("expected eu-west-1 in config file, got: %s", string(data))
+	}
+}
+
+func TestConfigSetConfigFieldTypeBool(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("verbose", ConfigFieldHelp("Verbose output"), ConfigFieldType(TypeBool), ConfigFieldDefault(false))
+
+	r := app.Test([]string{"config", "set", "verbose", "true"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	if !strings.Contains(string(data), "true") {
+		t.Fatalf("expected true in config file, got: %s", string(data))
+	}
+}
+
+func TestConfigSetConfigFieldTypeInt(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
+
+	r := app.Test([]string{"config", "set", "port", "9090"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	if !strings.Contains(string(data), "9090") {
+		t.Fatalf("expected 9090 in config file, got: %s", string(data))
+	}
+}
+
+func TestConfigSetConfigFieldTypeFloat(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("threshold", ConfigFieldHelp("Detection threshold"), ConfigFieldType(TypeFloat), ConfigFieldDefault(0.5))
+
+	r := app.Test([]string{"config", "set", "threshold", "0.95"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	if !strings.Contains(string(data), "0.95") {
+		t.Fatalf("expected 0.95 in config file, got: %s", string(data))
+	}
+}
+
+func TestConfigSetConfigFieldInvalidType(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt))
+
+	r := app.Test([]string{"config", "set", "port", "not-a-number"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "expected integer") {
+		t.Fatalf("expected type error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigSetUnknownKey(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+
+	r := app.Test([]string{"config", "set", "nonexistent", "value"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown key") {
+		t.Fatalf("expected unknown key error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigSetConfigFieldClearNotAllowed(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+
+	r := app.Test([]string{"config", "set", "region", "--clear"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--clear is only for repeatable flags") {
+		t.Fatalf("expected clear error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigSetConfigFieldDefault(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"region": "eu-west-1"}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+
+	r := app.Test([]string{"config", "set", "region", "--default"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	if strings.Contains(string(data), "region") {
+		t.Fatalf("expected region to be removed from config, got: %s", string(data))
+	}
+}
+
+// === 5f: config init ===
+
+func TestConfigInitJSON(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
+	app.Command("deploy", "Deploy", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"config", "init"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("config file not created: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "us-east-1") {
+		t.Fatalf("expected default region in template, got: %s", content)
+	}
+	if !strings.Contains(content, "8080") {
+		t.Fatalf("expected default port in template, got: %s", content)
+	}
+}
+
+func TestConfigInitTOML(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.toml"
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile), WithConfigFormat("toml"))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
+	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(443))
+	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.Command("deploy", "Deploy", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"config", "init"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("config file not created: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "[server]") {
+		t.Fatalf("expected [server] section in TOML template, got: %s", content)
+	}
+	if !strings.Contains(content, "us-east-1") {
+		t.Fatalf("expected default region in TOML template, got: %s", content)
+	}
+	if !strings.Contains(content, "REQUIRED") {
+		t.Fatalf("expected REQUIRED marker for api-key, got: %s", content)
+	}
+}
+
+func TestConfigInitErrorIfExists(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.Command("deploy", "Deploy", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"config", "init"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1 (file exists), got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "already exists") {
+		t.Fatalf("expected already exists error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigInitJSONNested(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("db.host", ConfigFieldHelp("Database host"), ConfigFieldDefault("localhost"))
+	app.ConfigField("db.port", ConfigFieldHelp("Database port"), ConfigFieldType(TypeInt), ConfigFieldDefault(5432))
+	app.Command("serve", "Serve", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"config", "init"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	content := string(data)
+	// Should have nested structure
+	if !strings.Contains(content, "localhost") {
+		t.Fatalf("expected localhost in nested JSON, got: %s", content)
+	}
+	if !strings.Contains(content, "5432") {
+		t.Fatalf("expected 5432 in nested JSON, got: %s", content)
+	}
+}
+
+// === 5g: Schema serialization ===
+
+func TestSchemaIncludesConfigFields(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("test", "1.0.0", "test app")
+	app.ConfigField("region", ConfigFieldHelp("AWS region"), ConfigFieldDefault("us-east-1"))
+	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt))
+
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("region", "port"))
+
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+
+	cfFields, ok := schema["config_fields"]
+	if !ok {
+		t.Fatal("expected config_fields in schema")
+	}
+	fieldList, ok := cfFields.([]interface{})
+	if !ok {
+		t.Fatalf("expected config_fields to be a slice, got %T", cfFields)
+	}
+	if len(fieldList) != 2 {
+		t.Fatalf("expected 2 config fields in schema, got %d", len(fieldList))
+	}
+
+	// Check first field (region)
+	field0 := fieldList[0].(map[string]interface{})
+	if field0["name"] != "region" {
+		t.Fatalf("expected first field name 'region', got %v", field0["name"])
+	}
+	if field0["type"] != "str" {
+		t.Fatalf("expected first field type 'str', got %v", field0["type"])
+	}
+	if field0["help"] != "AWS region" {
+		t.Fatalf("expected first field help 'AWS region', got %v", field0["help"])
+	}
+	if field0["required"] != false {
+		t.Fatalf("expected first field required false, got %v", field0["required"])
+	}
+	if field0["default"] != "us-east-1" {
+		t.Fatalf("expected first field default 'us-east-1', got %v", field0["default"])
+	}
+	// Check commands binding
+	cmds0, ok := field0["commands"]
+	if !ok {
+		t.Fatal("expected commands key for region")
+	}
+	cmdList0 := cmds0.([]interface{})
+	if len(cmdList0) != 1 || cmdList0[0] != "deploy" {
+		t.Fatalf("expected commands ['deploy'], got %v", cmdList0)
+	}
+
+	// Check second field (port)
+	field1 := fieldList[1].(map[string]interface{})
+	if field1["name"] != "port" {
+		t.Fatalf("expected second field name 'port', got %v", field1["name"])
+	}
+	if field1["type"] != "int" {
+		t.Fatalf("expected second field type 'int', got %v", field1["type"])
+	}
+	if field1["required"] != true {
+		t.Fatalf("expected second field required true, got %v", field1["required"])
+	}
+}
+
+func TestSchemaNoConfigFieldsWhenNoneDeclared(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("hello", "Say hello", func(args map[string]interface{}) int {
+		return 0
+	})
+
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+
+	if _, ok := schema["config_fields"]; ok {
+		t.Fatal("expected no config_fields key when none are declared")
 	}
 }
