@@ -8,7 +8,18 @@ import (
 // invokeResult holds the outcome of an invoke call.
 type invokeResult struct {
 	exitCode int
-	err      string // non-empty if invocation failed
+	data     interface{} // structured data from DataHandler (nil for regular handlers)
+	err      string      // non-empty if invocation failed
+}
+
+// InvokeError is returned by App.Call() when invocation fails
+// (unknown command, missing flags, mutex violations, etc.).
+type InvokeError struct {
+	Message string
+}
+
+func (e *InvokeError) Error() string {
+	return e.Message
 }
 
 // paramToFlagName converts a parameter name like "dry_run" back to a flag name "dry-run".
@@ -226,6 +237,40 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 	}
 
 	// Call the handler
+	if cmd.dataHandler != nil {
+		hr := cmd.dataHandler(validatedKwargs)
+		return invokeResult{exitCode: hr.ExitCode, data: hr.Data}
+	}
 	code := cmd.Handler(validatedKwargs)
 	return invokeResult{exitCode: code}
+}
+
+// Call invokes a command programmatically and returns its result.
+//
+// Unlike invoke(), this is the public API. It returns an InvokeError for
+// parse/validation errors instead of os.Exit, making it safe for
+// programmatic use.
+//
+// commandPath uses dot-separated segments: "deploy", "dns.zone.create".
+// kwargs keys use underscored parameter names (e.g., "dry_run", not "--dry-run").
+//
+// For passthrough commands, the special key "_args" must contain a []string
+// of raw arguments to forward to the handler.
+//
+// Returns:
+//   - For DataHandler commands: the HandlerResult.Data value
+//   - For regular handlers: the exit code (int)
+//   - For passthrough handlers: the exit code (int)
+//
+// Returns an InvokeError if invocation fails (unknown command, missing
+// required flags, mutex violations, dependency errors, etc.).
+func (a *App) Call(commandPath string, kwargs map[string]interface{}) (interface{}, error) {
+	ir := a.invoke(commandPath, kwargs)
+	if ir.err != "" {
+		return nil, &InvokeError{Message: ir.err}
+	}
+	if ir.data != nil {
+		return ir.data, nil
+	}
+	return ir.exitCode, nil
 }
