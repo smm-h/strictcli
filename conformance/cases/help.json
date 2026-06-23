@@ -227,7 +227,7 @@
     }
   },
   {
-    "name": "help: optional arg without default shows (optional)",
+    "name": "help: optional arg without default shows [optional]",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -253,8 +253,8 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "(optional)",
-      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  path    project dir (optional)"
+      "stdout_contains": "[optional]",
+      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  path    project dir [optional]"
     }
   },
   {
