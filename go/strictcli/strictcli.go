@@ -1197,84 +1197,50 @@ func (a *App) doParse(argv []string) parseResult {
 		return parseResult{versionText: formatVersion(a)}
 	}
 
-	// Iterative traversal for arbitrary-depth group nesting
-	currentGroups := a.groups
-	currentCommands := a.commands
-	currentDeprecated := a.deprecatedMap
-	var path []string
-	var lastGroup *Group
+	// Route through the group/command tree
+	route := a.resolveCommand(rest)
 
-	for len(rest) > 0 {
-		token := rest[0]
+	// Handle routing errors (deprecated, unknown, no command)
+	if route.err != "" {
+		return parseResult{parseErr: route.err, commandPrefix: route.commandPrefix}
+	}
 
-		// Check groups first
-		if grp, ok := currentGroups[token]; ok {
-			path = append(path, token)
-			lastGroup = grp
-			rest = rest[1:]
+	// Handle help at group level
+	if route.helpAtGroup {
+		return parseResult{helpText: formatGroupHelp(a, route.lastGroup, route.path)}
+	}
 
-			// Check for help at this level
-			if len(rest) == 0 || (len(rest) == 1 && (rest[0] == "--help" || rest[0] == "-h")) {
-				return parseResult{helpText: formatGroupHelp(a, grp, path)}
-			}
+	// Command was resolved — handle help, passthrough, and parsing
+	cmd := route.cmd
+	cmdRest := route.rest
+	path := route.path
 
-			// Descend into subgroup
-			currentGroups = grp.Groups
-			currentCommands = grp.Commands
-			currentDeprecated = grp.deprecatedMap
-			continue
-		}
-
-		// Check commands
-		if cmd, ok := currentCommands[token]; ok {
-			cmdRest := rest[1:]
-			// Check command-level --help anywhere in remaining tokens
-			if tokensContainHelp(cmdRest) {
-				prefix := ""
-				if len(path) > 0 {
-					prefix = strings.Join(path, " ") + " "
-				}
-				return parseResult{helpText: formatCommandHelp(a, cmd, prefix)}
-			}
-			// Passthrough: skip parsing, forward raw args
-			if cmd.Passthrough {
-				return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
-			}
-			kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy)
-			if err != "" {
-				parts := append([]string{a.Name}, path...)
-				parts = append(parts, cmd.Name)
-				return parseResult{parseErr: err, commandPrefix: strings.Join(parts, " ")}
-			}
-			// Merge global values: post-command globals override pre-command ones
-			for k, v := range postGlobalValues {
-				globalValues[k] = v
-			}
-			for k, v := range globalValues {
-				kwargs[k] = v
-			}
-			return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
-		}
-
-		// Check deprecated commands
-		if msg, ok := currentDeprecated[token]; ok {
-			return parseResult{parseErr: fmt.Sprintf("command '%s' is deprecated: %s", token, msg)}
-		}
-
-		// Unknown command -- include path in error message
+	// Check command-level --help anywhere in remaining tokens
+	if tokensContainHelp(cmdRest) {
+		prefix := ""
 		if len(path) > 0 {
-			prefix := strings.Join(append([]string{a.Name}, path...), " ")
-			return parseResult{parseErr: fmt.Sprintf("unknown command '%s' in '%s'", token, strings.Join(path, " ")), commandPrefix: prefix}
+			prefix = strings.Join(path, " ") + " "
 		}
-		return parseResult{parseErr: fmt.Sprintf("unknown command '%s'", token)}
+		return parseResult{helpText: formatCommandHelp(a, cmd, prefix)}
 	}
-
-	// Loop ended without finding a command -- remaining was exhausted by group traversal.
-	// This case is handled by the help check inside the loop, but guard against edge cases.
-	if lastGroup != nil {
-		return parseResult{helpText: formatGroupHelp(a, lastGroup, path)}
+	// Passthrough: skip parsing, forward raw args
+	if cmd.Passthrough {
+		return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
 	}
-	return parseResult{parseErr: "no command specified"}
+	kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy)
+	if err != "" {
+		parts := append([]string{a.Name}, path...)
+		parts = append(parts, cmd.Name)
+		return parseResult{parseErr: err, commandPrefix: strings.Join(parts, " ")}
+	}
+	// Merge global values: post-command globals override pre-command ones
+	for k, v := range postGlobalValues {
+		globalValues[k] = v
+	}
+	for k, v := range globalValues {
+		kwargs[k] = v
+	}
+	return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
 }
 
 // tokensContainHelp checks if --help or -h appears in tokens before any "--"
