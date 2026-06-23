@@ -153,14 +153,34 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 			}
 			padding := maxLen - len(displayName) + 4
 			helpText := a.Help
+			var metaParts []string
+			if a.Type != TypeStr {
+				metaParts = append(metaParts, fmt.Sprintf("type: %s", flagTypeName[a.Type]))
+			}
+			if a.Choices != nil {
+				metaParts = append(metaParts, fmt.Sprintf("choices: %s", formatChoices(a.Choices)))
+			}
 			if !a.Required {
 				if a.hasDefault {
-					helpText += fmt.Sprintf(" [default: %v]", a.Default)
+					metaParts = append(metaParts, fmt.Sprintf("default: %v", a.Default))
 				} else {
-					helpText += " (optional)"
+					metaParts = append(metaParts, "optional")
 				}
 			}
-			lines = append(lines, fmt.Sprintf("  %s%s%s", displayName, strings.Repeat(" ", padding), helpText))
+			meta := ""
+			if len(metaParts) > 0 {
+				var sb strings.Builder
+				for i, part := range metaParts {
+					if i > 0 {
+						sb.WriteString(" ")
+					}
+					sb.WriteString("[")
+					sb.WriteString(part)
+					sb.WriteString("]")
+				}
+				meta = " " + sb.String()
+			}
+			lines = append(lines, fmt.Sprintf("  %s%s%s%s", displayName, strings.Repeat(" ", padding), helpText, meta))
 		}
 	}
 

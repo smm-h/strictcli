@@ -41,11 +41,13 @@ type Flag struct {
 
 // Arg represents a positional argument.
 type Arg struct {
-	Name     string
-	Help     string
-	Required bool
-	Default  interface{}
+	Name       string
+	Help       string
+	Required   bool
+	Default    interface{}
 	IsVariadic bool
+	Type       FlagType
+	Choices    []interface{}
 
 	hasDefault bool
 }
@@ -327,6 +329,24 @@ func Variadic() ArgOption {
 	}
 }
 
+// ArgType sets the type for a positional argument.
+func ArgType(t FlagType) ArgOption {
+	return func(a *Arg) {
+		a.Type = t
+	}
+}
+
+// ArgChoices sets the allowed values for a positional argument.
+func ArgChoices(vals ...interface{}) ArgOption {
+	return func(a *Arg) {
+		if vals == nil {
+			a.Choices = []interface{}{}
+		} else {
+			a.Choices = vals
+		}
+	}
+}
+
 // CmdOption configures a Command during registration.
 type CmdOption func(*Command)
 
@@ -500,12 +520,108 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 		Name:     name,
 		Help:     help,
 		Required: true,
+		Type:     TypeStr,
 	}
 	for _, opt := range opts {
 		opt(&a)
 	}
 	if a.Required && a.hasDefault {
 		panic("required arg cannot have a default")
+	}
+	// Validate type is one of the four supported types
+	switch a.Type {
+	case TypeStr, TypeBool, TypeInt, TypeFloat:
+		// ok
+	default:
+		panic(fmt.Sprintf("Arg.type must be str, bool, int, or float, got %d", a.Type))
+	}
+	// Validate choices
+	if a.Choices != nil {
+		if a.Type == TypeBool {
+			panic(fmt.Sprintf("Arg %q: choices is incompatible with type=bool", a.Name))
+		}
+		if len(a.Choices) == 0 {
+			panic(fmt.Sprintf("Arg %q: choices must be a non-empty list", a.Name))
+		}
+		for _, c := range a.Choices {
+			switch a.Type {
+			case TypeStr:
+				if _, ok := c.(string); !ok {
+					panic(fmt.Sprintf("Arg %q: choice %v is not of type str", a.Name, c))
+				}
+			case TypeInt:
+				if _, ok := c.(int); !ok {
+					panic(fmt.Sprintf("Arg %q: choice %v is not of type int", a.Name, c))
+				}
+			case TypeFloat:
+				if _, ok := c.(float64); !ok {
+					panic(fmt.Sprintf("Arg %q: choice %v is not of type float", a.Name, c))
+				}
+			}
+		}
+	}
+	// Validate default type matches declared type
+	if a.hasDefault && a.Default != nil {
+		switch a.Type {
+		case TypeInt:
+			if _, ok := a.Default.(int); !ok {
+				var gotType string
+				switch a.Default.(type) {
+				case string:
+					gotType = "str"
+				case bool:
+					gotType = "bool"
+				default:
+					gotType = fmt.Sprintf("%T", a.Default)
+				}
+				panic(fmt.Sprintf("Arg %q: type=int requires an int default, got '%s'", a.Name, gotType))
+			}
+		case TypeFloat:
+			if _, ok := a.Default.(float64); !ok {
+				var gotType string
+				switch a.Default.(type) {
+				case string:
+					gotType = "str"
+				case bool:
+					gotType = "bool"
+				case int:
+					gotType = "int"
+				default:
+					gotType = fmt.Sprintf("%T", a.Default)
+				}
+				panic(fmt.Sprintf("Arg %q: type=float requires a float64 default, got '%s'", a.Name, gotType))
+			}
+		case TypeBool:
+			if _, ok := a.Default.(bool); !ok {
+				var gotType string
+				switch a.Default.(type) {
+				case string:
+					gotType = "str"
+				case int:
+					gotType = "int"
+				default:
+					gotType = fmt.Sprintf("%T", a.Default)
+				}
+				panic(fmt.Sprintf("Arg %q: type=bool requires a bool default, got '%s'", a.Name, gotType))
+			}
+		}
+	}
+	// Validate default is in choices
+	if a.Choices != nil && a.hasDefault && a.Default != nil {
+		found := false
+		for _, c := range a.Choices {
+			if a.Default == c {
+				found = true
+				break
+			}
+		}
+		if !found {
+			choiceParts := make([]string, len(a.Choices))
+			for i, c := range a.Choices {
+				choiceParts[i] = fmt.Sprintf("'%v'", c)
+			}
+			panic(fmt.Sprintf("Arg %q: default '%v' is not in choices [%s]", a.Name, a.Default, strings.Join(choiceParts, ", ")))
+		}
 	}
 	return a
 }

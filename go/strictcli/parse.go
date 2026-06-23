@@ -614,7 +614,8 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 	// Resolve positional args
 	argValues := make(map[string]interface{})
 	posIdx := 0
-	for _, a := range cmd.args {
+	for i := range cmd.args {
+		a := &cmd.args[i]
 		if a.IsVariadic {
 			// Collect all remaining positionals
 			remaining := positionals[posIdx:]
@@ -627,13 +628,21 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 			} else {
 				vals := make([]interface{}, len(remaining))
 				for j, v := range remaining {
-					vals[j] = v
+					coerced, errStr := coerceArgValue(a, v)
+					if errStr != "" {
+						return nil, nil, errStr
+					}
+					vals[j] = coerced
 				}
 				argValues[a.Name] = vals
 			}
 			posIdx = len(positionals)
 		} else if posIdx < len(positionals) {
-			argValues[a.Name] = positionals[posIdx]
+			coerced, errStr := coerceArgValue(a, positionals[posIdx])
+			if errStr != "" {
+				return nil, nil, errStr
+			}
+			argValues[a.Name] = coerced
 			posIdx++
 		} else if a.Required {
 			return nil, nil, fmt.Sprintf("missing required argument '%s'", a.Name)
@@ -646,6 +655,39 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 	}
 	if posIdx < len(positionals) {
 		return nil, nil, fmt.Sprintf("unexpected argument '%s'", positionals[posIdx])
+	}
+
+	// Validate arg choices (after type coercion)
+	for i := range cmd.args {
+		a := &cmd.args[i]
+		if a.Choices == nil {
+			continue
+		}
+		val, ok := argValues[a.Name]
+		if !ok {
+			continue
+		}
+		if a.IsVariadic {
+			vals, ok := val.([]interface{})
+			if !ok {
+				continue
+			}
+			for _, v := range vals {
+				if !inChoices(v, a.Choices) {
+					return nil, nil, fmt.Sprintf(
+						"argument '%s': invalid value '%v', must be one of: %s",
+						a.Name, v, formatChoices(a.Choices),
+					)
+				}
+			}
+		} else {
+			if !inChoices(val, a.Choices) {
+				return nil, nil, fmt.Sprintf(
+					"argument '%s': invalid value '%v', must be one of: %s",
+					a.Name, val, formatChoices(a.Choices),
+				)
+			}
+		}
 	}
 
 	// Build kwargs dict (command flags only)
@@ -744,6 +786,40 @@ func parseFloatStrict(flagName, raw string) (interface{}, string) {
 		return nil, fmt.Sprintf("--%s: expected float, got '%s'", flagName, raw)
 	}
 	return floatVal, ""
+}
+
+// coerceArgValue coerces a raw positional arg string to the declared type.
+// Uses the same strict parsing functions as flags. Error messages use
+// "argument '<name>': ..." prefix for parity with Python.
+func coerceArgValue(a *Arg, raw string) (interface{}, string) {
+	switch a.Type {
+	case TypeStr:
+		return raw, ""
+	case TypeInt:
+		intVal, err := parseIntStrict(raw)
+		if err != nil {
+			return nil, fmt.Sprintf("argument '%s': %s", a.Name, err.Error())
+		}
+		return intVal, ""
+	case TypeFloat:
+		floatVal, err := parseFloatStrictValue(raw)
+		if err != nil {
+			msg := err.Error()
+			if msg == "NaN is not allowed" || msg == "Inf is not allowed" {
+				return nil, fmt.Sprintf("argument '%s': %s", a.Name, msg)
+			}
+			return nil, fmt.Sprintf("argument '%s': expected float, got '%s'", a.Name, raw)
+		}
+		return floatVal, ""
+	case TypeBool:
+		boolVal, err := parseBoolStrict(raw)
+		if err != nil {
+			return nil, fmt.Sprintf("argument '%s': %s", a.Name, err.Error())
+		}
+		return boolVal, ""
+	default:
+		return raw, ""
+	}
 }
 
 // splitEscaped splits value on sep, treating backslash as escape character.

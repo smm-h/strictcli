@@ -1357,8 +1357,8 @@ func TestOptionalArgNoDefaultInHelp(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stdout, "(optional)") {
-		t.Fatalf("stdout should contain '(optional)', got %q", r.Stdout)
+	if !strings.Contains(r.Stdout, "[optional]") {
+		t.Fatalf("stdout should contain '[optional]', got %q", r.Stdout)
 	}
 }
 
@@ -7221,5 +7221,564 @@ func TestSchemaArgDefaultNil(t *testing.T) {
 	}
 	if v != nil {
 		t.Fatalf("expected arg default nil, got %v", v)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Typed positional args
+// ---------------------------------------------------------------------------
+
+func TestArgTypeInt(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={count}",
+		WithArgs(NewArg("count", "how many", ArgType(TypeInt))))
+	r := app.Test([]string{"cmd", "42"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=42" {
+		t.Fatalf("expected 'val=42', got %q", r.Stdout)
+	}
+}
+
+func TestArgTypeIntInvalid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("count", "how many", ArgType(TypeInt))))
+	r := app.Test([]string{"cmd", "abc"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'count': expected integer, got 'abc'") {
+		t.Fatalf("expected int parse error, got %q", r.Stderr)
+	}
+}
+
+func TestArgTypeFloat(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={ratio}",
+		WithArgs(NewArg("ratio", "the ratio", ArgType(TypeFloat))))
+	r := app.Test([]string{"cmd", "3.14"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=3.14" {
+		t.Fatalf("expected 'val=3.14', got %q", r.Stdout)
+	}
+}
+
+func TestArgTypeFloatInvalid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("ratio", "the ratio", ArgType(TypeFloat))))
+	r := app.Test([]string{"cmd", "notnum"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'ratio': expected float, got 'notnum'") {
+		t.Fatalf("expected float parse error, got %q", r.Stderr)
+	}
+}
+
+func TestArgTypeFloatRejectsNaN(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("val", "a float", ArgType(TypeFloat))))
+	r := app.Test([]string{"cmd", "NaN"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'val': NaN is not allowed") {
+		t.Fatalf("expected NaN rejection, got %q", r.Stderr)
+	}
+}
+
+func TestArgTypeFloatRejectsInf(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("val", "a float", ArgType(TypeFloat))))
+	r := app.Test([]string{"cmd", "Inf"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'val': Inf is not allowed") {
+		t.Fatalf("expected Inf rejection, got %q", r.Stderr)
+	}
+}
+
+func TestArgTypeBool(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={flag}",
+		WithArgs(NewArg("flag", "a flag value", ArgType(TypeBool))))
+	r := app.Test([]string{"cmd", "true"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=true" {
+		t.Fatalf("expected 'val=true', got %q", r.Stdout)
+	}
+}
+
+func TestArgTypeBoolInvalid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("flag", "a flag value", ArgType(TypeBool))))
+	r := app.Test([]string{"cmd", "maybe"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'flag': expected boolean, got 'maybe'") {
+		t.Fatalf("expected bool parse error, got %q", r.Stderr)
+	}
+}
+
+func TestArgTypeBoolCaseInsensitive(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={flag}",
+		WithArgs(NewArg("flag", "a flag value", ArgType(TypeBool))))
+	for _, val := range []string{"yes", "YES", "Yes", "1", "true", "TRUE"} {
+		r := app.Test([]string{"cmd", val})
+		if r.ExitCode != 0 {
+			t.Fatalf("value %q: expected exit 0, got %d; stderr=%q", val, r.ExitCode, r.Stderr)
+		}
+		if r.Stdout != "val=true" {
+			t.Fatalf("value %q: expected 'val=true', got %q", val, r.Stdout)
+		}
+	}
+	for _, val := range []string{"no", "NO", "No", "0", "false", "FALSE"} {
+		r := app.Test([]string{"cmd", val})
+		if r.ExitCode != 0 {
+			t.Fatalf("value %q: expected exit 0, got %d; stderr=%q", val, r.ExitCode, r.Stderr)
+		}
+		if r.Stdout != "val=false" {
+			t.Fatalf("value %q: expected 'val=false', got %q", val, r.Stdout)
+		}
+	}
+}
+
+func TestArgStrDefaultType(t *testing.T) {
+	// Default type is str -- no coercion applied
+	app := simpleApp("cmd", "a command", "val={name}",
+		WithArgs(NewArg("name", "the name")))
+	r := app.Test([]string{"cmd", "42"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if r.Stdout != "val=42" {
+		t.Fatalf("expected 'val=42', got %q", r.Stdout)
+	}
+}
+
+func TestArgChoicesStr(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={env}",
+		WithArgs(NewArg("env", "target env", ArgChoices("dev", "staging", "prod"))))
+	r := app.Test([]string{"cmd", "prod"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=prod" {
+		t.Fatalf("expected 'val=prod', got %q", r.Stdout)
+	}
+}
+
+func TestArgChoicesStrInvalid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("env", "target env", ArgChoices("dev", "staging", "prod"))))
+	r := app.Test([]string{"cmd", "local"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'env': invalid value 'local', must be one of: dev, staging, prod") {
+		t.Fatalf("expected choices error, got %q", r.Stderr)
+	}
+}
+
+func TestArgChoicesInt(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={level}",
+		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(1, 2, 3))))
+	r := app.Test([]string{"cmd", "2"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=2" {
+		t.Fatalf("expected 'val=2', got %q", r.Stdout)
+	}
+}
+
+func TestArgChoicesIntInvalid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(1, 2, 3))))
+	r := app.Test([]string{"cmd", "5"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'level': invalid value '5', must be one of: 1, 2, 3") {
+		t.Fatalf("expected choices error, got %q", r.Stderr)
+	}
+}
+
+func TestArgChoicesBoolPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for choices with bool arg")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "choices is incompatible with type=bool") {
+			t.Fatalf("expected choices+bool error, got %q", msg)
+		}
+	}()
+	NewArg("flag", "a bool arg", ArgType(TypeBool), ArgChoices(true, false))
+}
+
+func TestArgChoicesEmptyPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for empty choices")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "choices must be a non-empty list") {
+			t.Fatalf("expected empty choices error, got %q", msg)
+		}
+	}()
+	NewArg("name", "a name", ArgChoices())
+}
+
+func TestArgChoicesTypeMismatchPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for choice type mismatch")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "is not of type int") {
+			t.Fatalf("expected type mismatch error, got %q", msg)
+		}
+	}()
+	NewArg("count", "how many", ArgType(TypeInt), ArgChoices("one", "two"))
+}
+
+func TestArgDefaultTypeMismatchPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for default type mismatch")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "type=int requires an int default") {
+			t.Fatalf("expected type mismatch error, got %q", msg)
+		}
+	}()
+	NewArg("count", "how many", ArgType(TypeInt), ArgRequired(false), ArgDefault("not-int"))
+}
+
+func TestArgDefaultNotInChoicesPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for default not in choices")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "is not in choices") {
+			t.Fatalf("expected 'not in choices' error, got %q", msg)
+		}
+	}()
+	NewArg("env", "target", ArgRequired(false), ArgDefault("local"), ArgChoices("dev", "prod"))
+}
+
+func TestVariadicTypedArg(t *testing.T) {
+	app := simpleApp("cmd", "a command", "vals={nums}",
+		WithArgs(NewArg("nums", "numbers", ArgType(TypeInt), Variadic())))
+	r := app.Test([]string{"cmd", "1", "2", "3"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "vals=1,2,3" {
+		t.Fatalf("expected 'vals=1,2,3', got %q", r.Stdout)
+	}
+}
+
+func TestVariadicTypedArgInvalid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("nums", "numbers", ArgType(TypeInt), Variadic())))
+	r := app.Test([]string{"cmd", "1", "abc", "3"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'nums': expected integer, got 'abc'") {
+		t.Fatalf("expected int parse error, got %q", r.Stderr)
+	}
+}
+
+func TestVariadicArgWithChoices(t *testing.T) {
+	app := simpleApp("cmd", "a command", "vals={items}",
+		WithArgs(NewArg("items", "items", ArgChoices("a", "b", "c"), Variadic())))
+	r := app.Test([]string{"cmd", "a", "c"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	r = app.Test([]string{"cmd", "a", "d"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'items': invalid value 'd', must be one of: a, b, c") {
+		t.Fatalf("expected choices error for variadic, got %q", r.Stderr)
+	}
+}
+
+func TestArgTypeInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("count", "how many", ArgType(TypeInt))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "[type: int]") {
+		t.Fatalf("expected '[type: int]' in help, got %q", r.Stdout)
+	}
+}
+
+func TestArgTypeStrNotInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("name", "the name")))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if strings.Contains(r.Stdout, "[type:") {
+		t.Fatalf("str type should not show [type:] in help, got %q", r.Stdout)
+	}
+}
+
+func TestArgChoicesInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("env", "target env", ArgChoices("dev", "prod"))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "[choices: dev, prod]") {
+		t.Fatalf("expected '[choices: dev, prod]' in help, got %q", r.Stdout)
+	}
+}
+
+func TestArgTypeAndChoicesInHelp(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(1, 2, 3))))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "[type: int]") {
+		t.Fatalf("expected '[type: int]' in help, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "[choices: 1, 2, 3]") {
+		t.Fatalf("expected '[choices: 1, 2, 3]' in help, got %q", r.Stdout)
+	}
+}
+
+func TestSchemaArgType(t *testing.T) {
+	os.Chdir(t.TempDir())
+	os.WriteFile("go.mod", []byte("module test\n"), 0o644)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithArgs(
+			NewArg("count", "how many", ArgType(TypeInt)),
+			NewArg("name", "the name"),
+		),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	args := cmd["args"].([]interface{})
+
+	// int arg should have "type": "int"
+	intArg := args[0].(map[string]interface{})
+	if intArg["type"] != "int" {
+		t.Fatalf("expected type 'int', got %v", intArg["type"])
+	}
+
+	// str arg should NOT have "type" (default, omitted)
+	strArg := args[1].(map[string]interface{})
+	if _, ok := strArg["type"]; ok {
+		t.Fatalf("str arg should not have 'type' in schema (default is omitted)")
+	}
+}
+
+func TestSchemaArgChoices(t *testing.T) {
+	os.Chdir(t.TempDir())
+	os.WriteFile("go.mod", []byte("module test\n"), 0o644)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithArgs(
+			NewArg("env", "target", ArgChoices("dev", "prod")),
+		),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	args := cmd["args"].([]interface{})
+	arg := args[0].(map[string]interface{})
+	choices, ok := arg["choices"]
+	if !ok {
+		t.Fatal("expected 'choices' in schema arg")
+	}
+	choicesList := choices.([]interface{})
+	if len(choicesList) != 2 {
+		t.Fatalf("expected 2 choices, got %d", len(choicesList))
+	}
+	if choicesList[0] != "dev" || choicesList[1] != "prod" {
+		t.Fatalf("expected choices [dev, prod], got %v", choicesList)
+	}
+}
+
+func TestSchemaArgTypeInDefaults(t *testing.T) {
+	os.Chdir(t.TempDir())
+	os.WriteFile("go.mod", []byte("module test\n"), 0o644)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	defaults := schema["defaults"].(map[string]interface{})
+	argDefaults := defaults["arg"].(map[string]interface{})
+	if argDefaults["type"] != "str" {
+		t.Fatalf("expected arg default type 'str', got %v", argDefaults["type"])
+	}
+	if argDefaults["choices"] != nil {
+		t.Fatalf("expected arg default choices nil, got %v", argDefaults["choices"])
+	}
+}
+
+func TestArgIntNegativeValue(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={count}",
+		WithArgs(NewArg("count", "how many", ArgType(TypeInt))))
+	r := app.Test([]string{"cmd", "--", "-7"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=-7" {
+		t.Fatalf("expected 'val=-7', got %q", r.Stdout)
+	}
+}
+
+func TestArgFloatDefaultType(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for float default type mismatch")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "type=float requires a float64 default") {
+			t.Fatalf("expected type mismatch error, got %q", msg)
+		}
+	}()
+	NewArg("ratio", "the ratio", ArgType(TypeFloat), ArgRequired(false), ArgDefault("nope"))
+}
+
+func TestArgBoolDefaultType(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for bool default type mismatch")
+		}
+		msg := fmt.Sprintf("%v", r)
+		if !strings.Contains(msg, "type=bool requires a bool default") {
+			t.Fatalf("expected type mismatch error, got %q", msg)
+		}
+	}()
+	NewArg("flag", "a flag", ArgType(TypeBool), ArgRequired(false), ArgDefault("nope"))
+}
+
+func TestArgChoicesFloat(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={ratio}",
+		WithArgs(NewArg("ratio", "the ratio", ArgType(TypeFloat), ArgChoices(1.0, 2.5, 3.14))))
+	r := app.Test([]string{"cmd", "2.5"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=2.5" {
+		t.Fatalf("expected 'val=2.5', got %q", r.Stdout)
+	}
+}
+
+func TestArgChoicesFloatInvalid(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("ratio", "the ratio", ArgType(TypeFloat), ArgChoices(1.0, 2.5, 3.14))))
+	r := app.Test([]string{"cmd", "9.99"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'ratio': invalid value '9.99', must be one of:") {
+		t.Fatalf("expected choices error, got %q", r.Stderr)
+	}
+}
+
+func TestArgMixedTypedAndStr(t *testing.T) {
+	// First arg is str, second is int -- ensures independent coercion
+	app := simpleApp("cmd", "a command", "name={name} count={count}",
+		WithArgs(
+			NewArg("name", "the name"),
+			NewArg("count", "how many", ArgType(TypeInt)),
+		))
+	r := app.Test([]string{"cmd", "hello", "5"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "name=hello count=5" {
+		t.Fatalf("expected 'name=hello count=5', got %q", r.Stdout)
+	}
+}
+
+func TestArgIntWithOptionalDefault(t *testing.T) {
+	app := simpleApp("cmd", "a command", "val={port}",
+		WithArgs(NewArg("port", "the port", ArgType(TypeInt), ArgRequired(false), ArgDefault(8080))))
+	// With value
+	r := app.Test([]string{"cmd", "3000"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=3000" {
+		t.Fatalf("expected 'val=3000', got %q", r.Stdout)
+	}
+	// Without value: should use default
+	r = app.Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "val=8080" {
+		t.Fatalf("expected 'val=8080', got %q", r.Stdout)
+	}
+}
+
+func TestSchemaArgNoChoicesOmitted(t *testing.T) {
+	os.Chdir(t.TempDir())
+	os.WriteFile("go.mod", []byte("module test\n"), 0o644)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithArgs(NewArg("name", "the name")),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	args := cmd["args"].([]interface{})
+	arg := args[0].(map[string]interface{})
+	if _, ok := arg["choices"]; ok {
+		t.Fatal("choices should be omitted when not set")
+	}
+}
+
+func TestArgIntWithWhitespace(t *testing.T) {
+	// Strict int parsing rejects whitespace
+	app := simpleApp("cmd", "a command", "ok",
+		WithArgs(NewArg("count", "how many", ArgType(TypeInt))))
+	r := app.Test([]string{"cmd", " 42"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "argument 'count': expected integer, got ' 42'") {
+		t.Fatalf("expected strict int error, got %q", r.Stderr)
 	}
 }

@@ -85,6 +85,10 @@ func serializeArg(a Arg) map[string]interface{} {
 		"name": a.Name,
 		"help": a.Help,
 	}
+	// type: default "str" (omit when str)
+	if a.Type != TypeStr {
+		m["type"] = flagTypeName[a.Type]
+	}
 	// required: default true (omit when true)
 	if !a.Required {
 		m["required"] = false
@@ -96,6 +100,10 @@ func serializeArg(a Arg) map[string]interface{} {
 	// default: default nil (omit when nil / no default set)
 	if a.hasDefault {
 		m["default"] = a.Default
+	}
+	// choices: default nil (omit when nil)
+	if a.Choices != nil {
+		m["choices"] = a.Choices
 	}
 	return m
 }
@@ -261,9 +269,11 @@ func buildSchemaDefaults() map[string]interface{} {
 			"hidden":        false,
 		},
 		"arg": map[string]interface{}{
+			"type":     "str",
 			"required": true,
-			"variadic": false,
 			"default":  nil,
+			"variadic": false,
+			"choices":  nil,
 		},
 		"command": map[string]interface{}{
 			"passthrough": false,
