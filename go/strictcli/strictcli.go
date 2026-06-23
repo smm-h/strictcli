@@ -1485,6 +1485,10 @@ func (a *App) Run() {
 		fmt.Println(path)
 		os.Exit(0)
 	}
+	if pr.serveMCP {
+		a.ServeMCP()
+		os.Exit(0)
+	}
 	if pr.parseErr != "" {
 		fmt.Fprintln(os.Stderr, "error: "+pr.parseErr)
 		prefix := pr.commandPrefix
@@ -1542,6 +1546,11 @@ func (a *App) Test(argv []string) Result {
 			return Result{Stderr: fmt.Sprintf("error: %s\n", err), ExitCode: 1}
 		}
 		return Result{Stdout: path + "\n", ExitCode: 0}
+	}
+	if pr.serveMCP {
+		// In Test mode, MCP mode cannot be exercised (it requires stdin/stdout).
+		// Use serveMCPIO directly for testing.
+		return Result{Stderr: "error: --mcp cannot be used with Test(); use serveMCPIO directly\n", ExitCode: 1}
 	}
 	if pr.parseErr != "" {
 		prefix := pr.commandPrefix
@@ -1604,6 +1613,7 @@ type parseResult struct {
 	parseErr        string
 	commandPrefix   string
 	dumpSchema      bool
+	serveMCP        bool
 }
 
 // doParse parses argv and returns a parseResult.
@@ -1624,6 +1634,13 @@ func (a *App) doParse(argv []string) parseResult {
 	for _, tok := range argv {
 		if tok == "--dump-schema" {
 			return parseResult{dumpSchema: true}
+		}
+	}
+
+	// --mcp: detected anywhere in argv, before any other parsing
+	for _, tok := range argv {
+		if tok == "--mcp" {
+			return parseResult{serveMCP: true}
 		}
 	}
 
