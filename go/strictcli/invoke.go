@@ -59,6 +59,23 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 				return invokeResult{exitCode: 1, err: "passthrough command: _args must be []string"}
 			}
 		}
+
+		// Build set of known global flag param names
+		globalParamNames := make(map[string]bool)
+		for _, gf := range a.globalFlags {
+			globalParamNames[flagParamName(gf.Name)] = true
+		}
+
+		// Validate that all kwargs keys are either "_args" or known global flags
+		for key := range kwargs {
+			if key == "_args" {
+				continue
+			}
+			if !globalParamNames[key] {
+				return invokeResult{exitCode: 1, err: fmt.Sprintf("unknown parameter %q for passthrough command %q", key, commandPath)}
+			}
+		}
+
 		// Build global kwargs from the remaining kwargs entries
 		globalKwargs := make(map[string]interface{})
 		for _, gf := range a.globalFlags {
@@ -69,6 +86,9 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 				globalKwargs[paramName] = gf.Default
 			} else if gf.hasDefault {
 				globalKwargs[paramName] = gf.Default
+			} else {
+				// Required global flag not provided
+				return invokeResult{exitCode: 1, err: fmt.Sprintf("global flag '--%s' is required", gf.Name)}
 			}
 		}
 		code := cmd.PassthroughHandler(cmd.Name, args, globalKwargs)

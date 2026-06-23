@@ -453,6 +453,53 @@ func TestInvokePassthroughCommand(t *testing.T) {
 	}
 }
 
+func TestInvokePassthroughUnknownKwargs(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
+		return 0
+	})
+
+	ir := app.invoke("exec", map[string]interface{}{
+		"_args":      []string{"ls"},
+		"verbose":    true,
+		"bogus_flag": "should fail",
+	})
+	if ir.err == "" {
+		t.Fatal("expected error for unknown kwarg in passthrough command")
+	}
+	if !strings.Contains(ir.err, "unknown parameter") {
+		t.Fatalf("expected 'unknown parameter' in error, got %q", ir.err)
+	}
+	if !strings.Contains(ir.err, "bogus_flag") {
+		t.Fatalf("expected 'bogus_flag' in error, got %q", ir.err)
+	}
+}
+
+func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.GlobalFlag(StringFlag("token", "auth token"))
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
+		return 0
+	})
+
+	// Don't provide "token" -- it's a required string global flag (no default)
+	ir := app.invoke("exec", map[string]interface{}{
+		"_args":   []string{"ls"},
+		"verbose": true,
+	})
+	if ir.err == "" {
+		t.Fatal("expected error for missing required global flag in passthrough command")
+	}
+	if !strings.Contains(ir.err, "required") {
+		t.Fatalf("expected 'required' in error, got %q", ir.err)
+	}
+	if !strings.Contains(ir.err, "token") {
+		t.Fatalf("expected 'token' in error, got %q", ir.err)
+	}
+}
+
 func TestInvokeUnknownCommand(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("greet", "say hello", func(kwargs map[string]interface{}) int { return 0 })
