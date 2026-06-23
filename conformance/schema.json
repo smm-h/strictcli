@@ -243,11 +243,37 @@
         "name": { "type": "string" },
         "help": { "type": "string" },
         "required": { "type": "boolean", "default": true },
-        "default": { "type": "string" },
+        "default": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" },
+            { "type": "null" }
+          ]
+        },
         "variadic": {
           "type": "boolean",
           "default": false,
           "description": "If true, collects all remaining positional args into a list. Must be the last declared arg."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["str", "int", "float", "bool"],
+          "default": "str"
+        },
+        "choices_str": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Choices for str-type args."
+        },
+        "choices_int": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Choices for int-type args."
+        },
+        "choices_float": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Choices for float-type args."
         }
       }
     },
