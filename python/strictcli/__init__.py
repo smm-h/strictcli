@@ -3343,12 +3343,21 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
         for a, dn in zip(cmd.args, display_names):
             padding = max_len - len(dn) + 4
             help_text = a.help
+            meta_parts: list[str] = []
+            if a.type is not str:
+                meta_parts.append(f"type: {a.type.__name__}")
+            if a.choices is not None:
+                choices_str = ", ".join(str(c) for c in a.choices)
+                meta_parts.append(f"choices: {choices_str}")
             if not a.required:
                 if not isinstance(a.default, _MissingSentinel):
-                    help_text += f" [default: {a.default}]"
+                    meta_parts.append(f"default: {a.default}")
                 else:
-                    help_text += " (optional)"
-            lines.append(f"  {dn}{' ' * padding}{help_text}")
+                    meta_parts.append("optional")
+            meta = ""
+            if meta_parts:
+                meta = " [" + "] [".join(meta_parts) + "]"
+            lines.append(f"  {dn}{' ' * padding}{help_text}{meta}")
 
     # Collect flag names that belong to mutex groups
     mutex_flag_names: set[str] = set()
@@ -3907,12 +3916,16 @@ def _serialize_arg(a: Arg) -> dict:
         "name": a.name,
         "help": a.help,
     }
+    if a.type is not str:
+        d["type"] = a.type.__name__
     if not a.required:
         d["required"] = a.required
     if not isinstance(a.default, _MissingSentinel):
         d["default"] = a.default
     if a.variadic:
         d["variadic"] = a.variadic
+    if a.choices is not None:
+        d["choices"] = a.choices
     return d
 
 
@@ -4017,9 +4030,11 @@ def _build_schema_defaults() -> dict:
             "hidden": False,
         },
         "arg": {
+            "type": "str",
             "required": True,
             "default": None,
             "variadic": False,
+            "choices": None,
         },
         "command": {
             "passthrough": False,

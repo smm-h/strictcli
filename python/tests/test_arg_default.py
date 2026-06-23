@@ -81,7 +81,7 @@ def test_default_shown_in_help():
 
 
 def test_optional_arg_without_default_shows_optional_in_help():
-    """Optional arg without default shows (optional) in help, not [default: ...]."""
+    """Optional arg without default shows [optional] in help, not [default: ...]."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
@@ -94,7 +94,7 @@ def test_optional_arg_without_default_shows_optional_in_help():
 
     r = app.test(["cmd", "--help"])
     assert r.exit_code == 0
-    assert "(optional)" in r.stdout
+    assert "[optional]" in r.stdout
     assert "[default:" not in r.stdout
 
 
