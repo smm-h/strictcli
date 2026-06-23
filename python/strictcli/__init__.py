@@ -597,6 +597,7 @@ def _config_typename(value: object) -> str:
 
 _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _CHECK_REQUIRED_FIELDS = {"tags", "severity", "fast", "pure", "needs_network", "depends_on"}
+_CHECK_OPTIONAL_FIELDS = {"scope"}
 _CHECK_VALID_SEVERITIES = {"error", "warn"}
 
 
@@ -642,7 +643,7 @@ def _parse_checks_toml(data: bytes) -> tuple[str, dict[str, _CheckDef]]:
             raise ValueError(f'checks.toml: check "{name}" must be a table')
 
         # No unknown fields
-        unknown = set(fields.keys()) - _CHECK_REQUIRED_FIELDS
+        unknown = set(fields.keys()) - _CHECK_REQUIRED_FIELDS - _CHECK_OPTIONAL_FIELDS
         if unknown:
             raise ValueError(
                 f'checks.toml: check "{name}": unknown field "{sorted(unknown)[0]}"'
@@ -696,6 +697,14 @@ def _parse_checks_toml(data: bytes) -> tuple[str, dict[str, _CheckDef]]:
                     f'checks.toml: check "{name}": "depends_on" entries must be strings'
                 )
 
+        # Validate optional scope field
+        scope = fields.get("scope", "")
+        if not isinstance(scope, str):
+            raise ValueError(
+                f'checks.toml: check "{name}": "scope" must be a string, '
+                f"got {type(scope).__name__}"
+            )
+
         result[name] = _CheckDef(
             name=name,
             tags=tags,
@@ -704,6 +713,7 @@ def _parse_checks_toml(data: bytes) -> tuple[str, dict[str, _CheckDef]]:
             pure=fields["pure"],
             needs_network=fields["needs_network"],
             depends_on=depends_on,
+            scope=scope,
         )
 
     # Cross-validate depends_on references
@@ -1736,6 +1746,7 @@ class _CheckDef:
     pure: bool
     needs_network: bool
     depends_on: list[str]
+    scope: str = ""
     impl: object | None = None
 
 
@@ -1789,6 +1800,7 @@ class App:
             self._register_config_group()
         # Discover checks TOML
         self._check_context_factory: Callable | None = None
+        self._scope_adapter: Callable | None = None
         if self.checks_path is not None and self.checks_embed is not None:
             raise ValueError("cannot use both checks_path and checks_embed")
         if self.checks_path is not None:
@@ -2027,6 +2039,15 @@ class App:
         """
         self._check_context_factory = factory
 
+    def set_scope_adapter(self, adapter: Callable) -> None:
+        """Set the scope adapter callback for scoped checks.
+
+        The adapter is called as ``adapter(context, scope_string)`` and must
+        return either a replacement context object (used for the check's impl)
+        or a ``CheckResult`` (used directly, skipping the impl call).
+        """
+        self._scope_adapter = adapter
+
     def run_checks(
         self,
         context: CheckContext,
@@ -2052,6 +2073,7 @@ class App:
         order = _resolve_check_order(self._check_defs, selected)
         raw_results, exit_code = _run_checks(
             self._check_defs, order, context, ignore_warnings,
+            scope_adapter=self._scope_adapter,
         )
         results = [
             CheckRunResult(name=name, result=result)
@@ -2108,6 +2130,7 @@ class App:
             context = app_ref._check_context_factory()
             raw_results, exit_code = _run_checks(
                 app_ref._check_defs, order, context, ignore_warnings,
+                scope_adapter=app_ref._scope_adapter,
             )
 
             results_wrapped = [
@@ -5160,6 +5183,7 @@ def _run_checks(
     check_names: list[str],
     context: CheckContext,
     ignore_warnings: bool,
+    scope_adapter: object | None = None,
 ) -> tuple[list[tuple[str, CheckResult]], int]:
     """Execute checks in order, skipping dependents of failed checks.
 
@@ -5197,7 +5221,26 @@ def _run_checks(
             exit_code = 1
             continue
 
-        result = cdef.impl(context)
+        # Apply scope adapter if the check has a scope and an adapter is set
+        check_context = context
+        if cdef.scope and scope_adapter is not None:
+            adapted = scope_adapter(context, cdef.scope)
+            if isinstance(adapted, CheckResult):
+                result = adapted
+                results.append((name, result))
+                if result.status == "fail":
+                    failed_checks.add(name)
+                    exit_code = 1
+                elif result.status == "warn":
+                    if not ignore_warnings:
+                        failed_checks.add(name)
+                        exit_code = 1
+                elif result.status == "skip":
+                    pass
+                continue
+            check_context = adapted
+
+        result = cdef.impl(check_context)
         results.append((name, result))
 
         if result.status == "fail":
@@ -5227,10 +5270,12 @@ def _check_list_mode(check_defs: dict[str, _CheckDef], json_mode: bool) -> None:
     sorted_defs = sorted(check_defs.values(), key=lambda c: c.name)
 
     if json_mode:
-        items = [
-            {"name": cdef.name, "tags": cdef.tags, "severity": cdef.severity}
-            for cdef in sorted_defs
-        ]
+        items = []
+        for cdef in sorted_defs:
+            entry: dict = {"name": cdef.name, "tags": cdef.tags, "severity": cdef.severity}
+            if cdef.scope:
+                entry["scope"] = cdef.scope
+            items.append(entry)
         print(json.dumps(items, separators=(",", ":")))
         return
 
@@ -5607,8 +5652,9 @@ def _dump_schema(app: App) -> dict:
     if app._tag_contracts:
         schema["tag_contracts"] = dict(app._tag_contracts)
     if app._checks_enabled:
-        schema["checks"] = {
-            name: {
+        checks_schema: dict = {}
+        for name, cdef in app._check_defs.items():
+            entry = {
                 "tags": cdef.tags,
                 "severity": cdef.severity,
                 "fast": cdef.fast,
@@ -5616,8 +5662,10 @@ def _dump_schema(app: App) -> dict:
                 "needs_network": cdef.needs_network,
                 "depends_on": cdef.depends_on,
             }
-            for name, cdef in app._check_defs.items()
-        }
+            if cdef.scope:
+                entry["scope"] = cdef.scope
+            checks_schema[name] = entry
+        schema["checks"] = checks_schema
     if app._config_fields:
         # Build field definitions with bound command info
         cf_schema: dict = {}
