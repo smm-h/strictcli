@@ -4095,6 +4095,10 @@ def _serialize_command(cmd: Command) -> dict:
             })
     if constraints:
         d["constraints"] = constraints
+    if cmd.hidden:
+        d["hidden"] = True
+    if cmd.interactive:
+        d["interactive"] = True
     return d
 
 
@@ -4120,6 +4124,8 @@ def _serialize_group(group: Group) -> dict:
     tags = sorted(group.tags)
     if tags:
         d["tags"] = tags
+    if group.hidden:
+        d["hidden"] = True
     return d
 
 
@@ -4160,12 +4166,15 @@ def _build_schema_defaults() -> dict:
             "args": [],
             "tags": [],
             "constraints": [],
+            "hidden": False,
+            "interactive": False,
         },
         "group": {
             "commands": {},
             "groups": {},
             "deprecated": {},
             "tags": [],
+            "hidden": False,
         },
     }
 
