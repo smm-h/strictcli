@@ -2115,6 +2115,105 @@ class App:
             exit_code=exit_code,
         )
 
+    def _invoke(
+        self, command_path: str, kwargs: dict[str, object]
+    ) -> int | None:
+        """Invoke a command programmatically with pre-typed kwargs.
+
+        This is the internal pipeline for programmatic invocation. It bypasses
+        CLI parsing, env var resolution, config file loading, and stdin
+        handling. The caller provides fully-typed values directly.
+
+        Args:
+            command_path: dot-separated path to the command
+                (e.g. "deploy" or "config.set").
+            kwargs: handler keyword arguments. Flag names use underscores
+                (e.g. dry_run). Positional args use their declared name.
+                For passthrough commands, pass a single key "_args" with
+                a list of raw string arguments.
+
+        Returns:
+            The handler's return value (int or None).
+
+        Raises:
+            _ParseError: if validation fails (missing required flags,
+                mutex violations, dependency errors, etc.).
+            _HelpRequested: if the command path resolves to a group
+                with no subcommand.
+        """
+        path_segments = command_path.split(".")
+        cmd, _rest, _path = self._resolve_command(path_segments)
+
+        # Passthrough commands: forward raw args to the passthrough handler
+        if cmd.passthrough is not None:
+            raw_args = kwargs.get("_args", [])
+            return cmd.passthrough.handler(
+                cmd.name, raw_args, self._last_global_values,
+            )
+
+        # Build reverse mapping: param_name (underscore) -> flag.name (dashes)
+        param_to_flag: dict[str, str] = {}
+        for f in cmd.flags:
+            param_to_flag[_flag_param_name(f.name)] = f.name
+
+        # Also map global flags
+        global_flag_names: set[str] = set()
+        for gf in self._global_flags:
+            param_to_flag[_flag_param_name(gf.name)] = gf.name
+            global_flag_names.add(gf.name)
+
+        # Collect arg names for this command
+        arg_names: set[str] = {a.name for a in cmd.args}
+
+        # Populate cli_set from kwargs
+        cli_set: dict[str, object] = {}
+        positionals: list[str] = []
+
+        for key, value in kwargs.items():
+            if key in param_to_flag:
+                # It's a flag -- store under flag.name (with dashes)
+                flag_name = param_to_flag[key]
+                cli_set[flag_name] = value
+            elif key in arg_names:
+                # It's a positional arg -- collect into positionals in order
+                # (handled below after iterating all kwargs)
+                pass
+            else:
+                raise _ParseError(
+                    f"unknown parameter '{key}' for command '{cmd.name}'"
+                )
+
+        # Build positionals list in declared arg order from kwargs
+        for a in cmd.args:
+            if a.name in kwargs:
+                val = kwargs[a.name]
+                if a.variadic:
+                    # Variadic args expect a list
+                    if isinstance(val, list):
+                        positionals.extend(str(v) for v in val)
+                    else:
+                        positionals.append(str(val))
+                else:
+                    positionals.append(str(val))
+
+        # Validate and build final kwargs via the shared validation pipeline
+        _cmd, final_kwargs, _global_cli_set = _validate_and_build_kwargs(
+            cmd, cli_set, positionals, global_flag_names,
+        )
+
+        # Merge global flag values into final kwargs
+        for gf in self._global_flags:
+            if gf.name in _global_cli_set:
+                final_kwargs[_flag_param_name(gf.name)] = _global_cli_set[gf.name]
+            elif _flag_param_name(gf.name) not in final_kwargs:
+                # Global flag not provided -- use its default
+                if gf.type is bool:
+                    final_kwargs[_flag_param_name(gf.name)] = gf.default if gf.default is not None else False
+                elif gf.default is not None:
+                    final_kwargs[_flag_param_name(gf.name)] = gf.default
+
+        return cmd.handler(**final_kwargs)
+
 
 def _tokens_contain_help(tokens: list[str]) -> bool:
     """Check if --help or -h appears in tokens before any -- separator."""
