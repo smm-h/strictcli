@@ -301,20 +301,32 @@ func buildFlagSpec(f Flag) string {
 		}
 	}
 	spec := strings.Join(parts, ", ")
-	switch f.Type {
-	case TypeStr:
-		spec += " <str>"
-	case TypeInt:
-		spec += " <int>"
-	case TypeFloat:
-		spec += " <float>"
+	if IsDictType(f.Type) {
+		valTypeName := flagTypeName[ItemType(f.Type)]
+		spec += fmt.Sprintf(" <key=%s>", valTypeName)
+	} else if IsListType(f.Type) {
+		itemTypeName := flagTypeName[ItemType(f.Type)]
+		spec += fmt.Sprintf(" <%s>", itemTypeName)
+	} else {
+		switch f.Type {
+		case TypeStr:
+			spec += " <str>"
+		case TypeInt:
+			spec += " <int>"
+		case TypeFloat:
+			spec += " <float>"
+		}
 	}
 	return spec
 }
 
 func buildFlagMeta(f Flag) string {
 	var metaParts []string
-	if f.Repeatable {
+	if IsDictType(f.Type) {
+		metaParts = append(metaParts, "dict")
+	} else if IsListType(f.Type) {
+		metaParts = append(metaParts, "list")
+	} else if f.Repeatable {
 		metaParts = append(metaParts, "repeatable")
 	}
 	if f.Unique {

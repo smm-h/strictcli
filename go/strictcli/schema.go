@@ -12,10 +12,16 @@ import (
 
 // flagTypeName maps FlagType to its string representation for schema output.
 var flagTypeName = map[FlagType]string{
-	TypeStr:   "str",
-	TypeBool:  "bool",
-	TypeInt:   "int",
-	TypeFloat: "float",
+	TypeStr:       "str",
+	TypeBool:      "bool",
+	TypeInt:       "int",
+	TypeFloat:     "float",
+	TypeListStr:   "list[str]",
+	TypeListInt:   "list[int]",
+	TypeListFloat: "list[float]",
+	TypeDictStr:   "dict[str]",
+	TypeDictInt:   "dict[int]",
+	TypeDictFloat: "dict[float]",
 }
 
 // serializeFlag converts a Flag to a JSON-serializable map matching the Python format.

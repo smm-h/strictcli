@@ -283,9 +283,43 @@ func coerceConfigScalar(value interface{}, flagType FlagType) (interface{}, stri
 }
 
 // coerceConfigValue coerces a JSON-decoded value to the flag's type.
-// Handles both scalar values and arrays (for repeatable flags).
+// Handles scalar values, arrays (for repeatable/list flags), and objects (for dict flags).
 // Returns the coerced value and an error string (empty on success).
 func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
+	// Dict flags: expect a JSON object in config
+	if IsDictType(f.Type) {
+		m, ok := value.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Sprintf("expected object for dict flag, got %s", typeName(value))
+		}
+		valType := ItemType(f.Type)
+		result := make(map[string]interface{}, len(m))
+		for k, v := range m {
+			coerced, errStr := coerceConfigScalar(v, valType)
+			if errStr != "" {
+				return nil, fmt.Sprintf("key %q: expected %s, got %s", k, flagTypeName[valType], typeName(v))
+			}
+			result[k] = coerced
+		}
+		return result, ""
+	}
+	// List flags: expect a JSON array in config
+	if IsListType(f.Type) {
+		arr, ok := value.([]interface{})
+		if !ok {
+			return nil, fmt.Sprintf("expected array for list flag, got %s", typeName(value))
+		}
+		elemType := ItemType(f.Type)
+		result := make([]interface{}, len(arr))
+		for i, elem := range arr {
+			coerced, errStr := coerceConfigScalar(elem, elemType)
+			if errStr != "" {
+				return nil, fmt.Sprintf("element %d: expected %s, got %s", i, flagTypeName[elemType], typeName(elem))
+			}
+			result[i] = coerced
+		}
+		return result, ""
+	}
 	if arr, ok := value.([]interface{}); ok {
 		if !f.Repeatable {
 			return nil, "expected scalar, got array"

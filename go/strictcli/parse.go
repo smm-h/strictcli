@@ -1,6 +1,7 @@
 package strictcli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -146,30 +147,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				if f.Type == TypeBool {
 					return nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
 				}
-				if f.Type == TypeInt {
-					intVal, err := parseIntStrict(valuePart)
-					if err != nil {
-						return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
-					}
-					if errStr := storeValue(f, intVal); errStr != "" {
-						return nil, nil, errStr
-					}
-				} else if f.Type == TypeFloat {
-					floatVal, errStr := parseFloatStrict(f.Name, valuePart)
-					if errStr != "" {
-						return nil, nil, errStr
-					}
-					if errStr := storeValue(f, floatVal); errStr != "" {
-						return nil, nil, errStr
-					}
-				} else {
-					resolved, errStr := resolveAtPrefix(f.Name, valuePart, stdinConsumedBy)
-					if errStr != "" {
-						return nil, nil, errStr
-					}
-					if errStr := storeValue(f, resolved); errStr != "" {
-						return nil, nil, errStr
-					}
+				if errStr := parseFlagRawValue(f, valuePart, cliSet, stdinConsumedBy, storeValue); errStr != "" {
+					return nil, nil, errStr
 				}
 			} else if _, ok := negationLookup[flagPart]; ok {
 				return nil, nil, fmt.Sprintf("flag '%s' is a boolean negation and does not take a value", flagPart)
@@ -201,30 +180,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
 				raw := tokens[i+1]
-				if f.Type == TypeInt {
-					intVal, err := parseIntStrict(raw)
-					if err != nil {
-						return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
-					}
-					if errStr := storeValue(f, intVal); errStr != "" {
-						return nil, nil, errStr
-					}
-				} else if f.Type == TypeFloat {
-					floatVal, errStr := parseFloatStrict(f.Name, raw)
-					if errStr != "" {
-						return nil, nil, errStr
-					}
-					if errStr := storeValue(f, floatVal); errStr != "" {
-						return nil, nil, errStr
-					}
-				} else {
-					resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
-					if errStr != "" {
-						return nil, nil, errStr
-					}
-					if errStr := storeValue(f, resolved); errStr != "" {
-						return nil, nil, errStr
-					}
+				if errStr := parseFlagRawValue(f, raw, cliSet, stdinConsumedBy, storeValue); errStr != "" {
+					return nil, nil, errStr
 				}
 				i += 2
 			}
@@ -242,30 +199,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 						return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 					}
 					raw := tokens[i+1]
-					if f.Type == TypeInt {
-						intVal, err := parseIntStrict(raw)
-						if err != nil {
-							return nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
-						}
-						if errStr := storeValue(f, intVal); errStr != "" {
-							return nil, nil, errStr
-						}
-					} else if f.Type == TypeFloat {
-						floatVal, errStr := parseFloatStrict(f.Name, raw)
-						if errStr != "" {
-							return nil, nil, errStr
-						}
-						if errStr := storeValue(f, floatVal); errStr != "" {
-							return nil, nil, errStr
-						}
-					} else {
-						resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
-						if errStr != "" {
-							return nil, nil, errStr
-						}
-						if errStr := storeValue(f, resolved); errStr != "" {
-							return nil, nil, errStr
-						}
+					if errStr := parseFlagRawValue(f, raw, cliSet, stdinConsumedBy, storeValue); errStr != "" {
+						return nil, nil, errStr
 					}
 					i += 2
 				}
@@ -290,6 +225,40 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 		envVal, ok := os.LookupEnv(f.Env)
 		if !ok {
+			continue
+		}
+		// Compound types: dict parses JSON from env, list uses env_separator
+		if IsDictType(f.Type) {
+			entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
+			if errStr != "" {
+				return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+			}
+			cliSet[f.Name] = entries
+			continue
+		}
+		if IsListType(f.Type) {
+			if f.EnvSeparator == "" {
+				return nil, nil, fmt.Sprintf("--%s: list flag with env requires env_separator", f.Name)
+			}
+			parts := splitEscaped(envVal, f.EnvSeparator[0])
+			elemType := ItemType(f.Type)
+			coercedList := make([]interface{}, 0, len(parts))
+			for _, element := range parts {
+				val, errStr := coerceToScalar(f.Name, element, elemType, nil)
+				if errStr != "" {
+					return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+				}
+				coercedList = append(coercedList, val)
+			}
+			if f.Unique {
+				if dup := findDuplicate(coercedList); dup != nil {
+					return nil, nil, fmt.Sprintf(
+						"--%s: duplicate value '%s' (from env var '%s')",
+						f.Name, formatValueForError(dup), f.Env,
+					)
+				}
+			}
+			cliSet[f.Name] = coercedList
 			continue
 		}
 		switch f.Type {
@@ -530,7 +499,18 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 		if _, ok := cliSet[f.Name]; ok {
 			continue
 		}
-		if f.Repeatable {
+		if IsDictType(f.Type) {
+			if f.hasDefault && f.Default != nil {
+				src := f.Default.(map[string]interface{})
+				m := make(map[string]interface{}, len(src))
+				for k, v := range src {
+					m[k] = v
+				}
+				cliSet[f.Name] = m
+			} else {
+				cliSet[f.Name] = map[string]interface{}{}
+			}
+		} else if f.Repeatable {
 			if f.hasDefault && f.Default != nil {
 				src := f.Default.([]interface{})
 				cliSet[f.Name] = append([]interface{}{}, src...)
@@ -791,8 +771,14 @@ func parseFloatStrict(flagName, raw string) (interface{}, string) {
 // coerceArgValue coerces a raw positional arg string to the declared type.
 // Uses the same strict parsing functions as flags. Error messages use
 // "argument '<name>': ..." prefix for parity with Python.
+// For list types, coerces using the item type.
 func coerceArgValue(a *Arg, raw string) (interface{}, string) {
-	switch a.Type {
+	t := a.Type
+	// For list-typed variadic args, coerce each element to the item type
+	if IsListType(t) {
+		t = ItemType(t)
+	}
+	switch t {
 	case TypeStr:
 		return raw, ""
 	case TypeInt:
@@ -895,4 +881,167 @@ func formatValueForError(value interface{}) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// coerceToScalar coerces a raw string to a scalar FlagType.
+// For TypeStr, resolves @-prefix. For TypeInt/TypeFloat, does strict parsing.
+// Returns (coerced value, error string).
+func coerceToScalar(flagName, raw string, scalarType FlagType, stdinConsumedBy **string) (interface{}, string) {
+	switch scalarType {
+	case TypeInt:
+		intVal, err := parseIntStrict(raw)
+		if err != nil {
+			return nil, fmt.Sprintf("--%s: %s", flagName, err.Error())
+		}
+		return intVal, ""
+	case TypeFloat:
+		return parseFloatStrict(flagName, raw)
+	case TypeStr:
+		if stdinConsumedBy != nil {
+			return resolveAtPrefix(flagName, raw, stdinConsumedBy)
+		}
+		return raw, ""
+	default:
+		return raw, ""
+	}
+}
+
+// parseDictValue parses a single dict flag value from the CLI.
+// Accepts either "key=value" format or a JSON string starting with '{'.
+// Returns (parsed map entries, error string).
+func parseDictValue(flagName, raw string, valueType FlagType) (map[string]interface{}, string) {
+	trimmed := strings.TrimSpace(raw)
+	if strings.HasPrefix(trimmed, "{") {
+		// JSON object input
+		var jsonMap map[string]interface{}
+		if err := json.Unmarshal([]byte(raw), &jsonMap); err != nil {
+			return nil, fmt.Sprintf("--%s: invalid JSON: %s", flagName, err.Error())
+		}
+		// Coerce all values to the declared value type
+		result := make(map[string]interface{}, len(jsonMap))
+		for k, v := range jsonMap {
+			coerced, errStr := coerceJSONValueToScalar(v, valueType)
+			if errStr != "" {
+				return nil, fmt.Sprintf("--%s: JSON key %q: %s", flagName, k, errStr)
+			}
+			result[k] = coerced
+		}
+		return result, ""
+	}
+	// key=value format: split on first '='
+	eqIdx := strings.Index(raw, "=")
+	if eqIdx < 0 {
+		return nil, fmt.Sprintf("--%s: expected key=value, got '%s'", flagName, raw)
+	}
+	key := raw[:eqIdx]
+	valStr := raw[eqIdx+1:]
+	if key == "" {
+		return nil, fmt.Sprintf("--%s: empty key in key=value pair", flagName)
+	}
+	// Coerce the value
+	var coerced interface{}
+	switch valueType {
+	case TypeInt:
+		intVal, err := parseIntStrict(valStr)
+		if err != nil {
+			return nil, fmt.Sprintf("--%s: value for key %q: %s", flagName, key, err.Error())
+		}
+		coerced = intVal
+	case TypeFloat:
+		floatVal, err := parseFloatStrictValue(valStr)
+		if err != nil {
+			return nil, fmt.Sprintf("--%s: value for key %q: %s", flagName, key, err.Error())
+		}
+		coerced = floatVal
+	default:
+		coerced = valStr
+	}
+	return map[string]interface{}{key: coerced}, ""
+}
+
+// parseDictEnvValue parses a JSON string from an env var for a dict flag.
+// Returns (parsed map, error string).
+func parseDictEnvValue(flagName, envVal string, valueType FlagType) (map[string]interface{}, string) {
+	var jsonMap map[string]interface{}
+	if err := json.Unmarshal([]byte(envVal), &jsonMap); err != nil {
+		return nil, fmt.Sprintf("--%s: expected JSON object in env var, got invalid JSON", flagName)
+	}
+	result := make(map[string]interface{}, len(jsonMap))
+	for k, v := range jsonMap {
+		coerced, errStr := coerceJSONValueToScalar(v, valueType)
+		if errStr != "" {
+			return nil, fmt.Sprintf("--%s: env var JSON key %q: %s", flagName, k, errStr)
+		}
+		result[k] = coerced
+	}
+	return result, ""
+}
+
+// coerceJSONValueToScalar coerces a JSON-decoded value to a scalar FlagType.
+// JSON numbers are float64 by default; this handles int coercion.
+func coerceJSONValueToScalar(value interface{}, scalarType FlagType) (interface{}, string) {
+	switch scalarType {
+	case TypeStr:
+		if s, ok := value.(string); ok {
+			return s, ""
+		}
+		return nil, fmt.Sprintf("expected string, got %s", typeName(value))
+	case TypeInt:
+		if fv, ok := value.(float64); ok {
+			intVal := int(fv)
+			if float64(intVal) == fv {
+				return intVal, ""
+			}
+			return nil, "expected integer, got float"
+		}
+		return nil, fmt.Sprintf("expected integer, got %s", typeName(value))
+	case TypeFloat:
+		if fv, ok := value.(float64); ok {
+			return fv, ""
+		}
+		return nil, fmt.Sprintf("expected float, got %s", typeName(value))
+	}
+	return value, ""
+}
+
+// storeDictValue merges dict entries into the cliSet map for a dict flag.
+// Returns an error string (empty on success).
+func storeDictValue(cliSet map[string]interface{}, f *Flag, entries map[string]interface{}) string {
+	if existing, ok := cliSet[f.Name]; ok {
+		m := existing.(map[string]interface{})
+		for k, v := range entries {
+			m[k] = v
+		}
+	} else {
+		m := make(map[string]interface{}, len(entries))
+		for k, v := range entries {
+			m[k] = v
+		}
+		cliSet[f.Name] = m
+	}
+	return ""
+}
+
+// parseFlagRawValue parses a raw string value for a flag, handling scalar,
+// list, and dict types. For dict flags, it modifies cliSet directly.
+// For scalar and list flags, it returns the coerced value via storeValue.
+// Returns error string (empty on success).
+func parseFlagRawValue(f *Flag, raw string, cliSet map[string]interface{}, stdinConsumedBy **string, storeValue func(*Flag, interface{}) string) string {
+	if IsDictType(f.Type) {
+		entries, errStr := parseDictValue(f.Name, raw, ItemType(f.Type))
+		if errStr != "" {
+			return errStr
+		}
+		return storeDictValue(cliSet, f, entries)
+	}
+	// For list flags, coerce using the item type
+	scalarType := f.Type
+	if IsListType(f.Type) {
+		scalarType = ItemType(f.Type)
+	}
+	val, errStr := coerceToScalar(f.Name, raw, scalarType, stdinConsumedBy)
+	if errStr != "" {
+		return errStr
+	}
+	return storeValue(f, val)
 }

@@ -134,8 +134,12 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 		flagName := paramToFlagName(paramName)
 
 		// Check if it's a command flag
-		if _, ok := flagByName[flagName]; ok {
-			cliSet[flagName] = value
+		if f, ok := flagByName[flagName]; ok {
+			coerced, errStr := coerceInvokeValue(f, value)
+			if errStr != "" {
+				return invokeResult{exitCode: 1, err: errStr}
+			}
+			cliSet[flagName] = coerced
 			continue
 		}
 
@@ -243,6 +247,77 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 	}
 	code := cmd.Handler(validatedKwargs)
 	return invokeResult{exitCode: code}
+}
+
+// coerceInvokeValue converts a Go-native value to the internal representation
+// expected by the parsing/validation pipeline. For compound types, this converts
+// typed Go slices ([]int, []string, etc.) to []interface{}, and typed Go maps
+// (map[string]int, etc.) to map[string]interface{}. For scalar types, the value
+// is passed through as-is.
+func coerceInvokeValue(f *Flag, value interface{}) (interface{}, string) {
+	if IsDictType(f.Type) {
+		return coerceInvokeDict(f, value)
+	}
+	if IsListType(f.Type) || f.Repeatable {
+		return coerceInvokeList(f, value)
+	}
+	return value, ""
+}
+
+// coerceInvokeList converts various Go slice types to []interface{}.
+func coerceInvokeList(f *Flag, value interface{}) (interface{}, string) {
+	switch v := value.(type) {
+	case []interface{}:
+		return v, ""
+	case []string:
+		result := make([]interface{}, len(v))
+		for i, s := range v {
+			result[i] = s
+		}
+		return result, ""
+	case []int:
+		result := make([]interface{}, len(v))
+		for i, n := range v {
+			result[i] = n
+		}
+		return result, ""
+	case []float64:
+		result := make([]interface{}, len(v))
+		for i, n := range v {
+			result[i] = n
+		}
+		return result, ""
+	default:
+		return value, ""
+	}
+}
+
+// coerceInvokeDict converts various Go map types to map[string]interface{}.
+func coerceInvokeDict(f *Flag, value interface{}) (interface{}, string) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		return v, ""
+	case map[string]string:
+		result := make(map[string]interface{}, len(v))
+		for k, s := range v {
+			result[k] = s
+		}
+		return result, ""
+	case map[string]int:
+		result := make(map[string]interface{}, len(v))
+		for k, n := range v {
+			result[k] = n
+		}
+		return result, ""
+	case map[string]float64:
+		result := make(map[string]interface{}, len(v))
+		for k, n := range v {
+			result[k] = n
+		}
+		return result, ""
+	default:
+		return nil, fmt.Sprintf("dict flag %q: expected map type, got %T", f.Name, value)
+	}
 }
 
 // Call invokes a command programmatically and returns its result.

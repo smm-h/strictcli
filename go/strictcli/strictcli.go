@@ -10,6 +10,9 @@ import (
 )
 
 // FlagType represents the type of a flag value.
+// Scalar types: TypeStr, TypeBool, TypeInt, TypeFloat.
+// Compound types encode the item/value type in the upper bits:
+// list types = 0x100 | scalar, dict types = 0x200 | scalar.
 type FlagType int
 
 const (
@@ -17,7 +20,69 @@ const (
 	TypeBool  FlagType = iota
 	TypeInt   FlagType = iota
 	TypeFloat FlagType = iota
+
+	// Compound type bit flags
+	listBit FlagType = 0x100
+	dictBit FlagType = 0x200
+
+	// List types: a repeatable flag whose items are coerced to the element type.
+	TypeListStr   FlagType = listBit | TypeStr
+	TypeListInt   FlagType = listBit | TypeInt
+	TypeListFloat FlagType = listBit | TypeFloat
+
+	// Dict types: a repeatable key=value flag whose values are coerced to the value type.
+	TypeDictStr   FlagType = listBit | dictBit | TypeStr
+	TypeDictInt   FlagType = listBit | dictBit | TypeInt
+	TypeDictFloat FlagType = listBit | dictBit | TypeFloat
 )
+
+// IsScalarType returns true for the four primitive types.
+func IsScalarType(t FlagType) bool {
+	return t == TypeStr || t == TypeBool || t == TypeInt || t == TypeFloat
+}
+
+// IsListType returns true for list compound types.
+func IsListType(t FlagType) bool {
+	return t&listBit != 0 && t&dictBit == 0
+}
+
+// IsDictType returns true for dict compound types.
+func IsDictType(t FlagType) bool {
+	return t&dictBit != 0
+}
+
+// IsCompoundType returns true for any compound type (list or dict).
+func IsCompoundType(t FlagType) bool {
+	return IsListType(t) || IsDictType(t)
+}
+
+// ItemType returns the scalar element type for a compound type.
+// For scalar types, returns the type itself.
+func ItemType(t FlagType) FlagType {
+	return t & 0x0F
+}
+
+// ListOf creates a list type from a scalar item type.
+// Panics if the item type is not one of TypeStr, TypeInt, TypeFloat.
+func ListOf(itemType FlagType) FlagType {
+	switch itemType {
+	case TypeStr, TypeInt, TypeFloat:
+		return listBit | itemType
+	default:
+		panic(fmt.Sprintf("ListOf: item type must be str, int, or float, got %d", itemType))
+	}
+}
+
+// DictOf creates a dict type from a scalar value type.
+// Panics if the value type is not one of TypeStr, TypeInt, TypeFloat.
+func DictOf(valueType FlagType) FlagType {
+	switch valueType {
+	case TypeStr, TypeInt, TypeFloat:
+		return listBit | dictBit | valueType
+	default:
+		panic(fmt.Sprintf("DictOf: value type must be str, int, or float, got %d", valueType))
+	}
+}
 
 // Flag represents a --flag declaration.
 type Flag struct {
@@ -555,6 +620,49 @@ func FloatFlag(name, help string, opts ...FlagOption) Flag {
 	return f
 }
 
+// ListFlag creates a list-typed flag. itemType must be TypeStr, TypeInt, or TypeFloat.
+// List flags are automatically repeatable. The Unique option is supported.
+// CLI usage: --flag val1 --flag val2 (each value coerced to itemType).
+func ListFlag(itemType FlagType, name, help string, opts ...FlagOption) Flag {
+	lt := ListOf(itemType) // panics on bad itemType
+	f := Flag{
+		Name:       name,
+		Type:       lt,
+		Help:       help,
+		Prefixed:   true,
+		Repeatable: true,
+	}
+	for _, opt := range opts {
+		opt(&f)
+	}
+	// List flags are always repeatable; override any explicit Repeatable(false)
+	f.Repeatable = true
+	validateFlagConfig(&f)
+	return f
+}
+
+// DictFlag creates a dict-typed flag. valueType must be TypeStr, TypeInt, or TypeFloat.
+// Dict flags are automatically repeatable (multiple key=value pairs).
+// CLI usage: --flag key=value --flag key2=value2
+// Also accepts JSON: --flag '{"key": "value"}'
+func DictFlag(valueType FlagType, name, help string, opts ...FlagOption) Flag {
+	dt := DictOf(valueType) // panics on bad valueType
+	f := Flag{
+		Name:       name,
+		Type:       dt,
+		Help:       help,
+		Prefixed:   true,
+		Repeatable: true,
+	}
+	for _, opt := range opts {
+		opt(&f)
+	}
+	// Dict flags are always repeatable
+	f.Repeatable = true
+	validateFlagConfig(&f)
+	return f
+}
+
 // NewArg creates a positional argument.
 func NewArg(name, help string, opts ...ArgOption) Arg {
 	if strings.TrimSpace(help) == "" {
@@ -572,15 +680,34 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 	if a.Required && a.hasDefault {
 		panic("required arg cannot have a default")
 	}
-	// Validate type is one of the four supported types
-	switch a.Type {
-	case TypeStr, TypeBool, TypeInt, TypeFloat:
-		// ok
-	default:
-		panic(fmt.Sprintf("Arg.type must be str, bool, int, or float, got %d", a.Type))
+	// Validate type: scalar types always allowed; list types only on variadic args
+	if IsListType(a.Type) {
+		if !a.IsVariadic {
+			panic(fmt.Sprintf("Arg %q: list type requires variadic=true", a.Name))
+		}
+		// Item type must be scalar
+		item := ItemType(a.Type)
+		switch item {
+		case TypeStr, TypeInt, TypeFloat:
+			// ok
+		default:
+			panic(fmt.Sprintf("Arg %q: list item type must be str, int, or float", a.Name))
+		}
+	} else if IsDictType(a.Type) {
+		panic(fmt.Sprintf("Arg %q: dict type is not supported on positional arguments", a.Name))
+	} else {
+		switch a.Type {
+		case TypeStr, TypeBool, TypeInt, TypeFloat:
+			// ok
+		default:
+			panic(fmt.Sprintf("Arg.type must be str, bool, int, or float, got %d", a.Type))
+		}
 	}
 	// Validate choices
 	if a.Choices != nil {
+		if IsListType(a.Type) {
+			panic(fmt.Sprintf("Arg %q: choices is incompatible with list type", a.Name))
+		}
 		if a.Type == TypeBool {
 			panic(fmt.Sprintf("Arg %q: choices is incompatible with type=bool", a.Name))
 		}
@@ -678,6 +805,10 @@ func validateFlagConfig(f *Flag) {
 	if f.Repeatable && f.Type == TypeBool {
 		panic(fmt.Sprintf("Flag %q: repeatable is incompatible with type=bool", f.Name))
 	}
+	// Compound types: choices not supported
+	if IsCompoundType(f.Type) && f.Choices != nil {
+		panic(fmt.Sprintf("Flag %q: choices is incompatible with compound types (list/dict)", f.Name))
+	}
 	// Unique requires repeatable; repeatable requires explicit unique
 	if f.Repeatable && !f.hasUnique {
 		panic(fmt.Sprintf("Flag %q: repeatable requires explicit unique (unique=True or unique=False)", f.Name))
@@ -685,6 +816,8 @@ func validateFlagConfig(f *Flag) {
 	if f.hasUnique && !f.Repeatable {
 		panic(fmt.Sprintf("Flag %q: unique requires repeatable=True", f.Name))
 	}
+	// Dict flags: env_separator for dicts means JSON parse from env (env_separator not used
+	// for splitting). For list types, env_separator works as before.
 	// EnvSeparator validations
 	if f.EnvSeparator != "" && !f.Repeatable {
 		panic(fmt.Sprintf("Flag %q: env_separator requires repeatable=True", f.Name))
@@ -692,7 +825,7 @@ func validateFlagConfig(f *Flag) {
 	if f.EnvSeparator != "" && f.Env == "" {
 		panic(fmt.Sprintf("Flag %q: env_separator requires env", f.Name))
 	}
-	if f.Repeatable && f.Env != "" && f.EnvSeparator == "" {
+	if f.Repeatable && f.Env != "" && f.EnvSeparator == "" && !IsDictType(f.Type) {
 		panic(fmt.Sprintf("Flag %q: repeatable flag with env requires env_separator", f.Name))
 	}
 	if f.EnvSeparator != "" && len(f.EnvSeparator) != 1 {
@@ -762,8 +895,44 @@ func validateFlagConfig(f *Flag) {
 			}
 		}
 	}
-	// Validate repeatable flag defaults
-	if f.Repeatable && f.hasDefault && f.Default != nil {
+	// Validate dict flag defaults: must be map[string]interface{} with correct value types
+	if IsDictType(f.Type) && f.hasDefault && f.Default != nil {
+		m, ok := f.Default.(map[string]interface{})
+		if !ok {
+			panic(fmt.Sprintf("Flag %q: dict flag default must be a map[string]interface{}", f.Name))
+		}
+		if len(m) == 0 {
+			panic(fmt.Sprintf("Flag %q: explicit empty default is redundant for dict flags, omit the default", f.Name))
+		}
+		valType := ItemType(f.Type)
+		for k, v := range m {
+			if errStr := validateScalarType(v, valType); errStr != "" {
+				panic(fmt.Sprintf("Flag %q: default value for key %q: %s", f.Name, k, errStr))
+			}
+		}
+	} else if IsListType(f.Type) && f.hasDefault && f.Default != nil {
+		// List flag defaults: must be []interface{} with correct item types
+		slice, ok := f.Default.([]interface{})
+		if !ok {
+			panic(fmt.Sprintf("Flag %q: list flag default must be a []interface{}", f.Name))
+		}
+		if len(slice) == 0 {
+			panic(fmt.Sprintf("Flag %q: explicit empty default is redundant for list flags, omit the default", f.Name))
+		}
+		elemType := ItemType(f.Type)
+		for i, elem := range slice {
+			if errStr := validateScalarType(elem, elemType); errStr != "" {
+				panic(fmt.Sprintf("Flag %q: default element %d: %s", f.Name, i, errStr))
+			}
+			// Auto-coerce int to float64 for float list defaults
+			if elemType == TypeFloat {
+				if intVal, ok := elem.(int); ok {
+					slice[i] = float64(intVal)
+				}
+			}
+		}
+	} else if f.Repeatable && !IsCompoundType(f.Type) && f.hasDefault && f.Default != nil {
+		// Validate repeatable scalar flag defaults
 		slice, ok := f.Default.([]interface{})
 		if !ok {
 			panic(fmt.Sprintf("Flag %q: repeatable flag default must be a list", f.Name))
@@ -797,7 +966,7 @@ func validateFlagConfig(f *Flag) {
 	// Resolve defaults
 	if !f.hasDefault {
 		if f.Repeatable {
-			// Repeatable defaults to empty slice
+			// Repeatable/list/dict defaults to empty (slice or map)
 		} else if f.Type == TypeBool {
 			f.Default = false
 			f.hasDefault = true
@@ -823,6 +992,34 @@ func validateFlagConfig(f *Flag) {
 			panic(fmt.Sprintf("Flag %q: default '%v' is not in choices [%s]", f.Name, f.Default, strings.Join(choiceParts, ", ")))
 		}
 	}
+}
+
+// validateScalarType checks if a value matches a scalar FlagType.
+// Returns an error message or empty string on success.
+func validateScalarType(v interface{}, t FlagType) string {
+	switch t {
+	case TypeStr:
+		if _, ok := v.(string); !ok {
+			return fmt.Sprintf("expected str, got %s", describeGoType(v))
+		}
+	case TypeInt:
+		if _, ok := v.(int); !ok {
+			return fmt.Sprintf("expected int, got %s", describeGoType(v))
+		}
+	case TypeFloat:
+		if _, ok := v.(float64); ok {
+			return ""
+		}
+		if _, ok := v.(int); ok {
+			return "" // int is acceptable for float
+		}
+		return fmt.Sprintf("expected float, got %s", describeGoType(v))
+	case TypeBool:
+		if _, ok := v.(bool); !ok {
+			return fmt.Sprintf("expected bool, got %s", describeGoType(v))
+		}
+	}
+	return ""
 }
 
 // --- App ---
@@ -1587,11 +1784,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if f.Type == TypeBool {
 					return nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
 				}
-				val, err := parseGlobalFlagValue(f, valuePart, &a.stdinConsumedBy)
-				if err != "" {
-					return nil, nil, err
-				}
-				if errStr := storeValue(f, val); errStr != "" {
+				if errStr := parseFlagRawValue(f, valuePart, globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
 					return nil, nil, errStr
 				}
 				i++
@@ -1617,11 +1810,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if i+1 >= len(argv) {
 					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
-				val, err := parseGlobalFlagValue(f, argv[i+1], &a.stdinConsumedBy)
-				if err != "" {
-					return nil, nil, err
-				}
-				if errStr := storeValue(f, val); errStr != "" {
+				if errStr := parseFlagRawValue(f, argv[i+1], globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
 					return nil, nil, errStr
 				}
 				i += 2
@@ -1638,11 +1827,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if i+1 >= len(argv) {
 					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
-				val, err := parseGlobalFlagValue(f, argv[i+1], &a.stdinConsumedBy)
-				if err != "" {
-					return nil, nil, err
-				}
-				if errStr := storeValue(f, val); errStr != "" {
+				if errStr := parseFlagRawValue(f, argv[i+1], globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
 					return nil, nil, errStr
 				}
 				i += 2
@@ -1665,6 +1850,40 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		if f.Env != "" {
 			envVal, ok := os.LookupEnv(f.Env)
 			if ok {
+				// Compound types: dict parses JSON from env, list uses env_separator
+				if IsDictType(f.Type) {
+					entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
+					if errStr != "" {
+						return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+					}
+					globalValues[f.Name] = entries
+					continue
+				}
+				if IsListType(f.Type) {
+					if f.EnvSeparator == "" {
+						return nil, nil, fmt.Sprintf("--%s: list flag with env requires env_separator", f.Name)
+					}
+					parts := splitEscaped(envVal, f.EnvSeparator[0])
+					elemType := ItemType(f.Type)
+					coercedList := make([]interface{}, 0, len(parts))
+					for _, element := range parts {
+						val, errStr := coerceToScalar(f.Name, element, elemType, nil)
+						if errStr != "" {
+							return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+						}
+						coercedList = append(coercedList, val)
+					}
+					if f.Unique {
+						if dup := findDuplicate(coercedList); dup != nil {
+							return nil, nil, fmt.Sprintf(
+								"--%s: duplicate value '%s' (from env var '%s')",
+								f.Name, formatValueForError(dup), f.Env,
+							)
+						}
+					}
+					globalValues[f.Name] = coercedList
+					continue
+				}
 				switch f.Type {
 				case TypeBool:
 					boolVal, err := parseBoolStrict(envVal)
@@ -1811,7 +2030,18 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		if _, ok := globalValues[f.Name]; ok {
 			continue
 		}
-		if f.Repeatable {
+		if IsDictType(f.Type) {
+			if f.hasDefault && f.Default != nil {
+				src := f.Default.(map[string]interface{})
+				m := make(map[string]interface{}, len(src))
+				for k, v := range src {
+					m[k] = v
+				}
+				globalValues[f.Name] = m
+			} else {
+				globalValues[f.Name] = map[string]interface{}{}
+			}
+		} else if f.Repeatable {
 			if f.hasDefault && f.Default != nil {
 				src := f.Default.([]interface{})
 				globalValues[f.Name] = append([]interface{}{}, src...)
@@ -1873,26 +2103,6 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 	}
 
 	return result, remaining, ""
-}
-
-// parseGlobalFlagValue parses a string value for a global flag.
-func parseGlobalFlagValue(f *Flag, raw string, stdinConsumedBy **string) (interface{}, string) {
-	switch f.Type {
-	case TypeInt:
-		intVal, err := parseIntStrict(raw)
-		if err != nil {
-			return nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
-		}
-		return intVal, ""
-	case TypeFloat:
-		return parseFloatStrict(f.Name, raw)
-	default:
-		resolved, errStr := resolveAtPrefix(f.Name, raw, stdinConsumedBy)
-		if errStr != "" {
-			return nil, errStr
-		}
-		return resolved, ""
-	}
 }
 
 // buildAndValidateCommand creates and validates a Command.
