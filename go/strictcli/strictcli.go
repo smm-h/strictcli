@@ -2,6 +2,7 @@
 package strictcli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -94,11 +95,21 @@ func (Implies) isDependency()    {}
 // PassthroughHandler is the handler type for passthrough commands.
 type PassthroughHandler func(name string, args []string, globals map[string]interface{}) int
 
+// DataHandler is a handler that returns structured data alongside an exit code.
+type DataHandler func(map[string]interface{}) HandlerResult
+
+// HandlerResult is the return type for DataHandler functions.
+type HandlerResult struct {
+	Data     interface{}
+	ExitCode int
+}
+
 // Command is a leaf command with a handler.
 type Command struct {
 	Name               string
 	Help               string
 	Handler            func(map[string]interface{}) int
+	dataHandler        DataHandler
 	flags              []Flag
 	args               []Arg
 	flagSets           []FlagSet
@@ -107,6 +118,8 @@ type Command struct {
 	tags               []string
 	Passthrough        bool
 	PassthroughHandler PassthroughHandler
+	Hidden             bool
+	Interactive        bool
 }
 
 // deprecatedCmd is a declaration-only command that prints a message and exits 1.
@@ -134,6 +147,8 @@ type Group struct {
 
 	deprecated    []deprecatedCmd
 	deprecatedMap map[string]string
+
+	Hidden bool
 }
 
 // Result is returned by App.Test().
@@ -141,6 +156,7 @@ type Result struct {
 	Stdout   string
 	Stderr   string
 	ExitCode int
+	Data     interface{}
 }
 
 // App is the root CLI application.
@@ -393,6 +409,20 @@ func WithPassthrough(handler PassthroughHandler) CmdOption {
 	}
 }
 
+// WithHidden marks a command as hidden (excluded from help but still routable).
+func WithHidden() CmdOption {
+	return func(c *Command) {
+		c.Hidden = true
+	}
+}
+
+// WithInteractive marks a command as interactive (visible in help but excluded from tool export).
+func WithInteractive() CmdOption {
+	return func(c *Command) {
+		c.Interactive = true
+	}
+}
+
 // WithTags adds tags to a command.
 func WithTags(tags ...string) CmdOption {
 	return func(c *Command) {
@@ -589,7 +619,7 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 				default:
 					gotType = fmt.Sprintf("%T", a.Default)
 				}
-				panic(fmt.Sprintf("Arg %q: type=float requires a float64 default, got '%s'", a.Name, gotType))
+				panic(fmt.Sprintf("Arg %q: type=float requires a float default, got '%s'", a.Name, gotType))
 			}
 		case TypeBool:
 			if _, ok := a.Default.(bool); !ok {
@@ -714,7 +744,7 @@ func validateFlagConfig(f *Flag) {
 				default:
 					gotType = fmt.Sprintf("%T", f.Default)
 				}
-				panic(fmt.Sprintf("Flag %q: type=float requires a float64 default, got '%s'", f.Name, gotType))
+				panic(fmt.Sprintf("Flag %q: type=float requires a float default, got '%s'", f.Name, gotType))
 			}
 		}
 	}
@@ -965,6 +995,19 @@ func (a *App) Command(name, help string, handler func(map[string]interface{}) in
 	a.cmdOrder = append(a.cmdOrder, name)
 }
 
+// DataCommand registers a top-level command with a DataHandler that returns structured data.
+func (a *App) DataCommand(name, help string, handler DataHandler, opts ...CmdOption) {
+	// Wrap the data handler as a regular handler for buildAndValidateCommand
+	wrapper := func(kwargs map[string]interface{}) int {
+		result := handler(kwargs)
+		return result.ExitCode
+	}
+	cmd := buildAndValidateCommand(name, help, wrapper, a.EnvPrefix, a.globalFlags, nil, opts)
+	cmd.dataHandler = handler
+	a.commands[name] = cmd
+	a.cmdOrder = append(a.cmdOrder, name)
+}
+
 // Passthrough registers a passthrough command (raw args, no parsing).
 // Accepts CmdOptions for validation purposes (e.g., to detect invalid passthrough+flags).
 func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ...CmdOption) {
@@ -1070,6 +1113,21 @@ func (g *Group) Command(name, help string, handler func(map[string]interface{}) 
 		panic(fmt.Sprintf("command %q collides with an existing group", name))
 	}
 	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
+	g.Commands[name] = cmd
+	g.order = append(g.order, name)
+}
+
+// DataCommand registers a command within a group with a DataHandler that returns structured data.
+func (g *Group) DataCommand(name, help string, handler DataHandler, opts ...CmdOption) {
+	if _, ok := g.Groups[name]; ok {
+		panic(fmt.Sprintf("command %q collides with an existing group", name))
+	}
+	wrapper := func(kwargs map[string]interface{}) int {
+		result := handler(kwargs)
+		return result.ExitCode
+	}
+	cmd := buildAndValidateCommand(name, help, wrapper, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
+	cmd.dataHandler = handler
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
 }
@@ -1188,6 +1246,19 @@ func (a *App) Run() {
 		os.Exit(code)
 	}
 
+	if pr.cmd.dataHandler != nil {
+		result := pr.cmd.dataHandler(pr.kwargs)
+		if result.Data != nil {
+			data, err := json.Marshal(result.Data)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: failed to marshal result data: %s\n", err)
+				os.Exit(1)
+			}
+			fmt.Println(string(data))
+		}
+		os.Exit(result.ExitCode)
+	}
+
 	code := pr.cmd.Handler(pr.kwargs)
 	os.Exit(code)
 }
@@ -1234,8 +1305,13 @@ func (a *App) Test(argv []string) Result {
 	os.Stderr = stderrW
 
 	var exitCode int
+	var resultData interface{}
 	if pr.cmd.Passthrough {
 		exitCode = pr.cmd.PassthroughHandler(pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
+	} else if pr.cmd.dataHandler != nil {
+		hr := pr.cmd.dataHandler(pr.kwargs)
+		exitCode = hr.ExitCode
+		resultData = hr.Data
 	} else {
 		exitCode = pr.cmd.Handler(pr.kwargs)
 	}
@@ -1256,6 +1332,7 @@ func (a *App) Test(argv []string) Result {
 		Stdout:   string(stdoutBuf[:stdoutN]),
 		Stderr:   string(stderrBuf[:stderrN]),
 		ExitCode: exitCode,
+		Data:     resultData,
 	}
 }
 

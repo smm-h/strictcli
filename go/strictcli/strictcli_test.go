@@ -7668,7 +7668,7 @@ func TestArgFloatDefaultType(t *testing.T) {
 			t.Fatal("expected panic for float default type mismatch")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "type=float requires a float64 default") {
+		if !strings.Contains(msg, "type=float requires a float default") {
 			t.Fatalf("expected type mismatch error, got %q", msg)
 		}
 	}()
