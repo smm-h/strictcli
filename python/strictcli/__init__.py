@@ -1581,52 +1581,7 @@ class App:
         if not remaining or remaining == ["--help"] or remaining == ["-h"]:
             raise _HelpRequested(target=self)
 
-        current_groups = self._groups
-        current_commands = self._commands
-        current_deprecated = self._deprecated
-        path: list[str] = []  # tracks group names for error messages and help prefix
-
-        while remaining:
-            token = remaining[0]
-
-            if token in current_groups:
-                group = current_groups[token]
-                path.append(token)
-                remaining = remaining[1:]
-
-                if not remaining or remaining[0] in ("--help", "-h"):
-                    raise _HelpRequested(target=group)
-
-                # Descend into group
-                current_groups = group._groups
-                current_commands = group.commands
-                current_deprecated = group.deprecated
-                continue
-
-            if token in current_commands:
-                cmd = current_commands[token]
-                rest = remaining[1:]
-                break
-
-            if token in current_deprecated:
-                dep = current_deprecated[token]
-                raise _ParseError(
-                    f"command '{token}' is deprecated: {dep.message}"
-                )
-
-            # Unknown command -- include path in error message
-            if path:
-                raise _ParseError(
-                    f"unknown command '{token}' in '{' '.join(path)}'",
-                    command_prefix=f"{self.name} {' '.join(path)}",
-                )
-            raise _ParseError(f"unknown command '{token}'")
-        else:
-            # Loop ended without finding a command -- remaining was exhausted
-            # by group traversal. This means the last group had no subcommand.
-            # (Already handled by the help check inside the loop, but guard
-            # against edge cases.)
-            raise _HelpRequested(target=group)
+        cmd, rest, path = self._resolve_command(remaining)
 
         # Check for command-level --help/-h anywhere in remaining tokens
         # (but not after "--" separator, which makes everything literal)
@@ -1659,6 +1614,66 @@ class App:
             kwargs[_flag_param_name(gf.name)] = global_values[gf.name]
 
         return cmd, kwargs
+
+    def _resolve_command(
+        self, path_segments: list[str]
+    ) -> tuple[Command, list[str], list[str]]:
+        """Traverse groups/commands tree to resolve a command from path segments.
+
+        Takes the remaining argv tokens after global flag parsing (group names,
+        command name, and command arguments).  Consumes group and command tokens
+        from the front, returning the resolved Command, the unconsumed tokens
+        (command arguments), and the list of group names traversed.
+
+        Raises _HelpRequested for group-level help and _ParseError for
+        deprecated or unknown commands.
+        """
+        current_groups = self._groups
+        current_commands = self._commands
+        current_deprecated = self._deprecated
+        path: list[str] = []  # tracks group names for error messages and help prefix
+
+        while path_segments:
+            token = path_segments[0]
+
+            if token in current_groups:
+                group = current_groups[token]
+                path.append(token)
+                path_segments = path_segments[1:]
+
+                if not path_segments or path_segments[0] in ("--help", "-h"):
+                    raise _HelpRequested(target=group)
+
+                # Descend into group
+                current_groups = group._groups
+                current_commands = group.commands
+                current_deprecated = group.deprecated
+                continue
+
+            if token in current_commands:
+                cmd = current_commands[token]
+                rest = path_segments[1:]
+                return cmd, rest, path
+
+            if token in current_deprecated:
+                dep = current_deprecated[token]
+                raise _ParseError(
+                    f"command '{token}' is deprecated: {dep.message}"
+                )
+
+            # Unknown command -- include path in error message
+            if path:
+                raise _ParseError(
+                    f"unknown command '{token}' in '{' '.join(path)}'",
+                    command_prefix=f"{self.name} {' '.join(path)}",
+                )
+            raise _ParseError(f"unknown command '{token}'")
+
+        # Loop ended without finding a command -- path_segments was exhausted
+        # by group traversal. This means the last group had no subcommand.
+        # (Already handled by the help check inside the loop, but guard
+        # against edge cases.)
+        raise _HelpRequested(target=group)  # noqa: F821 -- 'group' always set when loop body ran
 
     def _parse_global_flags(
         self, argv: list[str]
@@ -2111,6 +2126,160 @@ def _tokens_contain_help(tokens: list[str]) -> bool:
     return False
 
 
+def _validate_and_build_kwargs(
+    cmd: Command,
+    cli_set: dict[str, object],
+    positionals: list[str],
+    global_flag_names: set[str],
+) -> tuple[Command, dict[str, object], dict[str, object]]:
+    """Validate parsed values and build the kwargs dict for the command handler.
+
+    This is the second half of command parsing: mutex enforcement, implies
+    resolution, dependency checks, defaults, choices validation, custom
+    validation, positional arg resolution, and kwargs building. It operates
+    on typed values in cli_set and doesn't care how they were produced.
+
+    Returns (cmd, kwargs, global_cli_set).
+    """
+    # Step 4.5: enforce mutex group constraints (before defaults are applied,
+    # so cli_set only contains values explicitly provided via CLI or env)
+    for mg in cmd.mutex:
+        set_flags = [f for f in mg.flags if f.name in cli_set]
+        if len(set_flags) > 1:
+            names = " and ".join(f"--{f.name}" for f in set_flags)
+            raise _ParseError(f"{names} are mutually exclusive")
+        if len(set_flags) == 0:
+            names = ", ".join(f"--{f.name}" for f in mg.flags)
+            raise _ParseError(f"one of {names} is required")
+
+    # Step 4.55: resolve Implies dependencies (before dependency checks, so
+    # implied values participate in downstream CoRequired/Requires validation)
+    for dep in cmd.dependencies:
+        if isinstance(dep, Implies):
+            if dep.flag in cli_set:
+                if dep.implies in cli_set:
+                    if cli_set[dep.implies] != dep.value:
+                        neg = "no-" if not dep.value else ""
+                        explicit_neg = "" if not dep.value else "no-"
+                        raise _ParseError(
+                            f"flag '--{dep.flag}' implies '--{neg}{dep.implies}', "
+                            f"but '--{explicit_neg}{dep.implies}' was explicitly provided"
+                        )
+                else:
+                    cli_set[dep.implies] = dep.value
+
+    # Step 4.6: enforce flag dependencies (before defaults, so cli_set only
+    # contains values explicitly provided via CLI or env)
+    for dep in cmd.dependencies:
+        if isinstance(dep, CoRequired):
+            present = [f for f in dep.flags if f in cli_set]
+            if 0 < len(present) < len(dep.flags):
+                names = ", ".join(f"--{f}" for f in dep.flags)
+                raise _ParseError(f"flags {names} must be used together")
+        elif isinstance(dep, Requires):
+            if dep.flag in cli_set and dep.depends_on not in cli_set:
+                raise _ParseError(
+                    f"flag '--{dep.flag}' requires '--{dep.depends_on}'"
+                )
+
+    # Build set of flag names belonging to mutex groups (used in step 5
+    # to suppress "required" errors -- mutex groups handle their own
+    # required semantics)
+    mutex_flag_names: set[str] = set()
+    for mg in cmd.mutex:
+        for mf in mg.flags:
+            mutex_flag_names.add(mf.name)
+
+    # Step 5: apply defaults
+    for f in cmd.flags:
+        if f.name in cli_set:
+            continue
+        if f.repeatable:
+            # Repeatable flags default to [] (never required)
+            cli_set[f.name] = list(f.default) if f.default else []
+        elif f.type is bool:
+            # Bool flags always have a default (False unless overridden)
+            cli_set[f.name] = f.default
+        elif f.default is not None:
+            cli_set[f.name] = f.default
+        elif f.name in mutex_flag_names:
+            # Mutex group flags with no default get None instead of being
+            # required -- the mutex group itself enforces required semantics
+            cli_set[f.name] = None
+        else:
+            # str/int/float flag with no default and no value: required
+            raise _ParseError(f"flag '--{f.name}' is required")
+
+    # Step 5.5: validate choices
+    for f in cmd.flags:
+        if f.choices is not None and f.name in cli_set:
+            if f.repeatable:
+                for val in cli_set[f.name]:
+                    if val not in f.choices:
+                        choices_str = ", ".join(str(c) for c in f.choices)
+                        raise _ParseError(
+                            f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
+                        )
+            else:
+                val = cli_set[f.name]
+                if val not in f.choices:
+                    choices_str = ", ".join(str(c) for c in f.choices)
+                    raise _ParseError(
+                        f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
+                    )
+
+    # Step 5.6: custom validation
+    for f in cmd.flags:
+        if f.validate is not None and f.name in cli_set:
+            if f.repeatable:
+                for val in cli_set[f.name]:
+                    try:
+                        f.validate(val)
+                    except ValueError as e:
+                        raise _ParseError(f"--{f.name}: {e}")
+            else:
+                try:
+                    f.validate(cli_set[f.name])
+                except ValueError as e:
+                    raise _ParseError(f"--{f.name}: {e}")
+
+    # Step 6: resolve positional args
+    arg_values: dict[str, object] = {}
+    has_variadic = cmd.args and cmd.args[-1].variadic
+    fixed_args = cmd.args[:-1] if has_variadic else cmd.args
+    for idx, a in enumerate(fixed_args):
+        if idx < len(positionals):
+            arg_values[a.name] = positionals[idx]
+        elif a.required:
+            raise _ParseError(f"missing required argument '{a.name}'")
+        elif not isinstance(a.default, _MissingSentinel):
+            arg_values[a.name] = a.default
+    if has_variadic:
+        va = cmd.args[-1]
+        remaining_positionals = positionals[len(fixed_args):]
+        if va.required and len(remaining_positionals) == 0:
+            raise _ParseError(f"missing required argument '{va.name}'")
+        arg_values[va.name] = remaining_positionals
+    elif len(positionals) > len(cmd.args):
+        raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
+
+    # Step 7: build kwargs dict (command flags only)
+    kwargs: dict[str, object] = {}
+    for f in cmd.flags:
+        kwargs[_flag_param_name(f.name)] = cli_set[f.name]
+    for a in cmd.args:
+        if a.name in arg_values:
+            kwargs[a.name] = arg_values[a.name]
+
+    # Separate out global flag values parsed from post-command tokens
+    global_cli_set: dict[str, object] = {}
+    for name in global_flag_names:
+        if name in cli_set:
+            global_cli_set[name] = cli_set[name]
+
+    return cmd, kwargs, global_cli_set
+
+
 def _parse_command(
     cmd: Command,
     tokens: list[str],
@@ -2414,143 +2583,7 @@ def _parse_command(
                         )
                 cli_set[f.name] = coerced
 
-    # Step 4.5: enforce mutex group constraints (before defaults are applied,
-    # so cli_set only contains values explicitly provided via CLI or env)
-    for mg in cmd.mutex:
-        set_flags = [f for f in mg.flags if f.name in cli_set]
-        if len(set_flags) > 1:
-            names = " and ".join(f"--{f.name}" for f in set_flags)
-            raise _ParseError(f"{names} are mutually exclusive")
-        if len(set_flags) == 0:
-            names = ", ".join(f"--{f.name}" for f in mg.flags)
-            raise _ParseError(f"one of {names} is required")
-
-    # Step 4.55: resolve Implies dependencies (before dependency checks, so
-    # implied values participate in downstream CoRequired/Requires validation)
-    for dep in cmd.dependencies:
-        if isinstance(dep, Implies):
-            if dep.flag in cli_set:
-                if dep.implies in cli_set:
-                    if cli_set[dep.implies] != dep.value:
-                        neg = "no-" if not dep.value else ""
-                        explicit_neg = "" if not dep.value else "no-"
-                        raise _ParseError(
-                            f"flag '--{dep.flag}' implies '--{neg}{dep.implies}', "
-                            f"but '--{explicit_neg}{dep.implies}' was explicitly provided"
-                        )
-                else:
-                    cli_set[dep.implies] = dep.value
-
-    # Step 4.6: enforce flag dependencies (before defaults, so cli_set only
-    # contains values explicitly provided via CLI or env)
-    for dep in cmd.dependencies:
-        if isinstance(dep, CoRequired):
-            present = [f for f in dep.flags if f in cli_set]
-            if 0 < len(present) < len(dep.flags):
-                names = ", ".join(f"--{f}" for f in dep.flags)
-                raise _ParseError(f"flags {names} must be used together")
-        elif isinstance(dep, Requires):
-            if dep.flag in cli_set and dep.depends_on not in cli_set:
-                raise _ParseError(
-                    f"flag '--{dep.flag}' requires '--{dep.depends_on}'"
-                )
-
-    # Build set of flag names belonging to mutex groups (used in step 5
-    # to suppress "required" errors -- mutex groups handle their own
-    # required semantics)
-    mutex_flag_names: set[str] = set()
-    for mg in cmd.mutex:
-        for mf in mg.flags:
-            mutex_flag_names.add(mf.name)
-
-    # Step 5: apply defaults
-    for f in cmd.flags:
-        if f.name in cli_set:
-            continue
-        if f.repeatable:
-            # Repeatable flags default to [] (never required)
-            cli_set[f.name] = list(f.default) if f.default else []
-        elif f.type is bool:
-            # Bool flags always have a default (False unless overridden)
-            cli_set[f.name] = f.default
-        elif f.default is not None:
-            cli_set[f.name] = f.default
-        elif f.name in mutex_flag_names:
-            # Mutex group flags with no default get None instead of being
-            # required -- the mutex group itself enforces required semantics
-            cli_set[f.name] = None
-        else:
-            # str/int/float flag with no default and no value: required
-            raise _ParseError(f"flag '--{f.name}' is required")
-
-    # Step 5.5: validate choices
-    for f in cmd.flags:
-        if f.choices is not None and f.name in cli_set:
-            if f.repeatable:
-                for val in cli_set[f.name]:
-                    if val not in f.choices:
-                        choices_str = ", ".join(str(c) for c in f.choices)
-                        raise _ParseError(
-                            f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
-                        )
-            else:
-                val = cli_set[f.name]
-                if val not in f.choices:
-                    choices_str = ", ".join(str(c) for c in f.choices)
-                    raise _ParseError(
-                        f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
-                    )
-
-    # Step 5.6: custom validation
-    for f in cmd.flags:
-        if f.validate is not None and f.name in cli_set:
-            if f.repeatable:
-                for val in cli_set[f.name]:
-                    try:
-                        f.validate(val)
-                    except ValueError as e:
-                        raise _ParseError(f"--{f.name}: {e}")
-            else:
-                try:
-                    f.validate(cli_set[f.name])
-                except ValueError as e:
-                    raise _ParseError(f"--{f.name}: {e}")
-
-    # Step 6: resolve positional args
-    arg_values: dict[str, object] = {}
-    has_variadic = cmd.args and cmd.args[-1].variadic
-    fixed_args = cmd.args[:-1] if has_variadic else cmd.args
-    for idx, a in enumerate(fixed_args):
-        if idx < len(positionals):
-            arg_values[a.name] = positionals[idx]
-        elif a.required:
-            raise _ParseError(f"missing required argument '{a.name}'")
-        elif not isinstance(a.default, _MissingSentinel):
-            arg_values[a.name] = a.default
-    if has_variadic:
-        va = cmd.args[-1]
-        remaining_positionals = positionals[len(fixed_args):]
-        if va.required and len(remaining_positionals) == 0:
-            raise _ParseError(f"missing required argument '{va.name}'")
-        arg_values[va.name] = remaining_positionals
-    elif len(positionals) > len(cmd.args):
-        raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
-
-    # Step 7: build kwargs dict (command flags only)
-    kwargs: dict[str, object] = {}
-    for f in cmd.flags:
-        kwargs[_flag_param_name(f.name)] = cli_set[f.name]
-    for a in cmd.args:
-        if a.name in arg_values:
-            kwargs[a.name] = arg_values[a.name]
-
-    # Separate out global flag values parsed from post-command tokens
-    global_cli_set: dict[str, object] = {}
-    for name in global_flag_names:
-        if name in cli_set:
-            global_cli_set[name] = cli_set[name]
-
-    return cmd, kwargs, global_cli_set
+    return _validate_and_build_kwargs(cmd, cli_set, positionals, global_flag_names)
 
 
 def _flag_param_name(flag_name: str) -> str:
