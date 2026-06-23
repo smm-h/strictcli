@@ -215,16 +215,16 @@ func writeConfigFile(data map[string]interface{}, path string, format string) in
 
 // registerConfigGroup registers the auto-generated 'config' command group.
 func (a *App) registerConfigGroup() {
-	grp := a.Group("config", "Manage configuration")
+	grp := a.Group("config", "Manage persistent configuration values stored in the config file")
 
 	// config path
-	grp.Command("path", "Print the config file path", func(args map[string]interface{}) int {
+	grp.Command("path", "Print the absolute path to the config file for this application", func(args map[string]interface{}) int {
 		fmt.Println(configPath(a.Name, a.configPathOverride, a.configFormat))
 		return 0
 	})
 
 	// config show
-	grp.Command("show", "Show all config values with source attribution", func(args map[string]interface{}) int {
+	grp.Command("show", "Show all config values with their sources (config file, env, or default)", func(args map[string]interface{}) int {
 		useJSON := args["json"].(bool)
 		configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		allFlags := a.collectAllFlags()
@@ -281,13 +281,13 @@ func (a *App) registerConfigGroup() {
 		return 0
 	}, WithMutex(
 		MutexGroup{Flags: []Flag{
-			BoolFlag("plain", "Human-readable output"),
-			BoolFlag("json", "JSON output"),
+			BoolFlag("plain", "Display config values in a human-readable table format"),
+			BoolFlag("json", "Display config values as a JSON object with source metadata"),
 		}},
 	))
 
 	// config set
-	grp.Command("set", "Set a config value", func(args map[string]interface{}) int {
+	grp.Command("set", "Set a persistent config value that overrides the default for a flag", func(args map[string]interface{}) int {
 		key := args["key"].(string)
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
@@ -428,16 +428,16 @@ func (a *App) registerConfigGroup() {
 		existing[key] = typedValue
 		return writeConfigFile(existing, path, a.configFormat)
 	}, WithArgs(
-		NewArg("key", "Config key to set"),
+		NewArg("key", "The config key to set, matching a registered flag name"),
 		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
 			ArgRequired(false)),
 	), WithFlags(
-		BoolFlag("clear", "Clear a repeatable flag (set to empty list)"),
-		BoolFlag("default", "Reset a key to its default (remove from config)"),
+		BoolFlag("clear", "Clear a repeatable flag by setting its value to an empty list"),
+		BoolFlag("default", "Reset a key to its default value by removing it from the config file"),
 	))
 
 	// config edit
-	grp.Command("edit", "Open the config file in $EDITOR", func(args map[string]interface{}) int {
+	grp.Command("edit", "Open the config file for manual editing in $EDITOR (creates if missing)", func(args map[string]interface{}) int {
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
