@@ -6860,3 +6860,366 @@ func TestSchemaTagsInDefaults(t *testing.T) {
 		t.Fatal("expected 'tags' in group defaults")
 	}
 }
+
+// --- Phase 1 schema enrichment tests ---
+
+func TestSchemaVersion(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("noop", "does nothing", func(args map[string]interface{}) int { return 0 })
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	sv, ok := schema["schema_version"]
+	if !ok {
+		t.Fatal("expected 'schema_version' in schema")
+	}
+	if sv != 1 {
+		t.Fatalf("expected schema_version 1, got %v", sv)
+	}
+}
+
+func TestSchemaVersionInDefaults(t *testing.T) {
+	defaults := buildSchemaDefaults()
+	sv, ok := defaults["schema_version"]
+	if !ok {
+		t.Fatal("expected 'schema_version' in defaults")
+	}
+	if sv != 1 {
+		t.Fatalf("expected schema_version default 1, got %v", sv)
+	}
+}
+
+func TestSchemaConstraintsMutex(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithMutex(MutexGroup{Flags: []Flag{
+			StringFlag("output-json", "JSON output", Default(nil)),
+			StringFlag("output-xml", "XML output", Default(nil)),
+		}}),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	constraints, ok := cmd["constraints"].([]interface{})
+	if !ok {
+		t.Fatal("expected 'constraints' array in command")
+	}
+	if len(constraints) != 1 {
+		t.Fatalf("expected 1 constraint, got %d", len(constraints))
+	}
+	c := constraints[0].(map[string]interface{})
+	if c["type"] != "mutex" {
+		t.Fatalf("expected type 'mutex', got %v", c["type"])
+	}
+	flags := c["flags"].([]interface{})
+	if len(flags) != 2 {
+		t.Fatalf("expected 2 flags in mutex, got %d", len(flags))
+	}
+	if flags[0] != "output-json" || flags[1] != "output-xml" {
+		t.Fatalf("expected flags [output-json, output-xml], got %v", flags)
+	}
+}
+
+func TestSchemaConstraintsCoRequired(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(
+			StringFlag("username", "Username", Default(nil)),
+			StringFlag("password", "Password", Default(nil)),
+		),
+		WithDependencies(CoRequired{Flags: []string{"username", "password"}}),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	constraints := cmd["constraints"].([]interface{})
+	if len(constraints) != 1 {
+		t.Fatalf("expected 1 constraint, got %d", len(constraints))
+	}
+	c := constraints[0].(map[string]interface{})
+	if c["type"] != "co_required" {
+		t.Fatalf("expected type 'co_required', got %v", c["type"])
+	}
+	flags := c["flags"].([]interface{})
+	if len(flags) != 2 {
+		t.Fatalf("expected 2 flags, got %d", len(flags))
+	}
+	if flags[0] != "username" || flags[1] != "password" {
+		t.Fatalf("expected flags [username, password], got %v", flags)
+	}
+}
+
+func TestSchemaConstraintsRequires(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(
+			StringFlag("format", "Output format", Default(nil)),
+			StringFlag("output", "Output file", Default(nil)),
+		),
+		WithDependencies(Requires{Flag: "output", DependsOn: "format"}),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	constraints := cmd["constraints"].([]interface{})
+	if len(constraints) != 1 {
+		t.Fatalf("expected 1 constraint, got %d", len(constraints))
+	}
+	c := constraints[0].(map[string]interface{})
+	if c["type"] != "requires" {
+		t.Fatalf("expected type 'requires', got %v", c["type"])
+	}
+	if c["flag"] != "output" {
+		t.Fatalf("expected flag 'output', got %v", c["flag"])
+	}
+	if c["depends_on"] != "format" {
+		t.Fatalf("expected depends_on 'format', got %v", c["depends_on"])
+	}
+}
+
+func TestSchemaConstraintsImplies(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(
+			BoolFlag("verbose", "Verbose output"),
+			BoolFlag("debug", "Debug mode"),
+		),
+		WithDependencies(Implies{Flag: "debug", Implies: "verbose", Value: true}),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	constraints := cmd["constraints"].([]interface{})
+	if len(constraints) != 1 {
+		t.Fatalf("expected 1 constraint, got %d", len(constraints))
+	}
+	c := constraints[0].(map[string]interface{})
+	if c["type"] != "implies" {
+		t.Fatalf("expected type 'implies', got %v", c["type"])
+	}
+	if c["flag"] != "debug" {
+		t.Fatalf("expected flag 'debug', got %v", c["flag"])
+	}
+	if c["implies"] != "verbose" {
+		t.Fatalf("expected implies 'verbose', got %v", c["implies"])
+	}
+	if c["value"] != true {
+		t.Fatalf("expected value true, got %v", c["value"])
+	}
+}
+
+func TestSchemaConstraintsMixed(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithFlags(
+			StringFlag("host", "Hostname", Default(nil)),
+			StringFlag("port", "Port", Default(nil)),
+			BoolFlag("verbose", "Verbose output"),
+			BoolFlag("debug", "Debug mode"),
+		),
+		WithMutex(MutexGroup{Flags: []Flag{
+			StringFlag("format-json", "JSON format", Default(nil)),
+			StringFlag("format-xml", "XML format", Default(nil)),
+		}}),
+		WithDependencies(
+			CoRequired{Flags: []string{"host", "port"}},
+			Requires{Flag: "port", DependsOn: "host"},
+			Implies{Flag: "debug", Implies: "verbose", Value: true},
+		),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	constraints := cmd["constraints"].([]interface{})
+	// 1 mutex + 3 dependencies = 4 constraints
+	if len(constraints) != 4 {
+		t.Fatalf("expected 4 constraints, got %d", len(constraints))
+	}
+	// First should be mutex (mutex comes before dependencies)
+	if constraints[0].(map[string]interface{})["type"] != "mutex" {
+		t.Fatalf("expected first constraint to be mutex, got %v", constraints[0])
+	}
+	// Then co_required, requires, implies in order
+	if constraints[1].(map[string]interface{})["type"] != "co_required" {
+		t.Fatalf("expected second constraint to be co_required, got %v", constraints[1])
+	}
+	if constraints[2].(map[string]interface{})["type"] != "requires" {
+		t.Fatalf("expected third constraint to be requires, got %v", constraints[2])
+	}
+	if constraints[3].(map[string]interface{})["type"] != "implies" {
+		t.Fatalf("expected fourth constraint to be implies, got %v", constraints[3])
+	}
+}
+
+func TestSchemaConstraintsOmittedWhenEmpty(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 })
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	if _, ok := cmd["constraints"]; ok {
+		t.Fatal("constraints should be omitted when empty")
+	}
+}
+
+func TestSchemaConstraintsInDefaults(t *testing.T) {
+	defaults := buildSchemaDefaults()
+	cmdDefaults := defaults["command"].(map[string]interface{})
+	if _, ok := cmdDefaults["constraints"]; !ok {
+		t.Fatal("expected 'constraints' in command defaults")
+	}
+}
+
+func TestSchemaTagContracts(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.TagContract("release", "dry-run")
+	app.Command("deploy", "Deploy app", func(args map[string]interface{}) int { return 0 },
+		WithFlags(BoolFlag("dry-run", "Dry run mode")),
+		WithTags("release"),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	tc, ok := schema["tag_contracts"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected 'tag_contracts' in schema")
+	}
+	if tc["release"] != "dry-run" {
+		t.Fatalf("expected tag_contracts['release'] = 'dry-run', got %v", tc["release"])
+	}
+}
+
+func TestSchemaTagContractsOmittedWhenEmpty(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("noop", "does nothing", func(args map[string]interface{}) int { return 0 })
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	if _, ok := schema["tag_contracts"]; ok {
+		t.Fatal("tag_contracts should be omitted when empty")
+	}
+}
+
+func TestSchemaTagContractsInDefaults(t *testing.T) {
+	defaults := buildSchemaDefaults()
+	appDefaults := defaults["app"].(map[string]interface{})
+	if _, ok := appDefaults["tag_contracts"]; !ok {
+		t.Fatal("expected 'tag_contracts' in app defaults")
+	}
+}
+
+func TestSchemaArgDefault(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithArgs(
+			NewArg("target", "Target name", ArgRequired(false), ArgDefault("prod")),
+		),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	args := cmd["args"].([]interface{})
+	if len(args) != 1 {
+		t.Fatalf("expected 1 arg, got %d", len(args))
+	}
+	arg := args[0].(map[string]interface{})
+	if arg["default"] != "prod" {
+		t.Fatalf("expected arg default 'prod', got %v", arg["default"])
+	}
+	if arg["required"] != false {
+		t.Fatalf("expected required false, got %v", arg["required"])
+	}
+}
+
+func TestSchemaArgDefaultOmittedWhenNotSet(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithArgs(
+			NewArg("target", "Target name"),
+		),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	args := cmd["args"].([]interface{})
+	arg := args[0].(map[string]interface{})
+	if _, ok := arg["default"]; ok {
+		t.Fatal("arg default should be omitted when not set")
+	}
+}
+
+func TestSchemaArgDefaultInDefaults(t *testing.T) {
+	defaults := buildSchemaDefaults()
+	argDefaults := defaults["arg"].(map[string]interface{})
+	v, ok := argDefaults["default"]
+	if !ok {
+		t.Fatal("expected 'default' in arg defaults")
+	}
+	if v != nil {
+		t.Fatalf("expected arg default to be nil, got %v", v)
+	}
+}
+
+func TestSchemaArgDefaultNil(t *testing.T) {
+	chdirTemp(t)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
+		WithArgs(
+			NewArg("target", "Target name", ArgRequired(false), ArgDefault(nil)),
+		),
+	)
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	cmd := commands["cmd"].(map[string]interface{})
+	args := cmd["args"].([]interface{})
+	arg := args[0].(map[string]interface{})
+	// When hasDefault is true but Default is nil, we should still emit default: null
+	v, ok := arg["default"]
+	if !ok {
+		t.Fatal("expected 'default' key when ArgDefault(nil) was used")
+	}
+	if v != nil {
+		t.Fatalf("expected arg default nil, got %v", v)
+	}
+}

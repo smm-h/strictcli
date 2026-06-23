@@ -93,6 +93,10 @@ func serializeArg(a Arg) map[string]interface{} {
 	if a.IsVariadic {
 		m["variadic"] = true
 	}
+	// default: default nil (omit when nil / no default set)
+	if a.hasDefault {
+		m["default"] = a.Default
+	}
 	return m
 }
 
@@ -134,7 +138,56 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 		}
 		m["tags"] = tags
 	}
+	// constraints: default [] (omit when empty)
+	constraints := serializeConstraints(cmd)
+	if len(constraints) > 0 {
+		m["constraints"] = constraints
+	}
 	return m
+}
+
+// serializeConstraints builds the constraints array from a command's mutex groups and dependencies.
+func serializeConstraints(cmd *Command) []interface{} {
+	var constraints []interface{}
+	// Mutex groups
+	for _, mg := range cmd.mutex {
+		flags := make([]interface{}, len(mg.Flags))
+		for i, f := range mg.Flags {
+			flags[i] = f.Name
+		}
+		constraints = append(constraints, map[string]interface{}{
+			"type":  "mutex",
+			"flags": flags,
+		})
+	}
+	// Dependencies
+	for _, dep := range cmd.dependencies {
+		switch d := dep.(type) {
+		case CoRequired:
+			flags := make([]interface{}, len(d.Flags))
+			for i, name := range d.Flags {
+				flags[i] = name
+			}
+			constraints = append(constraints, map[string]interface{}{
+				"type":  "co_required",
+				"flags": flags,
+			})
+		case Requires:
+			constraints = append(constraints, map[string]interface{}{
+				"type":       "requires",
+				"flag":       d.Flag,
+				"depends_on": d.DependsOn,
+			})
+		case Implies:
+			constraints = append(constraints, map[string]interface{}{
+				"type":    "implies",
+				"flag":    d.Flag,
+				"implies": d.Implies,
+				"value":   d.Value,
+			})
+		}
+	}
+	return constraints
 }
 
 // serializeGroup converts a Group to a JSON-serializable map (recursive).
@@ -186,13 +239,15 @@ func serializeGroup(grp *Group) map[string]interface{} {
 // Consumers use this to reconstruct omitted fields.
 func buildSchemaDefaults() map[string]interface{} {
 	return map[string]interface{}{
+		"schema_version": 1,
 		"app": map[string]interface{}{
-			"env_prefix":   nil,
-			"config":       false,
-			"global_flags": []interface{}{},
-			"commands":     map[string]interface{}{},
-			"groups":       map[string]interface{}{},
-			"deprecated":   map[string]interface{}{},
+			"env_prefix":     nil,
+			"config":         false,
+			"global_flags":   []interface{}{},
+			"commands":       map[string]interface{}{},
+			"groups":         map[string]interface{}{},
+			"deprecated":     map[string]interface{}{},
+			"tag_contracts":  map[string]interface{}{},
 		},
 		"flag": map[string]interface{}{
 			"short":         nil,
@@ -208,12 +263,14 @@ func buildSchemaDefaults() map[string]interface{} {
 		"arg": map[string]interface{}{
 			"required": true,
 			"variadic": false,
+			"default":  nil,
 		},
 		"command": map[string]interface{}{
 			"passthrough": false,
 			"flags":       []interface{}{},
 			"args":        []interface{}{},
 			"tags":        []interface{}{},
+			"constraints": []interface{}{},
 		},
 		"group": map[string]interface{}{
 			"commands":   map[string]interface{}{},
@@ -253,11 +310,12 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 		return nil, err
 	}
 	schema := map[string]interface{}{
-		"project_id": projectID,
-		"name":       app.Name,
-		"version":    app.Version,
-		"help":       app.Help,
-		"defaults":   buildSchemaDefaults(),
+		"schema_version": 1,
+		"project_id":     projectID,
+		"name":           app.Name,
+		"version":        app.Version,
+		"help":           app.Help,
+		"defaults":       buildSchemaDefaults(),
 	}
 
 	// env_prefix: default nil (omit when empty -> nil)
@@ -304,6 +362,15 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 			deprecated[name] = msg
 		}
 		schema["deprecated"] = deprecated
+	}
+
+	// tag_contracts: default {} (omit when empty)
+	if len(app.tagContracts) > 0 {
+		tagContracts := make(map[string]interface{})
+		for tag, flag := range app.tagContracts {
+			tagContracts[tag] = flag
+		}
+		schema["tag_contracts"] = tagContracts
 	}
 
 	// checks: only present when checks are enabled (not a default-omission case)
