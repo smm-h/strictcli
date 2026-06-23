@@ -11,6 +11,7 @@ __all__ = [
     "CheckResult", "CheckContext", "CheckRunResult",
     "format_check_results", "format_check_results_json",
     "ConfigField",
+    "Tool",
 ]
 
 import contextlib
@@ -1675,6 +1676,16 @@ class Result:
     stderr: str
     exit_code: int
     data: object = None
+
+
+@dataclass
+class Tool:
+    """A tool descriptor for exposing CLI commands to tool-using LLM agents."""
+
+    name: str
+    description: str
+    parameters: dict
+    execute: Callable
 
 
 @dataclass
@@ -3418,6 +3429,199 @@ class App:
         """
         import asyncio
         return await asyncio.to_thread(self.call, command_path, **kwargs)
+
+    def json_schema(self, command_path: str) -> dict:
+        """Produce a JSON Schema parameters object for a command's flags and args.
+
+        Args:
+            command_path: dot-separated path to the command (e.g. "deploy"
+                or "config.show").
+
+        Returns:
+            A JSON Schema object with "type": "object", "properties",
+            "required", and "additionalProperties": false.
+
+        Raises:
+            InvokeError: if the command path is invalid or resolves to a group.
+        """
+        path_segments = command_path.split(".")
+        try:
+            cmd, _rest, _path = self._resolve_command(path_segments)
+        except _ParseError as e:
+            raise InvokeError(str(e)) from e
+        except _HelpRequested:
+            raise InvokeError(
+                f"'{command_path}' is a group, not a command"
+            )
+        return _build_json_schema(cmd)
+
+    def as_tools(self) -> list[Tool]:
+        """Export non-hidden, non-interactive leaf commands as Tool descriptors.
+
+        Returns a list of Tool objects, one per eligible command plus a
+        router tool. Each tool's execute function wraps acall().
+        """
+        tools: list[Tool] = []
+        command_paths: list[str] = []
+
+        # Collect leaf commands from top-level
+        for name, cmd in self._commands.items():
+            if cmd.hidden or cmd.interactive:
+                continue
+            path = name
+            tools.append(self._make_tool(path, cmd))
+            command_paths.append(path)
+
+        # Collect leaf commands from groups (recursive)
+        for group_name, group in self._groups.items():
+            self._collect_tools_from_group(
+                group, [group_name], tools, command_paths,
+            )
+
+        # Build the router tool
+        tools.append(self._make_router_tool(command_paths))
+
+        return tools
+
+    def _collect_tools_from_group(
+        self,
+        group: Group,
+        path: list[str],
+        tools: list[Tool],
+        command_paths: list[str],
+    ) -> None:
+        """Recursively collect non-hidden, non-interactive commands from a group."""
+        if group.hidden:
+            return
+        for cmd_name, cmd in group.commands.items():
+            if cmd.hidden or cmd.interactive:
+                continue
+            dotted = ".".join(path + [cmd_name])
+            tools.append(self._make_tool(dotted, cmd))
+            command_paths.append(dotted)
+        for sub_name, sub_group in group._groups.items():
+            self._collect_tools_from_group(
+                sub_group, path + [sub_name], tools, command_paths,
+            )
+
+    def _make_tool(self, command_path: str, cmd: Command) -> Tool:
+        """Build a Tool for a single command."""
+        app_ref = self
+
+        async def execute(**kwargs: object) -> object:
+            return await app_ref.acall(command_path, **kwargs)
+
+        return Tool(
+            name=command_path,
+            description=cmd.help,
+            parameters=_build_json_schema(cmd),
+            execute=execute,
+        )
+
+    def _make_router_tool(self, command_paths: list[str]) -> Tool:
+        """Build the router tool that dispatches to per-command tools."""
+        app_ref = self
+
+        async def execute(command: str | None = None, **kwargs: object) -> object:
+            if command is None:
+                return command_paths[:]
+            return await app_ref.acall(command, **kwargs)
+
+        parameters: dict = {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": (
+                        "Command to execute (dot-separated path)"
+                    ),
+                    "enum": command_paths[:],
+                },
+            },
+            "required": ["command"],
+            "additionalProperties": False,
+        }
+        return Tool(
+            name=self.name,
+            description=f"Route to {self.name} commands",
+            parameters=parameters,
+            execute=execute,
+        )
+
+
+# JSON Schema type mapping for tool export
+_JSON_SCHEMA_TYPES = {
+    str: "string",
+    int: "integer",
+    float: "number",
+    bool: "boolean",
+}
+
+
+def _build_json_schema(cmd: Command) -> dict:
+    """Build a JSON Schema parameters object for a command's flags and args."""
+    properties: dict = {}
+    required: list[str] = []
+
+    for f in cmd.flags:
+        param_name = _flag_param_name(f.name)
+        prop: dict = {}
+
+        if f.compound == "list":
+            prop["type"] = "array"
+            prop["items"] = {"type": _JSON_SCHEMA_TYPES[f.item_type]}
+        elif f.compound == "dict":
+            prop["type"] = "object"
+            prop["additionalProperties"] = {
+                "type": _JSON_SCHEMA_TYPES[f.value_type],
+            }
+        else:
+            prop["type"] = _JSON_SCHEMA_TYPES[f.type]
+
+        if f.choices is not None:
+            prop["enum"] = f.choices[:]
+
+        prop["description"] = f.help
+
+        properties[param_name] = prop
+
+        # A flag is required if it has no default (None for scalar non-bool)
+        # Bool flags always have a default (False). Repeatable/dict flags
+        # always have a default (empty list/dict).
+        is_required = (
+            f.compound == "scalar"
+            and f.type is not bool
+            and f.default is None
+        )
+        if is_required:
+            required.append(param_name)
+
+    for a in cmd.args:
+        prop = {}
+
+        if a.compound == "list":
+            prop["type"] = "array"
+            prop["items"] = {"type": _JSON_SCHEMA_TYPES[a.item_type]}
+        else:
+            prop["type"] = _JSON_SCHEMA_TYPES[a.type]
+
+        if a.choices is not None:
+            prop["enum"] = a.choices[:]
+
+        prop["description"] = a.help
+
+        properties[a.name] = prop
+
+        if a.required:
+            required.append(a.name)
+
+    schema: dict = {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
+    return schema
 
 
 def _tokens_contain_help(tokens: list[str]) -> bool:
