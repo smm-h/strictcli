@@ -2228,8 +2228,38 @@ class App:
         # Passthrough commands: forward raw args to the passthrough handler
         if cmd.passthrough is not None:
             raw_args = kwargs.get("_args", [])
+
+            # Build set of known global flag param names
+            global_param_names: set[str] = set()
+            for gf in self._global_flags:
+                global_param_names.add(_flag_param_name(gf.name))
+
+            # Validate that all kwargs keys are either "_args" or known global flags
+            for key in kwargs:
+                if key == "_args":
+                    continue
+                if key not in global_param_names:
+                    raise _ParseError(
+                        f"unknown parameter '{key}' for passthrough command '{cmd.name}'"
+                    )
+
+            # Build global values from kwargs, applying defaults for missing flags
+            global_values: dict[str, object] = {}
+            for gf in self._global_flags:
+                param_name = _flag_param_name(gf.name)
+                if param_name in kwargs:
+                    global_values[param_name] = kwargs[param_name]
+                elif gf.type is bool:
+                    global_values[param_name] = gf.default if gf.default is not None else False
+                elif gf.default is not None:
+                    global_values[param_name] = gf.default
+                else:
+                    raise _ParseError(
+                        f"global flag '--{gf.name}' is required"
+                    )
+
             return cmd.passthrough.handler(
-                cmd.name, raw_args, self._last_global_values,
+                cmd.name, raw_args, global_values,
             )
 
         # Build reverse mapping: param_name (underscore) -> flag.name (dashes)

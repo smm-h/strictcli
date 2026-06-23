@@ -345,6 +345,88 @@ class TestInvokePassthrough:
         assert result == 0
         assert captured["args"] == []
 
+    def test_passthrough_receives_global_flag_values(self):
+        """Passthrough handler receives global flag values from kwargs."""
+        captured = {}
+
+        def pt_handler(name, args, globals):
+            captured["globals"] = globals
+            return 0
+
+        app = _build_app(
+            flags=[
+                strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+                strictcli.Flag(name="config", type=str, help="config path", default="default.toml"),
+            ],
+        )
+        pt = strictcli.Passthrough(handler=pt_handler)
+
+        @app.command("exec", help="execute", passthrough=pt)
+        def exec_cmd():
+            pass
+
+        app._invoke("exec", {"_args": ["--foo"], "verbose": True, "config": "custom.toml"})
+        assert captured["globals"]["verbose"] is True
+        assert captured["globals"]["config"] == "custom.toml"
+
+    def test_passthrough_global_flag_defaults(self):
+        """Passthrough handler receives defaults for unprovided global flags."""
+        captured = {}
+
+        def pt_handler(name, args, globals):
+            captured["globals"] = globals
+            return 0
+
+        app = _build_app(
+            flags=[
+                strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+                strictcli.Flag(name="config", type=str, help="config path", default="default.toml"),
+            ],
+        )
+        pt = strictcli.Passthrough(handler=pt_handler)
+
+        @app.command("exec", help="execute", passthrough=pt)
+        def exec_cmd():
+            pass
+
+        app._invoke("exec", {"_args": ["x"]})
+        assert captured["globals"]["verbose"] is False
+        assert captured["globals"]["config"] == "default.toml"
+
+    def test_passthrough_unknown_kwarg_raises(self):
+        """Unknown kwargs in passthrough invoke produce an error."""
+        def pt_handler(name, args, globals):
+            return 0
+
+        app = _build_app()
+        pt = strictcli.Passthrough(handler=pt_handler)
+
+        @app.command("exec", help="execute", passthrough=pt)
+        def exec_cmd():
+            pass
+
+        with pytest.raises(Exception, match="unknown parameter 'bogus' for passthrough command 'exec'"):
+            app._invoke("exec", {"_args": ["x"], "bogus": "value"})
+
+    def test_passthrough_missing_required_global_flag_raises(self):
+        """Missing required global flag in passthrough invoke produces an error."""
+        def pt_handler(name, args, globals):
+            return 0
+
+        app = _build_app(
+            flags=[
+                strictcli.Flag(name="token", type=str, help="auth token"),
+            ],
+        )
+        pt = strictcli.Passthrough(handler=pt_handler)
+
+        @app.command("exec", help="execute", passthrough=pt)
+        def exec_cmd():
+            pass
+
+        with pytest.raises(Exception, match="global flag '--token' is required"):
+            app._invoke("exec", {"_args": ["x"]})
+
 
 class TestInvokeReturnValue:
     """_invoke returns the handler's return value."""
