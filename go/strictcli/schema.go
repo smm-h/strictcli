@@ -464,7 +464,7 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 	if app.checksEnabled {
 		checksMap := make(map[string]interface{})
 		for name, def := range app.checkDefs {
-			checksMap[name] = map[string]interface{}{
+			entry := map[string]interface{}{
 				"tags":          def.tags,
 				"severity":      def.severity,
 				"fast":          def.fast,
@@ -472,6 +472,10 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 				"needs_network": def.needsNetwork,
 				"depends_on":    def.dependsOn,
 			}
+			if def.scope != "" {
+				entry["scope"] = def.scope
+			}
+			checksMap[name] = entry
 		}
 		schema["checks"] = checksMap
 	}

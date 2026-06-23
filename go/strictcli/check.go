@@ -31,6 +31,7 @@ type checkDef struct {
 	pure         bool
 	needsNetwork bool
 	dependsOn    []string
+	scope        string // optional, defaults to ""
 	impl         func(CheckContext) CheckResult // registered implementation, nil initially
 }
 
@@ -45,6 +46,7 @@ var knownCheckFields = map[string]bool{
 	"pure":          true,
 	"needs_network": true,
 	"depends_on":    true,
+	"scope":         true,
 }
 
 // loadChecksToml reads a checks.toml file from disk and parses it.
@@ -152,6 +154,15 @@ func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error
 		// Parse depends_on (required, []string, can be empty)
 		if err := parseCheckDependsOn(name, fields, def); err != nil {
 			return "", nil, nil, err
+		}
+
+		// Parse scope (optional, string, default "")
+		if scopeRaw, ok := fields["scope"]; ok {
+			scopeStr, ok := scopeRaw.(string)
+			if !ok {
+				return "", nil, nil, fmt.Errorf("checks.toml: check %q: \"scope\" must be a string, got %s", name, tomlTypeName(scopeRaw))
+			}
+			def.scope = scopeStr
 		}
 
 		result[name] = def

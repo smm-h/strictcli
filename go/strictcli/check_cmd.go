@@ -92,6 +92,7 @@ func (a *App) checkListJSON() int {
 		Name     string   `json:"name"`
 		Tags     []string `json:"tags"`
 		Severity string   `json:"severity"`
+		Scope    string   `json:"scope,omitempty"`
 	}
 
 	entries := make([]checkEntry, len(a.checkOrder))
@@ -101,6 +102,7 @@ func (a *App) checkListJSON() int {
 			Name:     name,
 			Tags:     def.tags,
 			Severity: def.severity,
+			Scope:    def.scope,
 		}
 	}
 
