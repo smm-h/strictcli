@@ -7,10 +7,192 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	tomledit "github.com/smm-h/go-toml-edit"
 )
+
+// ConfigField describes a declared config file field.
+type ConfigField struct {
+	Name       string
+	Type       FlagType
+	Help       string
+	Default    interface{}
+	HasDefault bool
+	Required   bool // computed: !HasDefault
+}
+
+// ConfigFieldOption configures a ConfigField.
+type ConfigFieldOption func(*ConfigField)
+
+// ConfigFieldType sets the type for a config field (default: TypeStr).
+func ConfigFieldType(t FlagType) ConfigFieldOption {
+	return func(cf *ConfigField) {
+		cf.Type = t
+	}
+}
+
+// ConfigFieldHelp sets the help text for a config field (required).
+func ConfigFieldHelp(help string) ConfigFieldOption {
+	return func(cf *ConfigField) {
+		cf.Help = help
+	}
+}
+
+// ConfigFieldDefault sets the default value for a config field.
+func ConfigFieldDefault(v interface{}) ConfigFieldOption {
+	return func(cf *ConfigField) {
+		cf.Default = v
+		cf.HasDefault = true
+	}
+}
+
+// configFieldNameRe validates config field names: lowercase letters, digits,
+// hyphens, underscores, and dots (for TOML sections). Must start with a
+// letter or underscore (underscore-prefixed names are reserved for framework).
+var configFieldNameRe = regexp.MustCompile(`^[a-z_][a-z0-9._-]*$`)
+
+// ConfigField declares a config field on the app.
+// Panics on invalid configuration (programmer error).
+func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
+	cf := &ConfigField{
+		Name: name,
+		Type: TypeStr, // default type
+	}
+	for _, opt := range opts {
+		opt(cf)
+	}
+	cf.Required = !cf.HasDefault
+
+	// Validate name format
+	if !configFieldNameRe.MatchString(name) {
+		panic(fmt.Sprintf("config field %q: invalid name, must match [a-z_][a-z0-9._-]*", name))
+	}
+
+	// Names starting with _ are reserved for framework fields
+	if strings.HasPrefix(name, "_") {
+		panic(fmt.Sprintf("config field %q: names starting with '_' are reserved for framework use", name))
+	}
+
+	// Validate help is non-empty
+	if strings.TrimSpace(cf.Help) == "" {
+		panic(fmt.Sprintf("config field %q: help text is required", name))
+	}
+
+	// Validate type
+	switch cf.Type {
+	case TypeStr, TypeBool, TypeInt, TypeFloat:
+		// ok
+	default:
+		panic(fmt.Sprintf("config field %q: type must be str, bool, int, or float, got %d", name, cf.Type))
+	}
+
+	// Validate default matches type
+	if cf.HasDefault && cf.Default != nil {
+		validateConfigFieldDefault(name, cf.Type, cf.Default)
+	}
+
+	// Check for duplicate names (user fields and framework fields)
+	if a.configFields == nil {
+		a.configFields = make(map[string]*ConfigField)
+	}
+	if _, ok := a.configFields[name]; ok {
+		panic(fmt.Sprintf("config field %q: duplicate name", name))
+	}
+	if a.frameworkFields != nil {
+		if _, ok := a.frameworkFields[name]; ok {
+			panic(fmt.Sprintf("config field %q: duplicate name (conflicts with framework field)", name))
+		}
+	}
+
+	a.configFields[name] = cf
+	a.configFieldOrder = append(a.configFieldOrder, name)
+}
+
+// registerFrameworkField declares an internal framework config field.
+// Framework fields use underscore-prefixed names and are not exposed to users.
+func (a *App) registerFrameworkField(name string, fieldType FlagType, help string) {
+	if !strings.HasPrefix(name, "_") {
+		panic(fmt.Sprintf("framework field %q: name must start with '_'", name))
+	}
+
+	if !configFieldNameRe.MatchString(name) {
+		panic(fmt.Sprintf("framework field %q: invalid name, must match [a-z_][a-z0-9._-]*", name))
+	}
+
+	if strings.TrimSpace(help) == "" {
+		panic(fmt.Sprintf("framework field %q: help text is required", name))
+	}
+
+	switch fieldType {
+	case TypeStr, TypeBool, TypeInt, TypeFloat:
+		// ok
+	default:
+		panic(fmt.Sprintf("framework field %q: type must be str, bool, int, or float, got %d", name, fieldType))
+	}
+
+	if a.frameworkFields == nil {
+		a.frameworkFields = make(map[string]*ConfigField)
+	}
+	if _, ok := a.frameworkFields[name]; ok {
+		panic(fmt.Sprintf("framework field %q: duplicate name", name))
+	}
+	if a.configFields != nil {
+		if _, ok := a.configFields[name]; ok {
+			panic(fmt.Sprintf("framework field %q: duplicate name (conflicts with user field)", name))
+		}
+	}
+
+	cf := &ConfigField{
+		Name:     name,
+		Type:     fieldType,
+		Help:     help,
+		Required: true, // framework fields have no default
+	}
+
+	a.frameworkFields[name] = cf
+	a.frameworkFieldOrder = append(a.frameworkFieldOrder, name)
+}
+
+// validateConfigFieldDefault panics if the default value doesn't match the declared type.
+func validateConfigFieldDefault(name string, fieldType FlagType, value interface{}) {
+	switch fieldType {
+	case TypeStr:
+		if _, ok := value.(string); !ok {
+			panic(fmt.Sprintf("config field %q: default value type mismatch, expected str, got %s", name, describeGoType(value)))
+		}
+	case TypeBool:
+		if _, ok := value.(bool); !ok {
+			panic(fmt.Sprintf("config field %q: default value type mismatch, expected bool, got %s", name, describeGoType(value)))
+		}
+	case TypeInt:
+		if _, ok := value.(int); !ok {
+			panic(fmt.Sprintf("config field %q: default value type mismatch, expected int, got %s", name, describeGoType(value)))
+		}
+	case TypeFloat:
+		if _, ok := value.(float64); !ok {
+			panic(fmt.Sprintf("config field %q: default value type mismatch, expected float, got %s", name, describeGoType(value)))
+		}
+	}
+}
+
+// describeGoType returns a human-readable type name for a Go value,
+// using strictcli type names (str, bool, int, float).
+func describeGoType(v interface{}) string {
+	switch v.(type) {
+	case string:
+		return "str"
+	case bool:
+		return "bool"
+	case int:
+		return "int"
+	case float64:
+		return "float"
+	default:
+		return fmt.Sprintf("%T", v)
+	}
+}
 
 // configPath returns the full path to the config file for an app.
 // If override is non-empty, it is returned as-is.

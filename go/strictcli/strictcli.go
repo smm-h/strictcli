@@ -181,6 +181,10 @@ type App struct {
 	configPathOverride  string
 	configFormat        string
 	configData          map[string]interface{}
+	configFields        map[string]*ConfigField
+	configFieldOrder    []string
+	frameworkFields     map[string]*ConfigField
+	frameworkFieldOrder []string
 
 	checksEnabled       bool
 	checksPath          string
