@@ -10,6 +10,7 @@ __all__ = [
     "flag", "arg",
     "CheckResult", "CheckContext", "CheckRunResult",
     "format_check_results", "format_check_results_json",
+    "ConfigField",
 ]
 
 import contextlib
@@ -941,6 +942,43 @@ class Group:
         return decorator
 
 
+_CONFIG_FIELD_NAME_RE = re.compile(r"^_?[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
+
+
+@dataclass
+class ConfigField:
+    """Declares a typed config file field.
+
+    Fields with no default are required — the config system will error if
+    they are missing from the config file. Fields with a default are optional.
+    """
+
+    name: str
+    type: type
+    help: str
+    default: object = _MISSING
+    required: bool = field(init=False)
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.help, "help", "ConfigField")
+        if self.type not in (str, bool, int, float):
+            raise ValueError(
+                f"ConfigField.type must be str, bool, int, or float, got {self.type!r}"
+            )
+        if not _CONFIG_FIELD_NAME_RE.match(self.name):
+            raise ValueError(
+                f'ConfigField name "{self.name}" is invalid: '
+                f"must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)* "
+                f"(lowercase, dots for sections)"
+            )
+        self.required = isinstance(self.default, _MissingSentinel)
+        if not self.required and not isinstance(self.default, self.type):
+            raise ValueError(
+                f'ConfigField "{self.name}": default value {self.default!r} '
+                f"does not match type {self.type.__name__}"
+            )
+
+
 @dataclass
 class Result:
     """Returned by app.test()."""
@@ -1075,10 +1113,79 @@ class App:
 
         self._tag_contracts: dict[str, str] = {}
 
+        # Config field declarations
+        self._config_fields: dict[str, ConfigField] = {}
+        self._framework_fields: dict[str, ConfigField] = {}
+
     @property
     def config_file_path(self) -> str:
         """Return the resolved config file path for this app."""
         return _config_path(self.name, override=self.config_path, config_format=self.config_format)
+
+    def config_field(
+        self,
+        name: str,
+        type: type,
+        help: str,
+        default: object = _MISSING,
+    ) -> ConfigField:
+        """Declare a typed config file field.
+
+        Args:
+            name: Field name. Dots allowed for TOML sections (e.g. "serve.port").
+                  Names starting with underscore are reserved for framework fields.
+            type: Field type — str, bool, int, or float.
+            help: Help text describing the field.
+            default: Default value. If omitted, the field is required.
+
+        Returns:
+            The registered ConfigField.
+
+        Raises:
+            ValueError: If the name is invalid, duplicated, reserved, or
+                        the default doesn't match the declared type.
+        """
+        if name.startswith("_"):
+            raise ValueError(
+                f'config field name "{name}" is reserved: '
+                f"names starting with underscore are reserved for framework fields"
+            )
+        if name in self._config_fields:
+            raise ValueError(f'duplicate config field name "{name}"')
+        if name in self._framework_fields:
+            raise ValueError(
+                f'config field name "{name}" conflicts with framework field'
+            )
+        cf = ConfigField(name=name, type=type, help=help, default=default)
+        self._config_fields[name] = cf
+        return cf
+
+    def _register_framework_field(
+        self,
+        name: str,
+        type: type,
+        help: str,
+    ) -> ConfigField:
+        """Register a framework-owned config field (e.g. _schema_version).
+
+        Framework fields must start with underscore. They are declared by the
+        framework, not the user, and cannot conflict with user fields.
+        """
+        if not name.startswith("_"):
+            raise ValueError(
+                f'framework field name "{name}" must start with underscore'
+            )
+        if name in self._framework_fields:
+            raise ValueError(f'duplicate framework field name "{name}"')
+        if name in self._config_fields:
+            raise ValueError(
+                f'framework field name "{name}" conflicts with user config field'
+            )
+        # Framework fields are always optional (no default required from user).
+        # Use _MISSING as default since they are managed internally.
+        cf = ConfigField(name=name, type=type, help=help)
+        self._framework_fields[name] = cf
+        return cf
 
     def check(self, name: str):
         """Decorator to register a check implementation."""
