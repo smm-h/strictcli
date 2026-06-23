@@ -28,7 +28,7 @@ import tomllib
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Protocol, runtime_checkable
+from typing import Callable, Protocol, get_args, get_origin, runtime_checkable
 
 
 # Sentinel for distinguishing "not provided" from actual values
@@ -98,17 +98,27 @@ def _toml_format_scalar(value: object) -> str:
 def _write_toml_flat(data: dict, path: str) -> None:
     """Write a flat dict as a TOML file.
 
-    Supports str, int, float, bool, and list values. This avoids requiring
-    a TOML writer dependency for the simple key=value configs that
-    'config set' produces.
+    Supports str, int, float, bool, list, and dict values. This avoids
+    requiring a TOML writer dependency for the simple key=value configs
+    that 'config set' produces.
     """
     lines: list[str] = []
+    # Write non-table values first, then tables
+    tables: list[tuple[str, dict]] = []
     for key, value in data.items():
-        if isinstance(value, list):
+        if isinstance(value, dict):
+            tables.append((key, value))
+        elif isinstance(value, list):
             elements = ", ".join(_toml_format_scalar(elem) for elem in value)
             lines.append(f"{key} = [{elements}]")
         else:
             lines.append(f"{key} = {_toml_format_scalar(value)}")
+    # Write TOML tables for dict values
+    for key, table in tables:
+        lines.append("")
+        lines.append(f"[{key}]")
+        for k, v in table.items():
+            lines.append(f"{k} = {_toml_format_scalar(v)}")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n" if lines else "")
 
@@ -141,21 +151,37 @@ def _coerce_config_value(value: object, flag: "Flag") -> object:
     """Coerce a JSON config value to the flag's type.
 
     Returns the coerced value, or raises ValueError if coercion fails.
-    Handles both scalar and array values for repeatable flags.
+    Handles scalar, array (repeatable), and object (dict) values.
     """
+    # Dict flags expect a JSON object
+    if flag.compound == "dict":
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"expected object for dict flag, got {_config_typename(value)}"
+            )
+        result = {}
+        for k, v in value.items():
+            try:
+                result[k] = _coerce_config_scalar(v, flag.value_type)
+            except ValueError:
+                raise ValueError(
+                    f"key '{k}': expected {flag.value_type.__name__}, "
+                    f"got {_config_typename(v)}"
+                )
+        return result
     if isinstance(value, list):
         if not flag.repeatable:
             raise ValueError("expected scalar, got array")
-        result = []
+        result_list = []
         for i, elem in enumerate(value):
             try:
-                result.append(_coerce_config_scalar(elem, flag.type))
+                result_list.append(_coerce_config_scalar(elem, flag.type))
             except ValueError:
                 raise ValueError(
                     f"element {i}: expected {flag.type.__name__}, "
                     f"got {_config_typename(elem)}"
                 )
-        return result
+        return result_list
     if flag.repeatable:
         raise ValueError(
             f"expected array for repeatable flag, got {_config_typename(value)}"
@@ -167,6 +193,8 @@ def _format_config_value(value: object) -> str:
     """Format a config value for display, matching Go's formatConfigValue."""
     if value is None:
         return "<nil>"
+    if isinstance(value, dict):
+        return json.dumps(value)
     if isinstance(value, list):
         return json.dumps(value)
     if isinstance(value, bool):
@@ -561,6 +589,8 @@ def _config_typename(value: object) -> str:
         return "null"
     if isinstance(value, list):
         return "array"
+    if isinstance(value, dict):
+        return "object"
     return type(value).__name__
 
 
@@ -875,6 +905,224 @@ def _require_non_empty_str(value: str, field_name: str, class_name: str) -> None
         raise ValueError(f"{class_name}.{field_name} must be a non-empty string")
 
 
+def _parse_dict_value(
+    flag_name: str, raw: str, value_type: type,
+) -> tuple[str, object] | dict[str, object]:
+    """Parse a dict flag value from CLI.
+
+    Two formats:
+    - key=value: splits on first '=', coerces value to value_type
+    - JSON string starting with '{': parsed as JSON dict
+
+    For key=value format, returns a (key, coerced_value) tuple.
+    For JSON format, returns a dict of {key: coerced_value}.
+    """
+    # JSON format: detected by leading '{'
+    if raw.startswith("{"):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise _ParseError(f"--{flag_name}: invalid JSON: {e}")
+        if not isinstance(parsed, dict):
+            raise _ParseError(
+                f"--{flag_name}: JSON value must be an object, "
+                f"got {type(parsed).__name__}"
+            )
+        result = {}
+        for k, v in parsed.items():
+            if not isinstance(k, str):
+                raise _ParseError(
+                    f"--{flag_name}: JSON key must be a string, got {k!r}"
+                )
+            result[k] = _coerce_dict_json_value(flag_name, k, v, value_type)
+        return result
+
+    # key=value format: split on first '='
+    if "=" not in raw:
+        raise _ParseError(
+            f"--{flag_name}: expected key=value or JSON, got '{raw}'"
+        )
+    eq_pos = raw.index("=")
+    key = raw[:eq_pos]
+    val_str = raw[eq_pos + 1:]
+
+    if not key:
+        raise _ParseError(f"--{flag_name}: empty key in '{raw}'")
+
+    if value_type is int:
+        try:
+            return (key, _strict_int(val_str))
+        except ValueError as e:
+            raise _ParseError(f"--{flag_name}: value for key '{key}': {e}")
+    elif value_type is float:
+        try:
+            return (key, _strict_float(val_str))
+        except ValueError as e:
+            raise _float_parse_error(flag_name, val_str, e)
+    else:  # str
+        return (key, val_str)
+
+
+def _coerce_dict_json_value(
+    flag_name: str, key: str, value: object, value_type: type,
+) -> object:
+    """Coerce a JSON-parsed value to the dict's value type."""
+    if value_type is str:
+        if not isinstance(value, str):
+            raise _ParseError(
+                f"--{flag_name}: JSON value for key '{key}' must be a string, "
+                f"got {_config_typename(value)}"
+            )
+        return value
+    if value_type is int:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise _ParseError(
+                f"--{flag_name}: JSON value for key '{key}' must be an integer, "
+                f"got {_config_typename(value)}"
+            )
+        return value
+    if value_type is float:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise _ParseError(
+                f"--{flag_name}: JSON value for key '{key}' must be a number, "
+                f"got {_config_typename(value)}"
+            )
+        return float(value)
+    raise _ParseError(f"--{flag_name}: unsupported value type {value_type}")
+
+
+def _store_dict_flag(f: "Flag", raw: str, cli_set: dict) -> None:
+    """Parse and store a dict flag value from a raw CLI string.
+
+    Handles both key=value and JSON formats. For JSON, may add multiple
+    entries at once. For key=value, adds one entry.
+    """
+    parsed = _parse_dict_value(f.name, raw, f.value_type)
+    if isinstance(parsed, dict):
+        # JSON format returned a full dict
+        if f.name not in cli_set:
+            cli_set[f.name] = {}
+        for k, v in parsed.items():
+            if k in cli_set[f.name]:
+                raise _ParseError(f"--{f.name}: duplicate key '{k}'")
+            cli_set[f.name][k] = v
+    else:
+        # key=value format returned a tuple
+        k, v = parsed
+        if f.name not in cli_set:
+            cli_set[f.name] = {}
+        if k in cli_set[f.name]:
+            raise _ParseError(f"--{f.name}: duplicate key '{k}'")
+        cli_set[f.name][k] = v
+
+
+_SCALAR_TYPES = (str, bool, int, float)
+_NON_BOOL_SCALAR_TYPES = (str, int, float)
+
+
+def _parse_compound_type(
+    raw_type: type, context: str,
+) -> tuple[str, type | None, type | None]:
+    """Parse a type annotation into (kind, item_type, value_type).
+
+    Returns:
+        ("scalar", None, None) for str/bool/int/float
+        ("list", item_type, None) for list[T]
+        ("dict", None, value_type) for dict[str, T]
+
+    Raises ValueError for invalid compound types.
+    """
+    # Plain scalar types
+    if raw_type in _SCALAR_TYPES:
+        return ("scalar", None, None)
+
+    # Bare list/dict without type args
+    if raw_type is list:
+        raise ValueError(
+            f'{context}: list type requires an item type '
+            f'(e.g., list[int]), got bare list'
+        )
+    if raw_type is dict:
+        raise ValueError(
+            f'{context}: dict type requires type arguments '
+            f'(e.g., dict[str, int]), got bare dict'
+        )
+
+    origin = get_origin(raw_type)
+
+    # list[T]
+    if origin is list:
+        args = get_args(raw_type)
+        if not args:
+            raise ValueError(
+                f'{context}: list type requires an item type '
+                f'(e.g., list[int]), got bare list'
+            )
+        if len(args) != 1:
+            raise ValueError(
+                f'{context}: list type takes exactly one type argument, '
+                f'got {len(args)}'
+            )
+        item_type = args[0]
+        if item_type not in _NON_BOOL_SCALAR_TYPES:
+            raise ValueError(
+                f'{context}: list item type must be str, int, or float, '
+                f'got {item_type!r}'
+            )
+        return ("list", item_type, None)
+
+    # dict[str, T]
+    if origin is dict:
+        args = get_args(raw_type)
+        if not args:
+            raise ValueError(
+                f'{context}: dict type requires type arguments '
+                f'(e.g., dict[str, int]), got bare dict'
+            )
+        if len(args) != 2:
+            raise ValueError(
+                f'{context}: dict type takes exactly two type arguments, '
+                f'got {len(args)}'
+            )
+        key_type, val_type = args
+        if key_type is not str:
+            raise ValueError(
+                f'{context}: dict key type must be str, got {key_type!r}'
+            )
+        if val_type not in _NON_BOOL_SCALAR_TYPES:
+            raise ValueError(
+                f'{context}: dict value type must be str, int, or float, '
+                f'got {val_type!r}'
+            )
+        return ("dict", None, val_type)
+
+    raise ValueError(
+        f'{context}: type must be str, bool, int, float, '
+        f'list[T], or dict[str, T], got {raw_type!r}'
+    )
+
+
+def _validate_element_type(
+    flag_name: str, expected_type: type, value: object, context: str,
+) -> None:
+    """Validate that a value matches the expected scalar type."""
+    if expected_type is str:
+        if not isinstance(value, str):
+            raise ValueError(
+                f'Flag "{flag_name}": {context} is not of type str'
+            )
+    elif expected_type is int:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(
+                f'Flag "{flag_name}": {context} is not of type int'
+            )
+    elif expected_type is float:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ValueError(
+                f'Flag "{flag_name}": {context} is not of type float'
+            )
+
+
 @dataclass
 class Flag:
     """Represents a --flag declaration."""
@@ -892,35 +1140,95 @@ class Flag:
     validate: Callable | None = None
     repeatable: bool = False
     unique: object = _MISSING
+    # Compound type fields (set by __post_init__, not by caller)
+    compound: str = "scalar"  # "scalar", "list", or "dict"
+    item_type: type | None = None  # for list[T]: the T
+    value_type: type | None = None  # for dict[str, T]: the T
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
-        if self.type not in (str, bool, int, float):
-            raise ValueError(f"Flag.type must be str, bool, int, or float, got {self.type!r}")
+
+        # Parse compound types (list[T], dict[str, T])
+        kind, item_t, val_t = _parse_compound_type(
+            self.type, f'Flag "{self.name}"',
+        )
+        self.compound = kind
+        self.item_type = item_t
+        self.value_type = val_t
+
+        if kind == "list":
+            # list[T] normalizes to: type=item_type, repeatable=True
+            self.type = self.item_type
+            if not self.repeatable:
+                self.repeatable = True
+            # unique defaults to False for list types if not specified
+            if isinstance(self.unique, _MissingSentinel):
+                self.unique = False
+        elif kind == "dict":
+            # dict[str, T] normalizes to: type stays as the original
+            # dict[str, T] annotation. The value_type tracks the T.
+            # Dict flags are implicitly repeatable (each --flag key=val
+            # adds to the dict), but don't use the list-based repeatable
+            # machinery. We store self.type as the value_type for coercion
+            # dispatch, but keep compound="dict" to distinguish behavior.
+            self.type = self.value_type
+            # Dict flags cannot be combined with repeatable=True by the user
+            if self.repeatable:
+                raise ValueError(
+                    f'Flag "{self.name}": dict type cannot be combined '
+                    f'with repeatable=True'
+                )
+            # Dict flags cannot have unique
+            if not isinstance(self.unique, _MissingSentinel):
+                raise ValueError(
+                    f'Flag "{self.name}": dict type cannot be combined with unique'
+                )
+            self.unique = False
+            # Dict flags cannot have choices
+            if self.choices is not None:
+                raise ValueError(
+                    f'Flag "{self.name}": dict type cannot be combined with choices'
+                )
+
+        # Validate scalar type
+        if kind == "scalar" and self.type not in (str, bool, int, float):
+            raise ValueError(
+                f"Flag.type must be str, bool, int, float, "
+                f"list[T], or dict[str, T], got {self.type!r}"
+            )
         # Validate repeatable
         if self.repeatable and self.type is bool:
             raise ValueError(f'Flag "{self.name}": repeatable is incompatible with type=bool')
         # Validate unique
-        if self.repeatable and isinstance(self.unique, _MissingSentinel):
-            raise ValueError(
-                f'Flag "{self.name}": repeatable requires explicit unique '
-                f"(unique=True or unique=False)"
-            )
-        if not isinstance(self.unique, _MissingSentinel) and self.unique is not True and self.unique is not False:
-            raise ValueError(f'Flag "{self.name}": unique must be True or False')
-        if (self.unique is True or self.unique is False) and not self.repeatable:
-            raise ValueError(f'Flag "{self.name}": unique requires repeatable=True')
-        if isinstance(self.unique, _MissingSentinel) and not self.repeatable:
-            self.unique = False
+        if self.compound != "dict":
+            if self.repeatable and isinstance(self.unique, _MissingSentinel):
+                raise ValueError(
+                    f'Flag "{self.name}": repeatable requires explicit unique '
+                    f"(unique=True or unique=False)"
+                )
+            if not isinstance(self.unique, _MissingSentinel) and self.unique is not True and self.unique is not False:
+                raise ValueError(f'Flag "{self.name}": unique must be True or False')
+            if (self.unique is True or self.unique is False) and not self.repeatable:
+                raise ValueError(f'Flag "{self.name}": unique requires repeatable=True')
+            if isinstance(self.unique, _MissingSentinel) and not self.repeatable:
+                self.unique = False
         # Validate env_separator
-        if self.env_separator is not None and not self.repeatable:
-            raise ValueError(f'Flag "{self.name}": env_separator requires repeatable=True')
-        if self.env_separator is not None and self.env is None:
-            raise ValueError(f'Flag "{self.name}": env_separator requires env')
-        if self.repeatable and self.env is not None and self.env_separator is None:
-            raise ValueError(
-                f'Flag "{self.name}": repeatable flag with env requires env_separator'
-            )
+        if self.compound == "dict":
+            # Dict flags use JSON for env vars, not env_separator
+            if self.env_separator is not None:
+                raise ValueError(
+                    f'Flag "{self.name}": dict type cannot use env_separator '
+                    f'(env vars are parsed as JSON)'
+                )
+        else:
+            if self.env_separator is not None and not self.repeatable:
+                raise ValueError(f'Flag "{self.name}": env_separator requires repeatable=True')
+            if self.env_separator is not None and self.env is None:
+                raise ValueError(f'Flag "{self.name}": env_separator requires env')
+            if self.repeatable and self.env is not None and self.env_separator is None:
+                raise ValueError(
+                    f'Flag "{self.name}": repeatable flag with env requires env_separator'
+                )
         if self.env_separator is not None and len(self.env_separator) != 1:
             raise ValueError(f'Flag "{self.name}": env_separator must be a single character')
         if self.env_separator == "\\":
@@ -936,8 +1244,31 @@ class Flag:
                     raise ValueError(
                         f'Flag "{self.name}": choice {c!r} is not of type {self.type.__name__}'
                     )
+        # Validate defaults for dict flags
+        if self.compound == "dict":
+            if not isinstance(self.default, _MissingSentinel):
+                if self.default is not None:
+                    if not isinstance(self.default, dict):
+                        raise ValueError(
+                            f'Flag "{self.name}": dict flag default must be a dict'
+                        )
+                    if len(self.default) == 0:
+                        raise ValueError(
+                            f'Flag "{self.name}": explicit empty default is '
+                            f'redundant for dict flags, omit the default'
+                        )
+                    for k, v in self.default.items():
+                        if not isinstance(k, str):
+                            raise ValueError(
+                                f'Flag "{self.name}": dict default key {k!r} '
+                                f'must be a string'
+                            )
+                        _validate_element_type(
+                            self.name, self.type, v,
+                            f"dict default value for key {k!r}",
+                        )
         # Validate repeatable flag defaults
-        if self.repeatable and not isinstance(self.default, _MissingSentinel):
+        elif self.repeatable and not isinstance(self.default, _MissingSentinel):
             if self.default is not None:
                 if not isinstance(self.default, list):
                     raise ValueError(
@@ -970,21 +1301,27 @@ class Flag:
                             self.default[i] = float(elem)
         # Validate default type for int flags
         if self.type is int and not isinstance(self.default, _MissingSentinel) and self.default is not None:
-            if not self.repeatable and not isinstance(self.default, int):
+            if not self.repeatable and self.compound != "dict" and not isinstance(self.default, int):
                 raise ValueError(
                     f'Flag "{self.name}": type=int requires an int default, '
                     f"got {type(self.default).__name__!r}"
                 )
         # Validate default type for float flags
         if self.type is float and not isinstance(self.default, _MissingSentinel) and self.default is not None:
-            if not self.repeatable and not isinstance(self.default, (int, float)):
+            if not self.repeatable and self.compound != "dict" and not isinstance(self.default, (int, float)):
                 raise ValueError(
                     f'Flag "{self.name}": type=float requires a float default, '
                     f"got {type(self.default).__name__!r}"
                 )
         # Resolve _MISSING sentinels based on type
-        if isinstance(self.default, _MissingSentinel):
-            if self.repeatable:
+        if isinstance(self.default, _MissingSentinel) or (
+            self.default is None and (
+                self.compound == "dict" or self.repeatable
+            )
+        ):
+            if self.compound == "dict":
+                self.default = {}
+            elif self.repeatable:
                 self.default = []
             elif self.type is bool:
                 self.default = False
@@ -1018,13 +1355,49 @@ class Arg:
     variadic: bool = False
     type: type = str
     choices: list | None = None
+    # Compound type fields (set by __post_init__, not by caller)
+    compound: str = "scalar"
+    item_type: type | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Arg")
         if self.required and not isinstance(self.default, _MissingSentinel):
             raise ValueError("required arg cannot have a default")
+
+        # Parse compound types for args (only list[T] is supported)
+        origin = get_origin(self.type)
+        if origin is list:
+            args = get_args(self.type)
+            if not args:
+                raise ValueError(
+                    f'Arg "{self.name}": list type requires an item type '
+                    f'(e.g., list[int]), got bare list'
+                )
+            if len(args) != 1:
+                raise ValueError(
+                    f'Arg "{self.name}": list type takes exactly one type '
+                    f'argument, got {len(args)}'
+                )
+            item_t = args[0]
+            if item_t not in _NON_BOOL_SCALAR_TYPES:
+                raise ValueError(
+                    f'Arg "{self.name}": list item type must be str, int, '
+                    f'or float, got {item_t!r}'
+                )
+            if not self.variadic:
+                raise ValueError(
+                    f'Arg "{self.name}": list type on args requires '
+                    f'variadic=True'
+                )
+            self.compound = "list"
+            self.item_type = item_t
+            self.type = item_t
+        elif origin is dict:
+            raise ValueError(
+                f'Arg "{self.name}": dict type is not supported on args'
+            )
         # Validate type
-        if self.type not in (str, bool, int, float):
+        elif self.type not in (str, bool, int, float):
             raise ValueError(
                 f"Arg.type must be str, bool, int, or float, got {self.type!r}"
             )
@@ -2040,13 +2413,16 @@ class App:
                       file=sys.stderr)
                 return 1
 
-            # --clear: repeatable flags only, writes []
+            # --clear: repeatable/dict flags only
             if use_clear:
-                if not matched_flag.repeatable:
+                if matched_flag.compound == "dict":
+                    existing[key] = {}
+                elif matched_flag.repeatable:
+                    existing[key] = []
+                else:
                     print("config set: --clear is only for repeatable flags",
                           file=sys.stderr)
                     return 1
-                existing[key] = []
                 if app_ref.config_format == "toml":
                     _write_toml_flat(existing, path)
                 else:
@@ -2069,7 +2445,31 @@ class App:
                 return 0
 
             # Coerce the string value to the flag's type
-            if matched_flag.repeatable:
+            if matched_flag.compound == "dict":
+                # Dict flags: parse as JSON
+                try:
+                    parsed = json.loads(value)
+                except json.JSONDecodeError as e:
+                    print(f"config set: key '{key}': invalid JSON: {e}",
+                          file=sys.stderr)
+                    return 1
+                if not isinstance(parsed, dict):
+                    print(f"config set: key '{key}': expected JSON object",
+                          file=sys.stderr)
+                    return 1
+                typed_value = {}
+                for dk, dv in parsed.items():
+                    try:
+                        typed_value[dk] = _coerce_config_scalar(
+                            dv, matched_flag.value_type,
+                        )
+                    except ValueError as e:
+                        print(
+                            f"config set: key '{key}': value for '{dk}': {e}",
+                            file=sys.stderr,
+                        )
+                        return 1
+            elif matched_flag.repeatable:
                 # Split on comma, coerce each element
                 parts = _split_escaped(value, ",")
                 try:
@@ -2389,7 +2789,17 @@ class App:
 
         def _store_value(f: Flag, value: object) -> None:
             """Store a parsed value, appending to a list for repeatable flags."""
-            if f.repeatable:
+            if f.compound == "dict":
+                if f.name not in cli_set:
+                    cli_set[f.name] = {}
+                # value is a (key, val) tuple from _parse_dict_value
+                k, v = value
+                if k in cli_set[f.name]:
+                    raise _ParseError(
+                        f"--{f.name}: duplicate key '{k}'"
+                    )
+                cli_set[f.name][k] = v
+            elif f.repeatable:
                 if f.name not in cli_set:
                     cli_set[f.name] = []
                 if f.unique and value in cli_set[f.name]:
@@ -2417,11 +2827,13 @@ class App:
 
                 if flag_part in long_lookup:
                     f = long_lookup[flag_part]
-                    if f.type is bool:
+                    if f.type is bool and f.compound != "dict":
                         raise _ParseError(
                             f"flag '{flag_part}' is a boolean flag and does not take a value"
                         )
-                    if f.type is int:
+                    if f.compound == "dict":
+                        _store_dict_flag(f, value_part, cli_set)
+                    elif f.type is int:
                         try:
                             _store_value(f, _strict_int(value_part))
                         except ValueError as e:
@@ -2457,13 +2869,15 @@ class App:
             # --flag (long form)
             if tok.startswith("--") and tok in long_lookup:
                 f = long_lookup[tok]
-                if f.type is bool:
+                if f.type is bool and f.compound != "dict":
                     cli_set[f.name] = True
                     i += 1
                 else:
                     if i + 1 < len(argv):
                         raw = argv[i + 1]
-                        if f.type is int:
+                        if f.compound == "dict":
+                            _store_dict_flag(f, raw, cli_set)
+                        elif f.type is int:
                             try:
                                 _store_value(f, _strict_int(raw))
                             except ValueError as e:
@@ -2486,13 +2900,15 @@ class App:
             # -x (short form)
             if tok.startswith("-") and len(tok) == 2 and tok in short_lookup:
                 f = short_lookup[tok]
-                if f.type is bool:
+                if f.type is bool and f.compound != "dict":
                     cli_set[f.name] = True
                     i += 1
                 else:
                     if i + 1 < len(argv):
                         raw = argv[i + 1]
-                        if f.type is int:
+                        if f.compound == "dict":
+                            _store_dict_flag(f, raw, cli_set)
+                        elif f.type is int:
                             try:
                                 _store_value(f, _strict_int(raw))
                             except ValueError as e:
@@ -2526,7 +2942,27 @@ class App:
             if f.env is not None:
                 env_val = os.environ.get(f.env)
                 if env_val is not None:
-                    if f.type is bool:
+                    if f.compound == "dict":
+                        # Dict flags parse env vars as JSON
+                        try:
+                            parsed = json.loads(env_val)
+                        except json.JSONDecodeError as e:
+                            raise _ParseError(
+                                f"--{f.name}: invalid JSON in env var "
+                                f"'{f.env}': {e}"
+                            )
+                        if not isinstance(parsed, dict):
+                            raise _ParseError(
+                                f"--{f.name}: env var '{f.env}' must be a "
+                                f"JSON object, got {type(parsed).__name__}"
+                            )
+                        result = {}
+                        for k, v in parsed.items():
+                            result[k] = _coerce_dict_json_value(
+                                f.name, k, v, f.value_type,
+                            )
+                        cli_set[f.name] = result
+                    elif f.type is bool:
                         try:
                             cli_set[f.name] = _strict_bool(env_val)
                         except ValueError:
@@ -3062,7 +3498,10 @@ def _validate_and_build_kwargs(
     for f in cmd.flags:
         if f.name in cli_set:
             continue
-        if f.repeatable:
+        if f.compound == "dict":
+            # Dict flags default to {} (never required)
+            cli_set[f.name] = dict(f.default) if f.default else {}
+        elif f.repeatable:
             # Repeatable flags default to [] (never required)
             cli_set[f.name] = list(f.default) if f.default else []
         elif f.type is bool:
@@ -3218,7 +3657,17 @@ def _parse_command(
 
     def _store_value(f: Flag, value: object) -> None:
         """Store a parsed value, appending to a list for repeatable flags."""
-        if f.repeatable:
+        if f.compound == "dict":
+            if f.name not in cli_set:
+                cli_set[f.name] = {}
+            # value is a (key, val) tuple from _parse_dict_value
+            k, v = value
+            if k in cli_set[f.name]:
+                raise _ParseError(
+                    f"--{f.name}: duplicate key '{k}'"
+                )
+            cli_set[f.name][k] = v
+        elif f.repeatable:
             if f.name not in cli_set:
                 cli_set[f.name] = []
             if f.unique and value in cli_set[f.name]:
@@ -3254,11 +3703,13 @@ def _parse_command(
 
             if flag_part in long_lookup:
                 f = long_lookup[flag_part]
-                if f.type is bool:
+                if f.type is bool and f.compound != "dict":
                     raise _ParseError(
                         f"flag '{flag_part}' is a boolean flag and does not take a value"
                     )
-                if f.type is int:
+                if f.compound == "dict":
+                    _store_dict_flag(f, value_part, cli_set)
+                elif f.type is int:
                     try:
                         _store_value(f, _strict_int(value_part))
                     except ValueError as e:
@@ -3293,14 +3744,16 @@ def _parse_command(
         if tok.startswith("--"):
             if tok in long_lookup:
                 f = long_lookup[tok]
-                if f.type is bool:
+                if f.type is bool and f.compound != "dict":
                     cli_set[f.name] = True
                     i += 1
                 else:
-                    # str/int/float flag: consume next token as value
+                    # str/int/float/dict flag: consume next token as value
                     if i + 1 < len(tokens):
                         raw = tokens[i + 1]
-                        if f.type is int:
+                        if f.compound == "dict":
+                            _store_dict_flag(f, raw, cli_set)
+                        elif f.type is int:
                             try:
                                 _store_value(f, _strict_int(raw))
                             except ValueError as e:
@@ -3325,14 +3778,16 @@ def _parse_command(
         # -x (short form)
         if tok.startswith("-") and len(tok) == 2 and tok in short_lookup:
             f = short_lookup[tok]
-            if f.type is bool:
+            if f.type is bool and f.compound != "dict":
                 cli_set[f.name] = True
                 i += 1
             else:
-                # str/int/float flag: consume next token as value
+                # str/int/float/dict flag: consume next token as value
                 if i + 1 < len(tokens):
                     raw = tokens[i + 1]
-                    if f.type is int:
+                    if f.compound == "dict":
+                        _store_dict_flag(f, raw, cli_set)
+                    elif f.type is int:
                         try:
                             _store_value(f, _strict_int(raw))
                         except ValueError as e:
@@ -3364,7 +3819,27 @@ def _parse_command(
         if f.env is not None:
             env_val = os.environ.get(f.env)
             if env_val is not None:
-                if f.type is bool:
+                if f.compound == "dict":
+                    # Dict flags parse env vars as JSON
+                    try:
+                        parsed = json.loads(env_val)
+                    except json.JSONDecodeError as e:
+                        raise _ParseError(
+                            f"--{f.name}: invalid JSON in env var "
+                            f"'{f.env}': {e}"
+                        )
+                    if not isinstance(parsed, dict):
+                        raise _ParseError(
+                            f"--{f.name}: env var '{f.env}' must be a JSON "
+                            f"object, got {type(parsed).__name__}"
+                        )
+                    result = {}
+                    for k, v in parsed.items():
+                        result[k] = _coerce_dict_json_value(
+                            f.name, k, v, f.value_type,
+                        )
+                    cli_set[f.name] = result
+                elif f.type is bool:
                     try:
                         cli_set[f.name] = _strict_bool(env_val)
                     except ValueError:
@@ -3995,7 +4470,7 @@ def _find_group_path(app: App, target: Group) -> list[str]:
 def _build_flag_spec(f: Flag) -> str:
     """Build the left-column spec string for a flag (e.g. '--target, -t <str>')."""
     parts: list[str] = []
-    if f.type is bool and f.negatable:
+    if f.type is bool and f.negatable and f.compound == "scalar":
         parts.append(f"--{f.name}, --no-{f.name}")
         if f.short:
             parts.append(f"-{f.short}")
@@ -4004,7 +4479,13 @@ def _build_flag_spec(f: Flag) -> str:
         if f.short:
             parts.append(f"-{f.short}")
     spec = ", ".join(parts)
-    if f.type is str:
+    if f.compound == "list":
+        type_name = _TYPE_NAMES.get(f.item_type, "str")
+        spec += f" <{type_name}>"
+    elif f.compound == "dict":
+        type_name = _TYPE_NAMES.get(f.value_type, "str")
+        spec += f" <key={type_name}>"
+    elif f.type is str:
         spec += " <str>"
     elif f.type is int:
         spec += " <int>"
@@ -4016,7 +4497,11 @@ def _build_flag_spec(f: Flag) -> str:
 def _build_flag_meta(f: Flag) -> str:
     """Build the bracketed metadata suffix for a flag."""
     meta_parts: list[str] = []
-    if f.repeatable:
+    if f.compound == "list":
+        meta_parts.append("list")
+    elif f.compound == "dict":
+        meta_parts.append("dict")
+    elif f.repeatable:
         meta_parts.append("repeatable")
     if f.unique is True:
         meta_parts.append("unique")
@@ -4028,7 +4513,11 @@ def _build_flag_meta(f: Flag) -> str:
             meta_parts.append(f"env: {f.env} (sep: {f.env_separator})")
         else:
             meta_parts.append(f"env: {f.env}")
-    if f.type is bool:
+    if f.compound == "dict":
+        # Dict flags are never required; show default only if non-empty
+        if f.default:
+            meta_parts.append(f"default: {f.default}")
+    elif f.type is bool and f.compound == "scalar":
         meta_parts.append(f"default: {'true' if f.default else 'false'}")
     elif f.repeatable:
         # Repeatable flags are never required; show default only if non-empty
@@ -4595,26 +5084,49 @@ def _serialize_flag(f: Flag) -> dict:
     Identity fields (name, type, help) are always included.
     Other fields are omitted when they match the schema defaults.
     """
+    # Compound type serialization
+    if f.compound == "list":
+        type_obj = {
+            "type": "array",
+            "items": {"type": _TYPE_NAMES[f.item_type]},
+        }
+    elif f.compound == "dict":
+        type_obj = {
+            "type": "object",
+            "additionalProperties": {"type": _TYPE_NAMES[f.value_type]},
+        }
+    else:
+        type_obj = _TYPE_NAMES[f.type]
+
     d: dict = {
         "name": f.name,
-        "type": _TYPE_NAMES[f.type],
+        "type": type_obj,
         "help": f.help,
     }
     if f.short is not None:
         d["short"] = f.short
-    if f.default is not None:
-        d["default"] = f.default
+    # For dict flags, only emit default if non-empty
+    if f.compound == "dict":
+        if f.default:
+            d["default"] = f.default
+    elif f.default is not None:
+        # For list (repeatable) flags, only emit if non-empty
+        if f.compound == "list" and isinstance(f.default, list) and not f.default:
+            pass  # omit empty list default
+        else:
+            d["default"] = f.default
     if f.env is not None:
         d["env"] = f.env
     if f.choices is not None:
         d["choices"] = f.choices
-    if f.repeatable:
+    if f.repeatable and f.compound != "list":
+        # Only emit repeatable for plain repeatable flags, not list[T] flags
         d["repeatable"] = f.repeatable
     if f.unique is True:
         d["unique"] = True
     if f.env_separator is not None:
         d["env_separator"] = f.env_separator
-    negatable = f.negatable if f.type is bool else None
+    negatable = f.negatable if f.type is bool and f.compound == "scalar" else None
     if negatable is not None:
         d["negatable"] = negatable
     # hidden is currently always False, so always omitted
@@ -4631,7 +5143,13 @@ def _serialize_arg(a: Arg) -> dict:
         "name": a.name,
         "help": a.help,
     }
-    if a.type is not str:
+    # Compound type serialization for args
+    if a.compound == "list":
+        d["type"] = {
+            "type": "array",
+            "items": {"type": _TYPE_NAMES[a.item_type]},
+        }
+    elif a.type is not str:
         d["type"] = a.type.__name__
     if not a.required:
         d["required"] = a.required
