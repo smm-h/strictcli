@@ -6,7 +6,8 @@ __version__ = "0.20.1"
 
 __all__ = [
     "App", "Flag", "Arg", "FlagSet", "MutexGroup", "CoRequired", "Requires",
-    "Implies", "Passthrough", "DeprecatedCommand", "Result", "flag", "arg",
+    "Implies", "Passthrough", "DeprecatedCommand", "Result", "InvokeError",
+    "flag", "arg",
     "CheckResult", "CheckContext", "CheckRunResult",
     "format_check_results", "format_check_results_json",
 ]
@@ -411,6 +412,10 @@ class _ParseError(Exception):
     def __init__(self, message: str, command_prefix: str | None = None):
         super().__init__(message)
         self.command_prefix = command_prefix
+
+
+class InvokeError(Exception):
+    """Raised by app.call() for invocation errors (unknown command, missing flags, etc.)."""
 
 
 def _strict_bool(s: str) -> bool:
@@ -827,6 +832,8 @@ class Command:
     dependencies: tuple[CoRequired | Requires | Implies, ...] = ()
     passthrough: Passthrough | None = None
     tags: frozenset[str] = frozenset()
+    hidden: bool = False
+    interactive: bool = False
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
@@ -848,6 +855,7 @@ class Group:
     _global_flags: list[Flag] = field(default_factory=list)
     tags: frozenset[str] = frozenset()
     _accumulated_tags: frozenset[str] = frozenset()
+    hidden: bool = False
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
@@ -855,7 +863,8 @@ class Group:
             if not _IDENTIFIER_RE.match(tag):
                 raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
 
-    def group(self, name: str, *, help: str, tags: set[str] | None = None) -> Group:
+    def group(self, name: str, *, help: str, tags: set[str] | None = None,
+              hidden: bool = False) -> Group:
         """Create and register a child subgroup."""
         if name in self.commands:
             raise ValueError(
@@ -869,7 +878,8 @@ class Group:
         grp = Group(name=name, help=help, env_prefix=self.env_prefix,
                      _global_flags=self._global_flags,
                      tags=own_tags,
-                     _accumulated_tags=self._accumulated_tags | own_tags)
+                     _accumulated_tags=self._accumulated_tags | own_tags,
+                     hidden=hidden)
         self._groups[name] = grp
         return grp
 
@@ -904,6 +914,8 @@ class Group:
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
         tags: set[str] | None = None,
+        hidden: bool = False,
+        interactive: bool = False,
     ) -> Callable:
         """Decorator to register a command within this group."""
 
@@ -920,6 +932,8 @@ class Group:
                 passthrough=passthrough,
                 tags=tags,
                 inherited_tags=self._accumulated_tags,
+                hidden=hidden,
+                interactive=interactive,
             )
             self.commands[name] = cmd
             return func
@@ -934,6 +948,7 @@ class Result:
     stdout: str
     stderr: str
     exit_code: int
+    data: object = None
 
 
 @dataclass
@@ -1288,6 +1303,8 @@ class App:
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
         tags: set[str] | None = None,
+        hidden: bool = False,
+        interactive: bool = False,
     ) -> Callable:
         """Decorator to register a top-level command."""
 
@@ -1305,19 +1322,23 @@ class App:
                 passthrough=passthrough,
                 tags=tags,
                 inherited_tags=None,
+                hidden=hidden,
+                interactive=interactive,
             )
             self._commands[name] = cmd
             return func
 
         return decorator
 
-    def group(self, name: str, *, help: str, tags: set[str] | None = None) -> Group:
+    def group(self, name: str, *, help: str, tags: set[str] | None = None,
+              hidden: bool = False) -> Group:
         """Create and register a command group."""
         own_tags = frozenset(tags or set())
         grp = Group(name=name, help=help, env_prefix=self.env_prefix,
                      _global_flags=self._global_flags,
                      tags=own_tags,
-                     _accumulated_tags=own_tags)
+                     _accumulated_tags=own_tags,
+                     hidden=hidden)
         self._groups[name] = grp
         return grp
 
@@ -1626,6 +1647,7 @@ class App:
             name="edit",
             help="Open the config file for manual editing in $EDITOR (creates if missing)",
             handler=_config_edit_handler,
+            interactive=True,
         )
 
         self._groups["config"] = config_grp
@@ -2122,16 +2144,23 @@ class App:
             sys.exit(1)
         else:
             if cmd.passthrough is not None:
-                code = cmd.passthrough.handler(cmd.name, data, self._last_global_values)
+                result = cmd.passthrough.handler(cmd.name, data, self._last_global_values)
             else:
-                code = cmd.handler(**data)
-            sys.exit(code if isinstance(code, int) else 0)
+                result = cmd.handler(**data)
+            if isinstance(result, int):
+                sys.exit(result)
+            elif result is None:
+                sys.exit(0)
+            else:
+                print(json.dumps(result, default=str))
+                sys.exit(0)
 
     def test(self, argv: list[str]) -> Result:
         """Run the CLI with given argv, capturing output and exit code."""
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
         exit_code = 0
+        result_data = None
 
         check_err = self._validate_check_registrations()
         if check_err:
@@ -2180,13 +2209,15 @@ class App:
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
                 try:
                     if cmd.passthrough is not None:
-                        code = cmd.passthrough.handler(
+                        handler_return = cmd.passthrough.handler(
                             cmd.name, data, self._last_global_values,
                         )
                     else:
-                        code = cmd.handler(**data)
-                    if isinstance(code, int):
-                        exit_code = code
+                        handler_return = cmd.handler(**data)
+                    if isinstance(handler_return, int):
+                        exit_code = handler_return
+                    elif handler_return is not None:
+                        result_data = handler_return
                 except SystemExit as e:
                     exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
 
@@ -2194,11 +2225,12 @@ class App:
             stdout=stdout_buf.getvalue(),
             stderr=stderr_buf.getvalue(),
             exit_code=exit_code,
+            data=result_data,
         )
 
     def _invoke(
         self, command_path: str, kwargs: dict[str, object]
-    ) -> int | None:
+    ) -> object:
         """Invoke a command programmatically with pre-typed kwargs.
 
         This is the internal pipeline for programmatic invocation. It bypasses
@@ -2214,7 +2246,7 @@ class App:
                 a list of raw string arguments.
 
         Returns:
-            The handler's return value (int or None).
+            The handler's return value (structured data, int, or None).
 
         Raises:
             _ParseError: if validation fails (missing required flags,
@@ -2324,6 +2356,52 @@ class App:
                     final_kwargs[_flag_param_name(gf.name)] = gf.default
 
         return cmd.handler(**final_kwargs)
+
+    def call(self, command_path: str, **kwargs: object) -> object:
+        """Invoke a command programmatically and return its result.
+
+        Unlike _invoke(), this is the public API. It converts internal
+        _ParseError exceptions to InvokeError so callers don't need to
+        depend on private types.
+
+        Args:
+            command_path: dot-separated path to the command
+                (e.g. "deploy" or "config.set").
+            **kwargs: handler keyword arguments. Flag names use underscores
+                (e.g. dry_run). Positional args use their declared name.
+                For passthrough commands, pass _args=[...] for raw arguments.
+
+        Returns:
+            The handler's return value (structured data, int, or None).
+
+        Raises:
+            InvokeError: if validation fails (unknown command, missing
+                required flags, mutex violations, dependency errors, etc.).
+        """
+        try:
+            return self._invoke(command_path, kwargs)
+        except _ParseError as e:
+            raise InvokeError(str(e)) from e
+        except _HelpRequested:
+            raise InvokeError(
+                f"'{command_path}' is a group, not a command"
+            )
+
+    async def acall(self, command_path: str, **kwargs: object) -> object:
+        """Async version of call(). Runs the handler in a thread.
+
+        Args:
+            command_path: dot-separated path to the command.
+            **kwargs: handler keyword arguments (same as call()).
+
+        Returns:
+            The handler's return value (structured data, int, or None).
+
+        Raises:
+            InvokeError: if validation fails.
+        """
+        import asyncio
+        return await asyncio.to_thread(self.call, command_path, **kwargs)
 
 
 def _tokens_contain_help(tokens: list[str]) -> bool:
@@ -2845,6 +2923,8 @@ def _build_and_validate_command(
     extra_flags: list[Flag] | None = None,
     tags: set[str] | None = None,
     inherited_tags: frozenset[str] | None = None,
+    hidden: bool = False,
+    interactive: bool = False,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
@@ -2880,6 +2960,8 @@ def _build_and_validate_command(
             handler=None,
             passthrough=passthrough,
             tags=effective_tags,
+            hidden=hidden,
+            interactive=interactive,
         )
 
     # Collect flags attached by @strictcli.flag decorators
@@ -3107,6 +3189,8 @@ def _build_and_validate_command(
         mutex=tuple(resolved_mutex),
         dependencies=tuple(resolved_dependencies),
         tags=effective_tags,
+        hidden=hidden,
+        interactive=interactive,
     )
 
 
@@ -3191,23 +3275,25 @@ def _format_app_help(app: App) -> str:
     """Format app-level help shown when the user runs 'myapp --help'."""
     lines: list[str] = [f"{app.name} v{app.version} -- {app.help}"]
 
-    if app._commands:
+    visible_commands = {n: c for n, c in app._commands.items() if not c.hidden}
+    if visible_commands:
         lines.append("")
         lines.append("Commands:")
-        names = list(app._commands.keys())
+        names = list(visible_commands.keys())
         max_len = max(len(n) for n in names)
         for name in names:
-            cmd = app._commands[name]
+            cmd = visible_commands[name]
             padding = max_len - len(name) + 4
             lines.append(f"  {name}{' ' * padding}{cmd.help}")
 
-    if app._groups:
+    visible_groups = {n: g for n, g in app._groups.items() if not g.hidden}
+    if visible_groups:
         lines.append("")
         lines.append("Groups:")
-        names = list(app._groups.keys())
+        names = list(visible_groups.keys())
         max_len = max(len(n) for n in names)
         for name in names:
-            grp = app._groups[name]
+            grp = visible_groups[name]
             padding = max_len - len(name) + 4
             lines.append(f"  {name}{' ' * padding}{grp.help}")
 
@@ -3252,23 +3338,25 @@ def _format_group_help(app: App, group: Group, path: list[str] | None = None) ->
     full_path = " ".join(path)
     lines: list[str] = [f"{app.name} {full_path} -- {group.help}"]
 
-    if group.commands:
+    visible_commands = {n: c for n, c in group.commands.items() if not c.hidden}
+    if visible_commands:
         lines.append("")
         lines.append("Commands:")
-        names = list(group.commands.keys())
+        names = list(visible_commands.keys())
         max_len = max(len(n) for n in names)
         for name in names:
-            cmd = group.commands[name]
+            cmd = visible_commands[name]
             padding = max_len - len(name) + 4
             lines.append(f"  {name}{' ' * padding}{cmd.help}")
 
-    if group._groups:
+    visible_groups = {n: g for n, g in group._groups.items() if not g.hidden}
+    if visible_groups:
         lines.append("")
         lines.append("Groups:")
-        names = list(group._groups.keys())
+        names = list(visible_groups.keys())
         max_len = max(len(n) for n in names)
         for name in names:
-            sub = group._groups[name]
+            sub = visible_groups[name]
             padding = max_len - len(name) + 4
             lines.append(f"  {name}{' ' * padding}{sub.help}")
 
