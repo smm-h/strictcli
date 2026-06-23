@@ -433,3 +433,67 @@ class TestFormatCheckResultsJson:
         results, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results_json(results)
         assert not output.endswith("\n")
+
+
+SCOPED_CHECK_TOML = """\
+app = "testapp"
+
+[checks.scoped-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = "changelog"
+"""
+
+
+class TestSetScopeAdapter:
+    """Tests for App.set_scope_adapter."""
+
+    def test_stores_adapter(self, tmp_path):
+        app = _make_app(tmp_path, SCOPED_CHECK_TOML)
+        assert app._scope_adapter is None
+
+        def my_adapter(ctx, scope):
+            return ctx
+
+        app.set_scope_adapter(my_adapter)
+        assert app._scope_adapter is my_adapter
+
+    def test_adapter_called_during_run_checks(self, tmp_path):
+        app = _make_app(tmp_path, SCOPED_CHECK_TOML)
+        adapter_calls = []
+
+        def adapter(ctx, scope):
+            adapter_calls.append(scope)
+            return ctx
+
+        app.set_scope_adapter(adapter)
+
+        ctx = SimpleContext(project_root=tmp_path)
+        results, exit_code = app.run_checks(ctx, run_all=True)
+        assert exit_code == 0
+        assert len(adapter_calls) == 1
+        assert adapter_calls[0] == "changelog"
+
+    def test_adapter_returning_check_result(self, tmp_path):
+        impl_called = []
+
+        def impl(ctx):
+            impl_called.append(True)
+            return CheckResult(status="pass", message="should not run")
+
+        app = _make_app(tmp_path, SCOPED_CHECK_TOML, impls={"scoped-check": impl})
+
+        def adapter(ctx, scope):
+            return CheckResult(status="skip", message="adapter skipped")
+
+        app.set_scope_adapter(adapter)
+
+        ctx = SimpleContext(project_root=tmp_path)
+        results, exit_code = app.run_checks(ctx, run_all=True)
+        assert exit_code == 0
+        assert results[0].result.status == "skip"
+        assert len(impl_called) == 0

@@ -377,3 +377,173 @@ class TestFilterChecks:
         assert "b" in order
         assert "a" in order
         assert order.index("b") < order.index("a")
+
+
+class TestScopeAdapter:
+    """Tests for scope adapter integration in _run_checks."""
+
+    def test_no_scope_no_adapter_call(self):
+        """When check has no scope, adapter is never called."""
+        adapter_calls = []
+
+        def adapter(ctx, scope):
+            adapter_calls.append(scope)
+            return ctx
+
+        defs = {
+            "a": _make_check_def(
+                "a",
+                impl=lambda ctx: CheckResult(status="pass", message="ok"),
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, exit_code = _run_checks(defs, ["a"], ctx, False, scope_adapter=adapter)
+        assert exit_code == 0
+        assert len(adapter_calls) == 0
+
+    def test_scope_without_adapter_skips_adaptation(self):
+        """When check has scope but no adapter is set, impl is called normally."""
+        defs = {
+            "a": _CheckDef(
+                name="a", tags=["default"], severity="error",
+                fast=True, pure=True, needs_network=False,
+                depends_on=[], scope="changelog",
+                impl=lambda ctx: CheckResult(status="pass", message="ok"),
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, exit_code = _run_checks(defs, ["a"], ctx, False, scope_adapter=None)
+        assert exit_code == 0
+        assert results[0][1].status == "pass"
+
+    def test_scope_adapter_transforms_context(self):
+        """Adapter returning a context replaces the context for impl."""
+        @dataclass
+        class ScopedContext:
+            project_root: Path
+            scope_value: str
+
+        def adapter(ctx, scope):
+            return ScopedContext(project_root=ctx.project_root, scope_value=scope)
+
+        def impl(ctx):
+            assert hasattr(ctx, "scope_value")
+            assert ctx.scope_value == "changelog"
+            return CheckResult(status="pass", message="scoped ok")
+
+        defs = {
+            "a": _CheckDef(
+                name="a", tags=["default"], severity="error",
+                fast=True, pure=True, needs_network=False,
+                depends_on=[], scope="changelog",
+                impl=impl,
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, exit_code = _run_checks(defs, ["a"], ctx, False, scope_adapter=adapter)
+        assert exit_code == 0
+        assert results[0][1].status == "pass"
+        assert results[0][1].message == "scoped ok"
+
+    def test_scope_adapter_returns_check_result_skip(self):
+        """Adapter returning CheckResult(skip) is used directly, impl not called."""
+        impl_called = []
+
+        def adapter(ctx, scope):
+            return CheckResult(status="skip", message="scope not applicable")
+
+        def impl(ctx):
+            impl_called.append(True)
+            return CheckResult(status="pass", message="should not run")
+
+        defs = {
+            "a": _CheckDef(
+                name="a", tags=["default"], severity="error",
+                fast=True, pure=True, needs_network=False,
+                depends_on=[], scope="changelog",
+                impl=impl,
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, exit_code = _run_checks(defs, ["a"], ctx, False, scope_adapter=adapter)
+        assert exit_code == 0
+        assert results[0][1].status == "skip"
+        assert results[0][1].message == "scope not applicable"
+        assert len(impl_called) == 0
+
+    def test_scope_adapter_returns_check_result_fail(self):
+        """Adapter returning CheckResult(fail) causes failure and cascades."""
+        def adapter(ctx, scope):
+            return CheckResult(status="fail", message="scope resolution failed")
+
+        defs = {
+            "a": _CheckDef(
+                name="a", tags=["default"], severity="error",
+                fast=True, pure=True, needs_network=False,
+                depends_on=[], scope="changelog",
+                impl=lambda ctx: CheckResult(status="pass", message="should not run"),
+            ),
+            "b": _make_check_def(
+                "b", depends_on=["a"],
+                impl=lambda ctx: CheckResult(status="pass", message="b ok"),
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, exit_code = _run_checks(defs, ["a", "b"], ctx, False, scope_adapter=adapter)
+        assert exit_code == 1
+        statuses = {name: r.status for name, r in results}
+        assert statuses["a"] == "fail"
+        assert statuses["b"] == "skip"
+
+    def test_scope_adapter_returns_check_result_warn(self):
+        """Adapter returning CheckResult(warn) respects ignore_warnings."""
+        def adapter(ctx, scope):
+            return CheckResult(status="warn", message="scope warning")
+
+        defs = {
+            "a": _CheckDef(
+                name="a", tags=["default"], severity="warn",
+                fast=True, pure=True, needs_network=False,
+                depends_on=[], scope="changelog",
+                impl=lambda ctx: CheckResult(status="pass", message="should not run"),
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+
+        # Without ignore_warnings: exit_code 1
+        results, exit_code = _run_checks(defs, ["a"], ctx, False, scope_adapter=adapter)
+        assert exit_code == 1
+        assert results[0][1].status == "warn"
+
+        # With ignore_warnings: exit_code 0
+        results, exit_code = _run_checks(defs, ["a"], ctx, True, scope_adapter=adapter)
+        assert exit_code == 0
+        assert results[0][1].status == "warn"
+
+    def test_mixed_scoped_and_unscoped_checks(self):
+        """Adapter is only called for checks with non-empty scope."""
+        adapter_calls = []
+
+        def adapter(ctx, scope):
+            adapter_calls.append(scope)
+            return ctx
+
+        defs = {
+            "scoped": _CheckDef(
+                name="scoped", tags=["default"], severity="error",
+                fast=True, pure=True, needs_network=False,
+                depends_on=[], scope="changelog",
+                impl=lambda ctx: CheckResult(status="pass", message="scoped ok"),
+            ),
+            "unscoped": _make_check_def(
+                "unscoped",
+                impl=lambda ctx: CheckResult(status="pass", message="unscoped ok"),
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, exit_code = _run_checks(
+            defs, ["scoped", "unscoped"], ctx, False, scope_adapter=adapter,
+        )
+        assert exit_code == 0
+        assert len(adapter_calls) == 1
+        assert adapter_calls[0] == "changelog"

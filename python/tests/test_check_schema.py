@@ -123,3 +123,60 @@ class TestSchemaWithoutChecks:
         assert result.exit_code == 0
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         assert "checks" not in data
+
+
+SCOPED_CHECKS_TOML = """\
+app = "testapp"
+
+[checks.scoped-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = "changelog"
+
+[checks.unscoped-check]
+tags = ["code"]
+severity = "warn"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+"""
+
+
+class TestSchemaWithScope:
+    """--dump-schema includes scope for scoped checks and omits it for unscoped."""
+
+    def test_scope_present_in_schema(self, tmp_path, monkeypatch):
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(SCOPED_CHECKS_TOML)
+        monkeypatch.chdir(tmp_path)
+
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+
+        @app.check("scoped-check")
+        def scoped_impl(ctx):
+            return strictcli.CheckResult(status="pass", message="ok")
+
+        @app.check("unscoped-check")
+        def unscoped_impl(ctx):
+            return strictcli.CheckResult(status="pass", message="ok")
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+
+        scoped = data["checks"]["scoped-check"]
+        assert scoped["scope"] == "changelog"
+
+        unscoped = data["checks"]["unscoped-check"]
+        assert "scope" not in unscoped

@@ -3,6 +3,7 @@
 import pytest
 
 import strictcli
+from strictcli import _parse_checks_toml
 
 
 VALID_TOML = """\
@@ -344,3 +345,134 @@ class TestChecksEmbed:
                 name="testapp", version="1.0.0", help="test app",
                 checks_embed=wrong_toml.encode(),
             )
+
+
+class TestScopeFieldParsing:
+    """Tests for the optional scope field in checks.toml."""
+
+    def test_scope_absent_defaults_to_empty(self):
+        """When scope is not present, it defaults to empty string."""
+        toml = b"""\
+app = "testapp"
+
+[checks.my-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+"""
+        _, defs = _parse_checks_toml(toml)
+        assert defs["my-check"].scope == ""
+
+    def test_scope_present_parsed_correctly(self):
+        """When scope is present, it is parsed as a string."""
+        toml = b"""\
+app = "testapp"
+
+[checks.my-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = "changelog"
+"""
+        _, defs = _parse_checks_toml(toml)
+        assert defs["my-check"].scope == "changelog"
+
+    def test_scope_empty_string_accepted(self):
+        """An explicit empty string for scope is valid."""
+        toml = b"""\
+app = "testapp"
+
+[checks.my-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = ""
+"""
+        _, defs = _parse_checks_toml(toml)
+        assert defs["my-check"].scope == ""
+
+    def test_scope_wrong_type_raises(self):
+        """Non-string scope raises ValueError."""
+        toml = b"""\
+app = "testapp"
+
+[checks.my-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = 42
+"""
+        with pytest.raises(ValueError, match='"scope" must be a string'):
+            _parse_checks_toml(toml)
+
+    def test_unknown_fields_still_rejected_with_scope(self):
+        """Unknown fields are rejected even when scope is present."""
+        toml = b"""\
+app = "testapp"
+
+[checks.my-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = "changelog"
+bogus = true
+"""
+        with pytest.raises(ValueError, match='unknown field "bogus"'):
+            _parse_checks_toml(toml)
+
+    def test_scope_via_checks_embed(self, tmp_path, monkeypatch):
+        """scope is parsed correctly when using checks_embed."""
+        monkeypatch.chdir(tmp_path)
+        toml = """\
+app = "testapp"
+
+[checks.my-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = "workspace"
+"""
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_embed=toml.encode(),
+        )
+        assert app._check_defs["my-check"].scope == "workspace"
+
+    def test_scope_via_checks_path(self, tmp_path):
+        """scope is parsed correctly when using checks_path."""
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text("""\
+app = "testapp"
+
+[checks.my-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = "project"
+""")
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+        assert app._check_defs["my-check"].scope == "project"
