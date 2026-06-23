@@ -2576,6 +2576,102 @@ func TestFormatCheckResultsJSON_FieldValues(t *testing.T) {
 	}
 }
 
+func TestLoadChecksToml_ScopeFieldAccepted(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `
+app = "testapp"
+[checks.scoped-check]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = "changelog"
+`)
+	_, defs, _, err := loadChecksToml(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	d := defs["scoped-check"]
+	if d == nil {
+		t.Fatal("scoped-check not found")
+	}
+	if d.scope != "changelog" {
+		t.Errorf("expected scope 'changelog', got %q", d.scope)
+	}
+}
+
+func TestLoadChecksToml_ScopeFieldAbsentDefaultsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `
+app = "testapp"
+[checks.no-scope]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+`)
+	_, defs, _, err := loadChecksToml(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	d := defs["no-scope"]
+	if d == nil {
+		t.Fatal("no-scope not found")
+	}
+	if d.scope != "" {
+		t.Errorf("expected empty scope, got %q", d.scope)
+	}
+}
+
+func TestLoadChecksToml_ScopeFieldWrongType(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `
+app = "testapp"
+[checks.bad-scope]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = 42
+`)
+	_, _, _, err := loadChecksToml(path)
+	if err == nil {
+		t.Fatal("expected error for non-string scope")
+	}
+	if !strings.Contains(err.Error(), `"scope" must be a string`) {
+		t.Errorf("expected error about scope type, got %q", err.Error())
+	}
+}
+
+func TestLoadChecksToml_UnknownFieldStillRejectedWithScope(t *testing.T) {
+	dir := t.TempDir()
+	path := writeToml(t, dir, `
+app = "testapp"
+[checks.foo]
+tags = ["a"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+scope = "changelog"
+bogus = true
+`)
+	_, _, _, err := loadChecksToml(path)
+	if err == nil {
+		t.Fatal("expected error for unknown field")
+	}
+	if !strings.Contains(err.Error(), `unknown field "bogus"`) {
+		t.Errorf("expected error about unknown field, got %q", err.Error())
+	}
+}
+
 // Ensure unused imports don't cause errors
 var _ = sort.Strings
 var _ = fmt.Sprintf
