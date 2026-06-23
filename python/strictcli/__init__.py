@@ -174,6 +174,315 @@ def _format_config_value(value: object) -> str:
     return str(value)
 
 
+def _nested_get(data: dict, dotted_key: str) -> tuple[bool, object]:
+    """Look up a dot-separated key in a nested dict.
+
+    Returns (found, value). If any intermediate segment is missing or
+    not a dict, returns (False, None).
+    """
+    parts = dotted_key.split(".")
+    current = data
+    for part in parts[:-1]:
+        if not isinstance(current, dict) or part not in current:
+            return False, None
+        current = current[part]
+    if not isinstance(current, dict) or parts[-1] not in current:
+        return False, None
+    return True, current[parts[-1]]
+
+
+def _nested_set(data: dict, dotted_key: str, value: object) -> None:
+    """Set a dot-separated key in a nested dict, creating intermediate dicts."""
+    parts = dotted_key.split(".")
+    current = data
+    for part in parts[:-1]:
+        if part not in current or not isinstance(current[part], dict):
+            current[part] = {}
+        current = current[part]
+    current[parts[-1]] = value
+
+
+def _nested_delete(data: dict, dotted_key: str) -> bool:
+    """Delete a dot-separated key from a nested dict.
+
+    Returns True if the key was found and deleted, False otherwise.
+    Cleans up empty intermediate dicts.
+    """
+    parts = dotted_key.split(".")
+    # Walk to the parent, tracking the path for cleanup
+    parents: list[tuple[dict, str]] = []
+    current = data
+    for part in parts[:-1]:
+        if not isinstance(current, dict) or part not in current:
+            return False
+        parents.append((current, part))
+        current = current[part]
+    if not isinstance(current, dict) or parts[-1] not in current:
+        return False
+    del current[parts[-1]]
+    # Clean up empty intermediate dicts
+    for parent, key in reversed(parents):
+        if not parent[key]:
+            del parent[key]
+    return True
+
+
+def _collect_nested_keys(data: dict, prefix: str = "") -> list[str]:
+    """Collect all leaf keys from a nested dict as dot-separated paths.
+
+    Non-dict values are leaves. Dict values are recursed into.
+    """
+    keys: list[str] = []
+    for k, v in data.items():
+        full_key = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            keys.extend(_collect_nested_keys(v, full_key))
+        else:
+            keys.append(full_key)
+    return keys
+
+
+def _check_config_field_type(cf: "ConfigField", value: object) -> str | None:
+    """Validate that a config file value matches the config field's declared type.
+
+    Returns an error message, or None if the type matches.
+    """
+    type_name = cf.type.__name__
+    if cf.type is bool:
+        if not isinstance(value, bool):
+            return (
+                f'config field "{cf.name}": expected {type_name}, '
+                f"got {_config_typename(value)}"
+            )
+    elif cf.type is int:
+        if not isinstance(value, int) or isinstance(value, bool):
+            return (
+                f'config field "{cf.name}": expected {type_name}, '
+                f"got {_config_typename(value)}"
+            )
+    elif cf.type is float:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return (
+                f'config field "{cf.name}": expected {type_name}, '
+                f"got {_config_typename(value)}"
+            )
+    elif cf.type is str:
+        if not isinstance(value, str):
+            return (
+                f'config field "{cf.name}": expected {type_name}, '
+                f"got {_config_typename(value)}"
+            )
+    return None
+
+
+def _config_set_field(
+    key: str,
+    value: str | None,
+    cf: "ConfigField",
+    existing: dict,
+    path: str,
+    config_format: str,
+    kw: dict,
+) -> int:
+    """Handle 'config set' for a config field (not a flag).
+
+    Returns an exit code (0 = success, 1 = error).
+    """
+    use_clear = kw.get("clear", False)
+    use_default = kw.get("default", False)
+    has_value = value is not None
+
+    if use_clear:
+        print("config set: --clear is only for repeatable flags", file=sys.stderr)
+        return 1
+    if use_clear and use_default:
+        print("config set: --clear and --default are mutually exclusive",
+              file=sys.stderr)
+        return 1
+    if has_value and use_default:
+        print("config set: cannot provide a value with --default", file=sys.stderr)
+        return 1
+    if not has_value and not use_default:
+        print("config set: provide a value or --default", file=sys.stderr)
+        return 1
+
+    if use_default:
+        found = _nested_delete(existing, key)
+        if not found:
+            print(f"config set: key '{key}' not in config", file=sys.stderr)
+            return 1
+        _write_config_data(existing, path, config_format)
+        return 0
+
+    # Coerce string value to the config field's type
+    try:
+        if cf.type is bool:
+            typed_value = _strict_bool(value)
+        elif cf.type is int:
+            typed_value = _strict_int(value)
+        elif cf.type is float:
+            try:
+                typed_value = _strict_float(value)
+            except ValueError as fe:
+                msg = str(fe)
+                if msg in ("NaN is not allowed", "Inf is not allowed"):
+                    raise
+                raise ValueError(f"expected float, got '{value}'") from fe
+        else:
+            typed_value = value
+    except ValueError as e:
+        print(f"config set: key '{key}': {e}", file=sys.stderr)
+        return 1
+
+    _nested_set(existing, key, typed_value)
+    _write_config_data(existing, path, config_format)
+    return 0
+
+
+def _write_config_data(data: dict, path: str, config_format: str) -> None:
+    """Write config data to disk in the appropriate format."""
+    if config_format == "toml":
+        _write_toml_nested(data, path)
+    else:
+        with open(path, "w") as fh:
+            fh.write(json.dumps(data, indent=2) + "\n")
+
+
+def _write_toml_nested(data: dict, path: str) -> None:
+    """Write a nested dict as a TOML file with sections.
+
+    Top-level scalars are written first, then nested dicts become [section] headers.
+    Only supports one level of nesting (matching config field dot-name semantics).
+    """
+    lines: list[str] = []
+    # Write top-level scalars first
+    for key, value in data.items():
+        if isinstance(value, dict):
+            continue
+        if isinstance(value, list):
+            elements = ", ".join(_toml_format_scalar(elem) for elem in value)
+            lines.append(f"{key} = [{elements}]")
+        else:
+            lines.append(f"{key} = {_toml_format_scalar(value)}")
+    # Write sections for nested dicts
+    for key, value in data.items():
+        if not isinstance(value, dict):
+            continue
+        if lines:
+            lines.append("")
+        lines.append(f"[{key}]")
+        for sub_key, sub_value in value.items():
+            if isinstance(sub_value, dict):
+                # Two-level nesting -- use dotted section header
+                lines.append("")
+                lines.append(f"[{key}.{sub_key}]")
+                for k, v in sub_value.items():
+                    lines.append(f"{k} = {_toml_format_scalar(v)}")
+            elif isinstance(sub_value, list):
+                elements = ", ".join(_toml_format_scalar(elem) for elem in sub_value)
+                lines.append(f"{sub_key} = [{elements}]")
+            else:
+                lines.append(f"{sub_key} = {_toml_format_scalar(sub_value)}")
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n" if lines else "")
+
+
+def _generate_config_template_toml(
+    flags: list["Flag"],
+    config_fields: dict[str, "ConfigField"],
+) -> str:
+    """Generate a TOML config template with comments."""
+    lines: list[str] = []
+
+    # Flag-backed keys (flat)
+    for f in flags:
+        param = _flag_param_name(f.name)
+        lines.append(f"# {f.help}")
+        if f.default is not None:
+            lines.append(f"{param} = {_toml_format_scalar(f.default)}")
+        else:
+            lines.append(f"# {param} =")
+        lines.append("")
+
+    # Config field keys (possibly nested via dot names)
+    # Group by first segment for TOML sections
+    top_level: list[tuple[str, "ConfigField"]] = []
+    sections: dict[str, list[tuple[str, "ConfigField"]]] = {}
+    for name, cf in config_fields.items():
+        parts = name.split(".")
+        if len(parts) == 1:
+            top_level.append((name, cf))
+        else:
+            section = parts[0]
+            if section not in sections:
+                sections[section] = []
+            sections[section].append((name, cf))
+
+    for name, cf in top_level:
+        req = " (required)" if cf.required else ""
+        lines.append(f"# {cf.help}{req}")
+        if not cf.required:
+            lines.append(f"{name} = {_toml_format_scalar(cf.default)}")
+        else:
+            lines.append(f"# {name} =")
+        lines.append("")
+
+    for section, fields in sections.items():
+        lines.append(f"[{section}]")
+        for name, cf in fields:
+            # The key within the section is everything after the first dot
+            sub_parts = name.split(".", 1)
+            sub_key = sub_parts[1] if len(sub_parts) > 1 else sub_parts[0]
+            # Handle deeper nesting
+            deeper_parts = sub_key.split(".")
+            if len(deeper_parts) > 1:
+                # Need a sub-section
+                sub_section = f"{section}.{deeper_parts[0]}"
+                leaf_key = ".".join(deeper_parts[1:])
+                lines.append("")
+                lines.append(f"[{sub_section}]")
+                req = " (required)" if cf.required else ""
+                lines.append(f"# {cf.help}{req}")
+                if not cf.required:
+                    lines.append(f"{leaf_key} = {_toml_format_scalar(cf.default)}")
+                else:
+                    lines.append(f"# {leaf_key} =")
+            else:
+                req = " (required)" if cf.required else ""
+                lines.append(f"# {cf.help}{req}")
+                if not cf.required:
+                    lines.append(f"{sub_key} = {_toml_format_scalar(cf.default)}")
+                else:
+                    lines.append(f"# {sub_key} =")
+        lines.append("")
+
+    return "\n".join(lines) + "\n" if lines else ""
+
+
+def _generate_config_template_json(
+    flags: list["Flag"],
+    config_fields: dict[str, "ConfigField"],
+) -> str:
+    """Generate a JSON config template."""
+    data: dict = {}
+    # Flag-backed keys
+    for f in flags:
+        param = _flag_param_name(f.name)
+        if f.default is not None:
+            data[param] = f.default
+        else:
+            data[param] = None
+
+    # Config field keys (nested via dot names)
+    for name, cf in config_fields.items():
+        if not cf.required:
+            _nested_set(data, name, cf.default)
+        else:
+            _nested_set(data, name, None)
+
+    return json.dumps(data, indent=2) + "\n"
+
+
 def _split_escaped(value: str, sep: str) -> list[str]:
     """Split value on sep, treating backslash as escape character.
 
@@ -835,6 +1144,7 @@ class Command:
     tags: frozenset[str] = frozenset()
     hidden: bool = False
     interactive: bool = False
+    config_fields: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
@@ -857,6 +1167,7 @@ class Group:
     tags: frozenset[str] = frozenset()
     _accumulated_tags: frozenset[str] = frozenset()
     hidden: bool = False
+    _config_fields_ref: dict[str, ConfigField] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
@@ -880,7 +1191,8 @@ class Group:
                      _global_flags=self._global_flags,
                      tags=own_tags,
                      _accumulated_tags=self._accumulated_tags | own_tags,
-                     hidden=hidden)
+                     hidden=hidden,
+                     _config_fields_ref=self._config_fields_ref)
         self._groups[name] = grp
         return grp
 
@@ -917,6 +1229,7 @@ class Group:
         tags: set[str] | None = None,
         hidden: bool = False,
         interactive: bool = False,
+        config_fields: list[str] | None = None,
     ) -> Callable:
         """Decorator to register a command within this group."""
 
@@ -935,6 +1248,8 @@ class Group:
                 inherited_tags=self._accumulated_tags,
                 hidden=hidden,
                 interactive=interactive,
+                config_fields=config_fields,
+                config_fields_ref=self._config_fields_ref,
             )
             self.commands[name] = cmd
             return func
@@ -1268,6 +1583,55 @@ class App:
             return err
         return _check_groups(self._groups)
 
+    def _validate_config_fields(self, cmd: Command, config_data: dict) -> str | None:
+        """Validate config file contents against the command's bound config fields.
+
+        Checks:
+        1. Each bound required config field exists in config with the correct type.
+        2. Each key in config matches a registered flag, config field, or framework
+           field. Unknown keys are hard errors.
+
+        Returns an error message string, or None if all OK.
+        """
+        # Check bound required config fields exist with correct type
+        for cf_name in cmd.config_fields:
+            cf = self._config_fields.get(cf_name)
+            if cf is None:
+                # Should not happen (validated at registration), but be defensive
+                return f'config field "{cf_name}" is not registered'
+            found, value = _nested_get(config_data, cf_name)
+            if not found:
+                if cf.required:
+                    return (
+                        f'required config field "{cf_name}" is missing from '
+                        f"config file"
+                    )
+                # Optional and missing -- that is fine
+                continue
+            # Validate type
+            err = _check_config_field_type(cf, value)
+            if err:
+                return err
+
+        # Check all keys in config file are known
+        all_config_keys = _collect_nested_keys(config_data)
+        # Build set of known keys
+        all_flags = self._collect_all_flags()
+        known_flag_keys = {_flag_param_name(f.name) for f in all_flags}
+        known_field_keys = set(self._config_fields.keys())
+        known_framework_keys = set(self._framework_fields.keys())
+
+        for key in all_config_keys:
+            if key in known_flag_keys:
+                continue
+            if key in known_field_keys:
+                continue
+            if key in known_framework_keys:
+                continue
+            return f'unknown key "{key}" in config file'
+
+        return None
+
     def set_check_context(self, factory: Callable) -> None:
         """Set the factory function that creates CheckContext for check runs.
 
@@ -1412,6 +1776,7 @@ class App:
         tags: set[str] | None = None,
         hidden: bool = False,
         interactive: bool = False,
+        config_fields: list[str] | None = None,
     ) -> Callable:
         """Decorator to register a top-level command."""
 
@@ -1431,6 +1796,8 @@ class App:
                 inherited_tags=None,
                 hidden=hidden,
                 interactive=interactive,
+                config_fields=config_fields,
+                config_fields_ref=self._config_fields,
             )
             self._commands[name] = cmd
             return func
@@ -1445,7 +1812,8 @@ class App:
                      _global_flags=self._global_flags,
                      tags=own_tags,
                      _accumulated_tags=own_tags,
-                     hidden=hidden)
+                     hidden=hidden,
+                     _config_fields_ref=self._config_fields)
         self._groups[name] = grp
         return grp
 
@@ -1539,6 +1907,27 @@ class App:
                         value = None
                         source = "default"
                     result[param] = {"value": value, "source": source}
+                # Include config fields
+                for cf_name, cf in app_ref._config_fields.items():
+                    found, value = _nested_get(config_data, cf_name)
+                    if found:
+                        source = "config"
+                    elif not isinstance(cf.default, _MissingSentinel):
+                        value = cf.default
+                        source = "default"
+                    else:
+                        value = None
+                        source = "not set"
+                    entry: dict = {
+                        "value": value,
+                        "source": source,
+                        "type": cf.type.__name__,
+                        "required": cf.required,
+                        "help": cf.help,
+                    }
+                    if not isinstance(cf.default, _MissingSentinel):
+                        entry["default"] = cf.default
+                    result[cf_name] = entry
                 print(json.dumps(result, indent=2, sort_keys=True))
                 return 0
             # --plain
@@ -1554,6 +1943,27 @@ class App:
                     value = None
                     source = "default"
                 print(f"{param} = {_format_config_value(value)}  (source: {source})")
+            # Include config fields in plain output
+            if app_ref._config_fields:
+                print()
+                print("Config fields:")
+                for cf_name, cf in app_ref._config_fields.items():
+                    found, value = _nested_get(config_data, cf_name)
+                    if found:
+                        source = "config"
+                    elif not isinstance(cf.default, _MissingSentinel):
+                        value = cf.default
+                        source = "default"
+                    else:
+                        value = None
+                        source = "not set"
+                    req_str = "required" if cf.required else "optional"
+                    print(
+                        f"  {cf_name} ({cf.type.__name__}, {req_str})"
+                        f" = {_format_config_value(value)}"
+                        f"  (source: {source})"
+                        f"  -- {cf.help}"
+                    )
             return 0
 
         config_show_flags = [
@@ -1585,16 +1995,28 @@ class App:
                 config_format=app_ref.config_format,
             )
 
-            # Look up the key against registered flags
+            # Look up the key against registered flags and config fields
             all_flags = app_ref._collect_all_flags()
             matched_flag = None
+            matched_config_field = None
             for f in all_flags:
                 if _flag_param_name(f.name) == key:
                     matched_flag = f
                     break
             if matched_flag is None:
+                # Check config fields
+                if key in app_ref._config_fields:
+                    matched_config_field = app_ref._config_fields[key]
+            if matched_flag is None and matched_config_field is None:
                 print(f"config set: unknown key '{key}'", file=sys.stderr)
                 return 1
+
+            # Config field path: simpler handling (no repeatable, no mutex)
+            if matched_config_field is not None:
+                return _config_set_field(
+                    key, value, matched_config_field, existing, path,
+                    app_ref.config_format, _kw,
+                )
 
             use_clear = _kw.get("clear", False)
             use_default = _kw.get("default", False)
@@ -1757,6 +2179,42 @@ class App:
             interactive=True,
         )
 
+        # config init
+        def _config_init_handler(**_kw) -> int:
+            cfg_path = _config_path(
+                app_ref.name,
+                override=app_ref.config_path,
+                config_format=app_ref.config_format,
+            )
+            if os.path.isfile(cfg_path):
+                print(
+                    f"config init: config file already exists: {cfg_path}",
+                    file=sys.stderr,
+                )
+                return 1
+            dir_path = os.path.dirname(cfg_path)
+            os.makedirs(dir_path, exist_ok=True)
+            if app_ref.config_format == "toml":
+                content = _generate_config_template_toml(
+                    app_ref._collect_all_flags(),
+                    app_ref._config_fields,
+                )
+            else:
+                content = _generate_config_template_json(
+                    app_ref._collect_all_flags(),
+                    app_ref._config_fields,
+                )
+            with open(cfg_path, "w") as fh:
+                fh.write(content)
+            print(cfg_path)
+            return 0
+
+        config_grp.commands["init"] = Command(
+            name="init",
+            help="Generate a template config file with documented fields and defaults",
+            handler=_config_init_handler,
+        )
+
         self._groups["config"] = config_grp
 
     def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object] | list[str]]:
@@ -1797,6 +2255,21 @@ class App:
         # (but not after "--" separator, which makes everything literal)
         if _tokens_contain_help(rest):
             raise _HelpRequested(target=cmd)
+
+        # Step 2.5: validate config fields (exempt config subcommands)
+        is_config_subcommand = bool(path) and path[0] == "config"
+        if (self.config and self._config_fields
+                and not is_config_subcommand):
+            # Reload config data fresh for validation
+            config_data = _load_config(
+                self.name,
+                config_path_override=self.config_path,
+                config_format=self.config_format,
+            )
+            self._config_data = config_data
+            err = self._validate_config_fields(cmd, config_data)
+            if err:
+                raise _ParseError(err)
 
         # Passthrough commands: skip all flag/arg parsing, forward raw args
         if cmd.passthrough is not None:
@@ -3032,12 +3505,27 @@ def _build_and_validate_command(
     inherited_tags: frozenset[str] | None = None,
     hidden: bool = False,
     interactive: bool = False,
+    config_fields: list[str] | None = None,
+    config_fields_ref: dict[str, ConfigField] | None = None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
         raise ValueError(f'command "{name}": missing help text')
 
     effective_tags = (inherited_tags or frozenset()) | frozenset(tags or set())
+
+    # Validate config_fields bindings (before passthrough check so both paths get it)
+    resolved_config_fields: tuple[str, ...] = ()
+    if config_fields:
+        if config_fields_ref is None:
+            config_fields_ref = {}
+        for cf_name in config_fields:
+            if cf_name not in config_fields_ref:
+                raise ValueError(
+                    f'command "{name}": config_fields references unknown '
+                    f'config field "{cf_name}"'
+                )
+        resolved_config_fields = tuple(config_fields)
 
     # Passthrough commands must not have flags, args, flag sets, or mutex groups
     if passthrough is not None:
@@ -3069,6 +3557,7 @@ def _build_and_validate_command(
             tags=effective_tags,
             hidden=hidden,
             interactive=interactive,
+            config_fields=resolved_config_fields,
         )
 
     # Collect flags attached by @strictcli.flag decorators
@@ -3298,6 +3787,7 @@ def _build_and_validate_command(
         tags=effective_tags,
         hidden=hidden,
         interactive=interactive,
+        config_fields=resolved_config_fields,
     )
 
 
@@ -4206,6 +4696,8 @@ def _serialize_command(cmd: Command) -> dict:
         d["hidden"] = True
     if cmd.interactive:
         d["interactive"] = True
+    if cmd.config_fields:
+        d["config_fields"] = list(cmd.config_fields)
     return d
 
 
@@ -4305,6 +4797,31 @@ def _read_project_id() -> str:
     return project_name
 
 
+def _collect_config_field_bindings(
+    commands: dict[str, Command],
+    bindings: dict[str, list[str]],
+    path: list[str],
+) -> None:
+    """Walk commands and record which commands bind each config field."""
+    for cmd in commands.values():
+        cmd_path = " ".join(path + [cmd.name])
+        for cf_name in cmd.config_fields:
+            if cf_name in bindings:
+                bindings[cf_name].append(cmd_path)
+
+
+def _collect_config_field_bindings_from_group(
+    group: Group,
+    bindings: dict[str, list[str]],
+    path: list[str],
+) -> None:
+    """Recursively walk groups to collect config field bindings."""
+    group_path = path + [group.name]
+    _collect_config_field_bindings(group.commands, bindings, group_path)
+    for sub in group._groups.values():
+        _collect_config_field_bindings_from_group(sub, bindings, group_path)
+
+
 def _dump_schema(app: App) -> dict:
     """Produce a JSON-serializable dict representing the app's command tree.
 
@@ -4350,6 +4867,29 @@ def _dump_schema(app: App) -> dict:
             }
             for name, cdef in app._check_defs.items()
         }
+    if app._config_fields:
+        # Build field definitions with bound command info
+        cf_schema: dict = {}
+        # Collect which commands bind each field
+        bindings: dict[str, list[str]] = {
+            name: [] for name in app._config_fields
+        }
+        _collect_config_field_bindings(app._commands, bindings, [])
+        for grp in app._groups.values():
+            _collect_config_field_bindings_from_group(grp, bindings, [])
+
+        for name, cf in app._config_fields.items():
+            entry: dict = {
+                "type": cf.type.__name__,
+                "help": cf.help,
+                "required": cf.required,
+            }
+            if not isinstance(cf.default, _MissingSentinel):
+                entry["default"] = cf.default
+            if bindings.get(name):
+                entry["bound_commands"] = bindings[name]
+            cf_schema[name] = entry
+        schema["config_fields"] = cf_schema
     return schema
 
 
