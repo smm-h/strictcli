@@ -452,7 +452,7 @@ def check_option_funcs_coverage(
     known_option_funcs = {
         "Short", "Default", "Env", "Prefixed", "Choices", "Repeatable",
         "ValidateFn", "NegatableOpt",
-        "ArgRequired", "ArgDefault", "Variadic",
+        "ArgRequired", "ArgDefault", "Variadic", "ArgType", "ArgChoices",
         "WithArgs", "WithFlags", "WithFlagSets", "WithMutex", "WithDependencies",
         "WithPassthrough", "WithEnvPrefix", "WithConfig",
         "WithConfigPath", "WithConfigFormat",
