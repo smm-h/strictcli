@@ -480,6 +480,37 @@ def _float_parse_error(
     return _ParseError(f"--{flag_name}: expected float, got {raw!r}{suffix}")
 
 
+def _coerce_arg_value(a: "Arg", raw: str) -> object:
+    """Coerce a raw positional arg string to the declared type.
+
+    Uses the same strict parsing functions as flags: _strict_int, _strict_float,
+    _strict_bool. Error messages follow the same pattern as flag type errors,
+    with "argument '<name>'" instead of "--<name>".
+    """
+    if a.type is str:
+        return raw
+    if a.type is int:
+        try:
+            return _strict_int(raw)
+        except ValueError as e:
+            raise _ParseError(f"argument '{a.name}': {e}")
+    if a.type is float:
+        try:
+            return _strict_float(raw)
+        except ValueError as e:
+            msg = str(e)
+            if msg in ("NaN is not allowed", "Inf is not allowed"):
+                raise _ParseError(f"argument '{a.name}': {msg}")
+            raise _ParseError(f"argument '{a.name}': expected float, got {raw!r}")
+    if a.type is bool:
+        try:
+            return _strict_bool(raw)
+        except ValueError as e:
+            raise _ParseError(f"argument '{a.name}': {e}")
+    # Unreachable (validated at registration), but defensive
+    return raw  # pragma: no cover
+
+
 _AT_PREFIX_MAX_SIZE = 1024 * 1024  # 1 MB
 
 
@@ -670,11 +701,61 @@ class Arg:
     required: bool = True
     default: object = _MISSING
     variadic: bool = False
+    type: type = str
+    choices: list | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Arg")
         if self.required and not isinstance(self.default, _MissingSentinel):
             raise ValueError("required arg cannot have a default")
+        # Validate type
+        if self.type not in (str, bool, int, float):
+            raise ValueError(
+                f"Arg.type must be str, bool, int, or float, got {self.type!r}"
+            )
+        # Validate choices
+        if self.choices is not None:
+            if self.type is bool:
+                raise ValueError(
+                    f'Arg "{self.name}": choices is incompatible with type=bool'
+                )
+            if not isinstance(self.choices, list) or len(self.choices) == 0:
+                raise ValueError(
+                    f'Arg "{self.name}": choices must be a non-empty list'
+                )
+            for c in self.choices:
+                if not isinstance(c, self.type):
+                    raise ValueError(
+                        f'Arg "{self.name}": choice {c!r} is not of type '
+                        f"{self.type.__name__}"
+                    )
+        # Validate default type matches declared type
+        if not isinstance(self.default, _MissingSentinel) and self.default is not None:
+            if self.type is int:
+                if not isinstance(self.default, int) or isinstance(self.default, bool):
+                    raise ValueError(
+                        f'Arg "{self.name}": type=int requires an int default, '
+                        f"got {type(self.default).__name__!r}"
+                    )
+            elif self.type is float:
+                if not isinstance(self.default, (int, float)) or isinstance(self.default, bool):
+                    raise ValueError(
+                        f'Arg "{self.name}": type=float requires a float default, '
+                        f"got {type(self.default).__name__!r}"
+                    )
+            elif self.type is bool:
+                if not isinstance(self.default, bool):
+                    raise ValueError(
+                        f'Arg "{self.name}": type=bool requires a bool default, '
+                        f"got {type(self.default).__name__!r}"
+                    )
+        # Validate default is in choices
+        if self.choices is not None and not isinstance(self.default, _MissingSentinel) and self.default is not None:
+            if self.default not in self.choices:
+                raise ValueError(
+                    f'Arg "{self.name}": default {self.default!r} is not in choices '
+                    f"{self.choices!r}"
+                )
 
 
 @dataclass
@@ -2348,7 +2429,7 @@ def _validate_and_build_kwargs(
     fixed_args = cmd.args[:-1] if has_variadic else cmd.args
     for idx, a in enumerate(fixed_args):
         if idx < len(positionals):
-            arg_values[a.name] = positionals[idx]
+            arg_values[a.name] = _coerce_arg_value(a, positionals[idx])
         elif a.required:
             raise _ParseError(f"missing required argument '{a.name}'")
         elif not isinstance(a.default, _MissingSentinel):
@@ -2358,9 +2439,31 @@ def _validate_and_build_kwargs(
         remaining_positionals = positionals[len(fixed_args):]
         if va.required and len(remaining_positionals) == 0:
             raise _ParseError(f"missing required argument '{va.name}'")
-        arg_values[va.name] = remaining_positionals
+        arg_values[va.name] = [
+            _coerce_arg_value(va, p) for p in remaining_positionals
+        ]
     elif len(positionals) > len(cmd.args):
         raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
+
+    # Step 6.5: validate arg choices
+    for a in cmd.args:
+        if a.choices is not None and a.name in arg_values:
+            val = arg_values[a.name]
+            if a.variadic:
+                for v in val:
+                    if v not in a.choices:
+                        choices_str = ", ".join(str(c) for c in a.choices)
+                        raise _ParseError(
+                            f"argument '{a.name}': invalid value '{v}', "
+                            f"must be one of: {choices_str}"
+                        )
+            else:
+                if val not in a.choices:
+                    choices_str = ", ".join(str(c) for c in a.choices)
+                    raise _ParseError(
+                        f"argument '{a.name}': invalid value '{val}', "
+                        f"must be one of: {choices_str}"
+                    )
 
     # Step 7: build kwargs dict (command flags only)
     kwargs: dict[str, object] = {}
@@ -3026,11 +3129,16 @@ def arg(
     required: bool = True,
     default: object = _MISSING,
     variadic: bool = False,
+    type: type = str,
+    choices: list | None = None,
 ) -> Callable:
     """Module-level decorator to attach an Arg to a command handler."""
 
     def decorator(func: Callable) -> Callable:
-        a = Arg(name=name, help=help, required=required, default=default, variadic=variadic)
+        a = Arg(
+            name=name, help=help, required=required, default=default,
+            variadic=variadic, type=type, choices=choices,
+        )
         if not hasattr(func, "_strictcli_args"):
             func._strictcli_args = []
         func._strictcli_args.append(a)
@@ -3801,6 +3909,8 @@ def _serialize_arg(a: Arg) -> dict:
     }
     if not a.required:
         d["required"] = a.required
+    if not isinstance(a.default, _MissingSentinel):
+        d["default"] = a.default
     if a.variadic:
         d["variadic"] = a.variadic
     return d
@@ -3827,6 +3937,33 @@ def _serialize_command(cmd: Command) -> dict:
     tags = sorted(cmd.tags)
     if tags:
         d["tags"] = tags
+    constraints: list[dict] = []
+    for mg in cmd.mutex:
+        constraints.append({
+            "type": "mutex",
+            "flags": [f.name for f in mg.flags],
+        })
+    for dep in cmd.dependencies:
+        if isinstance(dep, CoRequired):
+            constraints.append({
+                "type": "co_required",
+                "flags": dep.flags,
+            })
+        elif isinstance(dep, Requires):
+            constraints.append({
+                "type": "requires",
+                "flag": dep.flag,
+                "depends_on": dep.depends_on,
+            })
+        elif isinstance(dep, Implies):
+            constraints.append({
+                "type": "implies",
+                "flag": dep.flag,
+                "implies": dep.implies,
+                "value": dep.value,
+            })
+    if constraints:
+        d["constraints"] = constraints
     return d
 
 
@@ -3858,6 +3995,7 @@ def _serialize_group(group: Group) -> dict:
 def _build_schema_defaults() -> dict:
     """Return the defaults object documenting what 'missing' means in the schema."""
     return {
+        "schema_version": 1,
         "app": {
             "env_prefix": None,
             "config": False,
@@ -3865,6 +4003,7 @@ def _build_schema_defaults() -> dict:
             "commands": {},
             "groups": {},
             "deprecated": {},
+            "tag_contracts": {},
         },
         "flag": {
             "short": None,
@@ -3879,6 +4018,7 @@ def _build_schema_defaults() -> dict:
         },
         "arg": {
             "required": True,
+            "default": None,
             "variadic": False,
         },
         "command": {
@@ -3886,6 +4026,7 @@ def _build_schema_defaults() -> dict:
             "flags": [],
             "args": [],
             "tags": [],
+            "constraints": [],
         },
         "group": {
             "commands": {},
@@ -3923,6 +4064,7 @@ def _dump_schema(app: App) -> dict:
     """
     project_id = _read_project_id()
     schema: dict = {
+        "schema_version": 1,
         "defaults": _build_schema_defaults(),
         "project_id": project_id,
         "name": app.name,
@@ -3945,6 +4087,8 @@ def _dump_schema(app: App) -> dict:
     deprecated = {name: dep.message for name, dep in app._deprecated.items()}
     if deprecated:
         schema["deprecated"] = deprecated
+    if app._tag_contracts:
+        schema["tag_contracts"] = dict(app._tag_contracts)
     if app._checks_enabled:
         schema["checks"] = {
             name: {

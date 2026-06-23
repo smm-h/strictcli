@@ -482,6 +482,9 @@ class TestSchemaDefaults:
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         defaults = data["defaults"]
 
+        # Schema version default
+        assert defaults["schema_version"] == 1
+
         # App defaults
         assert defaults["app"]["env_prefix"] is None
         assert defaults["app"]["config"] is False
@@ -489,6 +492,7 @@ class TestSchemaDefaults:
         assert defaults["app"]["commands"] == {}
         assert defaults["app"]["groups"] == {}
         assert defaults["app"]["deprecated"] == {}
+        assert defaults["app"]["tag_contracts"] == {}
 
         # Flag defaults
         assert defaults["flag"]["short"] is None
@@ -501,12 +505,14 @@ class TestSchemaDefaults:
 
         # Arg defaults
         assert defaults["arg"]["required"] is True
+        assert defaults["arg"]["default"] is None
         assert defaults["arg"]["variadic"] is False
 
         # Command defaults
         assert defaults["command"]["passthrough"] is False
         assert defaults["command"]["flags"] == []
         assert defaults["command"]["args"] == []
+        assert defaults["command"]["constraints"] == []
 
         # Group defaults
         assert defaults["group"]["commands"] == {}
@@ -728,3 +734,277 @@ class TestSchemaProjectId:
         result = app.test(["--dump-schema"])
         assert result.exit_code != 0
         assert "project_id" in result.stderr
+
+
+class TestSchemaVersion:
+    """Schema includes schema_version field."""
+
+    def test_schema_version_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert data["schema_version"] == 1
+
+    def test_schema_version_is_first_key(self, tmp_path, monkeypatch):
+        """schema_version should appear before other keys in the JSON."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        keys = list(data.keys())
+        assert keys[0] == "schema_version"
+
+
+class TestSchemaConstraints:
+    """Schema serializes command constraints (mutex, co_required, requires, implies)."""
+
+    def test_no_constraints_omitted(self, tmp_path, monkeypatch):
+        """Commands without constraints omit the constraints field."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert "constraints" not in data["commands"]["noop"]
+
+    def test_mutex_group(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        json_flag = strictcli.Flag(name="json", type=bool, help="JSON output")
+        text_flag = strictcli.Flag(name="text", type=bool, help="Text output")
+
+        @app.command("show", help="Show data",
+                     mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])])
+        def show(json, text):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["show"]
+        assert "constraints" in cmd
+        assert len(cmd["constraints"]) == 1
+        c = cmd["constraints"][0]
+        assert c["type"] == "mutex"
+        assert c["flags"] == ["json", "text"]
+
+    def test_co_required(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("deploy", help="Deploy",
+                     dependencies=[strictcli.CoRequired(flags=["host", "port"])])
+        @strictcli.flag("host", type=str, help="Hostname")
+        @strictcli.flag("port", type=int, help="Port number")
+        def deploy(host, port):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["deploy"]
+        assert len(cmd["constraints"]) == 1
+        c = cmd["constraints"][0]
+        assert c["type"] == "co_required"
+        assert c["flags"] == ["host", "port"]
+
+    def test_requires(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("deploy", help="Deploy",
+                     dependencies=[strictcli.Requires(flag="port", depends_on="host")])
+        @strictcli.flag("host", type=str, help="Hostname")
+        @strictcli.flag("port", type=int, help="Port number")
+        def deploy(host, port):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["deploy"]
+        assert len(cmd["constraints"]) == 1
+        c = cmd["constraints"][0]
+        assert c["type"] == "requires"
+        assert c["flag"] == "port"
+        assert c["depends_on"] == "host"
+
+    def test_implies(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("deploy", help="Deploy",
+                     dependencies=[strictcli.Implies(
+                         flag="force", implies="yes", value=True)])
+        @strictcli.flag("force", type=bool, help="Force deploy")
+        @strictcli.flag("yes", type=bool, help="Skip confirmation")
+        def deploy(force, yes):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["deploy"]
+        assert len(cmd["constraints"]) == 1
+        c = cmd["constraints"][0]
+        assert c["type"] == "implies"
+        assert c["flag"] == "force"
+        assert c["implies"] == "yes"
+        assert c["value"] is True
+
+    def test_multiple_constraints(self, tmp_path, monkeypatch):
+        """Multiple constraint types on the same command."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        json_flag = strictcli.Flag(name="json", type=bool, help="JSON output")
+        text_flag = strictcli.Flag(name="text", type=bool, help="Text output")
+
+        @app.command("deploy", help="Deploy",
+                     mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])],
+                     dependencies=[
+                         strictcli.CoRequired(flags=["host", "port"]),
+                         strictcli.Requires(flag="port", depends_on="host"),
+                     ])
+        @strictcli.flag("host", type=str, help="Hostname")
+        @strictcli.flag("port", type=int, help="Port number")
+        def deploy(json, text, host, port):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["deploy"]
+        assert len(cmd["constraints"]) == 3
+        types = [c["type"] for c in cmd["constraints"]]
+        assert types == ["mutex", "co_required", "requires"]
+
+    def test_constraint_flag_names_use_dashes(self, tmp_path, monkeypatch):
+        """Constraint flag names should use dashes (flag names), not underscores."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("deploy", help="Deploy",
+                     dependencies=[strictcli.CoRequired(
+                         flags=["dry-run", "no-confirm"])])
+        @strictcli.flag("dry-run", type=bool, help="Dry run")
+        @strictcli.flag("no-confirm", type=bool, help="Skip confirmation")
+        def deploy(dry_run, no_confirm):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["deploy"]
+        c = cmd["constraints"][0]
+        assert c["flags"] == ["dry-run", "no-confirm"]
+
+
+class TestSchemaTagContracts:
+    """Schema serializes tag contracts at app level."""
+
+    def test_no_tag_contracts_omitted(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert "tag_contracts" not in data
+
+    def test_tag_contracts_serialized(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+        app.tag_contract("dangerous", requires_flag="force")
+
+        @app.command("deploy", help="Deploy", tags=["dangerous"])
+        @strictcli.flag("force", type=bool, help="Force it")
+        def deploy(force):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert "tag_contracts" in data
+        assert data["tag_contracts"] == {"dangerous": "force"}
+
+    def test_multiple_tag_contracts(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+        app.tag_contract("dangerous", requires_flag="force")
+        app.tag_contract("slow", requires_flag="timeout")
+
+        @app.command("deploy", help="Deploy", tags=["dangerous", "slow"])
+        @strictcli.flag("force", type=bool, help="Force it")
+        @strictcli.flag("timeout", type=int, help="Timeout", default=30)
+        def deploy(force, timeout):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert data["tag_contracts"] == {
+            "dangerous": "force",
+            "slow": "timeout",
+        }
+
+
+class TestSchemaArgDefaults:
+    """Schema serializes arg defaults when present."""
+
+    def test_arg_default_omitted_when_missing(self, tmp_path, monkeypatch):
+        """Required args with no default omit the default field."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="A command",
+                     args=[strictcli.Arg(name="target", help="The target")])
+        def cmd(target):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        arg = data["commands"]["cmd"]["args"][0]
+        assert "default" not in arg
+
+    def test_arg_default_string(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="A command",
+                     args=[strictcli.Arg(name="target", help="The target",
+                                         required=False, default="localhost")])
+        def cmd(target):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        arg = data["commands"]["cmd"]["args"][0]
+        assert arg["default"] == "localhost"
+
+    def test_arg_default_none(self, tmp_path, monkeypatch):
+        """An optional arg with default=None should serialize the default."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("cmd", help="A command",
+                     args=[strictcli.Arg(name="target", help="The target",
+                                         required=False, default=None)])
+        def cmd(target):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        arg = data["commands"]["cmd"]["args"][0]
+        assert arg["default"] is None
