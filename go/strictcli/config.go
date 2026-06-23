@@ -13,6 +13,110 @@ import (
 	tomledit "github.com/smm-h/go-toml-edit"
 )
 
+// nestedGet looks up a dot-separated key in a nested map.
+// Returns (value, true) if found, (nil, false) if any intermediate
+// segment is missing or not a map.
+func nestedGet(data map[string]interface{}, dotPath string) (interface{}, bool) {
+	parts := strings.Split(dotPath, ".")
+	var current interface{} = data
+	for _, part := range parts[:len(parts)-1] {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		current, ok = m[part]
+		if !ok {
+			return nil, false
+		}
+	}
+	m, ok := current.(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+	val, ok := m[parts[len(parts)-1]]
+	return val, ok
+}
+
+// nestedSet sets a dot-separated key in a nested map, creating
+// intermediate maps as needed.
+func nestedSet(data map[string]interface{}, dotPath string, value interface{}) {
+	parts := strings.Split(dotPath, ".")
+	current := data
+	for _, part := range parts[:len(parts)-1] {
+		if sub, ok := current[part]; ok {
+			if subMap, ok := sub.(map[string]interface{}); ok {
+				current = subMap
+			} else {
+				subMap := make(map[string]interface{})
+				current[part] = subMap
+				current = subMap
+			}
+		} else {
+			subMap := make(map[string]interface{})
+			current[part] = subMap
+			current = subMap
+		}
+	}
+	current[parts[len(parts)-1]] = value
+}
+
+// nestedDelete deletes a dot-separated key from a nested map.
+// Returns true if the key was found and deleted, false otherwise.
+// Cleans up empty intermediate maps.
+func nestedDelete(data map[string]interface{}, dotPath string) bool {
+	parts := strings.Split(dotPath, ".")
+	type parentEntry struct {
+		m   map[string]interface{}
+		key string
+	}
+	var parents []parentEntry
+	current := data
+	for _, part := range parts[:len(parts)-1] {
+		sub, ok := current[part]
+		if !ok {
+			return false
+		}
+		subMap, ok := sub.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		parents = append(parents, parentEntry{m: current, key: part})
+		current = subMap
+	}
+	lastKey := parts[len(parts)-1]
+	if _, ok := current[lastKey]; !ok {
+		return false
+	}
+	delete(current, lastKey)
+	// Clean up empty intermediate maps
+	for i := len(parents) - 1; i >= 0; i-- {
+		p := parents[i]
+		child := p.m[p.key].(map[string]interface{})
+		if len(child) == 0 {
+			delete(p.m, p.key)
+		}
+	}
+	return true
+}
+
+// collectNestedKeys flattens a nested map to dot-separated leaf key paths.
+// Non-map values are leaves; map values are recursed into.
+func collectNestedKeys(data map[string]interface{}, prefix string) []string {
+	var keys []string
+	for k, v := range data {
+		fullKey := k
+		if prefix != "" {
+			fullKey = prefix + "." + k
+		}
+		if subMap, ok := v.(map[string]interface{}); ok {
+			keys = append(keys, collectNestedKeys(subMap, fullKey)...)
+		} else {
+			keys = append(keys, fullKey)
+		}
+	}
+	return keys
+}
+
 // ConfigField describes a declared config file field.
 type ConfigField struct {
 	Name       string
@@ -48,10 +152,11 @@ func ConfigFieldDefault(v interface{}) ConfigFieldOption {
 	}
 }
 
-// configFieldNameRe validates config field names: lowercase letters, digits,
-// hyphens, underscores, and dots (for TOML sections). Must start with a
-// letter or underscore (underscore-prefixed names are reserved for framework).
-var configFieldNameRe = regexp.MustCompile(`^[a-z_][a-z0-9._-]*$`)
+// configFieldNameRe validates config field names: optional underscore prefix
+// (reserved for framework), then a letter followed by lowercase letters,
+// digits, and underscores. Dots separate segments, each starting with a letter.
+// Matches Python's _CONFIG_FIELD_NAME_RE.
+var configFieldNameRe = regexp.MustCompile(`^_?[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
 
 // ConfigField declares a config field on the app.
 // Panics on invalid configuration (programmer error).
@@ -67,7 +172,7 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 
 	// Validate name format
 	if !configFieldNameRe.MatchString(name) {
-		panic(fmt.Sprintf("config field %q: invalid name, must match [a-z_][a-z0-9._-]*", name))
+		panic(fmt.Sprintf("config field %q: invalid name, must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_])* (lowercase, dots for sections)", name))
 	}
 
 	// Names starting with _ are reserved for framework fields
@@ -118,7 +223,7 @@ func (a *App) registerFrameworkField(name string, fieldType FlagType, help strin
 	}
 
 	if !configFieldNameRe.MatchString(name) {
-		panic(fmt.Sprintf("framework field %q: invalid name, must match [a-z_][a-z0-9._-]*", name))
+		panic(fmt.Sprintf("framework field %q: invalid name, must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_])* (lowercase, dots for sections)", name))
 	}
 
 	if strings.TrimSpace(help) == "" {
@@ -250,7 +355,7 @@ func coerceConfigScalar(value interface{}, flagType FlagType) (interface{}, stri
 		if b, ok := value.(bool); ok {
 			return b, ""
 		}
-		return nil, fmt.Sprintf("expected boolean, got %s", typeName(value))
+		return nil, fmt.Sprintf("expected bool, got %s", typeName(value))
 	case TypeInt:
 		// TOML integers decode as int64; JSON numbers decode as float64
 		if val, ok := value.(int64); ok {
@@ -812,13 +917,13 @@ func (a *App) validateConfigFieldValues(cmd *Command) string {
 		val, exists := configData[fieldName]
 		if !exists {
 			if cf.Required {
-				return fmt.Sprintf("config field '%s' is required but not set in config file", fieldName)
+				return fmt.Sprintf("required config field \"%s\" is missing from config file", fieldName)
 			}
 			continue
 		}
 		// Validate type
 		if _, errStr := coerceConfigScalar(val, cf.Type); errStr != "" {
-			return fmt.Sprintf("config field '%s': %s", fieldName, errStr)
+			return fmt.Sprintf("config field \"%s\": %s", fieldName, errStr)
 		}
 	}
 
@@ -840,7 +945,7 @@ func (a *App) validateConfigFieldValues(cmd *Command) string {
 		}
 		for key := range configData {
 			if !knownKeys[key] {
-				return fmt.Sprintf("unknown key '%s' in config file", key)
+				return fmt.Sprintf("unknown key \"%s\" in config file", key)
 			}
 		}
 	}

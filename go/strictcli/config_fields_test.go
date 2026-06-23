@@ -114,9 +114,9 @@ func TestConfigFieldDotName(t *testing.T) {
 
 func TestConfigFieldRequired(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.ConfigField("api-key", ConfigFieldHelp("The API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("The API key"))
 
-	cf := app.configFields["api-key"]
+	cf := app.configFields["api_key"]
 	if !cf.Required {
 		t.Fatal("expected Required to be true (no default)")
 	}
@@ -351,9 +351,9 @@ func TestFrameworkFieldOrderPreserved(t *testing.T) {
 
 func TestConfigFieldNameWithHyphens(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
-	if _, ok := app.configFields["api-key"]; !ok {
-		t.Fatal("config field 'api-key' not registered")
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
+	if _, ok := app.configFields["api_key"]; !ok {
+		t.Fatal("config field 'api_key' not registered")
 	}
 }
 
@@ -369,18 +369,18 @@ func TestConfigFieldNameWithUnderscoresNonPrefix(t *testing.T) {
 
 func TestWithConfigFieldsStoresOnCommand(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
 
 	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
 		return 0
-	}, WithConfigFields("api-key", "region"))
+	}, WithConfigFields("api_key", "region"))
 
 	cmd := app.commands["deploy"]
 	if len(cmd.configFields) != 2 {
 		t.Fatalf("expected 2 config fields, got %d", len(cmd.configFields))
 	}
-	if cmd.configFields[0] != "api-key" || cmd.configFields[1] != "region" {
+	if cmd.configFields[0] != "api_key" || cmd.configFields[1] != "region" {
 		t.Fatalf("unexpected config fields: %v", cmd.configFields)
 	}
 }
@@ -417,12 +417,12 @@ func TestWithConfigFieldsValidBinding(t *testing.T) {
 
 func TestWithConfigFieldsInGroup(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.ConfigField("api-key", ConfigFieldHelp("API key"), ConfigFieldDefault("default-key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"), ConfigFieldDefault("default-key"))
 
 	grp := app.Group("infra", "Infrastructure commands")
 	grp.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
 		return 0
-	}, WithConfigFields("api-key"))
+	}, WithConfigFields("api_key"))
 
 	// Should validate correctly
 	r := app.Test([]string{"infra", "deploy"})
@@ -451,22 +451,22 @@ func TestWithConfigFieldsInGroupUnknownField(t *testing.T) {
 // === 5d: Config field validation at startup ===
 
 func TestConfigFieldValidationRequiredFieldMissing(t *testing.T) {
-	// Create a temp config file with no api-key
+	// Create a temp config file with no api_key
 	dir := t.TempDir()
 	configFile := dir + "/config.json"
 	os.WriteFile(configFile, []byte(`{}`), 0o644)
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
 		return 0
-	}, WithConfigFields("api-key"))
+	}, WithConfigFields("api_key"))
 
 	r := app.Test([]string{"deploy"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "config field 'api-key' is required but not set") {
+	if !strings.Contains(r.Stderr, "required config field") && !strings.Contains(r.Stderr, "api_key") {
 		t.Fatalf("expected required field error, got: %s", r.Stderr)
 	}
 }
@@ -474,13 +474,13 @@ func TestConfigFieldValidationRequiredFieldMissing(t *testing.T) {
 func TestConfigFieldValidationRequiredFieldPresent(t *testing.T) {
 	dir := t.TempDir()
 	configFile := dir + "/config.json"
-	os.WriteFile(configFile, []byte(`{"api-key": "my-secret"}`), 0o644)
+	os.WriteFile(configFile, []byte(`{"api_key": "my-secret"}`), 0o644)
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
 		return 0
-	}, WithConfigFields("api-key"))
+	}, WithConfigFields("api_key"))
 
 	r := app.Test([]string{"deploy"})
 	if r.ExitCode != 0 {
@@ -503,7 +503,7 @@ func TestConfigFieldValidationTypeMismatch(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "config field 'port'") {
+	if !strings.Contains(r.Stderr, "config field") || !strings.Contains(r.Stderr, "port") {
 		t.Fatalf("expected type mismatch error, got: %s", r.Stderr)
 	}
 }
@@ -528,19 +528,19 @@ func TestConfigFieldValidationOptionalFieldMissing(t *testing.T) {
 func TestConfigFieldValidationUnknownKeyInConfig(t *testing.T) {
 	dir := t.TempDir()
 	configFile := dir + "/config.json"
-	os.WriteFile(configFile, []byte(`{"api-key": "secret", "bogus_key": "value"}`), 0o644)
+	os.WriteFile(configFile, []byte(`{"api_key": "secret", "bogus_key": "value"}`), 0o644)
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int {
 		return 0
-	}, WithConfigFields("api-key"))
+	}, WithConfigFields("api_key"))
 
 	r := app.Test([]string{"deploy"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "unknown key 'bogus_key'") {
+	if !strings.Contains(r.Stderr, "unknown key") || !strings.Contains(r.Stderr, "bogus_key") {
 		t.Fatalf("expected unknown key error, got: %s", r.Stderr)
 	}
 }
@@ -550,7 +550,7 @@ func TestConfigFieldValidationConfigSubcommandExempt(t *testing.T) {
 	configFile := dir + "/config.json"
 	// No config file exists — config subcommands should still work
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
-	app.ConfigField("api-key", ConfigFieldHelp("API key")) // required, not set
+	app.ConfigField("api_key", ConfigFieldHelp("API key")) // required, not set
 
 	r := app.Test([]string{"config", "path"})
 	if r.ExitCode != 0 {
@@ -564,7 +564,7 @@ func TestConfigFieldValidationNoConfigFieldsSkipsValidation(t *testing.T) {
 	os.WriteFile(configFile, []byte(`{"random_key": true}`), 0o644)
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	// Command has no config fields bound — validation should not run
 	app.Command("status", "Show status", func(args map[string]interface{}) int {
 		return 0
@@ -585,7 +585,7 @@ func TestConfigShowIncludesConfigFields(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 
 	r := app.Test([]string{"config", "show", "--plain"})
 	if r.ExitCode != 0 {
@@ -597,9 +597,9 @@ func TestConfigShowIncludesConfigFields(t *testing.T) {
 	if !strings.Contains(r.Stdout, "source: config") {
 		t.Fatalf("expected source: config, got: %s", r.Stdout)
 	}
-	// api-key should show as nil/default since it's not in the file
-	if !strings.Contains(r.Stdout, "api-key") {
-		t.Fatalf("expected api-key in output, got: %s", r.Stdout)
+	// api_key should show as nil/default since it's not in the file
+	if !strings.Contains(r.Stdout, "api_key") {
+		t.Fatalf("expected api_key in output, got: %s", r.Stdout)
 	}
 }
 
@@ -777,7 +777,7 @@ func TestConfigInitJSON(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
 	app.Command("deploy", "Deploy", func(args map[string]interface{}) int { return 0 })
 
@@ -807,7 +807,7 @@ func TestConfigInitTOML(t *testing.T) {
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
 	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
 	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(443))
-	app.ConfigField("api-key", ConfigFieldHelp("API key"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.Command("deploy", "Deploy", func(args map[string]interface{}) int { return 0 })
 
 	r := app.Test([]string{"config", "init"})
@@ -827,7 +827,7 @@ func TestConfigInitTOML(t *testing.T) {
 		t.Fatalf("expected default region in TOML template, got: %s", content)
 	}
 	if !strings.Contains(content, "REQUIRED") {
-		t.Fatalf("expected REQUIRED marker for api-key, got: %s", content)
+		t.Fatalf("expected REQUIRED marker for api_key, got: %s", content)
 	}
 }
 
