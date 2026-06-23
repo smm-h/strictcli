@@ -429,6 +429,16 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 	}
 
+	return validateAndBuildKwargs(cmd, cliSet, positionals, globalFlagNames)
+}
+
+// validateAndBuildKwargs performs pure validation and kwargs assembly on the
+// already-parsed cliSet values. It enforces mutex constraints, resolves implies
+// dependencies, checks co-required/requires dependencies, applies defaults,
+// validates choices, runs custom validation, resolves positional args, and
+// builds the final kwargs map.
+// Returns (kwargs, postGlobalValues, errorString).
+func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positionals []string, globalFlagNames map[string]bool) (map[string]interface{}, map[string]interface{}, string) {
 	// Enforce mutex group constraints (before defaults)
 	for _, mg := range cmd.mutex {
 		var setFlags []string
