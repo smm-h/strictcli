@@ -1,0 +1,14 @@
+# Version bump type: patch, minor, or major
+bump = "minor"
+# Short description of this release (required)
+description = "Command declaration framework: structured handler returns, programmatic invocation, typed args, config fields, compound types, tool export, and MCP projection."
+# Optional context explaining why these changes were made
+context = """
+This release transforms strictcli from a CLI framework into a command declaration framework with multiple output projections. Commands declared once can be invoked via CLI (existing), programmatic API (app.call/acall), tool export (as_tools with JSON Schema), and MCP server (--mcp flag).
+
+Key additions: handlers can return structured data (backward compatible -- int returns still work), positional args gain type and choices support, first-class config fields with per-command binding and startup validation, compound types (list[T] and dict[str,T]), command visibility (hidden/interactive), and schema enrichment with versioning and constraint serialization.
+"""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["pypi", "npm"]
+exclude = []
