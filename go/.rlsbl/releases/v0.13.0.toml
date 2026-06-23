@@ -1,8 +1,0 @@
-# Version bump type: patch, minor, or major
-bump = "minor"
-# Short description of this release (required)
-description = "Public API for running checks programmatically, skip behavior fix"
-# Optional context explaining why these changes were made
-context = "Adds App.RunChecks(), FormatCheckResults(), FormatCheckResultsJSON(), CheckRunResult, and RunChecksOptions. Also fixes a bug where explicit skip from a check implementation incorrectly set exit code to 1 and cascaded to dependents."
-include = ["go"]
-exclude = []
