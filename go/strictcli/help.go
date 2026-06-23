@@ -13,32 +13,46 @@ func formatAppHelp(app *App) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("%s v%s -- %s", app.Name, app.Version, app.Help))
 
-	if len(app.cmdOrder) > 0 {
+	// Filter hidden commands
+	var visibleCmds []string
+	for _, name := range app.cmdOrder {
+		if !app.commands[name].Hidden {
+			visibleCmds = append(visibleCmds, name)
+		}
+	}
+	if len(visibleCmds) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Commands:")
 		maxLen := 0
-		for _, name := range app.cmdOrder {
+		for _, name := range visibleCmds {
 			if len(name) > maxLen {
 				maxLen = len(name)
 			}
 		}
-		for _, name := range app.cmdOrder {
+		for _, name := range visibleCmds {
 			cmd := app.commands[name]
 			padding := maxLen - len(name) + 4
 			lines = append(lines, fmt.Sprintf("  %s%s%s", name, strings.Repeat(" ", padding), cmd.Help))
 		}
 	}
 
-	if len(app.groupOrder) > 0 {
+	// Filter hidden groups
+	var visibleGroups []string
+	for _, name := range app.groupOrder {
+		if !app.groups[name].Hidden {
+			visibleGroups = append(visibleGroups, name)
+		}
+	}
+	if len(visibleGroups) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Groups:")
 		maxLen := 0
-		for _, name := range app.groupOrder {
+		for _, name := range visibleGroups {
 			if len(name) > maxLen {
 				maxLen = len(name)
 			}
 		}
-		for _, name := range app.groupOrder {
+		for _, name := range visibleGroups {
 			grp := app.groups[name]
 			padding := maxLen - len(name) + 4
 			lines = append(lines, fmt.Sprintf("  %s%s%s", name, strings.Repeat(" ", padding), grp.Help))
@@ -71,32 +85,46 @@ func formatGroupHelp(app *App, group *Group, path []string) string {
 	fullPath := strings.Join(path, " ")
 	lines = append(lines, fmt.Sprintf("%s %s -- %s", app.Name, fullPath, group.Help))
 
-	if len(group.order) > 0 {
+	// Filter hidden commands
+	var visibleCmds []string
+	for _, name := range group.order {
+		if !group.Commands[name].Hidden {
+			visibleCmds = append(visibleCmds, name)
+		}
+	}
+	if len(visibleCmds) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Commands:")
 		maxLen := 0
-		for _, name := range group.order {
+		for _, name := range visibleCmds {
 			if len(name) > maxLen {
 				maxLen = len(name)
 			}
 		}
-		for _, name := range group.order {
+		for _, name := range visibleCmds {
 			cmd := group.Commands[name]
 			padding := maxLen - len(name) + 4
 			lines = append(lines, fmt.Sprintf("  %s%s%s", name, strings.Repeat(" ", padding), cmd.Help))
 		}
 	}
 
-	if len(group.groupOrder) > 0 {
+	// Filter hidden groups
+	var visibleGroups []string
+	for _, name := range group.groupOrder {
+		if !group.Groups[name].Hidden {
+			visibleGroups = append(visibleGroups, name)
+		}
+	}
+	if len(visibleGroups) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Groups:")
 		maxLen := 0
-		for _, name := range group.groupOrder {
+		for _, name := range visibleGroups {
 			if len(name) > maxLen {
 				maxLen = len(name)
 			}
 		}
-		for _, name := range group.groupOrder {
+		for _, name := range visibleGroups {
 			sub := group.Groups[name]
 			padding := maxLen - len(name) + 4
 			lines = append(lines, fmt.Sprintf("  %s%s%s", name, strings.Repeat(" ", padding), sub.Help))

@@ -7782,3 +7782,286 @@ func TestArgIntWithWhitespace(t *testing.T) {
 		t.Fatalf("expected strict int error, got %q", r.Stderr)
 	}
 }
+
+// --- Hidden / Interactive tests ---
+
+func TestHiddenCommandNotInHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("visible", "A visible command", func(args map[string]interface{}) int {
+		return 0
+	})
+	app.Command("secret", "A secret command", func(args map[string]interface{}) int {
+		return 0
+	}, WithHidden())
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "visible") {
+		t.Fatal("expected 'visible' in help output")
+	}
+	if strings.Contains(r.Stdout, "secret") {
+		t.Fatal("hidden command 'secret' should not appear in help")
+	}
+}
+
+func TestHiddenCommandStillRoutable(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("secret", "A secret command", func(args map[string]interface{}) int {
+		fmt.Print("secret-executed")
+		return 0
+	}, WithHidden())
+	r := app.Test([]string{"secret"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "secret-executed" {
+		t.Fatalf("expected 'secret-executed', got %q", r.Stdout)
+	}
+}
+
+func TestHiddenGroupNotInHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	grp := app.Group("visible-group", "A visible group")
+	grp.Command("sub", "A subcommand", func(args map[string]interface{}) int {
+		return 0
+	})
+	hiddenGrp := app.Group("secret-group", "A hidden group")
+	hiddenGrp.Hidden = true
+	hiddenGrp.Command("sub", "A subcommand", func(args map[string]interface{}) int {
+		return 0
+	})
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "visible-group") {
+		t.Fatal("expected 'visible-group' in help output")
+	}
+	if strings.Contains(r.Stdout, "secret-group") {
+		t.Fatal("hidden group 'secret-group' should not appear in help")
+	}
+}
+
+func TestHiddenGroupStillRoutable(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	grp := app.Group("secret-group", "A hidden group")
+	grp.Hidden = true
+	grp.Command("sub", "A subcommand", func(args map[string]interface{}) int {
+		fmt.Print("hidden-group-cmd")
+		return 0
+	})
+	r := app.Test([]string{"secret-group", "sub"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "hidden-group-cmd" {
+		t.Fatalf("expected 'hidden-group-cmd', got %q", r.Stdout)
+	}
+}
+
+func TestHiddenCommandInGroupNotInGroupHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	grp := app.Group("tools", "Tool commands")
+	grp.Command("visible", "A visible subcommand", func(args map[string]interface{}) int {
+		return 0
+	})
+	grp.Command("hidden-sub", "A hidden subcommand", func(args map[string]interface{}) int {
+		return 0
+	}, WithHidden())
+	r := app.Test([]string{"tools", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "visible") {
+		t.Fatal("expected 'visible' in group help")
+	}
+	if strings.Contains(r.Stdout, "hidden-sub") {
+		t.Fatal("hidden command 'hidden-sub' should not appear in group help")
+	}
+}
+
+func TestHiddenSubgroupNotInGroupHelp(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	grp := app.Group("tools", "Tool commands")
+	visibleSub := grp.Group("public", "Public subgroup")
+	visibleSub.Command("cmd", "A command", func(args map[string]interface{}) int {
+		return 0
+	})
+	hiddenSub := grp.Group("internal", "Internal subgroup")
+	hiddenSub.Hidden = true
+	hiddenSub.Command("cmd", "A command", func(args map[string]interface{}) int {
+		return 0
+	})
+	r := app.Test([]string{"tools", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "public") {
+		t.Fatal("expected 'public' in group help")
+	}
+	if strings.Contains(r.Stdout, "internal") {
+		t.Fatal("hidden subgroup 'internal' should not appear in group help")
+	}
+}
+
+func TestInteractiveCommandInHelp(t *testing.T) {
+	// Interactive commands are visible in help (only hidden from tool export)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("edit", "Edit something interactively", func(args map[string]interface{}) int {
+		return 0
+	}, WithInteractive())
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "edit") {
+		t.Fatal("interactive command 'edit' should appear in help")
+	}
+}
+
+func TestConfigEditIsInteractive(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app", WithConfig())
+	grp, ok := app.Groups()["config"]
+	if !ok {
+		t.Fatal("expected config group to be registered")
+	}
+	editCmd, ok := grp.Commands["edit"]
+	if !ok {
+		t.Fatal("expected config edit command to be registered")
+	}
+	if !editCmd.Interactive {
+		t.Fatal("config edit command should be interactive")
+	}
+}
+
+func TestSchemaHiddenCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0o644)
+	os.Chdir(tmpDir)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("secret", "A secret command", func(args map[string]interface{}) int {
+		return 0
+	}, WithHidden())
+	app.Command("visible", "A visible command", func(args map[string]interface{}) int {
+		return 0
+	})
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema failed: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	secretCmd := commands["secret"].(map[string]interface{})
+	if secretCmd["hidden"] != true {
+		t.Fatalf("expected hidden=true for secret command, got %v", secretCmd["hidden"])
+	}
+	visibleCmd := commands["visible"].(map[string]interface{})
+	if _, ok := visibleCmd["hidden"]; ok {
+		t.Fatal("hidden should be omitted when false")
+	}
+}
+
+func TestSchemaInteractiveCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0o644)
+	os.Chdir(tmpDir)
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("edit", "Edit something", func(args map[string]interface{}) int {
+		return 0
+	}, WithInteractive())
+	app.Command("list", "List things", func(args map[string]interface{}) int {
+		return 0
+	})
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema failed: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	editCmd := commands["edit"].(map[string]interface{})
+	if editCmd["interactive"] != true {
+		t.Fatalf("expected interactive=true for edit command, got %v", editCmd["interactive"])
+	}
+	listCmd := commands["list"].(map[string]interface{})
+	if _, ok := listCmd["interactive"]; ok {
+		t.Fatal("interactive should be omitted when false")
+	}
+}
+
+func TestSchemaHiddenGroup(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0o644)
+	os.Chdir(tmpDir)
+	app := NewApp("myapp", "1.0.0", "test app")
+	grp := app.Group("secret", "A hidden group")
+	grp.Hidden = true
+	grp.Command("sub", "A sub", func(args map[string]interface{}) int { return 0 })
+	visibleGrp := app.Group("public", "A public group")
+	visibleGrp.Command("sub", "A sub", func(args map[string]interface{}) int { return 0 })
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema failed: %v", err)
+	}
+	groups := schema["groups"].(map[string]interface{})
+	secretGrp := groups["secret"].(map[string]interface{})
+	if secretGrp["hidden"] != true {
+		t.Fatalf("expected hidden=true for secret group, got %v", secretGrp["hidden"])
+	}
+	publicGrp := groups["public"].(map[string]interface{})
+	if _, ok := publicGrp["hidden"]; ok {
+		t.Fatal("hidden should be omitted when false for group")
+	}
+}
+
+func TestSchemaHiddenInteractiveInDefaults(t *testing.T) {
+	defaults := buildSchemaDefaults()
+	cmdDefaults := defaults["command"].(map[string]interface{})
+	if cmdDefaults["hidden"] != false {
+		t.Fatalf("expected command.hidden default to be false, got %v", cmdDefaults["hidden"])
+	}
+	if cmdDefaults["interactive"] != false {
+		t.Fatalf("expected command.interactive default to be false, got %v", cmdDefaults["interactive"])
+	}
+	grpDefaults := defaults["group"].(map[string]interface{})
+	if grpDefaults["hidden"] != false {
+		t.Fatalf("expected group.hidden default to be false, got %v", grpDefaults["hidden"])
+	}
+}
+
+func TestAllHiddenCommandsNoCommandsSection(t *testing.T) {
+	// When all commands are hidden, the Commands section should not appear in help
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("secret1", "Secret 1", func(args map[string]interface{}) int {
+		return 0
+	}, WithHidden())
+	app.Command("secret2", "Secret 2", func(args map[string]interface{}) int {
+		return 0
+	}, WithHidden())
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if strings.Contains(r.Stdout, "Commands:") {
+		t.Fatal("Commands section should not appear when all commands are hidden")
+	}
+}
+
+func TestAllHiddenGroupsNoGroupsSection(t *testing.T) {
+	// When all groups are hidden, the Groups section should not appear in help
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("visible", "Visible", func(args map[string]interface{}) int {
+		return 0
+	})
+	grp1 := app.Group("g1", "Group 1")
+	grp1.Hidden = true
+	grp1.Command("sub", "Sub", func(args map[string]interface{}) int { return 0 })
+	grp2 := app.Group("g2", "Group 2")
+	grp2.Hidden = true
+	grp2.Command("sub", "Sub", func(args map[string]interface{}) int { return 0 })
+	r := app.Test([]string{"--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", r.ExitCode)
+	}
+	if strings.Contains(r.Stdout, "Groups:") {
+		t.Fatal("Groups section should not appear when all groups are hidden")
+	}
+}

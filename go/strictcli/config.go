@@ -467,7 +467,7 @@ func (a *App) registerConfigGroup() {
 			return 1
 		}
 		return 0
-	})
+	}, WithInteractive())
 }
 
 // formatConfigValue formats a value for config show output.

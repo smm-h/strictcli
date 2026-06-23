@@ -151,6 +151,14 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 	if len(constraints) > 0 {
 		m["constraints"] = constraints
 	}
+	// hidden: default false (omit when false)
+	if cmd.Hidden {
+		m["hidden"] = true
+	}
+	// interactive: default false (omit when false)
+	if cmd.Interactive {
+		m["interactive"] = true
+	}
 	return m
 }
 
@@ -240,6 +248,10 @@ func serializeGroup(grp *Group) map[string]interface{} {
 		}
 		m["tags"] = tags
 	}
+	// hidden: default false (omit when false)
+	if grp.Hidden {
+		m["hidden"] = true
+	}
 	return m
 }
 
@@ -281,12 +293,15 @@ func buildSchemaDefaults() map[string]interface{} {
 			"args":        []interface{}{},
 			"tags":        []interface{}{},
 			"constraints": []interface{}{},
+			"hidden":      false,
+			"interactive": false,
 		},
 		"group": map[string]interface{}{
 			"commands":   map[string]interface{}{},
 			"groups":     map[string]interface{}{},
 			"deprecated": map[string]interface{}{},
 			"tags":       []interface{}{},
+			"hidden":     false,
 		},
 	}
 }
