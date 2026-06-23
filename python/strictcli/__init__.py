@@ -747,6 +747,10 @@ class _DumpSchemaRequested(Exception):
     """Raised when --dump-schema is encountered."""
 
 
+class _McpRequested(Exception):
+    """Raised when --mcp is encountered."""
+
+
 class _ParseError(Exception):
     """Raised for user-facing parse errors."""
 
@@ -2646,6 +2650,8 @@ class App:
             raise _VersionRequested()
         if "--dump-schema" in argv:
             raise _DumpSchemaRequested()
+        if "--mcp" in argv:
+            raise _McpRequested()
 
         # Step 1.5: parse global flags before command routing
         self._stdin_consumed_by: str | None = None
@@ -3164,6 +3170,9 @@ class App:
                 sys.exit(1)
             print(path)
             sys.exit(0)
+        except _McpRequested:
+            self.serve_mcp()
+            sys.exit(0)
         except _ParseError as e:
             print(f"error: {e}", file=sys.stderr)
             prefix = e.command_prefix or self.name
@@ -3227,6 +3236,10 @@ class App:
                 exit_code = 1
             else:
                 stdout_buf.write(path + "\n")
+        except _McpRequested:
+            # In test mode, MCP requires real stdin/stdout; just acknowledge
+            stderr_buf.write("error: --mcp requires interactive stdin/stdout\n")
+            exit_code = 1
         except _ParseError as e:
             stderr_buf.write(f"error: {e}\n")
             prefix = e.command_prefix or self.name
@@ -3547,6 +3560,22 @@ class App:
             parameters=parameters,
             execute=execute,
         )
+
+    def serve_mcp(
+        self,
+        *,
+        input: io.TextIOBase | None = None,
+        output: io.TextIOBase | None = None,
+    ) -> None:
+        """Run a JSON-RPC 2.0 MCP server on stdin/stdout.
+
+        Reads one JSON object per line from input (default: sys.stdin),
+        writes one JSON object per line to output (default: sys.stdout).
+        Handles initialize, tools/list, tools/call, and notifications.
+
+        The server runs until input is exhausted (EOF).
+        """
+        _run_mcp_server(self, input=input, output=output)
 
 
 # JSON Schema type mapping for tool export
@@ -5624,3 +5653,204 @@ def _write_schema(app: App) -> str:
     with open(file_path, "w") as f:
         f.write(json.dumps(schema, indent=2) + "\n")
     return file_path
+
+
+# MCP server (--mcp)
+
+def _mcp_collect_commands(app: App) -> dict[str, tuple[Command, str]]:
+    """Collect non-hidden, non-interactive leaf commands as {dotted_path: (cmd, help)}.
+
+    Returns a dict mapping dotted command paths to (Command, help_text) tuples.
+    """
+    commands: dict[str, tuple[Command, str]] = {}
+
+    for name, cmd in app._commands.items():
+        if cmd.hidden or cmd.interactive:
+            continue
+        commands[name] = (cmd, cmd.help)
+
+    def _collect_from_group(
+        group: Group, path: list[str],
+    ) -> None:
+        if group.hidden:
+            return
+        for cmd_name, cmd in group.commands.items():
+            if cmd.hidden or cmd.interactive:
+                continue
+            dotted = ".".join(path + [cmd_name])
+            commands[dotted] = (cmd, cmd.help)
+        for sub_name, sub_group in group._groups.items():
+            _collect_from_group(sub_group, path + [sub_name])
+
+    for group_name, group in app._groups.items():
+        _collect_from_group(group, [group_name])
+
+    return commands
+
+
+def _mcp_jsonrpc_error(
+    req_id: object, code: int, message: str,
+) -> dict:
+    """Build a JSON-RPC 2.0 error response."""
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "error": {"code": code, "message": message},
+    }
+
+
+def _mcp_handle_initialize(app: App, req_id: object) -> dict:
+    """Handle the MCP 'initialize' request."""
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "serverInfo": {
+                "name": app.name,
+                "version": app.version,
+            },
+        },
+    }
+
+
+def _mcp_handle_tools_list(
+    app: App, commands: dict[str, tuple[Command, str]], req_id: object,
+) -> dict:
+    """Handle the MCP 'tools/list' request."""
+    tools = []
+    for dotted_path, (cmd, help_text) in commands.items():
+        tools.append({
+            "name": dotted_path,
+            "description": help_text,
+            "inputSchema": _build_json_schema(cmd),
+        })
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "result": {"tools": tools},
+    }
+
+
+def _mcp_handle_tools_call(
+    app: App,
+    commands: dict[str, tuple[Command, str]],
+    req_id: object,
+    params: dict,
+) -> dict:
+    """Handle the MCP 'tools/call' request."""
+    tool_name = params.get("name")
+    if not isinstance(tool_name, str):
+        return _mcp_jsonrpc_error(
+            req_id, -32602, "missing or invalid 'name' in params",
+        )
+
+    if tool_name not in commands:
+        return _mcp_jsonrpc_error(
+            req_id, -32602, f"unknown tool: {tool_name}",
+        )
+
+    arguments = params.get("arguments", {})
+    if not isinstance(arguments, dict):
+        return _mcp_jsonrpc_error(
+            req_id, -32602, "'arguments' must be an object",
+        )
+
+    try:
+        result = app.call(tool_name, **arguments)
+    except InvokeError as e:
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "content": [{"type": "text", "text": str(e)}],
+                "isError": True,
+            },
+        }
+    except Exception as e:
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "content": [{"type": "text", "text": str(e)}],
+                "isError": True,
+            },
+        }
+
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "result": {
+            "content": [{
+                "type": "text",
+                "text": json.dumps(result, default=str),
+            }],
+        },
+    }
+
+
+def _run_mcp_server(
+    app: App,
+    *,
+    input: io.TextIOBase | None = None,
+    output: io.TextIOBase | None = None,
+) -> None:
+    """Run the MCP JSON-RPC 2.0 server loop.
+
+    Reads one JSON object per line from input, writes responses to output.
+    Notifications (no 'id' field) get no response.
+    """
+    inp = input if input is not None else sys.stdin
+    out = output if output is not None else sys.stdout
+
+    commands = _mcp_collect_commands(app)
+
+    _MCP_HANDLERS = {
+        "initialize": lambda req_id, _params: _mcp_handle_initialize(app, req_id),
+        "tools/list": lambda req_id, _params: _mcp_handle_tools_list(
+            app, commands, req_id,
+        ),
+        "tools/call": lambda req_id, params: _mcp_handle_tools_call(
+            app, commands, req_id, params,
+        ),
+    }
+
+    for line in inp:
+        line = line.strip()
+        if not line:
+            continue
+
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            # Malformed JSON -- send parse error if we can
+            resp = _mcp_jsonrpc_error(None, -32700, "parse error")
+            out.write(json.dumps(resp) + "\n")
+            out.flush()
+            continue
+
+        if not isinstance(msg, dict):
+            resp = _mcp_jsonrpc_error(None, -32600, "invalid request")
+            out.write(json.dumps(resp) + "\n")
+            out.flush()
+            continue
+
+        req_id = msg.get("id")
+        method = msg.get("method", "")
+        params = msg.get("params", {})
+
+        # Notifications have no 'id' -- don't send a response
+        if "id" not in msg:
+            continue
+
+        handler = _MCP_HANDLERS.get(method)
+        if handler is not None:
+            resp = handler(req_id, params)
+        else:
+            resp = _mcp_jsonrpc_error(
+                req_id, -32601, f"method not found: {method}",
+            )
+
+        out.write(json.dumps(resp) + "\n")
+        out.flush()
