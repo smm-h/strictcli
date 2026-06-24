@@ -2,18 +2,23 @@
 
 # Changelog
 
-## 0.16.0
+## 0.16.1
 
-Command declaration framework: structured handler returns, programmatic invocation, typed args, config fields, compound types, tool export, MCP projection, and scope-based check filtering.
+Config field parity fixes and error message alignment with Python.
 
 <details>
 <summary>Context</summary>
 
-This release transforms strictcli from a CLI framework into a command declaration framework with multiple output projections. Commands declared once can be invoked via CLI (existing), programmatic API (App.Call), tool export (AsTools with JSON Schema), and MCP server (--mcp flag).
-
-Key additions: DataCommand/HandlerResult for structured returns, typed positional args with choices, first-class ConfigField declarations with per-command binding and startup validation, compound types (ListOf/DictOf), command visibility (Hidden/Interactive), schema enrichment with versioning and constraint serialization, and declarative scope field on check definitions with SetScopeAdapter() for context-dependent pre-check filtering.
+Fixes config field operations for dot-name fields (nested TOML/JSON), aligns schema format (dict keyed by name, bound_commands), config show output (JSON metadata, plain section header), and error messages with Python. Splits config field validation into bound-field and unknown-key checks with correct gates. Adds 30 conformance test cases for typed args, compound types, visibility, and config fields.
 
 </details>
+
+### Fixes
+
+- **Fix.** Config field parity: nested dot-name operations, schema format, config show JSON/plain output, and help text aligned with Python.
+- **Fix.** Error message parity: aligned config field registration and coercion messages with Python.
+
+## 0.16.0
 
 ### Features
 
