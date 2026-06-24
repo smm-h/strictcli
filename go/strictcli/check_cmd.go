@@ -10,7 +10,7 @@ import (
 // registerCheckCommand registers the auto-generated "check" command.
 // Called from NewApp when checksEnabled is true.
 func (a *App) registerCheckCommand() {
-	a.Command("check", "Run registered project checks and report diagnostic results", func(args map[string]interface{}) int {
+	a.Command("check", "Run project checks registered via the check framework and report results", func(args map[string]interface{}) int {
 		runAll := args["all"].(bool)
 		tagExpr := args["tag"].(string)
 		nameGlob := args["name"].(string)
@@ -38,14 +38,14 @@ func (a *App) registerCheckCommand() {
 		return 0
 	},
 		WithFlags(
-			BoolFlag("all", "Run every registered check regardless of tag filters"),
-			StringFlag("tag", "Tag DSL expression to select which checks should run", Default("")),
-			StringFlag("name", "Glob pattern to select checks by their registered name", Default("")),
-			BoolFlag("list", "List all registered checks with their tags and severity"),
-			BoolFlag("json", "Format output as machine-readable JSON instead of text"),
-			BoolFlag("ignore-warnings", "Treat warnings as non-fatal so only errors cause failure"),
-			BoolFlag("verbose", "Show detailed diagnostic output for each check result"),
-			BoolFlag("dry-run", "Show which checks would run without actually executing"),
+			BoolFlag("all", "Run every registered check regardless of tag or name filters"),
+			StringFlag("tag", "Tag DSL expression to select checks (e.g. 'changelog & !quality')", Default("")),
+			StringFlag("name", "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')", Default("")),
+			BoolFlag("list", "List all registered checks with their tags and exit without running"),
+			BoolFlag("json", "Output check results as machine-readable JSON instead of human text"),
+			BoolFlag("ignore-warnings", "Treat warn-severity results as passing so they do not cause nonzero exit"),
+			BoolFlag("verbose", "Show full details for passing checks in addition to failures and warnings"),
+			BoolFlag("dry-run", "Show which checks would run based on current filters without executing them"),
 		),
 	)
 }
