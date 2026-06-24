@@ -135,7 +135,7 @@ wheels = [
 
 [[package]]
 name = "strictcli"
-version = "0.20.0"
+version = "0.20.1"
 source = { editable = "../python" }
 
 [package.metadata]
