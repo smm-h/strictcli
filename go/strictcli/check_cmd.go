@@ -10,7 +10,7 @@ import (
 // registerCheckCommand registers the auto-generated "check" command.
 // Called from NewApp when checksEnabled is true.
 func (a *App) registerCheckCommand() {
-	a.Command("check", "Run project checks", func(args map[string]interface{}) int {
+	a.Command("check", "Run registered project checks and report diagnostic results", func(args map[string]interface{}) int {
 		runAll := args["all"].(bool)
 		tagExpr := args["tag"].(string)
 		nameGlob := args["name"].(string)
@@ -38,14 +38,14 @@ func (a *App) registerCheckCommand() {
 		return 0
 	},
 		WithFlags(
-			BoolFlag("all", "Run all checks"),
-			StringFlag("tag", "Tag DSL expression", Default("")),
-			StringFlag("name", "Glob pattern for check names", Default("")),
-			BoolFlag("list", "List checks and tags"),
-			BoolFlag("json", "JSON output"),
-			BoolFlag("ignore-warnings", "Warnings do not cause failure"),
-			BoolFlag("verbose", "Show all details"),
-			BoolFlag("dry-run", "Show plan without executing"),
+			BoolFlag("all", "Run every registered check regardless of tag filters"),
+			StringFlag("tag", "Tag DSL expression to select which checks should run", Default("")),
+			StringFlag("name", "Glob pattern to select checks by their registered name", Default("")),
+			BoolFlag("list", "List all registered checks with their tags and severity"),
+			BoolFlag("json", "Format output as machine-readable JSON instead of text"),
+			BoolFlag("ignore-warnings", "Treat warnings as non-fatal so only errors cause failure"),
+			BoolFlag("verbose", "Show detailed diagnostic output for each check result"),
+			BoolFlag("dry-run", "Show which checks would run without actually executing"),
 		),
 	)
 }
