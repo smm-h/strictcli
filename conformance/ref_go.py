@@ -67,6 +67,11 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
     if "unique" in flag_def:
         val = "true" if flag_def["unique"] else "false"
         opts.append(f"strictcli.Unique({val})")
+    else:
+        ft = flag_def.get("type", "str")
+        if ft.startswith("list[") or ft.startswith("dict["):
+            # Compound types in Go require explicit unique; default to false
+            opts.append("strictcli.Unique(false)")
     if "env_separator" in flag_def:
         opts.append(f'strictcli.EnvSeparator("{flag_def["env_separator"]}")')
     if "negatable" in flag_def and not flag_def["negatable"]:
@@ -75,20 +80,31 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
 
 
 def _emit_flag(flag_def: dict) -> str:
-    """Emit a strictcli.StringFlag/BoolFlag/IntFlag(...) call."""
+    """Emit a strictcli.StringFlag/BoolFlag/IntFlag/ListFlag/DictFlag(...) call."""
     ftype = flag_def.get("type", "str")
-    type_map = {"str": "StringFlag", "bool": "BoolFlag", "int": "IntFlag", "float": "FloatFlag"}
-    constructor = type_map[ftype]
+    scalar_type_map = {"str": "StringFlag", "bool": "BoolFlag", "int": "IntFlag", "float": "FloatFlag"}
+    list_type_map = {"list[str]": "TypeStr", "list[int]": "TypeInt", "list[float]": "TypeFloat"}
+    dict_type_map = {"dict[str,str]": "TypeStr", "dict[str,int]": "TypeInt", "dict[str,float]": "TypeFloat"}
     opts = _emit_flag_opts(flag_def)
     opts_str = ""
     if opts:
         opts_str = ", " + ", ".join(opts)
-    return f'strictcli.{constructor}("{flag_def["name"]}", "{flag_def["help"]}"{opts_str})'
+    if ftype in list_type_map:
+        return f'strictcli.ListFlag(strictcli.{list_type_map[ftype]}, "{flag_def["name"]}", "{flag_def["help"]}"{opts_str})'
+    elif ftype in dict_type_map:
+        return f'strictcli.DictFlag(strictcli.{dict_type_map[ftype]}, "{flag_def["name"]}", "{flag_def["help"]}"{opts_str})'
+    else:
+        constructor = scalar_type_map[ftype]
+        return f'strictcli.{constructor}("{flag_def["name"]}", "{flag_def["help"]}"{opts_str})'
 
 
 def _emit_arg(arg_def: dict) -> str:
     """Emit a strictcli.NewArg(...) call."""
     opts = []
+    atype = arg_def.get("type", "str")
+    if atype != "str":
+        type_map = {"bool": "strictcli.TypeBool", "int": "strictcli.TypeInt", "float": "strictcli.TypeFloat"}
+        opts.append(f"strictcli.ArgType({type_map[atype]})")
     if "required" in arg_def:
         if arg_def["required"]:
             opts.append("strictcli.ArgRequired(true)")
@@ -98,10 +114,25 @@ def _emit_arg(arg_def: dict) -> str:
         default = arg_def["default"]
         if default is None:
             opts.append("strictcli.ArgDefault(nil)")
+        elif isinstance(default, bool):
+            opts.append(f"strictcli.ArgDefault({str(default).lower()})")
+        elif isinstance(default, int):
+            opts.append(f"strictcli.ArgDefault({default})")
+        elif isinstance(default, float):
+            opts.append(f"strictcli.ArgDefault({default})")
         else:
             opts.append(f'strictcli.ArgDefault("{default}")')
     if arg_def.get("variadic", False):
         opts.append("strictcli.Variadic()")
+    if "choices_str" in arg_def:
+        args = ", ".join(f'"{c}"' for c in arg_def["choices_str"])
+        opts.append(f"strictcli.ArgChoices({args})")
+    if "choices_int" in arg_def:
+        args = ", ".join(str(c) for c in arg_def["choices_int"])
+        opts.append(f"strictcli.ArgChoices({args})")
+    if "choices_float" in arg_def:
+        args = ", ".join(str(c) for c in arg_def["choices_float"])
+        opts.append(f"strictcli.ArgChoices({args})")
     opts_str = ""
     if opts:
         opts_str = ", " + ", ".join(opts)
@@ -140,7 +171,36 @@ def _emit_handler_body(cmd_def: dict, indent: str, global_flags: list[dict] | No
     for param_key, orig_name, kind, defn in params:
         if kind == "flag":
             ftype = defn.get("type", "str")
-            if defn.get("repeatable", False):
+            if ftype.startswith("list["):
+                # List compound type: value is []interface{}
+                item_type = ftype[5:-1]  # extract "int" from "list[int]"
+                lines.append(f'{indent}{{')
+                lines.append(f'{indent}\traw := args["{param_key}"]')
+                lines.append(f'{indent}\tvar parts []string')
+                lines.append(f'{indent}\tif raw != nil {{')
+                lines.append(f'{indent}\t\tfor _, v := range raw.([]interface{{}}) {{')
+                if item_type == "int":
+                    lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%d", v.(int)))')
+                else:
+                    lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%v", v))')
+                lines.append(f'{indent}\t\t}}')
+                lines.append(f'{indent}\t}}')
+                lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", strings.Join(parts, ","))')
+                lines.append(f'{indent}}}')
+            elif ftype.startswith("dict["):
+                # Dict compound type: value is map[string]interface{}
+                lines.append(f'{indent}{{')
+                lines.append(f'{indent}\traw := args["{param_key}"]')
+                lines.append(f'{indent}\tvar parts []string')
+                lines.append(f'{indent}\tif raw != nil {{')
+                lines.append(f'{indent}\t\tm := raw.(map[string]interface{{}})')
+                lines.append(f'{indent}\t\tfor k, v := range m {{')
+                lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%s=%v", k, v))')
+                lines.append(f'{indent}\t\t}}')
+                lines.append(f'{indent}\t}}')
+                lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", strings.Join(parts, ","))')
+                lines.append(f'{indent}}}')
+            elif defn.get("repeatable", False):
                 # Repeatable: value is []string or []int
                 if ftype == "int":
                     lines.append(f'{indent}{{')
@@ -183,23 +243,39 @@ def _emit_handler_body(cmd_def: dict, indent: str, global_flags: list[dict] | No
                 lines.append(f'{indent}}}')
         elif kind == "arg" and defn.get("variadic", False):
             # Variadic arg: value is a list, print comma-separated
+            atype = defn.get("type", "str")
             lines.append(f'{indent}{{')
             lines.append(f'{indent}\traw := args["{param_key}"]')
             lines.append(f'{indent}\tvar parts []string')
             lines.append(f'{indent}\tif raw != nil {{')
             lines.append(f'{indent}\t\tfor _, v := range raw.([]interface{{}}) {{')
-            lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%v", v))')
+            if atype == "int":
+                lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%d", v.(int)))')
+            else:
+                lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%v", v))')
             lines.append(f'{indent}\t\t}}')
             lines.append(f'{indent}\t}}')
             lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", strings.Join(parts, ","))')
             lines.append(f'{indent}}}')
-        else:
-            # arg -- always a string or nil
-            lines.append(f'{indent}if args["{param_key}"] != nil {{')
-            lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", fmt.Sprintf("%v", args["{param_key}"]))')
-            lines.append(f'{indent}}} else {{')
-            lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", "None")')
-            lines.append(f'{indent}}}')
+        elif kind == "arg":
+            atype = defn.get("type", "str")
+            if atype == "bool":
+                lines.append(f'{indent}if args["{param_key}"].(bool) {{')
+                lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", "true")')
+                lines.append(f'{indent}}} else {{')
+                lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", "false")')
+                lines.append(f'{indent}}}')
+            elif atype == "int":
+                lines.append(f'{indent}_out = strings.ReplaceAll(_out, "{{{orig_name}}}", fmt.Sprintf("%d", args["{param_key}"].(int)))')
+            elif atype == "float":
+                lines.append(f'{indent}_out = strings.ReplaceAll(_out, "{{{orig_name}}}", fmt.Sprintf("%v", args["{param_key}"].(float64)))')
+            else:
+                # str arg -- might be nil
+                lines.append(f'{indent}if args["{param_key}"] != nil {{')
+                lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", fmt.Sprintf("%v", args["{param_key}"]))')
+                lines.append(f'{indent}}} else {{')
+                lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", "None")')
+                lines.append(f'{indent}}}')
 
     lines.append(f'{indent}fmt.Println(_out)')
     return "\n".join(lines)
@@ -263,6 +339,14 @@ def _emit_cmd_options(cmd_def: dict, indent: str) -> list[str]:
     if cmd_def.get("config_fields"):
         cf_args = ", ".join(f'"{f}"' for f in cmd_def["config_fields"])
         opts.append(f"strictcli.WithConfigFields({cf_args})")
+
+    # Hidden
+    if cmd_def.get("hidden", False):
+        opts.append("strictcli.WithHidden()")
+
+    # Interactive
+    if cmd_def.get("interactive", False):
+        opts.append("strictcli.WithInteractive()")
 
     return opts
 
@@ -436,6 +520,8 @@ def generate(app_def: dict) -> str:
             tag_args = ", ".join(f'"{t}"' for t in group_def["tags"])
             tags_arg = f", {tag_args}"
         lines.append(f'{indent}{gvar} := {parent_var}.Group("{group_def["name"]}", "{group_def["help"]}"{tags_arg})')
+        if group_def.get("hidden", False):
+            lines.append(f'{indent}{gvar}.Hidden = true')
         lines.append("")
         for cmd_def in group_def.get("commands", []):
             if cmd_def.get("deprecated"):

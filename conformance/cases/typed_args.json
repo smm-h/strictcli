@@ -1,0 +1,333 @@
+[
+  {
+    "name": "typed args: int arg valid input",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "count",
+              "help": "a count",
+              "type": "int"
+            }
+          ],
+          "handler_prints": "count={count}"
+        }
+      ]
+    },
+    "argv": ["cmd", "42"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "count=42"
+    }
+  },
+  {
+    "name": "typed args: int arg invalid input",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "count",
+              "help": "a count",
+              "type": "int"
+            }
+          ],
+          "handler_prints": "count={count}"
+        }
+      ]
+    },
+    "argv": ["cmd", "abc"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["expected integer", "'abc'"],
+      "stderr_equals": "error: argument 'count': expected integer, got 'abc'\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "typed args: float arg valid input",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "rate",
+              "help": "a rate",
+              "type": "float"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "3.14"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rate=3.14"
+    }
+  },
+  {
+    "name": "typed args: float arg invalid input",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "rate",
+              "help": "a rate",
+              "type": "float"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "xyz"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["expected float", "'xyz'"],
+      "stderr_equals": "error: argument 'rate': expected float, got 'xyz'\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "typed args: bool arg valid true",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "flag",
+              "help": "a flag",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "flag={flag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "true"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag=true"
+    }
+  },
+  {
+    "name": "typed args: bool arg valid false",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "flag",
+              "help": "a flag",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "flag={flag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "false"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag=false"
+    }
+  },
+  {
+    "name": "typed args: bool arg invalid input",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "flag",
+              "help": "a flag",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "flag={flag}"
+        }
+      ]
+    },
+    "argv": ["cmd", "maybe"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "expected boolean",
+      "stderr_equals": "error: argument 'flag': expected boolean, got 'maybe'\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "typed args: int arg with choices valid",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "level",
+              "help": "verbosity level",
+              "type": "int",
+              "choices_int": [0, 1, 2]
+            }
+          ],
+          "handler_prints": "level={level}"
+        }
+      ]
+    },
+    "argv": ["cmd", "1"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "level=1"
+    }
+  },
+  {
+    "name": "typed args: int arg with choices invalid",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "level",
+              "help": "verbosity level",
+              "type": "int",
+              "choices_int": [0, 1, 2]
+            }
+          ],
+          "handler_prints": "level={level}"
+        }
+      ]
+    },
+    "argv": ["cmd", "5"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["invalid value", "5"],
+      "stderr_equals": "error: argument 'level': invalid value '5', must be one of: 0, 1, 2\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "typed args: str arg with choices valid",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "color",
+              "help": "a color",
+              "choices_str": ["red", "green", "blue"]
+            }
+          ],
+          "handler_prints": "color={color}"
+        }
+      ]
+    },
+    "argv": ["cmd", "green"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "color=green"
+    }
+  },
+  {
+    "name": "typed args: str arg with choices invalid",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "color",
+              "help": "a color",
+              "choices_str": ["red", "green", "blue"]
+            }
+          ],
+          "handler_prints": "color={color}"
+        }
+      ]
+    },
+    "argv": ["cmd", "yellow"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["invalid value", "'yellow'"],
+      "stderr_equals": "error: argument 'color': invalid value 'yellow', must be one of: red, green, blue\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "typed args: negative int arg",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "offset",
+              "help": "an offset",
+              "type": "int"
+            }
+          ],
+          "handler_prints": "offset={offset}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--", "-5"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "offset=-5"
+    }
+  }
+]

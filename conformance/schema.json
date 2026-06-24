@@ -113,6 +113,11 @@
             "required": ["requires_flag"],
             "additionalProperties": false
           }
+        },
+        "config_fields_def": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/config_field_def" },
+          "description": "Config field definitions registered on the app via app.config_field() / app.ConfigField()."
         }
       }
     },
@@ -296,7 +301,7 @@
         "help": { "type": "string" },
         "type": {
           "type": "string",
-          "enum": ["str", "bool", "int", "float"],
+          "enum": ["str", "bool", "int", "float", "list[str]", "list[int]", "list[float]", "dict[str,str]", "dict[str,int]", "dict[str,float]"],
           "default": "str"
         },
         "short": { "type": "string" },
@@ -404,6 +409,27 @@
         { "$ref": "#/$defs/requires" },
         { "$ref": "#/$defs/implies" }
       ]
+    },
+    "config_field_def": {
+      "type": "object",
+      "required": ["name", "type", "help"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["str", "int", "float", "bool"]
+        },
+        "help": { "type": "string" },
+        "default": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "boolean" },
+            { "type": "number" },
+            { "type": "null" }
+          ]
+        }
+      }
     },
     "expect": {
       "type": "object",

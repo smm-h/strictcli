@@ -275,6 +275,10 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	}
 	if v, ok := fd["unique"]; ok {
 		opts = append(opts, strictcli.Unique(v.(bool)))
+	} else if strings.HasPrefix(ftype, "list[") || strings.HasPrefix(ftype, "dict[") {
+		// Compound types in Go require explicit unique; default to false
+		// (Python auto-defaults this for list types and disallows it for dict types)
+		opts = append(opts, strictcli.Unique(false))
 	}
 	if v, ok := fd["env_separator"]; ok {
 		opts = append(opts, strictcli.EnvSeparator(v.(string)))
@@ -290,6 +294,18 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 		return strictcli.IntFlag(name, help, opts...)
 	case "float":
 		return strictcli.FloatFlag(name, help, opts...)
+	case "list[str]":
+		return strictcli.ListFlag(strictcli.TypeStr, name, help, opts...)
+	case "list[int]":
+		return strictcli.ListFlag(strictcli.TypeInt, name, help, opts...)
+	case "list[float]":
+		return strictcli.ListFlag(strictcli.TypeFloat, name, help, opts...)
+	case "dict[str,str]":
+		return strictcli.DictFlag(strictcli.TypeStr, name, help, opts...)
+	case "dict[str,int]":
+		return strictcli.DictFlag(strictcli.TypeInt, name, help, opts...)
+	case "dict[str,float]":
+		return strictcli.DictFlag(strictcli.TypeFloat, name, help, opts...)
 	default:
 		return strictcli.StringFlag(name, help, opts...)
 	}
@@ -302,6 +318,19 @@ func buildArg(ad map[string]interface{}) strictcli.Arg {
 
 	var opts []strictcli.ArgOption
 
+	atype := "str"
+	if t, ok := ad["type"]; ok {
+		atype = t.(string)
+	}
+	switch atype {
+	case "bool":
+		opts = append(opts, strictcli.ArgType(strictcli.TypeBool))
+	case "int":
+		opts = append(opts, strictcli.ArgType(strictcli.TypeInt))
+	case "float":
+		opts = append(opts, strictcli.ArgType(strictcli.TypeFloat))
+	}
+
 	if v, ok := ad["required"]; ok {
 		opts = append(opts, strictcli.ArgRequired(v.(bool)))
 	}
@@ -309,11 +338,41 @@ func buildArg(ad map[string]interface{}) strictcli.Arg {
 		if v == nil {
 			opts = append(opts, strictcli.ArgDefault(nil))
 		} else {
-			opts = append(opts, strictcli.ArgDefault(v.(string)))
+			switch atype {
+			case "int":
+				opts = append(opts, strictcli.ArgDefault(int(v.(float64))))
+			case "float":
+				opts = append(opts, strictcli.ArgDefault(v.(float64)))
+			case "bool":
+				opts = append(opts, strictcli.ArgDefault(v.(bool)))
+			default:
+				opts = append(opts, strictcli.ArgDefault(v.(string)))
+			}
 		}
 	}
 	if v, ok := ad["variadic"]; ok && v.(bool) {
 		opts = append(opts, strictcli.Variadic())
+	}
+	if v, ok := ad["choices_str"]; ok {
+		var items []interface{}
+		for _, item := range v.([]interface{}) {
+			items = append(items, item.(string))
+		}
+		opts = append(opts, strictcli.ArgChoices(items...))
+	}
+	if v, ok := ad["choices_int"]; ok {
+		var items []interface{}
+		for _, item := range v.([]interface{}) {
+			items = append(items, int(item.(float64)))
+		}
+		opts = append(opts, strictcli.ArgChoices(items...))
+	}
+	if v, ok := ad["choices_float"]; ok {
+		var items []interface{}
+		for _, item := range v.([]interface{}) {
+			items = append(items, item.(float64))
+		}
+		opts = append(opts, strictcli.ArgChoices(items...))
 	}
 
 	return strictcli.NewArg(name, help, opts...)
@@ -412,6 +471,16 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 		opts = append(opts, strictcli.WithConfigFields(cfNames...))
 	}
 
+	// Hidden.
+	if v, ok := cmdDef["hidden"]; ok && v.(bool) {
+		opts = append(opts, strictcli.WithHidden())
+	}
+
+	// Interactive.
+	if v, ok := cmdDef["interactive"]; ok && v.(bool) {
+		opts = append(opts, strictcli.WithInteractive())
+	}
+
 	return opts
 }
 
@@ -486,7 +555,31 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 				ftype = t.(string)
 			}
 
-			if rep, ok := fd["repeatable"]; ok && rep.(bool) {
+			if strings.HasPrefix(ftype, "list[") {
+				raw := args[key]
+				var parts []string
+				if raw != nil {
+					itemType := ftype[5 : len(ftype)-1] // extract "int" from "list[int]"
+					for _, v := range raw.([]interface{}) {
+						if itemType == "int" {
+							parts = append(parts, fmt.Sprintf("%d", v.(int)))
+						} else {
+							parts = append(parts, fmt.Sprintf("%v", v))
+						}
+					}
+				}
+				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
+			} else if strings.HasPrefix(ftype, "dict[") {
+				raw := args[key]
+				var parts []string
+				if raw != nil {
+					m := raw.(map[string]interface{})
+					for k, v := range m {
+						parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+					}
+				}
+				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
+			} else if rep, ok := fd["repeatable"]; ok && rep.(bool) {
 				raw := args[key]
 				var parts []string
 				if raw != nil {
@@ -523,16 +616,35 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 		for _, ad := range argDefs {
 			name := ad["name"].(string)
 			key := name // args use name as-is
+			atype := "str"
+			if t, ok := ad["type"]; ok {
+				atype = t.(string)
+			}
 
 			if v, ok := ad["variadic"]; ok && v.(bool) {
 				raw := args[key]
 				var parts []string
 				if raw != nil {
 					for _, v := range raw.([]interface{}) {
-						parts = append(parts, fmt.Sprintf("%v", v))
+						switch atype {
+						case "int":
+							parts = append(parts, fmt.Sprintf("%d", v.(int)))
+						default:
+							parts = append(parts, fmt.Sprintf("%v", v))
+						}
 					}
 				}
 				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
+			} else if atype == "bool" {
+				if args[key].(bool) {
+					out = strings.ReplaceAll(out, "{"+name+"}", "true")
+				} else {
+					out = strings.ReplaceAll(out, "{"+name+"}", "false")
+				}
+			} else if atype == "int" {
+				out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%d", args[key].(int)))
+			} else if atype == "float" {
+				out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key].(float64)))
 			} else {
 				if args[key] != nil {
 					out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key]))
@@ -634,6 +746,9 @@ func buildGroup(groupDef map[string]interface{}, app *strictcli.App, globalFlags
 		}
 	}
 	group := app.Group(name, help, tags...)
+	if v, ok := groupDef["hidden"]; ok && v.(bool) {
+		group.Hidden = true
+	}
 	populateGroup(groupDef, group, globalFlags)
 }
 
@@ -648,6 +763,9 @@ func buildSubGroup(groupDef map[string]interface{}, parent *strictcli.Group, glo
 		}
 	}
 	group := parent.Group(name, help, tags...)
+	if v, ok := groupDef["hidden"]; ok && v.(bool) {
+		group.Hidden = true
+	}
 	populateGroup(groupDef, group, globalFlags)
 }
 

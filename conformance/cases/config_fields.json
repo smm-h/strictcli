@@ -1,0 +1,147 @@
+[
+  {
+    "name": "config fields: required field missing produces error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "config_fields_def": [
+        {
+          "name": "api.key",
+          "type": "str",
+          "help": "API key"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "config_fields": ["api.key"]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "required config field \"api.key\" is missing from config file"
+    }
+  },
+  {
+    "name": "config fields: optional field with default used when missing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "config_fields_def": [
+        {
+          "name": "port",
+          "type": "int",
+          "help": "server port",
+          "default": 8080
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "port={port}",
+          "config_fields": ["port"],
+          "flags": [
+            {"name": "port", "help": "server port", "type": "int", "default": 3000}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=3000"
+    }
+  },
+  {
+    "name": "config fields: unknown key in config rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"bogus\": \"value\"}",
+      "config_fields_def": [
+        {
+          "name": "port",
+          "type": "int",
+          "help": "server port",
+          "default": 8080
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "config_fields": ["port"]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown key \"bogus\" in config file"
+    }
+  },
+  {
+    "name": "config fields: flat-key flag config still works",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"port\": 9090}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "port={port}",
+          "flags": [
+            {"name": "port", "help": "port number", "type": "int", "default": 80}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=9090"
+    }
+  },
+  {
+    "name": "config fields: flat-key flag config with CLI override",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"port\": 9090}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "port={port}",
+          "flags": [
+            {"name": "port", "help": "port number", "type": "int", "default": 80}
+          ]
+        }
+      ]
+    },
+    "argv": ["run", "--port", "8080"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=8080"
+    }
+  }
+]

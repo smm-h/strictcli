@@ -1,0 +1,166 @@
+[
+  {
+    "name": "visibility: hidden command not in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "visible",
+          "help": "a visible command",
+          "handler_prints": "visible"
+        },
+        {
+          "name": "secret",
+          "help": "a hidden command",
+          "hidden": true,
+          "handler_prints": "secret"
+        }
+      ]
+    },
+    "argv": ["--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "visible",
+      "stdout_not_contains": "secret"
+    }
+  },
+  {
+    "name": "visibility: hidden command still callable",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "visible",
+          "help": "a visible command",
+          "handler_prints": "visible"
+        },
+        {
+          "name": "secret",
+          "help": "a hidden command",
+          "hidden": true,
+          "handler_prints": "secret"
+        }
+      ]
+    },
+    "argv": ["secret"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "secret"
+    }
+  },
+  {
+    "name": "visibility: interactive command appears in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "serve",
+          "help": "start interactive server",
+          "interactive": true,
+          "handler_prints": "serving"
+        }
+      ]
+    },
+    "argv": ["--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "serve"
+    }
+  },
+  {
+    "name": "visibility: interactive command is callable",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "serve",
+          "help": "start interactive server",
+          "interactive": true,
+          "handler_prints": "serving"
+        }
+      ]
+    },
+    "argv": ["serve"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "serving"
+    }
+  },
+  {
+    "name": "visibility: hidden group not in help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run something",
+          "handler_prints": "running"
+        }
+      ],
+      "groups": [
+        {
+          "name": "internal",
+          "help": "internal commands",
+          "hidden": true,
+          "commands": [
+            {
+              "name": "debug",
+              "help": "debug info",
+              "handler_prints": "debug"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "run",
+      "stdout_not_contains": "internal"
+    }
+  },
+  {
+    "name": "visibility: hidden group commands still callable",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run something",
+          "handler_prints": "running"
+        }
+      ],
+      "groups": [
+        {
+          "name": "internal",
+          "help": "internal commands",
+          "hidden": true,
+          "commands": [
+            {
+              "name": "debug",
+              "help": "debug info",
+              "handler_prints": "debug"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["internal", "debug"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "debug"
+    }
+  }
+]

@@ -1,0 +1,196 @@
+[
+  {
+    "name": "compound types: list[int] flag multiple values",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "ids",
+              "type": "list[int]",
+              "help": "list of ids",
+              "unique": false
+            }
+          ],
+          "handler_prints": "ids={ids}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--ids", "1", "--ids", "2", "--ids", "3"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "ids=1,2,3"
+    }
+  },
+  {
+    "name": "compound types: list[int] flag single value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "ids",
+              "type": "list[int]",
+              "help": "list of ids",
+              "unique": false
+            }
+          ],
+          "handler_prints": "ids={ids}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--ids", "42"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "ids=42"
+    }
+  },
+  {
+    "name": "compound types: list[str] flag multiple values",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "tags",
+              "type": "list[str]",
+              "help": "list of tags",
+              "unique": false
+            }
+          ],
+          "handler_prints": "tags={tags}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--tags", "alpha", "--tags", "beta"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=alpha,beta"
+    }
+  },
+  {
+    "name": "compound types: list[int] invalid element",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "ids",
+              "type": "list[int]",
+              "help": "list of ids",
+              "unique": false
+            }
+          ],
+          "handler_prints": "ids={ids}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--ids", "abc"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["expected integer", "'abc'"]
+    }
+  },
+  {
+    "name": "compound types: dict[str,str] key=value format",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "header",
+              "type": "dict[str,str]",
+              "help": "HTTP headers"
+            }
+          ],
+          "handler_prints": "header={header}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--header", "content-type=text/html"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "content-type=text/html"
+    }
+  },
+  {
+    "name": "compound types: dict[str,str] missing equals",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "header",
+              "type": "dict[str,str]",
+              "help": "HTTP headers"
+            }
+          ],
+          "handler_prints": "header={header}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--header", "no-equals-here"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "expected key=value"
+    }
+  },
+  {
+    "name": "compound types: list[int] empty gives empty list",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "ids",
+              "type": "list[int]",
+              "help": "list of ids",
+              "unique": false
+            }
+          ],
+          "handler_prints": "ids={ids}"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "ids="
+    }
+  }
+]

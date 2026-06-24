@@ -30,8 +30,16 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
         f"name={flag_def['name']!r}",
     ]
     ftype = flag_def.get("type", "str")
-    type_map = {"str": "str", "bool": "bool", "int": "int", "float": "float"}
-    parts.append(f"type={type_map[ftype]}")
+    scalar_type_map = {"str": "str", "bool": "bool", "int": "int", "float": "float"}
+    compound_type_map = {
+        "list[str]": "list[str]", "list[int]": "list[int]", "list[float]": "list[float]",
+        "dict[str,str]": "dict[str, str]", "dict[str,int]": "dict[str, int]",
+        "dict[str,float]": "dict[str, float]",
+    }
+    if ftype in compound_type_map:
+        parts.append(f"type={compound_type_map[ftype]}")
+    else:
+        parts.append(f"type={scalar_type_map[ftype]}")
     parts.append(f"help={flag_def['help']!r}")
 
     if "short" in flag_def:
@@ -156,16 +164,21 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     for f in all_flags:
         pname = _flag_param(f["name"])
         ftype = f.get("type", "str")
-        if f.get("repeatable", False):
+        if ftype.startswith("list["):
+            # List compound type: print comma-separated
+            lines.append(
+                f"    _parts[{f['name']!r}] = ','.join(str(x) for x in {pname})"
+            )
+        elif ftype.startswith("dict["):
+            # Dict compound type: print key=value pairs comma-separated
+            lines.append(
+                f"    _parts[{f['name']!r}] = ','.join(f'{{k}}={{v}}' for k, v in {pname}.items())"
+            )
+        elif f.get("repeatable", False):
             # For repeatable, print comma-separated values
-            if ftype == "int":
-                lines.append(
-                    f"    _parts[{f['name']!r}] = ','.join(str(x) for x in {pname})"
-                )
-            else:
-                lines.append(
-                    f"    _parts[{f['name']!r}] = ','.join(str(x) for x in {pname})"
-                )
+            lines.append(
+                f"    _parts[{f['name']!r}] = ','.join(str(x) for x in {pname})"
+            )
         elif ftype == "bool":
             lines.append(
                 f"    _parts[{f['name']!r}] = 'true' if {pname} else 'false'"
@@ -174,9 +187,14 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
             lines.append(f"    _parts[{f['name']!r}] = str({pname})")
 
     for a in cmd_def.get("args", []):
+        atype = a.get("type", "str")
         if a.get("variadic", False):
             # Variadic: value is a list, print comma-separated
             lines.append(f"    _parts[{a['name']!r}] = ','.join(str(x) for x in {a['name']})")
+        elif atype == "bool":
+            lines.append(
+                f"    _parts[{a['name']!r}] = 'true' if {a['name']} else 'false'"
+            )
         else:
             lines.append(f"    _parts[{a['name']!r}] = str({a['name']})")
 
@@ -244,12 +262,22 @@ def _emit_command_registration(
             arg_exprs = []
             for a in cmd_def["args"]:
                 aparts = [f"name={a['name']!r}", f"help={a['help']!r}"]
+                atype = a.get("type", "str")
+                if atype != "str":
+                    type_map = {"bool": "bool", "int": "int", "float": "float"}
+                    aparts.append(f"type={type_map[atype]}")
                 if "required" in a:
                     aparts.append(f"required={a['required']!r}")
                 if "default" in a:
                     aparts.append(f"default={a['default']!r}")
                 if a.get("variadic", False):
                     aparts.append("variadic=True")
+                if "choices_str" in a:
+                    aparts.append(f"choices={a['choices_str']!r}")
+                if "choices_int" in a:
+                    aparts.append(f"choices={a['choices_int']!r}")
+                if "choices_float" in a:
+                    aparts.append(f"choices={a['choices_float']!r}")
                 arg_exprs.append(f"strictcli.Arg({', '.join(aparts)})")
             lines.append(
                 f"{indent}    args=[{', '.join(arg_exprs)}],"
@@ -326,12 +354,22 @@ def _emit_command_registration(
         arg_exprs = []
         for a in cmd_def["args"]:
             aparts = [f"name={a['name']!r}", f"help={a['help']!r}"]
+            atype = a.get("type", "str")
+            if atype != "str":
+                type_map = {"bool": "bool", "int": "int", "float": "float"}
+                aparts.append(f"type={type_map[atype]}")
             if "required" in a:
                 aparts.append(f"required={a['required']!r}")
             if "default" in a:
                 aparts.append(f"default={a['default']!r}")
             if a.get("variadic", False):
                 aparts.append("variadic=True")
+            if "choices_str" in a:
+                aparts.append(f"choices={a['choices_str']!r}")
+            if "choices_int" in a:
+                aparts.append(f"choices={a['choices_int']!r}")
+            if "choices_float" in a:
+                aparts.append(f"choices={a['choices_float']!r}")
             arg_exprs.append(f"strictcli.Arg({', '.join(aparts)})")
         decorator_parts.append(
             f"{indent}    args=[{', '.join(arg_exprs)}],"
@@ -381,14 +419,29 @@ def _emit_command_registration(
         cf_list = repr(cmd_def["config_fields"])
         decorator_parts.append(f"{indent}    config_fields={cf_list},")
 
+    # hidden
+    if cmd_def.get("hidden", False):
+        decorator_parts.append(f"{indent}    hidden=True,")
+
+    # interactive
+    if cmd_def.get("interactive", False):
+        decorator_parts.append(f"{indent}    interactive=True,")
+
     decorator_parts.append(f"{indent})")
 
     # Flag decorators (for direct flags)
+    compound_type_map = {
+        "list[str]": "list[str]", "list[int]": "list[int]", "list[float]": "list[float]",
+        "dict[str,str]": "dict[str, str]", "dict[str,int]": "dict[str, int]",
+        "dict[str,float]": "dict[str, float]",
+    }
     flag_decorators = []
     for f in cmd_def.get("flags", []):
         fd_parts = [f"{f['name']!r}"]
         ftype = f.get("type", "str")
-        if ftype != "str":
+        if ftype in compound_type_map:
+            fd_parts.append(f"type={compound_type_map[ftype]}")
+        elif ftype != "str":
             fd_parts.append(f"type={ftype}")
         fd_parts.append(f"help={f['help']!r}")
         if "short" in f:
@@ -544,8 +597,11 @@ def generate(app_def: dict) -> str:
         if group_def.get("tags"):
             tag_set = ", ".join(repr(t) for t in group_def["tags"])
             tags_arg = f", tags={{{tag_set}}}"
+        hidden_arg = ""
+        if group_def.get("hidden", False):
+            hidden_arg = ", hidden=True"
         lines.append(
-            f"{indent}{gvar} = {parent_var}.group({group_def['name']!r}, help={group_def['help']!r}{tags_arg})"
+            f"{indent}{gvar} = {parent_var}.group({group_def['name']!r}, help={group_def['help']!r}{tags_arg}{hidden_arg})"
         )
         lines.append("")
         for cmd_def in group_def.get("commands", []):
