@@ -12,3 +12,4 @@
 {"commits":["2c28328692198fb90abe5e05239e6df8171cd30a"],"user_facing":true,"description":"**Fix.** Go error message says `float` instead of `float64` for cross-language parity.","type":"fix","packages":["go-strictcli"]}
 {"commits":["e70d2a7d8bc07ae38862f54303f689a13f1e9cd7"],"user_facing":true,"description":"**Fix.** Align Go config field name regex and test assertions with Python parity.","type":"fix","packages":["go-strictcli"]}
 {"commits":["0c02e27acc1da308b2dde4f197a8e47746cdd1b2","8f4d115c89113f9ead7adff7e145675e49140917"],"user_facing":false,"packages":["go-strictcli"]}
+{"commits":["0805046fd7b3e0d7bea7e2861633043f5992968a","0753f347d22b76aa4199ddcbb5bf1ae3e3c7f624"],"user_facing":true,"description":"**New feature.** Optional `scope` field on check definitions for declarative pre-check context filtering, and `SetScopeAdapter()` method on App for registering scope transformation callbacks.","type":"feature","packages":["go-strictcli"]}
