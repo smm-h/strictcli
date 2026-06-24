@@ -1697,9 +1697,17 @@ func (a *App) doParse(argv []string) parseResult {
 
 	// Validate config fields for non-config subcommands
 	isConfigSubcommand := a.configEnabled && len(path) > 0 && path[0] == "config"
-	if a.configEnabled && !isConfigSubcommand && len(cmd.configFields) > 0 {
-		if errMsg := a.validateConfigFieldValues(cmd); errMsg != "" {
-			return parseResult{parseErr: errMsg}
+	if a.configEnabled && !isConfigSubcommand {
+		configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
+		if len(cmd.configFields) > 0 {
+			if errMsg := a.validateBoundConfigFields(cmd, configData); errMsg != "" {
+				return parseResult{parseErr: errMsg}
+			}
+		}
+		if len(a.configFields) > 0 {
+			if errMsg := a.validateUnknownConfigKeys(configData); errMsg != "" {
+				return parseResult{parseErr: errMsg}
+			}
 		}
 	}
 

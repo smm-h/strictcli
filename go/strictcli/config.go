@@ -578,7 +578,7 @@ func (a *App) registerConfigGroup() {
 				cf := a.configFields[name]
 				var value interface{}
 				var source string
-				if v, ok := configData[name]; ok {
+				if v, ok := nestedGet(configData, name); ok {
 					value = v
 					source = "config"
 				} else if cf.HasDefault && cf.Default != nil {
@@ -621,7 +621,7 @@ func (a *App) registerConfigGroup() {
 			cf := a.configFields[name]
 			var value interface{}
 			var source string
-			if v, ok := configData[name]; ok {
+			if v, ok := nestedGet(configData, name); ok {
 				value = v
 				source = "config"
 			} else if cf.HasDefault && cf.Default != nil {
@@ -715,11 +715,11 @@ func (a *App) registerConfigGroup() {
 
 		// --default: remove the key from config
 		if useDefault {
-			if _, ok := existing[key]; !ok {
+			if _, ok := nestedGet(existing, key); !ok {
 				fmt.Fprintf(os.Stderr, "config set: key '%s' not in config\n", key)
 				return 1
 			}
-			delete(existing, key)
+			nestedDelete(existing, key)
 			return writeConfigFile(existing, path, a.configFormat)
 		}
 
@@ -751,7 +751,7 @@ func (a *App) registerConfigGroup() {
 			case TypeStr:
 				typedValue = value
 			}
-			existing[key] = typedValue
+			nestedSet(existing, key, typedValue)
 			return writeConfigFile(existing, path, a.configFormat)
 		}
 
@@ -899,22 +899,17 @@ func (a *App) registerConfigGroup() {
 	})
 }
 
-// validateConfigFieldValues validates that bound config fields for a command
-// are present and have correct types in the config data. Also validates that
-// all keys in the config file are known (match a flag, config field, or
-// framework field).
+// validateBoundConfigFields validates that bound config fields for a command
+// are present and have correct types in the config data.
 // Returns an error message or empty string on success.
-func (a *App) validateConfigFieldValues(cmd *Command) string {
-	configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
-
-	// Validate bound required config fields are present with correct types
+func (a *App) validateBoundConfigFields(cmd *Command, configData map[string]interface{}) string {
 	for _, fieldName := range cmd.configFields {
 		cf, ok := a.configFields[fieldName]
 		if !ok {
 			// Should not happen — validated by validateConfigFieldBindings
 			continue
 		}
-		val, exists := configData[fieldName]
+		val, exists := nestedGet(configData, fieldName)
 		if !exists {
 			if cf.Required {
 				return fmt.Sprintf("required config field \"%s\" is missing from config file", fieldName)
@@ -926,30 +921,35 @@ func (a *App) validateConfigFieldValues(cmd *Command) string {
 			return fmt.Sprintf("config field \"%s\": %s", fieldName, errStr)
 		}
 	}
+	return ""
+}
 
-	// Validate no unknown keys
-	if len(configData) > 0 {
-		// Build set of all known keys: flags (using param names), config fields, framework fields
-		knownKeys := make(map[string]bool)
-		allFlags := a.collectAllFlags()
-		for _, f := range allFlags {
-			knownKeys[flagParamName(f.Name)] = true
-		}
-		for name := range a.configFields {
+// validateUnknownConfigKeys validates that all keys in the config file are known
+// (match a flag, config field, or framework field).
+// Returns an error message or empty string on success.
+func (a *App) validateUnknownConfigKeys(configData map[string]interface{}) string {
+	if len(configData) == 0 {
+		return ""
+	}
+	// Build set of all known keys: flags (using param names), config fields, framework fields
+	knownKeys := make(map[string]bool)
+	allFlags := a.collectAllFlags()
+	for _, f := range allFlags {
+		knownKeys[flagParamName(f.Name)] = true
+	}
+	for name := range a.configFields {
+		knownKeys[name] = true
+	}
+	if a.frameworkFields != nil {
+		for name := range a.frameworkFields {
 			knownKeys[name] = true
 		}
-		if a.frameworkFields != nil {
-			for name := range a.frameworkFields {
-				knownKeys[name] = true
-			}
-		}
-		for key := range configData {
-			if !knownKeys[key] {
-				return fmt.Sprintf("unknown key \"%s\" in config file", key)
-			}
+	}
+	for _, key := range collectNestedKeys(configData, "") {
+		if !knownKeys[key] {
+			return fmt.Sprintf("unknown key \"%s\" in config file", key)
 		}
 	}
-
 	return ""
 }
 
@@ -1044,41 +1044,13 @@ func (a *App) generateJSONTemplate(allFlags []Flag) string {
 		}
 	}
 
-	// Add config fields, nesting dot-names into objects
+	// Add config fields, nesting dot-names into objects via nestedSet
 	for _, name := range a.configFieldOrder {
 		cf := a.configFields[name]
-		if strings.Contains(name, ".") {
-			// Nest into objects
-			parts := strings.Split(name, ".")
-			current := result
-			for i, part := range parts {
-				if i == len(parts)-1 {
-					if cf.HasDefault && cf.Default != nil {
-						current[part] = cf.Default
-					} else {
-						current[part] = nil
-					}
-				} else {
-					if sub, ok := current[part]; ok {
-						if subMap, ok := sub.(map[string]interface{}); ok {
-							current = subMap
-						} else {
-							// Conflict: key already exists as non-object
-							break
-						}
-					} else {
-						subMap := make(map[string]interface{})
-						current[part] = subMap
-						current = subMap
-					}
-				}
-			}
+		if cf.HasDefault && cf.Default != nil {
+			nestedSet(result, name, cf.Default)
 		} else {
-			if cf.HasDefault && cf.Default != nil {
-				result[name] = cf.Default
-			} else {
-				result[name] = nil
-			}
+			nestedSet(result, name, nil)
 		}
 	}
 

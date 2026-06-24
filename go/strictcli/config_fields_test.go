@@ -558,21 +558,44 @@ func TestConfigFieldValidationConfigSubcommandExempt(t *testing.T) {
 	}
 }
 
-func TestConfigFieldValidationNoConfigFieldsSkipsValidation(t *testing.T) {
+func TestConfigFieldValidationNoConfigFieldsSkipsBoundValidation(t *testing.T) {
 	dir := t.TempDir()
 	configFile := dir + "/config.json"
-	os.WriteFile(configFile, []byte(`{"random_key": true}`), 0o644)
+	// api_key is missing from config — but since the command doesn't bind it,
+	// bound-field validation is skipped. No unknown keys either.
+	os.WriteFile(configFile, []byte(`{"api_key": "present"}`), 0o644)
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("api_key", ConfigFieldHelp("API key"))
-	// Command has no config fields bound — validation should not run
+	// Command has no config fields bound — bound validation should not run
 	app.Command("status", "Show status", func(args map[string]interface{}) int {
 		return 0
 	})
 
 	r := app.Test([]string{"status"})
 	if r.ExitCode != 0 {
-		t.Fatalf("no config fields bound — should skip validation, got exit %d. stderr: %s", r.ExitCode, r.Stderr)
+		t.Fatalf("no config fields bound — should skip bound validation, got exit %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationUnknownKeyStillCheckedWhenNoBinding(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"random_key": true}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
+	// Command has no config fields bound, but app-wide unknown-key check still runs
+	app.Command("status", "Show status", func(args map[string]interface{}) int {
+		return 0
+	})
+
+	r := app.Test([]string{"status"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1 for unknown key, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown key") || !strings.Contains(r.Stderr, "random_key") {
+		t.Fatalf("expected unknown key error, got: %s", r.Stderr)
 	}
 }
 
@@ -956,5 +979,254 @@ func TestSchemaNoConfigFieldsWhenNoneDeclared(t *testing.T) {
 
 	if _, ok := schema["config_fields"]; ok {
 		t.Fatal("expected no config_fields key when none are declared")
+	}
+}
+
+// === Nested (dot-name) config field tests ===
+
+func TestConfigFieldValidationNestedJSONRequired(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"server": {"host": "localhost"}}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"))
+	app.Command("serve", "Start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("server.host"))
+
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0 (nested field present), got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationNestedJSONMissing(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"))
+	app.Command("serve", "Start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("server.host"))
+
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1 (required nested field missing), got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "required config field") || !strings.Contains(r.Stderr, "server.host") {
+		t.Fatalf("expected missing field error for server.host, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationNestedJSONTypeMismatch(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"server": {"port": "not-a-number"}}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt))
+	app.Command("serve", "Start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("server.port"))
+
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config field") || !strings.Contains(r.Stderr, "server.port") {
+		t.Fatalf("expected type mismatch error for server.port, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigFieldValidationNestedJSONUnknownKey(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"server": {"host": "localhost", "bogus": "value"}}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"))
+	app.Command("serve", "Start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("server.host"))
+
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit code 1 for unknown nested key, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown key") || !strings.Contains(r.Stderr, "server.bogus") {
+		t.Fatalf("expected unknown key error for server.bogus, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigSetNestedField(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
+
+	r := app.Test([]string{"config", "set", "server.host", "example.com"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	content := string(data)
+	// Should have nested structure: {"server": {"host": "example.com"}}
+	if !strings.Contains(content, "example.com") {
+		t.Fatalf("expected example.com in config file, got: %s", content)
+	}
+	if !strings.Contains(content, "server") {
+		t.Fatalf("expected nested 'server' key in config file, got: %s", content)
+	}
+}
+
+func TestConfigSetDefaultNestedField(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"server": {"host": "example.com", "port": 9090}}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
+	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
+
+	r := app.Test([]string{"config", "set", "server.host", "--default"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	content := string(data)
+	// server.host should be removed; server.port should remain
+	if strings.Contains(content, "example.com") {
+		t.Fatalf("expected server.host to be removed, got: %s", content)
+	}
+	if !strings.Contains(content, "9090") {
+		t.Fatalf("expected server.port to remain, got: %s", content)
+	}
+}
+
+func TestConfigSetDefaultNestedFieldCleansEmptyParent(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"server": {"host": "example.com"}}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
+
+	r := app.Test([]string{"config", "set", "server.host", "--default"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	content := string(data)
+	// Both server.host and the empty server parent should be gone
+	if strings.Contains(content, "server") {
+		t.Fatalf("expected empty parent 'server' to be cleaned up, got: %s", content)
+	}
+}
+
+func TestConfigShowNestedFieldPlain(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"server": {"host": "example.com"}}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
+
+	r := app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "server.host = example.com") {
+		t.Fatalf("expected nested field value in plain output, got: %s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "source: config") {
+		t.Fatalf("expected source: config, got: %s", r.Stdout)
+	}
+}
+
+func TestConfigShowNestedFieldJSON(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"server": {"host": "example.com"}}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
+
+	r := app.Test([]string{"config", "show", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, `"server.host"`) {
+		t.Fatalf("expected server.host key in JSON output, got: %s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, `"example.com"`) {
+		t.Fatalf("expected example.com in JSON output, got: %s", r.Stdout)
+	}
+}
+
+func TestConfigShowNestedFieldDefaultFallback(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
+
+	r := app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "server.host = localhost") {
+		t.Fatalf("expected default value in output, got: %s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "source: default") {
+		t.Fatalf("expected source: default, got: %s", r.Stdout)
+	}
+}
+
+func TestConfigFieldValidationDeepNestedJSON(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"database": {"primary": {"host": "db.example.com"}}}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("database.primary.host", ConfigFieldHelp("Primary database host"))
+	app.Command("serve", "Start server", func(args map[string]interface{}) int {
+		return 0
+	}, WithConfigFields("database.primary.host"))
+
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0 (deep nested field present), got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigSetDeepNestedField(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.ConfigField("database.primary.host", ConfigFieldHelp("Primary database host"), ConfigFieldDefault("localhost"))
+
+	r := app.Test([]string{"config", "set", "database.primary.host", "db.example.com"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	data, _ := os.ReadFile(configFile)
+	content := string(data)
+	if !strings.Contains(content, "db.example.com") {
+		t.Fatalf("expected db.example.com in config file, got: %s", content)
+	}
+	if !strings.Contains(content, "database") {
+		t.Fatalf("expected nested 'database' key in config file, got: %s", content)
 	}
 }
