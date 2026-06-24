@@ -2,16 +2,22 @@
 
 # Changelog
 
-## 0.16.1
+## 0.16.2
 
-Config field parity fixes and error message alignment with Python.
+Check command help text parity with Python.
 
 <details>
 <summary>Context</summary>
 
-Fixes config field operations for dot-name fields (nested TOML/JSON), aligns schema format (dict keyed by name, bound_commands), config show output (JSON metadata, plain section header), and error messages with Python. Splits config field validation into bound-field and unknown-key checks with correct gates. Adds 30 conformance test cases for typed args, compound types, visibility, and config fields.
+Aligned all 9 check command help strings (command + 8 flags) between Go and Python for cross-language parity. All strings now meet the 50-character minimum.
 
 </details>
+
+### Fixes
+
+- **Fix.** Aligned check command help text between Python and Go for cross-language parity.
+
+## 0.16.1
 
 ### Fixes
 
