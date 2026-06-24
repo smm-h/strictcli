@@ -172,12 +172,12 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 
 	// Validate name format
 	if !configFieldNameRe.MatchString(name) {
-		panic(fmt.Sprintf("config field %q: invalid name, must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_])* (lowercase, dots for sections)", name))
+		panic(fmt.Sprintf("ConfigField name %q is invalid: must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)* (lowercase, dots for sections)", name))
 	}
 
 	// Names starting with _ are reserved for framework fields
 	if strings.HasPrefix(name, "_") {
-		panic(fmt.Sprintf("config field %q: names starting with '_' are reserved for framework use", name))
+		panic(fmt.Sprintf("config field name %q is reserved: names starting with underscore are reserved for framework fields", name))
 	}
 
 	// Validate help is non-empty
@@ -190,7 +190,7 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 	case TypeStr, TypeBool, TypeInt, TypeFloat:
 		// ok
 	default:
-		panic(fmt.Sprintf("config field %q: type must be str, bool, int, or float, got %d", name, cf.Type))
+		panic(fmt.Sprintf("ConfigField.type must be str, bool, int, or float, got %d", cf.Type))
 	}
 
 	// Validate default matches type
@@ -203,11 +203,11 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 		a.configFields = make(map[string]*ConfigField)
 	}
 	if _, ok := a.configFields[name]; ok {
-		panic(fmt.Sprintf("config field %q: duplicate name", name))
+		panic(fmt.Sprintf("duplicate config field name %q", name))
 	}
 	if a.frameworkFields != nil {
 		if _, ok := a.frameworkFields[name]; ok {
-			panic(fmt.Sprintf("config field %q: duplicate name (conflicts with framework field)", name))
+			panic(fmt.Sprintf("config field name %q conflicts with framework field", name))
 		}
 	}
 
@@ -219,11 +219,11 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 // Framework fields use underscore-prefixed names and are not exposed to users.
 func (a *App) registerFrameworkField(name string, fieldType FlagType, help string) {
 	if !strings.HasPrefix(name, "_") {
-		panic(fmt.Sprintf("framework field %q: name must start with '_'", name))
+		panic(fmt.Sprintf("framework field name %q must start with underscore", name))
 	}
 
 	if !configFieldNameRe.MatchString(name) {
-		panic(fmt.Sprintf("framework field %q: invalid name, must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_])* (lowercase, dots for sections)", name))
+		panic(fmt.Sprintf("framework field %q: invalid name, must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)* (lowercase, dots for sections)", name))
 	}
 
 	if strings.TrimSpace(help) == "" {
@@ -234,18 +234,18 @@ func (a *App) registerFrameworkField(name string, fieldType FlagType, help strin
 	case TypeStr, TypeBool, TypeInt, TypeFloat:
 		// ok
 	default:
-		panic(fmt.Sprintf("framework field %q: type must be str, bool, int, or float, got %d", name, fieldType))
+		panic(fmt.Sprintf("ConfigField.type must be str, bool, int, or float, got %d", fieldType))
 	}
 
 	if a.frameworkFields == nil {
 		a.frameworkFields = make(map[string]*ConfigField)
 	}
 	if _, ok := a.frameworkFields[name]; ok {
-		panic(fmt.Sprintf("framework field %q: duplicate name", name))
+		panic(fmt.Sprintf("duplicate framework field name %q", name))
 	}
 	if a.configFields != nil {
 		if _, ok := a.configFields[name]; ok {
-			panic(fmt.Sprintf("framework field %q: duplicate name (conflicts with user field)", name))
+			panic(fmt.Sprintf("framework field name %q conflicts with user config field", name))
 		}
 	}
 
@@ -265,19 +265,19 @@ func validateConfigFieldDefault(name string, fieldType FlagType, value interface
 	switch fieldType {
 	case TypeStr:
 		if _, ok := value.(string); !ok {
-			panic(fmt.Sprintf("config field %q: default value type mismatch, expected str, got %s", name, describeGoType(value)))
+			panic(fmt.Sprintf("ConfigField %q: default value %v does not match type %s", name, value, "str"))
 		}
 	case TypeBool:
 		if _, ok := value.(bool); !ok {
-			panic(fmt.Sprintf("config field %q: default value type mismatch, expected bool, got %s", name, describeGoType(value)))
+			panic(fmt.Sprintf("ConfigField %q: default value %v does not match type %s", name, value, "bool"))
 		}
 	case TypeInt:
 		if _, ok := value.(int); !ok {
-			panic(fmt.Sprintf("config field %q: default value type mismatch, expected int, got %s", name, describeGoType(value)))
+			panic(fmt.Sprintf("ConfigField %q: default value %v does not match type %s", name, value, "int"))
 		}
 	case TypeFloat:
 		if _, ok := value.(float64); !ok {
-			panic(fmt.Sprintf("config field %q: default value type mismatch, expected float, got %s", name, describeGoType(value)))
+			panic(fmt.Sprintf("ConfigField %q: default value %v does not match type %s", name, value, "float"))
 		}
 	}
 }
@@ -349,13 +349,25 @@ func loadConfig(appName string, pathOverride string, format string) map[string]i
 
 // coerceConfigScalar coerces a single JSON-decoded value to the given flag type.
 // Returns the coerced value and an error string (empty on success).
-func coerceConfigScalar(value interface{}, flagType FlagType) (interface{}, string) {
+// When shortNames is true (config field validation path), uses short type names
+// ("bool", "int", "str", "float") to match Python's _check_config_field_type.
+// When shortNames is false (flag coercion path), uses long type names
+// ("boolean", "integer", "string", "float") to match Python's _coerce_config_scalar.
+func coerceConfigScalar(value interface{}, flagType FlagType, shortNames bool) (interface{}, string) {
+	if shortNames {
+		return coerceConfigScalarShort(value, flagType)
+	}
+	return coerceConfigScalarLong(value, flagType)
+}
+
+// coerceConfigScalarLong uses long type names for the flag coercion path.
+func coerceConfigScalarLong(value interface{}, flagType FlagType) (interface{}, string) {
 	switch flagType {
 	case TypeBool:
 		if b, ok := value.(bool); ok {
 			return b, ""
 		}
-		return nil, fmt.Sprintf("expected bool, got %s", typeName(value))
+		return nil, fmt.Sprintf("expected boolean, got %s", typeName(value))
 	case TypeInt:
 		// TOML integers decode as int64; JSON numbers decode as float64
 		if val, ok := value.(int64); ok {
@@ -387,6 +399,45 @@ func coerceConfigScalar(value interface{}, flagType FlagType) (interface{}, stri
 	return nil, fmt.Sprintf("unsupported flag type %d", flagType)
 }
 
+// coerceConfigScalarShort uses short type names for the config field validation path.
+func coerceConfigScalarShort(value interface{}, flagType FlagType) (interface{}, string) {
+	switch flagType {
+	case TypeBool:
+		if b, ok := value.(bool); ok {
+			return b, ""
+		}
+		return nil, fmt.Sprintf("expected bool, got %s", typeName(value))
+	case TypeInt:
+		// TOML integers decode as int64; JSON numbers decode as float64
+		if val, ok := value.(int64); ok {
+			return int(val), ""
+		}
+		if fv, ok := value.(float64); ok {
+			intVal := int(fv)
+			if float64(intVal) == fv {
+				return intVal, ""
+			}
+			return nil, "expected int, got float"
+		}
+		return nil, fmt.Sprintf("expected int, got %s", typeName(value))
+	case TypeFloat:
+		// TOML integers decode as int64; JSON numbers decode as float64
+		if val, ok := value.(int64); ok {
+			return float64(val), ""
+		}
+		if fv, ok := value.(float64); ok {
+			return fv, ""
+		}
+		return nil, fmt.Sprintf("expected float, got %s", typeName(value))
+	case TypeStr:
+		if s, ok := value.(string); ok {
+			return s, ""
+		}
+		return nil, fmt.Sprintf("expected str, got %s", typeName(value))
+	}
+	return nil, fmt.Sprintf("unsupported flag type %d", flagType)
+}
+
 // coerceConfigValue coerces a JSON-decoded value to the flag's type.
 // Handles scalar values, arrays (for repeatable/list flags), and objects (for dict flags).
 // Returns the coerced value and an error string (empty on success).
@@ -400,7 +451,7 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 		valType := ItemType(f.Type)
 		result := make(map[string]interface{}, len(m))
 		for k, v := range m {
-			coerced, errStr := coerceConfigScalar(v, valType)
+			coerced, errStr := coerceConfigScalar(v, valType, false)
 			if errStr != "" {
 				return nil, fmt.Sprintf("key %q: expected %s, got %s", k, flagTypeName[valType], typeName(v))
 			}
@@ -417,7 +468,7 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 		elemType := ItemType(f.Type)
 		result := make([]interface{}, len(arr))
 		for i, elem := range arr {
-			coerced, errStr := coerceConfigScalar(elem, elemType)
+			coerced, errStr := coerceConfigScalar(elem, elemType, false)
 			if errStr != "" {
 				return nil, fmt.Sprintf("element %d: expected %s, got %s", i, flagTypeName[elemType], typeName(elem))
 			}
@@ -431,7 +482,7 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 		}
 		result := make([]interface{}, len(arr))
 		for i, elem := range arr {
-			coerced, errStr := coerceConfigScalar(elem, f.Type)
+			coerced, errStr := coerceConfigScalar(elem, f.Type, false)
 			if errStr != "" {
 				return nil, fmt.Sprintf("element %d: expected %s, got %s", i, flagTypeName[f.Type], typeName(elem))
 			}
@@ -442,7 +493,7 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 	if f.Repeatable {
 		return nil, fmt.Sprintf("expected array for repeatable flag, got %s", typeName(value))
 	}
-	return coerceConfigScalar(value, f.Type)
+	return coerceConfigScalar(value, f.Type, false)
 }
 
 // typeName returns a human-readable type name for a config-decoded value.
@@ -934,7 +985,7 @@ func (a *App) validateBoundConfigFields(cmd *Command, configData map[string]inte
 			continue
 		}
 		// Validate type
-		if _, errStr := coerceConfigScalar(val, cf.Type); errStr != "" {
+		if _, errStr := coerceConfigScalar(val, cf.Type, true); errStr != "" {
 			return fmt.Sprintf("config field \"%s\": %s", fieldName, errStr)
 		}
 	}

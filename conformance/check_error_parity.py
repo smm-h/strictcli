@@ -30,6 +30,8 @@ GO_CHECK_RUNNER = PROJECT_ROOT / "go" / "strictcli" / "check_runner.go"
 GO_CHECK_PUBLIC = PROJECT_ROOT / "go" / "strictcli" / "check_public.go"
 GO_TAGDSL = PROJECT_ROOT / "go" / "strictcli" / "tagdsl.go"
 GO_CONFIG = PROJECT_ROOT / "go" / "strictcli" / "config.go"
+GO_ROUTING = PROJECT_ROOT / "go" / "strictcli" / "routing.go"
+GO_INVOKE = PROJECT_ROOT / "go" / "strictcli" / "invoke.go"
 CASES_DIR = CONFORMANCE_DIR / "cases"
 
 # ---------------------------------------------------------------------------
@@ -107,6 +109,102 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # Python validates repeatable default element types generically
     'Flag *: default element * is not of type *':
         "Go validates default elements with type-specific messages (str/int/float)",
+    # --- Compound type structural differences ---
+    # Python uses generic {context}: patterns for compound type validation
+    # (Flag/Arg prefix merged into context); Go uses typed constructors with
+    # entity-specific messages (ListOf, DictOf, separate Arg vs Flag paths).
+    '*: dict key type must be str, got *':
+        "Python generic {context}: pattern; Go uses DictOf typed constructor",
+    '*: dict type requires type arguments (e.g., dict[str, int]), got bare dict':
+        "Python generic {context}: pattern; Go uses DictOf typed constructor",
+    '*: dict type takes exactly two type arguments, got *':
+        "Python generic {context}: pattern; Go uses DictOf typed constructor",
+    '*: dict value type must be str, int, or float, got *':
+        "Python generic {context}: pattern; Go uses DictOf typed constructor",
+    '*: list item type must be str, int, or float, got *':
+        "Python generic {context}: pattern; Go uses ListOf typed constructor",
+    '*: list type requires an item type (e.g., list[int]), got bare list':
+        "Python generic {context}: pattern; Go uses ListOf typed constructor",
+    '*: list type takes exactly one type argument, got *':
+        "Python generic {context}: pattern; Go uses ListOf typed constructor",
+    '*: type must be str, bool, int, float, list[T], or dict[str, T], got *':
+        "Python generic {context}: pattern; Go uses separate typed constructors",
+    # Python has typed {context} validation for Flag compound type checks
+    'Flag *: * is not of type float':
+        "Python generic {context} pattern; Go uses typed constructors with separate messages",
+    'Flag *: * is not of type int':
+        "Python generic {context} pattern; Go uses typed constructors with separate messages",
+    'Flag *: * is not of type str':
+        "Python generic {context} pattern; Go uses typed constructors with separate messages",
+    # --- Dict/list parse-time messages ---
+    # Python dict flag parsing uses JSON-based key=value and JSON object parsing.
+    # Go handles dict parsing differently with type-specific coercion in parse.go.
+    '--*: JSON key must be a string, got *':
+        "Python dict flag JSON parsing; Go handles via typed coercion in parse.go",
+    '--*: JSON value for key * must be a number, got *':
+        "Python dict flag JSON value validation; Go handles via typed coercion",
+    '--*: JSON value for key * must be a string, got *':
+        "Python dict flag JSON value validation; Go handles via typed coercion",
+    '--*: JSON value for key * must be an integer, got *':
+        "Python dict flag JSON value validation; Go handles via typed coercion",
+    '--*: JSON value must be an object, got *':
+        "Python dict flag JSON object validation; Go handles via typed coercion",
+    '--*: duplicate key *':
+        "Python dict flag duplicate key detection; Go handles via map overwrite",
+    '--*: empty key in *':
+        "Python dict flag empty key validation; Go handles differently",
+    '--*: env var * must be a JSON object, got *':
+        "Python dict flag env var validation; Go handles via typed coercion",
+    '--*: expected key=value or JSON, got *':
+        "Python dict flag format validation; Go handles via typed coercion",
+    '--*: invalid JSON in env var *: *':
+        "Python dict flag JSON parse error; Go handles via typed coercion",
+    '--*: invalid JSON: *':
+        "Python dict flag JSON parse error; Go handles via typed coercion",
+    '--*: unsupported value type *':
+        "Python dict flag unsupported type; Go handles via typed constructors",
+    '--*: value for key *: *':
+        "Python dict flag per-key value error; Go handles via typed coercion",
+    # --- Arg compound type messages ---
+    # Python uses same compound type validation for Arg as for Flag;
+    # Go has separate Arg-specific messages with different wording.
+    'Arg *: choice * is not of type *':
+        "Go validates Arg choices with type-specific messages (str/int/float)",
+    'Arg *: default * is not in choices *':
+        "Python f-string normalizes without brackets; Go counterpart uses [%s]",
+    'Arg *: dict type is not supported on args':
+        "Go uses 'positional arguments' wording instead of 'args'",
+    'Arg *: list item type must be str, int, or float, got *':
+        "Python includes 'got' clause; Go omits it",
+    'Arg *: list type on args requires variadic=True':
+        "Go uses lowercase variadic=true; Python uses variadic=True",
+    'Arg *: list type requires an item type (e.g., list[int]), got bare list':
+        "Python includes full example; Go has different wording",
+    'Arg *: list type takes exactly one type argument, got *':
+        "Python generic pattern; Go has different wording",
+    # --- Flag compound type Python-only messages ---
+    # Python validates flag compound types with wording that doesn't match Go.
+    'Flag *: dict default key * must be a string':
+        "Python validates dict default keys; Go uses typed map[string]interface{} assertion",
+    'Flag *: dict flag default must be a dict':
+        "Python uses 'dict'; Go uses 'map[string]interface{}'",
+    'Flag *: dict type cannot be combined with choices':
+        "Go uses 'choices is incompatible with compound types (list/dict)'",
+    'Flag *: dict type cannot be combined with repeatable=True':
+        "Go forbids compound+repeatable differently; no direct counterpart",
+    'Flag *: dict type cannot be combined with unique':
+        "Go forbids compound+unique differently; no direct counterpart",
+    'Flag *: dict type cannot use env_separator (env vars are parsed as JSON)':
+        "Go validates list/env interaction differently; no direct counterpart",
+    'Flag.type must be str, bool, int, float, list[T], or dict[str, T], got *':
+        "Go uses typed constructors (ListOf/DictOf); no runtime type check needed",
+    # --- Typed arg parse-time messages ---
+    # Python's typed arg parsing produces 'argument' prefixed messages;
+    # Go uses different wording ('expected X, got Y' at parse level).
+    'argument *: *':
+        "Python generic 'argument' prefix wrapper; Go produces typed errors at parse level",
+    'argument *: expected float, got *':
+        "Python typed arg float parsing; Go handles at parse level with different prefix",
 }
 
 # Go-only: errors that have no Python counterpart by design
@@ -161,7 +259,75 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
     # Go has a plain-string return for non-whole float->int coercion in config;
     # Python covers this generically via 'expected integer, got *'
     'expected integer, got float':
-        "Go plain-string return in coerceConfigScalar; Python generic 'expected integer, got *'",
+        "Go plain-string return in coerceConfigScalarLong; Python generic 'expected integer, got *'",
+    # --- Compound type Go-only messages ---
+    # Go uses typed constructors (ListOf, DictOf) and entity-specific messages
+    # that don't exist in Python's generic {context}: pattern approach.
+    'Arg *: choice * is not of type float':
+        "Go type-specific Arg choice validation (Python uses generic pattern)",
+    'Arg *: choice * is not of type int':
+        "Go type-specific Arg choice validation (Python uses generic pattern)",
+    'Arg *: choice * is not of type str':
+        "Go type-specific Arg choice validation (Python uses generic pattern)",
+    'Arg *: choices is incompatible with list type':
+        "Go Arg-specific compound type restriction; Python validates differently",
+    'Arg *: default * is not in choices [*]':
+        "Go fmt.Sprintf with brackets; Python counterpart normalizes without brackets",
+    'Arg *: dict type is not supported on positional arguments':
+        "Go uses 'positional arguments' wording; Python uses 'args'",
+    'Arg *: list item type must be str, int, or float':
+        "Go omits 'got' clause; Python includes it",
+    'Arg *: list type requires variadic=true':
+        "Go uses lowercase variadic=true; Python uses variadic=True",
+    'DictOf: value type must be str, int, or float, got *':
+        "Go typed constructor validation; Python uses generic {context}: pattern",
+    'Flag *: choices is incompatible with compound types (list/dict)':
+        "Go Flag-specific compound type restriction; Python validates differently",
+    'Flag *: default element *: *':
+        "Go type-specific default element validation (Python uses generic pattern)",
+    'Flag *: default value for key *: *':
+        "Go type-specific dict default validation; Python validates generically",
+    'Flag *: dict flag default must be a map[string]interface{}':
+        "Go typed assertion for dict default; Python uses isinstance check",
+    'Flag *: explicit empty default is redundant for list flags, omit the default':
+        "Go-specific list flag default validation; Python handles differently",
+    'Flag *: list flag default must be a []interface{}':
+        "Go typed assertion for list default; Python uses isinstance check",
+    'ListOf: item type must be str, int, or float, got *':
+        "Go typed constructor validation; Python uses generic {context}: pattern",
+    # --- Config field Go-only messages ---
+    # Go has separate config field help text validation messages;
+    # Python uses generic _require_non_empty_str producing '*.* must be...'
+    'config field *: help text is required':
+        "Go entity-specific; Python generic '*.* must be a non-empty string'",
+    'framework field *: help text is required':
+        "Go entity-specific; Python generic '*.* must be a non-empty string'",
+    'framework field *: invalid name, must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)* (lowercase, dots for sections)':
+        "Go has separate framework field validation; Python uses ConfigField.__post_init__",
+    # --- Config field validation short-name errors ---
+    # coerceConfigScalarShort produces these without prefix; the caller
+    # (validateBoundConfigFields) wraps them with 'config field "X": ...'
+    # Python produces the wrapped form directly via _check_config_field_type.
+    'expected bool, got *':
+        "Go coerceConfigScalarShort raw return; Python wraps with 'config field' prefix",
+    'expected int, got *':
+        "Go coerceConfigScalarShort raw return; Python wraps with 'config field' prefix",
+    'expected int, got float':
+        "Go coerceConfigScalarShort raw return; Python wraps with 'config field' prefix",
+    'expected str, got *':
+        "Go coerceConfigScalarShort raw return; Python wraps with 'config field' prefix",
+    'expected array for list flag, got *':
+        "Go coerceConfigValue for ListType flags; Python uses 'repeatable flag'",
+    # --- Invoke/routing Go-only messages ---
+    'no command specified':
+        "Go routing returns error; Python shows help when no command given",
+    'passthrough command: _args must be []string':
+        "Go typed system requires []string assertion; Python uses duck typing",
+    'dict flag *: expected map type, got *':
+        "Go invoke coerceInvokeDict; Python uses isinstance with different message",
+    # --- List flag env separator ---
+    '--*: list flag with env requires env_separator':
+        "Go-specific list/env interaction validation; Python handles differently",
 }
 
 # Dead code: errors present in both implementations but unreachable at runtime.
@@ -197,6 +363,14 @@ COVERAGE_DEFERRED_EXCLUSIONS: dict[str, str] = {
         "Requires a >1MB fixture file, impractical for conformance suite",
     '--*: cannot read file: *':
         "Requires a file with restricted permissions, platform-dependent",
+    # Typed arg choices validation
+    'argument *: invalid value *, must be one of: *':
+        "Needs typed arg choices conformance test case",
+    # Invoke API errors (programmatic call, not CLI argv)
+    'unknown parameter * for command *':
+        "Invoke API error; needs programmatic call conformance test infrastructure",
+    'unknown parameter * for passthrough command *':
+        "Invoke API error; needs programmatic call conformance test infrastructure",
 }
 
 
@@ -323,6 +497,8 @@ def extract_go_errors(
     check_public_src: str,
     tagdsl_src: str,
     config_src: str,
+    routing_src: str,
+    invoke_src: str,
 ) -> list[tuple[str, str]]:
     """Extract (category, format_string) pairs from Go source.
 
@@ -330,7 +506,7 @@ def extract_go_errors(
     """
     results: list[tuple[str, str]] = []
 
-    # --- Registration errors from strictcli.go ---
+    # --- Registration errors from strictcli.go and config.go (panics) ---
 
     # panic(fmt.Sprintf("...", args)) -- allow whitespace/newlines before the quote
     panic_sprintf = re.compile(
@@ -338,12 +514,24 @@ def extract_go_errors(
     )
     for m in panic_sprintf.finditer(strictcli_src):
         results.append(("registration", m.group(1)))
+    for m in panic_sprintf.finditer(config_src):
+        results.append(("registration", m.group(1)))
 
     # panic("...")
     panic_plain = re.compile(
         r'panic\("((?:[^"\\]|\\.)*)"\)',
     )
     for m in panic_plain.finditer(strictcli_src):
+        results.append(("registration", m.group(1)))
+    for m in panic_plain.finditer(config_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Registration errors from strictcli.go (violations append pattern) ---
+    # violations = append(violations, fmt.Sprintf("...", args))
+    violations_sprintf = re.compile(
+        r'append\(violations,\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
+    )
+    for m in violations_sprintf.finditer(strictcli_src):
         results.append(("registration", m.group(1)))
 
     # --- Parse errors from parse.go ---
@@ -440,6 +628,33 @@ def extract_go_errors(
         r'return\s+nil,\s*"((?:[^"\\]|\\.)*)"',
     )
     for m in config_plain_err.finditer(config_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Parse errors from routing.go (struct literal err field) ---
+    # err: fmt.Sprintf("...", args) and err: "..."
+    struct_err_sprintf = re.compile(
+        r'err:\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
+    )
+    struct_err_plain = re.compile(
+        r'err:\s*"((?:[^"\\]|\\.)*)"',
+    )
+    for m in struct_err_sprintf.finditer(routing_src):
+        results.append(("parse", m.group(1)))
+    for m in struct_err_plain.finditer(routing_src):
+        results.append(("parse", m.group(1)))
+
+    # --- Parse errors from invoke.go (struct literal err field and returns) ---
+    for m in struct_err_sprintf.finditer(invoke_src):
+        results.append(("parse", m.group(1)))
+    for m in struct_err_plain.finditer(invoke_src):
+        fmt_str = m.group(1)
+        # Skip partial strings that are continued with + concatenation
+        # (e.g., "no command resolved from path: " + commandPath)
+        if fmt_str.endswith(": "):
+            continue
+        results.append(("parse", fmt_str))
+    # return nil, fmt.Sprintf("...", args) -- coerceInvokeDict
+    for m in parse_sprintf_2.finditer(invoke_src):
         results.append(("registration", m.group(1)))
 
     return results
@@ -555,6 +770,8 @@ def main() -> int:
     go_check_public_source = GO_CHECK_PUBLIC.read_text()
     go_tagdsl_source = GO_TAGDSL.read_text()
     go_config_source = GO_CONFIG.read_text()
+    go_routing_source = GO_ROUTING.read_text()
+    go_invoke_source = GO_INVOKE.read_text()
 
     # Extract raw error patterns
     py_raw = extract_python_errors(py_source)
@@ -562,7 +779,8 @@ def main() -> int:
         go_strictcli_source, go_parse_source,
         go_check_source, go_check_runner_source,
         go_check_public_source, go_tagdsl_source,
-        go_config_source,
+        go_config_source, go_routing_source,
+        go_invoke_source,
     )
 
     # Normalize to signatures

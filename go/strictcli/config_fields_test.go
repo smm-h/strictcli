@@ -142,28 +142,28 @@ func TestConfigFieldOptionalNilDefault(t *testing.T) {
 // --- Type mismatch in default (panic) ---
 
 func TestConfigFieldDefaultTypeMismatchStrGotInt(t *testing.T) {
-	expectPanic(t, "default value type mismatch", func() {
+	expectPanic(t, "does not match type", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("name", ConfigFieldHelp("Name"), ConfigFieldDefault(42))
 	})
 }
 
 func TestConfigFieldDefaultTypeMismatchIntGotStr(t *testing.T) {
-	expectPanic(t, "default value type mismatch", func() {
+	expectPanic(t, "does not match type", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("port", ConfigFieldHelp("Port"), ConfigFieldType(TypeInt), ConfigFieldDefault("8080"))
 	})
 }
 
 func TestConfigFieldDefaultTypeMismatchBoolGotStr(t *testing.T) {
-	expectPanic(t, "default value type mismatch", func() {
+	expectPanic(t, "does not match type", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("verbose", ConfigFieldHelp("Verbose"), ConfigFieldType(TypeBool), ConfigFieldDefault("true"))
 	})
 }
 
 func TestConfigFieldDefaultTypeMismatchFloatGotInt(t *testing.T) {
-	expectPanic(t, "default value type mismatch", func() {
+	expectPanic(t, "does not match type", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("rate", ConfigFieldHelp("Rate"), ConfigFieldType(TypeFloat), ConfigFieldDefault(42))
 	})
@@ -172,7 +172,7 @@ func TestConfigFieldDefaultTypeMismatchFloatGotInt(t *testing.T) {
 // --- Duplicate name (panic) ---
 
 func TestConfigFieldDuplicateName(t *testing.T) {
-	expectPanic(t, "duplicate name", func() {
+	expectPanic(t, "duplicate config field name", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("name", ConfigFieldHelp("First"))
 		app.ConfigField("name", ConfigFieldHelp("Second"))
@@ -182,14 +182,14 @@ func TestConfigFieldDuplicateName(t *testing.T) {
 // --- Underscore prefix reserved (panic) ---
 
 func TestConfigFieldUnderscorePrefix(t *testing.T) {
-	expectPanic(t, "reserved for framework use", func() {
+	expectPanic(t, "is reserved: names starting with underscore", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("_internal", ConfigFieldHelp("Should fail"))
 	})
 }
 
 func TestConfigFieldUnderscorePrefixWithDot(t *testing.T) {
-	expectPanic(t, "reserved for framework use", func() {
+	expectPanic(t, "is reserved: names starting with underscore", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("_schema.version", ConfigFieldHelp("Should fail"))
 	})
@@ -198,21 +198,21 @@ func TestConfigFieldUnderscorePrefixWithDot(t *testing.T) {
 // --- Invalid name format ---
 
 func TestConfigFieldInvalidNameUppercase(t *testing.T) {
-	expectPanic(t, "invalid name", func() {
+	expectPanic(t, "is invalid:", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("MyField", ConfigFieldHelp("Bad name"))
 	})
 }
 
 func TestConfigFieldInvalidNameStartsWithDigit(t *testing.T) {
-	expectPanic(t, "invalid name", func() {
+	expectPanic(t, "is invalid:", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("1field", ConfigFieldHelp("Bad name"))
 	})
 }
 
 func TestConfigFieldInvalidNameEmpty(t *testing.T) {
-	expectPanic(t, "invalid name", func() {
+	expectPanic(t, "is invalid:", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.ConfigField("", ConfigFieldHelp("Bad name"))
 	})
@@ -277,14 +277,14 @@ func TestFrameworkFieldAllTypes(t *testing.T) {
 }
 
 func TestFrameworkFieldNoUnderscorePrefix(t *testing.T) {
-	expectPanic(t, "name must start with '_'", func() {
+	expectPanic(t, "must start with underscore", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.registerFrameworkField("schema_version", TypeStr, "Should fail")
 	})
 }
 
 func TestFrameworkFieldDuplicate(t *testing.T) {
-	expectPanic(t, "duplicate name", func() {
+	expectPanic(t, "duplicate framework field name", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.registerFrameworkField("_ver", TypeStr, "First")
 		app.registerFrameworkField("_ver", TypeStr, "Second")
@@ -305,7 +305,7 @@ func TestConfigFieldConflictsWithFrameworkField(t *testing.T) {
 	// so we test the other direction: framework field conflicting with user field.
 	// Framework fields require _ prefix while user fields forbid it, so in practice
 	// the namespaces don't overlap. This test verifies the underscore reservation fires.
-	expectPanic(t, "reserved for framework use", func() {
+	expectPanic(t, "is reserved: names starting with underscore", func() {
 		app := NewApp("test", "1.0.0", "test app")
 		app.registerFrameworkField("_ver", TypeStr, "Version")
 		app.ConfigField("_ver", ConfigFieldHelp("Conflict"))
@@ -397,7 +397,7 @@ func TestWithConfigFieldsValidationAtRunTime(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "config field \"nonexistent\" is not declared") {
+	if !strings.Contains(r.Stderr, "config_fields references unknown config field \"nonexistent\"") {
 		t.Fatalf("expected undeclared config field error, got: %s", r.Stderr)
 	}
 }
@@ -444,7 +444,7 @@ func TestWithConfigFieldsInGroupUnknownField(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "config field \"ghost-field\" is not declared") {
+	if !strings.Contains(r.Stderr, "config_fields references unknown config field \"ghost-field\"") {
 		t.Fatalf("expected undeclared config field error, got: %s", r.Stderr)
 	}
 }
