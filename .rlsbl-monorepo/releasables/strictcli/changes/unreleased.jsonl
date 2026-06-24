@@ -9,3 +9,4 @@
 {"commits":["15d5073beac0380c3974550f26976730f438504f"],"user_facing":true,"description":"**Fix.** Validate unknown kwargs and enforce required globals in passthrough invoke path.","type":"fix","packages":["strictcli"]}
 {"commits":["1de42ffa52c6e63bc6db4727c76fff059078980a"],"user_facing":false,"packages":["strictcli"]}
 {"commits":["0c02e27acc1da308b2dde4f197a8e47746cdd1b2","299e4207bbb49347d54db9f3668d4bfa2f511a42","b085c1f63f118660de8c599e75dbc97a518bbb67","b0a403ac09981b175845176b2830837265e0cee0"],"user_facing":false,"packages":["strictcli"]}
+{"commits":["d6f8c02415b18dcdb0761b6c8f48f88c8d6aabdd","8f5423248f2fe11825c4b5a4c9e875b4ab015973"],"user_facing":true,"description":"**New feature.** Optional `scope` field on check definitions for declarative pre-check context filtering, and `set_scope_adapter()` method on App for registering scope transformation callbacks.","type":"feature","packages":["strictcli"]}
