@@ -138,6 +138,7 @@
       "properties": {
         "name": { "type": "string" },
         "help": { "type": "string" },
+        "hidden": { "type": "boolean", "default": false },
         "tags": {
           "type": "array",
           "items": { "type": "string" }
@@ -159,6 +160,12 @@
       "properties": {
         "name": { "type": "string" },
         "help": { "type": "string" },
+        "hidden": { "type": "boolean", "default": false },
+        "interactive": { "type": "boolean", "default": false },
+        "config_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "tags": {
           "type": "array",
           "items": { "type": "string" }
@@ -231,7 +238,10 @@
           "dependencies": false,
           "passthrough": false,
           "passthrough_handler_prints": false,
-          "tags": false
+          "tags": false,
+          "hidden": false,
+          "interactive": false,
+          "config_fields": false
         }
       }
     },

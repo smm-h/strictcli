@@ -54,6 +54,10 @@ PER_ENTITY_EXCLUSIONS: dict[str, set[str]] = {
     # not serializable to the schema (deprecated commands are declared via
     # command.deprecated/deprecated_message in test case definitions).
     "Group": {"env_prefix", "deprecated"},
+    # Python-only compound type fields. Go encodes compound types in the
+    # FlagType bitfield, so these have no Go or schema counterpart.
+    "Flag": {"compound", "item_type", "value_type"},
+    "Arg": {"compound", "item_type"},
 }
 
 # Schema fields that exist only for the test harness (not real API fields):
@@ -145,6 +149,7 @@ SCHEMA_TO_GO: dict[str, str] = {
     "command.mutex": "mutex",  # Go Command.mutex (unexported)
     "command.dependencies": "dependencies",  # Go Command.dependencies (unexported)
     "command.tags": "tags",  # Go Command.tags (unexported)
+    "command.config_fields": "configFields",  # Go Command.configFields (unexported)
     "group.tags": "tags",  # Go Group.tags (unexported)
     "group.commands": "Commands",  # Go Group.Commands (exported)
 }
@@ -458,6 +463,7 @@ def check_option_funcs_coverage(
         "WithConfigPath", "WithConfigFormat",
         "WithChecks", "WithChecksEmbed",
         "WithTags",
+        "WithHidden", "WithInteractive", "WithConfigFields",
         "Unique", "EnvSeparator",
     }
     actual = go_fields.get("_option_funcs", set())
