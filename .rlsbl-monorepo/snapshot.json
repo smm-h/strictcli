@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-13T20:56:44Z",
+  "generated_at": "2026-06-24T07:55:41Z",
   "package_count": 3,
   "packages": {
     "strictcli": {
@@ -15,7 +15,8 @@
         "conformance"
       ],
       "library": false,
-      "dev_node": false,
+      "dev_only": false,
+      "releasable_flag": true,
       "test_only": false
     },
     "go-strictcli": {
@@ -23,12 +24,13 @@
       "targets": [
         "go"
       ],
-      "version": "0.15.0",
+      "version": "0.16.0",
       "description": null,
       "deps": [],
       "rdeps": [],
       "library": false,
-      "dev_node": false,
+      "dev_only": false,
+      "releasable_flag": true,
       "test_only": false
     },
     "conformance": {
@@ -43,7 +45,8 @@
       ],
       "rdeps": [],
       "library": false,
-      "dev_node": true,
+      "dev_only": true,
+      "releasable_flag": false,
       "test_only": false
     }
   },
