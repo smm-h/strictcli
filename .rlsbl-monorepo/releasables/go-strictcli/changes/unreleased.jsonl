@@ -1,1 +1,1 @@
-{"commits":["41055551975a98e68c08b1d654cd09f4e78ac2a9"],"user_facing":false,"packages":["go-strictcli"]}
+{"commits":["41055551975a98e68c08b1d654cd09f4e78ac2a9"],"user_facing":false,"description":"**Improvement.** Expanded check command help text to be more descriptive.","type":"feature","packages":["go-strictcli"]}
