@@ -642,7 +642,7 @@ func (a *App) registerConfigGroup() {
 	))
 
 	// config set
-	grp.Command("set", "Set a persistent config value for a flag or config field", func(args map[string]interface{}) int {
+	grp.Command("set", "Set a persistent config value that overrides the default for a flag", func(args map[string]interface{}) int {
 		key := args["key"].(string)
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
@@ -825,7 +825,7 @@ func (a *App) registerConfigGroup() {
 		existing[key] = typedValue
 		return writeConfigFile(existing, path, a.configFormat)
 	}, WithArgs(
-		NewArg("key", "The config key to set, matching a registered flag or config field name"),
+		NewArg("key", "The config key to set, matching a registered flag name"),
 		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
 			ArgRequired(false)),
 	), WithFlags(
@@ -867,7 +867,7 @@ func (a *App) registerConfigGroup() {
 	}, WithInteractive())
 
 	// config init
-	grp.Command("init", "Generate a template config file with all known keys and helpful comments", func(args map[string]interface{}) int {
+	grp.Command("init", "Generate a template config file with documented fields and defaults", func(args map[string]interface{}) int {
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		if _, err := os.Stat(path); err == nil {
 			fmt.Fprintf(os.Stderr, "error: config file already exists: %s\n", path)
