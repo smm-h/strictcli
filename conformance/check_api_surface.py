@@ -76,6 +76,9 @@ SCHEMA_TEST_ONLY: set[str] = {
     # config_content provides inline config file content for test cases --
     # not a real App parameter (the test runner writes it to a temp file).
     "config_content",
+    # config_fields_def defines config field registrations in test cases --
+    # not a real App struct field (it drives code generation).
+    "config_fields_def",
 }
 
 # Per-entity schema fields that are JSON discriminators, not real API fields:
