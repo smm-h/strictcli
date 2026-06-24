@@ -550,13 +550,8 @@ func (a *App) registerConfigGroup() {
 		configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		allFlags := a.collectAllFlags()
 
-		type entry struct {
-			Source string      `json:"source"`
-			Value  interface{} `json:"value"`
-		}
-
 		if useJSON {
-			result := make(map[string]entry)
+			result := make(map[string]interface{})
 			for _, f := range allFlags {
 				param := flagParamName(f.Name)
 				var value interface{}
@@ -571,7 +566,10 @@ func (a *App) registerConfigGroup() {
 					value = nil
 					source = "default"
 				}
-				result[param] = entry{Value: value, Source: source}
+				result[param] = map[string]interface{}{
+					"value":  value,
+					"source": source,
+				}
 			}
 			// Include config fields
 			for _, name := range a.configFieldOrder {
@@ -581,14 +579,24 @@ func (a *App) registerConfigGroup() {
 				if v, ok := nestedGet(configData, name); ok {
 					value = v
 					source = "config"
-				} else if cf.HasDefault && cf.Default != nil {
+				} else if cf.HasDefault {
 					value = cf.Default
 					source = "default"
 				} else {
 					value = nil
-					source = "default"
+					source = "not set"
 				}
-				result[name] = entry{Value: value, Source: source}
+				cfEntry := map[string]interface{}{
+					"value":    value,
+					"source":   source,
+					"type":     flagTypeName[cf.Type],
+					"required": cf.Required,
+					"help":     cf.Help,
+				}
+				if cf.HasDefault {
+					cfEntry["default"] = cf.Default
+				}
+				result[name] = cfEntry
 			}
 			data, err := json.MarshalIndent(result, "", "  ")
 			if err != nil {
@@ -617,21 +625,30 @@ func (a *App) registerConfigGroup() {
 			fmt.Printf("%s = %v  (source: %s)\n", param, formatConfigValue(value), source)
 		}
 		// Include config fields
-		for _, name := range a.configFieldOrder {
-			cf := a.configFields[name]
-			var value interface{}
-			var source string
-			if v, ok := nestedGet(configData, name); ok {
-				value = v
-				source = "config"
-			} else if cf.HasDefault && cf.Default != nil {
-				value = cf.Default
-				source = "default"
-			} else {
-				value = nil
-				source = "default"
+		if len(a.configFieldOrder) > 0 {
+			fmt.Println()
+			fmt.Println("Config fields:")
+			for _, name := range a.configFieldOrder {
+				cf := a.configFields[name]
+				var value interface{}
+				var source string
+				if v, ok := nestedGet(configData, name); ok {
+					value = v
+					source = "config"
+				} else if cf.HasDefault {
+					value = cf.Default
+					source = "default"
+				} else {
+					value = nil
+					source = "not set"
+				}
+				reqStr := "required"
+				if !cf.Required {
+					reqStr = "optional"
+				}
+				fmt.Printf("  %s (%s, %s) = %v  (source: %s)  -- %s\n",
+					name, flagTypeName[cf.Type], reqStr, formatConfigValue(value), source, cf.Help)
 			}
-			fmt.Printf("%s = %v  (source: %s)\n", name, formatConfigValue(value), source)
 		}
 		return 0
 	}, WithMutex(

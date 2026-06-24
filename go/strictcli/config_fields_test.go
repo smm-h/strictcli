@@ -1,6 +1,7 @@
 package strictcli
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -614,15 +615,18 @@ func TestConfigShowIncludesConfigFields(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, "region = eu-west-1") {
+	if !strings.Contains(r.Stdout, "Config fields:") {
+		t.Fatalf("expected Config fields: header in output, got: %s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "region (str, optional) = eu-west-1  (source: config)  -- Region") {
 		t.Fatalf("expected region in output, got: %s", r.Stdout)
 	}
-	if !strings.Contains(r.Stdout, "source: config") {
-		t.Fatalf("expected source: config, got: %s", r.Stdout)
-	}
-	// api_key should show as nil/default since it's not in the file
-	if !strings.Contains(r.Stdout, "api_key") {
+	// api_key should show as not set since it's required and not in the file
+	if !strings.Contains(r.Stdout, "api_key (str, required)") {
 		t.Fatalf("expected api_key in output, got: %s", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "(source: not set)") {
+		t.Fatalf("expected source: not set for required field, got: %s", r.Stdout)
 	}
 }
 
@@ -633,16 +637,52 @@ func TestConfigShowJSONIncludesConfigFields(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 
 	r := app.Test([]string{"config", "show", "--json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, `"region"`) {
-		t.Fatalf("expected region in JSON output, got: %s", r.Stdout)
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+		t.Fatalf("failed to parse JSON: %v\noutput: %s", err, r.Stdout)
 	}
-	if !strings.Contains(r.Stdout, `"eu-west-1"`) {
-		t.Fatalf("expected eu-west-1 in JSON output, got: %s", r.Stdout)
+	// Config field with value from config file
+	regionEntry, ok := result["region"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected region entry, got: %v", result["region"])
+	}
+	if regionEntry["value"] != "eu-west-1" {
+		t.Fatalf("expected region value eu-west-1, got: %v", regionEntry["value"])
+	}
+	if regionEntry["source"] != "config" {
+		t.Fatalf("expected region source config, got: %v", regionEntry["source"])
+	}
+	if regionEntry["type"] != "str" {
+		t.Fatalf("expected region type str, got: %v", regionEntry["type"])
+	}
+	if regionEntry["required"] != false {
+		t.Fatalf("expected region required false, got: %v", regionEntry["required"])
+	}
+	if regionEntry["help"] != "Region" {
+		t.Fatalf("expected region help Region, got: %v", regionEntry["help"])
+	}
+	if regionEntry["default"] != "us-east-1" {
+		t.Fatalf("expected region default us-east-1, got: %v", regionEntry["default"])
+	}
+	// Required config field with no value
+	apiEntry, ok := result["api_key"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected api_key entry, got: %v", result["api_key"])
+	}
+	if apiEntry["source"] != "not set" {
+		t.Fatalf("expected api_key source 'not set', got: %v", apiEntry["source"])
+	}
+	if apiEntry["required"] != true {
+		t.Fatalf("expected api_key required true, got: %v", apiEntry["required"])
+	}
+	if _, hasDefault := apiEntry["default"]; hasDefault {
+		t.Fatalf("expected no default for required field, got: %v", apiEntry["default"])
 	}
 }
 
@@ -917,51 +957,68 @@ func TestSchemaIncludesConfigFields(t *testing.T) {
 	if !ok {
 		t.Fatal("expected config_fields in schema")
 	}
-	fieldList, ok := cfFields.([]interface{})
+	fieldMap, ok := cfFields.(map[string]interface{})
 	if !ok {
-		t.Fatalf("expected config_fields to be a slice, got %T", cfFields)
+		t.Fatalf("expected config_fields to be a map, got %T", cfFields)
 	}
-	if len(fieldList) != 2 {
-		t.Fatalf("expected 2 config fields in schema, got %d", len(fieldList))
+	if len(fieldMap) != 2 {
+		t.Fatalf("expected 2 config fields in schema, got %d", len(fieldMap))
 	}
 
-	// Check first field (region)
-	field0 := fieldList[0].(map[string]interface{})
-	if field0["name"] != "region" {
-		t.Fatalf("expected first field name 'region', got %v", field0["name"])
-	}
-	if field0["type"] != "str" {
-		t.Fatalf("expected first field type 'str', got %v", field0["type"])
-	}
-	if field0["help"] != "AWS region" {
-		t.Fatalf("expected first field help 'AWS region', got %v", field0["help"])
-	}
-	if field0["required"] != false {
-		t.Fatalf("expected first field required false, got %v", field0["required"])
-	}
-	if field0["default"] != "us-east-1" {
-		t.Fatalf("expected first field default 'us-east-1', got %v", field0["default"])
-	}
-	// Check commands binding
-	cmds0, ok := field0["commands"]
+	// Check region field
+	regionRaw, ok := fieldMap["region"]
 	if !ok {
-		t.Fatal("expected commands key for region")
+		t.Fatal("expected region key in config_fields")
+	}
+	region := regionRaw.(map[string]interface{})
+	if region["type"] != "str" {
+		t.Fatalf("expected region type 'str', got %v", region["type"])
+	}
+	if region["help"] != "AWS region" {
+		t.Fatalf("expected region help 'AWS region', got %v", region["help"])
+	}
+	if region["required"] != false {
+		t.Fatalf("expected region required false, got %v", region["required"])
+	}
+	if region["default"] != "us-east-1" {
+		t.Fatalf("expected region default 'us-east-1', got %v", region["default"])
+	}
+	// Check bound_commands
+	cmds0, ok := region["bound_commands"]
+	if !ok {
+		t.Fatal("expected bound_commands key for region")
 	}
 	cmdList0 := cmds0.([]interface{})
 	if len(cmdList0) != 1 || cmdList0[0] != "deploy" {
-		t.Fatalf("expected commands ['deploy'], got %v", cmdList0)
+		t.Fatalf("expected bound_commands ['deploy'], got %v", cmdList0)
 	}
 
-	// Check second field (port)
-	field1 := fieldList[1].(map[string]interface{})
-	if field1["name"] != "port" {
-		t.Fatalf("expected second field name 'port', got %v", field1["name"])
+	// Check port field
+	portRaw, ok := fieldMap["port"]
+	if !ok {
+		t.Fatal("expected port key in config_fields")
 	}
-	if field1["type"] != "int" {
-		t.Fatalf("expected second field type 'int', got %v", field1["type"])
+	port := portRaw.(map[string]interface{})
+	if port["type"] != "int" {
+		t.Fatalf("expected port type 'int', got %v", port["type"])
 	}
-	if field1["required"] != true {
-		t.Fatalf("expected second field required true, got %v", field1["required"])
+	if port["required"] != true {
+		t.Fatalf("expected port required true, got %v", port["required"])
+	}
+
+	// Check per-command config_fields list
+	commands := schema["commands"].(map[string]interface{})
+	deployCmd := commands["deploy"].(map[string]interface{})
+	cmdCfFields, ok := deployCmd["config_fields"]
+	if !ok {
+		t.Fatal("expected config_fields on deploy command in schema")
+	}
+	cmdCfList := cmdCfFields.([]interface{})
+	if len(cmdCfList) != 2 {
+		t.Fatalf("expected 2 config_fields on deploy command, got %d", len(cmdCfList))
+	}
+	if cmdCfList[0] != "region" || cmdCfList[1] != "port" {
+		t.Fatalf("expected config_fields ['region', 'port'], got %v", cmdCfList)
 	}
 }
 
@@ -1143,11 +1200,8 @@ func TestConfigShowNestedFieldPlain(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, "server.host = example.com") {
+	if !strings.Contains(r.Stdout, "server.host (str, optional) = example.com  (source: config)  -- Server hostname") {
 		t.Fatalf("expected nested field value in plain output, got: %s", r.Stdout)
-	}
-	if !strings.Contains(r.Stdout, "source: config") {
-		t.Fatalf("expected source: config, got: %s", r.Stdout)
 	}
 }
 
@@ -1183,11 +1237,8 @@ func TestConfigShowNestedFieldDefaultFallback(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, "server.host = localhost") {
+	if !strings.Contains(r.Stdout, "server.host (str, optional) = localhost  (source: default)  -- Server hostname") {
 		t.Fatalf("expected default value in output, got: %s", r.Stdout)
-	}
-	if !strings.Contains(r.Stdout, "source: default") {
-		t.Fatalf("expected source: default, got: %s", r.Stdout)
 	}
 }
 

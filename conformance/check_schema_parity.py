@@ -403,6 +403,46 @@ MINIMAL_APP = {
     ],
 }
 
+# Config fields app -- tests that config_fields schema format matches
+CONFIG_APP = {
+    "name": "cfgapp",
+    "version": "1.0.0",
+    "help": "An app with config fields",
+    "config": True,
+    "config_fields_def": [
+        {
+            "name": "api.key",
+            "type": "str",
+            "help": "API key for the service",
+        },
+        {
+            "name": "port",
+            "type": "int",
+            "help": "Port to listen on",
+            "default": 8080,
+        },
+        {
+            "name": "debug",
+            "type": "bool",
+            "help": "Enable debug mode",
+            "default": False,
+        },
+    ],
+    "commands": [
+        {
+            "name": "serve",
+            "help": "Start the server",
+            "handler_prints": "serve",
+            "config_fields": ["api.key", "port"],
+        },
+        {
+            "name": "status",
+            "help": "Show status",
+            "handler_prints": "status",
+        },
+    ],
+}
+
 
 # ---------------------------------------------------------------------------
 # Helpers for running apps
@@ -621,6 +661,7 @@ def main() -> int:
     app_defs = [
         ("rich app", RICH_APP),
         ("minimal app", MINIMAL_APP),
+        ("config fields app", CONFIG_APP),
     ]
 
     all_diffs: list[tuple[str, list[str]]] = []

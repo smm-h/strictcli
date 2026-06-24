@@ -376,6 +376,11 @@ def _emit_command_registration(
         tag_set = ", ".join(repr(t) for t in cmd_def["tags"])
         decorator_parts.append(f"{indent}    tags={{{tag_set}}},")
 
+    # config_fields
+    if cmd_def.get("config_fields"):
+        cf_list = repr(cmd_def["config_fields"])
+        decorator_parts.append(f"{indent}    config_fields={cf_list},")
+
     decorator_parts.append(f"{indent})")
 
     # Flag decorators (for direct flags)
@@ -521,6 +526,16 @@ def generate(app_def: dict) -> str:
     lines.append("try:")
     lines.append(f"    app = strictcli.App({', '.join(app_parts)})")
     lines.append("")
+
+    # Register config fields (before commands, since commands may bind to them)
+    for cf_def in app_def.get("config_fields_def", []):
+        cf_parts = [f"{cf_def['name']!r}", f"type={cf_def['type']!s}"]
+        cf_parts.append(f"help={cf_def['help']!r}")
+        if "default" in cf_def:
+            cf_parts.append(f"default={cf_def['default']!r}")
+        lines.append(f"    app.config_field({', '.join(cf_parts)})")
+    if app_def.get("config_fields_def"):
+        lines.append("")
 
     # Register groups first (recursive helper for nested groups)
     def _emit_group(group_def: dict, parent_var: str, indent: str) -> None:

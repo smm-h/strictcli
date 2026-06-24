@@ -259,6 +259,11 @@ def _emit_cmd_options(cmd_def: dict, indent: str) -> list[str]:
         tag_args = ", ".join(f'"{t}"' for t in cmd_def["tags"])
         opts.append(f"strictcli.WithTags({tag_args})")
 
+    # Config fields
+    if cmd_def.get("config_fields"):
+        cf_args = ", ".join(f'"{f}"' for f in cmd_def["config_fields"])
+        opts.append(f"strictcli.WithConfigFields({cf_args})")
+
     return opts
 
 
@@ -390,6 +395,28 @@ def generate(app_def: dict) -> str:
         opts_str = ", " + ", ".join(app_opts)
     lines.append(f'\tapp := strictcli.NewApp("{app_def["name"]}", "{app_def["version"]}", "{app_def["help"]}"{opts_str})')
     lines.append("")
+
+    # Register config fields (before commands, since commands may bind to them)
+    for cf_def in app_def.get("config_fields_def", []):
+        cf_opts = []
+        cf_type = cf_def.get("type", "str")
+        type_map = {"str": "strictcli.TypeStr", "bool": "strictcli.TypeBool",
+                     "int": "strictcli.TypeInt", "float": "strictcli.TypeFloat"}
+        cf_opts.append(f"strictcli.ConfigFieldType({type_map[cf_type]})")
+        cf_opts.append(f'strictcli.ConfigFieldHelp("{cf_def["help"]}")')
+        if "default" in cf_def:
+            dv = cf_def["default"]
+            if isinstance(dv, bool):
+                cf_opts.append(f"strictcli.ConfigFieldDefault({str(dv).lower()})")
+            elif isinstance(dv, int):
+                cf_opts.append(f"strictcli.ConfigFieldDefault({dv})")
+            elif isinstance(dv, float):
+                cf_opts.append(f"strictcli.ConfigFieldDefault({dv})")
+            else:
+                cf_opts.append(f'strictcli.ConfigFieldDefault("{dv}")')
+        lines.append(f'\tapp.ConfigField("{cf_def["name"]}", {", ".join(cf_opts)})')
+    if app_def.get("config_fields_def"):
+        lines.append("")
 
     # Register global flags
     global_flags = app_def.get("global_flags", [])

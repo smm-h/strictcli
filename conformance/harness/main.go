@@ -64,6 +64,44 @@ func main() {
 		appOpts...,
 	)
 
+	// Register config fields (before commands, since commands may bind to them).
+	if cfs, ok := appDef["config_fields_def"]; ok {
+		for _, item := range cfs.([]interface{}) {
+			cfDef := item.(map[string]interface{})
+			cfName := cfDef["name"].(string)
+			cfHelp := cfDef["help"].(string)
+			var cfOpts []strictcli.ConfigFieldOption
+			cfType := "str"
+			if t, ok := cfDef["type"]; ok {
+				cfType = t.(string)
+			}
+			switch cfType {
+			case "bool":
+				cfOpts = append(cfOpts, strictcli.ConfigFieldType(strictcli.TypeBool))
+			case "int":
+				cfOpts = append(cfOpts, strictcli.ConfigFieldType(strictcli.TypeInt))
+			case "float":
+				cfOpts = append(cfOpts, strictcli.ConfigFieldType(strictcli.TypeFloat))
+			default:
+				cfOpts = append(cfOpts, strictcli.ConfigFieldType(strictcli.TypeStr))
+			}
+			cfOpts = append(cfOpts, strictcli.ConfigFieldHelp(cfHelp))
+			if v, ok := cfDef["default"]; ok {
+				switch cfType {
+				case "bool":
+					cfOpts = append(cfOpts, strictcli.ConfigFieldDefault(v.(bool)))
+				case "int":
+					cfOpts = append(cfOpts, strictcli.ConfigFieldDefault(int(v.(float64))))
+				case "float":
+					cfOpts = append(cfOpts, strictcli.ConfigFieldDefault(v.(float64)))
+				default:
+					cfOpts = append(cfOpts, strictcli.ConfigFieldDefault(v.(string)))
+				}
+			}
+			app.ConfigField(cfName, cfOpts...)
+		}
+	}
+
 	// Register global flags.
 	var globalFlags []map[string]interface{}
 	if gf, ok := appDef["global_flags"]; ok {
@@ -363,6 +401,15 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 			tagList = append(tagList, t.(string))
 		}
 		opts = append(opts, strictcli.WithTags(tagList...))
+	}
+
+	// Config fields.
+	if cfs, ok := cmdDef["config_fields"]; ok {
+		var cfNames []string
+		for _, f := range cfs.([]interface{}) {
+			cfNames = append(cfNames, f.(string))
+		}
+		opts = append(opts, strictcli.WithConfigFields(cfNames...))
 	}
 
 	return opts

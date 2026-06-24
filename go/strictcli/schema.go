@@ -165,6 +165,14 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 	if cmd.Interactive {
 		m["interactive"] = true
 	}
+	// config_fields: default [] (omit when empty)
+	if len(cmd.configFields) > 0 {
+		cfList := make([]interface{}, len(cmd.configFields))
+		for i, f := range cmd.configFields {
+			cfList[i] = f
+		}
+		m["config_fields"] = cfList
+	}
 	return m
 }
 
@@ -406,11 +414,10 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 
 	// config_fields: only present when config fields are declared
 	if len(app.configFields) > 0 {
-		cfFields := make([]interface{}, 0, len(app.configFieldOrder))
+		cfSchema := make(map[string]interface{})
 		for _, name := range app.configFieldOrder {
 			cf := app.configFields[name]
 			entry := map[string]interface{}{
-				"name":     cf.Name,
 				"type":     flagTypeName[cf.Type],
 				"help":     cf.Help,
 				"required": cf.Required,
@@ -453,11 +460,11 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 				for i, c := range boundCommands {
 					cmds[i] = c
 				}
-				entry["commands"] = cmds
+				entry["bound_commands"] = cmds
 			}
-			cfFields = append(cfFields, entry)
+			cfSchema[name] = entry
 		}
-		schema["config_fields"] = cfFields
+		schema["config_fields"] = cfSchema
 	}
 
 	// checks: only present when checks are enabled (not a default-omission case)
