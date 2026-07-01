@@ -1,6 +1,6 @@
 # strictcli
 
-A strict, zero-dependency CLI framework for Go.
+A strict CLI framework for Go.
 
 strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework panics at registration time. Four types only: `str`, `bool`, `int`, `float`. No magic type inference, no implicit defaults.
 
@@ -10,7 +10,7 @@ strictcli makes you declare everything -- every command, flag, argument, and env
 go get github.com/smm-h/strictcli/go/strictcli
 ```
 
-Requires Go 1.23+. Zero external dependencies (stdlib only).
+Requires Go 1.25+. One dependency: [go-toml-edit](https://github.com/smm-h/go-toml-edit) for TOML config/checks support.
 
 ## Quickstart
 
@@ -509,7 +509,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 - **Four types only.** `str`, `bool`, `int`, `float` -- plus compound `list` and `dict`. No magic type coercion.
 - **Handler signatures use `map[string]interface{}`** with flag names as keys (hyphens become underscores).
 - **Registration-time errors.** Misconfigurations panic loud and early, not at parse time.
-- **Zero dependencies.** Standard library only.
+- **Minimal dependencies.** One dependency ([go-toml-edit](https://github.com/smm-h/go-toml-edit)) for TOML support.
 
 ## See also
 
