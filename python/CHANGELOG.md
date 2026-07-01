@@ -2,18 +2,32 @@
 
 # Changelog
 
-## 0.21.0
+## 0.22.0
 
-Command declaration framework: structured handler returns, programmatic invocation, typed args, config fields, compound types, tool export, MCP projection, and scope-based check filtering.
+Required booleans, Context type, schema project_id guard, tag contract global flags fix
 
 <details>
 <summary>Context</summary>
 
-This release transforms strictcli from a CLI framework into a command declaration framework with multiple output projections. Commands declared once can be invoked via CLI (existing), programmatic API (app.call/acall), tool export (as_tools with JSON Schema), and MCP server (--mcp flag).
-
-Key additions: handlers can return structured data (backward compatible -- int returns still work), positional args gain type and choices support, first-class config fields with per-command binding and startup validation, compound types (list[T] and dict[str,T]), command visibility (hidden/interactive), schema enrichment with versioning and constraint serialization, and declarative scope field on check definitions with set_scope_adapter() for context-dependent pre-check filtering.
+Breaking change: Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required. New Context type for structured handler communication. Schema dump now validates project_id. TagContract now checks global flags.
 
 </details>
+
+### Breaking
+
+- **Breaking.** Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required — user must pass --flag or --no-flag.
+
+### Features
+
+- **New.** Schema dump validates project_id before writing — hard error if existing schema belongs to a different project.
+- **New.** Context type with output methods (Info, Warn, Debug, Error, Emit) for structured handler communication.
+- **New.** Comprehensive sub-project READMEs replacing severely stale documentation.
+
+### Fixes
+
+- **Fix.** TagContract now checks global flags, not just command-level flags.
+
+## 0.21.0
 
 ### Features
 
