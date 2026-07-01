@@ -308,20 +308,7 @@ Checks are declared in TOML and registered in code -- both must agree. Auto-regi
 
 ### Context
 
-`Context` provides structured output methods for command handlers. Available via `DataHandler` or `DataCommand`.
-
-```go
-app.DataCommand("status", "Show status",
-    func(args map[string]interface{}) strictcli.HandlerResult {
-        ctx := strictcli.NewContext(os.Stdout, os.Stderr, nil)
-        ctx.Info("checking status...")
-        ctx.Emit(map[string]interface{}{"healthy": true})
-        return strictcli.HandlerResult{ExitCode: 0}
-    },
-)
-```
-
-Methods: `Info(msg)` (stdout), `Warn(msg)` (stderr), `Debug(msg)` (stdout), `Error(msg)` (stderr), `Emit(data)` (JSON to stdout, single use).
+`Context` provides structured output methods for command handlers: `Info(msg)` (stdout), `Warn(msg)` (stderr), `Debug(msg)` (stdout), `Error(msg)` (stderr), `Emit(data)` (JSON to stdout, single use). Created internally by the framework and available to struct handlers via `RegisterHandler`.
 
 ### Tool export
 
