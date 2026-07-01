@@ -1008,3 +1008,72 @@ class TestSchemaArgDefaults:
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         arg = data["commands"]["cmd"]["args"][0]
         assert arg["default"] is None
+
+
+class TestSchemaProjectIdMismatch:
+    """Schema dump refuses to overwrite a schema belonging to a different project."""
+
+    def test_mismatch_raises_error(self, tmp_path, monkeypatch):
+        """Existing schema with a different project_id causes an error."""
+        monkeypatch.chdir(tmp_path)
+        schema_dir = tmp_path / ".strictcli"
+        schema_dir.mkdir()
+        (schema_dir / "schema.json").write_text(
+            json.dumps({"project_id": "other-project"})
+        )
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code != 0
+        assert "Schema mismatch" in result.stderr
+        assert "other-project" in result.stderr
+        assert "testproject" in result.stderr
+
+    def test_match_no_error(self, tmp_path, monkeypatch):
+        """Existing schema with the same project_id succeeds."""
+        monkeypatch.chdir(tmp_path)
+        schema_dir = tmp_path / ".strictcli"
+        schema_dir.mkdir()
+        (schema_dir / "schema.json").write_text(
+            json.dumps({"project_id": "testproject"})
+        )
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+
+    def test_missing_file_no_error(self, tmp_path, monkeypatch):
+        """No existing schema file passes through without error."""
+        monkeypatch.chdir(tmp_path)
+        assert not (tmp_path / ".strictcli" / "schema.json").exists()
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+
+    def test_corrupt_file_no_error(self, tmp_path, monkeypatch):
+        """Corrupt (non-JSON) schema file passes through without error."""
+        monkeypatch.chdir(tmp_path)
+        schema_dir = tmp_path / ".strictcli"
+        schema_dir.mkdir()
+        (schema_dir / "schema.json").write_text("not valid json {{{")
+        app = _make_app()
+
+        @app.command("noop", help="Does nothing")
+        def noop():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
