@@ -1957,7 +1957,7 @@ class App:
                 for tag in cmd.tags:
                     if tag in self._tag_contracts:
                         required_flag = self._tag_contracts[tag]
-                        flag_names = {f.name for f in cmd.flags}
+                        flag_names = {f.name for f in cmd.flags} | {f.name for f in self._global_flags}
                         if required_flag not in flag_names:
                             return (
                                 f'command "{cmd.name}": tag "{tag}" requires '
@@ -5697,12 +5697,35 @@ def _dump_schema(app: App) -> dict:
     return schema
 
 
+def _check_schema_project_id(file_path: str, new_project_id: str) -> None:
+    """Verify that an existing schema file belongs to the same project.
+
+    Raises RuntimeError on mismatch. Silently passes on: missing file,
+    unreadable file, JSON without project_id field, or matching project_id.
+    """
+    try:
+        with open(file_path) as f:
+            existing = json.loads(f.read())
+    except (OSError, json.JSONDecodeError, ValueError):
+        return
+    existing_id = existing.get("project_id")
+    if existing_id is None:
+        return
+    if existing_id != new_project_id:
+        raise RuntimeError(
+            f"Schema mismatch: existing schema belongs to project "
+            f"'{existing_id}', not '{new_project_id}'. "
+            f"Run from the correct project directory."
+        )
+
+
 def _write_schema(app: App) -> str:
     """Write the schema to .strictcli/schema.json and return the path."""
     schema = _dump_schema(app)
     dir_path = os.path.join(os.getcwd(), ".strictcli")
     os.makedirs(dir_path, exist_ok=True)
     file_path = os.path.join(dir_path, "schema.json")
+    _check_schema_project_id(file_path, schema["project_id"])
     with open(file_path, "w") as f:
         f.write(json.dumps(schema, indent=2) + "\n")
     return file_path

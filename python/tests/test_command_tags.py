@@ -319,6 +319,19 @@ class TestTagContracts:
         assert result.exit_code == 1
         assert 'requires flag "--json"' in result.stderr
 
+    def test_contract_satisfied_by_global_flag(self):
+        app = _make_app(
+            flags=[strictcli.Flag(name="json", type=bool, default=False, help="output json")]
+        )
+        app.tag_contract("json", requires_flag="json")
+
+        @app.command("cmd", help="a command", tags={"json"})
+        def cmd(json):
+            pass
+
+        result = app.test(["cmd"])
+        assert result.exit_code == 0
+
     def test_contract_multiple(self):
         # Both contracts satisfied: should pass
         app_good = _make_app()
