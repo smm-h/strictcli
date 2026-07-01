@@ -78,9 +78,9 @@
       "exit_code": 0,
       "stdout_contains": [
         "verbose=true",
-        "quiet=false"
+        "quiet=None"
       ],
-      "stdout_equals": "verbose=true quiet=false"
+      "stdout_equals": "verbose=true quiet=None"
     }
   },
   {
@@ -208,10 +208,10 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "verbose=false",
+        "verbose=None",
         "quiet=true"
       ],
-      "stdout_equals": "verbose=false quiet=true"
+      "stdout_equals": "verbose=None quiet=true"
     }
   },
   {
@@ -357,7 +357,7 @@
         "Flags:",
         "--name"
       ],
-      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --verbose, --no-verbose    verbose output [default: false]\n  --quiet, --no-quiet        quiet output [default: false]"
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --verbose, --no-verbose    verbose output [required]\n  --quiet, --no-quiet        quiet output [required]"
     }
   },
   {
@@ -397,7 +397,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": "Flags (mutually exclusive):",
-      "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive):\n  --verbose, --no-verbose    verbose output [default: false]\n  --quiet, --no-quiet        quiet output [default: false]"
+      "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive):\n  --verbose, --no-verbose    verbose output [required]\n  --quiet, --no-quiet        quiet output [required]"
     }
   }
 ]

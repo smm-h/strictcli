@@ -82,7 +82,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [
@@ -119,7 +120,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [
@@ -217,7 +219,8 @@
             {
               "name": "force",
               "type": "bool",
-              "help": "force"
+              "help": "force",
+              "default": false
             }
           ]
         }

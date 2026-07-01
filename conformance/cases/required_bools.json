@@ -1,0 +1,216 @@
+[
+  {
+    "name": "required_bools: missing required bool (negatable) errors",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag '--verbose' must be passed as --verbose or --no-verbose"
+    }
+  },
+  {
+    "name": "required_bools: missing required bool (non-negatable) errors",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "negatable": false
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag '--verbose' must be passed as --verbose"
+    }
+  },
+  {
+    "name": "required_bools: required bool with --flag receives true",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=true"
+    }
+  },
+  {
+    "name": "required_bools: required bool with --no-flag receives false",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--no-verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=false"
+    }
+  },
+  {
+    "name": "required_bools: required bool satisfied by env var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "env": "MYAPP_VERBOSE"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_VERBOSE": "true"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=true"
+    }
+  },
+  {
+    "name": "required_bools: required bool with short form -v receives true",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "short": "v",
+              "help": "be verbose"
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "-v"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=true"
+    }
+  },
+  {
+    "name": "required_bools: optional bool with default false not passed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "be verbose",
+              "default": false
+            }
+          ],
+          "handler_prints": "verbose={verbose}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "verbose=false"
+    }
+  }
+]

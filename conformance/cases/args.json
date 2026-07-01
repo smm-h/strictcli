@@ -260,7 +260,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose} path={path}"

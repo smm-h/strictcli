@@ -24,16 +24,31 @@
             }
           ],
           "dependencies": [
-            {"type": "co_required", "flags": ["output", "format"]}
+            {
+              "type": "co_required",
+              "flags": [
+                "output",
+                "format"
+              ]
+            }
           ],
           "handler_prints": "output={output} format={format}"
         }
       ]
     },
-    "argv": ["cmd", "--output", "file.txt", "--format", "json"],
+    "argv": [
+      "cmd",
+      "--output",
+      "file.txt",
+      "--format",
+      "json"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["output=file.txt", "format=json"]
+      "stdout_contains": [
+        "output=file.txt",
+        "format=json"
+      ]
     }
   },
   {
@@ -61,13 +76,21 @@
             }
           ],
           "dependencies": [
-            {"type": "co_required", "flags": ["output", "format"]}
+            {
+              "type": "co_required",
+              "flags": [
+                "output",
+                "format"
+              ]
+            }
           ],
           "handler_prints": "output={output} format={format}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0
     }
@@ -97,13 +120,23 @@
             }
           ],
           "dependencies": [
-            {"type": "co_required", "flags": ["output", "format"]}
+            {
+              "type": "co_required",
+              "flags": [
+                "output",
+                "format"
+              ]
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--output", "file.txt"],
+    "argv": [
+      "cmd",
+      "--output",
+      "file.txt"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flags --output, --format must be used together"
@@ -134,13 +167,23 @@
             }
           ],
           "dependencies": [
-            {"type": "co_required", "flags": ["output", "format"]}
+            {
+              "type": "co_required",
+              "flags": [
+                "output",
+                "format"
+              ]
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--format", "json"],
+    "argv": [
+      "cmd",
+      "--format",
+      "json"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flags --output, --format must be used together"
@@ -160,7 +203,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "verbose output"
+              "help": "verbose output",
+              "default": false
             },
             {
               "name": "output",
@@ -170,13 +214,22 @@
             }
           ],
           "dependencies": [
-            {"type": "requires", "flag": "verbose", "depends_on": "output"}
+            {
+              "type": "requires",
+              "flag": "verbose",
+              "depends_on": "output"
+            }
           ],
           "handler_prints": "verbose={verbose} output={output}"
         }
       ]
     },
-    "argv": ["cmd", "--verbose", "--output", "log.txt"],
+    "argv": [
+      "cmd",
+      "--verbose",
+      "--output",
+      "log.txt"
+    ],
     "expect": {
       "exit_code": 0
     }
@@ -195,7 +248,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "verbose output"
+              "help": "verbose output",
+              "default": false
             },
             {
               "name": "output",
@@ -205,13 +259,19 @@
             }
           ],
           "dependencies": [
-            {"type": "requires", "flag": "verbose", "depends_on": "output"}
+            {
+              "type": "requires",
+              "flag": "verbose",
+              "depends_on": "output"
+            }
           ],
           "handler_prints": "verbose={verbose} output={output}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0
     }
@@ -230,7 +290,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "verbose output"
+              "help": "verbose output",
+              "default": false
             },
             {
               "name": "output",
@@ -240,13 +301,21 @@
             }
           ],
           "dependencies": [
-            {"type": "requires", "flag": "verbose", "depends_on": "output"}
+            {
+              "type": "requires",
+              "flag": "verbose",
+              "depends_on": "output"
+            }
           ],
           "handler_prints": "verbose={verbose} output={output}"
         }
       ]
     },
-    "argv": ["cmd", "--output", "log.txt"],
+    "argv": [
+      "cmd",
+      "--output",
+      "log.txt"
+    ],
     "expect": {
       "exit_code": 0
     }
@@ -265,7 +334,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "verbose output"
+              "help": "verbose output",
+              "default": false
             },
             {
               "name": "output",
@@ -275,13 +345,20 @@
             }
           ],
           "dependencies": [
-            {"type": "requires", "flag": "verbose", "depends_on": "output"}
+            {
+              "type": "requires",
+              "flag": "verbose",
+              "depends_on": "output"
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--verbose"],
+    "argv": [
+      "cmd",
+      "--verbose"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag '--verbose' requires '--output'"
@@ -301,7 +378,8 @@
             {
               "name": "fast",
               "type": "bool",
-              "help": "fast mode"
+              "help": "fast mode",
+              "default": false
             },
             {
               "name": "embeddings",
@@ -311,16 +389,27 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+            {
+              "type": "implies",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
           ],
           "handler_prints": "fast={fast} embeddings={embeddings}"
         }
       ]
     },
-    "argv": ["cmd", "--fast"],
+    "argv": [
+      "cmd",
+      "--fast"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["fast=true", "embeddings=false"]
+      "stdout_contains": [
+        "fast=true",
+        "embeddings=false"
+      ]
     }
   },
   {
@@ -337,7 +426,8 @@
             {
               "name": "fast",
               "type": "bool",
-              "help": "fast mode"
+              "help": "fast mode",
+              "default": false
             },
             {
               "name": "embeddings",
@@ -347,16 +437,26 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+            {
+              "type": "implies",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
           ],
           "handler_prints": "fast={fast} embeddings={embeddings}"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["fast=false", "embeddings=true"]
+      "stdout_contains": [
+        "fast=false",
+        "embeddings=true"
+      ]
     }
   },
   {
@@ -373,7 +473,8 @@
             {
               "name": "fast",
               "type": "bool",
-              "help": "fast mode"
+              "help": "fast mode",
+              "default": false
             },
             {
               "name": "embeddings",
@@ -383,13 +484,22 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+            {
+              "type": "implies",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd", "--fast", "--embeddings"],
+    "argv": [
+      "cmd",
+      "--fast",
+      "--embeddings"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "implies"
@@ -409,7 +519,8 @@
             {
               "name": "fast",
               "type": "bool",
-              "help": "fast mode"
+              "help": "fast mode",
+              "default": false
             },
             {
               "name": "embeddings",
@@ -419,16 +530,28 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+            {
+              "type": "implies",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
           ],
           "handler_prints": "fast={fast} embeddings={embeddings}"
         }
       ]
     },
-    "argv": ["cmd", "--fast", "--no-embeddings"],
+    "argv": [
+      "cmd",
+      "--fast",
+      "--no-embeddings"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["fast=true", "embeddings=false"]
+      "stdout_contains": [
+        "fast=true",
+        "embeddings=false"
+      ]
     }
   },
   {
@@ -447,7 +570,8 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
-              "env": "MYAPP_FAST"
+              "env": "MYAPP_FAST",
+              "default": false
             },
             {
               "name": "embeddings",
@@ -457,17 +581,29 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "fast", "implies": "embeddings", "value": false}
+            {
+              "type": "implies",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
           ],
           "handler_prints": "fast={fast} embeddings={embeddings}"
         }
       ]
     },
-    "argv": ["cmd"],
-    "env": {"MYAPP_FAST": "true"},
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_FAST": "true"
+    },
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["fast=true", "embeddings=false"]
+      "stdout_contains": [
+        "fast=true",
+        "embeddings=false"
+      ]
     }
   },
   {
@@ -485,7 +621,8 @@
             {
               "name": "fast",
               "type": "bool",
-              "help": "fast mode"
+              "help": "fast mode",
+              "default": false
             },
             {
               "name": "embeddings",
@@ -495,13 +632,20 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "nonexistent", "implies": "embeddings", "value": false}
+            {
+              "type": "implies",
+              "flag": "nonexistent",
+              "implies": "embeddings",
+              "value": false
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "Implies references unknown flag"
@@ -522,7 +666,8 @@
             {
               "name": "fast",
               "type": "bool",
-              "help": "fast mode"
+              "help": "fast mode",
+              "default": false
             },
             {
               "name": "embeddings",
@@ -532,13 +677,20 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "fast", "implies": "nonexistent", "value": false}
+            {
+              "type": "implies",
+              "flag": "fast",
+              "implies": "nonexistent",
+              "value": false
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "Implies references unknown flag"
@@ -559,17 +711,25 @@
             {
               "name": "fast",
               "type": "bool",
-              "help": "fast mode"
+              "help": "fast mode",
+              "default": false
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "fast", "implies": "fast", "value": false}
+            {
+              "type": "implies",
+              "flag": "fast",
+              "implies": "fast",
+              "value": false
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "Implies flag and implies cannot be the same"
@@ -601,13 +761,20 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "mode", "implies": "embeddings", "value": false}
+            {
+              "type": "implies",
+              "flag": "mode",
+              "implies": "embeddings",
+              "value": false
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "Implies trigger flag"
@@ -628,7 +795,8 @@
             {
               "name": "fast",
               "type": "bool",
-              "help": "fast mode"
+              "help": "fast mode",
+              "default": false
             },
             {
               "name": "output",
@@ -638,13 +806,20 @@
             }
           ],
           "dependencies": [
-            {"type": "implies", "flag": "fast", "implies": "output", "value": false}
+            {
+              "type": "implies",
+              "flag": "fast",
+              "implies": "output",
+              "value": false
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "Implies target flag"

@@ -74,7 +74,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -104,7 +105,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -133,7 +135,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -164,7 +167,8 @@
               "name": "verbose",
               "type": "bool",
               "short": "V",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -318,7 +322,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -350,7 +355,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "negatable": false
+              "negatable": false,
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -382,7 +388,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "negatable": true
+              "negatable": true,
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"

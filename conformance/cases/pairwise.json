@@ -90,7 +90,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag1=false alt1=false"
+      "stdout_equals": "flag1=false alt1=None"
     }
   },
   {
@@ -318,7 +318,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag7=true alt7=false"
+      "stdout_equals": "flag7=true alt7=None"
     }
   },
   {
@@ -373,7 +373,8 @@
               "type": "bool",
               "help": "test flag 9",
               "env": "MYAPP_FLAG9",
-              "negatable": false
+              "negatable": false,
+              "default": false
             }
           ]
         }

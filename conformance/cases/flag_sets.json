@@ -16,7 +16,8 @@
                 {
                   "name": "verbose",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "verbose output",
+                  "default": false
                 }
               ]
             }
@@ -57,7 +58,8 @@
                 {
                   "name": "color",
                   "type": "bool",
-                  "help": "use color"
+                  "help": "use color",
+                  "default": false
                 }
               ]
             }
@@ -104,7 +106,8 @@
                 {
                   "name": "insecure",
                   "type": "bool",
-                  "help": "skip TLS verification"
+                  "help": "skip TLS verification",
+                  "default": false
                 }
               ]
             }
@@ -142,7 +145,8 @@
                 {
                   "name": "debug",
                   "type": "bool",
-                  "help": "enable debug mode"
+                  "help": "enable debug mode",
+                  "default": false
                 }
               ]
             }

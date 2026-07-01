@@ -144,7 +144,8 @@
           "name": "verbose",
           "type": "bool",
           "help": "enable verbose output",
-          "env": "MYAPP_VERBOSE"
+          "env": "MYAPP_VERBOSE",
+          "default": false
         }
       ],
       "commands": [

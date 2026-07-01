@@ -19,7 +19,9 @@
         }
       ]
     },
-    "argv": ["old-cmd"],
+    "argv": [
+      "old-cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command 'old-cmd' is deprecated: use 'new-cmd' instead"
@@ -84,7 +86,10 @@
         }
       ]
     },
-    "argv": ["config", "--help"],
+    "argv": [
+      "config",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -115,7 +120,9 @@
         }
       ]
     },
-    "argv": ["deploy"],
+    "argv": [
+      "deploy"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "deploying"
@@ -141,7 +148,9 @@
         }
       ]
     },
-    "argv": ["push"],
+    "argv": [
+      "push"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command 'push' is deprecated: use 'deploy' instead"
@@ -164,7 +173,9 @@
         }
       ]
     },
-    "argv": ["old-cmd"],
+    "argv": [
+      "old-cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "deprecated"
@@ -187,13 +198,16 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "verbose output"
+              "help": "verbose output",
+              "default": false
             }
           ]
         }
       ]
     },
-    "argv": ["old-cmd"],
+    "argv": [
+      "old-cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "deprecated"
@@ -214,7 +228,9 @@
         }
       ]
     },
-    "argv": ["old-cmd"],
+    "argv": [
+      "old-cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "deprecated"

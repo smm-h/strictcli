@@ -593,7 +593,9 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 				}
 				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 			} else if ftype == "bool" {
-				if args[key].(bool) {
+				if args[key] == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else if args[key].(bool) {
 					out = strings.ReplaceAll(out, "{"+name+"}", "true")
 				} else {
 					out = strings.ReplaceAll(out, "{"+name+"}", "false")
@@ -636,7 +638,9 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 				}
 				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 			} else if atype == "bool" {
-				if args[key].(bool) {
+				if args[key] == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else if args[key].(bool) {
 					out = strings.ReplaceAll(out, "{"+name+"}", "true")
 				} else {
 					out = strings.ReplaceAll(out, "{"+name+"}", "false")
@@ -679,7 +683,9 @@ func makePassthroughHandler(cmdDef map[string]interface{}, globalFlags []map[str
 
 			switch gfType {
 			case "bool":
-				if globals[gfKey].(bool) {
+				if globals[gfKey] == nil {
+					fmt.Printf("%s=None\n", gfName)
+				} else if globals[gfKey].(bool) {
 					fmt.Printf("%s=true\n", gfName)
 				} else {
 					fmt.Printf("%s=false\n", gfName)

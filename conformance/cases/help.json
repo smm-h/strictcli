@@ -51,7 +51,8 @@
             {
               "name": "dry-run",
               "type": "bool",
-              "help": "preview changes"
+              "help": "preview changes",
+              "default": false
             }
           ],
           "handler_prints": "{target}:{dry-run}"

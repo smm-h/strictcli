@@ -181,7 +181,7 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
             )
         elif ftype == "bool":
             lines.append(
-                f"    _parts[{f['name']!r}] = 'true' if {pname} else 'false'"
+                f"    _parts[{f['name']!r}] = 'None' if {pname} is None else ('true' if {pname} else 'false')"
             )
         else:
             lines.append(f"    _parts[{f['name']!r}] = str({pname})")

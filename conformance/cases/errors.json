@@ -13,7 +13,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "ok"
@@ -182,7 +183,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "ok"
@@ -249,7 +251,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "target={target} verbose={verbose}"

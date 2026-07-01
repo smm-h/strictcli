@@ -59,7 +59,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": ""
+              "help": "",
+              "default": false
             }
           ],
           "handler_prints": "ok"
@@ -151,7 +152,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "repeatable": true
+              "repeatable": true,
+              "default": false
             }
           ],
           "handler_prints": "ok"
@@ -188,7 +190,8 @@
               "choices_str": [
                 "yes",
                 "no"
-              ]
+              ],
+              "default": false
             }
           ],
           "handler_prints": "ok"
@@ -322,7 +325,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [
@@ -333,7 +337,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "be verbose"
+              "help": "be verbose",
+              "default": false
             }
           ],
           "handler_prints": "ok"
@@ -425,12 +430,14 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         },
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output again"
+          "help": "enable verbose output again",
+          "default": false
         }
       ],
       "commands": [
@@ -499,7 +506,10 @@
               "name": "format",
               "type": "str",
               "help": "output format",
-              "choices_str": ["json", "csv"],
+              "choices_str": [
+                "json",
+                "csv"
+              ],
               "default": "xml"
             }
           ],
@@ -614,7 +624,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": ""
+          "help": "",
+          "default": false
         }
       ],
       "commands": [
@@ -645,17 +656,29 @@
           "name": "cmd",
           "help": "a command",
           "flags": [
-            {"name": "output", "type": "str", "help": "output file", "default": "none"}
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            }
           ],
           "dependencies": [
-            {"type": "co_required", "flags": ["output"]}
+            {
+              "type": "co_required",
+              "flags": [
+                "output"
+              ]
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
     "skip_schema_validation": true,
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"cmd\": CoRequired must have at least 2 flags, got 1"
@@ -672,17 +695,35 @@
           "name": "cmd",
           "help": "a command",
           "flags": [
-            {"name": "output", "type": "str", "help": "output file", "default": "none"},
-            {"name": "format", "type": "str", "help": "format", "default": "none"}
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "format",
+              "default": "none"
+            }
           ],
           "dependencies": [
-            {"type": "co_required", "flags": ["output", "missing"]}
+            {
+              "type": "co_required",
+              "flags": [
+                "output",
+                "missing"
+              ]
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"cmd\": CoRequired references unknown flag \"missing\""
@@ -699,17 +740,35 @@
           "name": "cmd",
           "help": "a command",
           "flags": [
-            {"name": "output", "type": "str", "help": "output file", "default": "none"},
-            {"name": "format", "type": "str", "help": "format", "default": "none"}
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "format",
+              "default": "none"
+            }
           ],
           "dependencies": [
-            {"type": "co_required", "flags": ["output", "output"]}
+            {
+              "type": "co_required",
+              "flags": [
+                "output",
+                "output"
+              ]
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"cmd\": CoRequired has duplicate flag \"output\""
@@ -726,16 +785,27 @@
           "name": "cmd",
           "help": "a command",
           "flags": [
-            {"name": "output", "type": "str", "help": "output file", "default": "none"}
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            }
           ],
           "dependencies": [
-            {"type": "requires", "flag": "missing", "depends_on": "output"}
+            {
+              "type": "requires",
+              "flag": "missing",
+              "depends_on": "output"
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"cmd\": Requires references unknown flag \"missing\""
@@ -752,16 +822,27 @@
           "name": "cmd",
           "help": "a command",
           "flags": [
-            {"name": "output", "type": "str", "help": "output file", "default": "none"}
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "default": "none"
+            }
           ],
           "dependencies": [
-            {"type": "requires", "flag": "output", "depends_on": "output"}
+            {
+              "type": "requires",
+              "flag": "output",
+              "depends_on": "output"
+            }
           ],
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"cmd\": Requires flag and depends_on cannot be the same (\"output\")"
@@ -789,7 +870,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unique requires repeatable=True",
@@ -818,7 +901,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "repeatable requires explicit unique",
@@ -849,7 +934,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "env_separator requires repeatable=True",
@@ -880,7 +967,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "env_separator requires env",
@@ -912,7 +1001,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "repeatable flag with env requires env_separator",
@@ -945,7 +1036,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "env_separator must be a single character",
@@ -978,7 +1071,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "env_separator cannot be a backslash",

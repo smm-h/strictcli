@@ -330,7 +330,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -364,7 +365,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -398,7 +400,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -432,7 +435,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -466,7 +470,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -500,7 +505,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -535,7 +541,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -569,7 +576,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -604,7 +612,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -906,7 +915,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"
@@ -940,7 +950,8 @@
               "name": "verbose",
               "type": "bool",
               "help": "be verbose",
-              "env": "MYAPP_VERBOSE"
+              "env": "MYAPP_VERBOSE",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose}"

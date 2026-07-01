@@ -9,7 +9,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [
@@ -39,7 +40,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [
@@ -69,7 +71,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [
@@ -163,7 +166,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [
@@ -199,7 +203,8 @@
           "name": "verbose",
           "type": "bool",
           "help": "enable verbose output",
-          "env": "MYAPP_VERBOSE"
+          "env": "MYAPP_VERBOSE",
+          "default": false
         }
       ],
       "commands": [
@@ -231,7 +236,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [
@@ -270,7 +276,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         },
         {
           "name": "config",
@@ -305,7 +312,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         },
         {
           "name": "config",
@@ -322,7 +330,8 @@
             {
               "name": "force",
               "type": "bool",
-              "help": "force deploy"
+              "help": "force deploy",
+              "default": false
             }
           ],
           "handler_prints": "verbose={verbose} config={config} force={force}"

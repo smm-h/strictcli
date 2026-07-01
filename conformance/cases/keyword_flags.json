@@ -13,7 +13,8 @@
             {
               "name": "global",
               "type": "bool",
-              "help": "use global scope"
+              "help": "use global scope",
+              "default": false
             }
           ],
           "handler_prints": "global={global}"

@@ -225,7 +225,9 @@ def _emit_handler_body(cmd_def: dict, indent: str, global_flags: list[dict] | No
                     lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", strings.Join(parts, ","))')
                     lines.append(f'{indent}}}')
             elif ftype == "bool":
-                lines.append(f'{indent}if args["{param_key}"].(bool) {{')
+                lines.append(f'{indent}if args["{param_key}"] == nil {{')
+                lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", "None")')
+                lines.append(f'{indent}}} else if args["{param_key}"].(bool) {{')
                 lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", "true")')
                 lines.append(f'{indent}}} else {{')
                 lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", "false")')

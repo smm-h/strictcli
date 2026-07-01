@@ -323,7 +323,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "local=true system=false"
+      "stdout_equals": "local=true system=None"
     }
   },
   {
@@ -389,7 +389,8 @@
         {
           "name": "verbose",
           "type": "bool",
-          "help": "enable verbose output"
+          "help": "enable verbose output",
+          "default": false
         }
       ],
       "commands": [],
@@ -685,7 +686,8 @@
           "name": "verbose",
           "type": "bool",
           "help": "enable verbose output",
-          "env": "MYAPP_VERBOSE"
+          "env": "MYAPP_VERBOSE",
+          "default": false
         }
       ],
       "commands": [],
