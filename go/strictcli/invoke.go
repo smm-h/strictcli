@@ -217,27 +217,11 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			continue
 		}
 		// Apply defaults
-		if gf.Repeatable {
-			if gf.hasDefault && gf.Default != nil {
-				src := gf.Default.([]interface{})
-				validatedKwargs[paramName] = append([]interface{}{}, src...)
-			} else {
-				validatedKwargs[paramName] = []interface{}{}
-			}
-		} else if gf.hasDefault && gf.Default != nil {
-			validatedKwargs[paramName] = gf.Default
-		} else if gf.hasDefault {
-			validatedKwargs[paramName] = nil
-		} else {
-			// Required global flag not provided
-			if gf.Type == TypeBool && gf.Negatable {
-				return invokeResult{exitCode: 1, err: fmt.Sprintf("global flag '--%s' must be passed as --%s or --no-%s", gf.Name, gf.Name, gf.Name)}
-			}
-			if gf.Type == TypeBool && !gf.Negatable {
-				return invokeResult{exitCode: 1, err: fmt.Sprintf("global flag '--%s' must be passed as --%s", gf.Name, gf.Name)}
-			}
-			return invokeResult{exitCode: 1, err: fmt.Sprintf("global flag '--%s' is required", gf.Name)}
+		val, errMsg := applyFlagDefault(gf, nil, "global ")
+		if errMsg != "" {
+			return invokeResult{exitCode: 1, err: errMsg}
 		}
+		validatedKwargs[paramName] = val
 	}
 
 	// Call the handler

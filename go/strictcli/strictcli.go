@@ -2050,37 +2050,11 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		if _, ok := globalValues[f.Name]; ok {
 			continue
 		}
-		if IsDictType(f.Type) {
-			if f.hasDefault && f.Default != nil {
-				src := f.Default.(map[string]interface{})
-				m := make(map[string]interface{}, len(src))
-				for k, v := range src {
-					m[k] = v
-				}
-				globalValues[f.Name] = m
-			} else {
-				globalValues[f.Name] = map[string]interface{}{}
-			}
-		} else if f.Repeatable {
-			if f.hasDefault && f.Default != nil {
-				src := f.Default.([]interface{})
-				globalValues[f.Name] = append([]interface{}{}, src...)
-			} else {
-				globalValues[f.Name] = []interface{}{}
-			}
-		} else if f.hasDefault && f.Default != nil {
-			globalValues[f.Name] = f.Default
-		} else if f.hasDefault {
-			globalValues[f.Name] = nil
-		} else {
-			if f.Type == TypeBool && f.Negatable {
-				return nil, nil, fmt.Sprintf("global flag '--%s' must be passed as --%s or --no-%s", f.Name, f.Name, f.Name)
-			}
-			if f.Type == TypeBool && !f.Negatable {
-				return nil, nil, fmt.Sprintf("global flag '--%s' must be passed as --%s", f.Name, f.Name)
-			}
-			return nil, nil, fmt.Sprintf("global flag '--%s' is required", f.Name)
+		val, errMsg := applyFlagDefault(f, nil, "global ")
+		if errMsg != "" {
+			return nil, nil, errMsg
 		}
+		globalValues[f.Name] = val
 	}
 
 	// Validate choices for global flags

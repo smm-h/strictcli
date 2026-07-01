@@ -403,6 +403,47 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 // validateAndBuildKwargs performs pure validation and kwargs assembly on the
 // already-parsed cliSet values. It enforces mutex constraints, resolves implies
+// applyFlagDefault resolves the default value for a flag that was not provided
+// on the command line. Returns (value, errorMsg). If errorMsg is non-empty, the
+// flag is required and was not provided. The prefix is prepended to error
+// messages (e.g. "global " for global flags, "" for command flags).
+func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string) (interface{}, string) {
+	if IsDictType(f.Type) {
+		if f.hasDefault && f.Default != nil {
+			src := f.Default.(map[string]interface{})
+			m := make(map[string]interface{}, len(src))
+			for k, v := range src {
+				m[k] = v
+			}
+			return m, ""
+		}
+		return map[string]interface{}{}, ""
+	}
+	if f.Repeatable {
+		if f.hasDefault && f.Default != nil {
+			src := f.Default.([]interface{})
+			return append([]interface{}{}, src...), ""
+		}
+		return []interface{}{}, ""
+	}
+	if f.hasDefault && f.Default != nil {
+		return f.Default, ""
+	}
+	if f.hasDefault && f.Default == nil {
+		return nil, ""
+	}
+	if mutexFlagNames != nil && mutexFlagNames[f.Name] {
+		return nil, ""
+	}
+	if f.Type == TypeBool && f.Negatable {
+		return nil, fmt.Sprintf("%sflag '--%s' must be passed as --%s or --no-%s", prefix, f.Name, f.Name, f.Name)
+	}
+	if f.Type == TypeBool && !f.Negatable {
+		return nil, fmt.Sprintf("%sflag '--%s' must be passed as --%s", prefix, f.Name, f.Name)
+	}
+	return nil, fmt.Sprintf("%sflag '--%s' is required", prefix, f.Name)
+}
+
 // dependencies, checks co-required/requires dependencies, applies defaults,
 // validates choices, runs custom validation, resolves positional args, and
 // builds the final kwargs map.
@@ -499,40 +540,11 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 		if _, ok := cliSet[f.Name]; ok {
 			continue
 		}
-		if IsDictType(f.Type) {
-			if f.hasDefault && f.Default != nil {
-				src := f.Default.(map[string]interface{})
-				m := make(map[string]interface{}, len(src))
-				for k, v := range src {
-					m[k] = v
-				}
-				cliSet[f.Name] = m
-			} else {
-				cliSet[f.Name] = map[string]interface{}{}
-			}
-		} else if f.Repeatable {
-			if f.hasDefault && f.Default != nil {
-				src := f.Default.([]interface{})
-				cliSet[f.Name] = append([]interface{}{}, src...)
-			} else {
-				cliSet[f.Name] = []interface{}{}
-			}
-		} else if f.hasDefault && f.Default != nil {
-			cliSet[f.Name] = f.Default
-		} else if f.hasDefault && f.Default == nil {
-			// Explicit nil default (for mutex group str flags etc)
-			cliSet[f.Name] = nil
-		} else if mutexFlagNames[f.Name] {
-			cliSet[f.Name] = nil
-		} else {
-			if f.Type == TypeBool && f.Negatable {
-				return nil, nil, fmt.Sprintf("flag '--%s' must be passed as --%s or --no-%s", f.Name, f.Name, f.Name)
-			}
-			if f.Type == TypeBool && !f.Negatable {
-				return nil, nil, fmt.Sprintf("flag '--%s' must be passed as --%s", f.Name, f.Name)
-			}
-			return nil, nil, fmt.Sprintf("flag '--%s' is required", f.Name)
+		val, errMsg := applyFlagDefault(f, mutexFlagNames, "")
+		if errMsg != "" {
+			return nil, nil, errMsg
 		}
+		cliSet[f.Name] = val
 	}
 
 	// Validate choices
