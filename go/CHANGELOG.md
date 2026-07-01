@@ -2,16 +2,34 @@
 
 # Changelog
 
-## 0.16.2
+## 0.17.0
 
-Check command help text parity with Python.
+Required booleans, Context type, RegisterHandler, RegisterGlobals, schema project_id guard, tag contract global flags fix
 
 <details>
 <summary>Context</summary>
 
-Aligned all 9 check command help strings (command + 8 flags) between Go and Python for cross-language parity. All strings now meet the 50-character minimum.
+Breaking change: Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required. New Context type, RegisterHandler struct API, and RegisterGlobals[T] for typed global flag access. Schema dump now validates project_id. TagContract now checks global flags.
 
 </details>
+
+### Breaking
+
+- **Breaking.** Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required — user must pass --flag or --no-flag.
+
+### Features
+
+- **New.** Schema dump validates project_id before writing — hard error if existing schema belongs to a different project.
+- **New.** Context type with output methods (Info, Warn, Debug, Error, Emit) for structured handler communication.
+- **New.** RegisterHandler API — declare commands as structs with tagged fields. Compile-time-safe alternative to map[string]interface{} handlers.
+- **New.** RegisterGlobals[T] and Globals[T] — declare global flags via struct tags with generic typed accessor on Context.
+- **New.** Comprehensive sub-project READMEs replacing severely stale documentation.
+
+### Fixes
+
+- **Fix.** TagContract now checks global flags, not just command-level flags.
+
+## 0.16.2
 
 ### Fixes
 
