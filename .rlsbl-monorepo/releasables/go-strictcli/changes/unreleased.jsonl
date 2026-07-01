@@ -7,3 +7,4 @@
 {"commits":["c58e79bb0e643e9f9563c97a3fb0113577aaaec9","255e1558ca406ea4c1400b03c0e90f108ec29054","4e25a2374e545d0ced636c5a935b78088d5f03b6"],"user_facing":true,"description":"**New.** Comprehensive sub-project READMEs replacing severely stale documentation.","type":"feature","packages":["go-strictcli"]}
 {"commits":["283635039fa256e6a95005f9741117761f4dbf31"],"user_facing":false,"packages":["go-strictcli"]}
 {"commits":["f1f7d14175d830306de2d4970cb9321edcac40ff"],"user_facing":false,"packages":["go-strictcli"]}
+{"commits":["69b8f4911207df917350b1a17c12dccd2dc8911b"],"user_facing":false,"packages":["go-strictcli"]}
