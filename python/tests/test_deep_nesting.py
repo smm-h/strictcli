@@ -259,7 +259,7 @@ def test_global_flags_with_deep_nesting():
     """Global flags are parsed and passed through deep nesting."""
     app = strictcli.App(
         name="nch", version="1.0.0", help="cloud tool",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="enable verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="enable verbose output")],
     )
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage zones")
@@ -284,7 +284,7 @@ def test_global_flags_after_command_deep_nesting():
     """Global flags placed after the command work with deep nesting."""
     app = strictcli.App(
         name="nch", version="1.0.0", help="cloud tool",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="enable verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="enable verbose output")],
     )
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage zones")

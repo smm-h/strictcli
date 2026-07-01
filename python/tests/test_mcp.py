@@ -195,7 +195,7 @@ class TestMcpToolsList:
         @app.command("deploy", help="deploy the app")
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
-        @strictcli.flag("verbose", type=bool, help="verbose mode")
+        @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
         def deploy(target, count, verbose):
             pass
 
@@ -286,7 +286,7 @@ class TestMcpToolsCall:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        @strictcli.flag("dry-run", type=bool, help="dry run mode")
+        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
         def migrate(dry_run):
             return {"migrated": True, "dry_run": dry_run}
 

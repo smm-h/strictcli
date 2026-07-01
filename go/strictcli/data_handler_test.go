@@ -276,7 +276,7 @@ func TestCallNestedOldStyleCommand(t *testing.T) {
 	grp := app.Group("db", "database commands")
 	grp.Command("migrate", "run migrations", func(kwargs map[string]interface{}) int {
 		return 0
-	}, WithFlags(BoolFlag("dry-run", "preview only")))
+	}, WithFlags(BoolFlag("dry-run", "preview only", Default(false))))
 
 	result, err := app.Call("db.migrate", map[string]interface{}{"dry_run": true})
 	if err != nil {
@@ -302,7 +302,7 @@ func TestBackwardCompatExistingHandlersUnchanged(t *testing.T) {
 		return 0
 	}, WithFlags(
 		StringFlag("target", "deploy target"),
-		BoolFlag("dry-run", "dry run mode"),
+		BoolFlag("dry-run", "dry run mode", Default(false)),
 	))
 
 	r := app.Test([]string{"deploy", "--target", "production", "--dry-run"})
@@ -494,7 +494,7 @@ func TestInvokeErrorInterface(t *testing.T) {
 
 func TestCallDataCommandWithGlobalFlags(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "verbose output"))
+	app.GlobalFlag(BoolFlag("verbose", "verbose output", Default(false)))
 	app.DataCommand("info", "get info", func(kwargs map[string]interface{}) HandlerResult {
 		return HandlerResult{
 			Data: map[string]interface{}{

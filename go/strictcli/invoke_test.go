@@ -56,7 +56,7 @@ func TestInvokeMatchesTest(t *testing.T) {
 		app.Command("deploy", "deploy something", captureHandler(captured),
 			WithFlags(
 				StringFlag("target", "deploy target"),
-				BoolFlag("dry-run", "dry run mode"),
+				BoolFlag("dry-run", "dry run mode", Default(false)),
 				IntFlag("count", "instance count", Default(1)),
 			),
 		)
@@ -93,7 +93,7 @@ func TestInvokeWithDefaults(t *testing.T) {
 	app.Command("run", "run something", captureHandler(&captured),
 		WithFlags(
 			StringFlag("mode", "operation mode", Default("fast")),
-			BoolFlag("verbose", "verbose output"),
+			BoolFlag("verbose", "verbose output", Default(false)),
 			IntFlag("retries", "retry count", Default(3)),
 		),
 	)
@@ -124,7 +124,7 @@ func TestInvokeDefaultsMatchTest(t *testing.T) {
 		app.Command("run", "run it", captureHandler(captured),
 			WithFlags(
 				StringFlag("mode", "operation mode", Default("fast")),
-				BoolFlag("verbose", "verbose output"),
+				BoolFlag("verbose", "verbose output", Default(false)),
 				IntFlag("retries", "retry count", Default(3)),
 			),
 		)
@@ -156,7 +156,7 @@ func TestInvokeGroupCommand(t *testing.T) {
 	grp := app.Group("db", "database commands")
 	grp.Command("migrate", "run migrations", captureHandler(&captured),
 		WithFlags(
-			BoolFlag("dry-run", "preview only"),
+			BoolFlag("dry-run", "preview only", Default(false)),
 		),
 	)
 
@@ -232,7 +232,7 @@ func TestInvokeNestedGroupMatchesTest(t *testing.T) {
 func TestInvokeWithGlobalFlags(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
 	app.Command("run", "run it", captureHandler(&captured))
 
 	ir := app.invoke("run", map[string]interface{}{
@@ -249,7 +249,7 @@ func TestInvokeWithGlobalFlags(t *testing.T) {
 func TestInvokeGlobalFlagDefaults(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
 	app.Command("run", "run it", captureHandler(&captured))
 
 	// Don't provide the global flag -- should get default (false)
@@ -267,7 +267,7 @@ func TestInvokeGlobalFlagsMatchTest(t *testing.T) {
 
 	makeApp := func(captured *map[string]interface{}) *App {
 		app := NewApp("myapp", "1.0.0", "test app")
-		app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+		app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
 		app.GlobalFlag(StringFlag("format", "output format", Default("text")))
 		app.Command("run", "run it", captureHandler(captured),
 			WithFlags(
@@ -334,7 +334,7 @@ func TestInvokePositionalArgsMatchTest(t *testing.T) {
 				NewArg("dest", "destination file"),
 			),
 			WithFlags(
-				BoolFlag("recursive", "copy recursively"),
+				BoolFlag("recursive", "copy recursively", Default(false)),
 			),
 		)
 		return app
@@ -392,7 +392,7 @@ func TestInvokeVariadicArgsMatchTest(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("rm", "remove files", captureHandler(captured),
 			WithFlags(
-				BoolFlag("force", "force removal"),
+				BoolFlag("force", "force removal", Default(false)),
 			),
 			WithArgs(
 				NewArg("files", "files to remove", Variadic()),
@@ -427,7 +427,7 @@ func TestInvokePassthroughCommand(t *testing.T) {
 	var capturedGlobals map[string]interface{}
 
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
 	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
 		capturedName = name
 		capturedArgs = args
@@ -455,7 +455,7 @@ func TestInvokePassthroughCommand(t *testing.T) {
 
 func TestInvokePassthroughUnknownKwargs(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
 	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
 		return 0
 	})
@@ -479,7 +479,7 @@ func TestInvokePassthroughUnknownKwargs(t *testing.T) {
 func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(StringFlag("token", "auth token"))
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
 	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
 		return 0
 	})
@@ -681,7 +681,7 @@ func TestInvokeDashFlagName(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("run", "run it", captureHandler(&captured),
 		WithFlags(
-			BoolFlag("dry-run", "preview mode"),
+			BoolFlag("dry-run", "preview mode", Default(false)),
 			StringFlag("output-dir", "output directory", Default("/tmp")),
 		),
 	)
@@ -762,8 +762,8 @@ func TestInvokeImpliesDependency(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("run", "run it", captureHandler(captured),
 			WithFlags(
-				BoolFlag("all", "do everything"),
-				BoolFlag("verbose", "verbose output"),
+				BoolFlag("all", "do everything", Default(false)),
+				BoolFlag("verbose", "verbose output", Default(false)),
 			),
 			WithDependencies(
 				Implies{Flag: "all", Implies: "verbose", Value: true},

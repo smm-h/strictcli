@@ -19,7 +19,7 @@ func TestJsonSchemaAllScalarTypes(t *testing.T) {
 		StringFlag("name", "a string flag"),
 		IntFlag("count", "an integer flag"),
 		FloatFlag("ratio", "a float flag"),
-		BoolFlag("verbose", "a bool flag"),
+		BoolFlag("verbose", "a bool flag", Default(false)),
 	))
 
 	schema := app.JsonSchema("run")
@@ -56,7 +56,7 @@ func TestJsonSchemaRequiredFlags(t *testing.T) {
 		StringFlag("target", "deploy target"),               // required (no default)
 		IntFlag("replicas", "replica count"),                 // required (no default)
 		StringFlag("region", "region", Default("us-east-1")), // optional (has default)
-		BoolFlag("dry-run", "dry run mode"),                  // optional (bool always defaults to false)
+		BoolFlag("dry-run", "dry run mode", Default(false)),                  // optional (has default)
 		FloatFlag("threshold", "threshold", Default(0.5)),    // optional (has default)
 	))
 
@@ -84,7 +84,7 @@ func TestJsonSchemaOptionalFlagNotInRequired(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run something", nopHandler, WithFlags(
 		StringFlag("mode", "mode", Default("fast")),
-		BoolFlag("verbose", "verbosity"),
+		BoolFlag("verbose", "verbosity", Default(false)),
 	))
 
 	schema := app.JsonSchema("run")
@@ -282,7 +282,7 @@ func TestJsonSchemaAdditionalPropertiesFalse(t *testing.T) {
 func TestJsonSchemaDashedFlagBecomesUnderscored(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
-		BoolFlag("dry-run", "dry run mode"),
+		BoolFlag("dry-run", "dry run mode", Default(false)),
 	))
 
 	schema := app.JsonSchema("run")
@@ -468,7 +468,7 @@ func TestAsToolsToolParameters(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("deploy", "deploy", nopHandler, WithFlags(
 		StringFlag("target", "deploy target"),
-		BoolFlag("dry-run", "dry run"),
+		BoolFlag("dry-run", "dry run", Default(false)),
 	))
 
 	tools := app.AsTools()

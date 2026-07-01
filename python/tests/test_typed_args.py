@@ -822,7 +822,7 @@ def test_mixed_typed_arg_and_flags():
         help="a command",
         args=[strictcli.Arg(name="count", help="a count", type=int)],
     )
-    @strictcli.flag("verbose", type=bool, help="verbose output")
+    @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
     def cmd(count, verbose):
         print(f"count={count} type={type(count).__name__} verbose={verbose}")
 

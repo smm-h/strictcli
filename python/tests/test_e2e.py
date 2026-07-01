@@ -36,8 +36,8 @@ def _build_rlsbl_app():
         args=[strictcli.Arg(name="bump", help="version bump type")],
         flag_sets=[auth_flag_set],
     )
-    @strictcli.flag("dry-run", type=bool, help="preview without making changes")
-    @strictcli.flag("yes", type=bool, help="non-interactive mode")
+    @strictcli.flag("dry-run", type=bool, default=False, help="preview without making changes")
+    @strictcli.flag("yes", type=bool, default=False, help="non-interactive mode")
     def release(bump, token, dry_run, yes):
         parts = [f"releasing {bump}"]
         if dry_run:
@@ -232,7 +232,7 @@ def _build_kwargs_app():
         help="deploy the app",
         args=[strictcli.Arg(name="target", help="deploy target")],
     )
-    @strictcli.flag("dry-run", type=bool, help="preview without making changes")
+    @strictcli.flag("dry-run", type=bool, default=False, help="preview without making changes")
     @strictcli.flag("replicas", type=int, help="number of replicas", default=1)
     def deploy_handler(**kwargs):
         parts = [f"target={kwargs['target']}"]
@@ -292,7 +292,7 @@ def test_e2e_kwargs_handler_with_global_flags():
         version="1.0.0",
         help="kwargs test app",
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
         ],
     )
 
@@ -317,7 +317,7 @@ def test_e2e_kwargs_handler_registration_no_error():
         args=[strictcli.Arg(name="name", help="a name")],
     )
     @strictcli.flag("count", type=int, help="a count", default=0)
-    @strictcli.flag("force", type=bool, help="force it")
+    @strictcli.flag("force", type=bool, default=False, help="force it")
     def cmd_handler(**kwargs):
         return 0
 

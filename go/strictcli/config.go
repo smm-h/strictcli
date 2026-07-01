@@ -704,8 +704,8 @@ func (a *App) registerConfigGroup() {
 		return 0
 	}, WithMutex(
 		MutexGroup{Flags: []Flag{
-			BoolFlag("plain", "Display config values in a human-readable table format"),
-			BoolFlag("json", "Display config values as a JSON object with source metadata"),
+			BoolFlag("plain", "Display config values in a human-readable table format", Default(false)),
+			BoolFlag("json", "Display config values as a JSON object with source metadata", Default(false)),
 		}},
 	))
 
@@ -897,8 +897,8 @@ func (a *App) registerConfigGroup() {
 		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
 			ArgRequired(false)),
 	), WithFlags(
-		BoolFlag("clear", "Clear a repeatable flag by setting its value to an empty list"),
-		BoolFlag("default", "Reset a key to its default value by removing it from the config file"),
+		BoolFlag("clear", "Clear a repeatable flag by setting its value to an empty list", Default(false)),
+		BoolFlag("default", "Reset a key to its default value by removing it from the config file", Default(false)),
 	))
 
 	// config edit

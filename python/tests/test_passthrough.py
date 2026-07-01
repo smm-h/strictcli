@@ -54,7 +54,7 @@ class TestPassthroughWithGlobalFlags:
         capture = {}
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app(
-            flags=[strictcli.Flag(name="debug", type=bool, help="enable debug")]
+            flags=[strictcli.Flag(name="debug", type=bool, default=False, help="enable debug")]
         )
 
         @app.command("exec", help="execute something", passthrough=pt)
@@ -70,7 +70,7 @@ class TestPassthroughWithGlobalFlags:
         capture = {}
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app(
-            flags=[strictcli.Flag(name="debug", type=bool, help="enable debug")]
+            flags=[strictcli.Flag(name="debug", type=bool, default=False, help="enable debug")]
         )
 
         @app.command("exec", help="execute something", passthrough=pt)
@@ -151,7 +151,7 @@ class TestPassthroughWithFlagsRaisesValueError:
         app = _build_app()
         try:
             @app.command("exec", help="run", passthrough=pt)
-            @strictcli.flag("verbose", type=bool, help="verbose output")
+            @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
             def exec_cmd(verbose):
                 pass
             assert False, "should have raised ValueError"
@@ -212,8 +212,8 @@ class TestPassthroughWithMutexRaisesValueError:
     def test_mutex(self):
         pt = strictcli.Passthrough(handler=lambda n, a, g: 0)
         mg = strictcli.MutexGroup(flags=[
-            strictcli.Flag(name="json", type=bool, help="json output"),
-            strictcli.Flag(name="yaml", type=bool, help="yaml output"),
+            strictcli.Flag(name="json", type=bool, default=False, help="json output"),
+            strictcli.Flag(name="yaml", type=bool, default=False, help="yaml output"),
         ])
         app = _build_app()
         try:

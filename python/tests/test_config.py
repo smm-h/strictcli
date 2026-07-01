@@ -22,7 +22,7 @@ def _make_config_app(config=True, flags=None):
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
-    @strictcli.flag("verbose", type=bool, help="be verbose")
+    @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
     def run(target, count, verbose):
         print(f"target={target} count={count} verbose={verbose}")
 
@@ -522,7 +522,7 @@ def test_toml_format_reads_correctly(tmp_path):
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
-    @strictcli.flag("verbose", type=bool, help="be verbose")
+    @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
     def run(target, count, verbose):
         print(f"target={target} count={count} verbose={verbose}")
 

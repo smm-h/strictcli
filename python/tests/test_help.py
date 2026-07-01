@@ -8,7 +8,7 @@ def _make_full_app():
     app = strictcli.App(name="myapp", version="2.0.0", help="a great app")
 
     @app.command("init", help="initialize the project")
-    @strictcli.flag("force", type=bool, help="overwrite existing files")
+    @strictcli.flag("force", type=bool, default=False, help="overwrite existing files")
     def init(force):
         pass
 
@@ -134,7 +134,7 @@ def test_help_after_flags():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", type=bool, help="enable verbose output")
+    @strictcli.flag("verbose", type=bool, default=False, help="enable verbose output")
     def cmd(verbose):
         pass
 

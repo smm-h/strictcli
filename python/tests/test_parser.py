@@ -20,7 +20,7 @@ def _make_app_with_bool_flag():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", type=bool, help="be verbose")
+    @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
     def cmd(verbose):
         print(f"verbose={verbose}")
 
@@ -72,7 +72,7 @@ def test_short_flag_bool():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", short="v", type=bool, help="be verbose")
+    @strictcli.flag("verbose", short="v", type=bool, default=False, help="be verbose")
     def cmd(verbose):
         print(f"verbose={verbose}")
 
@@ -116,7 +116,7 @@ def test_double_dash_separator():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", args=[strictcli.Arg(name="path", help="a path")])
-    @strictcli.flag("verbose", type=bool, help="be verbose")
+    @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
     def cmd(verbose, path):
         print(f"verbose={verbose} path={path}")
 

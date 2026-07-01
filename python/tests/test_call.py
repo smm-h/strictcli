@@ -102,7 +102,7 @@ class TestCallReturnsDict:
         app = _build_app()
 
         @app.command("status", help="get status")
-        @strictcli.flag("verbose", type=bool, help="include details")
+        @strictcli.flag("verbose", type=bool, default=False, help="include details")
         def status(verbose):
             data = {"healthy": True}
             if verbose:
@@ -256,8 +256,8 @@ class TestCallErrorCases:
             "fmt", help="format",
             mutex=[strictcli.MutexGroup(
                 flags=[
-                    strictcli.Flag(name="json", type=bool, help="JSON output"),
-                    strictcli.Flag(name="yaml", type=bool, help="YAML output"),
+                    strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+                    strictcli.Flag(name="yaml", type=bool, default=False, help="YAML output"),
                 ],
             )],
         )

@@ -54,7 +54,7 @@ def test_command_with_global_flag():
     received = {}
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("global", type=bool, help="apply globally")
+    @strictcli.flag("global", type=bool, default=False, help="apply globally")
     def cmd(**kwargs):
         received.update(kwargs)
 
@@ -69,7 +69,7 @@ def test_command_with_global_flag_default():
     received = {}
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("global", type=bool, help="apply globally")
+    @strictcli.flag("global", type=bool, default=False, help="apply globally")
     def cmd(**kwargs):
         received.update(kwargs)
 
@@ -103,7 +103,7 @@ def test_config_key_uses_suffixed_name(tmp_path):
         received = {}
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("global", type=bool, help="apply globally")
+        @strictcli.flag("global", type=bool, default=False, help="apply globally")
         def cmd(**kwargs):
             received.update(kwargs)
 

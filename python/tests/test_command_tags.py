@@ -31,7 +31,7 @@ class TestFrozenCommand:
         app = _make_app()
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("verbose", type=bool, help="be verbose")
+        @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
         def cmd(verbose):
             pass
 
@@ -236,7 +236,7 @@ class TestTagContracts:
         app.tag_contract("json", requires_flag="json")
 
         @app.command("cmd", help="a command", tags={"json"})
-        @strictcli.flag("json", type=bool, help="output json")
+        @strictcli.flag("json", type=bool, default=False, help="output json")
         def cmd(json):
             pass
 
@@ -326,8 +326,8 @@ class TestTagContracts:
         app_good.tag_contract("verbose", requires_flag="verbose")
 
         @app_good.command("good", help="has both flags", tags={"json", "verbose"})
-        @strictcli.flag("json", type=bool, help="output json")
-        @strictcli.flag("verbose", type=bool, help="be verbose")
+        @strictcli.flag("json", type=bool, default=False, help="output json")
+        @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
         def good(json, verbose):
             pass
 
@@ -340,7 +340,7 @@ class TestTagContracts:
         app_bad.tag_contract("verbose", requires_flag="verbose")
 
         @app_bad.command("bad", help="missing verbose flag", tags={"json", "verbose"})
-        @strictcli.flag("json", type=bool, help="output json")
+        @strictcli.flag("json", type=bool, default=False, help="output json")
         def bad(json):
             pass
 

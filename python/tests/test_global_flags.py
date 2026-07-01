@@ -11,7 +11,7 @@ def _make_app_with_global_verbose():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="enable verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="enable verbose output")],
     )
 
     @app.command("run", help="run something")
@@ -157,13 +157,13 @@ def test_collision_between_global_and_command_flag():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
     )
 
     with pytest.raises(ValueError, match="collides with a global flag"):
 
         @app.command("run", help="run something")
-        @strictcli.flag("verbose", type=bool, help="also verbose")
+        @strictcli.flag("verbose", type=bool, default=False, help="also verbose")
         def run(verbose):
             pass
 
@@ -174,7 +174,7 @@ def test_global_flag_with_double_dash_separator():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
     )
 
     @app.command("run", help="run something")
@@ -217,7 +217,7 @@ def test_global_flag_short_form():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", short="V", type=bool, help="verbose output")],
+        flags=[strictcli.Flag(name="verbose", short="V", type=bool, default=False, help="verbose output")],
     )
 
     @app.command("run", help="run something")
@@ -235,7 +235,7 @@ def test_global_flag_with_group():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
     )
 
     grp = app.group("config", help="manage config")
@@ -255,7 +255,7 @@ def test_global_flag_with_group_and_command_flags():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
     )
 
     grp = app.group("config", help="manage config")
@@ -280,7 +280,7 @@ def test_global_flag_collision_in_group():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
     )
 
     grp = app.group("config", help="manage config")
@@ -288,7 +288,7 @@ def test_global_flag_collision_in_group():
     with pytest.raises(ValueError, match="collides with a global flag"):
 
         @grp.command("show", help="show config")
-        @strictcli.flag("verbose", type=bool, help="also verbose")
+        @strictcli.flag("verbose", type=bool, default=False, help="also verbose")
         def show(verbose):
             pass
 
@@ -318,7 +318,7 @@ def test_multiple_global_flags():
         version="1.0.0",
         help="test app",
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
             strictcli.Flag(name="config", type=str, help="config path", default="default.toml"),
         ],
     )

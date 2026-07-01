@@ -36,7 +36,7 @@ class TestInvokeBasicFlags:
         app = _build_app()
 
         @app.command("deploy", help="deploy")
-        @strictcli.flag("dry-run", type=bool, help="dry run mode")
+        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
         def deploy(dry_run):
             captured["dry_run"] = dry_run
 
@@ -87,7 +87,7 @@ class TestInvokeBasicFlags:
         app = _build_app()
 
         @app.command("deploy", help="deploy")
-        @strictcli.flag("dry-run", type=bool, help="dry run mode")
+        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
         def deploy(dry_run):
             captured["dry_run"] = dry_run
 
@@ -154,7 +154,7 @@ class TestInvokePositionalArgs:
             "deploy", help="deploy",
             args=[strictcli.Arg(name="target", help="deploy target")],
         )
-        @strictcli.flag("dry-run", type=bool, help="dry run mode")
+        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
         def deploy(target, dry_run):
             captured.update({"target": target, "dry_run": dry_run})
 
@@ -230,7 +230,7 @@ class TestInvokeGlobalFlags:
     def test_global_flag_passed(self):
         captured = {}
         app = _build_app(
-            flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+            flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
         )
 
         @app.command("run", help="run")
@@ -243,7 +243,7 @@ class TestInvokeGlobalFlags:
     def test_global_flag_default(self):
         captured = {}
         app = _build_app(
-            flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+            flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
         )
 
         @app.command("run", help="run")
@@ -283,7 +283,7 @@ class TestInvokeGlobalFlags:
         """Global flags and command flags both appear in handler kwargs."""
         captured = {}
         app = _build_app(
-            flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+            flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
         )
 
         @app.command("deploy", help="deploy")
@@ -355,7 +355,7 @@ class TestInvokePassthrough:
 
         app = _build_app(
             flags=[
-                strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+                strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
                 strictcli.Flag(name="config", type=str, help="config path", default="default.toml"),
             ],
         )
@@ -379,7 +379,7 @@ class TestInvokePassthrough:
 
         app = _build_app(
             flags=[
-                strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+                strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
                 strictcli.Flag(name="config", type=str, help="config path", default="default.toml"),
             ],
         )
@@ -488,8 +488,8 @@ class TestInvokeMutex:
             "fmt", help="format",
             mutex=[strictcli.MutexGroup(
                 flags=[
-                    strictcli.Flag(name="json", type=bool, help="JSON output"),
-                    strictcli.Flag(name="yaml", type=bool, help="YAML output"),
+                    strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+                    strictcli.Flag(name="yaml", type=bool, default=False, help="YAML output"),
                 ],
             )],
         )
@@ -507,8 +507,8 @@ class TestInvokeMutex:
             "fmt", help="format",
             mutex=[strictcli.MutexGroup(
                 flags=[
-                    strictcli.Flag(name="json", type=bool, help="JSON output"),
-                    strictcli.Flag(name="yaml", type=bool, help="YAML output"),
+                    strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+                    strictcli.Flag(name="yaml", type=bool, default=False, help="YAML output"),
                 ],
             )],
         )
@@ -598,8 +598,8 @@ class TestInvokeImplies:
                 strictcli.Implies(flag="ci", implies="yes", value=True),
             ],
         )
-        @strictcli.flag("ci", type=bool, help="CI mode")
-        @strictcli.flag("yes", type=bool, help="non-interactive")
+        @strictcli.flag("ci", type=bool, default=False, help="CI mode")
+        @strictcli.flag("yes", type=bool, default=False, help="non-interactive")
         def deploy(ci, yes):
             captured.update({"ci": ci, "yes": yes})
 

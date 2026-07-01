@@ -10,7 +10,7 @@ def test_register_command_with_flags_and_args():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("greet", help="say hello", args=[strictcli.Arg(name="name", help="who to greet")])
-    @strictcli.flag("loud", type=bool, help="shout it")
+    @strictcli.flag("loud", type=bool, default=False, help="shout it")
     def greet(name, loud):
         pass
 
@@ -51,7 +51,7 @@ def test_handler_missing_param():
     with pytest.raises(ValueError, match="handler missing parameter"):
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("verbose", type=bool, help="be verbose")
+        @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
         def cmd():
             pass
 
@@ -72,8 +72,8 @@ def test_duplicate_flag_name():
     with pytest.raises(ValueError, match="duplicate flag name"):
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("verbose", type=bool, help="be verbose")
-        @strictcli.flag("verbose", type=bool, help="also verbose")
+        @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
+        @strictcli.flag("verbose", type=bool, default=False, help="also verbose")
         def cmd(verbose):
             pass
 
@@ -118,7 +118,7 @@ def test_env_prefix_correct():
 def test_flag_set_merging():
     """Command inherits flag set flags."""
     verbose_flag_set = strictcli.FlagSet(
-        name="verbose", flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")]
+        name="verbose", flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")]
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 

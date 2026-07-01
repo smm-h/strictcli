@@ -14,8 +14,8 @@ def test_bool_mutex_neither_provided_error():
     """Two bool flags in mutex group, neither provided -> error (always required)."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -34,8 +34,8 @@ def test_bool_mutex_one_provided():
     """Two bool flags in mutex group, one provided -> OK."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -54,8 +54,8 @@ def test_bool_mutex_both_provided_error():
     """Two bool flags in mutex group, both provided -> error naming both."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -80,8 +80,8 @@ def test_required_mutex_none_provided_error():
     """Mutex group, none provided -> error (always required)."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -101,8 +101,8 @@ def test_required_mutex_one_provided_ok():
     """Mutex group, one provided -> OK."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -171,7 +171,7 @@ def test_mixed_type_mutex():
     """Mutex with mixed types (bool + str)."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="interactive", type=bool, help="interactive mode"),
+            strictcli.Flag(name="interactive", type=bool, default=False, help="interactive mode"),
             strictcli.Flag(name="script", type=str, help="script file", default=None),
         ],
     )
@@ -201,8 +201,8 @@ def test_mutex_shown_in_help():
     """Mutex group flags shown in help output under a distinct section."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -226,8 +226,8 @@ def test_required_mutex_shown_in_help():
     """Mutex group shows 'mutually exclusive' in the help section header."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -307,8 +307,8 @@ def test_mutex_flags_overlap_with_regular_flags_error():
     """Mutex flags that overlap with regular flags -> registration error."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -316,7 +316,7 @@ def test_mutex_flags_overlap_with_regular_flags_error():
     with pytest.raises(ValueError, match="duplicate flag name"):
 
         @app.command("cmd", help="a command", mutex=[mg])
-        @strictcli.flag("verbose", type=bool, help="verbose output")
+        @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
         def cmd(verbose, quiet):
             pass
 
@@ -325,7 +325,7 @@ def test_mutex_group_fewer_than_2_flags_error():
     """Mutex group with fewer than 2 flags -> registration error."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -358,14 +358,14 @@ def test_two_separate_mutex_groups():
     """Two independent mutex groups on the same command, both valid."""
     mg1 = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     mg2 = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=bool, help="JSON output"),
-            strictcli.Flag(name="csv", type=bool, help="CSV output"),
+            strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+            strictcli.Flag(name="csv", type=bool, default=False, help="CSV output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -393,17 +393,17 @@ def test_two_separate_mutex_groups():
 
 def test_overlapping_mutex_groups_error():
     """A flag appearing in multiple mutex groups -> registration error."""
-    shared_flag = strictcli.Flag(name="verbose", type=bool, help="verbose output")
+    shared_flag = strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")
     mg1 = strictcli.MutexGroup(
         flags=[
             shared_flag,
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     mg2 = strictcli.MutexGroup(
         flags=[
             shared_flag,
-            strictcli.Flag(name="debug", type=bool, help="debug output"),
+            strictcli.Flag(name="debug", type=bool, default=False, help="debug output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -424,8 +424,8 @@ def test_group_command_with_mutex():
     """Mutex works when registered via Group.command()."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-            strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="quiet", type=bool, default=False, help="quiet output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")

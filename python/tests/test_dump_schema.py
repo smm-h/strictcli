@@ -120,7 +120,7 @@ class TestSchemaCommands:
         @app.command("deploy", help="Deploy the app")
         @strictcli.flag("target", type=str, help="Deploy target", short="t",
                         choices=["prod", "staging"])
-        @strictcli.flag("force", type=bool, help="Force deploy")
+        @strictcli.flag("force", type=bool, default=False, help="Force deploy")
         def deploy(target, force):
             pass
 
@@ -265,7 +265,7 @@ class TestSchemaGlobalFlags:
         monkeypatch.chdir(tmp_path)
         app = _make_app(
             flags=[
-                strictcli.Flag(name="verbose", type=bool, help="Verbose output", short="V"),
+                strictcli.Flag(name="verbose", type=bool, default=False, help="Verbose output", short="V"),
                 strictcli.Flag(name="output", type=str, help="Output format",
                                default="text", choices=["text", "json"]),
             ]
@@ -428,7 +428,7 @@ class TestSchemaFlagTypes:
         app = _make_app()
 
         @app.command("cmd", help="A command")
-        @strictcli.flag("force", type=bool, help="Force it", negatable=False)
+        @strictcli.flag("force", type=bool, default=False, help="Force it", negatable=False)
         def cmd(force):
             pass
 
@@ -786,8 +786,8 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        json_flag = strictcli.Flag(name="json", type=bool, help="JSON output")
-        text_flag = strictcli.Flag(name="text", type=bool, help="Text output")
+        json_flag = strictcli.Flag(name="json", type=bool, default=False, help="JSON output")
+        text_flag = strictcli.Flag(name="text", type=bool, default=False, help="Text output")
 
         @app.command("show", help="Show data",
                      mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])])
@@ -849,8 +849,8 @@ class TestSchemaConstraints:
         @app.command("deploy", help="Deploy",
                      dependencies=[strictcli.Implies(
                          flag="force", implies="yes", value=True)])
-        @strictcli.flag("force", type=bool, help="Force deploy")
-        @strictcli.flag("yes", type=bool, help="Skip confirmation")
+        @strictcli.flag("force", type=bool, default=False, help="Force deploy")
+        @strictcli.flag("yes", type=bool, default=False, help="Skip confirmation")
         def deploy(force, yes):
             pass
 
@@ -869,8 +869,8 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        json_flag = strictcli.Flag(name="json", type=bool, help="JSON output")
-        text_flag = strictcli.Flag(name="text", type=bool, help="Text output")
+        json_flag = strictcli.Flag(name="json", type=bool, default=False, help="JSON output")
+        text_flag = strictcli.Flag(name="text", type=bool, default=False, help="Text output")
 
         @app.command("deploy", help="Deploy",
                      mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])],
@@ -898,8 +898,8 @@ class TestSchemaConstraints:
         @app.command("deploy", help="Deploy",
                      dependencies=[strictcli.CoRequired(
                          flags=["dry-run", "no-confirm"])])
-        @strictcli.flag("dry-run", type=bool, help="Dry run")
-        @strictcli.flag("no-confirm", type=bool, help="Skip confirmation")
+        @strictcli.flag("dry-run", type=bool, default=False, help="Dry run")
+        @strictcli.flag("no-confirm", type=bool, default=False, help="Skip confirmation")
         def deploy(dry_run, no_confirm):
             pass
 
@@ -931,7 +931,7 @@ class TestSchemaTagContracts:
         app.tag_contract("dangerous", requires_flag="force")
 
         @app.command("deploy", help="Deploy", tags=["dangerous"])
-        @strictcli.flag("force", type=bool, help="Force it")
+        @strictcli.flag("force", type=bool, default=False, help="Force it")
         def deploy(force):
             pass
 
@@ -947,7 +947,7 @@ class TestSchemaTagContracts:
         app.tag_contract("slow", requires_flag="timeout")
 
         @app.command("deploy", help="Deploy", tags=["dangerous", "slow"])
-        @strictcli.flag("force", type=bool, help="Force it")
+        @strictcli.flag("force", type=bool, default=False, help="Force it")
         @strictcli.flag("timeout", type=int, help="Timeout", default=30)
         def deploy(force, timeout):
             pass

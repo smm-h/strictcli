@@ -180,7 +180,7 @@ func TestStrFlagEqualsSyntax(t *testing.T) {
 
 func TestBoolFlagPresent(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose}",
-		WithFlags(BoolFlag("verbose", "be verbose")))
+		WithFlags(BoolFlag("verbose", "be verbose", Default(false))))
 	r := app.Test([]string{"cmd", "--verbose"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -192,7 +192,7 @@ func TestBoolFlagPresent(t *testing.T) {
 
 func TestBoolFlagAbsent(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose}",
-		WithFlags(BoolFlag("verbose", "be verbose")))
+		WithFlags(BoolFlag("verbose", "be verbose", Default(false))))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -204,7 +204,7 @@ func TestBoolFlagAbsent(t *testing.T) {
 
 func TestBoolFlagNegation(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose}",
-		WithFlags(BoolFlag("verbose", "be verbose")))
+		WithFlags(BoolFlag("verbose", "be verbose", Default(false))))
 	r := app.Test([]string{"cmd", "--no-verbose"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -216,7 +216,7 @@ func TestBoolFlagNegation(t *testing.T) {
 
 func TestShortBoolFlag(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose}",
-		WithFlags(BoolFlag("verbose", "be verbose", Short("V"))))
+		WithFlags(BoolFlag("verbose", "be verbose", Short("V"), Default(false))))
 	r := app.Test([]string{"cmd", "-V"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -276,7 +276,7 @@ func TestRequiredStrFlagMissing(t *testing.T) {
 
 func TestBoolFlagEqualsSyntaxRejected(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose}",
-		WithFlags(BoolFlag("verbose", "be verbose")))
+		WithFlags(BoolFlag("verbose", "be verbose", Default(false))))
 	r := app.Test([]string{"cmd", "--verbose=true"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -373,7 +373,7 @@ func TestOptionalArgNoDefault(t *testing.T) {
 
 func TestDoubleDashStopsFlagParsing(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose} path={path}",
-		WithFlags(BoolFlag("verbose", "be verbose")),
+		WithFlags(BoolFlag("verbose", "be verbose", Default(false))),
 		WithArgs(NewArg("path", "a path")))
 	r := app.Test([]string{"cmd", "--", "--not-a-flag"})
 	if r.ExitCode != 0 {
@@ -511,7 +511,7 @@ func TestEnvBoolTrue(t *testing.T) {
 		app.Command("cmd", "a command", func(args map[string]interface{}) int {
 			fmt.Print("verbose=" + formatValue(args["verbose"]))
 			return 0
-		}, WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"))))
+		}, WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"), Default(false))))
 
 		r := app.Test([]string{"cmd"})
 		if r.ExitCode != 0 {
@@ -531,7 +531,7 @@ func TestEnvBoolFalse(t *testing.T) {
 		app.Command("cmd", "a command", func(args map[string]interface{}) int {
 			fmt.Print("verbose=" + formatValue(args["verbose"]))
 			return 0
-		}, WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"))))
+		}, WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"), Default(false))))
 
 		r := app.Test([]string{"cmd"})
 		if r.ExitCode != 0 {
@@ -550,7 +550,7 @@ func TestEnvBoolInvalid(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
-		WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"))))
+		WithFlags(BoolFlag("verbose", "be verbose", Env("MYAPP_VERBOSE"), Default(false))))
 
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 1 {
@@ -666,7 +666,7 @@ func TestChoicesInHelp(t *testing.T) {
 
 func TestUnknownFlag(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithFlags(BoolFlag("verbose", "be verbose")))
+		WithFlags(BoolFlag("verbose", "be verbose", Default(false))))
 	r := app.Test([]string{"cmd", "--unknown"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -760,7 +760,7 @@ func TestErrorTryHintUnknownCommandInGroup(t *testing.T) {
 
 func TestBoolNegationWithValueRejected(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithFlags(BoolFlag("verbose", "be verbose")))
+		WithFlags(BoolFlag("verbose", "be verbose", Default(false))))
 	r := app.Test([]string{"cmd", "--no-verbose=true"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -908,8 +908,8 @@ func TestMutexNeitherProvided(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose} quiet={quiet}",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				BoolFlag("verbose", "verbose output"),
-				BoolFlag("quiet", "quiet output"),
+				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("quiet", "quiet output", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"cmd"})
@@ -925,8 +925,8 @@ func TestMutexOneProvided(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose} quiet={quiet}",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				BoolFlag("verbose", "verbose output"),
-				BoolFlag("quiet", "quiet output"),
+				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("quiet", "quiet output", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"cmd", "--verbose"})
@@ -942,8 +942,8 @@ func TestMutexBothProvidedError(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				BoolFlag("verbose", "verbose output"),
-				BoolFlag("quiet", "quiet output"),
+				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("quiet", "quiet output", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"cmd", "--verbose", "--quiet"})
@@ -962,8 +962,8 @@ func TestMutexRequiredNoneError(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				BoolFlag("verbose", "verbose output"),
-				BoolFlag("quiet", "quiet output"),
+				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("quiet", "quiet output", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"cmd"})
@@ -979,8 +979,8 @@ func TestMutexRequiredOneOk(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose} quiet={quiet}",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				BoolFlag("verbose", "verbose output"),
-				BoolFlag("quiet", "quiet output"),
+				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("quiet", "quiet output", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"cmd", "--quiet"})
@@ -1031,8 +1031,8 @@ func TestMutexHelpSection(t *testing.T) {
 		WithFlags(StringFlag("name", "your name", Default("anon"))),
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				BoolFlag("verbose", "verbose output"),
-				BoolFlag("quiet", "quiet output"),
+				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("quiet", "quiet output", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"cmd", "--help"})
@@ -1054,8 +1054,8 @@ func TestMutexRequiredInHelp(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				BoolFlag("verbose", "verbose output"),
-				BoolFlag("quiet", "quiet output"),
+				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("quiet", "quiet output", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"cmd", "--help"})
@@ -1196,7 +1196,7 @@ func TestFlagSetSingleFlag(t *testing.T) {
 	app := simpleApp("cmd", "a command", "verbose={verbose}",
 		WithFlagSets(FlagSet{
 			Name: "verbose",
-			Flags: []Flag{BoolFlag("verbose", "verbose output")},
+			Flags: []Flag{BoolFlag("verbose", "verbose output", Default(false))},
 		}))
 	r := app.Test([]string{"cmd", "--verbose"})
 	if r.ExitCode != 0 {
@@ -1213,7 +1213,7 @@ func TestFlagSetMultipleFlags(t *testing.T) {
 			Name: "output",
 			Flags: []Flag{
 				StringFlag("format", "output format", Default("text")),
-				BoolFlag("color", "use color"),
+				BoolFlag("color", "use color", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"cmd", "--format", "json", "--color"})
@@ -1234,7 +1234,7 @@ func TestFlagSetFlagsWithDefaults(t *testing.T) {
 			Name: "auth",
 			Flags: []Flag{
 				StringFlag("token", "auth token", Default("none")),
-				BoolFlag("insecure", "skip TLS verification"),
+				BoolFlag("insecure", "skip TLS verification", Default(false)),
 			},
 		}))
 	r := app.Test([]string{"deploy"})
@@ -1253,7 +1253,7 @@ func TestFlagSetFlagsInHelp(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
 		WithFlagSets(FlagSet{
 			Name:  "debug",
-			Flags: []Flag{BoolFlag("debug", "enable debug mode")},
+			Flags: []Flag{BoolFlag("debug", "enable debug mode", Default(false))},
 		}))
 	r := app.Test([]string{"cmd", "--help"})
 	if r.ExitCode != 0 {
@@ -1287,7 +1287,7 @@ func TestHelpShowsVersionAndCommands(t *testing.T) {
 func TestCommandHelpShowsFlagsAndArgs(t *testing.T) {
 	app := simpleApp("deploy", "deploy the app", "{target}:{dry_run}",
 		WithArgs(NewArg("target", "deploy target")),
-		WithFlags(BoolFlag("dry-run", "preview changes")))
+		WithFlags(BoolFlag("dry-run", "preview changes", Default(false))))
 	r := app.Test([]string{"deploy", "--help"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -1437,11 +1437,11 @@ func TestGroupCommandGlobalFlagCollisionPanics(t *testing.T) {
 	}()
 
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "global verbosity"))
+	app.GlobalFlag(BoolFlag("verbose", "global verbosity", Default(false)))
 	g := app.Group("config", "manage configuration")
 	// This should panic: "verbose" collides with the global flag
 	g.Command("show", "display config", func(args map[string]interface{}) int { return 0 },
-		WithFlags(BoolFlag("verbose", "local verbosity")))
+		WithFlags(BoolFlag("verbose", "local verbosity", Default(false))))
 }
 
 func TestEnvChoicesInvalid(t *testing.T) {
@@ -1678,8 +1678,8 @@ func TestCoRequiredDuplicateFlagPanics(t *testing.T) {
 func TestImpliesTriggerSetsTarget(t *testing.T) {
 	app := simpleApp("cmd", "a command", "fast={fast} embeddings={embeddings}",
 		WithFlags(
-			BoolFlag("fast", "enable fast mode"),
-			BoolFlag("embeddings", "enable embeddings"),
+			BoolFlag("fast", "enable fast mode", Default(false)),
+			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
 		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
 	r := app.Test([]string{"cmd", "--fast"})
@@ -1697,8 +1697,8 @@ func TestImpliesTriggerSetsTarget(t *testing.T) {
 func TestImpliesTriggerNotSetTargetGetsDefault(t *testing.T) {
 	app := simpleApp("cmd", "a command", "fast={fast} embeddings={embeddings}",
 		WithFlags(
-			BoolFlag("fast", "enable fast mode"),
-			BoolFlag("embeddings", "enable embeddings"),
+			BoolFlag("fast", "enable fast mode", Default(false)),
+			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
 		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
 	r := app.Test([]string{"cmd"})
@@ -1716,8 +1716,8 @@ func TestImpliesTriggerNotSetTargetGetsDefault(t *testing.T) {
 func TestImpliesExplicitConflictError(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
 		WithFlags(
-			BoolFlag("fast", "enable fast mode"),
-			BoolFlag("embeddings", "enable embeddings"),
+			BoolFlag("fast", "enable fast mode", Default(false)),
+			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
 		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
 	// --fast implies embeddings=false, but user explicitly sets --embeddings (true)
@@ -1733,8 +1733,8 @@ func TestImpliesExplicitConflictError(t *testing.T) {
 func TestImpliesExplicitAgreementNoError(t *testing.T) {
 	app := simpleApp("cmd", "a command", "fast={fast} embeddings={embeddings}",
 		WithFlags(
-			BoolFlag("fast", "enable fast mode"),
-			BoolFlag("embeddings", "enable embeddings"),
+			BoolFlag("fast", "enable fast mode", Default(false)),
+			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
 		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
 	// --fast implies embeddings=false, and user explicitly sets --no-embeddings (false) -- agreement
@@ -1764,7 +1764,7 @@ func TestImpliesUnknownTriggerFlagPanics(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
-		WithFlags(BoolFlag("embeddings", "enable embeddings")),
+		WithFlags(BoolFlag("embeddings", "enable embeddings", Default(false))),
 		WithDependencies(Implies{Flag: "nonexistent", Implies: "embeddings", Value: false}))
 }
 
@@ -1782,7 +1782,7 @@ func TestImpliesUnknownTargetFlagPanics(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
-		WithFlags(BoolFlag("fast", "enable fast mode")),
+		WithFlags(BoolFlag("fast", "enable fast mode", Default(false))),
 		WithDependencies(Implies{Flag: "fast", Implies: "nonexistent", Value: false}))
 }
 
@@ -1800,7 +1800,7 @@ func TestImpliesSelfImplicationPanics(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
-		WithFlags(BoolFlag("fast", "enable fast mode")),
+		WithFlags(BoolFlag("fast", "enable fast mode", Default(false))),
 		WithDependencies(Implies{Flag: "fast", Implies: "fast", Value: false}))
 }
 
@@ -1820,7 +1820,7 @@ func TestImpliesTriggerNotBoolFlagPanics(t *testing.T) {
 	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
 		WithFlags(
 			StringFlag("mode", "the mode", Default("fast")),
-			BoolFlag("embeddings", "enable embeddings"),
+			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
 		WithDependencies(Implies{Flag: "mode", Implies: "embeddings", Value: false}))
 }
@@ -1840,7 +1840,7 @@ func TestImpliesTargetNotBoolFlagPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
 		WithFlags(
-			BoolFlag("fast", "enable fast mode"),
+			BoolFlag("fast", "enable fast mode", Default(false)),
 			StringFlag("output", "output format", Default("text")),
 		),
 		WithDependencies(Implies{Flag: "fast", Implies: "output", Value: false}))
@@ -1989,8 +1989,8 @@ func TestImpliesEnvTrigger(t *testing.T) {
 		fmt.Print("fast=" + formatValue(args["fast"]) + " embeddings=" + formatValue(args["embeddings"]))
 		return 0
 	}, WithFlags(
-		BoolFlag("fast", "enable fast mode", Env("MYAPP_FAST")),
-		BoolFlag("embeddings", "enable embeddings"),
+		BoolFlag("fast", "enable fast mode", Env("MYAPP_FAST"), Default(false)),
+		BoolFlag("embeddings", "enable embeddings", Default(false)),
 	), WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
 
 	r := app.Test([]string{"cmd"})
@@ -2061,7 +2061,7 @@ func TestAppGroups(t *testing.T) {
 
 func TestAppGlobalFlags(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
 	app.GlobalFlag(StringFlag("output", "output format", Default("json")))
 
 	flags := app.GlobalFlags()
@@ -2154,7 +2154,7 @@ func TestHelpAfterFlags(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(args map[string]interface{}) int {
 		return 0
-	}, WithFlags(BoolFlag("verbose", "enable verbose output")))
+	}, WithFlags(BoolFlag("verbose", "enable verbose output", Default(false))))
 	r := app.Test([]string{"cmd", "--verbose", "--help"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -2651,7 +2651,7 @@ func TestDeepNestingDeprecatedInSubgroup(t *testing.T) {
 
 func TestDeepNestingGlobalFlags(t *testing.T) {
 	app := NewApp("nch", "1.0.0", "cloud tool")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output"))
+	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
 	dns := app.Group("dns", "manage DNS")
 	zone := dns.Group("zone", "manage zones")
 	zone.Command("list", "list zones", func(args map[string]interface{}) int {
@@ -3101,7 +3101,7 @@ func TestDumpSchemaContents(t *testing.T) {
 	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int { return 0 },
 		WithFlags(
 			StringFlag("target", "Deploy target", Short("t"), Choices("prod", "staging")),
-			BoolFlag("force", "Force deploy"),
+			BoolFlag("force", "Force deploy", Default(false)),
 		),
 		WithArgs(
 			NewArg("env", "Environment name"),
@@ -3326,7 +3326,7 @@ func TestDumpSchemaGroups(t *testing.T) {
 func TestDumpSchemaGlobalFlags(t *testing.T) {
 	tmpDir := chdirTemp(t)
 	app := NewApp("testapp", "1.0.0", "A test app")
-	app.GlobalFlag(BoolFlag("verbose", "Verbose output", Short("V")))
+	app.GlobalFlag(BoolFlag("verbose", "Verbose output", Short("V"), Default(false)))
 	app.GlobalFlag(StringFlag("output", "Output format", Default("text"), Choices("text", "json")))
 	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
 
@@ -4442,7 +4442,7 @@ func TestConfigShowJSON(t *testing.T) {
 	}, WithFlags(
 		IntFlag("port", "port number", Default(8080)),
 		StringFlag("host", "hostname", Default("localhost")),
-		BoolFlag("verbose", "verbose output"),
+		BoolFlag("verbose", "verbose output", Default(false)),
 	))
 
 	r := app.Test([]string{"config", "show", "--json"})
@@ -6637,7 +6637,7 @@ func TestTagContractSatisfied(t *testing.T) {
 	app.Command("cmd", "a command", func(args map[string]interface{}) int {
 		fmt.Print("ok")
 		return 0
-	}, WithTags("json"), WithFlags(BoolFlag("json", "output json")))
+	}, WithTags("json"), WithFlags(BoolFlag("json", "output json", Default(false))))
 	r := app.Test([]string{"cmd", "--json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -6996,8 +6996,8 @@ func TestSchemaConstraintsImplies(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(args map[string]interface{}) int { return 0 },
 		WithFlags(
-			BoolFlag("verbose", "Verbose output"),
-			BoolFlag("debug", "Debug mode"),
+			BoolFlag("verbose", "Verbose output", Default(false)),
+			BoolFlag("debug", "Debug mode", Default(false)),
 		),
 		WithDependencies(Implies{Flag: "debug", Implies: "verbose", Value: true}),
 	)
@@ -7033,8 +7033,8 @@ func TestSchemaConstraintsMixed(t *testing.T) {
 		WithFlags(
 			StringFlag("host", "Hostname", Default(nil)),
 			StringFlag("port", "Port", Default(nil)),
-			BoolFlag("verbose", "Verbose output"),
-			BoolFlag("debug", "Debug mode"),
+			BoolFlag("verbose", "Verbose output", Default(false)),
+			BoolFlag("debug", "Debug mode", Default(false)),
 		),
 		WithMutex(MutexGroup{Flags: []Flag{
 			StringFlag("format-json", "JSON format", Default(nil)),
@@ -7101,7 +7101,7 @@ func TestSchemaTagContracts(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.TagContract("release", "dry-run")
 	app.Command("deploy", "Deploy app", func(args map[string]interface{}) int { return 0 },
-		WithFlags(BoolFlag("dry-run", "Dry run mode")),
+		WithFlags(BoolFlag("dry-run", "Dry run mode", Default(false))),
 		WithTags("release"),
 	)
 	schema, err := dumpSchema(app)

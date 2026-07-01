@@ -250,7 +250,7 @@ func TestMCPToolsCallSuccess(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("greet", "greet someone", captureHandler(&captured), WithFlags(
 		StringFlag("name", "who to greet"),
-		BoolFlag("loud", "shout greeting"),
+		BoolFlag("loud", "shout greeting", Default(false)),
 	))
 
 	resp, err := sendMCPRequest(app, "tools/call", 4, map[string]interface{}{

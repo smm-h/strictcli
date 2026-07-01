@@ -56,7 +56,7 @@ class TestHiddenCommand:
         app = _make_app()
 
         @app.command("secret", help="A secret command", hidden=True)
-        @strictcli.flag("verbose", type=bool, help="be verbose")
+        @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
         def secret(verbose):
             pass
 

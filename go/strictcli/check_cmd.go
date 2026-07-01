@@ -38,14 +38,14 @@ func (a *App) registerCheckCommand() {
 		return 0
 	},
 		WithFlags(
-			BoolFlag("all", "Run every registered check regardless of tag or name filters"),
+			BoolFlag("all", "Run every registered check regardless of tag or name filters", Default(false)),
 			StringFlag("tag", "Tag DSL expression to select checks (e.g. 'changelog & !quality')", Default("")),
 			StringFlag("name", "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')", Default("")),
-			BoolFlag("list", "List all registered checks with their tags and exit without running"),
-			BoolFlag("json", "Output check results as machine-readable JSON instead of human text"),
-			BoolFlag("ignore-warnings", "Treat warn-severity results as passing so they do not cause nonzero exit"),
-			BoolFlag("verbose", "Show full details for passing checks in addition to failures and warnings"),
-			BoolFlag("dry-run", "Show which checks would run based on current filters without executing them"),
+			BoolFlag("list", "List all registered checks with their tags and exit without running", Default(false)),
+			BoolFlag("json", "Output check results as machine-readable JSON instead of human text", Default(false)),
+			BoolFlag("ignore-warnings", "Treat warn-severity results as passing so they do not cause nonzero exit", Default(false)),
+			BoolFlag("verbose", "Show full details for passing checks in addition to failures and warnings", Default(false)),
+			BoolFlag("dry-run", "Show which checks would run based on current filters without executing them", Default(false)),
 		),
 	)
 }

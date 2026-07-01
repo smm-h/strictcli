@@ -56,7 +56,7 @@ class TestJsonSchemaBasicTypes:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("verbose", type=bool, help="verbose mode")
+        @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
         def cmd(verbose):
             pass
 
@@ -70,7 +70,7 @@ class TestJsonSchemaBasicTypes:
         @strictcli.flag("name", type=str, help="string flag")
         @strictcli.flag("count", type=int, help="integer flag")
         @strictcli.flag("factor", type=float, help="number flag")
-        @strictcli.flag("verbose", type=bool, help="boolean flag")
+        @strictcli.flag("verbose", type=bool, default=False, help="boolean flag")
         def cmd(name, count, factor, verbose):
             pass
 
@@ -115,7 +115,7 @@ class TestJsonSchemaRequired:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("verbose", type=bool, help="verbose mode")
+        @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
         def cmd(verbose):
             pass
 
@@ -271,7 +271,7 @@ class TestJsonSchemaPositionalArgs:
         @app.command("cmd", help="a command", args=[
             strictcli.Arg(name="target", help="the target"),
         ])
-        @strictcli.flag("verbose", type=bool, help="verbose mode")
+        @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
         def cmd(target, verbose):
             pass
 
@@ -361,7 +361,7 @@ class TestJsonSchemaNestedPath:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        @strictcli.flag("dry-run", type=bool, help="dry run mode")
+        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
         def migrate(dry_run):
             pass
 
@@ -417,7 +417,7 @@ class TestJsonSchemaFlagNameConversion:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("dry-run", type=bool, help="dry run mode")
+        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
         def cmd(dry_run):
             pass
 
@@ -911,7 +911,7 @@ class TestToolExecuteGroupedCommand:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        @strictcli.flag("dry-run", type=bool, help="dry run mode")
+        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
         def migrate(dry_run):
             captured["dry_run"] = dry_run
             return {"migrated": True, "dry_run": dry_run}

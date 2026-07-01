@@ -7,7 +7,7 @@ def test_flag_set_with_single_flag():
     """FlagSet with single flag applied to command."""
     verbose_flag_set = strictcli.FlagSet(
         name="verbose",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output")],
+        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
@@ -26,7 +26,7 @@ def test_flag_set_with_multiple_flags():
         name="output",
         flags=[
             strictcli.Flag(name="format", type=str, help="output format", default="text"),
-            strictcli.Flag(name="color", type=bool, help="use color"),
+            strictcli.Flag(name="color", type=bool, default=False, help="use color"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -45,7 +45,7 @@ def test_flag_set_flags_in_command_flags():
     """FlagSet flags appear in command's flags list."""
     flag_set = strictcli.FlagSet(
         name="debug",
-        flags=[strictcli.Flag(name="debug", type=bool, help="enable debug mode")],
+        flags=[strictcli.Flag(name="debug", type=bool, default=False, help="enable debug mode")],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
@@ -61,7 +61,7 @@ def test_flag_set_flags_in_help():
     """FlagSet flags shown in help output."""
     flag_set = strictcli.FlagSet(
         name="debug",
-        flags=[strictcli.Flag(name="debug", type=bool, help="enable debug mode")],
+        flags=[strictcli.Flag(name="debug", type=bool, default=False, help="enable debug mode")],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
@@ -81,7 +81,7 @@ def test_flag_set_flag_values_parsed():
         name="auth",
         flags=[
             strictcli.Flag(name="token", type=str, help="auth token", default="none"),
-            strictcli.Flag(name="insecure", type=bool, help="skip TLS verification"),
+            strictcli.Flag(name="insecure", type=bool, default=False, help="skip TLS verification"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")

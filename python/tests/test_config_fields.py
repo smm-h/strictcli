@@ -483,7 +483,7 @@ class TestConfigFieldValidation:
         app.config_field("port", type=int, help="Port", default=8080)
 
         @app.command(name="serve", help="start", config_fields=["port"])
-        @strictcli.flag("verbose", type=bool, help="verbose output")
+        @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
         def serve(verbose, **kw):
             return 0
 
@@ -877,7 +877,7 @@ class TestConfigInit:
         )
 
         @app.command(name="serve", help="start")
-        @strictcli.flag("verbose", type=bool, help="verbose output")
+        @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
         def serve(verbose, **kw):
             pass
 

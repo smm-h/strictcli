@@ -49,7 +49,7 @@ def _make_bool_env_app():
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", type=bool, help="be verbose", env="MYAPP_VERBOSE")
+    @strictcli.flag("verbose", type=bool, default=False, help="be verbose", env="MYAPP_VERBOSE")
     def cmd(verbose):
         print(f"verbose={verbose}")
 

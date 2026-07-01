@@ -345,8 +345,8 @@ def test_dependency_with_mutex_interaction():
     """A flag can participate in both a mutex group and a dependency."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=bool, help="JSON output"),
-            strictcli.Flag(name="csv", type=bool, help="CSV output"),
+            strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+            strictcli.Flag(name="csv", type=bool, default=False, help="CSV output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -418,8 +418,8 @@ def test_implies_trigger_set_target_auto_set():
         "cmd", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
-    @strictcli.flag("fast", type=bool, help="fast mode")
-    @strictcli.flag("embeddings", type=bool, help="use embeddings")
+    @strictcli.flag("fast", type=bool, default=False, help="fast mode")
+    @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
     def cmd(fast, embeddings):
         print(f"fast={fast} embeddings={embeddings}")
 
@@ -442,7 +442,7 @@ def test_implies_trigger_not_set_target_gets_default():
         "cmd", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
-    @strictcli.flag("fast", type=bool, help="fast mode")
+    @strictcli.flag("fast", type=bool, default=False, help="fast mode")
     @strictcli.flag("embeddings", type=bool, help="use embeddings", default=True)
     def cmd(fast, embeddings):
         print(f"fast={fast} embeddings={embeddings}")
@@ -466,8 +466,8 @@ def test_implies_explicit_conflict_error():
         "cmd", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
-    @strictcli.flag("fast", type=bool, help="fast mode")
-    @strictcli.flag("embeddings", type=bool, help="use embeddings")
+    @strictcli.flag("fast", type=bool, default=False, help="fast mode")
+    @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
     def cmd(fast, embeddings):
         pass
 
@@ -492,8 +492,8 @@ def test_implies_explicit_agreement_ok():
         "cmd", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
-    @strictcli.flag("fast", type=bool, help="fast mode")
-    @strictcli.flag("embeddings", type=bool, help="use embeddings")
+    @strictcli.flag("fast", type=bool, default=False, help="fast mode")
+    @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
     def cmd(fast, embeddings):
         print(f"fast={fast} embeddings={embeddings}")
 
@@ -518,7 +518,7 @@ def test_implies_unknown_trigger_flag_error():
             "cmd", help="a command",
             dependencies=[strictcli.Implies(flag="nonexistent", implies="embeddings", value=False)],
         )
-        @strictcli.flag("embeddings", type=bool, help="use embeddings")
+        @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
         def cmd(embeddings):
             pass
 
@@ -538,7 +538,7 @@ def test_implies_unknown_target_flag_error():
             "cmd", help="a command",
             dependencies=[strictcli.Implies(flag="fast", implies="nonexistent", value=False)],
         )
-        @strictcli.flag("fast", type=bool, help="fast mode")
+        @strictcli.flag("fast", type=bool, default=False, help="fast mode")
         def cmd(fast):
             pass
 
@@ -558,7 +558,7 @@ def test_implies_self_implication_error():
             "cmd", help="a command",
             dependencies=[strictcli.Implies(flag="fast", implies="fast", value=True)],
         )
-        @strictcli.flag("fast", type=bool, help="fast mode")
+        @strictcli.flag("fast", type=bool, default=False, help="fast mode")
         def cmd(fast):
             pass
 
@@ -579,7 +579,7 @@ def test_implies_trigger_not_bool_error():
             dependencies=[strictcli.Implies(flag="name", implies="embeddings", value=False)],
         )
         @strictcli.flag("name", type=str, help="a name", default="")
-        @strictcli.flag("embeddings", type=bool, help="use embeddings")
+        @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
         def cmd(name, embeddings):
             pass
 
@@ -599,7 +599,7 @@ def test_implies_target_not_bool_error():
             "cmd", help="a command",
             dependencies=[strictcli.Implies(flag="fast", implies="name", value=False)],
         )
-        @strictcli.flag("fast", type=bool, help="fast mode")
+        @strictcli.flag("fast", type=bool, default=False, help="fast mode")
         @strictcli.flag("name", type=str, help="a name", default="")
         def cmd(fast, name):
             pass
@@ -618,9 +618,9 @@ def test_implies_env_var_trigger(monkeypatch):
         "cmd", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
-    @strictcli.flag("fast", type=bool, help="fast mode",
+    @strictcli.flag("fast", type=bool, default=False, help="fast mode",
                     env="TEST_IMPLIES_FAST", prefixed=False)
-    @strictcli.flag("embeddings", type=bool, help="use embeddings")
+    @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
     def cmd(fast, embeddings):
         print(f"fast={fast} embeddings={embeddings}")
 
@@ -647,8 +647,8 @@ def test_implies_with_requires_interaction():
             strictcli.Requires(flag="output", depends_on="fast"),
         ],
     )
-    @strictcli.flag("fast", type=bool, help="fast mode")
-    @strictcli.flag("embeddings", type=bool, help="use embeddings")
+    @strictcli.flag("fast", type=bool, default=False, help="fast mode")
+    @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
     @strictcli.flag("output", type=str, help="output path", default=None)
     def cmd(fast, embeddings, output):
         print(f"fast={fast} embeddings={embeddings} output={output}")

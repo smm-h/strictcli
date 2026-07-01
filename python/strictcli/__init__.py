@@ -2146,14 +2146,14 @@ class App:
         # collisions -- the handler receives global flag values automatically.
         global_flag_names = {gf.name for gf in self._global_flags}
         candidate_extra_flags = [
-            Flag(name="all", type=bool, help="Run every registered check regardless of tag or name filters"),
+            Flag(name="all", type=bool, default=False, help="Run every registered check regardless of tag or name filters"),
             Flag(name="tag", type=str, default="", help="Tag DSL expression to select checks (e.g. 'changelog & !quality')"),
             Flag(name="name", type=str, default="", help="Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')"),
-            Flag(name="list", type=bool, help="List all registered checks with their tags and exit without running"),
-            Flag(name="json", type=bool, help="Output check results as machine-readable JSON instead of human text"),
-            Flag(name="ignore-warnings", type=bool, help="Treat warn-severity results as passing so they do not cause nonzero exit"),
-            Flag(name="verbose", type=bool, help="Show full details for passing checks in addition to failures and warnings"),
-            Flag(name="dry-run", type=bool, help="Show which checks would run based on current filters without executing them"),
+            Flag(name="list", type=bool, default=False, help="List all registered checks with their tags and exit without running"),
+            Flag(name="json", type=bool, default=False, help="Output check results as machine-readable JSON instead of human text"),
+            Flag(name="ignore-warnings", type=bool, default=False, help="Treat warn-severity results as passing so they do not cause nonzero exit"),
+            Flag(name="verbose", type=bool, default=False, help="Show full details for passing checks in addition to failures and warnings"),
+            Flag(name="dry-run", type=bool, default=False, help="Show which checks would run based on current filters without executing them"),
         ]
         extra_flags = [f for f in candidate_extra_flags if f.name not in global_flag_names]
         check_cmd = _build_and_validate_command(
@@ -2375,8 +2375,8 @@ class App:
             return 0
 
         config_show_flags = [
-            Flag(name="plain", type=bool, help="Display config values in a human-readable table format"),
-            Flag(name="json", type=bool, help="Display config values as a JSON object with source metadata"),
+            Flag(name="plain", type=bool, default=False, help="Display config values in a human-readable table format"),
+            Flag(name="json", type=bool, default=False, help="Display config values as a JSON object with source metadata"),
         ]
         config_show_mutex = [MutexGroup(flags=config_show_flags)]
         config_grp.commands["show"] = Command(
@@ -2581,9 +2581,9 @@ class App:
                     required=False),
             ),
             flags=(
-                Flag(name="clear", type=bool,
+                Flag(name="clear", type=bool, default=False,
                      help="Clear a repeatable flag by setting its value to an empty list"),
-                Flag(name="default", type=bool,
+                Flag(name="default", type=bool, default=False,
                      help="Reset a key to its default value by removing it from the config file"),
             ),
         )
