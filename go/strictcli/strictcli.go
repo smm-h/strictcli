@@ -1182,13 +1182,13 @@ func (a *App) validateTagContracts() string {
 	var violations []string
 	// Check top-level commands
 	for _, cmd := range a.commands {
-		if v := checkCommandTagContract(cmd, a.tagContracts); v != "" {
+		if v := checkCommandTagContract(cmd, a.tagContracts, a.globalFlags); v != "" {
 			violations = append(violations, v)
 		}
 	}
 	// Check commands in groups recursively
 	for _, g := range a.groups {
-		violations = append(violations, checkGroupTagContracts(g, a.tagContracts)...)
+		violations = append(violations, checkGroupTagContracts(g, a.tagContracts, a.globalFlags)...)
 	}
 	if len(violations) == 0 {
 		return ""
@@ -1197,7 +1197,7 @@ func (a *App) validateTagContracts() string {
 	return strings.Join(violations, "; ")
 }
 
-func checkCommandTagContract(cmd *Command, contracts map[string]string) string {
+func checkCommandTagContract(cmd *Command, contracts map[string]string, globalFlags []Flag) string {
 	if cmd.Passthrough {
 		return ""
 	}
@@ -1214,21 +1214,29 @@ func checkCommandTagContract(cmd *Command, contracts map[string]string) string {
 			}
 		}
 		if !found {
+			for _, f := range globalFlags {
+				if f.Name == requiredFlag {
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
 			return fmt.Sprintf("command %q: tag %q requires flag \"--%s\"", cmd.Name, tag, requiredFlag)
 		}
 	}
 	return ""
 }
 
-func checkGroupTagContracts(g *Group, contracts map[string]string) []string {
+func checkGroupTagContracts(g *Group, contracts map[string]string, globalFlags []Flag) []string {
 	var violations []string
 	for _, cmd := range g.Commands {
-		if v := checkCommandTagContract(cmd, contracts); v != "" {
+		if v := checkCommandTagContract(cmd, contracts, globalFlags); v != "" {
 			violations = append(violations, v)
 		}
 	}
 	for _, sub := range g.Groups {
-		violations = append(violations, checkGroupTagContracts(sub, contracts)...)
+		violations = append(violations, checkGroupTagContracts(sub, contracts, globalFlags)...)
 	}
 	return violations
 }
