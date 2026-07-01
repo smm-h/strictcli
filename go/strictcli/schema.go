@@ -489,6 +489,35 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 	return schema, nil
 }
 
+// checkSchemaProjectID verifies that an existing schema file belongs to the
+// same project. Returns an error on mismatch. Silently passes on: missing
+// file, unreadable file, JSON without project_id field, or matching project_id.
+func checkSchemaProjectID(filePath string, newProjectID string) error {
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil
+	}
+	var existing map[string]interface{}
+	if err := json.Unmarshal(raw, &existing); err != nil {
+		return nil
+	}
+	existingID, ok := existing["project_id"]
+	if !ok {
+		return nil
+	}
+	existingIDStr, ok := existingID.(string)
+	if !ok {
+		return nil
+	}
+	if existingIDStr != newProjectID {
+		return fmt.Errorf(
+			"Schema mismatch: existing schema belongs to project '%s', not '%s'. Run from the correct project directory.",
+			existingIDStr, newProjectID,
+		)
+	}
+	return nil
+}
+
 // writeSchema writes the schema to .strictcli/schema.json and returns the path.
 func writeSchema(app *App) (string, error) {
 	schema, err := dumpSchema(app)
@@ -504,6 +533,10 @@ func writeSchema(app *App) (string, error) {
 		return "", err
 	}
 	filePath := filepath.Join(dirPath, "schema.json")
+	newProjectID, _ := schema["project_id"].(string)
+	if err := checkSchemaProjectID(filePath, newProjectID); err != nil {
+		return "", err
+	}
 	if err := os.WriteFile(filePath, append(data, '\n'), 0o644); err != nil {
 		return "", err
 	}

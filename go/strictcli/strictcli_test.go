@@ -3556,6 +3556,77 @@ func TestDumpSchemaProjectIdNoGoMod(t *testing.T) {
 	}
 }
 
+// --- Schema project_id mismatch tests ---
+
+func TestDumpSchemaProjectIdMismatch(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	// Write an existing schema with a different project_id
+	schemaDir := filepath.Join(tmpDir, ".strictcli")
+	os.MkdirAll(schemaDir, 0o755)
+	os.WriteFile(filepath.Join(schemaDir, "schema.json"),
+		[]byte(`{"project_id": "other-project"}`), 0644)
+
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode == 0 {
+		t.Fatal("expected non-zero exit code on project_id mismatch")
+	}
+	if !strings.Contains(r.Stderr, "Schema mismatch") {
+		t.Fatalf("expected 'Schema mismatch' in stderr, got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "other-project") {
+		t.Fatalf("expected 'other-project' in stderr, got %q", r.Stderr)
+	}
+}
+
+func TestDumpSchemaProjectIdMatch(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	// Write an existing schema with the same project_id
+	schemaDir := filepath.Join(tmpDir, ".strictcli")
+	os.MkdirAll(schemaDir, 0o755)
+	os.WriteFile(filepath.Join(schemaDir, "schema.json"),
+		[]byte(`{"project_id": "example.com/testproject"}`), 0644)
+
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestDumpSchemaProjectIdMissingFile(t *testing.T) {
+	chdirTemp(t)
+	// No existing schema file
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestDumpSchemaProjectIdCorruptFile(t *testing.T) {
+	tmpDir := chdirTemp(t)
+	// Write corrupt JSON
+	schemaDir := filepath.Join(tmpDir, ".strictcli")
+	os.MkdirAll(schemaDir, 0o755)
+	os.WriteFile(filepath.Join(schemaDir, "schema.json"),
+		[]byte("not valid json {{{"), 0644)
+
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.Command("noop", "Does nothing", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
 // --- @-prefix tests ---
 
 func TestAtPrefixFileBasic(t *testing.T) {
