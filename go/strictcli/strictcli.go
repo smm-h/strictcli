@@ -4,6 +4,7 @@ package strictcli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"sort"
@@ -187,6 +188,11 @@ type Command struct {
 	PassthroughHandler PassthroughHandler
 	Hidden             bool
 	Interactive        bool
+
+	// Struct handler fields (set by RegisterHandler)
+	handlerFactory func() Handler            // creates a fresh handler instance per dispatch
+	handlerType    reflect.Type              // the concrete struct type behind the Handler
+	paramToFlag    map[string]string          // reverse map: param name (underscores) -> flag name (dashes)
 }
 
 // deprecatedCmd is a declaration-only command that prints a message and exits 1.
@@ -204,6 +210,9 @@ type Group struct {
 	tags            []string
 	accumulatedTags []string // own tags union all ancestor tags; passed as inheritedTags to children
 	envPrefix       string
+
+	// app is a reference to the root App (needed for RegisterHandler dispatch context)
+	app *App
 
 	// globalFlags is a reference to the app's global flags for collision checking
 	globalFlags []Flag
@@ -263,6 +272,17 @@ type App struct {
 
 	stdinConsumedBy *string // tracks which flag consumed stdin via @-
 	tagContracts    map[string]string // tag name -> required flag name
+
+	currentDispatch *dispatchCtx // set before handler dispatch, cleared after
+}
+
+// dispatchCtx carries per-dispatch state to struct handler wrappers.
+// Set on the App before calling the handler, cleared after return.
+type dispatchCtx struct {
+	stdout   io.Writer
+	stderr   io.Writer
+	globals  map[string]interface{} // keyed by flag name (dashes)
+	emitData interface{}            // set by handler wrapper if ctx.Emit was called
 }
 
 // --- Option types ---
@@ -1263,6 +1283,16 @@ func (a *App) DataCommand(name, help string, handler DataHandler, opts ...CmdOpt
 	a.cmdOrder = append(a.cmdOrder, name)
 }
 
+// RegisterHandler registers a struct-based command handler on the app.
+// The factory function creates fresh handler instances for each invocation.
+// Flags and args are extracted from the handler struct's cli:/arg: tags.
+// Additional CmdOptions (e.g., WithMutex, WithDependencies) can be passed.
+func (a *App) RegisterHandler(name, help string, factory func() Handler, opts ...CmdOption) {
+	cmd := buildHandlerCommand(name, help, factory, a, a.EnvPrefix, a.globalFlags, nil, opts)
+	a.commands[name] = cmd
+	a.cmdOrder = append(a.cmdOrder, name)
+}
+
 // Passthrough registers a passthrough command (raw args, no parsing).
 // Accepts CmdOptions for validation purposes (e.g., to detect invalid passthrough+flags).
 func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ...CmdOption) {
@@ -1325,6 +1355,7 @@ func (a *App) Group(name, help string, tags ...string) *Group {
 		tags:            validTags,
 		accumulatedTags: validTags,
 		envPrefix:       a.EnvPrefix,
+		app:             a,
 		globalFlags:     a.globalFlags,
 		deprecatedMap:   make(map[string]string),
 	}
@@ -1354,6 +1385,7 @@ func (g *Group) Group(name, help string, tags ...string) *Group {
 		tags:            validTags,
 		accumulatedTags: accumulated,
 		envPrefix:       g.envPrefix,
+		app:             g.app,
 		globalFlags:     g.globalFlags,
 		deprecatedMap:   make(map[string]string),
 	}
@@ -1383,6 +1415,16 @@ func (g *Group) DataCommand(name, help string, handler DataHandler, opts ...CmdO
 	}
 	cmd := buildAndValidateCommand(name, help, wrapper, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
 	cmd.dataHandler = handler
+	g.Commands[name] = cmd
+	g.order = append(g.order, name)
+}
+
+// RegisterHandler registers a struct-based command handler within a group.
+func (g *Group) RegisterHandler(name, help string, factory func() Handler, opts ...CmdOption) {
+	if _, ok := g.Groups[name]; ok {
+		panic(fmt.Sprintf("command %q collides with an existing group", name))
+	}
+	cmd := buildHandlerCommand(name, help, factory, g.app, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
 }
@@ -1509,6 +1551,16 @@ func (a *App) Run() {
 		os.Exit(code)
 	}
 
+	// Set dispatch context for struct handler wrappers
+	if pr.cmd.handlerFactory != nil {
+		a.currentDispatch = &dispatchCtx{
+			stdout:  os.Stdout,
+			stderr:  os.Stderr,
+			globals: paramKwargsToFlagNames(pr.globalKwargs),
+		}
+		defer func() { a.currentDispatch = nil }()
+	}
+
 	if pr.cmd.dataHandler != nil {
 		result := pr.cmd.dataHandler(pr.kwargs)
 		if result.Data != nil {
@@ -1575,6 +1627,18 @@ func (a *App) Test(argv []string) Result {
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
+	// Set dispatch context for struct handler wrappers (uses pipe writers)
+	var dc *dispatchCtx
+	if pr.cmd.handlerFactory != nil {
+		dc = &dispatchCtx{
+			stdout:  stdoutW,
+			stderr:  stderrW,
+			globals: paramKwargsToFlagNames(pr.globalKwargs),
+		}
+		a.currentDispatch = dc
+		defer func() { a.currentDispatch = nil }()
+	}
+
 	var exitCode int
 	var resultData interface{}
 	if pr.cmd.Passthrough {
@@ -1585,6 +1649,11 @@ func (a *App) Test(argv []string) Result {
 		resultData = hr.Data
 	} else {
 		exitCode = pr.cmd.Handler(pr.kwargs)
+	}
+
+	// Capture emit data from struct handlers
+	if dc != nil && dc.emitData != nil {
+		resultData = dc.emitData
 	}
 
 	stdoutW.Close()
@@ -2293,6 +2362,100 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 	cmd.tags = mergeTags(inheritedTags, cmd.tags)
 
 	return cmd
+}
+
+// buildHandlerCommand creates a Command from a struct-based Handler factory.
+// It extracts flags/args from the handler struct, builds a reverse param-to-flag
+// map, and wraps the handler in a func(map[string]interface{}) int that performs
+// struct binding at dispatch time.
+func buildHandlerCommand(name, help string, factory func() Handler, app *App, envPrefix string, globalFlags []Flag, inheritedTags []string, opts []CmdOption) *Command {
+	sample := factory()
+	structType := reflect.TypeOf(sample)
+	if structType.Kind() == reflect.Ptr {
+		structType = structType.Elem()
+	}
+
+	flags, args := extractFlags(structType)
+
+	// Build reverse map: param name (underscores) -> flag name (dashes)
+	paramToFlagMap := make(map[string]string, len(flags))
+	for _, f := range flags {
+		paramToFlagMap[flagParamName(f.Name)] = f.Name
+	}
+
+	// Build the CmdOption list from extracted flags/args, prepended before user opts
+	var extractedOpts []CmdOption
+	if len(flags) > 0 {
+		extractedOpts = append(extractedOpts, WithFlags(flags...))
+	}
+	if len(args) > 0 {
+		extractedOpts = append(extractedOpts, WithArgs(args...))
+	}
+	mergedOpts := append(extractedOpts, opts...)
+
+	// The wrapper handler: called at dispatch time with kwargs from the parse pipeline
+	wrapper := func(kwargs map[string]interface{}) int {
+		handler := factory()
+
+		// Build values map keyed by flag name (dashes) for bindValues
+		flagValues := make(map[string]interface{}, len(kwargs))
+		for paramName, val := range kwargs {
+			if flagName, ok := paramToFlagMap[paramName]; ok {
+				flagValues[flagName] = val
+			}
+			// Arg values: keep as-is (arg names don't have dashes)
+			// They'll be matched by the arg: tag in bindValues
+		}
+		// Also add arg values by their arg names
+		for _, a := range args {
+			if val, ok := kwargs[a.Name]; ok {
+				flagValues[a.Name] = val
+			}
+		}
+
+		if err := bindValues(handler, flagValues); err != nil {
+			panic("strictcli: handler binding: " + err.Error())
+		}
+
+		// Construct Context from the app's current dispatch context
+		dc := app.currentDispatch
+		var stdout, stderr io.Writer
+		var globals map[string]interface{}
+		if dc != nil {
+			stdout = dc.stdout
+			stderr = dc.stderr
+			globals = dc.globals
+		}
+		ctx := newContext(stdout, stderr, globals)
+		code := handler.Run(ctx)
+
+		// If the handler emitted data, it needs to be available to the caller.
+		// Store the emit result on the dispatch context if present (for Test/invoke paths).
+		if dc != nil && ctx.emitData != nil {
+			dc.emitData = ctx.emitData
+		}
+
+		return code
+	}
+
+	cmd := buildAndValidateCommand(name, help, wrapper, envPrefix, globalFlags, inheritedTags, mergedOpts)
+	cmd.handlerFactory = factory
+	cmd.handlerType = structType
+	cmd.paramToFlag = paramToFlagMap
+	return cmd
+}
+
+// paramKwargsToFlagNames converts a map keyed by param names (underscores)
+// to flag names (dashes). Used to prepare globals for Context in dispatch.
+func paramKwargsToFlagNames(kwargs map[string]interface{}) map[string]interface{} {
+	if kwargs == nil {
+		return nil
+	}
+	result := make(map[string]interface{}, len(kwargs))
+	for k, v := range kwargs {
+		result[paramToFlagName(k)] = v
+	}
+	return result
 }
 
 // flagParamName converts a flag name like "dry-run" to a parameter key "dry_run".

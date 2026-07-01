@@ -1,7 +1,9 @@
 package strictcli
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -223,13 +225,34 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 		validatedKwargs[paramName] = val
 	}
 
+	// Set dispatch context for struct handler wrappers
+	var dc *dispatchCtx
+	if cmd.handlerFactory != nil {
+		// For invoke: stdout captures Emit output, stderr is discarded
+		var buf bytes.Buffer
+		dc = &dispatchCtx{
+			stdout:  &buf,
+			stderr:  io.Discard,
+			globals: paramKwargsToFlagNames(validatedKwargs),
+		}
+		a.currentDispatch = dc
+		defer func() { a.currentDispatch = nil }()
+	}
+
 	// Call the handler
 	if cmd.dataHandler != nil {
 		hr := cmd.dataHandler(validatedKwargs)
 		return invokeResult{exitCode: hr.ExitCode, data: hr.Data}
 	}
 	code := cmd.Handler(validatedKwargs)
-	return invokeResult{exitCode: code}
+
+	// Capture emit data from struct handlers
+	var data interface{}
+	if dc != nil && dc.emitData != nil {
+		data = dc.emitData
+	}
+
+	return invokeResult{exitCode: code, data: data}
 }
 
 // coerceInvokeValue converts a Go-native value to the internal representation

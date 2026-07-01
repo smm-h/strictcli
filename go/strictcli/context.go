@@ -7,6 +7,13 @@ import (
 	"reflect"
 )
 
+// Handler is the interface for struct-based command handlers.
+// Implementations define flags/args as struct fields with cli:/arg: tags,
+// and implement Run to execute the command logic.
+type Handler interface {
+	Run(ctx *Context) int
+}
+
 // Context provides structured output methods for command handlers.
 // Each method writes to the appropriate stream (stdout or stderr).
 // Emit writes JSON to stdout and stores the data for programmatic retrieval.

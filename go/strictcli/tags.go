@@ -516,14 +516,21 @@ func bindValuesRecursive(structVal reflect.Value, values map[string]interface{})
 			continue
 		}
 
-		// Only process fields with cli: tags
+		// Process fields with cli: or arg: tags
 		cliVal, hasCli := field.Tag.Lookup("cli")
-		if !hasCli {
+		argVal, hasArg := field.Tag.Lookup("arg")
+
+		var key string
+		if hasCli {
+			key = cliVal
+		} else if hasArg {
+			key = argVal
+		} else {
 			continue
 		}
 
-		// Look up the value by flag name (dashes)
-		mapVal, exists := values[cliVal]
+		// Look up the value by flag name (dashes) or arg name
+		mapVal, exists := values[key]
 		if !exists {
 			// Not in the map: leave zero value (or nil for pointer)
 			continue
