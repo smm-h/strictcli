@@ -1338,13 +1338,10 @@ class Flag:
                 self.default = {}
             elif self.repeatable:
                 self.default = []
-            elif self.type is bool:
-                self.default = False
             else:
-                # str/int/float with _MISSING default means required (no default)
+                # No default means required (no default) — same for all types
+                # including bool
                 self.default = None
-        elif self.type is bool and self.default is None:
-            self.default = False
         # Validate default is in choices (after sentinel resolution)
         if self.choices is not None and self.default is not None:
             if not self.repeatable and self.default not in self.choices:
