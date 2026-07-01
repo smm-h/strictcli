@@ -93,13 +93,12 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			paramName := flagParamName(gf.Name)
 			if v, ok := kwargs[paramName]; ok {
 				globalKwargs[paramName] = v
-			} else if gf.Type == TypeBool {
-				globalKwargs[paramName] = gf.Default
-			} else if gf.hasDefault {
-				globalKwargs[paramName] = gf.Default
 			} else {
-				// Required global flag not provided
-				return invokeResult{exitCode: 1, err: fmt.Sprintf("global flag '--%s' is required", gf.Name)}
+				val, errMsg := applyFlagDefault(&gf, nil, "global ")
+				if errMsg != "" {
+					return invokeResult{exitCode: 1, err: errMsg}
+				}
+				globalKwargs[paramName] = val
 			}
 		}
 		code := cmd.PassthroughHandler(cmd.Name, args, globalKwargs)

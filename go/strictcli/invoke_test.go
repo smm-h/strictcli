@@ -500,6 +500,29 @@ func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 	}
 }
 
+func TestInvokePassthroughMissingRequiredBoolGlobalFlag(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	// A required bool global flag: no Default, so it must be provided explicitly.
+	app.GlobalFlag(BoolFlag("force", "force operation"))
+	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
+		return 0
+	})
+
+	// Don't provide "force" -- it's a required bool global flag (no default)
+	ir := app.invoke("exec", map[string]interface{}{
+		"_args": []string{"ls"},
+	})
+	if ir.err == "" {
+		t.Fatal("expected error for missing required bool global flag in passthrough command")
+	}
+	if !strings.Contains(ir.err, "force") {
+		t.Fatalf("expected 'force' in error, got %q", ir.err)
+	}
+	if !strings.Contains(ir.err, "must be passed") {
+		t.Fatalf("expected 'must be passed' in error, got %q", ir.err)
+	}
+}
+
 func TestInvokeUnknownCommand(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("greet", "say hello", func(kwargs map[string]interface{}) int { return 0 })
