@@ -3114,11 +3114,19 @@ class App:
                 continue
             if f.repeatable:
                 cli_set[f.name] = list(f.default) if f.default else []
-            elif f.type is bool:
-                cli_set[f.name] = f.default
             elif f.default is not None:
                 cli_set[f.name] = f.default
             else:
+                if f.type is bool and f.negatable:
+                    raise _ParseError(
+                        f"global flag '--{f.name}' must be passed as "
+                        f"--{f.name} or --no-{f.name}"
+                    )
+                if f.type is bool and not f.negatable:
+                    raise _ParseError(
+                        f"global flag '--{f.name}' must be passed as "
+                        f"--{f.name}"
+                    )
                 raise _ParseError(f"global flag '--{f.name}' is required")
 
         # Validate choices for global flags
@@ -3341,8 +3349,6 @@ class App:
                 param_name = _flag_param_name(gf.name)
                 if param_name in kwargs:
                     global_values[param_name] = kwargs[param_name]
-                elif gf.type is bool:
-                    global_values[param_name] = gf.default if gf.default is not None else False
                 elif gf.default is not None:
                     global_values[param_name] = gf.default
                 else:
@@ -3410,9 +3416,7 @@ class App:
                 final_kwargs[_flag_param_name(gf.name)] = _global_cli_set[gf.name]
             elif _flag_param_name(gf.name) not in final_kwargs:
                 # Global flag not provided -- use its default
-                if gf.type is bool:
-                    final_kwargs[_flag_param_name(gf.name)] = gf.default if gf.default is not None else False
-                elif gf.default is not None:
+                if gf.default is not None:
                     final_kwargs[_flag_param_name(gf.name)] = gf.default
 
         return cmd.handler(**final_kwargs)
@@ -3634,12 +3638,10 @@ def _build_json_schema(cmd: Command) -> dict:
 
         properties[param_name] = prop
 
-        # A flag is required if it has no default (None for scalar non-bool)
-        # Bool flags always have a default (False). Repeatable/dict flags
-        # always have a default (empty list/dict).
+        # A flag is required if it has no default (None for scalar).
+        # Repeatable/dict flags always have a default (empty list/dict).
         is_required = (
             f.compound == "scalar"
-            and f.type is not bool
             and f.default is None
         )
         if is_required:
@@ -3757,9 +3759,6 @@ def _validate_and_build_kwargs(
         elif f.repeatable:
             # Repeatable flags default to [] (never required)
             cli_set[f.name] = list(f.default) if f.default else []
-        elif f.type is bool:
-            # Bool flags always have a default (False unless overridden)
-            cli_set[f.name] = f.default
         elif f.default is not None:
             cli_set[f.name] = f.default
         elif f.name in mutex_flag_names:
@@ -3767,7 +3766,16 @@ def _validate_and_build_kwargs(
             # required -- the mutex group itself enforces required semantics
             cli_set[f.name] = None
         else:
-            # str/int/float flag with no default and no value: required
+            # Flag with no default and no value: required
+            if f.type is bool and f.negatable:
+                raise _ParseError(
+                    f"flag '--{f.name}' must be passed as "
+                    f"--{f.name} or --no-{f.name}"
+                )
+            if f.type is bool and not f.negatable:
+                raise _ParseError(
+                    f"flag '--{f.name}' must be passed as --{f.name}"
+                )
             raise _ParseError(f"flag '--{f.name}' is required")
 
     # Step 5.5: validate choices
