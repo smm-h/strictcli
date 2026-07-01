@@ -2,7 +2,7 @@
 
 A strict, zero-dependency CLI framework for Go.
 
-strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework panics at registration time. Types are `str`, `bool`, and `int` only; there is no magic type inference.
+strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework panics at registration time. Four types only: `str`, `bool`, `int`, `float`. No magic type inference, no implicit defaults.
 
 ## Installation
 
@@ -19,26 +19,28 @@ package main
 
 import (
     "fmt"
+    "strings"
 
     "github.com/smm-h/strictcli/go/strictcli"
 )
 
 func main() {
-    app := strictcli.NewApp("greet", "0.1.0", "a friendly greeter")
+    app := strictcli.NewApp("greet", "1.0.0", "A greeting app")
 
-    app.Command("hello", "say hello", func(kwargs map[string]interface{}) int {
-        name := kwargs["name"].(string)
-        loud := kwargs["loud"].(bool)
-        msg := fmt.Sprintf("Hello, %s!", name)
-        if loud {
-            msg = fmt.Sprintf("HELLO, %s!", name)
-        }
-        fmt.Println(msg)
-        return 0
-    },
-        strictcli.WithArgs(strictcli.NewArg("name", "who to greet")),
+    app.Command("hello", "Say hello",
+        func(args map[string]interface{}) int {
+            name := args["name"].(string)
+            loud := args["loud"].(bool)
+            msg := fmt.Sprintf("Hello, %s!", name)
+            if loud {
+                msg = strings.ToUpper(msg)
+            }
+            fmt.Println(msg)
+            return 0
+        },
         strictcli.WithFlags(
-            strictcli.BoolFlag("loud", "shout the greeting", strictcli.Short("l")),
+            strictcli.StringFlag("name", "Who to greet"),
+            strictcli.BoolFlag("loud", "Shout it"),
         ),
     )
 
@@ -47,73 +49,376 @@ func main() {
 ```
 
 ```
-$ greet hello World
+$ greet hello --name World
 Hello, World!
 
-$ greet hello --loud World
+$ greet hello --name World --loud
 HELLO, WORLD!
 
 $ greet hello --help
-greet hello -- say hello
-
-Arguments:
-  name    who to greet
+greet hello -- Say hello
 
 Flags:
-  --loud, --no-loud, -l    shout the greeting [default: false]
+  --name <str>              Who to greet
+  --loud, --no-loud         Shout it [default: false]
 ```
 
 ## Features
 
-- **Commands and groups** -- top-level commands and one level of nested groups
-- **Three flag types** -- `StringFlag`, `BoolFlag`, `IntFlag`
-- **Short aliases** -- single-character short forms (`-v`, `-o`)
-- **Positional arguments** -- required, optional, and variadic
-- **Environment variables** -- first-class env var backing with prefix enforcement
-- **FlagSets** -- reusable bundles of flags shared across commands
-- **Mutex groups** -- mutually exclusive flags (exactly one required)
-- **CoRequired** -- flags that must appear together or not at all
-- **Requires** -- flag A depends on flag B being present
-- **Implies** -- providing one bool flag automatically sets another bool flag
-- **Global flags** -- app-level flags available to all commands
-- **Passthrough commands** -- bypass parsing, forward raw args to handler
-- **Repeatable flags** -- flags that accept multiple occurrences (collected into a slice)
-- **Choices** -- restrict flag values to an allowed set
-- **Custom validation** -- per-flag validation functions
-- **Auto-generated help** -- `--help` / `-h` at app, group, and command levels
-- **Version flag** -- `--version` / `-v` prints app version
-- **Deprecated commands** -- declaration-only stubs that print a message and exit 1
-- **In-process testing** -- `app.Test(argv)` captures stdout, stderr, and exit code
+### Commands and groups
 
-## API Overview
+Top-level commands with `app.Command`, nested groups with `app.Group`. Groups nest recursively to arbitrary depth via `group.Group`.
 
-### Core Types
+```go
+db := app.Group("db", "Database operations")
+schema := db.Group("schema", "Schema management")
 
-| Type | Description |
-|------|-------------|
-| `App` | Root CLI application |
-| `Command` | Leaf command with handler |
-| `Group` | Container for nested commands |
-| `Flag` | Flag declaration (use constructors below) |
-| `Arg` | Positional argument |
-| `FlagSet` | Reusable bundle of flags |
-| `MutexGroup` | Mutually exclusive flag group |
-| `CoRequired` | Flags that must appear together |
-| `Requires` | One flag depends on another |
-| `Implies` | Providing one bool flag sets another |
-| `Result` | Return type of `App.Test()` |
+schema.Command("migrate", "Run migrations",
+    func(args map[string]interface{}) int {
+        fmt.Println("migrating")
+        return 0
+    },
+)
+```
+
+Invoked as `myapp db schema migrate`.
+
+### Four flag types
+
+`StringFlag`, `BoolFlag`, `IntFlag`, `FloatFlag`. No magic coercion -- parse errors are clear and immediate.
+
+```go
+strictcli.StringFlag("output", "Output path", strictcli.Default("out.txt")),
+strictcli.BoolFlag("verbose", "Verbose output"),
+strictcli.IntFlag("port", "Port number"),
+strictcli.FloatFlag("threshold", "Score threshold"),
+```
+
+Bool flags default to `false`, support `--flag` / `--no-flag` negation (disable with `NegatableOpt(false)`). Float parsing rejects NaN and Inf.
+
+### Compound types
+
+`ListFlag` and `DictFlag` for collecting multiple values.
+
+```go
+strictcli.ListFlag(strictcli.TypeStr, "tags", "Tags to apply", strictcli.Unique(true)),
+strictcli.DictFlag(strictcli.TypeStr, "env", "Environment variables"),
+```
+
+List flags accept `--tags a --tags b`. Dict flags accept `--env KEY=VALUE` pairs or JSON objects.
+
+### Positional arguments
+
+Required by default. Support optional (`ArgRequired(false)`), default values (`ArgDefault(v)`), and variadic (`Variadic()`).
+
+```go
+app.Command("copy", "Copy files",
+    handler,
+    strictcli.WithArgs(
+        strictcli.NewArg("src", "Source path"),
+        strictcli.NewArg("dst", "Destination path"),
+    ),
+)
+```
+
+### Short flag aliases
+
+Single-character shortcuts for any flag.
+
+```go
+strictcli.BoolFlag("verbose", "Verbose output", strictcli.Short("v")),
+strictcli.StringFlag("output", "Output path", strictcli.Short("o"), strictcli.Default(".")),
+```
+
+### Environment variable binding
+
+Flags can be backed by environment variables. Prefix enforcement keeps your config namespace clean.
+
+```go
+app := strictcli.NewApp("myapp", "1.0.0", "My app", strictcli.WithEnvPrefix("MYAPP"))
+
+strictcli.StringFlag("region", "Cloud region",
+    strictcli.Env("MYAPP_REGION"), strictcli.Default("us-east-1")),
+```
+
+All env vars must start with the declared prefix. Use `Prefixed(false)` for external env vars. Precedence: CLI > env > config > default.
+
+Bool env vars accept `1|true|yes` / `0|false|no` (case-insensitive).
+
+### FlagSets
+
+Reusable bundles of flags shared across commands.
+
+```go
+authFlags := strictcli.FlagSet{
+    Name: "auth",
+    Flags: []strictcli.Flag{
+        strictcli.StringFlag("token", "Auth token", strictcli.Default("")),
+        strictcli.BoolFlag("insecure", "Skip TLS verification"),
+    },
+}
+
+app.Command("deploy", "Deploy", handler,
+    strictcli.WithFlagSets(authFlags),
+)
+```
+
+### Mutually exclusive flag groups
+
+Exactly one flag from the group must be provided.
+
+```go
+app.Command("log", "Show logs", handler,
+    strictcli.WithMutex(strictcli.MutexGroup{
+        Flags: []strictcli.Flag{
+            strictcli.BoolFlag("verbose", "Verbose output"),
+            strictcli.BoolFlag("quiet", "Quiet output"),
+        },
+    }),
+)
+```
+
+### Flag dependencies
+
+Three relationship types, all passed via `WithDependencies(...)`:
+
+- `CoRequired{Flags: []string{"output", "format"}}` -- all must appear together, or none
+- `Requires{Flag: "verbose", DependsOn: "output"}` -- one-way dependency
+- `Implies{Flag: "verbose", Implies: "log-output", Value: true}` -- auto-set a bool flag when another is provided; explicit contradictions are parse errors
+
+```go
+app.Command("export", "Export data", handler,
+    strictcli.WithFlags(...),
+    strictcli.WithDependencies(
+        strictcli.CoRequired{Flags: []string{"output", "format"}},
+        strictcli.Requires{Flag: "verbose", DependsOn: "output"},
+        strictcli.Implies{Flag: "verbose", Implies: "log-output", Value: true},
+    ),
+)
+```
+
+### Global flags
+
+App-level flags available to all commands, parsed before and after the command token.
+
+```go
+app.GlobalFlag(strictcli.BoolFlag("verbose", "Verbose output"))
+```
+
+### Passthrough commands
+
+Bypass all parsing -- handler gets raw args plus global flag values.
+
+```go
+app.Passthrough("run", "Run a script",
+    func(name string, args []string, globals map[string]interface{}) int {
+        // args contains everything after the command name
+        return 0
+    },
+)
+```
+
+### Repeatable flags
+
+Flags that accumulate values across multiple occurrences. Requires explicit `Unique(true)` or `Unique(false)`.
+
+```go
+strictcli.StringFlag("tag", "Add a tag", strictcli.Repeatable(), strictcli.Unique(true)),
+```
+
+### Choices
+
+Restrict flag values to an allowed set.
+
+```go
+strictcli.StringFlag("format", "Output format", strictcli.Choices("json", "csv", "xml")),
+```
+
+### Custom validation
+
+Per-flag validation functions.
+
+```go
+strictcli.IntFlag("port", "Port number",
+    strictcli.ValidateFn(func(v interface{}) error {
+        if n := v.(int); n < 1 || n > 65535 {
+            return fmt.Errorf("port must be 1-65535, got %d", n)
+        }
+        return nil
+    }),
+),
+```
+
+### Deprecated commands
+
+Register retired commands that print a message to stderr and exit 1.
+
+```go
+app.Deprecated("old-cmd", "Use 'new-cmd' instead")
+group.Deprecated("legacy-lint", "Use 'lint' instead")
+```
+
+Deprecated commands appear in help output under a `Deprecated:` section.
+
+### Hidden commands and groups
+
+Commands and groups can be hidden from help output while remaining functional.
+
+```go
+app.Command("internal-debug", "Debug internals", handler,
+    strictcli.WithHidden(),
+)
+```
+
+### JSON config file support
+
+Reads `~/.config/{name}/config.json` (or TOML). Auto-registers `config show/set/path/edit` subcommands.
+
+```go
+app := strictcli.NewApp("myapp", "1.0.0", "My app", strictcli.WithConfig())
+```
+
+Precedence: CLI > env > config > default. Config fields can be declared with typed validation:
+
+```go
+app.ConfigField("serve.port",
+    strictcli.ConfigFieldType(strictcli.TypeInt),
+    strictcli.ConfigFieldHelp("Server port"),
+    strictcli.ConfigFieldDefault(8080),
+)
+```
+
+### Schema dump
+
+`--dump-schema` is auto-injected on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups, checks).
+
+### Check system
+
+First-class check/validation framework with double-entry security. Enabled via `WithChecks(path)` pointing to a TOML file.
+
+```go
+app := strictcli.NewApp("myapp", "1.0.0", "My app", strictcli.WithChecks("checks.toml"))
+
+app.RegisterCheck("lint", func(ctx strictcli.CheckContext) strictcli.CheckResult {
+    return strictcli.CheckResult{Status: "pass", Message: "All good"}
+})
+```
+
+Checks are declared in TOML and registered in code -- both must agree. Auto-registers a `check` command with tag DSL filtering (`--tag "release & !slow"`), JSON output, and dependency resolution.
+
+### Context
+
+`Context` provides structured output methods for command handlers. Available via `DataHandler` or `DataCommand`.
+
+```go
+app.DataCommand("status", "Show status",
+    func(args map[string]interface{}) strictcli.HandlerResult {
+        ctx := strictcli.NewContext(os.Stdout, os.Stderr, nil)
+        ctx.Info("checking status...")
+        ctx.Emit(map[string]interface{}{"healthy": true})
+        return strictcli.HandlerResult{ExitCode: 0}
+    },
+)
+```
+
+Methods: `Info(msg)` (stdout), `Warn(msg)` (stderr), `Debug(msg)` (stdout), `Error(msg)` (stderr), `Emit(data)` (JSON to stdout, single use).
+
+### Tool export
+
+`app.AsTools()` exports non-hidden commands as `Tool` descriptors for LLM agents.
+
+```go
+tools := app.AsTools()
+// Each Tool has: Name, Description, Parameters (JSON Schema), Execute
+```
+
+### MCP server
+
+`app.ServeMCP()` runs a JSON-RPC 2.0 MCP server on stdin/stdout, exposing commands as tools for AI clients. Triggered via `--mcp` flag.
+
+### Help and version
+
+- `--help` / `-h` recognized anywhere in argv, at app, group, and command levels
+- `--version` / `-v` prints app version
+- Help is auto-generated with flag types, defaults, env var names, and choices
+
+## Handlers
+
+### Map handlers
+
+The default handler type receives `map[string]interface{}` with flag names (hyphens converted to underscores) as keys:
+
+```go
+func handler(args map[string]interface{}) int {
+    name := args["name"].(string)
+    count := args["count"].(int)
+    return 0
+}
+```
+
+### DataHandler
+
+Returns structured data alongside an exit code:
+
+```go
+app.DataCommand("status", "Show status",
+    func(args map[string]interface{}) strictcli.HandlerResult {
+        return strictcli.HandlerResult{
+            ExitCode: 0,
+            Data:     map[string]interface{}{"status": "ok"},
+        }
+    },
+)
+```
+
+### RegisterHandler (struct handlers)
+
+Type-safe handlers using Go structs. Flags map to struct fields automatically:
+
+```go
+type DeployArgs struct {
+    Region  string `cli:"region"`
+    Force   bool   `cli:"force"`
+    Timeout int    `cli:"timeout"`
+}
+
+app.RegisterHandler("deploy", "Deploy the app", func(args DeployArgs) int {
+    fmt.Printf("Deploying to %s\n", args.Region)
+    return 0
+})
+```
+
+## Testing
+
+`app.Test(argv)` runs the CLI in-process and returns a `Result`:
+
+```go
+result := app.Test([]string{"hello", "--name", "World", "--loud"})
+
+if result.ExitCode != 0 {
+    t.Fatalf("expected exit 0, got %d: %s", result.ExitCode, result.Stderr)
+}
+if !strings.Contains(result.Stdout, "HELLO, WORLD!") {
+    t.Fatalf("unexpected output: %q", result.Stdout)
+}
+```
+
+## API reference
 
 ### Constructors
 
 ```go
-app := strictcli.NewApp(name, version, help string, opts ...AppOption)
-flag := strictcli.StringFlag(name, help string, opts ...FlagOption)
-flag := strictcli.BoolFlag(name, help string, opts ...FlagOption)
-flag := strictcli.IntFlag(name, help string, opts ...FlagOption)
-arg  := strictcli.NewArg(name, help string, opts ...ArgOption)
+app  := strictcli.NewApp(name, version, help, opts ...AppOption)
+flag := strictcli.StringFlag(name, help, opts ...FlagOption)
+flag := strictcli.BoolFlag(name, help, opts ...FlagOption)
+flag := strictcli.IntFlag(name, help, opts ...FlagOption)
+flag := strictcli.FloatFlag(name, help, opts ...FlagOption)
+flag := strictcli.ListFlag(itemType, name, help, opts ...FlagOption)
+flag := strictcli.DictFlag(valueType, name, help, opts ...FlagOption)
+arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 ```
 
-### Flag Options
+### Flag options
 
 | Function | Description |
 |----------|-------------|
@@ -123,10 +428,11 @@ arg  := strictcli.NewArg(name, help string, opts ...ArgOption)
 | `Prefixed(b)` | Control env prefix validation |
 | `Choices(vals...)` | Restrict to allowed values |
 | `Repeatable()` | Accept multiple occurrences |
+| `Unique(b)` | Deduplicate repeatable values |
 | `ValidateFn(fn)` | Custom validation function |
 | `NegatableOpt(b)` | Control `--no-X` form for bool flags |
 
-### Arg Options
+### Arg options
 
 | Function | Description |
 |----------|-------------|
@@ -134,7 +440,7 @@ arg  := strictcli.NewArg(name, help string, opts ...ArgOption)
 | `ArgDefault(v)` | Default value for optional args |
 | `Variadic()` | Collect remaining positional values |
 
-### Command Options
+### Command options
 
 | Function | Description |
 |----------|-------------|
@@ -142,88 +448,74 @@ arg  := strictcli.NewArg(name, help string, opts ...ArgOption)
 | `WithArgs(args...)` | Add positional arguments |
 | `WithFlagSets(flagSets...)` | Attach flag set bundles |
 | `WithMutex(groups...)` | Add mutex groups |
-| `WithDependencies(deps...)` | Add CoRequired/Requires constraints |
+| `WithDependencies(deps...)` | Add CoRequired/Requires/Implies constraints |
 | `WithPassthrough(handler)` | Mark as passthrough command |
+| `WithHidden()` | Hide from help output |
 
-### App Methods
-
-```go
-app.Command(name, help, handler, opts...)   // Register a command
-app.Passthrough(name, help, handler, opts...)  // Register passthrough command
-app.Group(name, help) *Group                // Create a command group
-app.GlobalFlag(flag)                        // Register a global flag
-app.Run()                                   // Parse os.Args and execute
-app.Test(argv []string) Result              // Run in-process, capture output
-```
-
-### App Options
+### App options
 
 | Function | Description |
 |----------|-------------|
-| `WithEnvPrefix(prefix)` | Set env var prefix for the app |
+| `WithEnvPrefix(prefix)` | Set env var prefix |
+| `WithConfig()` | Enable config file support |
+| `WithConfigPath(path)` | Override config file path |
+| `WithConfigFormat(fmt)` | Set config format ("json" or "toml") |
+| `WithChecks(path)` | Enable check system |
+| `WithChecksEmbed(data)` | Enable check system with embedded TOML |
 
-## Implies Dependencies
+### App methods
 
-`Implies` declares that providing one bool flag automatically sets another bool flag to a specified value. Both the trigger flag and the target flag must be bool flags. If the user explicitly provides a contradicting value for the target, it is a parse error.
+| Method | Description |
+|--------|-------------|
+| `app.Command(name, help, handler, opts...)` | Register a command |
+| `app.DataCommand(name, help, handler, opts...)` | Register a data command |
+| `app.Passthrough(name, help, handler, opts...)` | Register a passthrough command |
+| `app.Group(name, help)` | Create a command group |
+| `app.GlobalFlag(flag)` | Register a global flag |
+| `app.Deprecated(name, message)` | Register a deprecated command |
+| `app.Run()` | Parse `os.Args` and execute |
+| `app.Test(argv)` | Run in-process, return `Result` |
+| `app.AsTools()` | Export commands as `Tool` descriptors |
+| `app.ServeMCP()` | Run MCP server on stdin/stdout |
+| `app.ConfigField(name, opts...)` | Declare a typed config field |
+| `app.RegisterCheck(name, fn)` | Register a check handler |
+| `app.SetCheckContext(factory)` | Set the check context factory |
 
-Pass `Implies` via `WithDependencies(...)` alongside `CoRequired` and `Requires`:
+### Core types
 
-```go
-app.Command("deploy", "deploy the application", handler,
-    strictcli.WithFlags(
-        strictcli.BoolFlag("verbose", "enable verbose output"),
-        strictcli.BoolFlag("log-output", "write output to log file"),
-    ),
-    strictcli.WithDependencies(
-        strictcli.Implies{Flag: "verbose", Implies: "log-output", Value: true},
-    ),
-)
-```
+| Type | Description |
+|------|-------------|
+| `App` | Root CLI application |
+| `Command` | Leaf command with handler |
+| `Group` | Container for nested commands |
+| `Flag` | Flag declaration |
+| `Arg` | Positional argument |
+| `FlagSet` | Reusable flag bundle |
+| `MutexGroup` | Mutually exclusive flags |
+| `CoRequired` | Flags that must appear together |
+| `Requires` | One flag depends on another |
+| `Implies` | Auto-set a bool flag from another |
+| `Result` | Return type of `app.Test()` |
+| `Tool` | LLM tool descriptor |
+| `Context` | Structured output (Info/Warn/Error/Emit) |
+| `CheckResult` | Check execution result |
+| `CheckContext` | Interface for check context |
+| `ConfigField` | Typed config file field |
+| `HandlerResult` | Return type for DataHandler |
 
-When `--verbose` is provided, `--log-output` is automatically set to `true`. If the user explicitly passes `--no-log-output` while also passing `--verbose`, the CLI exits with an error:
+## Design principles
 
-```
-flag '--verbose' implies '--log-output', but '--no-log-output' was explicitly provided
-```
+- **Help is mandatory.** Every command, flag, and argument must have help text. Missing help panics at registration time.
+- **Four types only.** `str`, `bool`, `int`, `float` -- plus compound `list` and `dict`. No magic type coercion.
+- **Handler signatures use `map[string]interface{}`** with flag names as keys (hyphens become underscores).
+- **Registration-time errors.** Misconfigurations panic loud and early, not at parse time.
+- **Zero dependencies.** Standard library only.
 
-## Deprecated Commands
+## See also
 
-`app.Deprecated(name, message)` registers a command name that prints a deprecation message to stderr and exits 1 when invoked. Deprecated commands are declaration-only stubs -- they cannot have handlers, flags, or arguments.
+- [strictcli monorepo](https://github.com/smm-h/strictcli) -- conformance tests, Python implementation, and project documentation
+- [Python implementation](https://github.com/smm-h/strictcli/tree/main/python) -- same semantics, decorator-based API
 
-Works on both `App` and `Group`:
+## License
 
-```go
-app.Deprecated("old-cmd", "Use 'new-cmd' instead")
-
-group := app.Group("tools", "utility commands")
-group.Deprecated("legacy-lint", "Use 'lint' instead")
-```
-
-When a user invokes a deprecated command:
-
-```
-$ myapp old-cmd
-command 'old-cmd' is deprecated: Use 'new-cmd' instead
-```
-
-Deprecated commands appear in help output under a separate `Deprecated:` section, distinct from regular commands.
-
-## Testing
-
-`app.Test(argv)` runs the CLI in-process and returns a `Result`:
-
-```go
-result := app.Test([]string{"hello", "--loud", "World"})
-
-if result.ExitCode != 0 {
-    t.Fatalf("expected exit 0, got %d: %s", result.ExitCode, result.Stderr)
-}
-if result.Stdout != "HELLO, WORLD!\n" {
-    t.Fatalf("unexpected output: %q", result.Stdout)
-}
-```
-
-## See Also
-
-- [strictcli root](https://github.com/smm-h/strictcli) -- monorepo with conformance tests and documentation
-- [Python implementation](https://github.com/smm-h/strictcli/tree/main/python) -- PyPI package with the same semantics
+MIT

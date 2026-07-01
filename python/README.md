@@ -2,473 +2,371 @@
 
 A strict, zero-dependency CLI framework for Python.
 
-strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework errors at registration time. Types are `str` and `bool` only; there is no magic type inference. Environment variables are first-class, with prefix enforcement to keep your config namespace clean.
+strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework errors at registration time. Four types only: `str`, `bool`, `int`, `float`. No magic type inference, no implicit defaults.
 
 ## Installation
-
-```
-uv add strictcli
-```
-
-Or:
 
 ```
 pip install strictcli
 ```
 
-Requires Python 3.11+.
+Or with uv:
+
+```
+uv add strictcli
+```
+
+Requires Python 3.11+. Zero external dependencies.
 
 ## Quickstart
 
 ```python
-# greet.py
 import strictcli
 
-app = strictcli.App(name="greet", version="0.1.0", help="a friendly greeter")
+app = strictcli.App("greet", version="1.0.0", help="A greeting app")
 
-@app.command("hello", help="say hello", args=[strictcli.Arg(name="name", help="who to greet")])
-@strictcli.flag("loud", short="l", type=bool, help="shout the greeting")
+@app.command("hello", help="Say hello")
+@strictcli.flag("name", type=str, help="Who to greet")
+@strictcli.flag("loud", type=bool, help="Shout it")
 def hello(name, loud):
     msg = f"Hello, {name}!"
-    if loud:
-        msg = msg.upper()
-    print(msg)
+    print(msg.upper() if loud else msg)
 
 app.run()
 ```
 
 ```
-$ python greet.py hello World
+$ python greet.py hello --name World
 Hello, World!
 
-$ python greet.py hello --loud World
+$ python greet.py hello --name World --loud
 HELLO, WORLD!
 
 $ python greet.py hello --help
-greet hello -- say hello
-
-Arguments:
-  name    who to greet
+greet hello -- Say hello
 
 Flags:
-  --loud, --no-loud, -l    shout the greeting [default: false]
+  --name <str>              Who to greet
+  --loud, --no-loud         Shout it [default: false]
 ```
 
-## Commands and Groups
+## Features
 
-Register top-level commands with `@app.command`:
+### Commands and groups
+
+Top-level commands with `@app.command`, nested groups with `app.group`. Groups nest recursively to arbitrary depth via `group.group`.
 
 ```python
-app = strictcli.App(name="myapp", version="1.0.0", help="manage deployments")
+db = app.group("db", help="Database operations")
+schema = db.group("schema", help="Schema management")
 
-@app.command("status", help="show current status")
-def status():
-    print("all systems go")
+@schema.command("migrate", help="Run migrations")
+def migrate():
+    print("migrating")
 ```
 
-Create groups for two-level nesting with `app.group`:
+Invoked as `myapp db schema migrate`.
+
+### Four flag types
+
+`str`, `bool`, `int`, and `float`. No magic coercion -- parse errors are clear and immediate.
 
 ```python
-db = app.group("db", help="manage databases")
-
-@db.command("migrate", help="run database migrations")
-@strictcli.flag("dry-run", type=bool, help="preview without applying")
-def migrate(dry_run):
-    if dry_run:
-        print("would run migrations")
-    else:
-        print("running migrations")
-
-@db.command("seed", help="populate with sample data")
-@strictcli.flag("count", type=str, help="number of records", default="100")
-def seed(count):
-    print(f"seeding {count} records")
+@strictcli.flag("port", type=int, help="Port number")
+@strictcli.flag("threshold", type=float, help="Score threshold")
+@strictcli.flag("verbose", type=bool, help="Verbose output")
+@strictcli.flag("output", type=str, help="Output path", default="out.txt")
 ```
 
-```
-$ myapp db migrate --dry-run
-would run migrations
+Bool flags default to `False`, support `--flag` / `--no-flag` negation (disable with `negatable=False`). Float parsing rejects NaN and Inf.
 
-$ myapp db seed --count 500
-seeding 500 records
-```
+### Compound types
 
-## Flags
-
-Declare flags with the `@strictcli.flag` decorator. Every flag must have `help` text.
-
-### String flags
+`list[T]` and `dict[str, T]` for collecting multiple values.
 
 ```python
-@app.command("build", help="build the project")
-@strictcli.flag("output", short="o", type=str, help="output directory", default="dist")
-def build(output):
-    print(f"building to {output}")
+@strictcli.flag("tags", type=list[str], help="Tags to apply", unique=True)
+@strictcli.flag("env", type=dict[str, str], help="Environment variables")
 ```
 
-String flags accept values via `--output dist` or `--output=dist`. A string flag without a `default` is required.
+List flags accept `--tags a --tags b`. Dict flags accept `--env KEY=VALUE` pairs or JSON objects.
 
-### Bool flags
+### Positional arguments
 
-```python
-@app.command("deploy", help="deploy the app")
-@strictcli.flag("force", short="f", type=bool, help="skip confirmation")
-def deploy(force):
-    if force:
-        print("deploying without confirmation")
-```
-
-Bool flags default to `False`. Pass `--force` to set `True`, or `--no-force` to explicitly set `False`. The `--no-` negation form is available by default for all bool flags; disable it with `negatable=False`.
-
-### Short aliases
-
-Any flag can have a one-character short alias:
+Two equivalent declaration forms. Arguments can be required, optional (with `required=False`), or variadic.
 
 ```python
-@strictcli.flag("verbose", short="v", type=bool, help="verbose output")
-```
+# Decorator form
+@app.command("show", help="Show a file")
+@strictcli.arg("path", help="File to show")
+def show(path): ...
 
-This allows both `--verbose` and `-v`.
-
-### Required vs optional
-
-- `str` flags with no `default` are required -- the parser errors if missing.
-- `str` flags with a `default` are optional.
-- `bool` flags always default to `False`.
-
-## Arguments
-
-Positional arguments are declared with `strictcli.Arg`. There are two equivalent forms.
-
-Using the `args=` parameter:
-
-```python
-@app.command("copy", help="copy files", args=[
-    strictcli.Arg(name="src", help="source path"),
-    strictcli.Arg(name="dst", help="destination path"),
+# Inline form
+@app.command("copy", help="Copy files", args=[
+    strictcli.Arg(name="src", help="Source"),
+    strictcli.Arg(name="dst", help="Destination"),
 ])
-def copy(src, dst):
-    print(f"copying {src} to {dst}")
+def copy(src, dst): ...
 ```
 
-Using the `@strictcli.arg` decorator:
+### Short flag aliases
+
+Single-character shortcuts for any flag.
 
 ```python
-@app.command("show", help="show a file")
-@strictcli.arg("path", help="file to show")
-def show(path):
-    print(f"showing {path}")
+@strictcli.flag("verbose", short="v", type=bool, help="Verbose output")
+@strictcli.flag("output", short="o", type=str, help="Output path", default=".")
 ```
 
-Arguments are matched in order. Use `required=False` for optional arguments. The `--` separator stops flag parsing, so everything after it becomes positional:
+### Environment variable binding
 
-```
-$ myapp cmd -- --not-a-flag
-```
-
-## Environment Variables
-
-Flags can be backed by environment variables with the `env` parameter:
+Flags can be backed by environment variables. Prefix enforcement keeps your config namespace clean.
 
 ```python
-app = strictcli.App(name="myapp", version="1.0.0", help="my app", env_prefix="MYAPP")
+app = strictcli.App("myapp", version="1.0.0", help="My app", env_prefix="MYAPP")
 
-@app.command("deploy", help="deploy the app")
-@strictcli.flag("region", type=str, help="cloud region", env="MYAPP_REGION", default="us-east-1")
-def deploy(region):
-    print(f"deploying to {region}")
+@strictcli.flag("region", type=str, help="Cloud region", env="MYAPP_REGION", default="us-east-1")
 ```
 
-### Prefix enforcement
+All env vars must start with the declared prefix. Use `prefixed=False` for external env vars like `GITHUB_TOKEN`. Precedence: CLI > env > config > default.
 
-When `env_prefix` is set on the App, all env vars must start with that prefix. This is validated at registration time:
+Bool env vars accept `1|true|yes` / `0|false|no` (case-insensitive).
 
-```python
-# This raises ValueError: env var 'REGION' must start with 'MYAPP_'
-@strictcli.flag("region", type=str, help="region", env="REGION", default="x")
-```
+### FlagSets
 
-### External env vars
-
-Use `prefixed=False` for env vars outside your app's namespace:
-
-```python
-@strictcli.flag("token", type=str, help="auth token", env="GITHUB_TOKEN", prefixed=False, default="")
-```
-
-### Priority
-
-Values resolve in this order: CLI argument > environment variable > default. If none of the three provides a value, the parser errors.
-
-### Bool env vars
-
-Bool flags from env vars accept `1`, `true`, `yes` (case-insensitive) for `True` and `0`, `false`, `no` for `False`. Any other value is an error.
-
-## FlagSets
-
-FlagSets are reusable bundles of flags that can be applied to multiple commands:
+Reusable bundles of flags shared across commands.
 
 ```python
 auth_flags = strictcli.FlagSet(
     name="auth",
     flags=[
-        strictcli.Flag(name="token", type=str, help="auth token", env="MYAPP_TOKEN", default=""),
-        strictcli.Flag(name="insecure", type=bool, help="skip TLS verification"),
+        strictcli.Flag(name="token", type=str, help="Auth token", default=""),
+        strictcli.Flag(name="insecure", type=bool, help="Skip TLS verification"),
     ],
 )
 
-@app.command("deploy", help="deploy the app", flag_sets=[auth_flags])
-def deploy(token, insecure):
-    print(f"token={'set' if token else 'unset'}, insecure={insecure}")
-
-@app.command("status", help="check status", flag_sets=[auth_flags])
-def status(token, insecure):
-    print(f"checking status")
+@app.command("deploy", help="Deploy", flag_sets=[auth_flags])
+def deploy(token, insecure): ...
 ```
 
-Both commands now have `--token` and `--insecure` flags. FlagSet flags appear in help output and are parsed like any other flag.
+### Mutually exclusive flag groups
 
-## Mutex Groups
-
-Mutex groups declare mutually exclusive flags -- exactly one flag from the group must be provided. If the user provides more than one, or provides none, the parser errors.
+Exactly one flag from the group must be provided.
 
 ```python
-@app.command("log", help="show logs", mutex=[
+@app.command("log", help="Show logs", mutex=[
     strictcli.MutexGroup(flags=[
-        strictcli.Flag(name="verbose", type=bool, help="verbose output"),
-        strictcli.Flag(name="quiet", type=bool, help="quiet output"),
+        strictcli.Flag(name="verbose", type=bool, help="Verbose output"),
+        strictcli.Flag(name="quiet", type=bool, help="Quiet output"),
     ]),
 ])
-def log(verbose, quiet):
-    if verbose:
-        print("showing all logs")
-    elif quiet:
-        print("showing errors only")
+def log(verbose, quiet): ...
 ```
 
-If both flags are provided:
+### Flag dependencies
 
-```
-$ myapp log --verbose --quiet
-error: --verbose and --quiet are mutually exclusive
-try 'myapp --help'
-```
+Three relationship types, all passed via `dependencies=[...]`:
 
-If neither flag is provided:
-
-```
-$ myapp log
-error: one of --verbose, --quiet is required
-try 'myapp --help'
-```
-
-Mutex group flags appear in a separate section in help output:
-
-```
-$ myapp log --help
-myapp log -- show logs
-
-Flags (mutually exclusive):
-  --verbose, --no-verbose    verbose output [default: false]
-  --quiet, --no-quiet        quiet output [default: false]
-```
-
-Flags inside a mutex group follow the same rules as regular flags (short aliases, env vars, types), but they are not declared with `@strictcli.flag` -- they live inside the `MutexGroup`.
-
-## Flag Dependencies
-
-Flag dependencies enforce relationships between flags. Two types are available:
-
-- `CoRequired(flags=["output", "format"])` -- all listed flags must be provided together, or none. Providing some but not all is an error.
-- `Requires(flag="verbose", depends_on="output")` -- if `--verbose` is provided, `--output` must also be provided. But `--output` can appear alone.
+- `CoRequired(flags=["output", "format"])` -- all must appear together, or none
+- `Requires(flag="verbose", depends_on="output")` -- one-way dependency
+- `Implies(flag="verbose", implies="log_output", value=True)` -- auto-set a bool flag when another is provided; explicit contradictions are parse errors
 
 ```python
-@app.command("export", help="export data", dependencies=[
+@app.command("export", help="Export data", dependencies=[
     strictcli.CoRequired(flags=["output", "format"]),
     strictcli.Requires(flag="verbose", depends_on="output"),
-])
-@strictcli.flag("output", short="o", type=str, help="output file path", default="")
-@strictcli.flag("format", type=str, help="output format (json, csv)", default="")
-@strictcli.flag("verbose", type=bool, help="show export progress")
-def export(output, format, verbose):
-    if output:
-        print(f"exporting to {output} as {format}")
-    if verbose:
-        print("progress: 100%")
-```
-
-If `--output` is provided without `--format`:
-
-```
-$ myapp export --output data.csv
-error: flags --output, --format must be used together
-try 'myapp --help'
-```
-
-If `--verbose` is provided without `--output`:
-
-```
-$ myapp export --verbose
-error: flag '--verbose' requires '--output'
-try 'myapp --help'
-```
-
-Notes:
-
-- Flag names in dependencies are strings (names without `--` prefix).
-- `CoRequired` needs at least 2 flags.
-- `Requires` is unidirectional -- use two `Requires` for bidirectional dependency.
-- Checked after environment variable resolution, before defaults are applied.
-- Can be combined with mutex groups.
-
-## Implies Dependencies
-
-`Implies` automatically sets a target bool flag when a trigger flag is provided. Both the trigger and the target must be bool flags.
-
-```python
-@app.command("run", help="run the pipeline", dependencies=[
     strictcli.Implies(flag="verbose", implies="log_output", value=True),
 ])
-@strictcli.flag("verbose", type=bool, help="enable verbose output")
-@strictcli.flag("log-output", type=bool, help="write output to log file")
-def run(verbose, log_output):
-    if log_output:
-        print("logging enabled")
-    if verbose:
-        print("verbose mode")
 ```
 
-When `--verbose` is provided, `--log-output` is automatically set to `True`:
+### Global flags
 
-```
-$ myapp run --verbose
-logging enabled
-verbose mode
-```
-
-If the user explicitly provides a value that contradicts the implied value, it is a parse error:
-
-```
-$ myapp run --verbose --no-log-output
-error: flag '--verbose' implies '--log-output', but '--no-log-output' was explicitly provided
-try 'myapp --help'
-```
-
-Notes:
-
-- Both trigger and target must be bool flags.
-- Passed via `dependencies=[...]` alongside `CoRequired` and `Requires`.
-- The `value` parameter specifies what the target flag is set to when the trigger is provided.
-- If the trigger flag is not provided, the target flag is unaffected.
-
-## Deprecated Commands
-
-`app.deprecate()` registers a command name that prints a deprecation message to stderr and exits with code 1 when invoked. Deprecated commands are declaration-only stubs -- they cannot have handlers, flags, or args.
+App-level flags available to all commands, parsed before and after the command token.
 
 ```python
-app = strictcli.App(name="myapp", version="1.0.0", help="manage projects")
+app = strictcli.App("myapp", version="1.0.0", help="My app", flags=[
+    strictcli.Flag(name="verbose", type=bool, help="Verbose output"),
+])
+```
 
+### Passthrough commands
+
+Bypass all parsing -- handler gets raw args plus global flag values.
+
+```python
+@app.command("run", help="Run a script", passthrough=True)
+def run(args, verbose):
+    subprocess.run(args)
+```
+
+### Repeatable flags
+
+Flags that accumulate values across multiple occurrences. Requires explicit `unique=True` or `unique=False`.
+
+```python
+@strictcli.flag("tag", type=str, help="Add a tag", repeatable=True, unique=True)
+```
+
+### Choices
+
+Restrict flag values to an allowed set.
+
+```python
+@strictcli.flag("format", type=str, help="Output format", choices=["json", "csv", "xml"])
+```
+
+### Custom validation
+
+Per-flag validation functions.
+
+```python
+@strictcli.flag("port", type=int, help="Port number", validate=lambda v: 1 <= v <= 65535)
+```
+
+### Deprecated commands
+
+Register retired commands that print a message to stderr and exit 1.
+
+```python
 app.deprecate("init", message="Use 'setup' instead")
-
-@app.command("setup", help="initialize a new project")
-def setup():
-    print("setting up project")
-```
-
-When the deprecated command is invoked:
-
-```
-$ myapp init
-error: command 'init' is deprecated: Use 'setup' instead
-```
-
-Works on both App and Group:
-
-```python
-db = app.group("db", help="manage databases")
 db.deprecate("reset", message="Use 'db wipe' instead")
 ```
 
-Deprecated commands appear in help output under a `Deprecated:` section:
+Deprecated commands appear in help output under a `Deprecated:` section.
 
-```
-$ myapp --help
-myapp v1.0.0 -- manage projects
+### Hidden commands and groups
 
-Commands:
-  setup    initialize a new project
+Commands and groups can be hidden from help output while remaining functional.
 
-Deprecated:
-  init    Use 'setup' instead
+```python
+@app.command("internal-debug", help="Debug internals", hidden=True)
+def internal_debug(): ...
 ```
 
-## Help Output
+### JSON config file support
 
-Help is auto-generated at three levels. Pass `--help` or `-h` at any level, or invoke the app with no arguments.
+Reads `~/.config/{name}/config.json` (or TOML). Auto-registers `config show/set/path/edit` subcommands.
 
-**App level** (`myapp --help`):
-
-```
-myapp v1.0.0 -- manage deployments
-
-Commands:
-  deploy    deploy the application
-
-Groups:
-  db    manage databases
-
-Use 'myapp <command> --help' for more information.
+```python
+app = strictcli.App("myapp", version="1.0.0", help="My app", config=True)
 ```
 
-**Group level** (`myapp db --help`):
+Precedence: CLI > env > config > default. Config fields can be declared with typed validation:
 
-```
-myapp db -- manage databases
-
-Commands:
-  migrate    run database migrations
-  seed       populate with sample data
-
-Use 'myapp db <command> --help' for more information.
+```python
+app.config_field("serve.port", type=int, help="Server port", default=8080)
 ```
 
-**Command level** (`myapp deploy --help`):
+### Schema dump
 
+`--dump-schema` is auto-injected on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups, checks).
+
+### Check system
+
+First-class check/validation framework with double-entry security. Enabled via `checks_path=` pointing to a TOML file.
+
+```python
+app = strictcli.App("myapp", version="1.0.0", help="My app", checks_path="checks.toml")
+
+@app.check("lint")
+def lint(context):
+    return strictcli.CheckResult(status="pass", message="All good")
 ```
-myapp deploy -- deploy the application
 
-Arguments:
-  target    deployment target
+Checks are declared in TOML and registered in code -- both must agree. Auto-registers a `check` command with tag DSL filtering (`--tag "release & !slow"`), JSON output, and dependency resolution.
 
-Flags:
-  --region, -r <str>         cloud region [env: MYAPP_REGION] [default: us-east-1]
-  --force, --no-force, -f    skip confirmation prompt [default: false]
+### Auto-version
+
+`App(name="x", help="...")` without an explicit `version` auto-detects from `importlib.metadata`.
+
+### Tool export
+
+`app.as_tools()` exports non-hidden, non-interactive commands as `Tool` descriptors for LLM agents.
+
+```python
+tools = app.as_tools()
+# Each Tool has: name, description, parameters (JSON Schema), execute
 ```
 
-Version: `--version` or `-v` prints `myapp 1.0.0`.
+### MCP server
+
+`app.serve_mcp()` runs a JSON-RPC 2.0 MCP server on stdin/stdout, exposing commands as tools for AI clients. Triggered via `--mcp` flag.
+
+### Help and version
+
+- `--help` / `-h` recognized anywhere in argv, at app, group, and command levels
+- `--version` / `-v` prints app version
+- Help is auto-generated with flag types, defaults, env var names, and choices
 
 ## Testing
 
-`app.test(argv)` runs the CLI in-process and returns a `Result` with captured output:
+`app.test(argv)` runs the CLI in-process and returns a `Result`:
 
 ```python
-result = app.test(["deploy", "--force", "production"])
+result = app.test(["hello", "--name", "World", "--loud"])
 
 assert result.exit_code == 0
-assert "deploying" in result.stdout
+assert "HELLO, WORLD!" in result.stdout
 assert result.stderr == ""
 ```
 
-The `Result` dataclass has three fields: `stdout`, `stderr`, and `exit_code`.
+## API reference
 
-## Strict by Design
+### Core types
 
-strictcli is opinionated about strictness:
+| Type | Description |
+|------|-------------|
+| `App` | Root CLI application |
+| `Flag` | Flag declaration |
+| `Arg` | Positional argument |
+| `FlagSet` | Reusable flag bundle |
+| `MutexGroup` | Mutually exclusive flags |
+| `CoRequired` | Flags that must appear together |
+| `Requires` | One flag depends on another |
+| `Implies` | Auto-set a bool flag from another |
+| `Result` | Return type of `app.test()` |
+| `Tool` | LLM tool descriptor |
+| `CheckResult` | Check execution result |
+| `CheckContext` | Protocol for check context |
+| `ConfigField` | Typed config file field |
 
-- **Help is mandatory.** Every command, flag, and argument must have help text. Missing help raises `ValueError` at registration time, not at runtime.
-- **Only str and bool.** No int, float, or list types. Parse them yourself in the handler -- it is one line of code and makes the conversion visible.
-- **Handler signatures are validated.** Every declared flag and arg must have a matching parameter in the handler function, and vice versa. Extra or missing parameters raise `ValueError`.
-- **Env var prefixes are enforced.** If you set `env_prefix="MYAPP"`, every env-backed flag must use that prefix (or explicitly opt out with `prefixed=False`).
-- **No hidden defaults.** Required flags fail loudly. Bool flags default to `False`. Everything else must be declared.
+### Decorators
 
-If you want automatic type coercion, subcommand hierarchies deeper than two levels, or rich terminal formatting, consider [argparse](https://docs.python.org/3/library/argparse.html), [click](https://click.palletsprojects.com/), or [typer](https://typer.tiangolo.com/).
+| Decorator | Description |
+|-----------|-------------|
+| `@app.command(name, help=...)` | Register a command |
+| `@strictcli.flag(name, type=, help=...)` | Declare a flag |
+| `@strictcli.arg(name, help=...)` | Declare a positional argument |
+| `@app.check(name)` | Register a check handler |
+
+### App methods
+
+| Method | Description |
+|--------|-------------|
+| `app.command(name, help=...)` | Register a command (decorator) |
+| `app.group(name, help=...)` | Create a command group |
+| `app.deprecate(name, message=...)` | Register a deprecated command |
+| `app.run()` | Parse `sys.argv` and execute |
+| `app.test(argv)` | Run in-process, return `Result` |
+| `app.as_tools()` | Export commands as `Tool` descriptors |
+| `app.serve_mcp()` | Run MCP server on stdin/stdout |
+| `app.config_field(name, type=, help=...)` | Declare a typed config field |
+| `app.check(name)` | Register a check handler (decorator) |
+| `app.set_check_context(factory)` | Set the check context factory |
+
+## Design principles
+
+- **Help is mandatory.** Every command, flag, and argument must have help text. Missing help raises `ValueError` at registration time.
+- **Four types only.** `str`, `bool`, `int`, `float` -- plus compound `list[T]` and `dict[str, T]`. No magic type coercion.
+- **Handler signatures are validated.** Parameter names must match declared flags and args exactly. Extra or missing parameters raise `ValueError`.
+- **Registration-time errors.** Misconfigurations fail loud and early, not at parse time.
+- **Zero dependencies.** Standard library only.
+
+## See also
+
+- [strictcli monorepo](https://github.com/smm-h/strictcli) -- conformance tests, Go implementation, and project documentation
+- [Go implementation](https://github.com/smm-h/strictcli/tree/main/go) -- same semantics, functional options API
+
+## License
+
+MIT
