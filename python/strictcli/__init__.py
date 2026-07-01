@@ -4778,7 +4778,7 @@ def _build_flag_meta(f: Flag) -> str:
         # Dict flags are never required; show default only if non-empty
         if f.default:
             meta_parts.append(f"default: {f.default}")
-    elif f.type is bool and f.compound == "scalar":
+    elif f.type is bool and f.compound == "scalar" and f.default is not None:
         meta_parts.append(f"default: {'true' if f.default else 'false'}")
     elif f.repeatable:
         # Repeatable flags are never required; show default only if non-empty

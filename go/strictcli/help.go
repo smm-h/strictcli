@@ -342,7 +342,7 @@ func buildFlagMeta(f Flag) string {
 			metaParts = append(metaParts, "env: "+f.Env)
 		}
 	}
-	if f.Type == TypeBool {
+	if f.Type == TypeBool && f.hasDefault && f.Default != nil {
 		if def, ok := f.Default.(bool); ok && def {
 			metaParts = append(metaParts, "default: true")
 		} else {
