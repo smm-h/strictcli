@@ -967,13 +967,8 @@ func validateFlagConfig(f *Flag) {
 	if !f.hasDefault {
 		if f.Repeatable {
 			// Repeatable/list/dict defaults to empty (slice or map)
-		} else if f.Type == TypeBool {
-			f.Default = false
-			f.hasDefault = true
 		}
-		// str/int with no default: required (nil Default)
-	} else if f.Type == TypeBool && f.Default == nil {
-		f.Default = false
+		// No default: required (nil Default) — same for all types including bool
 	}
 	// Validate default is in choices (after default resolution)
 	if f.Choices != nil && f.hasDefault && f.Default != nil && !f.Repeatable {
