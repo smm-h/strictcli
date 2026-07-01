@@ -4,17 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 )
 
 // Context provides structured output methods for command handlers.
 // Each method writes to the appropriate stream (stdout or stderr).
 // Emit writes JSON to stdout and stores the data for programmatic retrieval.
 type Context struct {
-	stdout     io.Writer
-	stderr     io.Writer
-	globals    map[string]interface{} // keyed by flag name (dashes, not underscores)
-	emitData   interface{}            // stores last Emit'd value
-	emitCalled bool                   // enforces single Emit
+	stdout       io.Writer
+	stderr       io.Writer
+	globals      map[string]interface{} // keyed by flag name (dashes, not underscores)
+	globalsCache interface{}            // cached result of Globals[T], set on first access
+	emitData     interface{}            // stores last Emit'd value
+	emitCalled   bool                   // enforces single Emit
 }
 
 // newContext creates a new Context with the given writers and global flag values.
@@ -72,4 +74,72 @@ func (c *Context) Emit(data interface{}) {
 // emitResult returns the stored emitData (used internally by Call/Test).
 func (c *Context) emitResult() interface{} {
 	return c.emitData
+}
+
+// reservedGlobalFlagNames are names that cannot be used for user-defined global flags
+// because they are reserved by the framework.
+var reservedGlobalFlagNames = map[string]bool{
+	"help":        true,
+	"h":           true,
+	"version":     true,
+	"v":           true,
+	"dump-schema": true,
+	"mcp":         true,
+}
+
+// RegisterGlobals extracts global flags from a struct type T and registers them
+// on the app. T must be a struct whose fields use cli: tags (not arg: tags).
+// Panics if any extracted flag name collides with a reserved name (help, h,
+// version, v, dump-schema, mcp), or if T contains positional arg fields.
+func RegisterGlobals[T any](app *App) {
+	var zero T
+	structType := reflect.TypeOf(zero)
+	if structType.Kind() == reflect.Ptr {
+		structType = structType.Elem()
+	}
+
+	flags, args := extractFlags(structType)
+
+	// Globals cannot have positional args
+	if len(args) > 0 {
+		panic(fmt.Sprintf("RegisterGlobals[%s]: globals struct must not have arg:-tagged fields", structType.Name()))
+	}
+
+	// Validate against reserved names
+	for _, f := range flags {
+		if reservedGlobalFlagNames[f.Name] {
+			panic(fmt.Sprintf("RegisterGlobals[%s]: flag name %q is reserved", structType.Name(), f.Name))
+		}
+		// Also check short names
+		if f.Short != "" && reservedGlobalFlagNames[f.Short] {
+			panic(fmt.Sprintf("RegisterGlobals[%s]: short flag %q is reserved", structType.Name(), f.Short))
+		}
+	}
+
+	// Register each flag as a global flag
+	for _, f := range flags {
+		app.GlobalFlag(f)
+	}
+
+	// Store the globals type on the app for validation
+	app.globalsType = structType
+}
+
+// Globals returns the global flags as a populated instance of T. On the first
+// call, it creates a zero T, binds values from ctx.globals, caches the result,
+// and returns it. Subsequent calls return the cached instance.
+func Globals[T any](ctx *Context) T {
+	// Return cached value if available
+	if ctx.globalsCache != nil {
+		return ctx.globalsCache.(T)
+	}
+
+	var t T
+	if ctx.globals != nil {
+		if err := bindValues(&t, ctx.globals); err != nil {
+			panic(fmt.Sprintf("Globals[%T]: %v", t, err))
+		}
+	}
+	ctx.globalsCache = t
+	return t
 }

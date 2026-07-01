@@ -481,6 +481,185 @@ func parseDefaultValue(structName, fieldName, raw string, flagType FlagType) int
 	}
 }
 
+// bindValues populates a struct from a map of flag values. The target must be a
+// pointer to a struct. The values map is keyed by flag name (dashes, matching cli:
+// tag values). For each struct field with a cli: tag, the corresponding value is
+// looked up and coerced to the field's Go type. Untagged fields are skipped.
+// Embedded structs are recursed into.
+//
+// This function is shared by Globals[T] (Phase 5) and struct handler dispatch (Phase 6).
+func bindValues(target interface{}, values map[string]interface{}) error {
+	rv := reflect.ValueOf(target)
+	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
+		return fmt.Errorf("bindValues: target must be a pointer to a struct, got %T", target)
+	}
+	return bindValuesRecursive(rv.Elem(), values)
+}
+
+// bindValuesRecursive recurses through struct fields setting values from the map.
+func bindValuesRecursive(structVal reflect.Value, values map[string]interface{}) error {
+	structType := structVal.Type()
+	structName := structType.Name()
+	if structName == "" {
+		structName = structType.String()
+	}
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+		fieldVal := structVal.Field(i)
+
+		// Handle embedded structs: recurse
+		if field.Anonymous && field.Type.Kind() == reflect.Struct {
+			if err := bindValuesRecursive(fieldVal, values); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Only process fields with cli: tags
+		cliVal, hasCli := field.Tag.Lookup("cli")
+		if !hasCli {
+			continue
+		}
+
+		// Look up the value by flag name (dashes)
+		mapVal, exists := values[cliVal]
+		if !exists {
+			// Not in the map: leave zero value (or nil for pointer)
+			continue
+		}
+
+		if err := setFieldValue(structName, field, fieldVal, mapVal); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// setFieldValue sets a struct field to the given value with type coercion.
+func setFieldValue(structName string, field reflect.StructField, fieldVal reflect.Value, value interface{}) error {
+	fieldType := field.Type
+
+	// Handle nil value
+	if value == nil {
+		// For pointer types, set to nil (zero value); for non-pointer, leave zero value
+		return nil
+	}
+
+	// Pointer types: wrap value in a pointer
+	if fieldType.Kind() == reflect.Ptr {
+		elemType := fieldType.Elem()
+		coerced, err := coerceToGoType(structName, field.Name, value, elemType)
+		if err != nil {
+			return err
+		}
+		ptr := reflect.New(elemType)
+		ptr.Elem().Set(reflect.ValueOf(coerced))
+		fieldVal.Set(ptr)
+		return nil
+	}
+
+	// Slice types: convert []interface{} to typed slice
+	if fieldType.Kind() == reflect.Slice {
+		return setSliceField(structName, field, fieldVal, value)
+	}
+
+	// Map types: convert map[string]interface{} to typed map
+	if fieldType.Kind() == reflect.Map {
+		return setMapField(structName, field, fieldVal, value)
+	}
+
+	// Scalar types: direct coercion
+	coerced, err := coerceToGoType(structName, field.Name, value, fieldType)
+	if err != nil {
+		return err
+	}
+	fieldVal.Set(reflect.ValueOf(coerced))
+	return nil
+}
+
+// coerceToGoType converts a value from the values map to the target Go type.
+func coerceToGoType(structName, fieldName string, value interface{}, targetType reflect.Type) (interface{}, error) {
+	switch targetType.Kind() {
+	case reflect.String:
+		if s, ok := value.(string); ok {
+			return s, nil
+		}
+		return nil, fmt.Errorf("%s.%s: expected string, got %T", structName, fieldName, value)
+	case reflect.Bool:
+		if b, ok := value.(bool); ok {
+			return b, nil
+		}
+		return nil, fmt.Errorf("%s.%s: expected bool, got %T", structName, fieldName, value)
+	case reflect.Int:
+		switch v := value.(type) {
+		case int:
+			return v, nil
+		case float64:
+			// JSON numbers are float64; accept if it's a whole number
+			if v == float64(int(v)) {
+				return int(v), nil
+			}
+			return nil, fmt.Errorf("%s.%s: expected int, got non-integer float64 %v", structName, fieldName, v)
+		}
+		return nil, fmt.Errorf("%s.%s: expected int, got %T", structName, fieldName, value)
+	case reflect.Float64:
+		switch v := value.(type) {
+		case float64:
+			return v, nil
+		case int:
+			return float64(v), nil
+		}
+		return nil, fmt.Errorf("%s.%s: expected float64, got %T", structName, fieldName, value)
+	default:
+		return nil, fmt.Errorf("%s.%s: unsupported target type %s", structName, fieldName, targetType.Kind())
+	}
+}
+
+// setSliceField converts []interface{} to a typed Go slice and sets it on the field.
+func setSliceField(structName string, field reflect.StructField, fieldVal reflect.Value, value interface{}) error {
+	srcSlice, ok := value.([]interface{})
+	if !ok {
+		return fmt.Errorf("%s.%s: expected []interface{}, got %T", structName, field.Name, value)
+	}
+
+	elemType := field.Type.Elem()
+	result := reflect.MakeSlice(field.Type, len(srcSlice), len(srcSlice))
+
+	for i, item := range srcSlice {
+		coerced, err := coerceToGoType(structName, field.Name, item, elemType)
+		if err != nil {
+			return fmt.Errorf("%s.%s[%d]: %w", structName, field.Name, i, err)
+		}
+		result.Index(i).Set(reflect.ValueOf(coerced))
+	}
+
+	fieldVal.Set(result)
+	return nil
+}
+
+// setMapField converts map[string]interface{} to a typed Go map and sets it on the field.
+func setMapField(structName string, field reflect.StructField, fieldVal reflect.Value, value interface{}) error {
+	srcMap, ok := value.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("%s.%s: expected map[string]interface{}, got %T", structName, field.Name, value)
+	}
+
+	valType := field.Type.Elem()
+	result := reflect.MakeMap(field.Type)
+
+	for k, v := range srcMap {
+		coerced, err := coerceToGoType(structName, field.Name, v, valType)
+		if err != nil {
+			return fmt.Errorf("%s.%s[%q]: %w", structName, field.Name, k, err)
+		}
+		result.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(coerced))
+	}
+
+	fieldVal.Set(result)
+	return nil
+}
+
 // parseChoiceValues parses string choice values into typed values matching the flag type.
 func parseChoiceValues(structName, fieldName string, parts []string, flagType FlagType) []interface{} {
 	vals := make([]interface{}, len(parts))

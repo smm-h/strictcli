@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -235,6 +236,7 @@ type App struct {
 	commands    map[string]*Command
 	groups      map[string]*Group
 	globalFlags []Flag
+	globalsType reflect.Type // set by RegisterGlobals[T], used for validation
 
 	// order preserves insertion order for help display
 	cmdOrder   []string
