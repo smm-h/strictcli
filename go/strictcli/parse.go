@@ -517,8 +517,6 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 			} else {
 				cliSet[f.Name] = []interface{}{}
 			}
-		} else if f.Type == TypeBool {
-			cliSet[f.Name] = f.Default
 		} else if f.hasDefault && f.Default != nil {
 			cliSet[f.Name] = f.Default
 		} else if f.hasDefault && f.Default == nil {
@@ -527,6 +525,12 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 		} else if mutexFlagNames[f.Name] {
 			cliSet[f.Name] = nil
 		} else {
+			if f.Type == TypeBool && f.Negatable {
+				return nil, nil, fmt.Sprintf("flag '--%s' must be passed as --%s or --no-%s", f.Name, f.Name, f.Name)
+			}
+			if f.Type == TypeBool && !f.Negatable {
+				return nil, nil, fmt.Sprintf("flag '--%s' must be passed as --%s", f.Name, f.Name)
+			}
 			return nil, nil, fmt.Sprintf("flag '--%s' is required", f.Name)
 		}
 	}

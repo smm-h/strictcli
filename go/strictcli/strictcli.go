@@ -2068,17 +2068,17 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 			} else {
 				globalValues[f.Name] = []interface{}{}
 			}
-		} else if f.Type == TypeBool {
-			if f.hasDefault {
-				globalValues[f.Name] = f.Default
-			} else {
-				globalValues[f.Name] = false
-			}
 		} else if f.hasDefault && f.Default != nil {
 			globalValues[f.Name] = f.Default
 		} else if f.hasDefault {
 			globalValues[f.Name] = nil
 		} else {
+			if f.Type == TypeBool && f.Negatable {
+				return nil, nil, fmt.Sprintf("global flag '--%s' must be passed as --%s or --no-%s", f.Name, f.Name, f.Name)
+			}
+			if f.Type == TypeBool && !f.Negatable {
+				return nil, nil, fmt.Sprintf("global flag '--%s' must be passed as --%s", f.Name, f.Name)
+			}
 			return nil, nil, fmt.Sprintf("global flag '--%s' is required", f.Name)
 		}
 	}

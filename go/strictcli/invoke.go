@@ -224,18 +224,18 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			} else {
 				validatedKwargs[paramName] = []interface{}{}
 			}
-		} else if gf.Type == TypeBool {
-			if gf.hasDefault {
-				validatedKwargs[paramName] = gf.Default
-			} else {
-				validatedKwargs[paramName] = false
-			}
 		} else if gf.hasDefault && gf.Default != nil {
 			validatedKwargs[paramName] = gf.Default
 		} else if gf.hasDefault {
 			validatedKwargs[paramName] = nil
 		} else {
 			// Required global flag not provided
+			if gf.Type == TypeBool && gf.Negatable {
+				return invokeResult{exitCode: 1, err: fmt.Sprintf("global flag '--%s' must be passed as --%s or --no-%s", gf.Name, gf.Name, gf.Name)}
+			}
+			if gf.Type == TypeBool && !gf.Negatable {
+				return invokeResult{exitCode: 1, err: fmt.Sprintf("global flag '--%s' must be passed as --%s", gf.Name, gf.Name)}
+			}
 			return invokeResult{exitCode: 1, err: fmt.Sprintf("global flag '--%s' is required", gf.Name)}
 		}
 	}
