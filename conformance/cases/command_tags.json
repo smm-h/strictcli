@@ -211,6 +211,33 @@
     }
   },
   {
+    "name": "command-tags: tag contract satisfied by global flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        { "name": "json", "type": "bool", "help": "output as json", "default": false }
+      ],
+      "tag_contracts": {
+        "json": { "requires_flag": "json" }
+      },
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "tags": ["json"],
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": ["greet"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "hello\n"
+    }
+  },
+  {
     "name": "command-tags: invalid tag name",
     "skip_schema_validation": true,
     "app": {
