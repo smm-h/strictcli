@@ -11,6 +11,7 @@ __all__ = [
     "CheckResult", "CheckContext", "CheckRunResult",
     "format_check_results", "format_check_results_json",
     "ConfigField",
+    "Context",
     "Tool",
 ]
 
@@ -39,6 +40,47 @@ class _MissingSentinel:
 
 
 _MISSING = _MissingSentinel()
+
+
+class Context:
+    """Structured output context for command handlers.
+
+    Provides info/warn/debug/error methods that route to the correct stream,
+    and an emit method for structured data output.
+    """
+
+    def __init__(self, stdout=None, stderr=None):
+        self._stdout = stdout or sys.stdout
+        self._stderr = stderr or sys.stderr
+        self._emit_data = _MISSING
+        self._emit_called = False
+
+    def info(self, msg: str) -> None:
+        """Write an informational message to stdout."""
+        print(msg, file=self._stdout)
+
+    def warn(self, msg: str) -> None:
+        """Write a warning message to stderr."""
+        print(msg, file=self._stderr)
+
+    def debug(self, msg: str) -> None:
+        """Write a debug message to stdout."""
+        print(msg, file=self._stdout)
+
+    def error(self, msg: str) -> None:
+        """Write an error message to stderr."""
+        print(msg, file=self._stderr)
+
+    def emit(self, data) -> None:
+        """Write JSON-serialized data to stdout and store for programmatic retrieval.
+
+        Raises RuntimeError if called more than once.
+        """
+        if self._emit_called:
+            raise RuntimeError("emit called more than once; bundle data into a single value")
+        self._emit_called = True
+        self._emit_data = data
+        print(json.dumps(data, default=str), file=self._stdout)
 
 
 def _config_path(app_name: str, *, override: str | None = None, config_format: str = "json") -> str:
@@ -1530,6 +1572,7 @@ class Command:
     hidden: bool = False
     interactive: bool = False
     config_fields: tuple[str, ...] = ()
+    needs_context: bool = False
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
@@ -3209,6 +3252,9 @@ class App:
         else:
             if cmd.passthrough is not None:
                 result = cmd.passthrough.handler(cmd.name, data, self._last_global_values)
+            elif cmd.needs_context:
+                ctx = Context(stdout=sys.stdout, stderr=sys.stderr)
+                result = cmd.handler(ctx, **data)
             else:
                 result = cmd.handler(**data)
             if isinstance(result, int):
@@ -3280,12 +3326,18 @@ class App:
                         handler_return = cmd.passthrough.handler(
                             cmd.name, data, self._last_global_values,
                         )
+                    elif cmd.needs_context:
+                        ctx = Context(stdout=stdout_buf, stderr=stderr_buf)
+                        handler_return = cmd.handler(ctx, **data)
                     else:
                         handler_return = cmd.handler(**data)
                     if isinstance(handler_return, int):
                         exit_code = handler_return
                     elif handler_return is not None:
                         result_data = handler_return
+                    # Capture emit data from Context-aware handlers
+                    if cmd.needs_context and not isinstance(ctx._emit_data, _MissingSentinel):
+                        result_data = ctx._emit_data
                 except SystemExit as e:
                     exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
 
@@ -3419,6 +3471,12 @@ class App:
                 if gf.default is not None:
                     final_kwargs[_flag_param_name(gf.name)] = gf.default
 
+        if cmd.needs_context:
+            ctx = Context(stdout=sys.stdout, stderr=sys.stderr)
+            result = cmd.handler(ctx, **final_kwargs)
+            if not isinstance(ctx._emit_data, _MissingSentinel):
+                return ctx._emit_data
+            return result
         return cmd.handler(**final_kwargs)
 
     def call(self, command_path: str, **kwargs: object) -> object:
@@ -4398,6 +4456,14 @@ def _build_and_validate_command(
     )
     param_names = set(sig.parameters.keys())
 
+    # Detect Context injection: if the first parameter's annotation is Context,
+    # exclude it from validation — it will be injected at dispatch time.
+    needs_context = False
+    params_list = list(sig.parameters.values())
+    if params_list and params_list[0].annotation is Context:
+        needs_context = True
+        param_names.discard(params_list[0].name)
+
     expected_names: set[str] = set()
     for f in all_flags:
         expected_names.add(_flag_param_name(f.name))
@@ -4524,6 +4590,7 @@ def _build_and_validate_command(
         hidden=hidden,
         interactive=interactive,
         config_fields=resolved_config_fields,
+        needs_context=needs_context,
     )
 
 
