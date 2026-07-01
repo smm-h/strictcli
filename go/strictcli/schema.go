@@ -73,7 +73,7 @@ func serializeFlag(f Flag) map[string]interface{} {
 	}
 
 	// negatable: default nil (omit when nil, i.e. non-bool flags)
-	// For bool flags, only omit when nil (which doesn't happen since BoolFlag sets it)
+	// For bool flags, always emit negatable
 	if f.Type == TypeBool {
 		m["negatable"] = f.Negatable
 	}
