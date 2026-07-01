@@ -1,0 +1,404 @@
+[
+  {
+    "name": "cross_feature: required bool in mutex group, only string provided",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "force",
+                  "type": "bool",
+                  "help": "force mode"
+                },
+                {
+                  "name": "target",
+                  "type": "str",
+                  "help": "target name",
+                  "default": null
+                }
+              ]
+            }
+          ],
+          "handler_prints": "force={force} target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--target",
+      "prod"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "force=None target=prod"
+    }
+  },
+  {
+    "name": "cross_feature: required bool in mutex group, neither provided is error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "force",
+                  "type": "bool",
+                  "help": "force mode"
+                },
+                {
+                  "name": "target",
+                  "type": "str",
+                  "help": "target name",
+                  "default": null
+                }
+              ]
+            }
+          ],
+          "handler_prints": "force={force} target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "one of",
+        "is required"
+      ]
+    }
+  },
+  {
+    "name": "cross_feature: required bool in mutex group, bool provided",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "force",
+                  "type": "bool",
+                  "help": "force mode"
+                },
+                {
+                  "name": "target",
+                  "type": "str",
+                  "help": "target name",
+                  "default": null
+                }
+              ]
+            }
+          ],
+          "handler_prints": "force={force} target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--force"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "force=true target=None"
+    }
+  },
+  {
+    "name": "cross_feature: required bool global flag satisfied by env var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "global_flags": [
+        {
+          "name": "force",
+          "type": "bool",
+          "help": "force mode",
+          "env": "MYAPP_FORCE"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "force={force}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_FORCE": "true"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "force=true"
+    }
+  },
+  {
+    "name": "cross_feature: required bool global flag missing without env var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "global_flags": [
+        {
+          "name": "force",
+          "type": "bool",
+          "help": "force mode",
+          "env": "MYAPP_FORCE"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "force={force}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "must be passed"
+    }
+  },
+  {
+    "name": "cross_feature: tag contract requires a required bool flag, invoked without flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "tag_contracts": {
+        "strict": { "requires_flag": "strict" }
+      },
+      "commands": [
+        {
+          "name": "lint",
+          "help": "lint code",
+          "tags": ["strict"],
+          "flags": [
+            {
+              "name": "strict",
+              "type": "bool",
+              "help": "strict mode"
+            }
+          ],
+          "handler_prints": "strict={strict}"
+        }
+      ]
+    },
+    "argv": [
+      "lint"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "must be passed"
+    }
+  },
+  {
+    "name": "cross_feature: tag contract requires a required bool flag, invoked with flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "tag_contracts": {
+        "strict": { "requires_flag": "strict" }
+      },
+      "commands": [
+        {
+          "name": "lint",
+          "help": "lint code",
+          "tags": ["strict"],
+          "flags": [
+            {
+              "name": "strict",
+              "type": "bool",
+              "help": "strict mode"
+            }
+          ],
+          "handler_prints": "strict={strict}"
+        }
+      ]
+    },
+    "argv": [
+      "lint",
+      "--strict"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "strict=true"
+    }
+  },
+  {
+    "name": "cross_feature: tag contract requires a required bool flag, invoked with --no-flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "tag_contracts": {
+        "strict": { "requires_flag": "strict" }
+      },
+      "commands": [
+        {
+          "name": "lint",
+          "help": "lint code",
+          "tags": ["strict"],
+          "flags": [
+            {
+              "name": "strict",
+              "type": "bool",
+              "help": "strict mode"
+            }
+          ],
+          "handler_prints": "strict={strict}"
+        }
+      ]
+    },
+    "argv": [
+      "lint",
+      "--no-strict"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "strict=false"
+    }
+  },
+  {
+    "name": "cross_feature: tag contract satisfied by required bool, contract check passes",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "tag_contracts": {
+        "strict": { "requires_flag": "strict" }
+      },
+      "commands": [
+        {
+          "name": "lint",
+          "help": "lint code",
+          "tags": ["strict"],
+          "flags": [
+            {
+              "name": "strict",
+              "type": "bool",
+              "help": "strict mode"
+            }
+          ],
+          "handler_prints": "strict={strict}"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ".strictcli/schema.json"
+    }
+  },
+  {
+    "name": "cross_feature: global flag value printed in handler output",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "format",
+          "type": "str",
+          "help": "output format",
+          "default": "text"
+        }
+      ],
+      "commands": [
+        {
+          "name": "show",
+          "help": "show data",
+          "flags": [
+            {
+              "name": "item",
+              "type": "str",
+              "help": "item to show"
+            }
+          ],
+          "handler_prints": "format={format} item={item}"
+        }
+      ]
+    },
+    "argv": [
+      "--format",
+      "json",
+      "show",
+      "--item",
+      "config"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "format=json item=config"
+    }
+  },
+  {
+    "name": "cross_feature: global flag default value visible in handler output",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "format",
+          "type": "str",
+          "help": "output format",
+          "default": "text"
+        }
+      ],
+      "commands": [
+        {
+          "name": "show",
+          "help": "show data",
+          "flags": [
+            {
+              "name": "item",
+              "type": "str",
+              "help": "item to show"
+            }
+          ],
+          "handler_prints": "format={format} item={item}"
+        }
+      ]
+    },
+    "argv": [
+      "show",
+      "--item",
+      "config"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "format=text item=config"
+    }
+  }
+]
