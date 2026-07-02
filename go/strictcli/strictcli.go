@@ -754,8 +754,51 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 		}
 	}
 	// Validate default type matches declared type
-	if a.hasDefault && a.Default != nil {
+	if a.hasDefault && a.Default != nil && IsListType(a.Type) {
+		slice, ok := a.Default.([]interface{})
+		if !ok {
+			panic(fmt.Sprintf("Arg %q: list arg default must be a list", a.Name))
+		}
+		if len(slice) == 0 {
+			panic(fmt.Sprintf("Arg %q: explicit empty default is redundant for list args, omit the default", a.Name))
+		}
+		elemType := ItemType(a.Type)
+		typeName := map[FlagType]string{TypeStr: "str", TypeInt: "int", TypeFloat: "float"}[elemType]
+		for i, elem := range slice {
+			valid := false
+			switch elemType {
+			case TypeStr:
+				_, valid = elem.(string)
+			case TypeInt:
+				_, valid = elem.(int)
+			case TypeFloat:
+				if intVal, isInt := elem.(int); isInt {
+					// Auto-coerce int to float64, mirroring list flag defaults
+					slice[i] = float64(intVal)
+					valid = true
+				} else {
+					_, valid = elem.(float64)
+				}
+			}
+			if !valid {
+				panic(fmt.Sprintf("Arg %q: default element %d is not of type %s", a.Name, i, typeName))
+			}
+		}
+	} else if a.hasDefault && a.Default != nil {
 		switch a.Type {
+		case TypeStr:
+			if _, ok := a.Default.(string); !ok {
+				var gotType string
+				switch a.Default.(type) {
+				case bool:
+					gotType = "bool"
+				case int:
+					gotType = "int"
+				default:
+					gotType = fmt.Sprintf("%T", a.Default)
+				}
+				panic(fmt.Sprintf("Arg %q: type=str requires a str default, got '%s'", a.Name, gotType))
+			}
 		case TypeInt:
 			if _, ok := a.Default.(int); !ok {
 				var gotType string

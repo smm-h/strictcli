@@ -1484,7 +1484,38 @@ class Arg:
                     )
         # Validate default type matches declared type
         if not isinstance(self.default, _MissingSentinel) and self.default is not None:
-            if self.type is int:
+            if self.compound == "list":
+                # self.type was normalized to the item type above; the
+                # default itself must be a list of that item type.
+                if not isinstance(self.default, list):
+                    raise ValueError(
+                        f'Arg "{self.name}": list arg default must be a list'
+                    )
+                if len(self.default) == 0:
+                    raise ValueError(
+                        f'Arg "{self.name}": explicit empty default is '
+                        f"redundant for list args, omit the default"
+                    )
+                type_name = {str: "str", int: "int", float: "float"}[self.type]
+                for i, elem in enumerate(self.default):
+                    if self.type is str:
+                        valid = isinstance(elem, str)
+                    elif self.type is int:
+                        valid = isinstance(elem, int) and not isinstance(elem, bool)
+                    else:  # float
+                        valid = (
+                            isinstance(elem, (int, float))
+                            and not isinstance(elem, bool)
+                        )
+                        if valid and isinstance(elem, int):
+                            # Auto-coerce int to float, mirroring list flag defaults
+                            self.default[i] = float(elem)
+                    if not valid:
+                        raise ValueError(
+                            f'Arg "{self.name}": default element {i} '
+                            f"is not of type {type_name}"
+                        )
+            elif self.type is int:
                 if not isinstance(self.default, int) or isinstance(self.default, bool):
                     raise ValueError(
                         f'Arg "{self.name}": type=int requires an int default, '
@@ -1500,6 +1531,12 @@ class Arg:
                 if not isinstance(self.default, bool):
                     raise ValueError(
                         f'Arg "{self.name}": type=bool requires a bool default, '
+                        f"got {type(self.default).__name__!r}"
+                    )
+            elif self.type is str:
+                if not isinstance(self.default, str):
+                    raise ValueError(
+                        f'Arg "{self.name}": type=str requires a str default, '
                         f"got {type(self.default).__name__!r}"
                     )
         # Validate default is in choices
