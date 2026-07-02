@@ -2145,33 +2145,12 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 	// Validate choices for global flags
 	for i := range a.globalFlags {
 		f := &a.globalFlags[i]
-		if f.Choices == nil {
-			continue
-		}
 		val, ok := globalValues[f.Name]
 		if !ok {
 			continue
 		}
-		if f.Repeatable {
-			vals, ok := val.([]interface{})
-			if !ok {
-				continue
-			}
-			for _, v := range vals {
-				if !inChoices(v, f.Choices) {
-					return nil, nil, fmt.Sprintf(
-						"--%s: invalid value '%v', must be one of: %s",
-						f.Name, v, formatChoices(f.Choices),
-					)
-				}
-			}
-		} else {
-			if !inChoices(val, f.Choices) {
-				return nil, nil, fmt.Sprintf(
-					"--%s: invalid value '%v', must be one of: %s",
-					f.Name, val, formatChoices(f.Choices),
-				)
-			}
+		if errMsg := validateChoices(f.Name, val, f.Repeatable, f.Choices, false); errMsg != "" {
+			return nil, nil, errMsg
 		}
 	}
 

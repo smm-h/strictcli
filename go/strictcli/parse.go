@@ -550,33 +550,12 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 	// Validate choices
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
-		if f.Choices == nil {
-			continue
-		}
 		val, ok := cliSet[f.Name]
 		if !ok {
 			continue
 		}
-		if f.Repeatable {
-			vals, ok := val.([]interface{})
-			if !ok {
-				continue
-			}
-			for _, v := range vals {
-				if !inChoices(v, f.Choices) {
-					return nil, nil, fmt.Sprintf(
-						"--%s: invalid value '%v', must be one of: %s",
-						f.Name, v, formatChoices(f.Choices),
-					)
-				}
-			}
-		} else {
-			if !inChoices(val, f.Choices) {
-				return nil, nil, fmt.Sprintf(
-					"--%s: invalid value '%v', must be one of: %s",
-					f.Name, val, formatChoices(f.Choices),
-				)
-			}
+		if errMsg := validateChoices(f.Name, val, f.Repeatable, f.Choices, false); errMsg != "" {
+			return nil, nil, errMsg
 		}
 	}
 
@@ -587,7 +566,9 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 			continue
 		}
 		val, ok := cliSet[f.Name]
-		if !ok {
+		if !ok || val == nil {
+			// nil means the flag was not passed (Default(nil) or an unset
+			// mutex flag) -- there is no value to validate.
 			continue
 		}
 		if f.Repeatable {
@@ -656,33 +637,12 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 	// Validate arg choices (after type coercion)
 	for i := range cmd.args {
 		a := &cmd.args[i]
-		if a.Choices == nil {
-			continue
-		}
 		val, ok := argValues[a.Name]
 		if !ok {
 			continue
 		}
-		if a.IsVariadic {
-			vals, ok := val.([]interface{})
-			if !ok {
-				continue
-			}
-			for _, v := range vals {
-				if !inChoices(v, a.Choices) {
-					return nil, nil, fmt.Sprintf(
-						"argument '%s': invalid value '%v', must be one of: %s",
-						a.Name, v, formatChoices(a.Choices),
-					)
-				}
-			}
-		} else {
-			if !inChoices(val, a.Choices) {
-				return nil, nil, fmt.Sprintf(
-					"argument '%s': invalid value '%v', must be one of: %s",
-					a.Name, val, formatChoices(a.Choices),
-				)
-			}
+		if errMsg := validateChoices(a.Name, val, a.IsVariadic, a.Choices, true); errMsg != "" {
+			return nil, nil, errMsg
 		}
 	}
 
@@ -707,6 +667,47 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 	}
 
 	return kwargs, postGlobalValues, ""
+}
+
+// validateChoices checks a resolved flag or arg value against its choices
+// list, returning an error message or "" if valid. isArg selects the message
+// prefix ("argument 'name':" instead of "--name:"); the two format strings
+// are kept as full literals so conformance/check_error_parity.py can extract
+// them. A nil val is exempt from validation: nil only arises from
+// Default(nil)/ArgDefault(nil) or an unset mutex flag, all meaning "not
+// passed" -- a CLI-supplied value is never nil.
+func validateChoices(name string, val interface{}, repeatable bool, choices []interface{}, isArg bool) string {
+	if choices == nil || val == nil {
+		return ""
+	}
+	check := func(v interface{}) string {
+		if inChoices(v, choices) {
+			return ""
+		}
+		if isArg {
+			return fmt.Sprintf(
+				"argument '%s': invalid value '%v', must be one of: %s",
+				name, v, formatChoices(choices),
+			)
+		}
+		return fmt.Sprintf(
+			"--%s: invalid value '%v', must be one of: %s",
+			name, v, formatChoices(choices),
+		)
+	}
+	if repeatable {
+		vals, ok := val.([]interface{})
+		if !ok {
+			return ""
+		}
+		for _, v := range vals {
+			if errMsg := check(v); errMsg != "" {
+				return errMsg
+			}
+		}
+		return ""
+	}
+	return check(val)
 }
 
 func inChoices(val interface{}, choices []interface{}) bool {
