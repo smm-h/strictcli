@@ -86,25 +86,25 @@
           ],
           "flags": [
             {
-              "name": "force",
+              "name": "force-deploy",
               "type": "bool",
               "help": "force deploy",
               "default": false
             }
           ],
-          "handler_prints": "deploy {target} force={force}",
+          "handler_prints": "deploy {target} force-deploy={force-deploy}",
           "handler_exit_code": 0
         }
       ]
     },
     "argv": [
       "deploy",
-      "--force",
+      "--force-deploy",
       "production"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "deploy production force=true"
+      "stdout_equals": "deploy production force-deploy=true"
     }
   }
 ]

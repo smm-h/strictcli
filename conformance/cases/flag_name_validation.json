@@ -1,0 +1,125 @@
+[
+  {
+    "name": "flag_name_validation: bare force flag is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "force",
+              "type": "bool",
+              "help": "force it",
+              "default": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "reserved"
+    }
+  },
+  {
+    "name": "flag_name_validation: no- prefix flag is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "no-commit",
+              "type": "bool",
+              "help": "skip commit",
+              "default": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "reserved"
+    }
+  },
+  {
+    "name": "flag_name_validation: force-overwrite is allowed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "force-overwrite",
+              "type": "bool",
+              "help": "force overwrite",
+              "default": false
+            }
+          ],
+          "handler_prints": "force-overwrite={force-overwrite}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--force-overwrite"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "force-overwrite=true"
+    }
+  },
+  {
+    "name": "flag_name_validation: negatable watch flag produces --no-watch",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "watch",
+              "type": "bool",
+              "help": "watch for changes",
+              "default": true,
+              "negatable": true
+            }
+          ],
+          "handler_prints": "watch={watch}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--no-watch"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "watch=false"
+    }
+  }
+]

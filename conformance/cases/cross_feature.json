@@ -13,7 +13,7 @@
             {
               "flags": [
                 {
-                  "name": "force",
+                  "name": "force-mode",
                   "type": "bool",
                   "help": "force mode"
                 },
@@ -26,7 +26,7 @@
               ]
             }
           ],
-          "handler_prints": "force={force} target={target}"
+          "handler_prints": "force-mode={force-mode} target={target}"
         }
       ]
     },
@@ -37,7 +37,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "force=None target=prod"
+      "stdout_equals": "force-mode=None target=prod"
     }
   },
   {
@@ -54,7 +54,7 @@
             {
               "flags": [
                 {
-                  "name": "force",
+                  "name": "force-mode",
                   "type": "bool",
                   "help": "force mode"
                 },
@@ -67,7 +67,7 @@
               ]
             }
           ],
-          "handler_prints": "force={force} target={target}"
+          "handler_prints": "force-mode={force-mode} target={target}"
         }
       ]
     },
@@ -96,7 +96,7 @@
             {
               "flags": [
                 {
-                  "name": "force",
+                  "name": "force-mode",
                   "type": "bool",
                   "help": "force mode"
                 },
@@ -109,17 +109,17 @@
               ]
             }
           ],
-          "handler_prints": "force={force} target={target}"
+          "handler_prints": "force-mode={force-mode} target={target}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--force"
+      "--force-mode"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "force=true target=None"
+      "stdout_equals": "force-mode=true target=None"
     }
   },
   {
@@ -131,17 +131,17 @@
       "env_prefix": "MYAPP",
       "global_flags": [
         {
-          "name": "force",
+          "name": "force-mode",
           "type": "bool",
           "help": "force mode",
-          "env": "MYAPP_FORCE"
+          "env": "MYAPP_FORCE_MODE"
         }
       ],
       "commands": [
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "force={force}"
+          "handler_prints": "force-mode={force-mode}"
         }
       ]
     },
@@ -149,11 +149,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_FORCE": "true"
+      "MYAPP_FORCE_MODE": "true"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "force=true"
+      "stdout_equals": "force-mode=true"
     }
   },
   {
@@ -165,17 +165,17 @@
       "env_prefix": "MYAPP",
       "global_flags": [
         {
-          "name": "force",
+          "name": "force-mode",
           "type": "bool",
           "help": "force mode",
-          "env": "MYAPP_FORCE"
+          "env": "MYAPP_FORCE_MODE"
         }
       ],
       "commands": [
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "force={force}"
+          "handler_prints": "force-mode={force-mode}"
         }
       ]
     },

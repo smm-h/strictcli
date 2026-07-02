@@ -328,13 +328,13 @@
           "help": "deploy the app",
           "flags": [
             {
-              "name": "force",
+              "name": "force-deploy",
               "type": "bool",
               "help": "force deploy",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose} config={config} force={force}"
+          "handler_prints": "verbose={verbose} config={config} force-deploy={force-deploy}"
         }
       ]
     },
@@ -343,11 +343,11 @@
       "--config",
       "/tmp/cfg",
       "deploy",
-      "--force"
+      "--force-deploy"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true config=/tmp/cfg force=true"
+      "stdout_equals": "verbose=true config=/tmp/cfg force-deploy=true"
     }
   }
 ]

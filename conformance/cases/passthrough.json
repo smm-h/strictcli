@@ -217,9 +217,9 @@
           "passthrough_handler_prints": "{name}:{args}",
           "flags": [
             {
-              "name": "force",
+              "name": "force-checkout",
               "type": "bool",
-              "help": "force",
+              "help": "force checkout",
               "default": false
             }
           ]
