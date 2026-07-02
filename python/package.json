@@ -1,6 +1,6 @@
 {
   "name": "strictcli",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "description": "A strict, zero-dependency CLI framework for Python (npm wrapper)",
   "main": "index.js",
   "scripts": {

@@ -2,16 +2,22 @@
 
 # Changelog
 
-## 0.22.0
+## 0.23.0
 
-Required booleans, Context type, schema project_id guard, tag contract global flags fix
+Registration-time ban on bare --force flag name and --no-* prefix
 
 <details>
 <summary>Context</summary>
 
-Breaking change: Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required. New Context type for structured handler communication. Schema dump now validates project_id. TagContract now checks global flags.
+Flag names 'force' (exact) and names starting with 'no-' are now rejected at registration time. Bare --force encourages agents to bypass guardrails without thinking; qualified names like --force-overwrite make the intent explicit. The no- prefix is reserved for strictcli's auto-generated negation system (--no-flag for negatable bools).
 
 </details>
+
+### Features
+
+- **New.** Registration-time ban on bare --force flag name and --no-* prefix. Flag names starting with no- are reserved for the negation system.
+
+## 0.22.0
 
 ### Breaking
 
