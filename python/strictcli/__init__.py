@@ -3185,21 +3185,8 @@ class App:
 
         # Validate choices for global flags
         for f in self._global_flags:
-            if f.choices is not None and f.name in cli_set:
-                if f.repeatable:
-                    for val in cli_set[f.name]:
-                        if val not in f.choices:
-                            choices_str = ", ".join(str(c) for c in f.choices)
-                            raise _ParseError(
-                                f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
-                            )
-                else:
-                    val = cli_set[f.name]
-                    if val not in f.choices:
-                        choices_str = ", ".join(str(c) for c in f.choices)
-                        raise _ParseError(
-                            f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
-                        )
+            if f.name in cli_set:
+                _validate_choices(f.name, cli_set[f.name], f.repeatable, f.choices)
 
         return cli_set, remaining
 
@@ -3754,6 +3741,39 @@ def _tokens_contain_help(tokens: list[str]) -> bool:
     return False
 
 
+def _validate_choices(
+    name: str,
+    val: object,
+    repeatable: bool,
+    choices: list | None,
+    *,
+    is_arg: bool = False,
+) -> None:
+    """Validate a resolved flag or arg value against its choices list.
+
+    Raises _ParseError on an invalid value. is_arg selects the message prefix
+    ("argument 'name':" instead of "--name:"); the two f-strings are kept as
+    full literals so conformance/check_error_parity.py can extract them.
+    A None value is exempt from validation: None only arises when the flag or
+    arg was not passed (an unset mutex flag, or default=None on an arg) -- a
+    CLI-supplied value is never None.
+    """
+    if choices is None or val is None:
+        return
+    vals = val if repeatable else [val]
+    for v in vals:
+        if v not in choices:
+            choices_str = ", ".join(str(c) for c in choices)
+            if is_arg:
+                raise _ParseError(
+                    f"argument '{name}': invalid value '{v}', "
+                    f"must be one of: {choices_str}"
+                )
+            raise _ParseError(
+                f"--{name}: invalid value '{v}', must be one of: {choices_str}"
+            )
+
+
 def _validate_and_build_kwargs(
     cmd: Command,
     cli_set: dict[str, object],
@@ -3849,21 +3869,8 @@ def _validate_and_build_kwargs(
 
     # Step 5.5: validate choices
     for f in cmd.flags:
-        if f.choices is not None and f.name in cli_set:
-            if f.repeatable:
-                for val in cli_set[f.name]:
-                    if val not in f.choices:
-                        choices_str = ", ".join(str(c) for c in f.choices)
-                        raise _ParseError(
-                            f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
-                        )
-            else:
-                val = cli_set[f.name]
-                if val not in f.choices:
-                    choices_str = ", ".join(str(c) for c in f.choices)
-                    raise _ParseError(
-                        f"--{f.name}: invalid value '{val}', must be one of: {choices_str}"
-                    )
+        if f.name in cli_set:
+            _validate_choices(f.name, cli_set[f.name], f.repeatable, f.choices)
 
     # Step 5.6: custom validation
     for f in cmd.flags:
@@ -3874,7 +3881,9 @@ def _validate_and_build_kwargs(
                         f.validate(val)
                     except ValueError as e:
                         raise _ParseError(f"--{f.name}: {e}")
-            else:
+            elif cli_set[f.name] is not None:
+                # None means the flag was not passed (an unset mutex flag) --
+                # there is no value to validate.
                 try:
                     f.validate(cli_set[f.name])
                 except ValueError as e:
@@ -3904,23 +3913,10 @@ def _validate_and_build_kwargs(
 
     # Step 6.5: validate arg choices
     for a in cmd.args:
-        if a.choices is not None and a.name in arg_values:
-            val = arg_values[a.name]
-            if a.variadic:
-                for v in val:
-                    if v not in a.choices:
-                        choices_str = ", ".join(str(c) for c in a.choices)
-                        raise _ParseError(
-                            f"argument '{a.name}': invalid value '{v}', "
-                            f"must be one of: {choices_str}"
-                        )
-            else:
-                if val not in a.choices:
-                    choices_str = ", ".join(str(c) for c in a.choices)
-                    raise _ParseError(
-                        f"argument '{a.name}': invalid value '{val}', "
-                        f"must be one of: {choices_str}"
-                    )
+        if a.name in arg_values:
+            _validate_choices(
+                a.name, arg_values[a.name], a.variadic, a.choices, is_arg=True,
+            )
 
     # Step 7: build kwargs dict (command flags only)
     kwargs: dict[str, object] = {}
