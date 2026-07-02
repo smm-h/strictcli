@@ -1135,7 +1135,11 @@ func TestResolveCheckOrder_NoDependencies(t *testing.T) {
 	}
 }
 
-func TestRunChecks_WarnDependency_SkipsDependent(t *testing.T) {
+func TestRunChecks_WarnDependency_RunsDependent(t *testing.T) {
+	// A warn satisfies a dependency: only FAIL (or cascade-skip) skips
+	// dependents. The warn still makes the run exit non-zero when
+	// ignoreWarnings=false, but the dependent must run.
+	aRan := false
 	defs := makeCheckDefs(map[string]struct {
 		tags      []string
 		severity  string
@@ -1155,8 +1159,8 @@ func TestRunChecks_WarnDependency_SkipsDependent(t *testing.T) {
 			severity:  "error",
 			dependsOn: []string{"check-b"},
 			impl: func(ctx CheckContext) CheckResult {
-				t.Fatal("check-a should not run when dependency warns and ignoreWarnings=false")
-				return CheckResult{}
+				aRan = true
+				return CheckResult{Status: "pass", Message: "ok"}
 			},
 		},
 	})
@@ -1165,10 +1169,67 @@ func TestRunChecks_WarnDependency_SkipsDependent(t *testing.T) {
 	results, exitCode := runChecks(defs, []string{"check-b", "check-a"}, ctx, false)
 
 	if exitCode != 1 {
-		t.Fatalf("expected exit code 1, got %d", exitCode)
+		t.Fatalf("expected exit code 1 (warn without ignoreWarnings), got %d", exitCode)
 	}
-	if results[1].Result.Status != "skip" {
-		t.Fatalf("expected check-a to be skipped, got %q", results[1].Result.Status)
+	if !aRan {
+		t.Fatal("expected check-a to run when dependency warned")
+	}
+	if results[0].Result.Status != "warn" {
+		t.Fatalf("expected check-b warn, got %q", results[0].Result.Status)
+	}
+	if results[1].Result.Status != "pass" {
+		t.Fatalf("expected check-a pass, got %q", results[1].Result.Status)
+	}
+}
+
+func TestRunChecks_WarnDependency_TransitiveDependentsRun(t *testing.T) {
+	// warn -> dependent -> transitive dependent: the whole chain runs.
+	defs := makeCheckDefs(map[string]struct {
+		tags      []string
+		severity  string
+		dependsOn []string
+		impl      func(CheckContext) CheckResult
+	}{
+		"check-c": {
+			tags:      []string{"fast"},
+			severity:  "warn",
+			dependsOn: []string{},
+			impl: func(ctx CheckContext) CheckResult {
+				return CheckResult{Status: "warn", Message: "warning"}
+			},
+		},
+		"check-b": {
+			tags:      []string{"fast"},
+			severity:  "error",
+			dependsOn: []string{"check-c"},
+			impl: func(ctx CheckContext) CheckResult {
+				return CheckResult{Status: "pass", Message: "ok"}
+			},
+		},
+		"check-a": {
+			tags:      []string{"fast"},
+			severity:  "error",
+			dependsOn: []string{"check-b"},
+			impl: func(ctx CheckContext) CheckResult {
+				return CheckResult{Status: "pass", Message: "ok"}
+			},
+		},
+	})
+
+	ctx := &testCheckContext{root: "/tmp/test"}
+	results, exitCode := runChecks(defs, []string{"check-c", "check-b", "check-a"}, ctx, false)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1 (warn without ignoreWarnings), got %d", exitCode)
+	}
+	if results[0].Result.Status != "warn" {
+		t.Fatalf("expected check-c warn, got %q", results[0].Result.Status)
+	}
+	if results[1].Result.Status != "pass" {
+		t.Fatalf("expected check-b pass, got %q", results[1].Result.Status)
+	}
+	if results[2].Result.Status != "pass" {
+		t.Fatalf("expected check-a pass, got %q", results[2].Result.Status)
 	}
 }
 

@@ -167,14 +167,16 @@ func findCycle(checkDefs map[string]*checkDef, expanded map[string]bool, inDegre
 	return ""
 }
 
-// runChecks executes checks in order, skipping dependents of failed/warned checks.
+// runChecks executes checks in order, skipping dependents of failed checks.
 // Returns results and an exit code (0 = all pass or all warn with ignoreWarnings, 1 otherwise).
 func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext, ignoreWarnings bool) ([]CheckRunResult, int) {
 	results := make([]CheckRunResult, 0, len(order))
 	// Track checks whose dependents should be cascade-skipped.
-	// A check is "failed" for cascade purposes if it returned fail,
-	// or warn without ignoreWarnings, or was itself cascade-skipped.
-	// Explicit skip from a check impl is NOT a failure -- dependents still run.
+	// A check is "failed" for cascade purposes only if it returned fail
+	// or was itself cascade-skipped. A warn satisfies the dependency
+	// (dependents still run) regardless of ignoreWarnings -- it only
+	// affects the exit code. Explicit skip from a check impl is NOT a
+	// failure -- dependents still run.
 	failedChecks := make(map[string]bool)
 
 	exitCode := 0
@@ -207,8 +209,9 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 			failedChecks[name] = true
 			exitCode = 1
 		case "warn":
+			// Warn satisfies the dependency (no cascade), but still
+			// makes the run exit non-zero unless warnings are ignored.
 			if !ignoreWarnings {
-				failedChecks[name] = true
 				exitCode = 1
 			}
 		case "skip":
