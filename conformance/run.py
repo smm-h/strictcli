@@ -505,6 +505,7 @@ def _run_both_mode(cases: list[tuple[str, dict]], verbose: bool) -> int:
 
     # Cleanup
     _cleanup_harness()
+    _cleanup_go_cache()
 
     # Summary
     total = passed + parity_failures + consistent_failures
@@ -554,6 +555,7 @@ def _run_single_mode(cases: list[tuple[str, dict]], target: str, verbose: bool) 
 
     # Cleanup
     _cleanup_harness()
+    _cleanup_go_cache()
 
     # Summary
     total = passed + failed
