@@ -319,7 +319,7 @@ RICH_APP = {
                     "prefixed": True,
                 },
                 {
-                    "name": "no-color",
+                    "name": "color-off",
                     "type": "bool",
                     "help": "Disable colors",
                     "negatable": False,
