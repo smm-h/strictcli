@@ -2398,12 +2398,25 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 // struct binding at dispatch time.
 func buildHandlerCommand(name, help string, factory func() Handler, app *App, envPrefix string, globalFlags []Flag, inheritedTags []string, opts []CmdOption) *Command {
 	sample := factory()
-	structType := reflect.TypeOf(sample)
+	sampleVal := reflect.ValueOf(sample)
+	structType := sampleVal.Type()
 	if structType.Kind() == reflect.Ptr {
 		structType = structType.Elem()
 	}
 
-	flags, args := extractFlags(structType)
+	// Build a pointer receiver for choices_from method resolution, preserving
+	// the factory-built instance so injected dependencies are visible.
+	var receiver reflect.Value
+	if sampleVal.Kind() == reflect.Ptr && !sampleVal.IsNil() {
+		receiver = sampleVal
+	} else {
+		receiver = reflect.New(structType)
+		if sampleVal.Kind() == reflect.Struct {
+			receiver.Elem().Set(sampleVal)
+		}
+	}
+
+	flags, args := extractFlagsWithReceiver(structType, receiver)
 
 	// Build reverse map: param name (underscores) -> flag name (dashes)
 	paramToFlagMap := make(map[string]string, len(flags))

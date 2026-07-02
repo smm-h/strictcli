@@ -19,9 +19,11 @@ type tagInfo struct {
 	prefixed     *bool   // nil = not set (default true)
 	negatable    *bool   // nil = not set (default true for bool)
 	choices      string  // raw comma-separated string
+	choicesFrom  string  // method name on the handler type returning []string
 	unique       *bool   // nil = not set
 	envSeparator string
 	variadic     *bool   // nil = not set
+	required     *bool   // nil = not set; only "false" on variadic slice args is valid
 	defaultVal   *string // nil = not set; pointer to distinguish "not present" from "empty string"
 }
 
@@ -35,9 +37,11 @@ var knownTagKeys = map[string]bool{
 	"prefixed":      true,
 	"negatable":     true,
 	"choices":       true,
+	"choices_from":  true,
 	"unique":        true,
 	"env_separator": true,
 	"variadic":      true,
+	"required":      true,
 	"default":       true,
 }
 
@@ -90,6 +94,12 @@ func parseStructTag(structName string, field reflect.StructField) *tagInfo {
 	if v, ok := field.Tag.Lookup("choices"); ok {
 		info.choices = v
 	}
+	if v, ok := field.Tag.Lookup("choices_from"); ok {
+		info.choicesFrom = v
+	}
+	if info.choices != "" && info.choicesFrom != "" {
+		panic(fmt.Sprintf("%s.%s: cannot have both choices and choices_from tags", structName, field.Name))
+	}
 	if v, ok := field.Tag.Lookup("unique"); ok {
 		b := parseBoolTag(structName, field.Name, "unique", v)
 		info.unique = &b
@@ -100,6 +110,10 @@ func parseStructTag(structName string, field reflect.StructField) *tagInfo {
 	if v, ok := field.Tag.Lookup("variadic"); ok {
 		b := parseBoolTag(structName, field.Name, "variadic", v)
 		info.variadic = &b
+	}
+	if v, ok := field.Tag.Lookup("required"); ok {
+		b := parseBoolTag(structName, field.Name, "required", v)
+		info.required = &b
 	}
 	if v, ok := field.Tag.Lookup("default"); ok {
 		info.defaultVal = &v
@@ -190,7 +204,8 @@ func extractTagKeys(tag string) []string {
 
 // extractFlags extracts Flag and Arg declarations from a struct type using
 // reflection and struct tags. The struct type must be a struct (not a pointer).
-// Panics on invalid configurations.
+// A fresh zero instance serves as the receiver for choices_from method
+// resolution. Panics on invalid configurations.
 func extractFlags(structType reflect.Type) ([]Flag, []Arg) {
 	if structType.Kind() == reflect.Ptr {
 		structType = structType.Elem()
@@ -198,14 +213,22 @@ func extractFlags(structType reflect.Type) ([]Flag, []Arg) {
 	if structType.Kind() != reflect.Struct {
 		panic(fmt.Sprintf("extractFlags: expected struct type, got %s", structType.Kind()))
 	}
+	return extractFlagsWithReceiver(structType, reflect.New(structType))
+}
 
+// extractFlagsWithReceiver is extractFlags with an explicit receiver instance.
+// The receiver must be a pointer to structType (pointer receivers carry the
+// full method set); choices_from methods are resolved and invoked on it, so a
+// factory-built instance exposes injected dependencies to those methods.
+func extractFlagsWithReceiver(structType reflect.Type, receiver reflect.Value) ([]Flag, []Arg) {
 	visited := make(map[reflect.Type]bool)
-	return extractFlagsRecursive(structType, visited)
+	return extractFlagsRecursive(structType, receiver, visited)
 }
 
 // extractFlagsRecursive recurses into the struct type to extract flags and args.
-// Tracks visited types to detect cycles in embedded structs.
-func extractFlagsRecursive(structType reflect.Type, visited map[reflect.Type]bool) ([]Flag, []Arg) {
+// Tracks visited types to detect cycles in embedded structs. The receiver is
+// always the root handler instance, not the embedded struct.
+func extractFlagsRecursive(structType reflect.Type, receiver reflect.Value, visited map[reflect.Type]bool) ([]Flag, []Arg) {
 	if visited[structType] {
 		panic(fmt.Sprintf("extractFlags: cycle detected involving type %s", structType.Name()))
 	}
@@ -225,7 +248,7 @@ func extractFlagsRecursive(structType reflect.Type, visited map[reflect.Type]boo
 
 		// Handle embedded structs (FlagSets): recurse
 		if field.Anonymous && field.Type.Kind() == reflect.Struct {
-			embeddedFlags, embeddedArgs := extractFlagsRecursive(field.Type, visited)
+			embeddedFlags, embeddedArgs := extractFlagsRecursive(field.Type, receiver, visited)
 			flags = append(flags, embeddedFlags...)
 			args = append(args, embeddedArgs...)
 			continue
@@ -237,10 +260,10 @@ func extractFlagsRecursive(structType reflect.Type, visited map[reflect.Type]boo
 		}
 
 		if info.flagName != "" {
-			f := buildFlag(structName, field, info)
+			f := buildFlag(structName, field, info, receiver)
 			flags = append(flags, f)
 		} else {
-			a := buildArg(structName, field, info)
+			a := buildArg(structName, field, info, receiver)
 			args = append(args, a)
 		}
 	}
@@ -249,11 +272,25 @@ func extractFlagsRecursive(structType reflect.Type, visited map[reflect.Type]boo
 }
 
 // buildFlag constructs a Flag from parsed tag info and field type.
-func buildFlag(structName string, field reflect.StructField, info *tagInfo) Flag {
+// The receiver is the root handler instance, used to resolve choices_from.
+func buildFlag(structName string, field reflect.StructField, info *tagInfo, receiver reflect.Value) Flag {
 	fieldType := field.Type
 	isPointer := fieldType.Kind() == reflect.Ptr
 
 	flagType, isSlice, isMap := resolveFieldType(structName, field.Name, fieldType)
+
+	if isPointer && (isSlice || isMap) {
+		panic(fmt.Sprintf("%s.%s: pointer-to-slice and pointer-to-map field types are unsupported "+
+			"(a missing repeatable flag always resolves to an empty list/map, never nil); "+
+			"use a plain slice/map flag field, or a plain slice arg field with variadic:\"true\" required:\"false\"",
+			structName, field.Name))
+	}
+
+	if info.required != nil {
+		panic(fmt.Sprintf("%s.%s: required tag is only valid on variadic slice args; "+
+			"flags express optionality via pointer types or the default tag",
+			structName, field.Name))
+	}
 
 	var opts []FlagOption
 
@@ -281,6 +318,12 @@ func buildFlag(structName string, field reflect.StructField, info *tagInfo) Flag
 	if info.choices != "" {
 		parts := strings.Split(info.choices, ",")
 		choiceVals := parseChoiceValues(structName, field.Name, parts, flagType)
+		opts = append(opts, Choices(choiceVals...))
+	}
+
+	// Choices resolved from a handler method
+	if info.choicesFrom != "" {
+		choiceVals := resolveChoicesFrom(structName, field, info, receiver, flagType)
 		opts = append(opts, Choices(choiceVals...))
 	}
 
@@ -338,7 +381,8 @@ func buildFlag(structName string, field reflect.StructField, info *tagInfo) Flag
 }
 
 // buildArg constructs an Arg from parsed tag info and field type.
-func buildArg(structName string, field reflect.StructField, info *tagInfo) Arg {
+// The receiver is the root handler instance, used to resolve choices_from.
+func buildArg(structName string, field reflect.StructField, info *tagInfo, receiver reflect.Value) Arg {
 	fieldType := field.Type
 	isPointer := fieldType.Kind() == reflect.Ptr
 
@@ -346,6 +390,13 @@ func buildArg(structName string, field reflect.StructField, info *tagInfo) Arg {
 
 	if isMap {
 		panic(fmt.Sprintf("%s.%s: map types are not supported for positional arguments",
+			structName, field.Name))
+	}
+
+	if isPointer && isSlice {
+		panic(fmt.Sprintf("%s.%s: pointer-to-slice and pointer-to-map field types are unsupported "+
+			"(a missing optional variadic arg always resolves to an empty list, never nil); "+
+			"use a plain slice field with variadic:\"true\" required:\"false\"",
 			structName, field.Name))
 	}
 
@@ -368,10 +419,35 @@ func buildArg(structName string, field reflect.StructField, info *tagInfo) Arg {
 		opts = append(opts, Variadic())
 	}
 
+	// required tag: only required:"false" on a variadic slice arg is valid
+	// (zero positionals then bind an empty slice). Everything else is redundant
+	// or expressed elsewhere: args are required by default, and optional scalar
+	// args use pointer types or the default tag.
+	if info.required != nil {
+		if !isVariadic {
+			panic(fmt.Sprintf("%s.%s: required tag is only valid on variadic slice args; "+
+				"optional scalar args use pointer types or the default tag",
+				structName, field.Name))
+		}
+		if *info.required {
+			panic(fmt.Sprintf("%s.%s: required:\"true\" is redundant (args are required by default; "+
+				"pointer types and the default tag express optionality elsewhere) -- "+
+				"only required:\"false\" on a variadic slice arg is meaningful",
+				structName, field.Name))
+		}
+		opts = append(opts, ArgRequired(false))
+	}
+
 	// Choices (args)
 	if info.choices != "" {
 		parts := strings.Split(info.choices, ",")
 		choiceVals := parseChoiceValues(structName, field.Name, parts, flagType)
+		opts = append(opts, ArgChoices(choiceVals...))
+	}
+
+	// Choices resolved from a handler method
+	if info.choicesFrom != "" {
+		choiceVals := resolveChoicesFrom(structName, field, info, receiver, flagType)
 		opts = append(opts, ArgChoices(choiceVals...))
 	}
 
@@ -665,6 +741,30 @@ func setMapField(structName string, field reflect.StructField, fieldVal reflect.
 
 	fieldVal.Set(result)
 	return nil
+}
+
+// resolveChoicesFrom resolves a choices_from tag: it looks up the named method
+// on the handler receiver, validates its signature (func() []string), invokes
+// it once at registration time, and feeds the result through the same typed
+// parsing as the choices tag. The resulting concrete choice list flows through
+// help text, parse errors, schema dump, and MCP enums unchanged.
+func resolveChoicesFrom(structName string, field reflect.StructField, info *tagInfo, receiver reflect.Value, flagType FlagType) []interface{} {
+	m := receiver.MethodByName(info.choicesFrom)
+	if !m.IsValid() {
+		panic(fmt.Sprintf("%s.%s: choices_from method %q not found on %s (value or pointer receiver)",
+			structName, field.Name, info.choicesFrom, receiver.Type().Elem()))
+	}
+	mt := m.Type()
+	if mt.NumIn() != 0 || mt.NumOut() != 1 || mt.Out(0) != reflect.TypeOf([]string(nil)) {
+		panic(fmt.Sprintf("%s.%s: choices_from method %q must have signature func() []string, got func%s",
+			structName, field.Name, info.choicesFrom, strings.TrimPrefix(mt.String(), "func")))
+	}
+	result := m.Call(nil)[0].Interface().([]string)
+	if len(result) == 0 {
+		panic(fmt.Sprintf("%s.%s: choices_from method %q returned an empty list",
+			structName, field.Name, info.choicesFrom))
+	}
+	return parseChoiceValues(structName, field.Name, result, flagType)
 }
 
 // parseChoiceValues parses string choice values into typed values matching the flag type.
