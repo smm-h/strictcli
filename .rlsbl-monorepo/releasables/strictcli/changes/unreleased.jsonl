@@ -1,0 +1,1 @@
+{"commits":["9be83689efda8254d52c6ab777494dcee3b52712"],"user_facing":true,"description":"**Fixed.** Unset mutex flags with choices and optional args with `default=None` + choices no longer fail with \"invalid value 'None'\" when not passed. Custom validators are no longer invoked with None for not-passed flags.","type":"fix","packages":["strictcli"]}
