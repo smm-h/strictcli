@@ -382,9 +382,6 @@ COVERAGE_DEFERRED_EXCLUSIONS: dict[str, str] = {
         "Requires a >1MB fixture file, impractical for conformance suite",
     '--*: cannot read file: *':
         "Requires a file with restricted permissions, platform-dependent",
-    # Typed arg choices validation
-    'argument *: invalid value *, must be one of: *':
-        "Needs typed arg choices conformance test case",
     # Invoke API errors (programmatic call, not CLI argv)
     'unknown parameter * for command *':
         "Invoke API error; needs programmatic call conformance test infrastructure",

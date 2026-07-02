@@ -268,5 +268,157 @@
       ],
       "stderr_equals": "error: --format: invalid value 'xml', must be one of: text, json\ntry 'myapp cmd --help'"
     }
+  },
+  {
+    "name": "choices: optional arg with choices not passed succeeds",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "env",
+              "help": "target env",
+              "required": false,
+              "default": null,
+              "choices_str": [
+                "dev",
+                "prod"
+              ]
+            }
+          ],
+          "handler_prints": "env={env}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "env=None"
+    }
+  },
+  {
+    "name": "choices: optional arg with choices and no default not passed succeeds",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "env",
+              "help": "target env",
+              "required": false,
+              "choices_str": [
+                "dev",
+                "prod"
+              ]
+            }
+          ],
+          "handler_prints": "env={env}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "env=None"
+    }
+  },
+  {
+    "name": "choices: optional arg with choices invalid value rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "env",
+              "help": "target env",
+              "required": false,
+              "default": null,
+              "choices_str": [
+                "dev",
+                "prod"
+              ]
+            }
+          ],
+          "handler_prints": "env={env}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "local"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "invalid value",
+        "'local'"
+      ],
+      "stderr_equals": "error: argument 'env': invalid value 'local', must be one of: dev, prod\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "choices: unset mutex flag with choices not validated",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "format",
+                  "type": "str",
+                  "help": "output format",
+                  "default": null,
+                  "choices_str": [
+                    "text",
+                    "json"
+                  ]
+                },
+                {
+                  "name": "output",
+                  "type": "str",
+                  "help": "output path",
+                  "default": null
+                }
+              ]
+            }
+          ],
+          "handler_prints": "format={format} output={output}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--output",
+      "out.txt"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "format=None output=out.txt"
+    }
   }
 ]
