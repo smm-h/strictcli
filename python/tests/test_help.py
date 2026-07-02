@@ -8,8 +8,8 @@ def _make_full_app():
     app = strictcli.App(name="myapp", version="2.0.0", help="a great app")
 
     @app.command("init", help="initialize the project")
-    @strictcli.flag("force", type=bool, default=False, help="overwrite existing files")
-    def init(force):
+    @strictcli.flag("force-overwrite", type=bool, default=False, help="overwrite existing files")
+    def init(force_overwrite):
         pass
 
     @app.command(
@@ -117,7 +117,7 @@ def test_help_at_command_level():
     assert r.exit_code == 0
     assert "init" in r.stdout
     assert "initialize the project" in r.stdout
-    assert "--force" in r.stdout
+    assert "--force-overwrite" in r.stdout
 
 
 def test_help_at_group_level():

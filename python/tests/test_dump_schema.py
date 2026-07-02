@@ -120,8 +120,8 @@ class TestSchemaCommands:
         @app.command("deploy", help="Deploy the app")
         @strictcli.flag("target", type=str, help="Deploy target", short="t",
                         choices=["prod", "staging"])
-        @strictcli.flag("force", type=bool, default=False, help="Force deploy")
-        def deploy(target, force):
+        @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
+        def deploy(target, force_deploy):
             pass
 
         app.test(["--dump-schema"])
@@ -141,7 +141,7 @@ class TestSchemaCommands:
         assert "hidden" not in target_flag  # hidden=False is the default, omitted
 
         force_flag = cmd["flags"][1]
-        assert force_flag["name"] == "force"
+        assert force_flag["name"] == "force-deploy"
         assert force_flag["type"] == "bool"
         assert force_flag["negatable"] is True
         assert force_flag["default"] is False
@@ -428,8 +428,8 @@ class TestSchemaFlagTypes:
         app = _make_app()
 
         @app.command("cmd", help="A command")
-        @strictcli.flag("force", type=bool, default=False, help="Force it", negatable=False)
-        def cmd(force):
+        @strictcli.flag("force-it", type=bool, default=False, help="Force it", negatable=False)
+        def cmd(force_it):
             pass
 
         app.test(["--dump-schema"])
@@ -848,10 +848,10 @@ class TestSchemaConstraints:
 
         @app.command("deploy", help="Deploy",
                      dependencies=[strictcli.Implies(
-                         flag="force", implies="yes", value=True)])
-        @strictcli.flag("force", type=bool, default=False, help="Force deploy")
+                         flag="force-deploy", implies="yes", value=True)])
+        @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
         @strictcli.flag("yes", type=bool, default=False, help="Skip confirmation")
-        def deploy(force, yes):
+        def deploy(force_deploy, yes):
             pass
 
         app.test(["--dump-schema"])
@@ -860,7 +860,7 @@ class TestSchemaConstraints:
         assert len(cmd["constraints"]) == 1
         c = cmd["constraints"][0]
         assert c["type"] == "implies"
-        assert c["flag"] == "force"
+        assert c["flag"] == "force-deploy"
         assert c["implies"] == "yes"
         assert c["value"] is True
 
@@ -897,17 +897,17 @@ class TestSchemaConstraints:
 
         @app.command("deploy", help="Deploy",
                      dependencies=[strictcli.CoRequired(
-                         flags=["dry-run", "no-confirm"])])
+                         flags=["dry-run", "skip-confirm"])])
         @strictcli.flag("dry-run", type=bool, default=False, help="Dry run")
-        @strictcli.flag("no-confirm", type=bool, default=False, help="Skip confirmation")
-        def deploy(dry_run, no_confirm):
+        @strictcli.flag("skip-confirm", type=bool, default=False, help="Skip confirmation")
+        def deploy(dry_run, skip_confirm):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["deploy"]
         c = cmd["constraints"][0]
-        assert c["flags"] == ["dry-run", "no-confirm"]
+        assert c["flags"] == ["dry-run", "skip-confirm"]
 
 
 class TestSchemaTagContracts:
@@ -928,34 +928,34 @@ class TestSchemaTagContracts:
     def test_tag_contracts_serialized(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         app = _make_app()
-        app.tag_contract("dangerous", requires_flag="force")
+        app.tag_contract("dangerous", requires_flag="force-deploy")
 
         @app.command("deploy", help="Deploy", tags=["dangerous"])
-        @strictcli.flag("force", type=bool, default=False, help="Force it")
-        def deploy(force):
+        @strictcli.flag("force-deploy", type=bool, default=False, help="Force it")
+        def deploy(force_deploy):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         assert "tag_contracts" in data
-        assert data["tag_contracts"] == {"dangerous": "force"}
+        assert data["tag_contracts"] == {"dangerous": "force-deploy"}
 
     def test_multiple_tag_contracts(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         app = _make_app()
-        app.tag_contract("dangerous", requires_flag="force")
+        app.tag_contract("dangerous", requires_flag="force-deploy")
         app.tag_contract("slow", requires_flag="timeout")
 
         @app.command("deploy", help="Deploy", tags=["dangerous", "slow"])
-        @strictcli.flag("force", type=bool, default=False, help="Force it")
+        @strictcli.flag("force-deploy", type=bool, default=False, help="Force it")
         @strictcli.flag("timeout", type=int, help="Timeout", default=30)
-        def deploy(force, timeout):
+        def deploy(force_deploy, timeout):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         assert data["tag_contracts"] == {
-            "dangerous": "force",
+            "dangerous": "force-deploy",
             "slow": "timeout",
         }
 

@@ -392,7 +392,7 @@ func TestInvokeVariadicArgsMatchTest(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("rm", "remove files", captureHandler(captured),
 			WithFlags(
-				BoolFlag("force", "force removal", Default(false)),
+				BoolFlag("force-removal", "force removal", Default(false)),
 			),
 			WithArgs(
 				NewArg("files", "files to remove", Variadic()),
@@ -403,15 +403,15 @@ func TestInvokeVariadicArgsMatchTest(t *testing.T) {
 
 	app1 := makeApp(&invokeKwargs)
 	ir := app1.invoke("rm", map[string]interface{}{
-		"force": true,
-		"files": []string{"a.txt", "b.txt"},
+		"force_removal": true,
+		"files":         []string{"a.txt", "b.txt"},
 	})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
 	}
 
 	app2 := makeApp(&testKwargs)
-	r := app2.Test([]string{"rm", "--force", "a.txt", "b.txt"})
+	r := app2.Test([]string{"rm", "--force-removal", "a.txt", "b.txt"})
 	if r.ExitCode != 0 {
 		t.Fatalf("Test failed: %s", r.Stderr)
 	}
@@ -503,20 +503,20 @@ func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 func TestInvokePassthroughMissingRequiredBoolGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	// A required bool global flag: no Default, so it must be provided explicitly.
-	app.GlobalFlag(BoolFlag("force", "force operation"))
+	app.GlobalFlag(BoolFlag("force-run", "force operation"))
 	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
 		return 0
 	})
 
-	// Don't provide "force" -- it's a required bool global flag (no default)
+	// Don't provide "force-run" -- it's a required bool global flag (no default)
 	ir := app.invoke("exec", map[string]interface{}{
 		"_args": []string{"ls"},
 	})
 	if ir.err == "" {
 		t.Fatal("expected error for missing required bool global flag in passthrough command")
 	}
-	if !strings.Contains(ir.err, "force") {
-		t.Fatalf("expected 'force' in error, got %q", ir.err)
+	if !strings.Contains(ir.err, "force-run") {
+		t.Fatalf("expected 'force-run' in error, got %q", ir.err)
 	}
 	if !strings.Contains(ir.err, "must be passed") {
 		t.Fatalf("expected 'must be passed' in error, got %q", ir.err)

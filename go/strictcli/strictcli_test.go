@@ -3101,7 +3101,7 @@ func TestDumpSchemaContents(t *testing.T) {
 	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int { return 0 },
 		WithFlags(
 			StringFlag("target", "Deploy target", Short("t"), Choices("prod", "staging")),
-			BoolFlag("force", "Force deploy", Default(false)),
+			BoolFlag("force-deploy", "Force deploy", Default(false)),
 		),
 		WithArgs(
 			NewArg("env", "Environment name"),
@@ -3204,8 +3204,8 @@ func TestDumpSchemaContents(t *testing.T) {
 	}
 
 	forceFlag := flags[1].(map[string]interface{})
-	if forceFlag["name"] != "force" {
-		t.Fatalf("expected flag name 'force', got %v", forceFlag["name"])
+	if forceFlag["name"] != "force-deploy" {
+		t.Fatalf("expected flag name 'force-deploy', got %v", forceFlag["name"])
 	}
 	if forceFlag["type"] != "bool" {
 		t.Fatalf("expected flag type 'bool', got %v", forceFlag["type"])

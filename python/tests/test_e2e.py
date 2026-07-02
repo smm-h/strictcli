@@ -317,7 +317,7 @@ def test_e2e_kwargs_handler_registration_no_error():
         args=[strictcli.Arg(name="name", help="a name")],
     )
     @strictcli.flag("count", type=int, help="a count", default=0)
-    @strictcli.flag("force", type=bool, default=False, help="force it")
+    @strictcli.flag("force-it", type=bool, default=False, help="force it")
     def cmd_handler(**kwargs):
         return 0
 
