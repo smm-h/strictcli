@@ -401,8 +401,6 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	return validateAndBuildKwargs(cmd, cliSet, positionals, globalFlagNames)
 }
 
-// validateAndBuildKwargs performs pure validation and kwargs assembly on the
-// already-parsed cliSet values. It enforces mutex constraints, resolves implies
 // applyFlagDefault resolves the default value for a flag that was not provided
 // on the command line. Returns (value, errorMsg). If errorMsg is non-empty, the
 // flag is required and was not provided. The prefix is prepended to error
@@ -444,6 +442,8 @@ func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string) (i
 	return nil, fmt.Sprintf("%sflag '--%s' is required", prefix, f.Name)
 }
 
+// validateAndBuildKwargs performs pure validation and kwargs assembly on the
+// already-parsed cliSet values. It enforces mutex constraints, resolves implies
 // dependencies, checks co-required/requires dependencies, applies defaults,
 // validates choices, runs custom validation, resolves positional args, and
 // builds the final kwargs map.
