@@ -401,6 +401,42 @@
     }
   },
   {
+    "name": "checks: warn dependency satisfies dependent which runs",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.compile]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = [\"compile\"]\n",
+      "checks": [
+        {
+          "name": "compile",
+          "check_returns": "warn",
+          "check_message": "compiled with warnings"
+        },
+        {
+          "name": "lint",
+          "check_returns": "pass",
+          "check_message": "lint ok"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--all"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": [
+        "WARN",
+        "PASS"
+      ],
+      "stdout_not_contains": [
+        "SKIP"
+      ]
+    }
+  },
+  {
     "name": "checks: missing registration causes error",
     "app": {
       "name": "testapp",
