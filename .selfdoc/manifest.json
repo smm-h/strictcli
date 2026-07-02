@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "name": "strictcli",
+  "slug": "strictcli",
+  "version": "",
+  "description": "",
+  "language": "python",
+  "base_url": "https://strictcli.smmh.dev",
+  "pages": [
+    {
+      "path": "gen-index.md",
+      "title": "API Reference",
+      "type": "doc"
+    },
+    {
+      "path": "go-strictcli.md",
+      "title": "go/strictcli",
+      "type": "doc"
+    },
+    {
+      "path": "python-strictcli.md",
+      "title": "python.strictcli",
+      "type": "doc"
+    }
+  ],
+  "posts": [],
+  "last_gen": "2026-07-02T23:20:52.626099+00:00"
+}
