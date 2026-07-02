@@ -5307,15 +5307,22 @@ def _run_checks(
     warn with ignore_warnings=True), 1 otherwise.
     """
     results: list[tuple[str, CheckResult]] = []
+    # Checks whose dependents should be cascade-skipped: only fail or
+    # cascade-skip qualifies. A warn satisfies the dependency (dependents
+    # still run) regardless of ignore_warnings -- it only affects the exit
+    # code. Explicit skip from an impl is not a failure either.
     failed_checks: set[str] = set()
     exit_code = 0
 
-    # Build reverse dependency map for this execution set
-    dependents_of: dict[str, set[str]] = {name: set() for name in check_names}
-    for name in check_names:
-        for dep in check_defs[name].depends_on:
-            if dep in dependents_of:
-                dependents_of[dep].add(name)
+    def record(name: str, result: CheckResult) -> None:
+        nonlocal exit_code
+        if result.status == "fail":
+            failed_checks.add(name)
+            exit_code = 1
+        elif result.status == "warn":
+            if not ignore_warnings:
+                exit_code = 1
+        # "skip" from an impl or adapter: no cascade, no exit code change.
 
     for name in check_names:
         cdef = check_defs[name]
@@ -5342,33 +5349,14 @@ def _run_checks(
         if cdef.scope and scope_adapter is not None:
             adapted = scope_adapter(context, cdef.scope)
             if isinstance(adapted, CheckResult):
-                result = adapted
-                results.append((name, result))
-                if result.status == "fail":
-                    failed_checks.add(name)
-                    exit_code = 1
-                elif result.status == "warn":
-                    if not ignore_warnings:
-                        failed_checks.add(name)
-                        exit_code = 1
-                elif result.status == "skip":
-                    pass
+                results.append((name, adapted))
+                record(name, adapted)
                 continue
             check_context = adapted
 
         result = cdef.impl(check_context)
         results.append((name, result))
-
-        if result.status == "fail":
-            failed_checks.add(name)
-            exit_code = 1
-        elif result.status == "warn":
-            if not ignore_warnings:
-                failed_checks.add(name)
-                exit_code = 1
-        elif result.status == "skip":
-            # Treat explicit skip from impl as non-failure (no cascade)
-            pass
+        record(name, result)
 
     return results, exit_code
 

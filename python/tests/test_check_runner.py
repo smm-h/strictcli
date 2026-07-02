@@ -267,7 +267,10 @@ class TestRunChecks:
         assert exit_code == 1
         assert results[0][1].status == "warn"
 
-    def test_warn_cascades_skip_when_not_ignored(self, tmp_path, monkeypatch):
+    def test_warn_dependency_runs_dependent(self, tmp_path, monkeypatch):
+        # A warn satisfies a dependency: only fail (or cascade-skip) skips
+        # dependents. The warn still makes the run exit non-zero when
+        # ignore_warnings=False, but the dependent must run.
         defs = {
             "b": _make_check_def(
                 "b",
@@ -286,7 +289,66 @@ class TestRunChecks:
         assert exit_code == 1
         statuses = {name: r.status for name, r in results}
         assert statuses["b"] == "warn"
-        assert statuses["a"] == "skip"
+        assert statuses["a"] == "pass"
+
+    def test_warn_dependency_transitive_dependents_run(self, tmp_path, monkeypatch):
+        # warn -> dependent -> transitive dependent: the whole chain runs.
+        defs = {
+            "c": _make_check_def(
+                "c",
+                impl=lambda ctx: CheckResult(status="warn", message="Warning"),
+            ),
+            "b": _make_check_def(
+                "b",
+                depends_on=["c"],
+                impl=lambda ctx: CheckResult(status="pass", message="B OK"),
+            ),
+            "a": _make_check_def(
+                "a",
+                depends_on=["b"],
+                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+            ),
+        }
+        app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
+        ctx = SimpleContext(project_root=tmp_path)
+        order = _resolve_check_order(app._check_defs, {"a", "b", "c"})
+        results, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
+        assert exit_code == 1
+        statuses = {name: r.status for name, r in results}
+        assert statuses["c"] == "warn"
+        assert statuses["b"] == "pass"
+        assert statuses["a"] == "pass"
+
+    def test_warn_from_scope_adapter_runs_dependent(self, tmp_path, monkeypatch):
+        # When the scope adapter short-circuits a check with a warn result,
+        # the warn must also satisfy dependencies (no cascade-skip).
+        defs = {
+            "b": _make_check_def(
+                "b",
+                impl=lambda ctx: CheckResult(status="pass", message="unused"),
+            ),
+            "a": _make_check_def(
+                "a",
+                depends_on=["b"],
+                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+            ),
+        }
+        app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
+        # Give "b" a scope so the adapter is consulted for it.
+        app._check_defs["b"].scope = "some-scope"
+
+        def adapter(context, scope):
+            return CheckResult(status="warn", message="adapter warning")
+
+        ctx = SimpleContext(project_root=tmp_path)
+        order = _resolve_check_order(app._check_defs, {"a", "b"})
+        results, exit_code = _run_checks(
+            app._check_defs, order, ctx, ignore_warnings=False, scope_adapter=adapter
+        )
+        assert exit_code == 1
+        statuses = {name: r.status for name, r in results}
+        assert statuses["b"] == "warn"
+        assert statuses["a"] == "pass"
 
     def test_warn_does_not_cascade_when_ignored(self, tmp_path, monkeypatch):
         defs = {
