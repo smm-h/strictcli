@@ -205,6 +205,25 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
         "Python generic 'argument' prefix wrapper; Go produces typed errors at parse level",
     'argument *: expected float, got *':
         "Python typed arg float parsing; Go handles at parse level with different prefix",
+    # --- Required-bool prefix structural difference ---
+    # Go's applyFlagDefault uses a prefix parameter ("%sflag '--%s' ...") that
+    # produces one format string per error type. The extractor sees "%sflag"
+    # which normalizes to "*flag" -- a single Go signature covers both command
+    # and global flags. Python uses separate literal messages for "flag" and
+    # "global flag" prefixes. Same errors at runtime; signature mismatch due
+    # to Go parameterized prefix vs Python literal prefix.
+    "flag '--*' is required":
+        "Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+    "flag '--*' must be passed as --*":
+        "Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+    "flag '--*' must be passed as --* or --no-*":
+        "Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+    "global flag '--*' is required":
+        "Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+    "global flag '--*' must be passed as --*":
+        "Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+    "global flag '--*' must be passed as --* or --no-*":
+        "Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
 }
 
 # Go-only: errors that have no Python counterpart by design

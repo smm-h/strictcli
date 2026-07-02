@@ -58,6 +58,11 @@ PER_ENTITY_EXCLUSIONS: dict[str, set[str]] = {
     # FlagType bitfield, so these have no Go or schema counterpart.
     "Flag": {"compound", "item_type", "value_type"},
     "Arg": {"compound", "item_type"},
+    # Python Command.needs_context is derived from handler type annotations
+    # at registration time (first param annotated as Context). Go uses a
+    # different dispatch mechanism (struct handlers with explicit Context
+    # field). Not a user-facing schema concept.
+    "Command": {"needs_context"},
 }
 
 # Schema fields that exist only for the test harness (not real API fields):
