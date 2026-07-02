@@ -824,6 +824,12 @@ func validateFlagConfig(f *Flag) {
 	if strings.TrimSpace(f.Help) == "" {
 		panic(fmt.Sprintf("Flag.help must be a non-empty string"))
 	}
+	if f.Name == "force" {
+		panic(fmt.Sprintf("flag 'force' is a reserved name; use a qualified name like 'force-overwrite' or 'force-delete'"))
+	}
+	if strings.HasPrefix(f.Name, "no-") {
+		panic(fmt.Sprintf("flag '%s': names starting with 'no-' are reserved for the negation system; use a positive name instead", f.Name))
+	}
 	if f.Repeatable && f.Type == TypeBool {
 		panic(fmt.Sprintf("Flag %q: repeatable is incompatible with type=bool", f.Name))
 	}

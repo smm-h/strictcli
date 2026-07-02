@@ -1204,6 +1204,17 @@ class Flag:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
+        if self.name == "force":
+            raise ValueError(
+                "flag 'force' is a reserved name; use a qualified name "
+                "like 'force-overwrite' or 'force-delete'"
+            )
+        if self.name.startswith("no-"):
+            raise ValueError(
+                f"flag '{self.name}': names starting with 'no-' are "
+                f"reserved for the negation system; use a positive "
+                f"name instead"
+            )
 
         # Parse compound types (list[T], dict[str, T])
         kind, item_t, val_t = _parse_compound_type(
