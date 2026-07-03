@@ -5,10 +5,12 @@
   },
   "en/go-strictcli.md": {
     "content": "6f55d75b36604a220e5b240d0ba7b6e4492e58fb1ea15ae3d7e5c101e3f91fc8",
-    "description": "bfb10482afc2d53c69236c5b3845694e0e2df47e499ddbca24403634e2f37d37"
+    "description": "bfb10482afc2d53c69236c5b3845694e0e2df47e499ddbca24403634e2f37d37",
+    "source_docstring": "bfb10482afc2d53c69236c5b3845694e0e2df47e499ddbca24403634e2f37d37"
   },
   "en/python-strictcli.md": {
     "content": "1eb65ee207ffb102c50868164722de2adefcd37f33443407e2d7104597c7af7e",
-    "description": "2dd559b655515f7f804630d777694359a18d2ec5f7e4e860dea48bd7c53c16d5"
+    "description": "2dd559b655515f7f804630d777694359a18d2ec5f7e4e860dea48bd7c53c16d5",
+    "source_docstring": "2dd559b655515f7f804630d777694359a18d2ec5f7e4e860dea48bd7c53c16d5"
   }
 }
