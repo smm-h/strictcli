@@ -2,7 +2,7 @@
   ".github/workflows/ci.yml": "b4e075171b131d25f9cce55a3e3a30732e95a2a794af00f354ee3200626d6a04",
   ".github/workflows/publish.yml": "e77dcd0b5d1c1abae5424e5f3b73862f44f06b5d46209cbe71bc04d6baa6b5be",
   "CHANGELOG.md": "7a6ec46141007c18090a0ff325e2dd68cd51588c4e0b5af7b580365e5eaaca85",
-  ".gitignore": "c89d76c6c43e7f0897b3472a15b7c0103e0be5b3a04c2b44e585fa48bdcda2bb",
+  ".gitignore": "c0582f9b1c640f9f9a8acbbe02cd19fff50e66cc595f25e129b7cc9b6cd357db",
   "LICENSE": "e958892abc1dd5d991fca6d528e695d335f25773d373d2e0be5f4a9507d8f8d5",
   "CLAUDE.md": "7294b791570185dc31020dadb092b5b79681ba8ee932fe9a3974e27eaae56c4f",
   ".rlsbl/hooks/pre-release.sh": "b2dc17c243d0b1a2c1e23c1c25db6f94878596df81dc76c41b32d95f740a7d44",
@@ -12,5 +12,6 @@
   ".rlsbl/lint/python.toml": "9cfbcef2e010d5fad243437bf2fd8df54a1fae70ee0762f9d11da70fe207501c",
   ".rlsbl/lint/go.toml": "807d5cf760baad6d571a5bfd43cb163efe356f7462ba9f1918d72de45f62339f",
   ".rlsbl/lint/npm.toml": "baa36014e65923d8cc5c8b83c77fa651da79351627570476402da66840027645",
-  ".npmignore": "7c0eea9785c0318aeb39bf8b670ce8384f4a5b812fde69ce23d7d018057325a3"
+  ".npmignore": "7c0eea9785c0318aeb39bf8b670ce8384f4a5b812fde69ce23d7d018057325a3",
+  ".github/workflows/ci-pypi.yml": "6bde3f6dd33979636f6a8f51721f85519c4d2b6106cb9c9fa78e540df26471c4"
 }

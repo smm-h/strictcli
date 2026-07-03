@@ -6,7 +6,13 @@
   "private": false,
   "push_timeout": 300,
   "pipelines": {
-    "pypi": {"type": "pypi", "local": false},
-    "npm": {"type": "npm", "local": false}
+    "pypi": {
+      "type": "pypi",
+      "local": false
+    },
+    "npm": {
+      "type": "npm",
+      "local": false
+    }
   }
 }
