@@ -1,6 +1,6 @@
 ---
 title: python.strictcli
-description: "A strict, zero-dependency CLI framework for Python."
+description: "A strict, zero-dependency CLI framework for Python with mandatory help text, type-safe flags, groups, and schema export."
 generated: true
 nav_group: "API Reference"
 nav_order: 1

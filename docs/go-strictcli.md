@@ -1,6 +1,6 @@
 ---
 title: go/strictcli
-description: "Package strictcli is a strict, zero-dependency CLI framework for Go."
+description: "Package strictcli is a strict, zero-dependency CLI framework for Go with mandatory help text, type-safe flags, groups, and schema export."
 generated: true
 nav_group: "API Reference"
 nav_order: 1
