@@ -14,3 +14,5 @@ dist/
 .env.local
 *.local-only
 strictcli.test
+
+.rlsbl-monorepo/lock

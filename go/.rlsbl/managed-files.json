@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "files": {
+    "VERSION": "06c53dd4f22b2e0038ca2bb9af32cc1ab7e69898d99cc3bfa22bd965f21aac8f",
+    ".github/workflows/ci.yml": "a4eb37a8927ffda2aa646e45ac6f849648a53ea7fb4efe0df4fda3c9946c28f9",
+    ".github/workflows/publish.yml": "f1f707e4efdb4e837546ebb5d11385cb6ae2b1538207b2c40c14de8efac3ec97",
+    ".gitignore": "69fdec9b59f7e0238589219ae3d09b76103d9835116b1aeac078b050509bbaa6",
+    ".rlsbl/lint/go.toml": "807d5cf760baad6d571a5bfd43cb163efe356f7462ba9f1918d72de45f62339f"
+  }
+}

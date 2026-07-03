@@ -17,3 +17,5 @@ strictcli_go_*/
 harness/harness
 tmp*.py
 .venv/
+
+.rlsbl-monorepo/lock
