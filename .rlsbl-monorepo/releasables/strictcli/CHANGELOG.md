@@ -2,16 +2,11 @@
 
 # Changelog
 
+## Unreleased
+
+- No user-facing changes.
+
 ## 0.24.0
-
-Optional values skip choices validation; WARN check results satisfy depends_on; arg default-type validation.
-
-<details>
-<summary>Context</summary>
-
-Choices validation previously rejected optional flags/args that were not passed (None flowed into the choices check, producing "invalid value 'None'"). Validation is now skipped for absent optional values across flags, args, and globals via one shared helper. Check dependency semantics changed: a check that WARNs satisfies its dependents (WARN means passed-with-notes, not failed); only FAIL cascade-skips. Arg default-type validation gains str and list cases.
-
-</details>
 
 ### Features
 
