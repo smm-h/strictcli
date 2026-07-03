@@ -59,16 +59,11 @@
 
 # go-strictcli
 
+## Unreleased
+
+- No user-facing changes.
+
 ## 0.19.0
-
-choices_from and required tags, pointer-compound registration errors, nil-safe choices validation, WARN satisfies depends_on.
-
-<details>
-<summary>Context</summary>
-
-Default(nil)+Choices flags/args no longer fail parse when omitted (nil skips choices validation via one shared validateChoices helper). Check dependency semantics: WARN satisfies depends_on; only FAIL cascade-skips. Tags API gains choices_from:"Method" (registration-time dynamic choices) and required:"false" (optional variadic slice args); pointer-to-slice/map handler fields become loud registration errors instead of dispatch-time panics. NewArg validates str and list default types.
-
-</details>
 
 ### Features
 
