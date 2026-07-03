@@ -8,6 +8,7 @@ name = "go-strictcli"
 path = "python/"
 name = "strictcli"
 releasable = "strictcli"
+watch = ["python/**", "LICENSE"]
 
 [[projects]]
 path = "go/"
