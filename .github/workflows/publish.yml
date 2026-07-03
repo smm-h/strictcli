@@ -198,6 +198,7 @@ jobs:
       run:
         working-directory: python
   go-strictcli-goreleaser:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -218,4 +219,3 @@ jobs:
     defaults:
       run:
         working-directory: go
-    needs: gate
