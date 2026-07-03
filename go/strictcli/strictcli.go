@@ -1,4 +1,4 @@
-// Package strictcli is a strict, zero-dependency CLI framework for Go.
+// Package strictcli is a strict, zero-dependency CLI framework for Go with mandatory help text, type-safe flags, groups, and schema export.
 package strictcli
 
 import (

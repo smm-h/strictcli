@@ -1,4 +1,4 @@
-"""A strict, zero-dependency CLI framework for Python."""
+"""A strict, zero-dependency CLI framework for Python with mandatory help text, type-safe flags, groups, and schema export."""
 
 from __future__ import annotations
 
