@@ -2,9 +2,20 @@
 
 # Changelog
 
-## Unreleased
+## 0.19.1
 
-- No user-facing changes.
+Recovered full release history
+
+<details>
+<summary>Context</summary>
+
+53 pre-releasable versioned changelog files were recovered from saferm archive, restoring complete release history in CHANGELOG.md. All changes in this release are infrastructure-only (scaffold updates, docstrings, changelog recovery).
+
+</details>
+
+### Hotfix
+
+- Recovered full release history
 
 ## 0.19.0
 
