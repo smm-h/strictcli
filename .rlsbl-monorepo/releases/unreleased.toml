@@ -1,17 +1,6 @@
-
-
-# strictcli: no unreleased commits since strictcli@v0.24.1
-# [releasables.strictcli]
-# bump = ""
-# description = ""
-# context = ""
-# include = ["pypi", "npm"]
-# exclude = []
-
-# go-strictcli: no unreleased commits since go/v0.19.1
-# [releasables.go-strictcli]
-# bump = ""
-# description = ""
-# context = ""
-# include = ["go"]
-# exclude = []
+[releasables.strictcli]
+bump = "hotfix"
+description = "Fix publish router CI gate regex to match actual CI check run names."
+context = "The publish gate used CI_CHECK_REGEX '^(strictcli) / ' but the CI Router produces check runs named 'strictcli-ci / ...' and 'strictcli-ci-pypi / ...'. The gate timed out waiting for non-existent check runs."
+include = ["pypi", "npm"]
+exclude = []
