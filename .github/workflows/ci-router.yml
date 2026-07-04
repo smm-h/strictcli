@@ -22,7 +22,10 @@ jobs:
       id: changes
       with:
         filters: |
-          strictcli: 'python/**'
+          strictcli:
+            - 'python/**'
+            - 'python/**'
+            - 'LICENSE'
           go-strictcli: 'go/**'
           conformance:
             - 'conformance/**'
