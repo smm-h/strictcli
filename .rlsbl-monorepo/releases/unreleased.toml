@@ -1,0 +1,17 @@
+
+
+# strictcli: no unreleased commits since strictcli@v0.24.1
+# [releasables.strictcli]
+# bump = ""
+# description = ""
+# context = ""
+# include = ["pypi", "npm"]
+# exclude = []
+
+# go-strictcli: no unreleased commits since go/v0.19.1
+# [releasables.go-strictcli]
+# bump = ""
+# description = ""
+# context = ""
+# include = ["go"]
+# exclude = []
