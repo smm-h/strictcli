@@ -10,70 +10,305 @@
 
 ### Features
 
-- **Warn satisfies check dependencies.** A check that returns warn no longer causes its dependents to be cascade-skipped; dependents are skipped only when a dependency fails (or was itself skipped). Warn still makes the check run exit non-zero unless `--ignore-warnings`.
-- **Tags API: dynamic and optional registration.** New `choices_from:"MethodName"` tag resolves flag/arg choices from a handler method (`func() []string`) once at registration, flowing through help, parse errors, schema dump, and MCP enums like a literal choices list. New `required:"false"` tag on variadic slice args allows zero positionals, binding an empty slice.
+- [go-strictcli] **Warn satisfies check dependencies.** A check that returns warn no longer causes its dependents to be cascade-skipped; dependents are skipped only when a dependency fails (or was itself skipped). Warn still makes the check run exit non-zero unless `--ignore-warnings`.
+- [go-strictcli] **Tags API: dynamic and optional registration.** New `choices_from:"MethodName"` tag resolves flag/arg choices from a handler method (`func() []string`) once at registration, flowing through help, parse errors, schema dump, and MCP enums like a literal choices list. New `required:"false"` tag on variadic slice args allows zero positionals, binding an empty slice.
 
 ### Fixes
 
-- **Fixed.** Flags registered with `Default(nil)` + `Choices(...)`, optional args with choices, and unset mutex flags with choices no longer fail with "invalid value '<nil>'" when not passed. Custom validators are no longer invoked with nil for not-passed flags.
-- **Fixed.** Arg defaults are now fully validated at registration: `ArgDefault` with a non-string value on a str arg, and list arg defaults that are not non-empty lists of the item type, now panic instead of passing silently. Int elements in float list defaults are coerced to float64.
-- **Pointer-to-slice/map handler fields fail at registration.** `*[]T` and `*map[string]T` fields previously registered fine and panicked at every dispatch; they now panic at registration with a message pointing to plain slice/map fields or `required:"false"` variadic args.
+- [go-strictcli] **Fixed.** Flags registered with `Default(nil)` + `Choices(...)`, optional args with choices, and unset mutex flags with choices no longer fail with "invalid value '<nil>'" when not passed. Custom validators are no longer invoked with nil for not-passed flags.
+- [go-strictcli] **Fixed.** Arg defaults are now fully validated at registration: `ArgDefault` with a non-string value on a str arg, and list arg defaults that are not non-empty lists of the item type, now panic instead of passing silently. Int elements in float list defaults are coerced to float64.
+- [go-strictcli] **Pointer-to-slice/map handler fields fail at registration.** `*[]T` and `*map[string]T` fields previously registered fine and panicked at every dispatch; they now panic at registration with a message pointing to plain slice/map fields or `required:"false"` variadic args.
 
 ## 0.18.0
 
 ### Features
 
-- **New.** Registration-time ban on bare --force flag name and --no-* prefix. Flag names starting with no- are reserved for the negation system.
+- [go-strictcli] **New.** Registration-time ban on bare --force flag name and --no-* prefix. Flag names starting with no- are reserved for the negation system.
 
 ## 0.17.0
 
 ### Breaking
 
-- **Breaking.** Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required — user must pass --flag or --no-flag.
+- [go-strictcli] **Breaking.** Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required — user must pass --flag or --no-flag.
 
 ### Features
 
-- **New.** Schema dump validates project_id before writing — hard error if existing schema belongs to a different project.
-- **New.** Context type with output methods (Info, Warn, Debug, Error, Emit) for structured handler communication.
-- **New.** RegisterHandler API — declare commands as structs with tagged fields. Compile-time-safe alternative to map[string]interface{} handlers.
-- **New.** RegisterGlobals[T] and Globals[T] — declare global flags via struct tags with generic typed accessor on Context.
-- **New.** Comprehensive sub-project READMEs replacing severely stale documentation.
+- [go-strictcli] **New.** Schema dump validates project_id before writing — hard error if existing schema belongs to a different project.
+- [go-strictcli] **New.** Context type with output methods (Info, Warn, Debug, Error, Emit) for structured handler communication.
+- [go-strictcli] **New.** RegisterHandler API — declare commands as structs with tagged fields. Compile-time-safe alternative to map[string]interface{} handlers.
+- [go-strictcli] **New.** RegisterGlobals[T] and Globals[T] — declare global flags via struct tags with generic typed accessor on Context.
+- [go-strictcli] **New.** Comprehensive sub-project READMEs replacing severely stale documentation.
 
 ### Fixes
 
-- **Fix.** TagContract now checks global flags, not just command-level flags.
+- [go-strictcli] **Fix.** TagContract now checks global flags, not just command-level flags.
 
 ## 0.16.2
 
 ### Fixes
 
-- **Fix.** Aligned check command help text between Python and Go for cross-language parity.
+- [go-strictcli] **Fix.** Aligned check command help text between Python and Go for cross-language parity.
 
 ## 0.16.1
 
 ### Fixes
 
-- **Fix.** Config field parity: nested dot-name operations, schema format, config show JSON/plain output, and help text aligned with Python.
-- **Fix.** Error message parity: aligned config field registration and coercion messages with Python.
+- [go-strictcli] **Fix.** Config field parity: nested dot-name operations, schema format, config show JSON/plain output, and help text aligned with Python.
+- [go-strictcli] **Fix.** Error message parity: aligned config field registration and coercion messages with Python.
 
 ## 0.16.0
 
 ### Features
 
-- **New feature.** Programmatic invocation via `App.Call()` with `InvokeError` for structured error handling.
-- **New feature.** Schema versioning with `schema_version` field, constraint serialization (mutex, CoRequired, Requires, Implies), tag contracts, and arg defaults in `--dump-schema` output.
-- **New feature.** Typed positional args with `type` (str/int/float/bool) and `choices` support, matching the flag type system.
-- **New feature.** Command visibility: `hidden` and `interactive` declarations with help text filtering and schema serialization.
-- **New feature.** Handlers return structured data via `DataCommand`/`HandlerResult`, with `App.Call()` returning data directly.
-- **New feature.** First-class config fields with `ConfigField()` declarations, per-command binding, startup validation, `config init` template generation, and unknown-key rejection.
-- **New feature.** Compound types `ListOf(T)` and `DictOf(T)` on flags and args with projection-specific CLI parsing.
-- **New feature.** Tool export: `JsonSchema()`, `AsTools()`, `Tool` struct, and router tool for AI agent integration.
-- **New feature.** MCP projection via `ServeMCP()` and `--mcp` flag for Model Context Protocol tool serving.
-- **New feature.** Optional `scope` field on check definitions for declarative pre-check context filtering, and `SetScopeAdapter()` method on App for registering scope transformation callbacks.
+- [go-strictcli] **New feature.** Programmatic invocation via `App.Call()` with `InvokeError` for structured error handling.
+- [go-strictcli] **New feature.** Schema versioning with `schema_version` field, constraint serialization (mutex, CoRequired, Requires, Implies), tag contracts, and arg defaults in `--dump-schema` output.
+- [go-strictcli] **New feature.** Typed positional args with `type` (str/int/float/bool) and `choices` support, matching the flag type system.
+- [go-strictcli] **New feature.** Command visibility: `hidden` and `interactive` declarations with help text filtering and schema serialization.
+- [go-strictcli] **New feature.** Handlers return structured data via `DataCommand`/`HandlerResult`, with `App.Call()` returning data directly.
+- [go-strictcli] **New feature.** First-class config fields with `ConfigField()` declarations, per-command binding, startup validation, `config init` template generation, and unknown-key rejection.
+- [go-strictcli] **New feature.** Compound types `ListOf(T)` and `DictOf(T)` on flags and args with projection-specific CLI parsing.
+- [go-strictcli] **New feature.** Tool export: `JsonSchema()`, `AsTools()`, `Tool` struct, and router tool for AI agent integration.
+- [go-strictcli] **New feature.** MCP projection via `ServeMCP()` and `--mcp` flag for Model Context Protocol tool serving.
+- [go-strictcli] **New feature.** Optional `scope` field on check definitions for declarative pre-check context filtering, and `SetScopeAdapter()` method on App for registering scope transformation callbacks.
 
 ### Fixes
 
-- **Fix.** Validate unknown kwargs and enforce required globals in passthrough invoke path.
-- **Fix.** Align Go config subcommand help text with Python for schema parity.
-- **Fix.** Go error message says `float` instead of `float64` for cross-language parity.
-- **Fix.** Align Go config field name regex and test assertions with Python parity.
+- [go-strictcli] **Fix.** Validate unknown kwargs and enforce required globals in passthrough invoke path.
+- [go-strictcli] **Fix.** Align Go config subcommand help text with Python for schema parity.
+- [go-strictcli] **Fix.** Go error message says `float` instead of `float64` for cross-language parity.
+- [go-strictcli] **Fix.** Align Go config field name regex and test assertions with Python parity.
+
+## 0.15.0
+
+### Breaking
+
+- [go-strictcli] **Breaking.** Command collection fields (`Flags`, `Args`, `FlagSets`, `Mutex`, `Dependencies`) are now unexported.
+
+### Features
+
+- [go-strictcli] **New.** Command tags: string labels on commands and groups with group-to-command inheritance via `WithTags()` and variadic tags on `App.Group()`/`Group.Group()`.
+- [go-strictcli] **New.** Tag contracts: `App.TagContract()` validates at run time that tagged commands have required flags.
+
+## 0.14.0
+
+### Breaking
+
+- [go-strictcli] **Breaking.** Renamed `Tag` to `FlagSet`, `WithTags` to `WithFlagSets`, and `Command.Tags` field to `Command.FlagSets`.
+
+## 0.13.0
+
+Public API for running checks programmatically, skip behavior fix
+
+<details>
+<summary>Context</summary>
+
+Adds App.RunChecks(), FormatCheckResults(), FormatCheckResultsJSON(), CheckRunResult, and RunChecksOptions. Also fixes a bug where explicit skip from a check implementation incorrectly set exit code to 1 and cascaded to dependents.
+
+</details>
+
+### Features
+
+- [go-strictcli] **New.** Public API for running checks programmatically: `App.RunChecks()`, `FormatCheckResults()`, `FormatCheckResultsJSON()`, `CheckRunResult`, `RunChecksOptions`.
+
+### Fixes
+
+- [go-strictcli] **Fix.** Explicit skip from check implementation no longer sets exit code to 1 or cascades to dependents.
+
+## 0.12.1
+
+Fix repeatable flag defaults not applied to handlers
+
+### Breaking
+
+- [go-strictcli] **Breaking.** Explicit empty default on repeatable flags (`Default([]interface{}{})`) is now a registration error. Omit the default instead.
+
+### Features
+
+- [go-strictcli] **New.** Registration validates repeatable flag default element types match the flag's declared type.
+- [go-strictcli] **New.** Help text now displays non-empty repeatable flag defaults as `[default: a, b, c]`.
+
+### Fixes
+
+- [go-strictcli] **Fix.** Repeatable flag defaults are now correctly applied to handlers (previously always received empty list).
+
+## 0.12.0
+
+Array config support, unique flag enforcement, env var delimiter, config set repeatable
+
+<details>
+<summary>Context</summary>
+
+Major additions: Unique field on repeatable flags enforces no duplicates at parse time and in config. EnvSeparator controls how env var values split into arrays. Config values for repeatable flags are coerced from strings to declared types. config set now supports repeatable flags with --clear and --default. Breaking: config show requires --plain or --json.
+
+</details>
+
+### Breaking
+
+- [go-strictcli] **Config show.** `config show` now requires explicit `--plain` or `--json` flag instead of defaulting to plain text.
+
+### Features
+
+- [go-strictcli] **New flag fields.** `Unique` field on repeatable flags enforces no duplicate values at CLI parse time and in config arrays.
+- [go-strictcli] **New flag field.** `EnvSeparator` on repeatable flags controls how environment variable values are split into arrays.
+- [go-strictcli] **Config arrays.** Config values for repeatable flags are now coerced from strings to the declared type.
+- [go-strictcli] **Config set.** Repeatable flags can now be managed with `config set`, including `--clear` to reset and `--default` to restore default values.
+
+### Fixes
+
+- [go-strictcli] **Fix.** Config show JSON output now uses consistent field ordering.
+- [go-strictcli] **Fix.** Config error messages now use consistent type names and array formatting.
+- [go-strictcli] **Fix.** Config array values now use correct comma formatting.
+- [go-strictcli] **Fix.** `config set` mutex error messages now include the `config set:` prefix for consistency.
+- [go-strictcli] **Fix.** `typeName` now correctly reports whole float64 values (e.g. `3.0`) as `int` type for config validation.
+- [go-strictcli] **Fix.** Config set help text now mentions backslash escaping for values containing commas in repeatable flags.
+
+## 0.11.1
+
+Config show bool parity, negative values in config set, parseIntStrict wiring
+
+<details>
+<summary>Context</summary>
+
+config show now outputs lowercase bools matching Python. config set accepts negative numeric values. Wired parseIntStrict to all int parsing sites. Error message change: unknown single-dash tokens now produce 'unexpected argument' instead of 'unknown flag'.
+
+</details>
+
+### Breaking
+
+- [go-strictcli] **Breaking.** Config set now accepts negative numeric values. Unknown single-dash tokens produce 'unexpected argument' instead of 'unknown flag'.
+
+## 0.11.0
+
+TOML config support and config set type coercion
+
+<details>
+<summary>Context</summary>
+
+WithConfigFormat("toml") now correctly parses TOML config files (previously always JSON-parsed). config set validates keys and coerces values to flag types. Both are breaking: TOML configs that silently fell back to defaults will now resolve values, and unknown keys in config set are rejected.
+
+</details>
+
+### Breaking
+
+- [go-strictcli] **Breaking.** `config set` now validates keys against registered flags and rejects unknown keys.
+
+### Features
+
+- [go-strictcli] **New feature.** `config set` coerces values to the flag's declared type (int, bool, float) before writing to config.
+
+### Fixes
+
+- [go-strictcli] **Bug fix.** `WithConfigFormat("toml")` now correctly parses TOML config files. Previously, config files were always parsed as JSON regardless of the format setting.
+
+## 0.10.0
+
+### Features
+
+- [go-strictcli] **New feature.** `WithChecksEmbed(data []byte)` option enables the check system with inline TOML data (e.g., via `//go:embed`), removing the requirement for a checks.toml file on disk.
+
+## 0.9.0
+
+### Features
+
+- [go-strictcli] **New feature.** Schema dump (--dump-schema) now includes a project_id field read from go.mod, providing provenance for schema validation.
+
+## 0.8.0
+
+### Breaking
+
+- [go-strictcli] **Breaking.** `WithChecksPath(path)` renamed to `WithChecks(path)`. CWD auto-discovery of checks.toml removed; checks must be explicitly enabled. checks.toml now requires a top-level `app` field matching the app name.
+
+### Fixes
+
+- [go-strictcli] **Fix.** Removed double `checks.toml:` prefix in check system error messages.
+
+## 0.7.0
+
+### Features
+
+- [go-strictcli] **New feature.** `WithChecksPath` option for explicit checks.toml location, replacing CWD-based discovery.
+
+## 0.6.0
+
+### Features
+
+- [go-strictcli] **New feature.** Added config_path and config_format support (WithConfigPath, WithConfigFormat options).
+- [go-strictcli] **New feature.** `--dump-schema` omits fields matching defaults and includes a top-level `defaults` object documenting what missing fields mean.
+- [go-strictcli] **New feature.** `@`-prefix for string flag values: `@path` reads from file, `@-` reads from stdin, `@@` escapes. 1 MB size limit, trailing whitespace stripped.
+
+## 0.5.4
+
+### Features
+
+- [go-strictcli] **New feature.** Parse error help suggestions now include the subcommand name (e.g., `try 'myapp stream --help'` instead of `try 'myapp --help'`).
+
+## 0.5.3
+
+### Fixes
+
+- [go-strictcli] **Fix.** Allow empty `tags = []` in `.strictcli/checks.toml`. Checks without tags are valid -- they are addressable by `--name` and included in `--all`.
+
+## 0.5.2
+
+- No user-facing changes.
+
+## 0.5.1
+
+- No user-facing changes.
+
+## 0.5.0
+
+### Features
+
+- [go-strictcli] **New feature.** Check system -- a first-class, security-hardened check/validation framework. Register checks in `.strictcli/checks.toml` (source of truth) with metadata (tags, severity, dependencies), implement them via `app.RegisterCheck()`, and run them with the auto-registered `check` command. Includes: tag-based filtering with a set-operation DSL (`&`, `|`, `^`, `-`, `!`), DAG-based dependency ordering, human/JSON output, `--list`/`--dry-run`/`--verbose` modes, `--ignore-warnings`, and `--dump-schema` integration. First external dependency: go-toml-edit for TOML parsing.
+
+## 0.4.0
+
+### Features
+
+- [go-strictcli] **New feature.** Public accessor methods for App introspection: `Commands()`, `Groups()`, `GlobalFlags()`, `DeprecatedCommands()`.
+- [go-strictcli] **New feature.** `--help` and `-h` recognized anywhere in the argument list.
+- [go-strictcli] **New feature.** `FloatFlag` type support. Rejects NaN and Inf.
+- [go-strictcli] **New feature.** Recursive group nesting to arbitrary depth via `Group.Group(name, help)`.
+- [go-strictcli] **New feature.** Opt-in JSON config file support with `WithConfig()`. Reads `~/.config/{name}/config.json` with precedence: CLI > env > config > default.
+- [go-strictcli] **New feature.** `--dump-schema` flag auto-generates `.strictcli/schema.json`.
+
+### Fixes
+
+- [go-strictcli] **Fix.** Flags with `Default(nil)` now display `[optional]` instead of `[required]` in help output.
+
+## 0.3.1
+
+### Fixes
+
+- [go-strictcli] **Fix.** Harmonize Implies conflict error message with Python for exact parity.
+
+## 0.3.0
+
+### Features
+
+- [go-strictcli] **New feature.** Deprecated commands: declare a command name + message that prints the deprecation notice and exits when invoked, with a `Deprecated:` section in help output.
+
+## 0.2.0
+
+### Features
+
+- [go-strictcli] **New feature.** `Implies` flag dependency type: when a trigger bool flag is set, automatically set a target bool flag. Explicit contradictions are parse errors.
+
+## 0.1.1
+
+### Breaking
+
+- [go-strictcli] **Breaking: mutex groups always required.** Removed the `Required` field from `MutexGroup`. All mutex groups now require exactly one flag.
+
+### Features
+
+- [go-strictcli] **Flag dependencies.** New `CoRequired` and `Requires` types for declaring flags that must appear together.
+
+### Fixes
+
+- [go-strictcli] **Choices on global flags.** Global flags now validate choices correctly.
+- [go-strictcli] **Repeatable global flags.** Global flags with `Repeatable()` now work correctly.
+- [go-strictcli] **Global flag parsing fix.** `extractGlobalFlags` now correctly stops at the first non-flag token.
+- [go-strictcli] **Global flag collision check.** Group commands now detect flag name collisions with global flags.
+- [go-strictcli] **Choices nil slice fix.** `Choices()` no longer panics when called with no arguments.

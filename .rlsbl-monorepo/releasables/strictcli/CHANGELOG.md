@@ -4,55 +4,355 @@
 
 ## Unreleased
 
-- No user-facing changes.
+### Features
+
+- [strictcli] **New feature.** Project now includes MIT license.
 
 ## 0.24.0
 
 ### Features
 
-- **Warn satisfies check dependencies.** A check that returns warn no longer causes its dependents to be cascade-skipped; dependents are skipped only when a dependency fails (or was itself skipped). Warn still makes the check run exit non-zero unless `--ignore-warnings`.
+- [strictcli] **Warn satisfies check dependencies.** A check that returns warn no longer causes its dependents to be cascade-skipped; dependents are skipped only when a dependency fails (or was itself skipped). Warn still makes the check run exit non-zero unless `--ignore-warnings`.
 
 ### Fixes
 
-- **Fixed.** Unset mutex flags with choices and optional args with `default=None` + choices no longer fail with "invalid value 'None'" when not passed. Custom validators are no longer invoked with None for not-passed flags.
-- **Fixed.** Arg defaults are now fully validated at registration: a non-string default on a str arg is rejected, and list arg defaults are validated as non-empty lists of the item type (previously a valid list default on a `list[int]`/`list[float]` arg was wrongly rejected with a scalar-type error). Int elements in float list defaults are coerced to float.
+- [strictcli] **Fixed.** Unset mutex flags with choices and optional args with `default=None` + choices no longer fail with "invalid value 'None'" when not passed. Custom validators are no longer invoked with None for not-passed flags.
+- [strictcli] **Fixed.** Arg defaults are now fully validated at registration: a non-string default on a str arg is rejected, and list arg defaults are validated as non-empty lists of the item type (previously a valid list default on a `list[int]`/`list[float]` arg was wrongly rejected with a scalar-type error). Int elements in float list defaults are coerced to float.
 
 ## 0.23.0
 
 ### Features
 
-- **New.** Registration-time ban on bare --force flag name and --no-* prefix. Flag names starting with no- are reserved for the negation system.
+- [strictcli] **New.** Registration-time ban on bare --force flag name and --no-* prefix. Flag names starting with no- are reserved for the negation system.
 
 ## 0.22.0
 
 ### Breaking
 
-- **Breaking.** Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required — user must pass --flag or --no-flag.
+- [strictcli] **Breaking.** Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required — user must pass --flag or --no-flag.
 
 ### Features
 
-- **New.** Schema dump validates project_id before writing — hard error if existing schema belongs to a different project.
-- **New.** Context type with output methods (Info, Warn, Debug, Error, Emit) for structured handler communication.
-- **New.** Comprehensive sub-project READMEs replacing severely stale documentation.
+- [strictcli] **New.** Schema dump validates project_id before writing — hard error if existing schema belongs to a different project.
+- [strictcli] **New.** Context type with output methods (Info, Warn, Debug, Error, Emit) for structured handler communication.
+- [strictcli] **New.** Comprehensive sub-project READMEs replacing severely stale documentation.
 
 ### Fixes
 
-- **Fix.** TagContract now checks global flags, not just command-level flags.
+- [strictcli] **Fix.** TagContract now checks global flags, not just command-level flags.
 
 ## 0.21.0
 
 ### Features
 
-- **New feature.** Programmatic invocation via `app.call()` and `app.acall()` with `InvokeError` exception for structured error handling.
-- **New feature.** Schema versioning with `schema_version` field, constraint serialization (mutex, CoRequired, Requires, Implies), tag contracts, and arg defaults in `--dump-schema` output.
-- **New feature.** Typed positional args with `type` (str/int/float/bool) and `choices` support, matching the flag type system.
-- **New feature.** Command visibility: `hidden` and `interactive` declarations with help text filtering and schema serialization.
-- **New feature.** First-class config fields with `config_field()` declarations, per-command binding, startup validation, `config init` template generation, and unknown-key rejection.
-- **New feature.** Compound types `list[T]` and `dict[str, T]` on flags and args with projection-specific CLI parsing.
-- **New feature.** Tool export: `json_schema()`, `as_tools()`, `Tool` dataclass, and router tool for AI agent integration.
-- **New feature.** MCP projection via `serve_mcp()` and `--mcp` flag for Model Context Protocol tool serving.
-- **New feature.** Optional `scope` field on check definitions for declarative pre-check context filtering, and `set_scope_adapter()` method on App for registering scope transformation callbacks.
+- [strictcli] **New feature.** Programmatic invocation via `app.call()` and `app.acall()` with `InvokeError` exception for structured error handling.
+- [strictcli] **New feature.** Schema versioning with `schema_version` field, constraint serialization (mutex, CoRequired, Requires, Implies), tag contracts, and arg defaults in `--dump-schema` output.
+- [strictcli] **New feature.** Typed positional args with `type` (str/int/float/bool) and `choices` support, matching the flag type system.
+- [strictcli] **New feature.** Command visibility: `hidden` and `interactive` declarations with help text filtering and schema serialization.
+- [strictcli] **New feature.** First-class config fields with `config_field()` declarations, per-command binding, startup validation, `config init` template generation, and unknown-key rejection.
+- [strictcli] **New feature.** Compound types `list[T]` and `dict[str, T]` on flags and args with projection-specific CLI parsing.
+- [strictcli] **New feature.** Tool export: `json_schema()`, `as_tools()`, `Tool` dataclass, and router tool for AI agent integration.
+- [strictcli] **New feature.** MCP projection via `serve_mcp()` and `--mcp` flag for Model Context Protocol tool serving.
+- [strictcli] **New feature.** Optional `scope` field on check definitions for declarative pre-check context filtering, and `set_scope_adapter()` method on App for registering scope transformation callbacks.
 
 ### Fixes
 
-- **Fix.** Validate unknown kwargs and enforce required globals in passthrough invoke path.
+- [strictcli] **Fix.** Validate unknown kwargs and enforce required globals in passthrough invoke path.
+
+## 0.20.1
+
+Fix keyword collision in flag parameter names
+
+<details>
+<summary>Context</summary>
+
+Flags named after Python keywords (--global, --class, --import, etc.) now produce valid parameter names with a trailing underscore per PEP 8 convention.
+
+</details>
+
+### Fixes
+
+- [strictcli] **Fix.** Flags named after Python keywords (`--global`, `--class`, `--import`) now produce valid parameter names with a trailing underscore (e.g., `global_`).
+
+## 0.20.0
+
+Frozen Command, command tags, tag contracts
+
+<details>
+<summary>Context</summary>
+
+Breaking: Command dataclass is now frozen=True with tuple fields (was mutable list). New: command tags (string labels with group inheritance) and tag contracts (registration-time validation that tagged commands have required flags).
+
+</details>
+
+### Breaking
+
+- [strictcli] **Breaking.** Command dataclass is now `frozen=True` with `tuple` fields instead of `list`.
+
+### Features
+
+- [strictcli] **New.** Command tags: string labels on commands and groups with group-to-command inheritance.
+- [strictcli] **New.** Tag contracts: registration-time validation that tagged commands have required flags.
+
+## 0.19.0
+
+### Breaking
+
+- [strictcli] **Breaking.** Renamed `Tag` to `FlagSet` and `tags=` parameter to `flag_sets=` across all API surfaces.
+
+## 0.18.0
+
+Public API for running checks programmatically
+
+<details>
+<summary>Context</summary>
+
+Adds App.run_checks(), format_check_results(), format_check_results_json(), and CheckRunResult — a stable public API replacing the private _filter_checks/_resolve_check_order/_run_checks/_check_format_human functions that consumers like rlsbl were forced to use.
+
+</details>
+
+### Features
+
+- [strictcli] **New.** Public API for running checks programmatically: `App.run_checks()`, `format_check_results()`, `format_check_results_json()`, `CheckRunResult`.
+
+## 0.17.0
+
+Repeatable flag default validation and help text display
+
+### Breaking
+
+- [strictcli] **Breaking.** Repeatable flag defaults are now validated at registration: must be a list, `default=[]` is rejected as redundant, and element types must match the flag type.
+
+### Features
+
+- [strictcli] **New.** Help text now displays non-empty repeatable flag defaults as `[default: a, b, c]`.
+
+## 0.16.1
+
+Error message fixes and help text improvements
+
+### Fixes
+
+- [strictcli] **Fix.** `config set` mutex error messages now include the `config set:` prefix for consistency.
+- [strictcli] **Fix.** Config set help text now mentions backslash escaping for values containing commas in repeatable flags.
+
+## 0.16.0
+
+unique and env_separator flag fields, config array coercion, config set repeatable support
+
+<details>
+<summary>Context</summary>
+
+Breaking: config show now requires --plain or --json. New features: unique field enforces no duplicate values on repeatable flags, env_separator controls how env vars are split into arrays, config arrays are coerced to declared types, config set supports repeatable flags with --clear and --default.
+
+</details>
+
+### Breaking
+
+- [strictcli] **Config show.** `config show` now requires explicit `--plain` or `--json` flag instead of defaulting to plain text.
+
+### Features
+
+- [strictcli] **New flag field.** `unique` field on repeatable flags enforces no duplicate values at CLI parse time and in config arrays.
+- [strictcli] **New flag field.** `env_separator` on repeatable flags controls how environment variable values are split into arrays.
+- [strictcli] **Config arrays.** Config values for repeatable flags are now coerced from strings to the declared type.
+- [strictcli] **Config set.** Repeatable flags can now be managed with `config set`, including `--clear` to reset and `--default` to restore default values.
+
+### Fixes
+
+- [strictcli] **Fix.** Float NaN/Inf env var error messages now include the environment variable suffix.
+- [strictcli] **Fix.** Config error messages now use consistent type names and array formatting.
+- [strictcli] **Fix.** Flag collection no longer includes config group pseudo-flags, preventing incorrect behavior in commands that enumerate all flags.
+
+## 0.15.1
+
+Config show bool parity and negative values in config set
+
+<details>
+<summary>Context</summary>
+
+config show now outputs lowercase true/false matching Go. config set accepts negative numeric values.
+
+</details>
+
+### Breaking
+
+- [strictcli] **Breaking.** Config set now accepts negative numeric values. Unknown single-dash tokens produce 'unexpected argument' instead of 'unknown flag'.
+
+### Fixes
+
+- [strictcli] **Fix.** Config show now outputs lowercase true/false for bool values, matching Go implementation.
+
+## 0.15.0
+
+Config set type coercion and key validation
+
+<details>
+<summary>Context</summary>
+
+config set now validates keys against registered flags and coerces string values to the flag's declared type before writing. This is a breaking change: unknown keys are rejected.
+
+</details>
+
+### Breaking
+
+- [strictcli] **Breaking.** `config set` now validates keys against registered flags and rejects unknown keys.
+
+### Features
+
+- [strictcli] **New feature.** `config set` coerces values to the flag's declared type (int, bool, float) before writing to config.
+
+## 0.14.0
+
+### Features
+
+- [strictcli] **New feature.** `checks_embed` parameter accepts raw TOML bytes, enabling inline checks configuration without a file on disk.
+
+## 0.13.0
+
+### Features
+
+- [strictcli] **New feature.** Schema dump (--dump-schema) now includes a project_id field read from pyproject.toml, providing provenance for schema validation.
+
+## 0.12.0
+
+### Breaking
+
+- [strictcli] **Breaking.** CWD auto-discovery of checks.toml removed; checks must be explicitly enabled via `checks_path=`. checks.toml now requires a top-level `app` field matching the app name.
+
+## 0.11.0
+
+### Features
+
+- [strictcli] **New feature.** `checks_path` parameter on `App` for explicit checks.toml location, replacing CWD-based discovery.
+
+## 0.10.0
+
+### Features
+
+- [strictcli] **New feature.** `--dump-schema` omits fields matching defaults and includes a top-level `defaults` object documenting what missing fields mean.
+- [strictcli] **New feature.** `@`-prefix for string flag values: `@path` reads from file, `@-` reads from stdin, `@@` escapes. 1 MB size limit, trailing whitespace stripped.
+
+## 0.9.1
+
+### Features
+
+- [strictcli] **New feature.** Public `config_file_path` property on App.
+
+### Fixes
+
+- [strictcli] **Fix.** Config format validation errors now have parity between Python and Go.
+
+## 0.9.0
+
+### Features
+
+- [strictcli] **New feature.** config_path and config_format options for TOML-based configuration file support.
+
+## 0.8.7
+
+### Features
+
+- [strictcli] **New feature.** Go implementation now includes subcommand name in parse error help suggestions, matching Python.
+
+### Fixes
+
+- [strictcli] **Fix.** Unknown subcommand errors in groups now suggest group-level help (e.g., `try 'myapp config --help'`).
+
+## 0.8.6
+
+### Features
+
+- [strictcli] **New feature.** Parse error messages now suggest the correct subcommand help (e.g., `try 'app stream --help'` instead of `try 'app --help'`).
+
+## 0.8.5
+
+### Features
+
+- [strictcli] **New feature.** App-level and command-level help output now includes a 'Global flags' section.
+
+### Fixes
+
+- [strictcli] **Fix.** Auto-registered `check` command no longer collides with app-level global flags (e.g., `--dry-run`).
+
+## 0.8.4
+
+### Fixes
+
+- [strictcli] **Fix.** Allow empty `tags = []` in `.strictcli/checks.toml`. Checks without tags are valid -- they are addressable by `--name` and included in `--all`.
+
+## 0.8.3
+
+- No user-facing changes.
+
+## 0.8.2
+
+- No user-facing changes.
+
+## 0.8.1
+
+- No user-facing changes.
+
+## 0.8.0
+
+### Features
+
+- [strictcli] **New feature.** Check system -- a first-class, security-hardened check/validation framework. Register checks in `.strictcli/checks.toml` (source of truth) with metadata (tags, severity, dependencies), implement them via `@app.check()` decorator, and run them with the auto-registered `check` command. Includes: tag-based filtering with a set-operation DSL (`&`, `|`, `^`, `-`, `!`), DAG-based dependency ordering, human/JSON output, `--list`/`--dry-run`/`--verbose` modes, `--ignore-warnings`, and `--dump-schema` integration.
+
+## 0.7.1
+
+### Features
+
+- [strictcli] **New feature.** Handlers with `**kwargs` signatures are accepted without strict parameter validation.
+
+## 0.7.0
+
+### Features
+
+- [strictcli] **New feature.** `--dump-schema` flag auto-generates `.strictcli/schema.json` describing the full CLI structure.
+- [strictcli] **New feature.** Opt-in JSON config file support with `App(config=True)`. Reads `~/.config/{name}/config.json` with precedence: CLI > env > config > default. Auto-registers `config show/set/path/edit` subcommands.
+- [strictcli] **New feature.** Recursive group nesting to arbitrary depth. Groups can contain subgroups via `group.group(name, help=...)`.
+- [strictcli] **New feature.** `type=float` flag support. Rejects NaN and Inf.
+- [strictcli] **New feature.** `--help` and `-h` recognized anywhere in the argument list, not just at token boundaries.
+- [strictcli] **New feature.** `App(version=None)` auto-detects version from `importlib.metadata`.
+
+## 0.6.1
+
+### Fixes
+
+- [strictcli] **Fix.** Harmonize Implies and deprecated command error messages with Go for exact parity.
+
+## 0.6.0
+
+### Features
+
+- [strictcli] **New feature.** Deprecated commands: declare a command name + message that prints the deprecation notice and exits when invoked, with a `Deprecated:` section in help output.
+
+## 0.5.0
+
+### Features
+
+- [strictcli] **New feature.** `Implies` flag dependency type: when a trigger flag is set, automatically set a target bool flag to a specified value. Explicit contradictions are parse errors.
+
+## 0.4.1
+
+### Fixes
+
+- [strictcli] **CI publish fix.** Fixed publish workflow for GitHub Actions compatibility.
+
+## 0.4.0
+
+### Breaking
+
+- [strictcli] **Breaking: mutex groups always required.** Removed the `required` parameter from `MutexGroup`. All mutex groups now require exactly one flag to be provided.
+
+### Features
+
+- [strictcli] **Flag dependencies.** New `CoRequired` and `Requires` types for declaring flags that must appear together.
+
+### Fixes
+
+- [strictcli] **Choices on global flags.** Global flags now validate choices correctly.
+- [strictcli] **Repeatable global flags.** Global flags with `repeatable=True` now work correctly.
+- [strictcli] **Strict int parsing.** Integer flags now enforce 64-bit signed range to match Go behavior.
+- [strictcli] **Strict int env parsing.** Integer environment variables reject leading/trailing whitespace.
