@@ -35,10 +35,10 @@ jobs:
         # skipping every job.
         case "$GITHUB_REF_NAME" in
           "go-strictcli@v"*)
-            regex='^(go\-strictcli) / '
+            regex='^go-strictcli / '
             ;;
           "strictcli@v"*)
-            regex='^(strictcli) / '
+            regex='^strictcli-ci(-pypi)? / '
             ;;
           *)
             echo "::error::Publish gate: ref '$GITHUB_REF_NAME' matches no project tag prefix (known prefixes: strictcli@v, go-strictcli@v)."
