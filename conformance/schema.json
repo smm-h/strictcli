@@ -94,6 +94,10 @@
           "type": "string",
           "description": "Raw config file content to write before running the test"
         },
+        "config_content_late": {
+          "type": "string",
+          "description": "Raw config file content to write AFTER app construction but BEFORE app.run(). Tests parse-time config loading vs construction-time."
+        },
         "checks_toml": {
           "type": "string",
           "description": "Raw TOML content to write as .strictcli/checks.toml for check conformance tests."
@@ -184,6 +188,12 @@
           "type": "string",
           "description": "Deprecation message shown when the command is invoked or listed in help. Required when deprecated is true."
         },
+        "handler_style": {
+          "type": "string",
+          "enum": ["classic", "context"],
+          "default": "classic",
+          "description": "Handler style: 'classic' (kwargs, current behavior) or 'context' (receives ctx, can call ctx.source(name))."
+        },
         "handler_prints": {
           "type": "string",
           "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'."
@@ -234,6 +244,7 @@
           "help": true,
           "deprecated": true,
           "deprecated_message": true,
+          "handler_style": false,
           "handler_prints": false,
           "handler_exit_code": false,
           "flags": false,

@@ -274,6 +274,10 @@ type App struct {
 	tagContracts    map[string]string // tag name -> required flag name
 
 	currentDispatch *dispatchCtx // set before handler dispatch, cleared after
+
+	// LastSources stores the source map from the most recent parse.
+	// Available for function handlers that need provenance info.
+	LastSources map[string]string
 }
 
 // dispatchCtx carries per-dispatch state to struct handler wrappers.
@@ -282,6 +286,7 @@ type dispatchCtx struct {
 	stdout   io.Writer
 	stderr   io.Writer
 	globals  map[string]interface{} // keyed by flag name (dashes)
+	sources  map[string]string      // flag param name -> source label
 	emitData interface{}            // set by handler wrapper if ctx.Emit was called
 }
 
@@ -1601,6 +1606,9 @@ func (a *App) Run() {
 		os.Exit(1)
 	}
 
+	// Store sources for function handlers that need provenance info
+	a.LastSources = pr.sources
+
 	if pr.cmd.Passthrough {
 		code := pr.cmd.PassthroughHandler(pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		os.Exit(code)
@@ -1612,6 +1620,7 @@ func (a *App) Run() {
 			stdout:  os.Stdout,
 			stderr:  os.Stderr,
 			globals: paramKwargsToFlagNames(pr.globalKwargs),
+			sources: pr.sources,
 		}
 		defer func() { a.currentDispatch = nil }()
 	}
@@ -1682,6 +1691,9 @@ func (a *App) Test(argv []string) Result {
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
+	// Store sources for function handlers that need provenance info
+	a.LastSources = pr.sources
+
 	// Set dispatch context for struct handler wrappers (uses pipe writers)
 	var dc *dispatchCtx
 	if pr.cmd.handlerFactory != nil {
@@ -1689,6 +1701,7 @@ func (a *App) Test(argv []string) Result {
 			stdout:  stdoutW,
 			stderr:  stderrW,
 			globals: paramKwargsToFlagNames(pr.globalKwargs),
+			sources: pr.sources,
 		}
 		a.currentDispatch = dc
 		defer func() { a.currentDispatch = nil }()
@@ -1736,6 +1749,7 @@ type parseResult struct {
 	cmd             *Command
 	kwargs          map[string]interface{}
 	globalKwargs    map[string]interface{}
+	sources         map[string]string // flag param name -> source label
 	passthroughArgs []string
 	helpText        string
 	versionText     string
@@ -1844,7 +1858,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 	}
 
-	kwargs, postGlobalValues, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy)
+	kwargs, postGlobalValues, cmdSources, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy)
 	if err != "" {
 		parts := append([]string{a.Name}, path...)
 		parts = append(parts, cmd.Name)
@@ -1857,7 +1871,7 @@ func (a *App) doParse(argv []string) parseResult {
 	for k, v := range globalValues {
 		kwargs[k] = v
 	}
-	return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues}
+	return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources}
 }
 
 // tokensContainHelp checks if --help or -h appears in tokens before any "--"
@@ -2472,12 +2486,14 @@ func buildHandlerCommand(name, help string, factory func() Handler, app *App, en
 		dc := app.currentDispatch
 		var stdout, stderr io.Writer
 		var globals map[string]interface{}
+		var sources map[string]string
 		if dc != nil {
 			stdout = dc.stdout
 			stderr = dc.stderr
 			globals = dc.globals
+			sources = dc.sources
 		}
-		ctx := newContext(stdout, stderr, globals)
+		ctx := newContext(stdout, stderr, globals, sources)
 		code := handler.Run(ctx)
 
 		// If the handler emitted data, it needs to be available to the caller.

@@ -351,7 +351,7 @@ type SimpleGlobals struct {
 func TestGlobals_PopulatesFromContext(t *testing.T) {
 	ctx := newContext(nil, nil, map[string]interface{}{
 		"verbose": true,
-	})
+	}, nil)
 
 	g := Globals[SimpleGlobals](ctx)
 	if !g.Verbose {
@@ -362,7 +362,7 @@ func TestGlobals_PopulatesFromContext(t *testing.T) {
 func TestGlobals_BoolDefaultFalse(t *testing.T) {
 	ctx := newContext(nil, nil, map[string]interface{}{
 		"verbose": false,
-	})
+	}, nil)
 
 	g := Globals[SimpleGlobals](ctx)
 	if g.Verbose {
@@ -375,7 +375,7 @@ type OptionalGlobals struct {
 }
 
 func TestGlobals_OptionalNotSet(t *testing.T) {
-	ctx := newContext(nil, nil, map[string]interface{}{})
+	ctx := newContext(nil, nil, map[string]interface{}{}, nil)
 
 	g := Globals[OptionalGlobals](ctx)
 	if g.Output != nil {
@@ -386,7 +386,7 @@ func TestGlobals_OptionalNotSet(t *testing.T) {
 func TestGlobals_OptionalSet(t *testing.T) {
 	ctx := newContext(nil, nil, map[string]interface{}{
 		"output": "file.txt",
-	})
+	}, nil)
 
 	g := Globals[OptionalGlobals](ctx)
 	if g.Output == nil {
@@ -400,7 +400,7 @@ func TestGlobals_OptionalSet(t *testing.T) {
 func TestGlobals_CachedOnSecondCall(t *testing.T) {
 	ctx := newContext(nil, nil, map[string]interface{}{
 		"verbose": true,
-	})
+	}, nil)
 
 	g1 := Globals[SimpleGlobals](ctx)
 	g2 := Globals[SimpleGlobals](ctx)
@@ -417,7 +417,7 @@ func TestGlobals_CachedOnSecondCall(t *testing.T) {
 }
 
 func TestGlobals_NilGlobalsMap(t *testing.T) {
-	ctx := newContext(nil, nil, nil)
+	ctx := newContext(nil, nil, nil, nil)
 
 	g := Globals[SimpleGlobals](ctx)
 	if g.Verbose {
@@ -533,7 +533,7 @@ func TestGlobals_FullIntegration(t *testing.T) {
 		"verbose": true,
 		"format":  "json",
 		"level":   3,
-	})
+	}, nil)
 
 	g := Globals[MultiTypeGlobals](ctx)
 
@@ -563,7 +563,7 @@ type DashGlobals struct {
 func TestGlobals_DashInFlagName(t *testing.T) {
 	ctx := newContext(nil, nil, map[string]interface{}{
 		"dry-run": true,
-	})
+	}, nil)
 
 	g := Globals[DashGlobals](ctx)
 	if !g.DryRun {
@@ -582,7 +582,7 @@ func TestGlobals_PointerFieldSet(t *testing.T) {
 	ctx := newContext(nil, nil, map[string]interface{}{
 		"output": "result.txt",
 		"debug":  true,
-	})
+	}, nil)
 
 	g := Globals[PointerGlobals](ctx)
 	if g.Output == nil {
@@ -600,7 +600,7 @@ func TestGlobals_PointerFieldSet(t *testing.T) {
 }
 
 func TestGlobals_PointerFieldNilWhenMissing(t *testing.T) {
-	ctx := newContext(nil, nil, map[string]interface{}{})
+	ctx := newContext(nil, nil, map[string]interface{}{}, nil)
 
 	g := Globals[PointerGlobals](ctx)
 	if g.Output != nil {

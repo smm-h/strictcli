@@ -120,6 +120,10 @@ class _SourcedStore:
     def __getitem__(self, name: str) -> object:
         return self._entries[name].value
 
+    def source_map(self) -> dict[str, str]:
+        """Return a dict mapping flag names to source labels."""
+        return {k: e.source for k, e in self._entries.items()}
+
     @classmethod
     def from_dict(cls, d: dict[str, object], source: str) -> "_SourcedStore":
         """Build a store from a plain dict, marking all entries with source."""
@@ -136,11 +140,12 @@ class Context:
     and an emit method for structured data output.
     """
 
-    def __init__(self, stdout=None, stderr=None):
+    def __init__(self, stdout=None, stderr=None, sources=None):
         self._stdout = stdout or sys.stdout
         self._stderr = stderr or sys.stderr
         self._emit_data = _MISSING
         self._emit_called = False
+        self._sources = sources or {}  # flag-name -> source label (cli/env/config/default/implied)
 
     def info(self, msg: str) -> None:
         """Write an informational message to stdout."""
@@ -157,6 +162,20 @@ class Context:
     def error(self, msg: str) -> None:
         """Write an error message to stderr."""
         print(msg, file=self._stderr)
+
+    def source(self, name: str) -> str:
+        """Return the provenance source label for a flag.
+
+        Returns one of: "cli", "env", "config", "default", "implied".
+        Raises KeyError if the flag name is not found.
+        """
+        key = name.replace("-", "_")
+        if key in self._sources:
+            return self._sources[key]
+        # Try original name (with dashes)
+        if name in self._sources:
+            return self._sources[name]
+        raise KeyError(f"no source info for flag {name!r}")
 
     def emit(self, data) -> None:
         """Write JSON-serialized data to stdout and store for programmatic retrieval.
@@ -2850,11 +2869,11 @@ class App:
 
         self._groups["config"] = config_grp
 
-    def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object] | list[str]]:
+    def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object] | list[str], dict[str, str]]:
         """Parse argv (without program name) into a resolved Command and kwargs.
 
-        For normal commands, returns (Command, kwargs_dict).
-        For passthrough commands, returns (Command, raw_args_list).
+        For normal commands, returns (Command, kwargs_dict, sources).
+        For passthrough commands, returns (Command, raw_args_list, {}).
         Callers disambiguate by checking cmd.passthrough.
 
         After parsing, self._last_global_values holds the parsed global flag
@@ -2905,14 +2924,14 @@ class App:
 
         # Passthrough commands: skip all flag/arg parsing, forward raw args
         if cmd.passthrough is not None:
-            return cmd, rest
+            return cmd, rest, {}
 
         # Step 3: parse remaining tokens for the resolved command
         # Pass stdin_consumed_by as a mutable single-element list so
         # _parse_command can update the shared state.
         stdin_state: list[str | None] = [self._stdin_consumed_by]
         try:
-            cmd, kwargs, post_global = _parse_command(
+            cmd, kwargs, post_global, sources = _parse_command(
                 cmd, rest, self._global_flags, config_data=self._config_data,
                 stdin_consumed_by=stdin_state,
             )
@@ -2928,7 +2947,7 @@ class App:
                 global_values[gf.name] = post_global[gf.name]
             kwargs[_flag_param_name(gf.name)] = global_values[gf.name]
 
-        return cmd, kwargs
+        return cmd, kwargs, sources
 
     def _resolve_command(
         self, path_segments: list[str]
@@ -3359,7 +3378,7 @@ class App:
             sys.exit(1)
         argv = sys.argv[1:]
         try:
-            cmd, data = self._parse(argv)
+            cmd, data, sources = self._parse(argv)
         except _HelpRequested as e:
             if isinstance(e.target, App):
                 print(_format_app_help(self))
@@ -3392,7 +3411,7 @@ class App:
             if cmd.passthrough is not None:
                 result = cmd.passthrough.handler(cmd.name, data, self._last_global_values)
             elif cmd.needs_context:
-                ctx = Context(stdout=sys.stdout, stderr=sys.stderr)
+                ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=sources)
                 result = cmd.handler(ctx, **data)
             else:
                 result = cmd.handler(**data)
@@ -3430,7 +3449,7 @@ class App:
             )
 
         try:
-            cmd, data = self._parse(argv)
+            cmd, data, sources = self._parse(argv)
         except _HelpRequested as e:
             if isinstance(e.target, App):
                 stdout_buf.write(_format_app_help(self) + "\n")
@@ -3466,7 +3485,7 @@ class App:
                             cmd.name, data, self._last_global_values,
                         )
                     elif cmd.needs_context:
-                        ctx = Context(stdout=stdout_buf, stderr=stderr_buf)
+                        ctx = Context(stdout=stdout_buf, stderr=stderr_buf, sources=sources)
                         handler_return = cmd.handler(ctx, **data)
                     else:
                         handler_return = cmd.handler(**data)
@@ -3599,7 +3618,7 @@ class App:
                     positionals.append(str(val))
 
         # Validate and build final kwargs via the shared validation pipeline
-        _cmd, final_kwargs, _global_cli_set = _validate_and_build_kwargs(
+        _cmd, final_kwargs, _global_cli_set, invoke_sources = _validate_and_build_kwargs(
             cmd, store, positionals, global_flag_names,
         )
 
@@ -3613,7 +3632,7 @@ class App:
                     final_kwargs[_flag_param_name(gf.name)] = gf.default
 
         if cmd.needs_context:
-            ctx = Context(stdout=sys.stdout, stderr=sys.stderr)
+            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources)
             result = cmd.handler(ctx, **final_kwargs)
             if not isinstance(ctx._emit_data, _MissingSentinel):
                 return ctx._emit_data
@@ -3922,7 +3941,7 @@ def _validate_and_build_kwargs(
     store: _SourcedStore,
     positionals: list[str],
     global_flag_names: set[str],
-) -> tuple[Command, dict[str, object], dict[str, object]]:
+) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Validate parsed values and build the kwargs dict for the command handler.
 
     This is the second half of command parsing: mutex enforcement, implies
@@ -3930,7 +3949,8 @@ def _validate_and_build_kwargs(
     validation, positional arg resolution, and kwargs building. It operates
     on sourced values in the store and doesn't care how they were produced.
 
-    Returns (cmd, kwargs, global_cli_set).
+    Returns (cmd, kwargs, global_cli_set, sources) where sources maps
+    flag param names to source labels (cli/env/config/default/implied).
     """
     # Step 4.5: enforce mutex group constraints (before defaults are applied).
     # Only cli/env/config sources count as "present" for mutex evaluation.
@@ -4077,7 +4097,14 @@ def _validate_and_build_kwargs(
         if store.has(name):
             global_cli_set[name] = store[name]
 
-    return cmd, kwargs, global_cli_set
+    # Build source map: param-name -> source label (for Context.source())
+    sources: dict[str, str] = {}
+    raw_sources = store.source_map()
+    for f in cmd.flags:
+        if f.name in raw_sources:
+            sources[_flag_param_name(f.name)] = raw_sources[f.name]
+
+    return cmd, kwargs, global_cli_set, sources
 
 
 def _parse_command(
@@ -4086,10 +4113,10 @@ def _parse_command(
     global_flags: list[Flag] | None = None,
     config_data: dict | None = None,
     stdin_consumed_by: list[str | None] | None = None,
-) -> tuple[Command, dict[str, object], dict[str, object]]:
+) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Parse tokens against a resolved command's flags and args.
 
-    Returns (cmd, kwargs, global_cli_set) where global_cli_set contains
+    Returns (cmd, kwargs, global_cli_set, sources) where global_cli_set contains
     any global flag values parsed from tokens appearing after the command name.
 
     stdin_consumed_by is a mutable single-element list tracking which flag

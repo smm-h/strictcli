@@ -250,6 +250,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
 
     # Handle config_content: write to a temp file and override config_path
     config_tmp_path = None
+    late_config_tmp_path = None
     app_def = case["app"]
     if "config_content" in app_def:
         config_format = app_def.get("config_format", "json")
@@ -262,6 +263,21 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         # Shallow copy so we don't mutate the original case
         app_def = dict(app_def)
         app_def["config_path"] = config_tmp_path
+
+    # Handle config_content_late: create a temp path for the config file,
+    # set config_path to it, but let the generated code write the content
+    # AFTER app construction (between construction and app.run()).
+    if "config_content_late" in app_def:
+        config_format = app_def.get("config_format", "json")
+        ext = ".toml" if config_format == "toml" else ".json"
+        late_config_tmp_path = tempfile.mktemp(
+            suffix=ext, prefix="strictcli_lcfg_",
+        )
+        # Shallow copy so we don't mutate the original case
+        if app_def is case["app"]:
+            app_def = dict(app_def)
+        app_def["config_path"] = late_config_tmp_path
+        # Keep config_content_late in app_def so generators can emit the write code
 
     if target == "python":
         script = _generate_python_script(app_def)
@@ -373,6 +389,8 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             os.unlink(cleanup_path)
         if config_tmp_path is not None:
             os.unlink(config_tmp_path)
+        if late_config_tmp_path is not None and os.path.exists(late_config_tmp_path):
+            os.unlink(late_config_tmp_path)
         if proj_dir is not None:
             shutil.rmtree(proj_dir, ignore_errors=True)
 

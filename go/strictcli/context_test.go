@@ -9,7 +9,7 @@ import (
 
 func TestContextInfoWritesToStdout(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	ctx.Info("hello world")
 
@@ -23,7 +23,7 @@ func TestContextInfoWritesToStdout(t *testing.T) {
 
 func TestContextWarnWritesToStderr(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	ctx.Warn("something is off")
 
@@ -37,7 +37,7 @@ func TestContextWarnWritesToStderr(t *testing.T) {
 
 func TestContextDebugWritesToStdout(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	ctx.Debug("trace info")
 
@@ -51,7 +51,7 @@ func TestContextDebugWritesToStdout(t *testing.T) {
 
 func TestContextErrorWritesToStderr(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	ctx.Error("something broke")
 
@@ -65,7 +65,7 @@ func TestContextErrorWritesToStderr(t *testing.T) {
 
 func TestContextEmitWritesJSONAndStoresData(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	data := map[string]interface{}{
 		"name":  "widget",
@@ -104,7 +104,7 @@ func TestContextEmitWritesJSONAndStoresData(t *testing.T) {
 
 func TestContextEmitCalledTwicePanics(t *testing.T) {
 	var stdout bytes.Buffer
-	ctx := newContext(&stdout, &stdout, nil)
+	ctx := newContext(&stdout, &stdout, nil, nil)
 
 	ctx.Emit("first")
 
@@ -127,7 +127,7 @@ func TestContextEmitCalledTwicePanics(t *testing.T) {
 
 func TestNewContextWithNilWriters(t *testing.T) {
 	// nil writers should not crash — they are replaced with io.Discard
-	ctx := newContext(nil, nil, nil)
+	ctx := newContext(nil, nil, nil, nil)
 
 	// These should not panic
 	ctx.Info("info message")

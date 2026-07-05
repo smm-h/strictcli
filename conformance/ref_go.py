@@ -574,6 +574,15 @@ def generate(app_def: dict) -> str:
         lines.append('\t})')
         lines.append("")
 
+    # Write config_content_late AFTER construction but BEFORE run
+    if "config_content_late" in app_def:
+        late_content = app_def["config_content_late"]
+        config_path = app_def.get("config_path", "")
+        if config_path:
+            escaped = late_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+            lines.append(f'\tos.WriteFile("{config_path}", []byte("{escaped}"), 0o644)')
+            lines.append("")
+
     lines.append("\tapp.Run()")
     lines.append("}")
     lines.append("")

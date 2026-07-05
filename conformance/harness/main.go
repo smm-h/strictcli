@@ -122,7 +122,7 @@ func main() {
 	// Register top-level commands.
 	if cmds, ok := appDef["commands"]; ok {
 		for _, c := range cmds.([]interface{}) {
-			registerCommand(c.(map[string]interface{}), appTarget{app}, globalFlags)
+			registerCommand(c.(map[string]interface{}), appTarget{app}, globalFlags, app)
 		}
 	}
 
@@ -162,6 +162,17 @@ func main() {
 		app.SetCheckContext(func() strictcli.CheckContext {
 			return &testCheckCtx{}
 		})
+	}
+
+	// Write config_content_late AFTER construction but BEFORE run
+	if v, ok := appDef["config_content_late"]; ok {
+		configPath := ""
+		if cp, ok := appDef["config_path"]; ok && cp != nil {
+			configPath = cp.(string)
+		}
+		if configPath != "" {
+			os.WriteFile(configPath, []byte(v.(string)), 0o644)
+		}
 	}
 
 	app.Run()
@@ -522,11 +533,16 @@ func collectAllFlagDefs(cmdDef map[string]interface{}, globalFlags []map[string]
 }
 
 // makeHandler builds a normal command handler function from a command definition.
-func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interface{}) func(map[string]interface{}) int {
+func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interface{}, app *strictcli.App) func(map[string]interface{}) int {
 	handlerPrints := cmdDef["handler_prints"].(string)
 	exitCode := 0
 	if v, ok := cmdDef["handler_exit_code"]; ok {
 		exitCode = int(v.(float64))
+	}
+
+	handlerStyle := "classic"
+	if v, ok := cmdDef["handler_style"]; ok {
+		handlerStyle = v.(string)
 	}
 
 	allFlags := collectAllFlagDefs(cmdDef, globalFlags)
@@ -542,9 +558,27 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 	// Capture for closure.
 	template := handlerPrints
 	ec := exitCode
+	style := handlerStyle
 
 	return func(args map[string]interface{}) int {
 		out := template
+
+		// For context-style handlers, substitute {source:name} patterns
+		// using the app's LastSources map populated during dispatch.
+		if style == "context" {
+			for _, fd := range allFlags {
+				name := fd["name"].(string)
+				key := strings.ReplaceAll(name, "-", "_")
+				sourceKey := "{source:" + name + "}"
+				if strings.Contains(out, sourceKey) {
+					if s, ok := app.LastSources[key]; ok {
+						out = strings.ReplaceAll(out, sourceKey, s)
+					} else {
+						out = strings.ReplaceAll(out, sourceKey, "unknown")
+					}
+				}
+			}
+		}
 
 		// Substitute flags.
 		for _, fd := range allFlags {
@@ -712,7 +746,7 @@ func makePassthroughHandler(cmdDef map[string]interface{}, globalFlags []map[str
 }
 
 // registerCommand registers a single command (normal, passthrough, or deprecated) on a target.
-func registerCommand(cmdDef map[string]interface{}, t target, globalFlags []map[string]interface{}) {
+func registerCommand(cmdDef map[string]interface{}, t target, globalFlags []map[string]interface{}, app *strictcli.App) {
 	name := cmdDef["name"].(string)
 	help := cmdDef["help"].(string)
 
@@ -736,7 +770,7 @@ func registerCommand(cmdDef map[string]interface{}, t target, globalFlags []map[
 	}
 
 	// Normal command.
-	handler := makeHandler(cmdDef, globalFlags)
+	handler := makeHandler(cmdDef, globalFlags, app)
 	opts := buildCmdOptions(cmdDef)
 	t.Command(name, help, handler, opts...)
 }
@@ -755,11 +789,11 @@ func buildGroup(groupDef map[string]interface{}, app *strictcli.App, globalFlags
 	if v, ok := groupDef["hidden"]; ok && v.(bool) {
 		group.Hidden = true
 	}
-	populateGroup(groupDef, group, globalFlags)
+	populateGroup(groupDef, group, globalFlags, app)
 }
 
 // buildSubGroup recursively registers a sub-group and its contents on a parent Group.
-func buildSubGroup(groupDef map[string]interface{}, parent *strictcli.Group, globalFlags []map[string]interface{}) {
+func buildSubGroup(groupDef map[string]interface{}, parent *strictcli.Group, globalFlags []map[string]interface{}, app *strictcli.App) {
 	name := groupDef["name"].(string)
 	help := groupDef["help"].(string)
 	var tags []string
@@ -772,22 +806,22 @@ func buildSubGroup(groupDef map[string]interface{}, parent *strictcli.Group, glo
 	if v, ok := groupDef["hidden"]; ok && v.(bool) {
 		group.Hidden = true
 	}
-	populateGroup(groupDef, group, globalFlags)
+	populateGroup(groupDef, group, globalFlags, app)
 }
 
 // populateGroup registers commands and sub-groups on a group.
-func populateGroup(groupDef map[string]interface{}, group *strictcli.Group, globalFlags []map[string]interface{}) {
+func populateGroup(groupDef map[string]interface{}, group *strictcli.Group, globalFlags []map[string]interface{}, app *strictcli.App) {
 	// Register commands.
 	if cmds, ok := groupDef["commands"]; ok {
 		for _, c := range cmds.([]interface{}) {
-			registerCommand(c.(map[string]interface{}), groupTarget{group}, globalFlags)
+			registerCommand(c.(map[string]interface{}), groupTarget{group}, globalFlags, app)
 		}
 	}
 
 	// Register sub-groups recursively.
 	if groups, ok := groupDef["groups"]; ok {
 		for _, g := range groups.([]interface{}) {
-			buildSubGroup(g.(map[string]interface{}), group, globalFlags)
+			buildSubGroup(g.(map[string]interface{}), group, globalFlags, app)
 		}
 	}
 }

@@ -207,6 +207,38 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     return "\n".join(lines)
 
 
+def _emit_context_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) -> str:
+    """Emit the handler body for context-style handlers.
+
+    The template uses {source:name} to print ctx.source(name) and
+    {name} to print the flag value from kwargs.
+    """
+    import re
+    template = cmd_def["handler_prints"]
+
+    lines = []
+    lines.append("    _out = ''")
+
+    # Split template into parts: {source:name} refs and {name} refs and literals
+    parts = re.split(r'\{(source:[^}]+|[^}]+)\}', template)
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            # Literal text
+            if part:
+                lines.append(f"    _out += {part!r}")
+        else:
+            if part.startswith("source:"):
+                flag_name = part[7:]
+                lines.append(f"    _out += ctx.source({flag_name!r})")
+            else:
+                # Value reference -- use kwargs
+                param = _flag_param(part)
+                lines.append(f"    _out += str({param})")
+
+    lines.append("    print(_out)")
+    return "\n".join(lines)
+
+
 def _emit_command_registration(
     cmd_def: dict, target: str, indent: str = "",
     global_flags: list[dict] | None = None,
@@ -510,18 +542,33 @@ def _emit_command_registration(
             param_strs.append(p)
     param_str = ", ".join(param_strs)
 
-    handler_body = _emit_handler_body(cmd_def, global_flags)
+    handler_style = cmd_def.get("handler_style", "classic")
 
-    lines.extend(decorator_parts)
-    for fd in flag_decorators:
-        lines.append(fd)
-    lines.append(f"{indent}def {cmd_def['name'].replace('-', '_')}_handler({param_str}):")
-    lines.append(handler_body)
-    if exit_code != 0:
-        lines.append(f"{indent}    return {exit_code}")
+    if handler_style == "context":
+        handler_body = _emit_context_handler_body(cmd_def, global_flags)
+        lines.extend(decorator_parts)
+        for fd in flag_decorators:
+            lines.append(fd)
+        # Context handler: first param is ctx with type annotation
+        lines.append(f"{indent}def {cmd_def['name'].replace('-', '_')}_handler(ctx: strictcli.Context, {param_str}):")
+        lines.append(handler_body)
+        if exit_code != 0:
+            lines.append(f"{indent}    return {exit_code}")
+        else:
+            lines.append(f"{indent}    return 0")
+        lines.append("")
     else:
-        lines.append(f"{indent}    return 0")
-    lines.append("")
+        handler_body = _emit_handler_body(cmd_def, global_flags)
+        lines.extend(decorator_parts)
+        for fd in flag_decorators:
+            lines.append(fd)
+        lines.append(f"{indent}def {cmd_def['name'].replace('-', '_')}_handler({param_str}):")
+        lines.append(handler_body)
+        if exit_code != 0:
+            lines.append(f"{indent}    return {exit_code}")
+        else:
+            lines.append(f"{indent}    return 0")
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -654,6 +701,15 @@ def generate(app_def: dict) -> str:
         lines.append("        project_root = pathlib.Path('.')")
         lines.append("")
         lines.append("    app.set_check_context(lambda: _CheckCtx())")
+        lines.append("")
+
+    # Write config_content_late AFTER construction but BEFORE run
+    if "config_content_late" in app_def:
+        late_content = app_def["config_content_late"]
+        config_path_expr = f"app._config_path_override" if "config_path" in app_def else "None"
+        lines.append(f"    # Write late config content")
+        lines.append(f"    with open({app_def['config_path']!r}, 'w') as _lcf:")
+        lines.append(f"        _lcf.write({late_content!r})")
         lines.append("")
 
     lines.append("    app.run()")

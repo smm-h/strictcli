@@ -197,7 +197,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 	}
 
 	// Run validation and build final kwargs
-	validatedKwargs, postGlobalValues, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)
+	validatedKwargs, postGlobalValues, _, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)
 	if errStr != "" {
 		return invokeResult{exitCode: 1, err: errStr}
 	}

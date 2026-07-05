@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 )
 
 // Handler is the interface for struct-based command handlers.
@@ -24,20 +25,25 @@ type Context struct {
 	globalsCache interface{}            // cached result of Globals[T], set on first access
 	emitData     interface{}            // stores last Emit'd value
 	emitCalled   bool                   // enforces single Emit
+	sources      map[string]string      // flag param name -> source label (cli/env/config/default/implied)
 }
 
 // newContext creates a new Context with the given writers and global flag values.
-func newContext(stdout, stderr io.Writer, globals map[string]interface{}) *Context {
+func newContext(stdout, stderr io.Writer, globals map[string]interface{}, sources map[string]string) *Context {
 	if stdout == nil {
 		stdout = io.Discard
 	}
 	if stderr == nil {
 		stderr = io.Discard
 	}
+	if sources == nil {
+		sources = make(map[string]string)
+	}
 	return &Context{
 		stdout:  stdout,
 		stderr:  stderr,
 		globals: globals,
+		sources: sources,
 	}
 }
 
@@ -60,6 +66,22 @@ func (c *Context) Debug(msg string) {
 // Error writes an error message to stderr.
 func (c *Context) Error(msg string) {
 	fmt.Fprintln(c.stderr, msg)
+}
+
+// Source returns the provenance source label for a flag.
+// Returns one of: "cli", "env", "config", "default", "implied".
+// Panics if the flag name is not found.
+func (c *Context) Source(name string) string {
+	// Try param name (underscores)
+	key := strings.ReplaceAll(name, "-", "_")
+	if s, ok := c.sources[key]; ok {
+		return s
+	}
+	// Try original name (dashes)
+	if s, ok := c.sources[name]; ok {
+		return s
+	}
+	panic(fmt.Sprintf("no source info for flag %q", name))
 }
 
 // Emit JSON-marshals data to stdout and stores it for programmatic retrieval.
