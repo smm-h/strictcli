@@ -474,6 +474,8 @@ def generate(app_def: dict) -> str:
         app_opts.append(f'strictcli.WithConfigPath("{app_def["config_path"]}")')
     if "config_format" in app_def and app_def["config_format"] != "json":
         app_opts.append(f'strictcli.WithConfigFormat("{app_def["config_format"]}")')
+    if app_def.get("no_default_config_path", False):
+        app_opts.append("strictcli.WithNoDefaultConfigPath()")
     if has_checks:
         app_opts.append('strictcli.WithChecks(checksPath)')
     opts_str = ""

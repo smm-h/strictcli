@@ -517,13 +517,29 @@ func TestMCPFlagDetection(t *testing.T) {
 	}
 }
 
-func TestMCPFlagDetectionAnywhere(t *testing.T) {
+func TestMCPFlagDetectionPreCommandOnly(t *testing.T) {
 	app := mcpTestApp()
 
-	// --mcp anywhere in argv should be detected
-	result := app.Test([]string{"greet", "--mcp"})
+	// --mcp before a command is detected
+	result := app.Test([]string{"--mcp"})
 	if !strings.Contains(result.Stderr, "--mcp cannot be used with Test()") {
-		t.Errorf("expected --mcp detection even after command, got: %s", result.Stderr)
+		t.Errorf("expected --mcp detection before command, got: %s", result.Stderr)
+	}
+
+	// --mcp after a command name is NOT intercepted (unknown flag error)
+	result2 := app.Test([]string{"greet", "--mcp"})
+	if result2.ExitCode != 1 {
+		t.Errorf("expected exit 1 for --mcp after command, got %d", result2.ExitCode)
+	}
+	if !strings.Contains(result2.Stderr, "unknown flag") {
+		t.Errorf("expected unknown flag error for --mcp after command, got: %s", result2.Stderr)
+	}
+
+	// --mcp after -- is NOT intercepted
+	result3 := app.Test([]string{"--", "--mcp"})
+	// After --, --mcp is treated as a command name (unknown command error)
+	if result3.ExitCode != 1 {
+		t.Errorf("expected exit 1 for --mcp after --, got %d", result3.ExitCode)
 	}
 }
 

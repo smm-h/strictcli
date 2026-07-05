@@ -256,28 +256,28 @@ class TestInvokeGlobalFlags:
     def test_global_str_flag(self):
         captured = {}
         app = _build_app(
-            flags=[strictcli.Flag(name="config", type=str, help="config path", default="default.toml")],
+            flags=[strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml")],
         )
 
         @app.command("run", help="run")
-        def run(config):
-            captured["config"] = config
+        def run(settings):
+            captured["settings"] = settings
 
-        app._invoke("run", {"config": "custom.toml"})
-        assert captured["config"] == "custom.toml"
+        app._invoke("run", {"settings": "custom.toml"})
+        assert captured["settings"] == "custom.toml"
 
     def test_global_str_flag_default(self):
         captured = {}
         app = _build_app(
-            flags=[strictcli.Flag(name="config", type=str, help="config path", default="default.toml")],
+            flags=[strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml")],
         )
 
         @app.command("run", help="run")
-        def run(config):
-            captured["config"] = config
+        def run(settings):
+            captured["settings"] = settings
 
         app._invoke("run", {})
-        assert captured["config"] == "default.toml"
+        assert captured["settings"] == "default.toml"
 
     def test_global_and_command_flags_together(self):
         """Global flags and command flags both appear in handler kwargs."""
@@ -356,7 +356,7 @@ class TestInvokePassthrough:
         app = _build_app(
             flags=[
                 strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
-                strictcli.Flag(name="config", type=str, help="config path", default="default.toml"),
+                strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml"),
             ],
         )
         pt = strictcli.Passthrough(handler=pt_handler)
@@ -365,9 +365,9 @@ class TestInvokePassthrough:
         def exec_cmd():
             pass
 
-        app._invoke("exec", {"_args": ["--foo"], "verbose": True, "config": "custom.toml"})
+        app._invoke("exec", {"_args": ["--foo"], "verbose": True, "settings": "custom.toml"})
         assert captured["globals"]["verbose"] is True
-        assert captured["globals"]["config"] == "custom.toml"
+        assert captured["globals"]["settings"] == "custom.toml"
 
     def test_passthrough_global_flag_defaults(self):
         """Passthrough handler receives defaults for unprovided global flags."""
@@ -380,7 +380,7 @@ class TestInvokePassthrough:
         app = _build_app(
             flags=[
                 strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
-                strictcli.Flag(name="config", type=str, help="config path", default="default.toml"),
+                strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml"),
             ],
         )
         pt = strictcli.Passthrough(handler=pt_handler)
@@ -391,7 +391,7 @@ class TestInvokePassthrough:
 
         app._invoke("exec", {"_args": ["x"]})
         assert captured["globals"]["verbose"] is False
-        assert captured["globals"]["config"] == "default.toml"
+        assert captured["globals"]["settings"] == "default.toml"
 
     def test_passthrough_unknown_kwarg_raises(self):
         """Unknown kwargs in passthrough invoke produce an error."""

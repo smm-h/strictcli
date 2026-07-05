@@ -8,7 +8,7 @@ import strictcli
 class TestReservedGlobalFlagNames:
     """App() must reject global flags whose name collides with a reserved name."""
 
-    @pytest.mark.parametrize("name", ["help", "version", "dump-schema", "mcp"])
+    @pytest.mark.parametrize("name", ["help", "version", "dump-schema", "mcp", "config"])
     def test_reserved_name_rejected(self, name: str) -> None:
         with pytest.raises(ValueError, match="reserved"):
             strictcli.App(

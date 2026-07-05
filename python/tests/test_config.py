@@ -1309,3 +1309,175 @@ def test_config_set_clear_and_default_error(tmp_path, monkeypatch):
     r = app.test(["config", "set", "tags", "--clear", "--default"])
     assert r.exit_code == 1
     assert "config set: --clear and --default are mutually exclusive" in r.stderr
+
+
+# ---- Phase 1b: --config flag tests ----
+
+
+def test_config_flag_selects_file(tmp_path, monkeypatch):
+    """--config <path> selects that file for config loading."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    custom_path = str(tmp_path / "custom.json")
+    with open(custom_path, "w") as f:
+        json.dump({"port": 9999}, f)
+
+    app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
+
+    @app.command("serve", help="start server")
+    @strictcli.flag("port", type=int, help="port number", default=8080)
+    def serve(port):
+        print(f"port={port}")
+
+    r = app.test(["--config", custom_path, "serve"])
+    assert r.exit_code == 0
+    assert "port=9999" in r.stdout
+
+
+def test_config_flag_equals_form(tmp_path, monkeypatch):
+    """--config=<path> form works."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    custom_path = str(tmp_path / "custom.json")
+    with open(custom_path, "w") as f:
+        json.dump({"port": 7777}, f)
+
+    app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
+
+    @app.command("serve", help="start server")
+    @strictcli.flag("port", type=int, help="port number", default=8080)
+    def serve(port):
+        print(f"port={port}")
+
+    r = app.test([f"--config={custom_path}", "serve"])
+    assert r.exit_code == 0
+    assert "port=7777" in r.stdout
+
+
+def test_config_flag_overrides_constructed_path(tmp_path, monkeypatch):
+    """--config overrides a constructed config_path."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    constructed_path = str(tmp_path / "constructed.json")
+    override_path = str(tmp_path / "override.json")
+    with open(constructed_path, "w") as f:
+        json.dump({"port": 1111}, f)
+    with open(override_path, "w") as f:
+        json.dump({"port": 2222}, f)
+
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test app",
+        config=True, config_path=constructed_path,
+    )
+
+    @app.command("serve", help="start server")
+    @strictcli.flag("port", type=int, help="port number", default=8080)
+    def serve(port):
+        print(f"port={port}")
+
+    r = app.test(["--config", override_path, "serve"])
+    assert r.exit_code == 0
+    assert "port=2222" in r.stdout
+
+
+def test_config_flag_on_disabled_app_is_error():
+    """--config on an app with config disabled is a hard error."""
+    app = strictcli.App(name="testapp", version="1.0.0", help="test app")
+
+    @app.command("run", help="run")
+    def run():
+        pass
+
+    r = app.test(["--config", "/tmp/fake.json", "run"])
+    assert r.exit_code == 1
+    assert "--config is not available" in r.stderr
+
+
+def test_config_flag_after_command_is_unknown():
+    """--config after the command name is an unknown flag error."""
+    app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
+
+    @app.command("run", help="run")
+    def run():
+        pass
+
+    r = app.test(["run", "--config", "/tmp/fake.json"])
+    assert r.exit_code == 1
+    assert "unknown flag" in r.stderr
+
+
+def test_config_flag_after_double_dash():
+    """--config after -- is not intercepted."""
+    app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
+
+    @app.command("run", help="run")
+    def run():
+        pass
+
+    r = app.test(["--", "--config", "/tmp/fake.json"])
+    assert r.exit_code == 1
+
+
+def test_config_flag_not_in_schema(tmp_path, monkeypatch):
+    """--config should NOT appear in --dump-schema output."""
+    monkeypatch.chdir(tmp_path)
+    # Create pyproject.toml for project_id detection
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "testapp"\n')
+
+    app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
+
+    @app.command("run", help="run")
+    def run():
+        pass
+
+    r = app.test(["--dump-schema"])
+    assert r.exit_code == 0
+    schema = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+    # Check that no global flag is named "config"
+    for gf in schema.get("global_flags", []):
+        assert gf["name"] != "config", "--config should not appear in schema"
+
+
+# ---- Phase 1c: no-default-config-path tests ----
+
+
+def test_no_default_config_path(tmp_path, monkeypatch):
+    """With no_default_config_path, XDG config is NOT loaded without --config."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    # Write config at the XDG default location
+    cfg_dir = tmp_path / "testapp"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.json").write_text(json.dumps({"port": 6666}))
+
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test app",
+        config=True, no_default_config_path=True,
+    )
+
+    @app.command("serve", help="start server")
+    @strictcli.flag("port", type=int, help="port number", default=8080)
+    def serve(port):
+        print(f"port={port}")
+
+    r = app.test(["serve"])
+    assert r.exit_code == 0
+    assert "port=8080" in r.stdout
+
+
+def test_no_default_config_path_with_config_flag(tmp_path, monkeypatch):
+    """With no_default_config_path + --config, the explicit path IS loaded."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    custom_path = str(tmp_path / "explicit.json")
+    with open(custom_path, "w") as f:
+        json.dump({"port": 3333}, f)
+
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test app",
+        config=True, no_default_config_path=True,
+    )
+
+    @app.command("serve", help="start server")
+    @strictcli.flag("port", type=int, help="port number", default=8080)
+    def serve(port):
+        print(f"port={port}")
+
+    r = app.test(["--config", custom_path, "serve"])
+    assert r.exit_code == 0
+    assert "port=3333" in r.stdout

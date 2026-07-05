@@ -1,0 +1,102 @@
+[
+  {
+    "name": "config-flag: --config on app with config disabled is a hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--config", "/tmp/fake.json", "run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "--config is not available"
+    }
+  },
+  {
+    "name": "config-flag: --config after command name is unknown flag error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["run", "--config", "/tmp/fake.json"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag"
+    }
+  },
+  {
+    "name": "config-flag: --dump-schema after command name is unknown flag error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["run", "--dump-schema"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag"
+    }
+  },
+  {
+    "name": "config-flag: --dump-schema after -- is not intercepted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--", "--dump-schema"],
+    "expect": {
+      "exit_code": 1
+    }
+  },
+  {
+    "name": "config-flag: --config after -- is not intercepted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--", "--config", "/tmp/fake.json"],
+    "expect": {
+      "exit_code": 1
+    }
+  }
+]

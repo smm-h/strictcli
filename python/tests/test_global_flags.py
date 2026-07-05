@@ -48,16 +48,16 @@ def test_global_str_flag_with_value():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="config", type=str, help="config file path", default="default.toml")],
+        flags=[strictcli.Flag(name="settings", type=str, help="settings file path", default="default.toml")],
     )
 
     @app.command("run", help="run something")
-    def run(config):
-        print(f"config={config}")
+    def run(settings):
+        print(f"settings={settings}")
 
-    r = app.test(["--config", "custom.toml", "run"])
+    r = app.test(["--settings", "custom.toml", "run"])
     assert r.exit_code == 0
-    assert "config=custom.toml" in r.stdout
+    assert "settings=custom.toml" in r.stdout
 
 
 def test_global_int_flag_with_value():
@@ -84,16 +84,16 @@ def test_global_flag_default():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="config", type=str, help="config path", default="app.toml")],
+        flags=[strictcli.Flag(name="settings", type=str, help="settings path", default="app.toml")],
     )
 
     @app.command("run", help="run")
-    def run(config):
-        print(f"config={config}")
+    def run(settings):
+        print(f"settings={settings}")
 
     r = app.test(["run"])
     assert r.exit_code == 0
-    assert "config=app.toml" in r.stdout
+    assert "settings=app.toml" in r.stdout
 
 
 def test_global_flag_from_env(monkeypatch):
@@ -299,16 +299,16 @@ def test_global_flag_equals_form():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="config", type=str, help="config path", default="default.toml")],
+        flags=[strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml")],
     )
 
     @app.command("run", help="run")
-    def run(config):
-        print(f"config={config}")
+    def run(settings):
+        print(f"settings={settings}")
 
-    r = app.test(["--config=custom.toml", "run"])
+    r = app.test(["--settings=custom.toml", "run"])
     assert r.exit_code == 0
-    assert "config=custom.toml" in r.stdout
+    assert "settings=custom.toml" in r.stdout
 
 
 def test_multiple_global_flags():
@@ -319,18 +319,18 @@ def test_multiple_global_flags():
         help="test app",
         flags=[
             strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
-            strictcli.Flag(name="config", type=str, help="config path", default="default.toml"),
+            strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml"),
         ],
     )
 
     @app.command("run", help="run")
-    def run(verbose, config):
-        print(f"verbose={verbose} config={config}")
+    def run(verbose, settings):
+        print(f"verbose={verbose} settings={settings}")
 
-    r = app.test(["--verbose", "--config", "custom.toml", "run"])
+    r = app.test(["--verbose", "--settings", "custom.toml", "run"])
     assert r.exit_code == 0
     assert "verbose=True" in r.stdout
-    assert "config=custom.toml" in r.stdout
+    assert "settings=custom.toml" in r.stdout
 
 
 def test_no_global_flags_works():

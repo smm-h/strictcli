@@ -110,6 +110,33 @@
     }
   },
   {
+    "name": "reserved_global_flags: global flag named 'config' is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "config",
+          "type": "str",
+          "help": "should be rejected"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "reserved"
+    }
+  },
+  {
     "name": "reserved_global_flags: non-reserved global flag is allowed",
     "app": {
       "name": "myapp",

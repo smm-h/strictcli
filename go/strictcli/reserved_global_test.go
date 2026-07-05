@@ -8,7 +8,7 @@ import (
 // TestGlobalFlagReservedNames verifies that App.GlobalFlag panics when
 // registering a flag whose name collides with a reserved global name.
 func TestGlobalFlagReservedNames(t *testing.T) {
-	reserved := []string{"help", "version", "dump-schema", "mcp"}
+	reserved := []string{"help", "version", "dump-schema", "mcp", "config"}
 	for _, name := range reserved {
 		t.Run(name, func(t *testing.T) {
 			defer func() {

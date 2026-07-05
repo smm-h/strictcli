@@ -439,9 +439,22 @@ class TestSchemaFlagTypes:
 
 
 class TestDumpSchemaWithOtherArgs:
-    """--dump-schema is detected even when mixed with other args."""
+    """--dump-schema is only detected in the pre-command region."""
 
-    def test_dump_schema_with_command_name(self, tmp_path, monkeypatch):
+    def test_dump_schema_before_command(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("greet", help="Say hello")
+        def greet():
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+        assert (tmp_path / ".strictcli" / "schema.json").exists()
+
+    def test_dump_schema_after_command_is_unknown_flag(self, tmp_path, monkeypatch):
+        """--dump-schema after a command name is NOT intercepted."""
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
@@ -450,8 +463,21 @@ class TestDumpSchemaWithOtherArgs:
             pass
 
         result = app.test(["greet", "--dump-schema"])
-        assert result.exit_code == 0
-        assert (tmp_path / ".strictcli" / "schema.json").exists()
+        assert result.exit_code == 1
+        assert "unknown flag" in result.stderr
+
+    def test_dump_schema_after_double_dash_is_not_intercepted(self, tmp_path, monkeypatch):
+        """--dump-schema after -- is NOT intercepted."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("greet", help="Say hello")
+        def greet():
+            pass
+
+        result = app.test(["--", "--dump-schema"])
+        # After --, --dump-schema is treated as a command name (unknown command error)
+        assert result.exit_code == 1
 
 
 class TestSchemaDefaults:

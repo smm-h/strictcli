@@ -40,9 +40,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "config",
+          "name": "settings",
           "type": "str",
-          "help": "config path",
+          "help": "settings path",
           "default": "/etc"
         }
       ],
@@ -50,17 +50,17 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "config={config}"
+          "handler_prints": "settings={settings}"
         }
       ]
     },
     "argv": [
-      "--config"
+      "--settings"
     ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "requires a value",
-      "stderr_equals": "error: flag '--config' requires a value\ntry 'myapp --help'"
+      "stderr_equals": "error: flag '--settings' requires a value\ntry 'myapp --help'"
     }
   },
   {
@@ -107,16 +107,16 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "config",
+          "name": "settings",
           "type": "str",
-          "help": "config path"
+          "help": "settings path"
         }
       ],
       "commands": [
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "config={config}"
+          "handler_prints": "settings={settings}"
         }
       ]
     },
@@ -129,7 +129,7 @@
         "global flag",
         "required"
       ],
-      "stderr_equals": "error: global flag '--config' is required\ntry 'myapp --help'"
+      "stderr_equals": "error: global flag '--settings' is required\ntry 'myapp --help'"
     }
   },
   {

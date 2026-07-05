@@ -2,7 +2,9 @@ package strictcli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -1279,5 +1281,237 @@ func TestConfigSetDeepNestedField(t *testing.T) {
 	}
 	if !strings.Contains(content, "database") {
 		t.Fatalf("expected nested 'database' key in config file, got: %s", content)
+	}
+}
+
+// ---- Phase 1b: --config flag tests ----
+
+func TestConfigFlagSelectsFile(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Write a config file at a custom path
+	customPath := filepath.Join(tmpDir, "custom.json")
+	os.WriteFile(customPath, []byte(`{"port": 9999}`), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	r := app.Test([]string{"--config", customPath, "serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=9999") {
+		t.Fatalf("expected port=9999 from --config, got %q", r.Stdout)
+	}
+}
+
+func TestConfigFlagEqualsForm(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	customPath := filepath.Join(tmpDir, "custom.json")
+	os.WriteFile(customPath, []byte(`{"port": 7777}`), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	r := app.Test([]string{"--config=" + customPath, "serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=7777") {
+		t.Fatalf("expected port=7777 from --config=, got %q", r.Stdout)
+	}
+}
+
+func TestConfigFlagOverridesConstructedPath(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Set up constructed config path with one value
+	constructedPath := filepath.Join(tmpDir, "constructed.json")
+	os.WriteFile(constructedPath, []byte(`{"port": 1111}`), 0o644)
+
+	// Set up override config path with a different value
+	overridePath := filepath.Join(tmpDir, "override.json")
+	os.WriteFile(overridePath, []byte(`{"port": 2222}`), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigPath(constructedPath))
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	r := app.Test([]string{"--config", overridePath, "serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=2222") {
+		t.Fatalf("expected port=2222 from --config override, got %q", r.Stdout)
+	}
+}
+
+func TestConfigFlagOnDisabledAppIsError(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--config", "/tmp/fake.json", "run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--config is not available") {
+		t.Fatalf("expected --config error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigFlagAfterCommandIsUnknown(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"run", "--config", "/tmp/fake.json"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown flag") {
+		t.Fatalf("expected unknown flag error, got: %s", r.Stderr)
+	}
+}
+
+func TestConfigFlagAfterDoubleDash(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--", "--config", "/tmp/fake.json"})
+	// After --, --config is treated as a command name (unknown command error)
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+}
+
+func TestConfigFlagNotInSchema(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Create a go.mod so writeSchema works
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	os.WriteFile(goModPath, []byte("module testapp\n"), 0o644)
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 })
+
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema failed: %v", err)
+	}
+	data, _ := json.Marshal(schema)
+	schemaStr := string(data)
+
+	// --config should NOT appear in the schema
+	if strings.Contains(schemaStr, `"config"`) {
+		// config might appear as a group name but NOT as a flag name
+		// Check that no flag object has name "config"
+		if gf, ok := schema["global_flags"]; ok {
+			for _, f := range gf.([]interface{}) {
+				fm := f.(map[string]interface{})
+				if fm["name"] == "config" {
+					t.Fatal("--config should NOT appear in schema output as a global flag")
+				}
+			}
+		}
+	}
+}
+
+func TestDumpSchemaAfterCommandIsNotIntercepted(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"run", "--dump-schema"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "unknown flag") {
+		t.Fatalf("expected unknown flag error, got: %s", r.Stderr)
+	}
+}
+
+func TestDumpSchemaAfterDoubleDash(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.Command("run", "run", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--", "--dump-schema"})
+	// After --, --dump-schema is treated as a command name (unknown command error)
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+}
+
+// ---- Phase 1c: no-default-config-path tests ----
+
+func TestNoDefaultConfigPath(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Write a config file at the XDG default location
+	dir := filepath.Join(tmpDir, "testapp")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"port": 6666}`), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithNoDefaultConfigPath())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	// Without --config, the XDG default is NOT loaded
+	r := app.Test([]string{"serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=8080") {
+		t.Fatalf("expected default port=8080 with no-default-config-path, got %q", r.Stdout)
+	}
+}
+
+func TestNoDefaultConfigPathWithConfigFlag(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	// Write a config file at a custom path
+	customPath := filepath.Join(tmpDir, "explicit.json")
+	os.WriteFile(customPath, []byte(`{"port": 3333}`), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithNoDefaultConfigPath())
+	app.Command("serve", "start server", func(args map[string]interface{}) int {
+		fmt.Printf("port=%d", args["port"])
+		return 0
+	}, WithFlags(
+		IntFlag("port", "port number", Default(8080)),
+	))
+
+	// With --config, the explicit path IS loaded
+	r := app.Test([]string{"--config", customPath, "serve"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "port=3333") {
+		t.Fatalf("expected port=3333 from --config with no-default-config-path, got %q", r.Stdout)
 	}
 }

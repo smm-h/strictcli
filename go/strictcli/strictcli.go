@@ -254,14 +254,15 @@ type App struct {
 	deprecated    []deprecatedCmd
 	deprecatedMap map[string]string
 
-	configEnabled       bool
-	configPathOverride  string
-	configFormat        string
-	configData          map[string]interface{}
-	configFields        map[string]*ConfigField
-	configFieldOrder    []string
-	frameworkFields     map[string]*ConfigField
-	frameworkFieldOrder []string
+	configEnabled          bool
+	configPathOverride     string
+	configFormat           string
+	configData             map[string]interface{}
+	configFields           map[string]*ConfigField
+	configFieldOrder       []string
+	frameworkFields        map[string]*ConfigField
+	frameworkFieldOrder    []string
+	noDefaultConfigPath    bool
 
 	checksEnabled       bool
 	checksPath          string
@@ -320,6 +321,15 @@ func WithConfigPath(path string) AppOption {
 func WithConfigFormat(format string) AppOption {
 	return func(a *App) {
 		a.configFormat = format
+	}
+}
+
+// WithNoDefaultConfigPath makes the app load NO config file unless
+// --config is explicitly passed on the command line. Without this
+// option (the default), the app loads from the XDG default path.
+func WithNoDefaultConfigPath() AppOption {
+	return func(a *App) {
+		a.noDefaultConfigPath = true
 	}
 }
 
@@ -1759,14 +1769,152 @@ type parseResult struct {
 	serveMCP        bool
 }
 
+// preScanResult holds the results of the position-aware pre-scan for
+// reserved flags (--dump-schema, --mcp, --config).
+type preScanResult struct {
+	dumpSchema  bool
+	serveMCP    bool
+	configPath  string   // value from --config <path> or --config=<path>
+	err         string   // non-empty on error (e.g. missing value, config on disabled app)
+	cleanedArgv []string // argv with --config/--config=value stripped out
+}
+
+// preScanReservedFlags scans argv for --dump-schema, --mcp, and --config
+// in the pre-command region only. The pre-command region ends at:
+//   - the first non-flag token (the command name)
+//   - a "--" terminator
+//
+// Within the pre-command region, known global flags and their values are
+// skipped so that a global flag value that happens to look like a command
+// name is not treated as one. After the pre-command region, these reserved
+// flags are NOT intercepted (they become unknown-flag errors in the normal
+// parse flow).
+func (a *App) preScanReservedFlags(argv []string) preScanResult {
+	// Build a set of known global flag long-names and short-names,
+	// along with whether they take a value (non-bool).
+	type flagInfo struct {
+		takesValue bool
+	}
+	knownFlags := make(map[string]*flagInfo)
+	for i := range a.globalFlags {
+		f := &a.globalFlags[i]
+		knownFlags["--"+f.Name] = &flagInfo{takesValue: f.Type != TypeBool}
+		if f.Short != "" {
+			knownFlags["-"+f.Short] = &flagInfo{takesValue: f.Type != TypeBool}
+		}
+		if f.Type == TypeBool && f.Negatable {
+			knownFlags["--no-"+f.Name] = &flagInfo{takesValue: false}
+		}
+	}
+
+	var result preScanResult
+	// Track indices to exclude from cleanedArgv (--config tokens)
+	excludeIndices := make(map[int]bool)
+	i := 0
+	for i < len(argv) {
+		tok := argv[i]
+
+		// -- terminates the pre-command region
+		if tok == "--" {
+			break
+		}
+
+		// Non-flag token = command name: stop scanning
+		if !strings.HasPrefix(tok, "-") || tok == "-" {
+			break
+		}
+
+		// --dump-schema
+		if tok == "--dump-schema" {
+			result.dumpSchema = true
+			return result
+		}
+
+		// --mcp
+		if tok == "--mcp" {
+			result.serveMCP = true
+			return result
+		}
+
+		// --config=<value>
+		if strings.HasPrefix(tok, "--config=") {
+			if !a.configEnabled {
+				result.err = "--config is not available: this app does not use config files"
+				return result
+			}
+			val := tok[len("--config="):]
+			if val == "" {
+				result.err = "flag '--config' requires a value"
+				return result
+			}
+			result.configPath = val
+			excludeIndices[i] = true
+			i++
+			continue
+		}
+
+		// --config <value>
+		if tok == "--config" {
+			if !a.configEnabled {
+				result.err = "--config is not available: this app does not use config files"
+				return result
+			}
+			if i+1 >= len(argv) {
+				result.err = "flag '--config' requires a value"
+				return result
+			}
+			result.configPath = argv[i+1]
+			excludeIndices[i] = true
+			excludeIndices[i+1] = true
+			i += 2
+			continue
+		}
+
+		// Known global flag with --flag=value form: skip
+		if strings.HasPrefix(tok, "--") && strings.Contains(tok, "=") {
+			eqPos := strings.Index(tok, "=")
+			flagPart := tok[:eqPos]
+			if _, ok := knownFlags[flagPart]; ok {
+				i++
+				continue
+			}
+			// Unknown flag-like token before command name: stop
+			break
+		}
+
+		// Known global flag: skip it (and its value if non-bool)
+		if info, ok := knownFlags[tok]; ok {
+			if info.takesValue {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		}
+
+		// Unknown flag-like token before command name: stop
+		break
+	}
+
+	// Build cleaned argv with --config tokens stripped
+	if len(excludeIndices) > 0 {
+		cleaned := make([]string, 0, len(argv)-len(excludeIndices))
+		for j, tok := range argv {
+			if !excludeIndices[j] {
+				cleaned = append(cleaned, tok)
+			}
+		}
+		result.cleanedArgv = cleaned
+	} else {
+		result.cleanedArgv = argv
+	}
+
+	return result
+}
+
 // doParse parses argv and returns a parseResult.
 // Exactly one of: (cmd+kwargs), helpText, versionText, or parseErr will be non-zero.
 func (a *App) doParse(argv []string) parseResult {
-	// Load config data once at parse time (replaces the old construction-time load)
-	if a.configEnabled {
-		a.configData = a.resolveConfigData("", false)
-	}
-
 	// Reset stdin tracking for each parse invocation
 	a.stdinConsumedBy = nil
 
@@ -1778,23 +1926,30 @@ func (a *App) doParse(argv []string) parseResult {
 		return parseResult{versionText: formatVersion(a)}
 	}
 
-	// --dump-schema: detected anywhere in argv, before any other parsing
-	for _, tok := range argv {
-		if tok == "--dump-schema" {
-			return parseResult{dumpSchema: true}
-		}
+	// Position-aware pre-scan: intercept --dump-schema, --mcp, and --config
+	// in the pre-command region only (before the first non-flag token, before --).
+	// This replaces the old naive scans that checked ALL of argv.
+	preScan := a.preScanReservedFlags(argv)
+	if preScan.dumpSchema {
+		return parseResult{dumpSchema: true}
+	}
+	if preScan.serveMCP {
+		return parseResult{serveMCP: true}
+	}
+	if preScan.err != "" {
+		return parseResult{parseErr: preScan.err}
 	}
 
-	// --mcp: detected anywhere in argv, before any other parsing
-	for _, tok := range argv {
-		if tok == "--mcp" {
-			return parseResult{serveMCP: true}
-		}
+	// Load config data once at parse time
+	if a.configEnabled {
+		runtimeOverride := preScan.configPath
+		hermetic := a.noDefaultConfigPath && runtimeOverride == ""
+		a.configData = a.resolveConfigData(runtimeOverride, hermetic)
 	}
 
-	// Extract global flags from argv, leaving the rest for command routing.
-	// Global flags can appear before the command name.
-	globalValues, rest, globalErr := a.extractGlobalFlags(argv)
+	// Extract global flags from cleaned argv (--config stripped), leaving
+	// the rest for command routing.
+	globalValues, rest, globalErr := a.extractGlobalFlags(preScan.cleanedArgv)
 	if globalErr != "" {
 		return parseResult{parseErr: globalErr}
 	}

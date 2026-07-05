@@ -90,6 +90,11 @@
           "default": null,
           "description": "Override CWD-based discovery of checks.toml with an explicit path."
         },
+        "no_default_config_path": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, the app loads no config unless --config is explicitly passed."
+        },
         "config_content": {
           "type": "string",
           "description": "Raw config file content to write before running the test"

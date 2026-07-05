@@ -217,19 +217,19 @@
       "env_prefix": "MYAPP",
       "global_flags": [
         {
-          "name": "config",
+          "name": "settings",
           "type": "str",
-          "help": "config path",
+          "help": "settings path",
           "short": "c",
           "default": "/etc/myapp",
-          "env": "MYAPP_CONFIG"
+          "env": "MYAPP_SETTINGS"
         }
       ],
       "commands": [
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "config={config}"
+          "handler_prints": "settings={settings}"
         }
       ]
     },
@@ -240,7 +240,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "config=/tmp/cfg"
+      "stdout_equals": "settings=/tmp/cfg"
     }
   },
   {
@@ -252,19 +252,19 @@
       "env_prefix": "MYAPP",
       "global_flags": [
         {
-          "name": "config",
+          "name": "settings",
           "type": "str",
-          "help": "config path",
+          "help": "settings path",
           "short": "c",
           "default": "/etc/myapp",
-          "env": "MYAPP_CONFIG"
+          "env": "MYAPP_SETTINGS"
         }
       ],
       "commands": [
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "config={config}"
+          "handler_prints": "settings={settings}"
         }
       ]
     },
@@ -272,11 +272,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_CONFIG": "/from/env"
+      "MYAPP_SETTINGS": "/from/env"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "config=/from/env"
+      "stdout_equals": "settings=/from/env"
     }
   },
   {

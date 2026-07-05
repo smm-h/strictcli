@@ -1185,7 +1185,7 @@ _NON_BOOL_SCALAR_TYPES = (str, int, float)
 # Names reserved by the framework for global flags.
 # These cannot be used for user-defined global flags.
 _RESERVED_GLOBAL_FLAG_NAMES = frozenset({
-    "help", "h", "version", "v", "dump-schema", "mcp",
+    "help", "h", "version", "v", "dump-schema", "mcp", "config",
 })
 
 
@@ -1961,6 +1961,7 @@ class App:
     config: bool = False
     config_path: str | None = None
     config_format: str = "json"
+    no_default_config_path: bool = False
     checks_path: str | Path | None = None
     checks_embed: bytes | None = None
     flags: list[Flag] = field(default_factory=list)
@@ -2869,6 +2870,112 @@ class App:
 
         self._groups["config"] = config_grp
 
+    def _pre_scan_reserved_flags(self, argv: list[str]) -> dict:
+        """Position-aware pre-scan for --dump-schema, --mcp, --config.
+
+        Scans the pre-command region of argv (before the first non-flag
+        token, before ``--``).  Known global flags and their values are
+        skipped so that a global-flag value matching a command name does
+        not terminate the scan early.
+
+        Returns a dict with keys: dump_schema, serve_mcp, config_path, err,
+        cleaned_argv.
+        """
+        # Build a set of known global flag tokens with value-taking info
+        known_flags: dict[str, bool] = {}  # token -> takes_value
+        for f in self._global_flags:
+            known_flags[f"--{f.name}"] = f.type is not bool
+            if f.short:
+                known_flags[f"-{f.short}"] = f.type is not bool
+            if f.type is bool and f.negatable:
+                known_flags[f"--no-{f.name}"] = False
+
+        result: dict = {}
+        exclude_indices: set[int] = set()
+        i = 0
+        while i < len(argv):
+            tok = argv[i]
+
+            # -- terminates the pre-command region
+            if tok == "--":
+                break
+
+            # Non-flag token = command name: stop scanning
+            if not tok.startswith("-") or tok == "-":
+                break
+
+            # --dump-schema
+            if tok == "--dump-schema":
+                result["dump_schema"] = True
+                return result
+
+            # --mcp
+            if tok == "--mcp":
+                result["serve_mcp"] = True
+                return result
+
+            # --config=<value>
+            if tok.startswith("--config="):
+                if not self.config:
+                    result["err"] = (
+                        "--config is not available: this app does not use config files"
+                    )
+                    return result
+                val = tok[len("--config="):]
+                if not val:
+                    result["err"] = "flag '--config' requires a value"
+                    return result
+                result["config_path"] = val
+                exclude_indices.add(i)
+                i += 1
+                continue
+
+            # --config <value>
+            if tok == "--config":
+                if not self.config:
+                    result["err"] = (
+                        "--config is not available: this app does not use config files"
+                    )
+                    return result
+                if i + 1 >= len(argv):
+                    result["err"] = "flag '--config' requires a value"
+                    return result
+                result["config_path"] = argv[i + 1]
+                exclude_indices.add(i)
+                exclude_indices.add(i + 1)
+                i += 2
+                continue
+
+            # Known global flag with --flag=value form: skip
+            if tok.startswith("--") and "=" in tok:
+                eq_pos = tok.index("=")
+                flag_part = tok[:eq_pos]
+                if flag_part in known_flags:
+                    i += 1
+                    continue
+                # Unknown flag-like token: stop
+                break
+
+            # Known global flag: skip it (and its value if non-bool)
+            if tok in known_flags:
+                if known_flags[tok]:
+                    i += 2
+                else:
+                    i += 1
+                continue
+
+            # Unknown flag-like token: stop
+            break
+
+        if exclude_indices:
+            result["cleaned_argv"] = [
+                tok for j, tok in enumerate(argv) if j not in exclude_indices
+            ]
+        else:
+            result["cleaned_argv"] = argv
+
+        return result
+
     def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object] | list[str], dict[str, str]]:
         """Parse argv (without program name) into a resolved Command and kwargs.
 
@@ -2880,23 +2987,36 @@ class App:
         values (used by passthrough command handlers).
         """
 
-        # Load config data once at parse time
-        if self.config:
-            self._config_data = self._resolve_config_data()
-
-        # Step 1: intercept app-level --help/-h, --version/-v, --dump-schema
+        # Step 1: intercept app-level --help/-h, --version/-v
         if not argv or argv == ["--help"] or argv == ["-h"]:
             raise _HelpRequested(target=self)
         if argv == ["--version"] or argv == ["-v"]:
             raise _VersionRequested()
-        if "--dump-schema" in argv:
+
+        # Position-aware pre-scan: intercept --dump-schema, --mcp, --config
+        # in the pre-command region only (before command name, before --).
+        pre_scan = self._pre_scan_reserved_flags(argv)
+        if pre_scan.get("dump_schema"):
             raise _DumpSchemaRequested()
-        if "--mcp" in argv:
+        if pre_scan.get("serve_mcp"):
             raise _McpRequested()
+        if pre_scan.get("err"):
+            raise _ParseError(pre_scan["err"])
+
+        # Load config data once at parse time
+        if self.config:
+            runtime_override = pre_scan.get("config_path")
+            hermetic = self.no_default_config_path and not runtime_override
+            self._config_data = self._resolve_config_data(
+                runtime_path_override=runtime_override,
+                hermetic=hermetic,
+            )
 
         # Step 1.5: parse global flags before command routing
+        # Use cleaned argv (--config stripped) for the rest of the pipeline
+        cleaned_argv = pre_scan.get("cleaned_argv", argv)
         self._stdin_consumed_by: str | None = None
-        global_values, remaining = self._parse_global_flags(argv)
+        global_values, remaining = self._parse_global_flags(cleaned_argv)
         self._last_global_values = global_values
 
         # Step 2: route to command or group (iterative traversal for arbitrary depth)

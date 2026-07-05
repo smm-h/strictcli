@@ -100,9 +100,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "config",
+          "name": "settings",
           "type": "str",
-          "help": "config directory",
+          "help": "settings directory",
           "default": "/etc/myapp"
         }
       ],
@@ -110,18 +110,18 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "config={config}"
+          "handler_prints": "settings={settings}"
         }
       ]
     },
     "argv": [
-      "--config",
+      "--settings",
       "/tmp",
       "cmd"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "config=/tmp"
+      "stdout_equals": "settings=/tmp"
     }
   },
   {
@@ -280,9 +280,9 @@
           "default": false
         },
         {
-          "name": "config",
+          "name": "settings",
           "type": "str",
-          "help": "config path",
+          "help": "settings path",
           "default": "/etc/myapp"
         }
       ],
@@ -290,7 +290,7 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "verbose={verbose} config={config}"
+          "handler_prints": "verbose={verbose} settings={settings}"
         }
       ]
     },
@@ -299,7 +299,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false config=/etc/myapp"
+      "stdout_equals": "verbose=false settings=/etc/myapp"
     }
   },
   {
@@ -316,9 +316,9 @@
           "default": false
         },
         {
-          "name": "config",
+          "name": "settings",
           "type": "str",
-          "help": "config path",
+          "help": "settings path",
           "default": "/etc/myapp"
         }
       ],
@@ -334,20 +334,20 @@
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose} config={config} force-deploy={force-deploy}"
+          "handler_prints": "verbose={verbose} settings={settings} force-deploy={force-deploy}"
         }
       ]
     },
     "argv": [
       "--verbose",
-      "--config",
+      "--settings",
       "/tmp/cfg",
       "deploy",
       "--force-deploy"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true config=/tmp/cfg force-deploy=true"
+      "stdout_equals": "verbose=true settings=/tmp/cfg force-deploy=true"
     }
   }
 ]
