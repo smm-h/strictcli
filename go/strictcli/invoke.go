@@ -127,8 +127,10 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 		argNames[arg.Name] = true
 	}
 
-	// Populate cliSet from kwargs, mapping param names back to flag names
-	cliSet := make(map[string]interface{})
+	// Populate sourcedStore from kwargs, mapping param names back to flag names.
+	// Provided kwargs are marked SourceCLI; absent flags will get SourceDefault
+	// when validateAndBuildKwargs applies defaults.
+	store := newSourcedStore()
 	var positionals []string
 
 	for paramName, value := range kwargs {
@@ -140,13 +142,13 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			if errStr != "" {
 				return invokeResult{exitCode: 1, err: errStr}
 			}
-			cliSet[flagName] = coerced
+			store.set(flagName, coerced, SourceCLI)
 			continue
 		}
 
 		// Check if it's a global flag
 		if globalFlagNames[flagName] {
-			cliSet[flagName] = value
+			store.set(flagName, value, SourceCLI)
 			continue
 		}
 
@@ -195,7 +197,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 	}
 
 	// Run validation and build final kwargs
-	validatedKwargs, postGlobalValues, errStr := validateAndBuildKwargs(cmd, cliSet, positionals, globalFlagNames)
+	validatedKwargs, postGlobalValues, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)
 	if errStr != "" {
 		return invokeResult{exitCode: 1, err: errStr}
 	}
@@ -212,8 +214,8 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 		if _, ok := validatedKwargs[paramName]; ok {
 			continue
 		}
-		// Use value from cliSet if provided
-		if v, ok := cliSet[gf.Name]; ok {
+		// Use value from store if provided
+		if v, ok := store.get(gf.Name); ok {
 			validatedKwargs[paramName] = v
 			continue
 		}

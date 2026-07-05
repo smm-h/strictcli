@@ -42,6 +42,93 @@ class _MissingSentinel:
 _MISSING = _MissingSentinel()
 
 
+# ---------------------------------------------------------------------------
+# Source provenance (Phase 0c)
+# ---------------------------------------------------------------------------
+
+class _Source:
+    """Where a flag value came from."""
+    CLI = "cli"          # explicitly passed on the command line
+    ENV = "env"          # from an environment variable
+    CONFIG = "config"    # from a config file
+    DEFAULT = "default"  # from the flag's default value
+    IMPLIED = "implied"  # injected by an Implies dependency
+
+
+class _SourcedEntry:
+    """A value paired with its provenance source."""
+    __slots__ = ("value", "source")
+
+    def __init__(self, value: object, source: str) -> None:
+        self.value = value
+        self.source = source
+
+
+class _SourcedStore:
+    """Map of flag-name to _SourcedEntry with source-filtered presence queries.
+
+    Replaces the plain ``cli_set: dict[str, object]`` in the validation
+    pipeline, adding provenance tracking for each value.
+    """
+
+    def __init__(self) -> None:
+        self._entries: dict[str, _SourcedEntry] = {}
+
+    def set(self, name: str, value: object, source: str) -> None:
+        self._entries[name] = _SourcedEntry(value, source)
+
+    def get(self, name: str) -> tuple[object, bool]:
+        """Return (value, True) or (None, False)."""
+        e = self._entries.get(name)
+        if e is None:
+            return None, False
+        return e.value, True
+
+    def has(self, name: str) -> bool:
+        return name in self._entries
+
+    def get_value(self, name: str) -> object:
+        """Return the value or raise KeyError."""
+        return self._entries[name].value
+
+    def set_value(self, name: str, value: object) -> None:
+        """Update the value of an existing entry, keeping its source."""
+        self._entries[name].value = value
+
+    def is_present_for_mutex(self, name: str) -> bool:
+        """Present for mutex: only cli, env, config. NOT default or implied."""
+        e = self._entries.get(name)
+        if e is None:
+            return False
+        return e.source in (_Source.CLI, _Source.ENV, _Source.CONFIG)
+
+    def is_present_for_deps(self, name: str) -> bool:
+        """Present for deps (CoRequired, Requires): everything except default."""
+        e = self._entries.get(name)
+        if e is None:
+            return False
+        return e.source != _Source.DEFAULT
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._entries
+
+    def __setitem__(self, name: str, value: object) -> None:
+        # Convenience for migration: stores with SourceCLI by default.
+        # Only used in parsing contexts where source is CLI.
+        self._entries[name] = _SourcedEntry(value, _Source.CLI)
+
+    def __getitem__(self, name: str) -> object:
+        return self._entries[name].value
+
+    @classmethod
+    def from_dict(cls, d: dict[str, object], source: str) -> "_SourcedStore":
+        """Build a store from a plain dict, marking all entries with source."""
+        store = cls()
+        for k, v in d.items():
+            store.set(k, v, source)
+        return store
+
+
 class Context:
     """Structured output context for command handlers.
 
@@ -3478,15 +3565,17 @@ class App:
         # Collect arg names for this command
         arg_names: set[str] = {a.name for a in cmd.args}
 
-        # Populate cli_set from kwargs
-        cli_set: dict[str, object] = {}
+        # Populate sourced store from kwargs. Provided kwargs are marked
+        # _Source.CLI; absent flags will get _Source.DEFAULT when
+        # _validate_and_build_kwargs applies defaults.
+        store = _SourcedStore()
         positionals: list[str] = []
 
         for key, value in kwargs.items():
             if key in param_to_flag:
                 # It's a flag -- store under flag.name (with dashes)
                 flag_name = param_to_flag[key]
-                cli_set[flag_name] = value
+                store.set(flag_name, value, _Source.CLI)
             elif key in arg_names:
                 # It's a positional arg -- collect into positionals in order
                 # (handled below after iterating all kwargs)
@@ -3511,7 +3600,7 @@ class App:
 
         # Validate and build final kwargs via the shared validation pipeline
         _cmd, final_kwargs, _global_cli_set = _validate_and_build_kwargs(
-            cmd, cli_set, positionals, global_flag_names,
+            cmd, store, positionals, global_flag_names,
         )
 
         # Merge global flag values into final kwargs
@@ -3830,7 +3919,7 @@ def _validate_choices(
 
 def _validate_and_build_kwargs(
     cmd: Command,
-    cli_set: dict[str, object],
+    store: _SourcedStore,
     positionals: list[str],
     global_flag_names: set[str],
 ) -> tuple[Command, dict[str, object], dict[str, object]]:
@@ -3839,14 +3928,15 @@ def _validate_and_build_kwargs(
     This is the second half of command parsing: mutex enforcement, implies
     resolution, dependency checks, defaults, choices validation, custom
     validation, positional arg resolution, and kwargs building. It operates
-    on typed values in cli_set and doesn't care how they were produced.
+    on sourced values in the store and doesn't care how they were produced.
 
     Returns (cmd, kwargs, global_cli_set).
     """
-    # Step 4.5: enforce mutex group constraints (before defaults are applied,
-    # so cli_set only contains values explicitly provided via CLI or env)
+    # Step 4.5: enforce mutex group constraints (before defaults are applied).
+    # Only cli/env/config sources count as "present" for mutex evaluation.
+    # Default and implied sources do NOT trigger mutex violations.
     for mg in cmd.mutex:
-        set_flags = [f for f in mg.flags if f.name in cli_set]
+        set_flags = [f for f in mg.flags if store.is_present_for_mutex(f.name)]
         if len(set_flags) > 1:
             names = " and ".join(f"--{f.name}" for f in set_flags)
             raise _ParseError(f"{names} are mutually exclusive")
@@ -3855,12 +3945,13 @@ def _validate_and_build_kwargs(
             raise _ParseError(f"one of {names} is required")
 
     # Step 4.55: resolve Implies dependencies (before dependency checks, so
-    # implied values participate in downstream CoRequired/Requires validation)
+    # implied values participate in downstream CoRequired/Requires validation).
+    # Implied values are stored with _Source.IMPLIED.
     for dep in cmd.dependencies:
         if isinstance(dep, Implies):
-            if dep.flag in cli_set:
-                if dep.implies in cli_set:
-                    if cli_set[dep.implies] != dep.value:
+            if store.is_present_for_deps(dep.flag):
+                if store.has(dep.implies):
+                    if store[dep.implies] != dep.value:
                         neg = "no-" if not dep.value else ""
                         explicit_neg = "" if not dep.value else "no-"
                         raise _ParseError(
@@ -3868,18 +3959,18 @@ def _validate_and_build_kwargs(
                             f"but '--{explicit_neg}{dep.implies}' was explicitly provided"
                         )
                 else:
-                    cli_set[dep.implies] = dep.value
+                    store.set(dep.implies, dep.value, _Source.IMPLIED)
 
-    # Step 4.6: enforce flag dependencies (before defaults, so cli_set only
-    # contains values explicitly provided via CLI or env)
+    # Step 4.6: enforce flag dependencies (before defaults).
+    # is_present_for_deps: cli, env, config, implied count. Default does NOT.
     for dep in cmd.dependencies:
         if isinstance(dep, CoRequired):
-            present = [f for f in dep.flags if f in cli_set]
+            present = [f for f in dep.flags if store.is_present_for_deps(f)]
             if 0 < len(present) < len(dep.flags):
                 names = ", ".join(f"--{f}" for f in dep.flags)
                 raise _ParseError(f"flags {names} must be used together")
         elif isinstance(dep, Requires):
-            if dep.flag in cli_set and dep.depends_on not in cli_set:
+            if store.is_present_for_deps(dep.flag) and not store.is_present_for_deps(dep.depends_on):
                 raise _ParseError(
                     f"flag '--{dep.flag}' requires '--{dep.depends_on}'"
                 )
@@ -3892,22 +3983,22 @@ def _validate_and_build_kwargs(
         for mf in mg.flags:
             mutex_flag_names.add(mf.name)
 
-    # Step 5: apply defaults
+    # Step 5: apply defaults (SourceDefault)
     for f in cmd.flags:
-        if f.name in cli_set:
+        if store.has(f.name):
             continue
         if f.compound == "dict":
             # Dict flags default to {} (never required)
-            cli_set[f.name] = dict(f.default) if f.default else {}
+            store.set(f.name, dict(f.default) if f.default else {}, _Source.DEFAULT)
         elif f.repeatable:
             # Repeatable flags default to [] (never required)
-            cli_set[f.name] = list(f.default) if f.default else []
+            store.set(f.name, list(f.default) if f.default else [], _Source.DEFAULT)
         elif f.default is not None:
-            cli_set[f.name] = f.default
+            store.set(f.name, f.default, _Source.DEFAULT)
         elif f.name in mutex_flag_names:
             # Mutex group flags with no default get None instead of being
             # required -- the mutex group itself enforces required semantics
-            cli_set[f.name] = None
+            store.set(f.name, None, _Source.DEFAULT)
         else:
             # Flag with no default and no value: required
             if f.type is bool and f.negatable:
@@ -3923,23 +4014,23 @@ def _validate_and_build_kwargs(
 
     # Step 5.5: validate choices
     for f in cmd.flags:
-        if f.name in cli_set:
-            _validate_choices(f.name, cli_set[f.name], f.repeatable, f.choices)
+        if store.has(f.name):
+            _validate_choices(f.name, store[f.name], f.repeatable, f.choices)
 
     # Step 5.6: custom validation
     for f in cmd.flags:
-        if f.validate is not None and f.name in cli_set:
+        if f.validate is not None and store.has(f.name):
             if f.repeatable:
-                for val in cli_set[f.name]:
+                for val in store[f.name]:
                     try:
                         f.validate(val)
                     except ValueError as e:
                         raise _ParseError(f"--{f.name}: {e}")
-            elif cli_set[f.name] is not None:
+            elif store[f.name] is not None:
                 # None means the flag was not passed (an unset mutex flag) --
                 # there is no value to validate.
                 try:
-                    f.validate(cli_set[f.name])
+                    f.validate(store[f.name])
                 except ValueError as e:
                     raise _ParseError(f"--{f.name}: {e}")
 
@@ -3975,7 +4066,7 @@ def _validate_and_build_kwargs(
     # Step 7: build kwargs dict (command flags only)
     kwargs: dict[str, object] = {}
     for f in cmd.flags:
-        kwargs[_flag_param_name(f.name)] = cli_set[f.name]
+        kwargs[_flag_param_name(f.name)] = store[f.name]
     for a in cmd.args:
         if a.name in arg_values:
             kwargs[a.name] = arg_values[a.name]
@@ -3983,8 +4074,8 @@ def _validate_and_build_kwargs(
     # Separate out global flag values parsed from post-command tokens
     global_cli_set: dict[str, object] = {}
     for name in global_flag_names:
-        if name in cli_set:
-            global_cli_set[name] = cli_set[name]
+        if store.has(name):
+            global_cli_set[name] = store[name]
 
     return cmd, kwargs, global_cli_set
 
@@ -4328,7 +4419,12 @@ def _parse_command(
                         )
                 cli_set[f.name] = coerced
 
-    return _validate_and_build_kwargs(cmd, cli_set, positionals, global_flag_names)
+    # Wrap cli_set into a _SourcedStore. Everything parsed above is marked
+    # _Source.CLI -- env and config sources will get proper Source values
+    # in Phase 2a; for now they are temporarily _Source.CLI.
+    store = _SourcedStore.from_dict(cli_set, _Source.CLI)
+
+    return _validate_and_build_kwargs(cmd, store, positionals, global_flag_names)
 
 
 def _flag_param_name(flag_name: str) -> str:

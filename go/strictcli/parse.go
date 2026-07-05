@@ -10,6 +10,90 @@ import (
 	"strings"
 )
 
+// Source represents where a flag value came from.
+type Source int
+
+const (
+	SourceCLI     Source = iota // explicitly passed on the command line
+	SourceEnv     Source = iota // from an environment variable
+	SourceConfig  Source = iota // from a config file
+	SourceDefault Source = iota // from the flag's default value
+	SourceImplied Source = iota // injected by an Implies dependency
+)
+
+// sourcedEntry stores a value alongside its provenance.
+type sourcedEntry struct {
+	value  interface{}
+	source Source
+}
+
+// sourcedStore wraps a map of flag-name to sourcedEntry, providing
+// source-filtered presence queries for mutex and dependency evaluation.
+type sourcedStore struct {
+	entries map[string]sourcedEntry
+}
+
+func newSourcedStore() *sourcedStore {
+	return &sourcedStore{entries: make(map[string]sourcedEntry)}
+}
+
+// set stores a value with its source.
+func (s *sourcedStore) set(name string, value interface{}, src Source) {
+	s.entries[name] = sourcedEntry{value: value, source: src}
+}
+
+// get returns the value and whether the key exists (ignoring source).
+func (s *sourcedStore) get(name string) (interface{}, bool) {
+	e, ok := s.entries[name]
+	if !ok {
+		return nil, false
+	}
+	return e.value, true
+}
+
+// getEntry returns the full sourcedEntry and whether the key exists.
+func (s *sourcedStore) getEntry(name string) (sourcedEntry, bool) {
+	e, ok := s.entries[name]
+	return e, ok
+}
+
+// has returns true if the key exists regardless of source.
+func (s *sourcedStore) has(name string) bool {
+	_, ok := s.entries[name]
+	return ok
+}
+
+// isPresentForMutex returns true if the flag is "present" for mutex
+// evaluation. Only cli, env, and config sources count. Default and
+// implied values do NOT trigger mutex violations.
+func (s *sourcedStore) isPresentForMutex(name string) bool {
+	e, ok := s.entries[name]
+	if !ok {
+		return false
+	}
+	return e.source == SourceCLI || e.source == SourceEnv || e.source == SourceConfig
+}
+
+// isPresentForDeps returns true if the flag is "present" for dependency
+// checks (CoRequired, Requires). CLI, env, config, and implied sources
+// count. Default values do NOT count.
+func (s *sourcedStore) isPresentForDeps(name string) bool {
+	e, ok := s.entries[name]
+	if !ok {
+		return false
+	}
+	return e.source != SourceDefault
+}
+
+// toMap returns a plain map of name -> value (dropping source info).
+func (s *sourcedStore) toMap() map[string]interface{} {
+	m := make(map[string]interface{}, len(s.entries))
+	for k, e := range s.entries {
+		m[k] = e.value
+	}
+	return m
+}
+
 const atPrefixMaxSize = 1024 * 1024 // 1 MB
 
 // resolveAtPrefix resolves @-prefix for string flag values.
@@ -398,7 +482,15 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 	}
 
-	return validateAndBuildKwargs(cmd, cliSet, positionals, globalFlagNames)
+	// Wrap cliSet into a sourcedStore. Everything parsed above is marked
+	// SourceCLI -- env and config sources will get proper Source values
+	// in Phase 2a; for now they are temporarily SourceCLI.
+	store := newSourcedStore()
+	for k, v := range cliSet {
+		store.set(k, v, SourceCLI)
+	}
+
+	return validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)
 }
 
 // applyFlagDefault resolves the default value for a flag that was not provided
@@ -443,17 +535,20 @@ func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string) (i
 }
 
 // validateAndBuildKwargs performs pure validation and kwargs assembly on the
-// already-parsed cliSet values. It enforces mutex constraints, resolves implies
-// dependencies, checks co-required/requires dependencies, applies defaults,
-// validates choices, runs custom validation, resolves positional args, and
-// builds the final kwargs map.
+// already-parsed sourced values. It enforces mutex constraints (using
+// source-filtered presence), resolves implies dependencies, checks
+// co-required/requires dependencies, applies defaults, validates choices,
+// runs custom validation, resolves positional args, and builds the final
+// kwargs map.
 // Returns (kwargs, postGlobalValues, errorString).
-func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positionals []string, globalFlagNames map[string]bool) (map[string]interface{}, map[string]interface{}, string) {
-	// Enforce mutex group constraints (before defaults)
+func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []string, globalFlagNames map[string]bool) (map[string]interface{}, map[string]interface{}, string) {
+	// Enforce mutex group constraints (before defaults).
+	// Only cli/env/config sources count as "present" for mutex evaluation.
+	// Default and implied sources do NOT trigger mutex violations.
 	for _, mg := range cmd.mutex {
 		var setFlags []string
 		for _, f := range mg.Flags {
-			if _, ok := cliSet[f.Name]; ok {
+			if store.isPresentForMutex(f.Name) {
 				setFlags = append(setFlags, "--"+f.Name)
 			}
 		}
@@ -469,11 +564,12 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 		}
 	}
 
-	// Resolve Implies dependencies (before general dependency validation)
+	// Resolve Implies dependencies (before general dependency validation).
+	// Implied values are stored with SourceImplied.
 	for _, dep := range cmd.dependencies {
 		if d, ok := dep.(Implies); ok {
-			if _, triggerSet := cliSet[d.Flag]; triggerSet {
-				if targetVal, targetSet := cliSet[d.Implies]; targetSet {
+			if store.isPresentForDeps(d.Flag) {
+				if targetVal, targetSet := store.get(d.Implies); targetSet {
 					// Target was explicitly set -- check for conflict
 					if targetVal.(bool) != d.Value {
 						neg := ""
@@ -491,20 +587,21 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 					}
 				} else {
 					// Target not set -- inject the implied value
-					cliSet[d.Implies] = d.Value
+					store.set(d.Implies, d.Value, SourceImplied)
 				}
 			}
 		}
 	}
 
-	// Enforce dependency constraints
+	// Enforce dependency constraints.
+	// isPresentForDeps: cli, env, config, implied count. Default does NOT.
 	for _, dep := range cmd.dependencies {
 		switch d := dep.(type) {
 		case CoRequired:
 			var setFlags []string
 			var unsetFlags []string
 			for _, flagName := range d.Flags {
-				if _, ok := cliSet[flagName]; ok {
+				if store.isPresentForDeps(flagName) {
 					setFlags = append(setFlags, "--"+flagName)
 				} else {
 					unsetFlags = append(unsetFlags, "--"+flagName)
@@ -518,8 +615,8 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 				return nil, nil, fmt.Sprintf("flags %s must be used together", strings.Join(names, ", "))
 			}
 		case Requires:
-			if _, flagSet := cliSet[d.Flag]; flagSet {
-				if _, depSet := cliSet[d.DependsOn]; !depSet {
+			if store.isPresentForDeps(d.Flag) {
+				if !store.isPresentForDeps(d.DependsOn) {
 					return nil, nil, fmt.Sprintf("flag '--%s' requires '--%s'", d.Flag, d.DependsOn)
 				}
 			}
@@ -534,23 +631,23 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 		}
 	}
 
-	// Apply defaults
+	// Apply defaults (SourceDefault)
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
-		if _, ok := cliSet[f.Name]; ok {
+		if store.has(f.Name) {
 			continue
 		}
 		val, errMsg := applyFlagDefault(f, mutexFlagNames, "")
 		if errMsg != "" {
 			return nil, nil, errMsg
 		}
-		cliSet[f.Name] = val
+		store.set(f.Name, val, SourceDefault)
 	}
 
 	// Validate choices
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
-		val, ok := cliSet[f.Name]
+		val, ok := store.get(f.Name)
 		if !ok {
 			continue
 		}
@@ -565,7 +662,7 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 		if f.Validate == nil {
 			continue
 		}
-		val, ok := cliSet[f.Name]
+		val, ok := store.get(f.Name)
 		if !ok || val == nil {
 			// nil means the flag was not passed (Default(nil) or an unset
 			// mutex flag) -- there is no value to validate.
@@ -650,7 +747,9 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 	kwargs := make(map[string]interface{})
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
-		kwargs[flagParamName(f.Name)] = cliSet[f.Name]
+		if val, ok := store.get(f.Name); ok {
+			kwargs[flagParamName(f.Name)] = val
+		}
 	}
 	for _, a := range cmd.args {
 		if v, ok := argValues[a.Name]; ok {
@@ -661,8 +760,8 @@ func validateAndBuildKwargs(cmd *Command, cliSet map[string]interface{}, positio
 	// Separate out global flag values parsed from post-command tokens
 	postGlobalValues := make(map[string]interface{})
 	for name := range globalFlagNames {
-		if v, ok := cliSet[name]; ok {
-			postGlobalValues[flagParamName(name)] = v
+		if val, ok := store.get(name); ok {
+			postGlobalValues[flagParamName(name)] = val
 		}
 	}
 
