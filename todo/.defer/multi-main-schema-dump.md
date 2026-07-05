@@ -26,3 +26,9 @@ The Go convention today is one strictcli CLI per project, with `--dump-schema` w
 ## Effort
 
 S–M in strictcli itself (plus conformance updates); consumer coordination tracked in their own todos.
+
+---
+
+## Deferral rationale (2026-07-05)
+
+Deferred: rejected for now on merit. Multiple CLIs in one repo have an ecosystem-native answer — rlsbl monorepo members (each CLI as a member with its own go.mod, own .strictcli/schema.json, own scaffold), or command groups within a single strictcli app. The one friction (shared internal/ packages must become an importable member) is a pattern the ecosystem already runs. Building per-main schema machinery across strictcli + rlsbl + selfdoc is not justified while no consumer has a strong case for separate binary distribution. Revisit if a consumer demonstrates a genuine need for separately-distributed binaries that monorepo members cannot serve. (Decided 2026-07-05 in triage session.)
