@@ -338,6 +338,45 @@ def _coerce_config_value(value: object, flag: "Flag") -> object:
     return _coerce_config_scalar(value, flag.type)
 
 
+def _resolve_flag_show_source(f: "Flag", config_data: dict) -> tuple[object, str]:
+    """Resolve the effective value and source for a flag in config show context.
+
+    Precedence: env > config > default.
+    "cli" is structurally impossible in config show because the app's own
+    flags were never passed on the command line.
+    """
+    # Check env first (highest precedence after CLI)
+    if f.env is not None:
+        env_val = os.environ.get(f.env)
+        if env_val is not None:
+            # Coerce the env value to the flag's type for display
+            if f.type is bool:
+                try:
+                    return _strict_bool(env_val), "env"
+                except ValueError:
+                    return env_val, "env"
+            elif f.type is int:
+                try:
+                    return _strict_int(env_val), "env"
+                except ValueError:
+                    return env_val, "env"
+            elif f.type is float:
+                try:
+                    return _strict_float(env_val), "env"
+                except ValueError:
+                    return env_val, "env"
+            else:
+                return env_val, "env"
+    # Check config
+    param = _flag_param_name(f.name)
+    if param in config_data:
+        return config_data[param], "config"
+    # Default
+    if f.default is not None:
+        return f.default, "default"
+    return None, "default"
+
+
 def _format_config_value(value: object) -> str:
     """Format a config value for display, matching Go's formatConfigValue."""
     if value is None:
@@ -1993,6 +2032,7 @@ class App:
             seen.add(f.name)
         self._global_flags: list[Flag] = list(self.flags)
         self._last_global_values: dict[str, object] = {}
+        self._last_sources: dict[str, str] = {}
         # Validate config_format
         if self.config_format not in ("json", "toml"):
             raise ValueError(
@@ -2519,6 +2559,10 @@ class App:
         )
 
         # config show
+        #
+        # Source resolution uses the shared precedence chain: env > config > default.
+        # "cli" is structurally impossible here -- config show is a subcommand,
+        # so the app's own flags were never passed on the command line.
         def _config_show_handler(**_kw) -> int:
             use_json = _kw.get("json", False)
             config_data = app_ref._resolve_config_data()
@@ -2527,15 +2571,7 @@ class App:
                 result = {}
                 for f in all_flags:
                     param = _flag_param_name(f.name)
-                    if param in config_data:
-                        value = config_data[param]
-                        source = "config"
-                    elif f.default is not None:
-                        value = f.default
-                        source = "default"
-                    else:
-                        value = None
-                        source = "default"
+                    value, source = _resolve_flag_show_source(f, config_data)
                     result[param] = {"value": value, "source": source}
                 # Include config fields
                 for cf_name, cf in app_ref._config_fields.items():
@@ -2563,15 +2599,7 @@ class App:
             # --plain
             for f in all_flags:
                 param = _flag_param_name(f.name)
-                if param in config_data:
-                    value = config_data[param]
-                    source = "config"
-                elif f.default is not None:
-                    value = f.default
-                    source = "default"
-                else:
-                    value = None
-                    source = "default"
+                value, source = _resolve_flag_show_source(f, config_data)
                 print(f"{param} = {_format_config_value(value)}  (source: {source})")
             # Include config fields in plain output
             if app_ref._config_fields:
@@ -3016,7 +3044,7 @@ class App:
         # Use cleaned argv (--config stripped) for the rest of the pipeline
         cleaned_argv = pre_scan.get("cleaned_argv", argv)
         self._stdin_consumed_by: str | None = None
-        global_values, remaining = self._parse_global_flags(cleaned_argv)
+        global_values, global_source_map, remaining = self._parse_global_flags(cleaned_argv)
         self._last_global_values = global_values
 
         # Step 2: route to command or group (iterative traversal for arbitrary depth)
@@ -3066,6 +3094,10 @@ class App:
             if gf.name in post_global:
                 global_values[gf.name] = post_global[gf.name]
             kwargs[_flag_param_name(gf.name)] = global_values[gf.name]
+
+        # Merge global sources into command sources
+        for k, v in global_source_map.items():
+            sources[k] = v
 
         return cmd, kwargs, sources
 
@@ -3131,8 +3163,8 @@ class App:
 
     def _parse_global_flags(
         self, argv: list[str]
-    ) -> tuple[dict[str, object], list[str]]:
-        """Parse global flags from argv, returning (global_values, remaining_tokens).
+    ) -> tuple[dict[str, object], dict[str, str], list[str]]:
+        """Parse global flags from argv, returning (global_values, global_sources, remaining_tokens).
 
         Scans tokens from left to right. Global flags are consumed; the first
         non-global-flag token (the command name) and everything after it are
@@ -3140,7 +3172,7 @@ class App:
         and is included in the remaining tokens.
         """
         if not self._global_flags:
-            return {}, argv
+            return {}, {}, argv
 
         # Build lookup tables
         long_lookup: dict[str, Flag] = {}
@@ -3306,6 +3338,13 @@ class App:
             # Loop completed without break -- all tokens consumed
             remaining = []
 
+        # Track sources for global flags. Values already in cli_set are CLI.
+        global_sources: dict[str, str] = {}
+        for k in cli_set:
+            global_sources[_flag_param_name(k)] = "cli"
+        env_names: set[str] = set()
+        config_names: set[str] = set()
+
         # Resolve env vars for global flags not set by CLI
         for f in self._global_flags:
             if f.name in cli_set:
@@ -3418,6 +3457,7 @@ class App:
                                 f.name, env_val, self._stdin_consumed_by,
                             )
                             cli_set[f.name] = [resolved] if f.repeatable else resolved
+                    env_names.add(f.name)
 
         # Resolve config values for global flags not set by CLI or env
         if self._config_data:
@@ -3441,6 +3481,13 @@ class App:
                                 f"'{_format_value_for_error(dup)}'"
                             )
                     cli_set[f.name] = coerced
+                    config_names.add(f.name)
+
+        # Assign sources for env and config values
+        for name in env_names:
+            global_sources[_flag_param_name(name)] = "env"
+        for name in config_names:
+            global_sources[_flag_param_name(name)] = "config"
 
         # Apply defaults for global flags not set by CLI or env
         for f in self._global_flags:
@@ -3462,13 +3509,14 @@ class App:
                         f"--{f.name}"
                     )
                 raise _ParseError(f"global flag '--{f.name}' is required")
+            global_sources[_flag_param_name(f.name)] = "default"
 
         # Validate choices for global flags
         for f in self._global_flags:
             if f.name in cli_set:
                 _validate_choices(f.name, cli_set[f.name], f.repeatable, f.choices)
 
-        return cli_set, remaining
+        return cli_set, global_sources, remaining
 
     def _find_command_prefix(self, cmd: Command) -> str:
         """Find the group prefix for a command (for help formatting).
@@ -3528,6 +3576,7 @@ class App:
             print(f"try '{prefix} --help'", file=sys.stderr)
             sys.exit(1)
         else:
+            self._last_sources = sources
             if cmd.passthrough is not None:
                 result = cmd.passthrough.handler(cmd.name, data, self._last_global_values)
             elif cmd.needs_context:
@@ -3598,6 +3647,8 @@ class App:
             stderr_buf.write(f"try '{prefix} --help'\n")
             exit_code = 1
         else:
+            # Store sources for function handlers that need provenance info
+            self._last_sources = sources
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
                 try:
                     if cmd.passthrough is not None:
@@ -3750,6 +3801,9 @@ class App:
                 # Global flag not provided -- use its default
                 if gf.default is not None:
                     final_kwargs[_flag_param_name(gf.name)] = gf.default
+
+        # Store sources for function handlers that need provenance info
+        self._last_sources = invoke_sources
 
         if cmd.needs_context:
             ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources)
@@ -4430,6 +4484,10 @@ def _parse_command(
         positionals.append(tok)
         i += 1
 
+    # Track which flag names are set by env vs config (for source attribution).
+    env_names: set[str] = set()
+    config_names: set[str] = set()
+
     # Step 4: resolve env vars for flags not set by CLI
     for f in cmd.flags:
         if f.name in cli_set:
@@ -4542,6 +4600,7 @@ def _parse_command(
                             f.name, env_val, stdin_consumed_by[0],
                         )
                         cli_set[f.name] = [resolved] if f.repeatable else resolved
+                env_names.add(f.name)
 
     # Step 4.2: resolve config values for flags not set by CLI or env
     if config_data:
@@ -4565,11 +4624,19 @@ def _parse_command(
                             f"'{_format_value_for_error(dup)}'"
                         )
                 cli_set[f.name] = coerced
+                config_names.add(f.name)
 
-    # Wrap cli_set into a _SourcedStore. Everything parsed above is marked
-    # _Source.CLI -- env and config sources will get proper Source values
-    # in Phase 2a; for now they are temporarily _Source.CLI.
-    store = _SourcedStore.from_dict(cli_set, _Source.CLI)
+    # Wrap cli_set into a _SourcedStore with proper source attribution.
+    # CLI-parsed values are _Source.CLI, env-resolved values are _Source.ENV,
+    # and config-resolved values are _Source.CONFIG.
+    store = _SourcedStore()
+    for k, v in cli_set.items():
+        if k in env_names:
+            store.set(k, v, _Source.ENV)
+        elif k in config_names:
+            store.set(k, v, _Source.CONFIG)
+        else:
+            store.set(k, v, _Source.CLI)
 
     return _validate_and_build_kwargs(cmd, store, positionals, global_flag_names)
 

@@ -1949,7 +1949,7 @@ func (a *App) doParse(argv []string) parseResult {
 
 	// Extract global flags from cleaned argv (--config stripped), leaving
 	// the rest for command routing.
-	globalValues, rest, globalErr := a.extractGlobalFlags(preScan.cleanedArgv)
+	globalValues, globalSourceMap, rest, globalErr := a.extractGlobalFlags(preScan.cleanedArgv)
 	if globalErr != "" {
 		return parseResult{parseErr: globalErr}
 	}
@@ -2026,6 +2026,10 @@ func (a *App) doParse(argv []string) parseResult {
 	for k, v := range globalValues {
 		kwargs[k] = v
 	}
+	// Merge global sources into command sources
+	for k, v := range globalSourceMap {
+		cmdSources[k] = v
+	}
 	return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources}
 }
 
@@ -2048,11 +2052,12 @@ func tokensContainHelp(tokens []string) bool {
 // "--", returning everything from that point onward as remaining tokens.
 // This matches Python's _parse_global_flags behavior.  Global flags appearing
 // after the command name are handled by parseCommand instead.
-// Returns (globalValues map, remaining argv, error string).
-func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []string, string) {
+// Returns (globalValues map, globalSources map, remaining argv, error string).
+func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, map[string]string, []string, string) {
 	globalValues := make(map[string]interface{})
+	globalSources := make(map[string]string)
 	if len(a.globalFlags) == 0 {
-		return globalValues, argv, ""
+		return globalValues, globalSources, argv, ""
 	}
 
 	// Build lookup maps for global flags
@@ -2109,10 +2114,10 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 			valuePart := tok[eqPos+1:]
 			if f, ok := longLookup[flagPart]; ok {
 				if f.Type == TypeBool {
-					return nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
+					return nil, nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
 				}
 				if errStr := parseFlagRawValue(f, valuePart, globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
-					return nil, nil, errStr
+					return nil, nil, nil, errStr
 				}
 				i++
 				continue
@@ -2135,10 +2140,10 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				i++
 			} else {
 				if i+1 >= len(argv) {
-					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
+					return nil, nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
 				if errStr := parseFlagRawValue(f, argv[i+1], globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
-					return nil, nil, errStr
+					return nil, nil, nil, errStr
 				}
 				i += 2
 			}
@@ -2152,10 +2157,10 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				i++
 			} else {
 				if i+1 >= len(argv) {
-					return nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
+					return nil, nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
 				}
 				if errStr := parseFlagRawValue(f, argv[i+1], globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
-					return nil, nil, errStr
+					return nil, nil, nil, errStr
 				}
 				i += 2
 			}
@@ -2167,6 +2172,12 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 	}
 
 	remaining := argv[i:]
+
+	// All values set in the CLI loop above are SourceCLI.
+	// Mark them now before env/config/default layers add more.
+	for k := range globalValues {
+		globalSources[flagParamName(k)] = "cli"
+	}
 
 	// Resolve env vars for global flags not set by CLI
 	for i := range a.globalFlags {
@@ -2181,14 +2192,15 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 				if IsDictType(f.Type) {
 					entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
 					if errStr != "" {
-						return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+						return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
 					}
 					globalValues[f.Name] = entries
+					globalSources[flagParamName(f.Name)] = "env"
 					continue
 				}
 				if IsListType(f.Type) {
 					if f.EnvSeparator == "" {
-						return nil, nil, fmt.Sprintf("--%s: list flag with env requires env_separator", f.Name)
+						return nil, nil, nil, fmt.Sprintf("--%s: list flag with env requires env_separator", f.Name)
 					}
 					parts := splitEscaped(envVal, f.EnvSeparator[0])
 					elemType := ItemType(f.Type)
@@ -2196,26 +2208,27 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 					for _, element := range parts {
 						val, errStr := coerceToScalar(f.Name, element, elemType, nil)
 						if errStr != "" {
-							return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+							return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
 						}
 						coercedList = append(coercedList, val)
 					}
 					if f.Unique {
 						if dup := findDuplicate(coercedList); dup != nil {
-							return nil, nil, fmt.Sprintf(
+							return nil, nil, nil, fmt.Sprintf(
 								"--%s: duplicate value '%s' (from env var '%s')",
 								f.Name, formatValueForError(dup), f.Env,
 							)
 						}
 					}
 					globalValues[f.Name] = coercedList
+					globalSources[flagParamName(f.Name)] = "env"
 					continue
 				}
 				switch f.Type {
 				case TypeBool:
 					boolVal, err := parseBoolStrict(envVal)
 					if err != nil {
-						return nil, nil, fmt.Sprintf(
+						return nil, nil, nil, fmt.Sprintf(
 							"invalid boolean value '%s' for env var '%s' (flag '--%s')",
 							envVal, f.Env, f.Name,
 						)
@@ -2228,7 +2241,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 						for _, element := range parts {
 							intVal, err := parseIntStrict(element)
 							if err != nil {
-								return nil, nil, fmt.Sprintf(
+								return nil, nil, nil, fmt.Sprintf(
 									"--%s: %s (from env var '%s')",
 									f.Name, err.Error(), f.Env,
 								)
@@ -2237,7 +2250,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 						}
 						if f.Unique {
 							if dup := findDuplicate(coercedList); dup != nil {
-								return nil, nil, fmt.Sprintf(
+								return nil, nil, nil, fmt.Sprintf(
 									"--%s: duplicate value '%s' (from env var '%s')",
 									f.Name, formatValueForError(dup), f.Env,
 								)
@@ -2247,7 +2260,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 					} else {
 						intVal, err := parseIntStrict(envVal)
 						if err != nil {
-							return nil, nil, fmt.Sprintf(
+							return nil, nil, nil, fmt.Sprintf(
 								"--%s: %s (from env var '%s')",
 								f.Name, err.Error(), f.Env,
 							)
@@ -2265,13 +2278,13 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 						for _, element := range parts {
 							floatVal, errStr := parseFloatStrict(f.Name, element)
 							if errStr != "" {
-								return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+								return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
 							}
 							coercedList = append(coercedList, floatVal)
 						}
 						if f.Unique {
 							if dup := findDuplicate(coercedList); dup != nil {
-								return nil, nil, fmt.Sprintf(
+								return nil, nil, nil, fmt.Sprintf(
 									"--%s: duplicate value '%s' (from env var '%s')",
 									f.Name, formatValueForError(dup), f.Env,
 								)
@@ -2281,7 +2294,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 					} else {
 						floatVal, errStr := parseFloatStrict(f.Name, envVal)
 						if errStr != "" {
-							return nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+							return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
 						}
 						if f.Repeatable {
 							globalValues[f.Name] = []interface{}{floatVal}
@@ -2296,13 +2309,13 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 						for _, element := range parts {
 							resolved, errStr := resolveAtPrefix(f.Name, element, &a.stdinConsumedBy)
 							if errStr != "" {
-								return nil, nil, errStr
+								return nil, nil, nil, errStr
 							}
 							coercedList = append(coercedList, resolved)
 						}
 						if f.Unique {
 							if dup := findDuplicate(coercedList); dup != nil {
-								return nil, nil, fmt.Sprintf(
+								return nil, nil, nil, fmt.Sprintf(
 									"--%s: duplicate value '%s' (from env var '%s')",
 									f.Name, formatValueForError(dup), f.Env,
 								)
@@ -2312,7 +2325,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 					} else {
 						resolved, errStr := resolveAtPrefix(f.Name, envVal, &a.stdinConsumedBy)
 						if errStr != "" {
-							return nil, nil, errStr
+							return nil, nil, nil, errStr
 						}
 						if f.Repeatable {
 							globalValues[f.Name] = []interface{}{resolved}
@@ -2321,6 +2334,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 						}
 					}
 				}
+				globalSources[flagParamName(f.Name)] = "env"
 				continue
 			}
 		}
@@ -2337,16 +2351,17 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 			if v, ok := a.configData[param]; ok {
 				coerced, errStr := coerceConfigValue(v, f)
 				if errStr != "" {
-					return nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+					return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
 				}
 				if f.Unique {
 					if arr, ok := coerced.([]interface{}); ok {
 						if dup := findDuplicate(arr); dup != nil {
-							return nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
+							return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
 						}
 					}
 				}
 				globalValues[f.Name] = coerced
+				globalSources[flagParamName(f.Name)] = "config"
 			}
 		}
 	}
@@ -2359,9 +2374,10 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		}
 		val, errMsg := applyFlagDefault(f, nil, "global ")
 		if errMsg != "" {
-			return nil, nil, errMsg
+			return nil, nil, nil, errMsg
 		}
 		globalValues[f.Name] = val
+		globalSources[flagParamName(f.Name)] = "default"
 	}
 
 	// Validate choices for global flags
@@ -2372,7 +2388,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 			continue
 		}
 		if errMsg := validateChoices(f.Name, val, f.Repeatable, f.Choices, false); errMsg != "" {
-			return nil, nil, errMsg
+			return nil, nil, nil, errMsg
 		}
 	}
 
@@ -2382,7 +2398,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, []strin
 		result[flagParamName(k)] = v
 	}
 
-	return result, remaining, ""
+	return result, globalSources, remaining, ""
 }
 
 // buildAndValidateCommand creates and validates a Command.

@@ -318,6 +318,10 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		i++
 	}
 
+	// Track which flag names are set by env vs config (for source attribution).
+	envNames := make(map[string]bool)
+	configNames := make(map[string]bool)
+
 	// Resolve env vars for flags not set by CLI
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
@@ -338,6 +342,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
 			}
 			cliSet[f.Name] = entries
+			envNames[f.Name] = true
 			continue
 		}
 		if IsListType(f.Type) {
@@ -363,6 +368,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				}
 			}
 			cliSet[f.Name] = coercedList
+			envNames[f.Name] = true
 			continue
 		}
 		switch f.Type {
@@ -475,6 +481,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				}
 			}
 		}
+		envNames[f.Name] = true
 	}
 
 	// Resolve config values for flags not set by CLI or env
@@ -498,16 +505,23 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					}
 				}
 				cliSet[f.Name] = coerced
+				configNames[f.Name] = true
 			}
 		}
 	}
 
-	// Wrap cliSet into a sourcedStore. Everything parsed above is marked
-	// SourceCLI -- env and config sources will get proper Source values
-	// in Phase 2a; for now they are temporarily SourceCLI.
+	// Wrap cliSet into a sourcedStore with proper source attribution.
+	// CLI-parsed values are SourceCLI, env-resolved values are SourceEnv,
+	// and config-resolved values are SourceConfig.
 	store := newSourcedStore()
 	for k, v := range cliSet {
-		store.set(k, v, SourceCLI)
+		if envNames[k] {
+			store.set(k, v, SourceEnv)
+		} else if configNames[k] {
+			store.set(k, v, SourceConfig)
+		} else {
+			store.set(k, v, SourceCLI)
+		}
 	}
 
 	return validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)

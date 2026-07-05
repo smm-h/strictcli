@@ -599,6 +599,49 @@ func writeConfigFile(data map[string]interface{}, path string, format string) in
 	return 0
 }
 
+// resolveFlagShowSource resolves the effective value and source for a flag
+// in the config show context. Precedence: env > config > default.
+// "cli" is structurally impossible in config show because the app's own
+// flags were never passed on the command line.
+func resolveFlagShowSource(f *Flag, configData map[string]interface{}) (interface{}, string) {
+	// Check env first (highest precedence after CLI)
+	if f.Env != "" {
+		if envVal, ok := os.LookupEnv(f.Env); ok {
+			// Coerce the env value to the flag's type.
+			// For show purposes, we display the raw string if coercion
+			// fails (the parse-time error path handles actual errors).
+			switch f.Type {
+			case TypeBool:
+				if boolVal, err := parseBoolStrict(envVal); err == nil {
+					return boolVal, "env"
+				}
+			case TypeInt:
+				if intVal, err := parseIntStrict(envVal); err == nil {
+					return intVal, "env"
+				}
+			case TypeFloat:
+				if floatVal, err := parseFloatStrictValue(envVal); err == nil {
+					return floatVal, "env"
+				}
+			default:
+				return envVal, "env"
+			}
+			// If coercion failed, still report env source with the raw string
+			return envVal, "env"
+		}
+	}
+	// Check config
+	param := flagParamName(f.Name)
+	if v, ok := configData[param]; ok {
+		return v, "config"
+	}
+	// Default
+	if f.hasDefault && f.Default != nil {
+		return f.Default, "default"
+	}
+	return nil, "default"
+}
+
 // registerConfigGroup registers the auto-generated 'config' command group.
 func (a *App) registerConfigGroup() {
 	grp := a.Group("config", "Manage persistent configuration values stored in the config file")
@@ -610,6 +653,10 @@ func (a *App) registerConfigGroup() {
 	})
 
 	// config show
+	//
+	// Source resolution uses the shared precedence chain: env > config > default.
+	// "cli" is structurally impossible here -- config show is a subcommand,
+	// so the app's own flags were never passed on the command line.
 	grp.Command("show", "Show all config values with their sources (config file, env, or default)", func(args map[string]interface{}) int {
 		useJSON := args["json"].(bool)
 		configData := a.resolveConfigData("", false)
@@ -619,18 +666,7 @@ func (a *App) registerConfigGroup() {
 			result := make(map[string]interface{})
 			for _, f := range allFlags {
 				param := flagParamName(f.Name)
-				var value interface{}
-				var source string
-				if v, ok := configData[param]; ok {
-					value = v
-					source = "config"
-				} else if f.hasDefault && f.Default != nil {
-					value = f.Default
-					source = "default"
-				} else {
-					value = nil
-					source = "default"
-				}
+				value, source := resolveFlagShowSource(&f, configData)
 				result[param] = map[string]interface{}{
 					"value":  value,
 					"source": source,
@@ -675,18 +711,7 @@ func (a *App) registerConfigGroup() {
 		// --plain
 		for _, f := range allFlags {
 			param := flagParamName(f.Name)
-			var value interface{}
-			var source string
-			if v, ok := configData[param]; ok {
-				value = v
-				source = "config"
-			} else if f.hasDefault && f.Default != nil {
-				value = f.Default
-				source = "default"
-			} else {
-				value = nil
-				source = "default"
-			}
+			value, source := resolveFlagShowSource(&f, configData)
 			fmt.Printf("%s = %v  (source: %s)\n", param, formatConfigValue(value), source)
 		}
 		// Include config fields
