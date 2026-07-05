@@ -1,6 +1,6 @@
 [
   {
-    "name": "config-hard-error: malformed TOML is a hard error",
+    "name": "config-hard-error: malformed TOML is a hard error with position",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -22,7 +22,7 @@
     "argv": ["run"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "config file"
+      "stderr_contains": ["config file", "line", "column"]
     }
   },
   {
