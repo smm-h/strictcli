@@ -1076,6 +1076,12 @@ def _store_dict_flag(f: "Flag", raw: str, cli_set: dict) -> None:
 _SCALAR_TYPES = (str, bool, int, float)
 _NON_BOOL_SCALAR_TYPES = (str, int, float)
 
+# Names reserved by the framework for global flags.
+# These cannot be used for user-defined global flags.
+_RESERVED_GLOBAL_FLAG_NAMES = frozenset({
+    "help", "h", "version", "v", "dump-schema", "mcp",
+})
+
 
 def _parse_compound_type(
     raw_type: type, context: str,
@@ -1864,11 +1870,19 @@ class App:
             except importlib.metadata.PackageNotFoundError:
                 self.version = "unknown"
         _require_non_empty_str(self.help, "help", "App")
-        # Check for duplicate global flag names
+        # Check for duplicate and reserved global flag names
         seen: set[str] = set()
         for f in self.flags:
             if f.name in seen:
                 raise ValueError(f'duplicate global flag name "{f.name}"')
+            if f.name in _RESERVED_GLOBAL_FLAG_NAMES:
+                raise ValueError(
+                    f'global flag name "{f.name}" is reserved'
+                )
+            if f.short and f.short in _RESERVED_GLOBAL_FLAG_NAMES:
+                raise ValueError(
+                    f'global short flag "{f.short}" is reserved'
+                )
             seen.add(f.name)
         self._global_flags: list[Flag] = list(self.flags)
         self._last_global_values: dict[str, object] = {}

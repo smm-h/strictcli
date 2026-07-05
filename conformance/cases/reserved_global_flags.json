@@ -1,0 +1,140 @@
+[
+  {
+    "name": "reserved_global_flags: global flag named 'help' is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "help",
+          "type": "str",
+          "help": "should be rejected"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "reserved"
+    }
+  },
+  {
+    "name": "reserved_global_flags: global flag named 'version' is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "version",
+          "type": "str",
+          "help": "should be rejected"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "reserved"
+    }
+  },
+  {
+    "name": "reserved_global_flags: global flag named 'dump-schema' is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "dump-schema",
+          "type": "bool",
+          "help": "should be rejected",
+          "default": false
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "reserved"
+    }
+  },
+  {
+    "name": "reserved_global_flags: global flag named 'mcp' is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "mcp",
+          "type": "bool",
+          "help": "should be rejected",
+          "default": false
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "reserved"
+    }
+  },
+  {
+    "name": "reserved_global_flags: non-reserved global flag is allowed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output",
+          "default": false
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "ok"
+    }
+  }
+]

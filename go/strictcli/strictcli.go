@@ -1381,6 +1381,13 @@ func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ..
 
 // GlobalFlag registers a global flag on the app.
 func (a *App) GlobalFlag(f Flag) {
+	// Check reserved names
+	if reservedGlobalFlagNames[f.Name] {
+		panic(fmt.Sprintf("global flag name %q is reserved", f.Name))
+	}
+	if f.Short != "" && reservedGlobalFlagNames[f.Short] {
+		panic(fmt.Sprintf("global short flag %q is reserved", f.Short))
+	}
 	// Check for collisions with existing global flags
 	for _, gf := range a.globalFlags {
 		if gf.Name == f.Name {
