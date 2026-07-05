@@ -279,6 +279,14 @@ type App struct {
 	// LastSources stores the source map from the most recent parse.
 	// Available for function handlers that need provenance info.
 	LastSources map[string]string
+
+	// configParseErr stores a config parse error for config show to pick up.
+	// Set when a config subcommand is routed and the config file was malformed.
+	configParseErr string
+
+	// configConflictMode controls whether config+cli and config+env overlaps
+	// are hard errors. Valid values: "cli-wins" (default), "error".
+	configConflictMode string
 }
 
 // dispatchCtx carries per-dispatch state to struct handler wrappers.
@@ -330,6 +338,19 @@ func WithConfigFormat(format string) AppOption {
 func WithNoDefaultConfigPath() AppOption {
 	return func(a *App) {
 		a.noDefaultConfigPath = true
+	}
+}
+
+// WithConfigConflictMode sets the conflict resolution mode for config values.
+// Valid values: "cli-wins" (default) and "error".
+// In "error" mode, a flag set by both config AND cli (or config AND env)
+// is a hard error. Implied sources are excluded from conflict checks.
+func WithConfigConflictMode(mode string) AppOption {
+	return func(a *App) {
+		if mode != "cli-wins" && mode != "error" {
+			panic(fmt.Sprintf("WithConfigConflictMode: mode must be \"cli-wins\" or \"error\", got %q", mode))
+		}
+		a.configConflictMode = mode
 	}
 }
 
@@ -1940,11 +1961,20 @@ func (a *App) doParse(argv []string) parseResult {
 		return parseResult{parseErr: preScan.err}
 	}
 
-	// Load config data once at parse time
+	// Load config data once at parse time.
+	// Capture any parse error to handle config subcommand exemption later.
+	var configLoadErr string
 	if a.configEnabled {
 		runtimeOverride := preScan.configPath
 		hermetic := a.noDefaultConfigPath && runtimeOverride == ""
-		a.configData = a.resolveConfigData(runtimeOverride, hermetic)
+		isRuntimeFlag := runtimeOverride != ""
+		result := a.resolveConfigData(runtimeOverride, hermetic, isRuntimeFlag)
+		if result.parseErr != "" {
+			configLoadErr = result.parseErr
+			a.configData = map[string]interface{}{}
+		} else {
+			a.configData = result.data
+		}
 	}
 
 	// Extract global flags from cleaned argv (--config stripped), leaving
@@ -1998,8 +2028,24 @@ func (a *App) doParse(argv []string) parseResult {
 		return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
 	}
 
-	// Validate config fields for non-config subcommands
+	// Config subcommand exemption: config edit, config path, config set
+	// are exempt from config load errors (self-lock prevention).
+	// config show handles the error specially (shows it as output).
 	isConfigSubcommand := a.configEnabled && len(path) > 0 && path[0] == "config"
+	if configLoadErr != "" {
+		if !isConfigSubcommand {
+			// Non-config command: hard error
+			return parseResult{parseErr: configLoadErr}
+		}
+		// Config subcommand: only config show needs special handling.
+		// edit, path, set, init are exempt (they work on broken configs).
+		// config show is handled by the config show handler itself,
+		// which calls resolveConfigData independently. We store the
+		// error on the app for config show to pick up.
+		a.configParseErr = configLoadErr
+	}
+
+	// Validate config fields for non-config subcommands
 	if a.configEnabled && !isConfigSubcommand {
 		if len(cmd.configFields) > 0 {
 			if errMsg := a.validateBoundConfigFields(cmd, a.configData); errMsg != "" {
@@ -2013,7 +2059,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 	}
 
-	kwargs, postGlobalValues, cmdSources, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy)
+	kwargs, postGlobalValues, cmdSources, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode)
 	if err != "" {
 		parts := append([]string{a.Name}, path...)
 		parts = append(parts, cmd.Name)
@@ -2340,29 +2386,40 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, map[str
 		}
 	}
 
-	// Resolve config values for global flags not set by CLI or env
+	// Resolve config values for global flags not set by CLI or env.
+	// In conflict mode "error", detect when config would set a flag
+	// already set by CLI or env.
 	if a.configData != nil {
 		for i := range a.globalFlags {
 			f := &a.globalFlags[i]
-			if _, ok := globalValues[f.Name]; ok {
+			param := flagParamName(f.Name)
+			configVal, hasConfig := a.configData[param]
+			if !hasConfig {
 				continue
 			}
-			param := flagParamName(f.Name)
-			if v, ok := a.configData[param]; ok {
-				coerced, errStr := coerceConfigValue(v, f)
-				if errStr != "" {
-					return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+			if _, alreadySet := globalValues[f.Name]; alreadySet {
+				if a.configConflictMode == "error" {
+					existingSource := globalSources[param]
+					return nil, nil, nil, fmt.Sprintf(
+						"flag '%s' set in both %s and config; remove one",
+						f.Name, existingSource,
+					)
 				}
-				if f.Unique {
-					if arr, ok := coerced.([]interface{}); ok {
-						if dup := findDuplicate(arr); dup != nil {
-							return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
-						}
+				continue // cli-wins: skip config value
+			}
+			coerced, errStr := coerceConfigValue(configVal, f)
+			if errStr != "" {
+				return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+			}
+			if f.Unique {
+				if arr, ok := coerced.([]interface{}); ok {
+					if dup := findDuplicate(arr); dup != nil {
+						return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
 					}
 				}
-				globalValues[f.Name] = coerced
-				globalSources[flagParamName(f.Name)] = "config"
 			}
+			globalValues[f.Name] = coerced
+			globalSources[flagParamName(f.Name)] = "config"
 		}
 	}
 

@@ -619,6 +619,8 @@ def generate(app_def: dict) -> str:
         app_parts.append(f"config_format={app_def['config_format']!r}")
     if app_def.get("no_default_config_path", False):
         app_parts.append("no_default_config_path=True")
+    if "config_conflict_mode" in app_def and app_def["config_conflict_mode"] != "cli-wins":
+        app_parts.append(f"config_conflict_mode={app_def['config_conflict_mode']!r}")
     if has_checks:
         app_parts.append("checks_path=_checks_path")
     if global_flags:

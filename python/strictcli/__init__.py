@@ -202,33 +202,80 @@ def _config_path(app_name: str, *, override: str | None = None, config_format: s
     return os.path.join(config_home, app_name, f"config.{ext}")
 
 
+import re as _re
+
+
+# Regex to extract position from tomllib error messages:
+# "... (at line X, column Y)" pattern (Python 3.11-3.13)
+_TOML_POSITION_RE = _re.compile(r"\(at line (\d+), column (\d+)\)")
+
+
+class _ConfigLoadResult:
+    """Result of loading a config file."""
+    __slots__ = ("data", "parse_err")
+
+    def __init__(self, data: dict | None = None, parse_err: str | None = None):
+        self.data = data if data is not None else {}
+        self.parse_err = parse_err
+
+
+def _compute_json_position(text: str, offset: int) -> tuple[int, int]:
+    """Convert a byte offset to 1-based (line, column)."""
+    line = 1
+    col = 1
+    for i in range(min(offset, len(text))):
+        if text[i] == "\n":
+            line += 1
+            col = 1
+        else:
+            col += 1
+    return line, col
+
+
 def _load_config(
     app_name: str,
     *,
     config_path_override: str | None = None,
     config_format: str = "json",
-) -> dict:
+    is_runtime_flag: bool = False,
+) -> _ConfigLoadResult:
     """Load the config file for an app.
 
-    Returns an empty dict if the file doesn't exist or contains invalid content.
-    Invalid content prints a warning to stderr.
+    Missing file with is_runtime_flag=True is a hard error (user explicitly
+    passed --config). Missing file otherwise is soft (returns empty dict).
+    Malformed file is always a hard error with position information.
     """
     path = _config_path(app_name, override=config_path_override, config_format=config_format)
     if not os.path.isfile(path):
-        return {}
+        if is_runtime_flag:
+            return _ConfigLoadResult(parse_err=f"config file not found: {path}")
+        return _ConfigLoadResult()
     if config_format == "toml":
         try:
             with open(path, "rb") as f:
-                return tomllib.load(f)
-        except (tomllib.TOMLDecodeError, UnicodeDecodeError):
-            print(f"warning: invalid TOML in config file '{path}', ignoring", file=sys.stderr)
-            return {}
+                return _ConfigLoadResult(data=tomllib.load(f))
+        except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+            msg = str(e)
+            m = _TOML_POSITION_RE.search(msg)
+            if m:
+                line, col = int(m.group(1)), int(m.group(2))
+                return _ConfigLoadResult(
+                    parse_err=f"config file {path}: {msg} (line {line}, column {col})",
+                )
+            return _ConfigLoadResult(parse_err=f"config file {path}: {msg}")
     try:
         with open(path) as f:
-            return json.loads(f.read())
-    except (json.JSONDecodeError, ValueError):
-        print(f"warning: invalid JSON in config file '{path}', ignoring", file=sys.stderr)
-        return {}
+            text = f.read()
+            return _ConfigLoadResult(data=json.loads(text))
+    except json.JSONDecodeError as e:
+        line, col = _compute_json_position(text, e.pos) if e.pos is not None else (0, 0)
+        if line > 0:
+            return _ConfigLoadResult(
+                parse_err=f"config file {path}: {e.msg} (line {line}, column {col})",
+            )
+        return _ConfigLoadResult(parse_err=f"config file {path}: {e.msg}")
+    except ValueError as e:
+        return _ConfigLoadResult(parse_err=f"config file {path}: {e}")
 
 
 def _toml_format_scalar(value: object) -> str:
@@ -2000,6 +2047,7 @@ class App:
     config: bool = False
     config_path: str | None = None
     config_format: str = "json"
+    config_conflict_mode: str = "cli-wins"
     no_default_config_path: bool = False
     checks_path: str | Path | None = None
     checks_embed: bytes | None = None
@@ -2038,6 +2086,11 @@ class App:
             raise ValueError(
                 f'App.config_format must be "json" or "toml", got {self.config_format!r}'
             )
+        # Validate config_conflict_mode
+        if self.config_conflict_mode not in ("cli-wins", "error"):
+            raise ValueError(
+                f'App.config_conflict_mode must be "cli-wins" or "error", got {self.config_conflict_mode!r}'
+            )
         # Register config subcommands if enabled (config data loaded at parse time)
         self._config_data: dict = {}
         if self.config:
@@ -2075,6 +2128,9 @@ class App:
         # Config field declarations
         self._config_fields: dict[str, ConfigField] = {}
         self._framework_fields: dict[str, ConfigField] = {}
+
+        # Config parse error (for config show to pick up)
+        self._config_parse_err: str | None = None
 
     @property
     def config_file_path(self) -> str:
@@ -2231,19 +2287,20 @@ class App:
         self,
         runtime_path_override: str | None = None,
         hermetic: bool = False,
-    ) -> dict:
+        is_runtime_flag: bool = False,
+    ) -> _ConfigLoadResult:
         """Single entry point for all config loading.
 
-        The runtime_path_override and hermetic parameters are plumbed for
-        future use (Phase 1) but currently inert.
+        is_runtime_flag indicates the path came from --config (hard error on missing).
         """
         if hermetic:
-            return {}
+            return _ConfigLoadResult()
         override = runtime_path_override or self.config_path
         return _load_config(
             self.name,
             config_path_override=override,
             config_format=self.config_format,
+            is_runtime_flag=is_runtime_flag,
         )
 
     def _validate_config_fields(self, cmd: Command, config_data: dict) -> str | None:
@@ -2564,8 +2621,12 @@ class App:
         # "cli" is structurally impossible here -- config show is a subcommand,
         # so the app's own flags were never passed on the command line.
         def _config_show_handler(**_kw) -> int:
+            # If there was a config parse error, show it instead of values
+            if app_ref._config_parse_err:
+                print(f"error: {app_ref._config_parse_err}", file=sys.stderr)
+                return 1
             use_json = _kw.get("json", False)
-            config_data = app_ref._resolve_config_data()
+            config_data = app_ref._config_data
             all_flags = app_ref._collect_all_flags()
             if use_json:
                 result = {}
@@ -2646,8 +2707,8 @@ class App:
             )
             dir_path = os.path.dirname(path)
             os.makedirs(dir_path, exist_ok=True)
-            # Read existing config
-            existing = app_ref._resolve_config_data()
+            # Read existing config (use already-loaded data from parse time)
+            existing = app_ref._config_data
 
             # Look up the key against registered flags and config fields
             all_flags = app_ref._collect_all_flags()
@@ -3031,14 +3092,23 @@ class App:
         if pre_scan.get("err"):
             raise _ParseError(pre_scan["err"])
 
-        # Load config data once at parse time
+        # Load config data once at parse time.
+        # Capture any parse error to handle config subcommand exemption later.
+        config_load_err: str | None = None
         if self.config:
             runtime_override = pre_scan.get("config_path")
             hermetic = self.no_default_config_path and not runtime_override
-            self._config_data = self._resolve_config_data(
+            is_runtime_flag = bool(runtime_override)
+            result = self._resolve_config_data(
                 runtime_path_override=runtime_override,
                 hermetic=hermetic,
+                is_runtime_flag=is_runtime_flag,
             )
+            if result.parse_err:
+                config_load_err = result.parse_err
+                self._config_data = {}
+            else:
+                self._config_data = result.data
 
         # Step 1.5: parse global flags before command routing
         # Use cleaned argv (--config stripped) for the rest of the pipeline
@@ -3062,8 +3132,17 @@ class App:
         if _tokens_contain_help(rest):
             raise _HelpRequested(target=cmd)
 
-        # Step 2.5: validate config fields (exempt config subcommands)
+        # Config subcommand exemption: config edit, config path, config set
+        # are exempt from config load errors (self-lock prevention).
+        # config show handles the error specially (shows it as output).
         is_config_subcommand = bool(path) and path[0] == "config"
+        if config_load_err:
+            if not is_config_subcommand:
+                raise _ParseError(config_load_err)
+            # Store for config show to pick up
+            self._config_parse_err = config_load_err
+
+        # Step 2.5: validate config fields (exempt config subcommands)
         if (self.config and self._config_fields
                 and not is_config_subcommand):
             err = self._validate_config_fields(cmd, self._config_data)
@@ -3082,6 +3161,7 @@ class App:
             cmd, kwargs, post_global, sources = _parse_command(
                 cmd, rest, self._global_flags, config_data=self._config_data,
                 stdin_consumed_by=stdin_state,
+                conflict_mode=self.config_conflict_mode,
             )
         except _ParseError as e:
             prefix_parts = [self.name] + path + [cmd.name]
@@ -3459,29 +3539,37 @@ class App:
                             cli_set[f.name] = [resolved] if f.repeatable else resolved
                     env_names.add(f.name)
 
-        # Resolve config values for global flags not set by CLI or env
+        # Resolve config values for global flags not set by CLI or env.
+        # In conflict mode "error", detect config+cli/env overlaps.
         if self._config_data:
             for f in self._global_flags:
-                if f.name in cli_set:
-                    continue
                 param = _flag_param_name(f.name)
-                if param in self._config_data:
-                    try:
-                        coerced = _coerce_config_value(self._config_data[param], f)
-                    except ValueError as e:
+                if param not in self._config_data:
+                    continue
+                if f.name in cli_set:
+                    if self.config_conflict_mode == "error":
+                        existing_source = global_sources.get(param, "cli")
                         raise _ParseError(
-                            f"--{f.name}: config value error: {e}"
+                            f"flag '{f.name}' set in both "
+                            f"{existing_source} and config; remove one"
                         )
-                    if f.unique and isinstance(coerced, list):
-                        dup = _find_duplicate(coerced)
-                        if dup is not None:
-                            raise _ParseError(
-                                f"--{f.name}: config value error: "
-                                f"duplicate value "
-                                f"'{_format_value_for_error(dup)}'"
-                            )
-                    cli_set[f.name] = coerced
-                    config_names.add(f.name)
+                    continue  # cli-wins: skip config value
+                try:
+                    coerced = _coerce_config_value(self._config_data[param], f)
+                except ValueError as e:
+                    raise _ParseError(
+                        f"--{f.name}: config value error: {e}"
+                    )
+                if f.unique and isinstance(coerced, list):
+                    dup = _find_duplicate(coerced)
+                    if dup is not None:
+                        raise _ParseError(
+                            f"--{f.name}: config value error: "
+                            f"duplicate value "
+                            f"'{_format_value_for_error(dup)}'"
+                        )
+                cli_set[f.name] = coerced
+                config_names.add(f.name)
 
         # Assign sources for env and config values
         for name in env_names:
@@ -4287,6 +4375,7 @@ def _parse_command(
     global_flags: list[Flag] | None = None,
     config_data: dict | None = None,
     stdin_consumed_by: list[str | None] | None = None,
+    conflict_mode: str = "cli-wins",
 ) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Parse tokens against a resolved command's flags and args.
 
@@ -4602,29 +4691,39 @@ def _parse_command(
                         cli_set[f.name] = [resolved] if f.repeatable else resolved
                 env_names.add(f.name)
 
-    # Step 4.2: resolve config values for flags not set by CLI or env
+    # Step 4.2: resolve config values for flags not set by CLI or env.
+    # In conflict mode "error", detect when config would set a flag
+    # already set by CLI or env.
     if config_data:
         for f in cmd.flags:
-            if f.name in cli_set:
-                continue
             param = _flag_param_name(f.name)
-            if param in config_data:
-                try:
-                    coerced = _coerce_config_value(config_data[param], f)
-                except ValueError as e:
+            if param not in config_data:
+                continue
+            if f.name in cli_set:
+                # Flag set by CLI or env, config also has a value
+                if conflict_mode == "error":
+                    existing_source = "env" if f.name in env_names else "cli"
                     raise _ParseError(
-                        f"--{f.name}: config value error: {e}"
+                        f"flag '{f.name}' set in both "
+                        f"{existing_source} and config; remove one"
                     )
-                if f.unique and isinstance(coerced, list):
-                    dup = _find_duplicate(coerced)
-                    if dup is not None:
-                        raise _ParseError(
-                            f"--{f.name}: config value error: "
-                            f"duplicate value "
-                            f"'{_format_value_for_error(dup)}'"
-                        )
-                cli_set[f.name] = coerced
-                config_names.add(f.name)
+                continue  # cli-wins: skip config value
+            try:
+                coerced = _coerce_config_value(config_data[param], f)
+            except ValueError as e:
+                raise _ParseError(
+                    f"--{f.name}: config value error: {e}"
+                )
+            if f.unique and isinstance(coerced, list):
+                dup = _find_duplicate(coerced)
+                if dup is not None:
+                    raise _ParseError(
+                        f"--{f.name}: config value error: "
+                        f"duplicate value "
+                        f"'{_format_value_for_error(dup)}'"
+                    )
+            cli_set[f.name] = coerced
+            config_names.add(f.name)
 
     # Wrap cli_set into a _SourcedStore with proper source attribution.
     # CLI-parsed values are _Source.CLI, env-resolved values are _Source.ENV,

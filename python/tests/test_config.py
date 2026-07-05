@@ -127,20 +127,21 @@ def test_config_overrides_default(tmp_path, monkeypatch):
     assert "count=1" not in r.stdout
 
 
-# --- Test 7: invalid JSON prints warning and falls back ---
+# --- Test 7: invalid JSON is a hard error with position ---
 
-def test_invalid_json_warning(tmp_path, monkeypatch):
-    """Config with invalid JSON prints warning and falls back."""
+def test_invalid_json_hard_error(tmp_path, monkeypatch):
+    """Config with invalid JSON is a hard error with position information."""
     config_dir = tmp_path / "testapp"
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config.json"
     config_file.write_text("{invalid json!!")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    # App should still work, using defaults
     app = _make_config_app(config=True)
     r = app.test(["run"])
-    assert r.exit_code == 0
-    assert "target=default-val" in r.stdout
+    assert r.exit_code == 1
+    assert "config file" in r.stderr
+    assert "line" in r.stderr
+    assert "column" in r.stderr
 
 
 # --- Test 8: config set creates file and directory ---
@@ -635,8 +636,8 @@ def test_toml_format_xdg_default_path(tmp_path, monkeypatch):
     assert expected in r.stdout
 
 
-def test_invalid_toml_warning(tmp_path):
-    """Invalid TOML file prints warning and falls back to defaults."""
+def test_invalid_toml_hard_error(tmp_path):
+    """Invalid TOML file is a hard error with position information."""
     config_file = tmp_path / "config.toml"
     config_file.write_text("this is = not [ valid toml")
 
@@ -655,8 +656,8 @@ def test_invalid_toml_warning(tmp_path):
         print(f"target={target}")
 
     r = app.test(["run"])
-    assert r.exit_code == 0
-    assert "target=default-val" in r.stdout
+    assert r.exit_code == 1
+    assert "config file" in r.stderr
 
 
 def test_invalid_config_format():
@@ -1481,3 +1482,226 @@ def test_no_default_config_path_with_config_flag(tmp_path, monkeypatch):
     r = app.test(["--config", custom_path, "serve"])
     assert r.exit_code == 0
     assert "port=3333" in r.stdout
+
+
+# --- Phase 3a: hard-error config loading tests ---
+
+def test_malformed_toml_hard_error(tmp_path):
+    """Malformed TOML config file is a hard error with position info."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("key = [unclosed")
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test",
+        config=True, config_path=str(config_file), config_format="toml",
+    )
+
+    @app.command("run", help="run")
+    @strictcli.flag("name", type=str, help="a name", default="")
+    def run(name):
+        print(f"name={name}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "config file" in r.stderr
+
+
+def test_malformed_json_hard_error(tmp_path, monkeypatch):
+    """Malformed JSON config file is a hard error with position info."""
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text('{"key": bad}')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_app(config=True)
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "config file" in r.stderr
+    assert "line" in r.stderr
+    assert "column" in r.stderr
+
+
+def test_missing_via_runtime_flag():
+    """--config pointing at missing file is a hard error."""
+    app = strictcli.App(name="testapp", version="1.0.0", help="test", config=True)
+
+    @app.command("run", help="run")
+    def run():
+        pass
+
+    r = app.test(["--config", "/nonexistent/path/config.json", "run"])
+    assert r.exit_code == 1
+    assert "config file not found" in r.stderr
+
+
+def test_missing_via_config_path_is_soft():
+    """config_path pointing at missing file is soft (empty map)."""
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test",
+        config=True, config_path="/nonexistent/path/config.json",
+    )
+
+    @app.command("run", help="run")
+    @strictcli.flag("name", type=str, help="a name", default="default")
+    def run(name):
+        print(f"name={name}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 0
+    assert "name=default" in r.stdout
+
+
+def test_missing_xdg_is_soft(tmp_path, monkeypatch):
+    """Missing XDG config is soft (no error)."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_app(config=True)
+    r = app.test(["run"])
+    assert r.exit_code == 0
+
+
+def test_config_show_on_broken_config(tmp_path, monkeypatch):
+    """config show on broken config shows the error."""
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text("{broken")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_app(config=True)
+    r = app.test(["config", "show", "--plain"])
+    assert r.exit_code == 1
+    assert "config file" in r.stderr
+
+
+def test_config_path_on_broken_config(tmp_path, monkeypatch):
+    """config path still works on broken config."""
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text("{broken")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_app(config=True)
+    r = app.test(["config", "path"])
+    assert r.exit_code == 0
+
+
+def test_duplicate_key_toml_hard_error(tmp_path):
+    """Duplicate key in TOML config is a hard error."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('name = "a"\nname = "b"\n')
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test",
+        config=True, config_path=str(config_file), config_format="toml",
+    )
+
+    @app.command("run", help="run")
+    @strictcli.flag("name", type=str, help="a name", default="")
+    def run(name):
+        print(f"name={name}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "config file" in r.stderr
+
+
+# --- Phase 3b: conflict mode tests ---
+
+def test_conflict_mode_default(tmp_path, monkeypatch):
+    """Default mode (cli-wins): CLI overrides config silently."""
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text('{"target": "from-config"}')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = _make_config_app(config=True)
+    r = app.test(["run", "--target", "from-cli"])
+    assert r.exit_code == 0
+    assert "target=from-cli" in r.stdout
+
+
+def test_conflict_mode_error_cli(tmp_path, monkeypatch):
+    """Conflict mode error: config + CLI is a conflict."""
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text('{"target": "from-config"}')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test",
+        config=True, config_conflict_mode="error",
+    )
+
+    @app.command("run", help="run")
+    @strictcli.flag("target", type=str, help="target", default="default-val")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["run", "--target", "from-cli"])
+    assert r.exit_code == 1
+    assert "target" in r.stderr
+    assert "cli" in r.stderr
+    assert "config" in r.stderr
+
+
+def test_conflict_mode_error_env(tmp_path, monkeypatch):
+    """Conflict mode error: config + env is a conflict."""
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text('{"target": "from-config"}')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("MY_TARGET", "from-env")
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test",
+        config=True, config_conflict_mode="error",
+    )
+
+    @app.command("run", help="run")
+    @strictcli.flag("target", type=str, help="target", default="default-val",
+                    env="MY_TARGET")
+    def run(target):
+        print(f"target={target}")
+
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert "target" in r.stderr
+
+
+def test_conflict_mode_implied_excluded(tmp_path, monkeypatch):
+    """Implied source does NOT trigger conflict with config."""
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text('{"verbose": true}')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test",
+        config=True, config_conflict_mode="error",
+    )
+
+    @app.command("run", help="run",
+                 dependencies=[strictcli.Implies(flag="debug", implies="verbose", value=True)])
+    @strictcli.flag("debug", type=bool, help="enable debug", default=False)
+    @strictcli.flag("verbose", type=bool, help="be verbose", default=False)
+    def run(debug, verbose):
+        print(f"verbose={verbose}")
+
+    r = app.test(["run", "--debug"])
+    assert r.exit_code == 0
+
+
+def test_conflict_mode_fires_before_mutex(tmp_path, monkeypatch):
+    """Conflict fires before mutex when both would error."""
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text('{"format_json": true}')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test",
+        config=True, config_conflict_mode="error",
+    )
+
+    format_json = strictcli.Flag(name="format-json", type=bool, default=False,
+                                  help="output as JSON")
+    format_yaml = strictcli.Flag(name="format-yaml", type=bool, default=False,
+                                  help="output as YAML")
+
+    @app.command("run", help="run", mutex=[strictcli.MutexGroup(flags=[format_json, format_yaml])])
+    def run(format_json, format_yaml):
+        pass
+
+    r = app.test(["run", "--format-json"])
+    assert r.exit_code == 1
+    # Should mention conflict (set in both), not mutex
+    assert "set in both" in r.stderr

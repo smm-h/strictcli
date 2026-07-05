@@ -1,0 +1,176 @@
+[
+  {
+    "name": "config-hard-error: malformed TOML is a hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_format": "toml",
+      "config_content": "key = [unclosed",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "name", "help": "a name", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config file"
+    }
+  },
+  {
+    "name": "config-hard-error: malformed JSON is a hard error with position",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"key\": bad}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "name", "help": "a name", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["config file", "line", "column"]
+    }
+  },
+  {
+    "name": "config-hard-error: --config missing file is hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--config", "/nonexistent/path/config.json", "run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config file not found"
+    }
+  },
+  {
+    "name": "config-hard-error: config show on broken config shows error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{broken",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["config", "show", "--plain"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "config file"
+    }
+  },
+  {
+    "name": "config-conflict: error mode config+cli is hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"name\": \"from-config\"}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "name", "help": "a name", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "argv": ["run", "--name", "from-cli"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["name", "cli", "config"]
+    }
+  },
+  {
+    "name": "config-conflict: error mode config+env is hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"name\": \"from-config\"}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "name", "help": "a name", "type": "str", "default": "", "env": "MYAPP_NAME"}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "env": {
+      "MYAPP_NAME": "from-env"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": ["name", "config"]
+    }
+  },
+  {
+    "name": "config-conflict: cli-wins mode no error (regression)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"name\": \"from-config\"}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "name", "help": "a name", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "argv": ["run", "--name", "from-cli"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "ok"
+    }
+  }
+]

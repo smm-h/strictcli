@@ -321,44 +321,82 @@ func configPath(appName string, override string, format string) string {
 	return filepath.Join(configHome, appName, "config."+ext)
 }
 
+// configLoadResult holds the result of loading a config file.
+// If parseErr is non-empty, the file existed but was malformed.
+type configLoadResult struct {
+	data     map[string]interface{}
+	parseErr string // non-empty if file was malformed (includes position info)
+}
+
 // loadConfig reads the config file for an app.
-// Returns an empty map if the file doesn't exist or contains invalid data.
-// Invalid content prints a warning to stderr.
-func loadConfig(appName string, pathOverride string, format string) map[string]interface{} {
+// Missing file with isRuntimeFlag=true is a hard error (user explicitly passed --config).
+// Missing file with isRuntimeFlag=false is soft (returns empty map, no error).
+// Malformed file is always a hard error with position information.
+func loadConfig(appName string, pathOverride string, format string, isRuntimeFlag bool) configLoadResult {
 	path := configPath(appName, pathOverride, format)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// File doesn't exist or can't be read -- silent
-		return map[string]interface{}{}
+		if isRuntimeFlag {
+			return configLoadResult{parseErr: fmt.Sprintf("config file not found: %s", path)}
+		}
+		return configLoadResult{data: map[string]interface{}{}}
 	}
 	var result map[string]interface{}
 	switch format {
 	case "toml":
 		if err := tomledit.Unmarshal(data, &result); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: invalid TOML in config file '%s', ignoring\n", path)
-			return map[string]interface{}{}
+			if pe, ok := err.(*tomledit.ParseError); ok {
+				return configLoadResult{
+					parseErr: fmt.Sprintf("config file %s: %s (line %d, column %d)", path, pe.Message, pe.Line, pe.Column),
+				}
+			}
+			return configLoadResult{
+				parseErr: fmt.Sprintf("config file %s: %s", path, err.Error()),
+			}
 		}
 	default:
 		if err := json.Unmarshal(data, &result); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: invalid JSON in config file '%s', ignoring\n", path)
-			return map[string]interface{}{}
+			if se, ok := err.(*json.SyntaxError); ok {
+				line, col := computeJSONPosition(data, se.Offset)
+				return configLoadResult{
+					parseErr: fmt.Sprintf("config file %s: %s (line %d, column %d)", path, se.Error(), line, col),
+				}
+			}
+			return configLoadResult{
+				parseErr: fmt.Sprintf("config file %s: %s", path, err.Error()),
+			}
 		}
 	}
-	return result
+	return configLoadResult{data: result}
+}
+
+// computeJSONPosition converts a byte offset to 1-based line and column.
+func computeJSONPosition(data []byte, offset int64) (int, int) {
+	line := 1
+	col := 1
+	for i := int64(0); i < offset && i < int64(len(data)); i++ {
+		if data[i] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	return line, col
 }
 
 // resolveConfigData loads config data for the app. This is the single
-// entry point for all config loading. The runtimePathOverride and hermetic
-// parameters are plumbed for future use (Phase 1) but currently inert.
-func (a *App) resolveConfigData(runtimePathOverride string, hermetic bool) map[string]interface{} {
+// entry point for all config loading.
+// isRuntimeFlag indicates the path came from --config (hard error on missing).
+func (a *App) resolveConfigData(runtimePathOverride string, hermetic bool, isRuntimeFlag bool) configLoadResult {
 	if hermetic {
-		return map[string]interface{}{}
+		return configLoadResult{data: map[string]interface{}{}}
 	}
 	override := a.configPathOverride
 	if runtimePathOverride != "" {
 		override = runtimePathOverride
 	}
-	return loadConfig(a.Name, override, a.configFormat)
+	return loadConfig(a.Name, override, a.configFormat, isRuntimeFlag)
 }
 
 // coerceConfigScalar coerces a single JSON-decoded value to the given flag type.
@@ -657,9 +695,15 @@ func (a *App) registerConfigGroup() {
 	// Source resolution uses the shared precedence chain: env > config > default.
 	// "cli" is structurally impossible here -- config show is a subcommand,
 	// so the app's own flags were never passed on the command line.
+	// If the config file is malformed, shows the parse error instead of values.
 	grp.Command("show", "Show all config values with their sources (config file, env, or default)", func(args map[string]interface{}) int {
+		// If there was a config parse error, show it instead of values
+		if a.configParseErr != "" {
+			fmt.Fprintf(os.Stderr, "error: %s\n", a.configParseErr)
+			return 1
+		}
 		useJSON := args["json"].(bool)
-		configData := a.resolveConfigData("", false)
+		configData := a.configData
 		allFlags := a.collectAllFlags()
 
 		if useJSON {
@@ -757,8 +801,8 @@ func (a *App) registerConfigGroup() {
 			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
 			return 1
 		}
-		// Read existing config
-		existing := a.resolveConfigData("", false)
+		// Read existing config (use the already-loaded data from parse time)
+		existing := a.configData
 
 		// Look up the key against registered flags and config fields
 		allFlags := a.collectAllFlags()

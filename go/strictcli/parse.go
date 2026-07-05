@@ -168,8 +168,9 @@ func resolveAtPrefix(flagName, raw string, stdinConsumedBy **string) (string, st
 // globalFlags are also recognized in post-command tokens and returned separately
 // in postGlobalValues so the caller can merge them with pre-command globals.
 // configData is an optional map of config values (may be nil).
+// conflictMode is "cli-wins" (default) or "error" (config+cli/env overlap is an error).
 // Returns (kwargs, postGlobalValues, sources, errorString).
-func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
 	// Build flag lookup maps
 	longLookup := make(map[string]*Flag)    // --flag-name -> Flag
 	shortLookup := make(map[string]*Flag)   // -x -> Flag
@@ -484,29 +485,44 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		envNames[f.Name] = true
 	}
 
-	// Resolve config values for flags not set by CLI or env
+	// Resolve config values for flags not set by CLI or env.
+	// In conflict mode "error", detect when config would set a flag
+	// already set by CLI or env.
 	if configData != nil {
 		for i := range cmd.flags {
 			f := &cmd.flags[i]
-			if _, ok := cliSet[f.Name]; ok {
+			param := flagParamName(f.Name)
+			configVal, hasConfig := configData[param]
+			if !hasConfig {
 				continue
 			}
-			param := flagParamName(f.Name)
-			if v, ok := configData[param]; ok {
-				coerced, errStr := coerceConfigValue(v, f)
-				if errStr != "" {
-					return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+			if _, alreadySet := cliSet[f.Name]; alreadySet {
+				// Flag set by CLI or env, config also has a value
+				if conflictMode == "error" {
+					existingSource := "cli"
+					if envNames[f.Name] {
+						existingSource = "env"
+					}
+					return nil, nil, nil, fmt.Sprintf(
+						"flag '%s' set in both %s and config; remove one",
+						f.Name, existingSource,
+					)
 				}
-				if f.Unique {
-					if arr, ok := coerced.([]interface{}); ok {
-						if dup := findDuplicate(arr); dup != nil {
-							return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
-						}
+				continue // cli-wins: skip config value
+			}
+			coerced, errStr := coerceConfigValue(configVal, f)
+			if errStr != "" {
+				return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+			}
+			if f.Unique {
+				if arr, ok := coerced.([]interface{}); ok {
+					if dup := findDuplicate(arr); dup != nil {
+						return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
 					}
 				}
-				cliSet[f.Name] = coerced
-				configNames[f.Name] = true
 			}
+			cliSet[f.Name] = coerced
+			configNames[f.Name] = true
 		}
 	}
 

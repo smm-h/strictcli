@@ -2909,31 +2909,17 @@ func TestConfigInvalidJSON(t *testing.T) {
 		IntFlag("port", "port number", Default(8080)),
 	))
 
-	// Config is loaded at parse time; capture os.Stderr around Test to verify warning
-	oldStderr := os.Stderr
-	stderrR, stderrW, _ := os.Pipe()
-	os.Stderr = stderrW
-
 	r := app.Test([]string{"serve"})
 
-	stderrW.Close()
-	var stderrBuf [4096]byte
-	n, _ := stderrR.Read(stderrBuf[:])
-	stderrR.Close()
-	os.Stderr = oldStderr
-	stderrOut := string(stderrBuf[:n])
-
-	// Warning should be printed to stderr during parse
-	if !strings.Contains(stderrOut, "warning: invalid JSON") {
-		t.Fatalf("expected warning about invalid JSON, got stderr=%q", stderrOut)
+	// Malformed config is a hard error with position information
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-
-	// Should fall back to defaults (config is empty due to invalid JSON)
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	if !strings.Contains(r.Stderr, "config file") {
+		t.Fatalf("expected error about config file, got stderr=%q", r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, "port=8080") {
-		t.Fatalf("expected default value 8080, got %q", r.Stdout)
+	if !strings.Contains(r.Stderr, "line") || !strings.Contains(r.Stderr, "column") {
+		t.Fatalf("expected position info (line, column) in error, got stderr=%q", r.Stderr)
 	}
 }
 
@@ -4440,29 +4426,17 @@ func TestTomlConfigInvalidToml(t *testing.T) {
 		IntFlag("port", "port number", Default(8080)),
 	))
 
-	// Config is loaded at parse time; capture os.Stderr around Test to verify warning
-	oldStderr := os.Stderr
-	stderrR, stderrW, _ := os.Pipe()
-	os.Stderr = stderrW
-
 	r := app.Test([]string{"serve"})
 
-	stderrW.Close()
-	var stderrBuf [4096]byte
-	n, _ := stderrR.Read(stderrBuf[:])
-	stderrR.Close()
-	os.Stderr = oldStderr
-	stderrOut := string(stderrBuf[:n])
-
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	// Malformed TOML is now a hard error with position information
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	// Warning should mention invalid TOML
-	if !strings.Contains(stderrOut, "warning: invalid TOML") {
-		t.Fatalf("expected warning about invalid TOML, got stderr=%q", stderrOut)
+	if !strings.Contains(r.Stderr, "config file") {
+		t.Fatalf("expected error about config file, got stderr=%q", r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, "port=8080") {
-		t.Fatalf("expected default value 8080, got %q", r.Stdout)
+	if !strings.Contains(r.Stderr, "line") || !strings.Contains(r.Stderr, "column") {
+		t.Fatalf("expected position info (line, column) in error, got stderr=%q", r.Stderr)
 	}
 }
 
@@ -4653,9 +4627,9 @@ func TestTomlConfigSetRoundTrip(t *testing.T) {
 	}
 
 	// Load the config and verify it round-trips
-	config := loadConfig("tomlrtapp", "", "toml")
-	if config["name"] != "bob" {
-		t.Fatalf("expected name=bob from loadConfig, got %v", config["name"])
+	configResult := loadConfig("tomlrtapp", "", "toml", false)
+	if configResult.data["name"] != "bob" {
+		t.Fatalf("expected name=bob from loadConfig, got %v", configResult.data["name"])
 	}
 }
 
@@ -4723,9 +4697,9 @@ func TestTomlConfigSetOverwrite(t *testing.T) {
 	}
 
 	// Also verify via loadConfig
-	config := loadConfig("tomlowapp", "", "toml")
-	if config["color"] != "blue" {
-		t.Fatalf("expected color=blue from loadConfig, got %v", config["color"])
+	configResult := loadConfig("tomlowapp", "", "toml", false)
+	if configResult.data["color"] != "blue" {
+		t.Fatalf("expected color=blue from loadConfig, got %v", configResult.data["color"])
 	}
 }
 
@@ -8134,5 +8108,309 @@ func TestAllHiddenGroupsNoGroupsSection(t *testing.T) {
 	}
 	if strings.Contains(r.Stdout, "Groups:") {
 		t.Fatal("Groups section should not appear when all groups are hidden")
+	}
+}
+
+// --- Phase 3a: hard-error config loading tests ---
+
+func TestConfigMalformedTOMLHardError(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	dir := filepath.Join(tmpDir, "testapp")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.toml"), []byte("key = [unclosed"), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config file") {
+		t.Fatalf("expected 'config file' in error, got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "line") || !strings.Contains(r.Stderr, "column") {
+		t.Fatalf("expected position info in error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigMalformedJSONHardError(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	dir := filepath.Join(tmpDir, "testapp")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"key": bad}`), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config file") {
+		t.Fatalf("expected 'config file' in error, got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "line") || !strings.Contains(r.Stderr, "column") {
+		t.Fatalf("expected position info in error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigMissingViaRuntimeFlag(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	_ = tmpDir
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"--config", "/nonexistent/path/config.json", "run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config file not found") {
+		t.Fatalf("expected 'config file not found' in error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigMissingViaWithConfigPathIsSoft(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	_ = tmpDir
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigPath("/nonexistent/path/config.json"))
+	app.Command("run", "run it", func(args map[string]interface{}) int {
+		fmt.Printf("ok")
+		return 0
+	}, WithFlags(
+		StringFlag("name", "a name", Default("default")),
+	))
+
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "ok") {
+		t.Fatalf("expected 'ok' in stdout, got %q", r.Stdout)
+	}
+}
+
+func TestConfigMissingXDGIsSoft(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	_ = tmpDir
+
+	// No config file written -- XDG path doesn't exist
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int {
+		fmt.Printf("ok")
+		return 0
+	}, WithFlags(
+		StringFlag("name", "a name", Default("default")),
+	))
+
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigShowOnBrokenConfigShowsError(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	dir := filepath.Join(tmpDir, "testapp")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{broken`), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 })
+
+	r := app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config file") {
+		t.Fatalf("expected config error in stderr, got %q", r.Stderr)
+	}
+}
+
+func TestConfigEditOnBrokenConfigStillWorks(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	dir := filepath.Join(tmpDir, "testapp")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{broken`), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 })
+
+	// config path should still work on broken config
+	r := app.Test([]string{"config", "path"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0 for config path on broken config, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigDuplicateKeyTOMLHardError(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	dir := filepath.Join(tmpDir, "testapp")
+	os.MkdirAll(dir, 0o755)
+	// Duplicate key in TOML
+	os.WriteFile(filepath.Join(dir, "config.toml"), []byte("name = \"a\"\nname = \"b\"\n"), 0o644)
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 }, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1 for duplicate key, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "config file") {
+		t.Fatalf("expected 'config file' in error, got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "line") || !strings.Contains(r.Stderr, "column") {
+		t.Fatalf("expected position info in error, got %q", r.Stderr)
+	}
+}
+
+// --- Phase 3b: conflict mode tests ---
+
+func TestConfigConflictModeDefault(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"name": "from-config"})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int {
+		fmt.Printf("name=%s", args["name"])
+		return 0
+	}, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	// Default mode (cli-wins): CLI overrides config silently
+	r := app.Test([]string{"run", "--name", "from-cli"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "name=from-cli") {
+		t.Fatalf("expected CLI value to win, got %q", r.Stdout)
+	}
+}
+
+func TestConfigConflictModeErrorCLI(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"name": "from-config"})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+	app.Command("run", "run it", func(args map[string]interface{}) int {
+		fmt.Printf("name=%s", args["name"])
+		return 0
+	}, WithFlags(
+		StringFlag("name", "a name", Default("")),
+	))
+
+	// Conflict mode error: config + CLI is a conflict
+	r := app.Test([]string{"run", "--name", "from-cli"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "name") {
+		t.Fatalf("expected flag name in error, got %q", r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "cli") && !strings.Contains(r.Stderr, "config") {
+		t.Fatalf("expected both sources in error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigConflictModeErrorEnv(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"name": "from-config"})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+	app.Command("run", "run it", func(args map[string]interface{}) int {
+		fmt.Printf("name=%s", args["name"])
+		return 0
+	}, WithFlags(
+		StringFlag("name", "a name", Default(""), Env("TESTAPP_NAME"), Prefixed(false)),
+	))
+
+	os.Setenv("TESTAPP_NAME", "from-env")
+	defer os.Unsetenv("TESTAPP_NAME")
+
+	// Conflict mode error: config + env is a conflict
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "name") {
+		t.Fatalf("expected flag name in error, got %q", r.Stderr)
+	}
+}
+
+func TestConfigConflictModeImpliedExcluded(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"verbose": true})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+	app.Command("run", "run it", func(args map[string]interface{}) int {
+		fmt.Printf("verbose=%v", args["verbose"])
+		return 0
+	}, WithFlags(
+		BoolFlag("debug", "enable debug", Default(false)),
+		BoolFlag("verbose", "be verbose", Default(false)),
+	), WithDependencies(
+		Implies{Flag: "debug", Implies: "verbose", Value: true},
+	))
+
+	// Implied source should NOT trigger conflict with config
+	r := app.Test([]string{"run", "--debug"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0 (implied not a conflict), got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConfigConflictModeFiresBeforeMutex(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"format_json": true})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithMutex(MutexGroup{Flags: []Flag{
+			BoolFlag("format-json", "output as JSON", Default(false)),
+			BoolFlag("format-yaml", "output as YAML", Default(false)),
+		}}),
+	)
+
+	// Both conflict AND mutex would fire. Conflict should fire first.
+	r := app.Test([]string{"run", "--format-json"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	// Should mention conflict, not mutex
+	if !strings.Contains(r.Stderr, "set in both") {
+		t.Fatalf("expected conflict error, got %q", r.Stderr)
 	}
 }

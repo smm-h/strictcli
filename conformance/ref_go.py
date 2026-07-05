@@ -476,6 +476,8 @@ def generate(app_def: dict) -> str:
         app_opts.append(f'strictcli.WithConfigFormat("{app_def["config_format"]}")')
     if app_def.get("no_default_config_path", False):
         app_opts.append("strictcli.WithNoDefaultConfigPath()")
+    if "config_conflict_mode" in app_def and app_def["config_conflict_mode"] != "cli-wins":
+        app_opts.append(f'strictcli.WithConfigConflictMode("{app_def["config_conflict_mode"]}")')
     if has_checks:
         app_opts.append('strictcli.WithChecks(checksPath)')
     opts_str = ""

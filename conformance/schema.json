@@ -95,6 +95,12 @@
           "default": false,
           "description": "If true, the app loads no config unless --config is explicitly passed."
         },
+        "config_conflict_mode": {
+          "type": "string",
+          "enum": ["cli-wins", "error"],
+          "default": "cli-wins",
+          "description": "Conflict resolution mode for config values. In 'error' mode, config+cli and config+env overlaps are hard errors."
+        },
         "config_content": {
           "type": "string",
           "description": "Raw config file content to write before running the test"

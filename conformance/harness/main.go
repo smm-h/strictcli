@@ -53,6 +53,9 @@ func main() {
 	if v, ok := appDef["config_format"]; ok && v.(string) != "json" {
 		appOpts = append(appOpts, strictcli.WithConfigFormat(v.(string)))
 	}
+	if v, ok := appDef["config_conflict_mode"]; ok && v.(string) != "cli-wins" {
+		appOpts = append(appOpts, strictcli.WithConfigConflictMode(v.(string)))
+	}
 	if v, ok := appDef["checks_toml"]; ok {
 		appOpts = append(appOpts, strictcli.WithChecksEmbed([]byte(v.(string))))
 	}
