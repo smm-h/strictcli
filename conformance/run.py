@@ -248,10 +248,13 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     errors = []
     raw_result = None
 
-    # Handle config_content: write to a temp file and override config_path
+    # Handle config_content: write to a temp file and override config_path.
+    # If argv contains "$CONFIG_PATH", substitute the temp path into argv
+    # instead of setting config_path on the app def (for --config flag tests).
     config_tmp_path = None
     late_config_tmp_path = None
     app_def = case["app"]
+    case_argv = case["argv"]
     if "config_content" in app_def:
         config_format = app_def.get("config_format", "json")
         ext = ".toml" if config_format == "toml" else ".json"
@@ -262,7 +265,14 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             config_tmp_path = cfg_f.name
         # Shallow copy so we don't mutate the original case
         app_def = dict(app_def)
-        app_def["config_path"] = config_tmp_path
+        if any("$CONFIG_PATH" in arg for arg in case_argv):
+            # Substitute $CONFIG_PATH in argv; don't set config_path on app
+            case_argv = [
+                arg.replace("$CONFIG_PATH", config_tmp_path)
+                for arg in case_argv
+            ]
+        else:
+            app_def["config_path"] = config_tmp_path
 
     # Handle config_content_late: create a temp path for the config file,
     # set config_path to it, but let the generated code write the content
@@ -295,7 +305,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         ) as f:
             f.write(script)
             script_path = f.name
-        argv = [sys.executable, script_path] + case["argv"]
+        argv = [sys.executable, script_path] + case_argv
         cleanup_path = script_path
         extra_env = {}
     elif target == "go":
@@ -310,7 +320,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         json.dump(app_def, app_def_file, sort_keys=True)
         app_def_file.close()
         extra_env = {"CONFORMANCE_APP_DEF": app_def_file.name}
-        argv = [binary] + case["argv"]
+        argv = [binary] + case_argv
         cleanup_path = app_def_file.name
     else:
         return False, [f"  unsupported target: {target}"], None
@@ -318,7 +328,7 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     # --dump-schema needs go.mod (Go) or pyproject.toml (Python) in the CWD
     # to determine project_id. Create a temp dir with the right project file.
     proj_dir = None
-    if "--dump-schema" in case["argv"]:
+    if "--dump-schema" in case_argv:
         proj_dir = _make_project_dir(target, app_def["name"])
         run_cwd = proj_dir
     else:

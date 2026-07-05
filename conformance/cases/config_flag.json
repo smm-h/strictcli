@@ -98,5 +98,102 @@
     "expect": {
       "exit_code": 1
     }
+  },
+  {
+    "name": "config-flag: --config <path> happy path loads config",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"port\": 9090}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "port={port}",
+          "flags": [
+            {"name": "port", "help": "port number", "type": "int", "default": 80}
+          ]
+        }
+      ]
+    },
+    "argv": ["--config", "$CONFIG_PATH", "run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=9090"
+    }
+  },
+  {
+    "name": "config-flag: --config=<path> equals form loads config",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"port\": 9090}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "port={port}",
+          "flags": [
+            {"name": "port", "help": "port number", "type": "int", "default": 80}
+          ]
+        }
+      ]
+    },
+    "argv": ["--config=$CONFIG_PATH", "run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=9090"
+    }
+  },
+  {
+    "name": "config-flag: --config missing value is an error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--config"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "'--config' requires a value"
+    }
+  },
+  {
+    "name": "config-flag: no_default_config_path with explicit --config loads config",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "no_default_config_path": true,
+      "config_content": "{\"port\": 9090}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "port={port}",
+          "flags": [
+            {"name": "port", "help": "port number", "type": "int", "default": 80}
+          ]
+        }
+      ]
+    },
+    "argv": ["--config", "$CONFIG_PATH", "run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=9090"
+    }
   }
 ]

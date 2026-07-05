@@ -43,6 +43,7 @@ IMPL_EXCLUSIONS: dict[str, str] = {
     "type": "Python Flag.type uses native types; schema uses 'type' string enum",
     "checks_embed": "runtime-only (bytes data, not serializable to JSON schema)",
     "checksEmbed": "runtime-only (Go field for WithChecksEmbed, not serializable to JSON schema)",
+    "LastSources": "Go-only runtime state (source provenance map from most recent parse)",
 }
 
 # Per-entity exclusions: fields present in one implementation but not
@@ -81,9 +82,15 @@ SCHEMA_TEST_ONLY: set[str] = {
     # config_content provides inline config file content for test cases --
     # not a real App parameter (the test runner writes it to a temp file).
     "config_content",
+    # config_content_late is like config_content but the generated code writes
+    # the file after app construction (between construction and app.run()).
+    "config_content_late",
     # config_fields_def defines config field registrations in test cases --
     # not a real App struct field (it drives code generation).
     "config_fields_def",
+    # handler_style tells the code generator which handler shape to emit
+    # (e.g. "context" vs "classic") -- not a real Command struct field.
+    "handler_style",
 }
 
 # Per-entity schema fields that are JSON discriminators, not real API fields:
