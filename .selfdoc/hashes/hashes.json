@@ -4,13 +4,11 @@
     "description": "bb3cd9d34f014c0674a9285c25ee14b5b4abc5cf941f0d83594c301405e8f3b6"
   },
   "en/go-strictcli.md": {
-    "content": "5fe2e25bf3a98d8466c2da2946d8f07af9e20479217c55c042eceb6b28894116",
-    "description": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3",
-    "source_docstring": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
+    "content": "9d7ab5c6b293546626be6a9dcc37551d440b4a856928026177d666aa49bffecf",
+    "description": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
   },
   "en/python-strictcli.md": {
-    "content": "f021be028d5163508da2837c52fa693f58e03885b8b8acf87e621109970776ae",
-    "description": "e8a96baa19d372ccd8a10900f7aac016dd2539fd4d685fa4d64fa203e10871b3",
-    "source_docstring": "e8a96baa19d372ccd8a10900f7aac016dd2539fd4d685fa4d64fa203e10871b3"
+    "content": "20d40f191eac2d4a91fbaa9236fd0ca3291a9118ad0f916fc3fff7f90968be15",
+    "description": "e8a96baa19d372ccd8a10900f7aac016dd2539fd4d685fa4d64fa203e10871b3"
   }
 }
