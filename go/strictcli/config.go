@@ -347,6 +347,20 @@ func loadConfig(appName string, pathOverride string, format string) map[string]i
 	return result
 }
 
+// resolveConfigData loads config data for the app. This is the single
+// entry point for all config loading. The runtimePathOverride and hermetic
+// parameters are plumbed for future use (Phase 1) but currently inert.
+func (a *App) resolveConfigData(runtimePathOverride string, hermetic bool) map[string]interface{} {
+	if hermetic {
+		return map[string]interface{}{}
+	}
+	override := a.configPathOverride
+	if runtimePathOverride != "" {
+		override = runtimePathOverride
+	}
+	return loadConfig(a.Name, override, a.configFormat)
+}
+
 // coerceConfigScalar coerces a single JSON-decoded value to the given flag type.
 // Returns the coerced value and an error string (empty on success).
 // When shortNames is true (config field validation path), uses short type names
@@ -598,7 +612,7 @@ func (a *App) registerConfigGroup() {
 	// config show
 	grp.Command("show", "Show all config values with their sources (config file, env, or default)", func(args map[string]interface{}) int {
 		useJSON := args["json"].(bool)
-		configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
+		configData := a.resolveConfigData("", false)
 		allFlags := a.collectAllFlags()
 
 		if useJSON {
@@ -719,7 +733,7 @@ func (a *App) registerConfigGroup() {
 			return 1
 		}
 		// Read existing config
-		existing := loadConfig(a.Name, a.configPathOverride, a.configFormat)
+		existing := a.resolveConfigData("", false)
 
 		// Look up the key against registered flags and config fields
 		allFlags := a.collectAllFlags()

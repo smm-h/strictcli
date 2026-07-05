@@ -1115,7 +1115,6 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		os.Exit(1)
 	}
 	if a.configEnabled {
-		a.configData = loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		a.registerConfigGroup()
 	}
 	// Enable check system when WithChecks(path) or WithChecksEmbed(data) was provided
@@ -1749,6 +1748,11 @@ type parseResult struct {
 // doParse parses argv and returns a parseResult.
 // Exactly one of: (cmd+kwargs), helpText, versionText, or parseErr will be non-zero.
 func (a *App) doParse(argv []string) parseResult {
+	// Load config data once at parse time (replaces the old construction-time load)
+	if a.configEnabled {
+		a.configData = a.resolveConfigData("", false)
+	}
+
 	// Reset stdin tracking for each parse invocation
 	a.stdinConsumedBy = nil
 
@@ -1828,14 +1832,13 @@ func (a *App) doParse(argv []string) parseResult {
 	// Validate config fields for non-config subcommands
 	isConfigSubcommand := a.configEnabled && len(path) > 0 && path[0] == "config"
 	if a.configEnabled && !isConfigSubcommand {
-		configData := loadConfig(a.Name, a.configPathOverride, a.configFormat)
 		if len(cmd.configFields) > 0 {
-			if errMsg := a.validateBoundConfigFields(cmd, configData); errMsg != "" {
+			if errMsg := a.validateBoundConfigFields(cmd, a.configData); errMsg != "" {
 				return parseResult{parseErr: errMsg}
 			}
 		}
 		if len(a.configFields) > 0 {
-			if errMsg := a.validateUnknownConfigKeys(configData); errMsg != "" {
+			if errMsg := a.validateUnknownConfigKeys(a.configData); errMsg != "" {
 				return parseResult{parseErr: errMsg}
 			}
 		}

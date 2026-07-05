@@ -2901,11 +2901,6 @@ func TestConfigInvalidJSON(t *testing.T) {
 	os.MkdirAll(dir, 0o755)
 	os.WriteFile(filepath.Join(dir, "config.json"), []byte("{bad json"), 0o644)
 
-	// Capture stderr during NewApp to verify warning
-	oldStderr := os.Stderr
-	stderrR, stderrW, _ := os.Pipe()
-	os.Stderr = stderrW
-
 	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
 	app.Command("serve", "start server", func(args map[string]interface{}) int {
 		fmt.Printf("port=%d", args["port"])
@@ -2914,6 +2909,13 @@ func TestConfigInvalidJSON(t *testing.T) {
 		IntFlag("port", "port number", Default(8080)),
 	))
 
+	// Config is loaded at parse time; capture os.Stderr around Test to verify warning
+	oldStderr := os.Stderr
+	stderrR, stderrW, _ := os.Pipe()
+	os.Stderr = stderrW
+
+	r := app.Test([]string{"serve"})
+
 	stderrW.Close()
 	var stderrBuf [4096]byte
 	n, _ := stderrR.Read(stderrBuf[:])
@@ -2921,13 +2923,12 @@ func TestConfigInvalidJSON(t *testing.T) {
 	os.Stderr = oldStderr
 	stderrOut := string(stderrBuf[:n])
 
-	// Warning should be printed to stderr during construction
+	// Warning should be printed to stderr during parse
 	if !strings.Contains(stderrOut, "warning: invalid JSON") {
 		t.Fatalf("expected warning about invalid JSON, got stderr=%q", stderrOut)
 	}
 
 	// Should fall back to defaults (config is empty due to invalid JSON)
-	r := app.Test([]string{"serve"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4431,11 +4432,6 @@ func TestTomlConfigInvalidToml(t *testing.T) {
 	os.MkdirAll(dir, 0o755)
 	os.WriteFile(filepath.Join(dir, "config.toml"), []byte("= invalid toml [[["), 0o644)
 
-	// Capture stderr during NewApp to verify warning
-	oldStderr := os.Stderr
-	stderrR, stderrW, _ := os.Pipe()
-	os.Stderr = stderrW
-
 	app := NewApp("tomlbadapp", "1.0.0", "test app", WithConfig(), WithConfigFormat("toml"))
 	app.Command("serve", "start server", func(args map[string]interface{}) int {
 		fmt.Printf("port=%d", args["port"])
@@ -4444,6 +4440,13 @@ func TestTomlConfigInvalidToml(t *testing.T) {
 		IntFlag("port", "port number", Default(8080)),
 	))
 
+	// Config is loaded at parse time; capture os.Stderr around Test to verify warning
+	oldStderr := os.Stderr
+	stderrR, stderrW, _ := os.Pipe()
+	os.Stderr = stderrW
+
+	r := app.Test([]string{"serve"})
+
 	stderrW.Close()
 	var stderrBuf [4096]byte
 	n, _ := stderrR.Read(stderrBuf[:])
@@ -4451,15 +4454,12 @@ func TestTomlConfigInvalidToml(t *testing.T) {
 	os.Stderr = oldStderr
 	stderrOut := string(stderrBuf[:n])
 
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
 	// Warning should mention invalid TOML
 	if !strings.Contains(stderrOut, "warning: invalid TOML") {
 		t.Fatalf("expected warning about invalid TOML, got stderr=%q", stderrOut)
-	}
-
-	// Should fall back to defaults
-	r := app.Test([]string{"serve"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
 	if !strings.Contains(r.Stdout, "port=8080") {
 		t.Fatalf("expected default value 8080, got %q", r.Stdout)

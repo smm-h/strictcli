@@ -1891,14 +1891,9 @@ class App:
             raise ValueError(
                 f'App.config_format must be "json" or "toml", got {self.config_format!r}'
             )
-        # Load config and register config subcommands if enabled
+        # Register config subcommands if enabled (config data loaded at parse time)
         self._config_data: dict = {}
         if self.config:
-            self._config_data = _load_config(
-                self.name,
-                config_path_override=self.config_path,
-                config_format=self.config_format,
-            )
             self._register_config_group()
         # Discover checks TOML
         self._check_context_factory: Callable | None = None
@@ -2084,6 +2079,25 @@ class App:
         if err:
             return err
         return _check_groups(self._groups)
+
+    def _resolve_config_data(
+        self,
+        runtime_path_override: str | None = None,
+        hermetic: bool = False,
+    ) -> dict:
+        """Single entry point for all config loading.
+
+        The runtime_path_override and hermetic parameters are plumbed for
+        future use (Phase 1) but currently inert.
+        """
+        if hermetic:
+            return {}
+        override = runtime_path_override or self.config_path
+        return _load_config(
+            self.name,
+            config_path_override=override,
+            config_format=self.config_format,
+        )
 
     def _validate_config_fields(self, cmd: Command, config_data: dict) -> str | None:
         """Validate config file contents against the command's bound config fields.
@@ -2400,11 +2414,7 @@ class App:
         # config show
         def _config_show_handler(**_kw) -> int:
             use_json = _kw.get("json", False)
-            config_data = _load_config(
-                app_ref.name,
-                config_path_override=app_ref.config_path,
-                config_format=app_ref.config_format,
-            )
+            config_data = app_ref._resolve_config_data()
             all_flags = app_ref._collect_all_flags()
             if use_json:
                 result = {}
@@ -2502,11 +2512,7 @@ class App:
             dir_path = os.path.dirname(path)
             os.makedirs(dir_path, exist_ok=True)
             # Read existing config
-            existing = _load_config(
-                app_ref.name,
-                config_path_override=app_ref.config_path,
-                config_format=app_ref.config_format,
-            )
+            existing = app_ref._resolve_config_data()
 
             # Look up the key against registered flags and config fields
             all_flags = app_ref._collect_all_flags()
@@ -2768,6 +2774,10 @@ class App:
         values (used by passthrough command handlers).
         """
 
+        # Load config data once at parse time
+        if self.config:
+            self._config_data = self._resolve_config_data()
+
         # Step 1: intercept app-level --help/-h, --version/-v, --dump-schema
         if not argv or argv == ["--help"] or argv == ["-h"]:
             raise _HelpRequested(target=self)
@@ -2802,14 +2812,7 @@ class App:
         is_config_subcommand = bool(path) and path[0] == "config"
         if (self.config and self._config_fields
                 and not is_config_subcommand):
-            # Reload config data fresh for validation
-            config_data = _load_config(
-                self.name,
-                config_path_override=self.config_path,
-                config_format=self.config_format,
-            )
-            self._config_data = config_data
-            err = self._validate_config_fields(cmd, config_data)
+            err = self._validate_config_fields(cmd, self._config_data)
             if err:
                 raise _ParseError(err)
 
