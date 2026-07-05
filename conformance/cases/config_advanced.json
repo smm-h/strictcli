@@ -393,5 +393,30 @@
       "exit_code": 1,
       "stderr_contains": "mutually exclusive"
     }
+  },
+  {
+    "name": "config: parse-time loading - late-written config is honored",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content_late": "{\"port\": 5555}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "port={port}",
+          "flags": [
+            {"name": "port", "help": "port number", "type": "int", "default": 80}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=5555"
+    }
   }
 ]
