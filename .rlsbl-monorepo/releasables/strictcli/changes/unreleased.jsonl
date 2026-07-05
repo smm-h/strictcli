@@ -1,0 +1,1 @@
+{"commits":["13e89d96159680e9189072553ce47a5c20e620da"],"user_facing":true,"description":"**Parse-time config loading.** Config files are now loaded at parse time (not construction time), ensuring late-written config files are honored.","type":"feature","packages":["strictcli"]}
