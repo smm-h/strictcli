@@ -1,6 +1,6 @@
 [
   {
-    "name": "context handler: CLI flag source is 'cli', defaulted flag source is 'default'",
+    "name": "ctx.source: CLI flag source is 'cli', defaulted flag source is 'default'",
     "app": {
       "name": "provenance-test",
       "version": "1.0.0",
@@ -31,6 +31,211 @@
     "expect": {
       "exit_code": 0,
       "stdout_equals": "cli:default"
+    }
+  },
+  {
+    "name": "ctx.source: env flag source is 'env' when set by env var (no CLI)",
+    "app": {
+      "name": "provenance-test",
+      "version": "1.0.0",
+      "help": "Test env provenance",
+      "env_prefix": "PROV",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:level}",
+          "flags": [
+            {
+              "name": "level",
+              "help": "Level",
+              "type": "int",
+              "env": "PROV_LEVEL",
+              "default": 0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "env": {
+      "PROV_LEVEL": "42"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "env"
+    }
+  },
+  {
+    "name": "ctx.source: config flag source is 'config' when set by config file (no CLI, no env)",
+    "app": {
+      "name": "provenance-test",
+      "version": "1.0.0",
+      "help": "Test config provenance",
+      "config": true,
+      "config_content": "{\"level\": 7}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:level}",
+          "flags": [
+            {
+              "name": "level",
+              "help": "Level",
+              "type": "int",
+              "default": 0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "config"
+    }
+  },
+  {
+    "name": "ctx.source: default flag source is 'default' when not set anywhere",
+    "app": {
+      "name": "provenance-test",
+      "version": "1.0.0",
+      "help": "Test default provenance",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:level}",
+          "flags": [
+            {
+              "name": "level",
+              "help": "Level",
+              "type": "int",
+              "default": 0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "default"
+    }
+  },
+  {
+    "name": "ctx.source: implied flag source is 'implied' when set via Implies dependency",
+    "app": {
+      "name": "provenance-test",
+      "version": "1.0.0",
+      "help": "Test implied provenance",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:all}:{source:verbose}",
+          "flags": [
+            {
+              "name": "all",
+              "help": "Enable all",
+              "type": "bool",
+              "default": false
+            },
+            {
+              "name": "verbose",
+              "help": "Verbose mode",
+              "type": "bool",
+              "default": false
+            }
+          ],
+          "dependencies": [
+            {
+              "type": "implies",
+              "flag": "all",
+              "implies": "verbose",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["run", "--all"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "cli:implied"
+    }
+  },
+  {
+    "name": "ctx.source: provenance under hermetic (env set but source is 'default')",
+    "app": {
+      "name": "provenance-test",
+      "version": "1.0.0",
+      "help": "Test hermetic provenance",
+      "env_prefix": "PROV",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:level}:{level}",
+          "flags": [
+            {
+              "name": "level",
+              "help": "Level",
+              "type": "int",
+              "env": "PROV_LEVEL",
+              "default": 5
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--hermetic", "run"],
+    "env": {
+      "PROV_LEVEL": "99"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "default:5"
+    }
+  },
+  {
+    "name": "ctx.source: CLI overrides env -- source is 'cli'",
+    "app": {
+      "name": "provenance-test",
+      "version": "1.0.0",
+      "help": "Test CLI > env provenance",
+      "env_prefix": "PROV",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:level}",
+          "flags": [
+            {
+              "name": "level",
+              "help": "Level",
+              "type": "int",
+              "env": "PROV_LEVEL",
+              "default": 0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["run", "--level", "99"],
+    "env": {
+      "PROV_LEVEL": "42"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "cli"
     }
   }
 ]
