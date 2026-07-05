@@ -197,7 +197,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 	}
 
 	// Run validation and build final kwargs
-	validatedKwargs, postGlobalValues, _, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)
+	validatedKwargs, postGlobalValues, sources, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)
 	if errStr != "" {
 		return invokeResult{exitCode: 1, err: errStr}
 	}
@@ -227,6 +227,9 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 		validatedKwargs[paramName] = val
 	}
 
+	// Store sources for function handlers that need provenance info
+	a.LastSources = sources
+
 	// Set dispatch context for struct handler wrappers
 	var dc *dispatchCtx
 	if cmd.handlerFactory != nil {
@@ -236,6 +239,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			stdout:  &buf,
 			stderr:  io.Discard,
 			globals: paramKwargsToFlagNames(validatedKwargs),
+			sources: sources,
 		}
 		a.currentDispatch = dc
 		defer func() { a.currentDispatch = nil }()

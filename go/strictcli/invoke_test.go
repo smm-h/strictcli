@@ -818,3 +818,48 @@ func TestInvokeImpliesDependency(t *testing.T) {
 		t.Fatalf("expected verbose=true (implied), got %v", invokeKwargs["verbose"])
 	}
 }
+
+// sourceCapturingHandler is a struct handler that captures ctx.Source() results.
+type sourceCapturingHandler struct {
+	Name    string `cli:"name" help:"who to greet"`
+	Verbose bool   `cli:"verbose" help:"verbose output" default:"false"`
+}
+
+func (h *sourceCapturingHandler) Run(ctx *Context) int {
+	// Store the sources in a package-level variable so the test can inspect them
+	capturedSources["name"] = ctx.Source("name")
+	capturedSources["verbose"] = ctx.Source("verbose")
+	return 0
+}
+
+var capturedSources = map[string]string{}
+
+func TestCallStructHandlerSourceProvenance(t *testing.T) {
+	// Reset captured sources
+	capturedSources = map[string]string{}
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.RegisterHandler("greet", "greet someone", func() Handler {
+		return &sourceCapturingHandler{}
+	})
+
+	// Call with "name" provided, "verbose" absent (should get default)
+	result, err := app.Call("greet", map[string]interface{}{
+		"name": "world",
+	})
+	if err != nil {
+		t.Fatalf("Call error: %v", err)
+	}
+	if result.(int) != 0 {
+		t.Fatalf("expected exit code 0, got %v", result)
+	}
+
+	// Provided kwarg should have source "cli"
+	if capturedSources["name"] != "cli" {
+		t.Fatalf("expected source 'cli' for name, got %q", capturedSources["name"])
+	}
+	// Absent kwarg with default should have source "default"
+	if capturedSources["verbose"] != "default" {
+		t.Fatalf("expected source 'default' for verbose, got %q", capturedSources["verbose"])
+	}
+}
