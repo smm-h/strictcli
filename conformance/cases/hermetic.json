@@ -1,0 +1,247 @@
+[
+  {
+    "name": "hermetic: CLI flag source is 'cli', defaulted flag source is 'default', env var ignored",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test hermetic mode",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run with hermetic",
+          "handler_style": "context",
+          "handler_prints": "{source:output}:{source:level}:{output}:{level}",
+          "flags": [
+            {
+              "name": "output",
+              "help": "Output file",
+              "type": "str",
+              "env": "MYAPP_OUTPUT",
+              "default": "none"
+            },
+            {
+              "name": "level",
+              "help": "Verbosity level",
+              "type": "int",
+              "env": "MYAPP_LEVEL",
+              "default": 0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--hermetic", "run", "--output", "file.txt"],
+    "env": {
+      "MYAPP_OUTPUT": "from-env",
+      "MYAPP_LEVEL": "42"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "cli:default:file.txt:0"
+    }
+  },
+  {
+    "name": "hermetic: env var for flag is set, but under hermetic the flag gets its default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test hermetic env bypass",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run with hermetic",
+          "handler_style": "context",
+          "handler_prints": "{source:level}:{level}",
+          "flags": [
+            {
+              "name": "level",
+              "help": "Level",
+              "type": "int",
+              "env": "MYAPP_LEVEL",
+              "default": 0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--hermetic", "run"],
+    "env": {
+      "MYAPP_LEVEL": "42"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "default:0"
+    }
+  },
+  {
+    "name": "hermetic: --hermetic + --config = mutual exclusion error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test hermetic config conflict",
+      "config": true,
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--hermetic", "--config", "/tmp/nonexistent.json", "run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "--hermetic and --config are mutually exclusive"
+    }
+  },
+  {
+    "name": "hermetic: --hermetic + config subcommand = error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test hermetic config cmd conflict",
+      "config": true,
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--hermetic", "config", "show"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "--hermetic cannot be used with config commands"
+    }
+  },
+  {
+    "name": "hermetic: required flag missing (env set but ignored) = error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test hermetic required flag",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_prints": "name={name}",
+          "flags": [
+            {
+              "name": "name",
+              "help": "Name to use",
+              "type": "str",
+              "env": "MYAPP_NAME"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--hermetic", "run"],
+    "env": {
+      "MYAPP_NAME": "test-value"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "required"
+    }
+  },
+  {
+    "name": "hermetic: global flag named 'hermetic' is rejected (reserved)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "hermetic",
+          "type": "bool",
+          "help": "should be rejected",
+          "default": false
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "reserved"
+    }
+  },
+  {
+    "name": "hermetic: provenance under hermetic (env set but source is 'default')",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test provenance under hermetic",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:level}",
+          "flags": [
+            {
+              "name": "level",
+              "help": "Level",
+              "type": "int",
+              "env": "MYAPP_LEVEL",
+              "default": 5
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--hermetic", "run"],
+    "env": {
+      "MYAPP_LEVEL": "99"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "default"
+    }
+  },
+  {
+    "name": "hermetic: works on app without config (still disables env)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test hermetic without config",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_prints": "level={level}",
+          "flags": [
+            {
+              "name": "level",
+              "help": "Level",
+              "type": "int",
+              "env": "MYAPP_LEVEL",
+              "default": 0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--hermetic", "run"],
+    "env": {
+      "MYAPP_LEVEL": "42"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "level=0"
+    }
+  }
+]

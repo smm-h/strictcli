@@ -115,6 +115,7 @@ var reservedGlobalFlagNames = map[string]bool{
 	"dump-schema": true,
 	"mcp":         true,
 	"config":      true,
+	"hermetic":    true,
 }
 
 // RegisterGlobals extracts global flags from a struct type T and registers them

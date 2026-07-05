@@ -1791,13 +1791,14 @@ type parseResult struct {
 }
 
 // preScanResult holds the results of the position-aware pre-scan for
-// reserved flags (--dump-schema, --mcp, --config).
+// reserved flags (--dump-schema, --mcp, --config, --hermetic).
 type preScanResult struct {
 	dumpSchema  bool
 	serveMCP    bool
+	hermetic    bool     // --hermetic: skip config loading and env var resolution
 	configPath  string   // value from --config <path> or --config=<path>
 	err         string   // non-empty on error (e.g. missing value, config on disabled app)
-	cleanedArgv []string // argv with --config/--config=value stripped out
+	cleanedArgv []string // argv with --config/--config=value/--hermetic stripped out
 }
 
 // preScanReservedFlags scans argv for --dump-schema, --mcp, and --config
@@ -1855,6 +1856,14 @@ func (a *App) preScanReservedFlags(argv []string) preScanResult {
 		if tok == "--mcp" {
 			result.serveMCP = true
 			return result
+		}
+
+		// --hermetic (boolean, no value)
+		if tok == "--hermetic" {
+			result.hermetic = true
+			excludeIndices[i] = true
+			i++
+			continue
 		}
 
 		// --config=<value>
@@ -1947,7 +1956,7 @@ func (a *App) doParse(argv []string) parseResult {
 		return parseResult{versionText: formatVersion(a)}
 	}
 
-	// Position-aware pre-scan: intercept --dump-schema, --mcp, and --config
+	// Position-aware pre-scan: intercept --dump-schema, --mcp, --config, --hermetic
 	// in the pre-command region only (before the first non-flag token, before --).
 	// This replaces the old naive scans that checked ALL of argv.
 	preScan := a.preScanReservedFlags(argv)
@@ -1961,10 +1970,16 @@ func (a *App) doParse(argv []string) parseResult {
 		return parseResult{parseErr: preScan.err}
 	}
 
+	// --hermetic + --config mutual exclusion
+	if preScan.hermetic && preScan.configPath != "" {
+		return parseResult{parseErr: "--hermetic and --config are mutually exclusive"}
+	}
+
 	// Load config data once at parse time.
+	// When hermetic is active, skip config loading entirely (even XDG defaults).
 	// Capture any parse error to handle config subcommand exemption later.
 	var configLoadErr string
-	if a.configEnabled {
+	if a.configEnabled && !preScan.hermetic {
 		runtimeOverride := preScan.configPath
 		hermetic := a.noDefaultConfigPath && runtimeOverride == ""
 		isRuntimeFlag := runtimeOverride != ""
@@ -1975,11 +1990,14 @@ func (a *App) doParse(argv []string) parseResult {
 		} else {
 			a.configData = result.data
 		}
+	} else if preScan.hermetic {
+		// Hermetic mode: no config data at all
+		a.configData = nil
 	}
 
-	// Extract global flags from cleaned argv (--config stripped), leaving
-	// the rest for command routing.
-	globalValues, globalSourceMap, rest, globalErr := a.extractGlobalFlags(preScan.cleanedArgv)
+	// Extract global flags from cleaned argv (--config/--hermetic stripped), leaving
+	// the rest for command routing. Pass hermetic flag to skip env resolution.
+	globalValues, globalSourceMap, rest, globalErr := a.extractGlobalFlags(preScan.cleanedArgv, preScan.hermetic)
 	if globalErr != "" {
 		return parseResult{parseErr: globalErr}
 	}
@@ -2032,6 +2050,12 @@ func (a *App) doParse(argv []string) parseResult {
 	// are exempt from config load errors (self-lock prevention).
 	// config show handles the error specially (shows it as output).
 	isConfigSubcommand := a.configEnabled && len(path) > 0 && path[0] == "config"
+
+	// --hermetic + config subcommand = hard error
+	if preScan.hermetic && isConfigSubcommand {
+		return parseResult{parseErr: "--hermetic cannot be used with config commands"}
+	}
+
 	if configLoadErr != "" {
 		if !isConfigSubcommand {
 			// Non-config command: hard error
@@ -2059,7 +2083,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 	}
 
-	kwargs, postGlobalValues, cmdSources, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode)
+	kwargs, postGlobalValues, cmdSources, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode, preScan.hermetic)
 	if err != "" {
 		parts := append([]string{a.Name}, path...)
 		parts = append(parts, cmd.Name)
@@ -2098,8 +2122,9 @@ func tokensContainHelp(tokens []string) bool {
 // "--", returning everything from that point onward as remaining tokens.
 // This matches Python's _parse_global_flags behavior.  Global flags appearing
 // after the command name are handled by parseCommand instead.
+// When hermetic is true, env var and config resolution are skipped entirely.
 // Returns (globalValues map, globalSources map, remaining argv, error string).
-func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, map[string]string, []string, string) {
+func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]interface{}, map[string]string, []string, string) {
 	globalValues := make(map[string]interface{})
 	globalSources := make(map[string]string)
 	if len(a.globalFlags) == 0 {
@@ -2225,7 +2250,8 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, map[str
 		globalSources[flagParamName(k)] = "cli"
 	}
 
-	// Resolve env vars for global flags not set by CLI
+	// Resolve env vars for global flags not set by CLI (skipped under --hermetic)
+	if !hermetic {
 	for i := range a.globalFlags {
 		f := &a.globalFlags[i]
 		if _, ok := globalValues[f.Name]; ok {
@@ -2422,6 +2448,7 @@ func (a *App) extractGlobalFlags(argv []string) (map[string]interface{}, map[str
 			globalSources[flagParamName(f.Name)] = "config"
 		}
 	}
+	} // end if !hermetic
 
 	// Apply defaults for global flags not set
 	for i := range a.globalFlags {

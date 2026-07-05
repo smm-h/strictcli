@@ -169,8 +169,9 @@ func resolveAtPrefix(flagName, raw string, stdinConsumedBy **string) (string, st
 // in postGlobalValues so the caller can merge them with pre-command globals.
 // configData is an optional map of config values (may be nil).
 // conflictMode is "cli-wins" (default) or "error" (config+cli/env overlap is an error).
+// When hermetic is true, env var and config resolution are skipped entirely.
 // Returns (kwargs, postGlobalValues, sources, errorString).
-func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string, hermetic bool) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
 	// Build flag lookup maps
 	longLookup := make(map[string]*Flag)    // --flag-name -> Flag
 	shortLookup := make(map[string]*Flag)   // -x -> Flag
@@ -323,7 +324,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	envNames := make(map[string]bool)
 	configNames := make(map[string]bool)
 
-	// Resolve env vars for flags not set by CLI
+	// Resolve env vars for flags not set by CLI (skipped under --hermetic)
+	if !hermetic {
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
 		if _, ok := cliSet[f.Name]; ok {
@@ -525,6 +527,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			configNames[f.Name] = true
 		}
 	}
+	} // end if !hermetic
 
 	// Wrap cliSet into a sourcedStore with proper source attribution.
 	// CLI-parsed values are SourceCLI, env-resolved values are SourceEnv,

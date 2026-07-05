@@ -1271,7 +1271,7 @@ _NON_BOOL_SCALAR_TYPES = (str, int, float)
 # Names reserved by the framework for global flags.
 # These cannot be used for user-defined global flags.
 _RESERVED_GLOBAL_FLAG_NAMES = frozenset({
-    "help", "h", "version", "v", "dump-schema", "mcp", "config",
+    "help", "h", "version", "v", "dump-schema", "mcp", "config", "hermetic",
 })
 
 
@@ -2960,15 +2960,15 @@ class App:
         self._groups["config"] = config_grp
 
     def _pre_scan_reserved_flags(self, argv: list[str]) -> dict:
-        """Position-aware pre-scan for --dump-schema, --mcp, --config.
+        """Position-aware pre-scan for --dump-schema, --mcp, --config, --hermetic.
 
         Scans the pre-command region of argv (before the first non-flag
         token, before ``--``).  Known global flags and their values are
         skipped so that a global-flag value matching a command name does
         not terminate the scan early.
 
-        Returns a dict with keys: dump_schema, serve_mcp, config_path, err,
-        cleaned_argv.
+        Returns a dict with keys: dump_schema, serve_mcp, hermetic, config_path,
+        err, cleaned_argv.
         """
         # Build a set of known global flag tokens with value-taking info
         known_flags: dict[str, bool] = {}  # token -> takes_value
@@ -3002,6 +3002,13 @@ class App:
             if tok == "--mcp":
                 result["serve_mcp"] = True
                 return result
+
+            # --hermetic (boolean, no value)
+            if tok == "--hermetic":
+                result["hermetic"] = True
+                exclude_indices.add(i)
+                i += 1
+                continue
 
             # --config=<value>
             if tok.startswith("--config="):
@@ -3082,7 +3089,7 @@ class App:
         if argv == ["--version"] or argv == ["-v"]:
             raise _VersionRequested()
 
-        # Position-aware pre-scan: intercept --dump-schema, --mcp, --config
+        # Position-aware pre-scan: intercept --dump-schema, --mcp, --config, --hermetic
         # in the pre-command region only (before command name, before --).
         pre_scan = self._pre_scan_reserved_flags(argv)
         if pre_scan.get("dump_schema"):
@@ -3092,10 +3099,17 @@ class App:
         if pre_scan.get("err"):
             raise _ParseError(pre_scan["err"])
 
+        is_hermetic = bool(pre_scan.get("hermetic"))
+
+        # --hermetic + --config mutual exclusion
+        if is_hermetic and pre_scan.get("config_path"):
+            raise _ParseError("--hermetic and --config are mutually exclusive")
+
         # Load config data once at parse time.
+        # When hermetic is active, skip config loading entirely (even XDG defaults).
         # Capture any parse error to handle config subcommand exemption later.
         config_load_err: str | None = None
-        if self.config:
+        if self.config and not is_hermetic:
             runtime_override = pre_scan.get("config_path")
             hermetic = self.no_default_config_path and not runtime_override
             is_runtime_flag = bool(runtime_override)
@@ -3109,12 +3123,17 @@ class App:
                 self._config_data = {}
             else:
                 self._config_data = result.data
+        elif is_hermetic:
+            # Hermetic mode: no config data at all
+            self._config_data = None
 
         # Step 1.5: parse global flags before command routing
-        # Use cleaned argv (--config stripped) for the rest of the pipeline
+        # Use cleaned argv (--config/--hermetic stripped) for the rest of the pipeline
         cleaned_argv = pre_scan.get("cleaned_argv", argv)
         self._stdin_consumed_by: str | None = None
-        global_values, global_source_map, remaining = self._parse_global_flags(cleaned_argv)
+        global_values, global_source_map, remaining = self._parse_global_flags(
+            cleaned_argv, hermetic=is_hermetic,
+        )
         self._last_global_values = global_values
 
         # Step 2: route to command or group (iterative traversal for arbitrary depth)
@@ -3136,6 +3155,11 @@ class App:
         # are exempt from config load errors (self-lock prevention).
         # config show handles the error specially (shows it as output).
         is_config_subcommand = bool(path) and path[0] == "config"
+
+        # --hermetic + config subcommand = hard error
+        if is_hermetic and is_config_subcommand:
+            raise _ParseError("--hermetic cannot be used with config commands")
+
         if config_load_err:
             if not is_config_subcommand:
                 raise _ParseError(config_load_err)
@@ -3162,6 +3186,7 @@ class App:
                 cmd, rest, self._global_flags, config_data=self._config_data,
                 stdin_consumed_by=stdin_state,
                 conflict_mode=self.config_conflict_mode,
+                hermetic=is_hermetic,
             )
         except _ParseError as e:
             prefix_parts = [self.name] + path + [cmd.name]
@@ -3242,7 +3267,7 @@ class App:
         raise _HelpRequested(target=group)  # noqa: F821 -- 'group' always set when loop body ran
 
     def _parse_global_flags(
-        self, argv: list[str]
+        self, argv: list[str], *, hermetic: bool = False,
     ) -> tuple[dict[str, object], dict[str, str], list[str]]:
         """Parse global flags from argv, returning (global_values, global_sources, remaining_tokens).
 
@@ -3250,6 +3275,8 @@ class App:
         non-global-flag token (the command name) and everything after it are
         returned as remaining tokens. A bare ``--`` stops global flag parsing
         and is included in the remaining tokens.
+
+        When hermetic is True, env var and config resolution are skipped entirely.
         """
         if not self._global_flags:
             return {}, {}, argv
@@ -3425,8 +3452,10 @@ class App:
         env_names: set[str] = set()
         config_names: set[str] = set()
 
-        # Resolve env vars for global flags not set by CLI
+        # Resolve env vars for global flags not set by CLI (skipped under --hermetic)
         for f in self._global_flags:
+            if hermetic:
+                break
             if f.name in cli_set:
                 continue
             if f.env is not None:
@@ -3541,7 +3570,8 @@ class App:
 
         # Resolve config values for global flags not set by CLI or env.
         # In conflict mode "error", detect config+cli/env overlaps.
-        if self._config_data:
+        # (Skipped under --hermetic since config is not loaded.)
+        if self._config_data and not hermetic:
             for f in self._global_flags:
                 param = _flag_param_name(f.name)
                 if param not in self._config_data:
@@ -4376,6 +4406,7 @@ def _parse_command(
     config_data: dict | None = None,
     stdin_consumed_by: list[str | None] | None = None,
     conflict_mode: str = "cli-wins",
+    hermetic: bool = False,
 ) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Parse tokens against a resolved command's flags and args.
 
@@ -4384,6 +4415,8 @@ def _parse_command(
 
     stdin_consumed_by is a mutable single-element list tracking which flag
     has already consumed stdin via @-. Updated in-place.
+
+    When hermetic is True, env var and config resolution are skipped entirely.
     """
     if stdin_consumed_by is None:
         stdin_consumed_by = [None]
@@ -4577,8 +4610,10 @@ def _parse_command(
     env_names: set[str] = set()
     config_names: set[str] = set()
 
-    # Step 4: resolve env vars for flags not set by CLI
+    # Step 4: resolve env vars for flags not set by CLI (skipped under --hermetic)
     for f in cmd.flags:
+        if hermetic:
+            break
         if f.name in cli_set:
             continue
         if f.env is not None:
@@ -4693,8 +4728,8 @@ def _parse_command(
 
     # Step 4.2: resolve config values for flags not set by CLI or env.
     # In conflict mode "error", detect when config would set a flag
-    # already set by CLI or env.
-    if config_data:
+    # already set by CLI or env. (Skipped under --hermetic.)
+    if config_data and not hermetic:
         for f in cmd.flags:
             param = _flag_param_name(f.name)
             if param not in config_data:
