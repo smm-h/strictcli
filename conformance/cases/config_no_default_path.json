@@ -1,0 +1,27 @@
+[
+  {
+    "name": "config-no-default-path: no config loaded without --config",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "no_default_config_path": true,
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "port={port}",
+          "flags": [
+            {"name": "port", "help": "port number", "type": "int", "default": 80}
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=80"
+    }
+  }
+]

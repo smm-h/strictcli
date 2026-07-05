@@ -149,6 +149,7 @@ SCHEMA_TO_GO: dict[str, str] = {
     "app.config": "configEnabled",  # Go App.configEnabled (unexported, set via WithConfig())
     "app.config_path": "configPathOverride",  # Go App.configPathOverride (unexported, set via WithConfigPath())
     "app.config_format": "configFormat",  # Go App.configFormat (unexported, set via WithConfigFormat())
+    "app.no_default_config_path": "noDefaultConfigPath",  # Go App.noDefaultConfigPath (unexported, set via WithNoDefaultConfigPath())
     "app.checks_path": "checksPath",  # Go App.checksPath (unexported, set via WithChecks())
     "app.tag_contracts": "tagContracts",  # Go App.tagContracts (unexported, set via TagContract())
     "command.flags": "flags",  # Go Command.flags (unexported)
@@ -473,6 +474,7 @@ def check_option_funcs_coverage(
         "WithTags",
         "WithHidden", "WithInteractive", "WithConfigFields",
         "Unique", "EnvSeparator",
+        "WithNoDefaultConfigPath",
     }
     actual = go_fields.get("_option_funcs", set())
     unknown = actual - known_option_funcs
