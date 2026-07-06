@@ -359,20 +359,39 @@ config set now validates keys against registered flags and coerces string values
 
 # go-strictcli
 
-## 0.19.1
+## 0.20.0
 
-Recovered full release history
+Config lifecycle overhaul: parse-time loading, --config flag, --hermetic, conflict mode, hard-error loading, ctx.Source provenance API.
 
 <details>
 <summary>Context</summary>
 
-53 pre-releasable versioned changelog files were recovered from saferm archive, restoring complete release history in CHANGELOG.md. All changes in this release are infrastructure-only (scaffold updates, docstrings, changelog recovery).
+Major rework of the config system. Config files are now loaded at parse time rather than
+lazily, giving deterministic precedence (CLI > env > config > default). The new --config
+flag lets callers specify an explicit config path. --hermetic disables all config/env
+resolution for reproducible runs. Conflict mode detects and rejects ambiguous flag
+definitions. Hard-error config loading fails loudly on malformed config files instead of
+silently ignoring them. The ctx.Source provenance API lets handlers inspect where each
+flag value came from (cli, env, config, default). Reserved global flag enforcement
+prevents user code from shadowing built-in flags.
 
 </details>
 
-### Hotfix
+### Breaking
 
-- Recovered full release history
+- [go-strictcli] **Reserved global flag names enforced.** Global flags named `help`, `version`, `dump-schema`, `config`, `hermetic`, or `mcp` are now rejected at registration time.
+
+### Features
+
+- [go-strictcli] **Parse-time config loading.** Config files are now loaded at parse time (not construction time), ensuring late-written config files are honored.
+- [go-strictcli] **`--config` flag and `NoDefaultConfigPath` option.** `--config <path>` selects a config file explicitly; `NoDefaultConfigPath()` requires explicit `--config` instead of searching the default path.
+- [go-strictcli] **Hard-error config loading.** Malformed TOML and JSON config files produce hard errors with line/column position information.
+- [go-strictcli] **`--hermetic` flag.** Ignores env vars and config, using only CLI flags and defaults. Mutually exclusive with `--config` and config subcommands.
+- [go-strictcli] **`ctx.Source` provenance API.** `ctx.Source(flag)` returns the origin of each flag value: `cli`, `env`, `config`, `default`, or `implied`.
+
+## 0.19.1
+
+- No user-facing changes.
 
 ## 0.19.0
 
