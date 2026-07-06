@@ -2,6 +2,40 @@
 
 # strictcli
 
+## 0.25.0
+
+Config lifecycle overhaul: parse-time loading, --config flag, --hermetic, conflict mode, hard-error loading, ctx.Source provenance API.
+
+<details>
+<summary>Context</summary>
+
+Major rework of the config system. Config files are now loaded at parse time rather than
+lazily, giving deterministic precedence (CLI > env > config > default). The new --config
+flag lets callers specify an explicit config path. --hermetic disables all config/env
+resolution for reproducible runs. Conflict mode detects and rejects ambiguous flag
+definitions. Hard-error config loading fails loudly on malformed config files instead of
+silently ignoring them. The ctx.Source provenance API lets handlers inspect where each
+flag value came from (cli, env, config, default). Reserved global flag enforcement
+prevents user code from shadowing built-in flags.
+
+</details>
+
+### Breaking
+
+- [strictcli] **Reserved global flag names enforced.** Global flags named `help`, `version`, `dump-schema`, `config`, `hermetic`, or `mcp` are now rejected at registration time.
+
+### Features
+
+- [strictcli] **Parse-time config loading.** Config files are now loaded at parse time (not construction time), ensuring late-written config files are honored.
+- [strictcli] **`--config` flag and `no_default_config_path` option.** `--config <path>` selects a config file explicitly; `no_default_config_path` requires explicit `--config` instead of searching the default path.
+- [strictcli] **Hard-error config loading.** Malformed TOML and JSON config files produce hard errors with line/column position information.
+- [strictcli] **`--hermetic` flag.** Ignores env vars and config, using only CLI flags and defaults. Mutually exclusive with `--config` and config subcommands.
+- [strictcli] **`ctx.Source` provenance API.** `ctx.source(flag)` returns the origin of each flag value: `cli`, `env`, `config`, `default`, or `implied`.
+
+## 0.24.2
+
+- No user-facing changes.
+
 ## 0.24.1
 
 ### Features
