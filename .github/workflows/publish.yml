@@ -35,10 +35,10 @@ jobs:
         # skipping every job.
         case "$GITHUB_REF_NAME" in
           "go-strictcli@v"*)
-            regex='^go-strictcli / '
+            regex='^(go\-strictcli\-ci) / '
             ;;
           "strictcli@v"*)
-            regex='^strictcli-ci(-pypi)? / '
+            regex='^(strictcli\-ci) / '
             ;;
           *)
             echo "::error::Publish gate: ref '$GITHUB_REF_NAME' matches no project tag prefix (known prefixes: strictcli@v, go-strictcli@v)."
@@ -197,25 +197,3 @@ jobs:
     defaults:
       run:
         working-directory: python
-  go-strictcli-goreleaser:
-    needs: gate
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-    - uses: actions/setup-go@v6
-      with:
-        go-version-file: go/go.mod
-    - uses: goreleaser/goreleaser-action@v7
-      with:
-        version: ~> v2
-        args: release --clean
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      contents: write
-    if: startsWith(github.ref_name, 'go-strictcli@v')
-    defaults:
-      run:
-        working-directory: go

@@ -39,11 +39,11 @@ jobs:
     needs: detect
     if: needs.detect.outputs.strictcli == 'true'
     uses: ./.github/workflows/strictcli-ci-pypi.yml
-  go-strictcli:
+  go-strictcli-ci:
     needs: detect
     if: needs.detect.outputs.go-strictcli == 'true'
     uses: ./.github/workflows/go-strictcli-ci.yml
-  conformance:
+  conformance-ci:
     needs: detect
     if: needs.detect.outputs.conformance == 'true'
     uses: ./.github/workflows/conformance-ci.yml
