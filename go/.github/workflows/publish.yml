@@ -113,21 +113,8 @@ jobs:
             jq -r '.[] | "  \(.name): \(.conclusion)"' <<< "$runs"
             exit 0
           done
-  goreleaser:
-    needs: gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+  # go-strictcli is a library: tagged releases are consumable via `go get`
+  # directly, so there is no goreleaser binary-build job. The gate job above
+  # is kept because the root publish router hard-errors on tags that match no
+  # known workflow prefix.
 
