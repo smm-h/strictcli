@@ -1,3 +1,4 @@
 {
-    "private": false
+  "private": false,
+  "coverage_unit": "commit"
 }

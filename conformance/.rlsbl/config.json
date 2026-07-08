@@ -4,5 +4,6 @@
   ],
   "private": false,
   "push_timeout": 300,
-  "pipelines": {}
+  "pipelines": {},
+  "coverage_unit": "commit"
 }

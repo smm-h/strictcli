@@ -9,5 +9,6 @@
       "type": "go",
       "local": false
     }
-  }
+  },
+  "coverage_unit": "commit"
 }

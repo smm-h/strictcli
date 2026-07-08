@@ -14,5 +14,6 @@
       "type": "npm",
       "local": false
     }
-  }
+  },
+  "coverage_unit": "commit"
 }
