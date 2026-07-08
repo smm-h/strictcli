@@ -116,7 +116,7 @@
     "argv": ["run", "--name", "from-cli"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["name", "cli", "config"]
+      "stderr_contains": "flag 'name' set in both cli and config; remove one"
     }
   },
   {
@@ -145,7 +145,7 @@
     },
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["name", "config"]
+      "stderr_contains": "flag 'name' set in both env and config; remove one"
     }
   },
   {

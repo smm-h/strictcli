@@ -103,6 +103,11 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # Python uses field names (checks_path/checks_embed); Go uses option function names
     'cannot use both checks_path and checks_embed':
         "Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names (checks_path/checks_embed)",
+    # Python uses the field name (App.config_conflict_mode); Go uses the
+    # option function name (WithConfigConflictMode). Same validation, same
+    # runtime effect; the entity name differs by API-surface convention.
+    'App.config_conflict_mode must be "cli-wins" or "error", got *':
+        "Go counterpart is 'WithConfigConflictMode: mode must be ...' (option function name)",
     # Python validates unique as bool at registration; Go uses typed bool field
     'Flag *: unique must be True or False':
         "Go uses typed bool field for Unique; no runtime type check needed",
@@ -275,6 +280,10 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
     # Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names
     'cannot use both WithChecks and WithChecksEmbed':
         "Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names (checks_path/checks_embed)",
+    # Go uses the option function name (WithConfigConflictMode); Python uses
+    # the field name (App.config_conflict_mode). Same validation.
+    'WithConfigConflictMode: mode must be "cli-wins" or "error", got *':
+        "Python counterpart is 'App.config_conflict_mode must be ...' (field name)",
     # Go has a plain-string return for non-whole float->int coercion in config;
     # Python covers this generically via 'expected integer, got *'
     'expected integer, got float':
@@ -433,6 +442,15 @@ def _extract_string_literals(arg_text: str) -> str | None:
     i = 0
     text = arg_text.strip()
 
+    # The argument must BEGIN with a string literal (optionally f-prefixed).
+    # Otherwise it is a variable expression (e.g., raise _ParseError(err) or
+    # raise _ParseError(pre_scan["err"])) whose embedded string literals are
+    # subscript keys, not error message text.
+    if not text or text[0] not in ('"', "'", "f") or (
+        text[0] == "f" and (len(text) < 2 or text[1] not in ('"', "'"))
+    ):
+        return None
+
     while i < len(text):
         # Skip whitespace and newlines
         if text[i] in " \t\n\r":
@@ -551,9 +569,12 @@ def extract_go_errors(
         results.append(("registration", m.group(1)))
 
     # --- Parse errors from parse.go ---
-    # return nil, nil, fmt.Sprintf("...", args)
+    # return nil, ..., fmt.Sprintf("...", args) with two or more leading
+    # nils. Arity-agnostic: parse helpers have grown extra return values
+    # over time (e.g., provenance sources added a fourth return), so match
+    # any run of two-plus nils rather than a fixed arity.
     parse_sprintf_3 = re.compile(
-        r'return\s+nil,\s*nil,\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
+        r'return\s+(?:nil,\s*){2,}fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
     )
     for m in parse_sprintf_3.finditer(parse_src):
         results.append(("parse", m.group(1)))
@@ -574,6 +595,13 @@ def extract_go_errors(
         r'parseErr:\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
     )
     for m in parse_err_sprintf.finditer(strictcli_src):
+        results.append(("parse", m.group(1)))
+
+    # parseErr: "..." -- plain string literals (e.g., hermetic mode errors)
+    parse_err_plain = re.compile(
+        r'parseErr:\s*"((?:[^"\\]|\\.)*)"',
+    )
+    for m in parse_err_plain.finditer(strictcli_src):
         results.append(("parse", m.group(1)))
 
     # return nil, fmt.Sprintf("...", args) -- parseGlobalFlagValue
@@ -644,7 +672,13 @@ def extract_go_errors(
         r'return\s+nil,\s*"((?:[^"\\]|\\.)*)"',
     )
     for m in config_plain_err.finditer(config_src):
-        results.append(("registration", m.group(1)))
+        fmt_str = m.group(1)
+        # Skip provenance source labels like `return nil, "default"` --
+        # (value, source) tuple returns, not error messages. Real error
+        # messages always contain a space.
+        if " " not in fmt_str:
+            continue
+        results.append(("registration", fmt_str))
 
     # --- Parse errors from routing.go (struct literal err field) ---
     # err: fmt.Sprintf("...", args) and err: "..."
