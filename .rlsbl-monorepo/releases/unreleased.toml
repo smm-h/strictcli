@@ -1,23 +1,10 @@
 [releasables.strictcli]
-# Version bump type: patch, minor, major, hotfix, or prerelease
-bump = ""
-# Short description of this release (required)
-description = ""
-# Optional context explaining why these changes were made
-context = ""
-# Pre-release identifier: alpha, beta, rc, or stable
-# preid = ""
+bump = "minor"
+description = "PEP 561 py.typed marker and typed decorator return annotations for consumer type checking."
+context = """
+Adds py.typed marker file for PEP 561 compliance and fixes decorator return type
+annotations so consumer type checkers (mypy, pyright) see proper types for flag(),
+arg(), command(), and check() decorators instead of generic Callable.
+"""
 include = ["pypi", "npm"]
-exclude = []
-
-[releasables.go-strictcli]
-# Version bump type: patch, minor, major, hotfix, or prerelease
-bump = ""
-# Short description of this release (required)
-description = ""
-# Optional context explaining why these changes were made
-context = ""
-# Pre-release identifier: alpha, beta, rc, or stable
-# preid = ""
-include = ["go"]
 exclude = []
