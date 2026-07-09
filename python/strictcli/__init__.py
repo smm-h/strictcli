@@ -30,7 +30,10 @@ import tomllib
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Protocol, get_args, get_origin, runtime_checkable
+from typing import Any, Callable, Protocol, TypeVar, get_args, get_origin, runtime_checkable
+
+# TypeVar for decorator return types — preserves the decorated function's type
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 # Sentinel for distinguishing "not provided" from actual values
@@ -1904,10 +1907,10 @@ class Group:
         hidden: bool = False,
         interactive: bool = False,
         config_fields: list[str] | None = None,
-    ) -> Callable:
+    ) -> Callable[[F], F]:
         """Decorator to register a command within this group."""
 
-        def decorator(func: Callable) -> Callable:
+        def decorator(func: F) -> F:
             if name in self._groups:
                 raise ValueError(
                     f'command "{name}" collides with an existing group'
@@ -2202,9 +2205,9 @@ class App:
         self._framework_fields[name] = cf
         return cf
 
-    def check(self, name: str):
+    def check(self, name: str) -> Callable[[F], F]:
         """Decorator to register a check implementation."""
-        def decorator(fn):
+        def decorator(fn: F) -> F:
             if not self._checks_enabled:
                 raise ValueError(
                     f'cannot register check "{name}": '
@@ -2508,10 +2511,10 @@ class App:
         hidden: bool = False,
         interactive: bool = False,
         config_fields: list[str] | None = None,
-    ) -> Callable:
+    ) -> Callable[[F], F]:
         """Decorator to register a top-level command."""
 
-        def decorator(func: Callable) -> Callable:
+        def decorator(func: F) -> F:
             cmd = _build_and_validate_command(
                 name,
                 help=help,
@@ -5114,10 +5117,10 @@ def flag(
     validate: Callable | None = None,
     repeatable: bool = False,
     unique: object = _MISSING,
-) -> Callable:
+) -> Callable[[F], F]:
     """Module-level decorator to attach a Flag to a command handler."""
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: F) -> F:
         f = Flag(
             name=name,
             short=short,
@@ -5150,10 +5153,10 @@ def arg(
     variadic: bool = False,
     type: type = str,
     choices: list | None = None,
-) -> Callable:
+) -> Callable[[F], F]:
     """Module-level decorator to attach an Arg to a command handler."""
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: F) -> F:
         a = Arg(
             name=name, help=help, required=required, default=default,
             variadic=variadic, type=type, choices=choices,
