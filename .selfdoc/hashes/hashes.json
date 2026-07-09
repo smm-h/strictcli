@@ -5,7 +5,8 @@
   },
   "en/go-strictcli.md": {
     "content": "9d7ab5c6b293546626be6a9dcc37551d440b4a856928026177d666aa49bffecf",
-    "description": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
+    "description": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3",
+    "source_docstring": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
   },
   "en/python-strictcli.md": {
     "content": "20d40f191eac2d4a91fbaa9236fd0ca3291a9118ad0f916fc3fff7f90968be15",
