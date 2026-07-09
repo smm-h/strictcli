@@ -2,23 +2,24 @@
 
 # Changelog
 
-## 0.25.0
+## 0.26.0
 
-Config lifecycle overhaul: parse-time loading, --config flag, --hermetic, conflict mode, hard-error loading, ctx.Source provenance API.
+PEP 561 py.typed marker and typed decorator return annotations for consumer type checking.
 
 <details>
 <summary>Context</summary>
 
-Major rework of the config system. Config files are now loaded at parse time rather than
-lazily, giving deterministic precedence (CLI > env > config > default). The new --config
-flag lets callers specify an explicit config path. --hermetic disables all config/env
-resolution for reproducible runs. Conflict mode detects and rejects ambiguous flag
-definitions. Hard-error config loading fails loudly on malformed config files instead of
-silently ignoring them. The ctx.Source provenance API lets handlers inspect where each
-flag value came from (cli, env, config, default). Reserved global flag enforcement
-prevents user code from shadowing built-in flags.
+Adds py.typed marker file for PEP 561 compliance and fixes decorator return type
+annotations so consumer type checkers (mypy, pyright) see proper types for flag(),
+arg(), command(), and check() decorators instead of generic Callable.
 
 </details>
+
+### Features
+
+- [strictcli] **New feature.** PEP 561 py.typed marker and typed decorator return annotations -- consumer type checkers now see proper types for flag(), arg(), command(), and check() decorators.
+
+## 0.25.0
 
 ### Breaking
 
