@@ -1,16 +1,16 @@
 {
+  "_hash_version": 3,
   "en/gen-index.md": {
     "content": "c50b88b1b524e70056426394e032212dd1beab8d508492ccc0393a6e0f733240",
-    "description": "bb3cd9d34f014c0674a9285c25ee14b5b4abc5cf941f0d83594c301405e8f3b6"
+    "description": "0fe85bc1c50c6e79fef3bcc1bc69f0a928b6fc68ea9ec907a1e39cf0079f7ca2",
+    "seed_hash": "0fe85bc1c50c6e79fef3bcc1bc69f0a928b6fc68ea9ec907a1e39cf0079f7ca2"
   },
   "en/go-strictcli.md": {
-    "content": "9d7ab5c6b293546626be6a9dcc37551d440b4a856928026177d666aa49bffecf",
-    "description": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3",
-    "source_docstring": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
+    "content": "fdeec4c30ea7f755da9bceec5ec9a00f75acd02d258a2d78d5281cd669b32e19",
+    "description": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
   },
   "en/python-strictcli.md": {
-    "content": "3d52d4b13096a88dc9fa6604e1b26489a11cecbae86e50272d2e1617837c50ab",
-    "description": "47746dd5f86a6256c008a6e1565794914724be5772d654d4d71438cb4e314c64",
-    "source_docstring": "e8a96baa19d372ccd8a10900f7aac016dd2539fd4d685fa4d64fa203e10871b3"
+    "content": "6f1b6e55f543e1bfc7464a15348000471faada959c6686d2ed797541d3d806f7",
+    "description": "47746dd5f86a6256c008a6e1565794914724be5772d654d4d71438cb4e314c64"
   }
 }
