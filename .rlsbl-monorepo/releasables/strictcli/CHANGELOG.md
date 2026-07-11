@@ -4,22 +4,28 @@
 
 ## 0.26.0
 
-PEP 561 py.typed marker and typed decorator return annotations for consumer type checking.
-
-<details>
-<summary>Context</summary>
-
-Adds py.typed marker file for PEP 561 compliance and fixes decorator return type
-annotations so consumer type checkers (mypy, pyright) see proper types for flag(),
-arg(), command(), and check() decorators instead of generic Callable.
-
-</details>
-
 ### Features
 
 - [strictcli] **New feature.** PEP 561 py.typed marker and typed decorator return annotations -- consumer type checkers now see proper types for flag(), arg(), command(), and check() decorators.
 
 ## 0.25.0
+
+Config lifecycle overhaul: parse-time loading, --config flag, --hermetic, conflict mode, hard-error loading, ctx.Source provenance API.
+
+<details>
+<summary>Context</summary>
+
+Major rework of the config system. Config files are now loaded at parse time rather than
+lazily, giving deterministic precedence (CLI > env > config > default). The new --config
+flag lets callers specify an explicit config path. --hermetic disables all config/env
+resolution for reproducible runs. Conflict mode makes a value set both in the config file
+and on the CLI (or env) a hard error instead of silently letting the CLI win. Hard-error
+config loading fails loudly on malformed config files instead of silently ignoring them.
+The ctx.Source provenance API lets handlers inspect where each flag value came from (cli,
+env, config, default). Reserved global flag enforcement prevents user code from shadowing
+built-in flags.
+
+</details>
 
 ### Breaking
 
@@ -29,7 +35,7 @@ arg(), command(), and check() decorators instead of generic Callable.
 
 - [strictcli] **Parse-time config loading.** Config files are now loaded at parse time (not construction time), ensuring late-written config files are honored.
 - [strictcli] **`--config` flag and `no_default_config_path` option.** `--config <path>` selects a config file explicitly; `no_default_config_path` requires explicit `--config` instead of searching the default path.
-- [strictcli] **Hard-error config loading.** Malformed TOML and JSON config files produce hard errors with line/column position information.
+- [strictcli] **Hard-error config loading and config conflict mode.** Malformed TOML and JSON config files produce hard errors with line/column position information. `config_conflict_mode="error"` (an `App` argument) makes a value set both in the config file and on the CLI (or env) a hard error instead of silently letting the CLI win; the default stays `cli-wins`.
 - [strictcli] **`--hermetic` flag.** Ignores env vars and config, using only CLI flags and defaults. Mutually exclusive with `--config` and config subcommands.
 - [strictcli] **`ctx.Source` provenance API.** `ctx.source(flag)` returns the origin of each flag value: `cli`, `env`, `config`, `default`, or `implied`.
 
