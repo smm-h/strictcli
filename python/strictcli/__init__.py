@@ -2140,6 +2140,18 @@ class App:
         """Return the resolved config file path for this app."""
         return _config_path(self.name, override=self.config_path, config_format=self.config_format)
 
+    def dump_schema_dict(self) -> dict:
+        """Return the app's full schema as a dict, excluding ``project_id``.
+
+        This is the public, CWD-free accessor for the schema. Unlike the
+        ``--dump-schema`` flag (which writes ``.strictcli/schema.json`` and
+        derives ``project_id`` from ``pyproject.toml`` in the current working
+        directory), this method reads only the in-memory ``App`` and performs
+        no filesystem or CWD access. The returned dict is byte-identical to the
+        written schema file with the ``project_id`` field removed.
+        """
+        return _dump_schema_core(self)
+
     def config_field(
         self,
         name: str,
@@ -6186,17 +6198,20 @@ def _collect_config_field_bindings_from_group(
         _collect_config_field_bindings_from_group(sub, bindings, group_path)
 
 
-def _dump_schema(app: App) -> dict:
-    """Produce a JSON-serializable dict representing the app's command tree.
+def _dump_schema_core(app: App) -> dict:
+    """Build the full schema dict, excluding ``project_id``.
 
-    Fields whose values match the schema defaults are omitted.
-    The top-level ``defaults`` key documents what each missing field means.
+    This is the CWD-free, filesystem-free core of schema production. It reads
+    only the in-memory ``App`` (name, version, help, flags, commands, groups,
+    etc.). ``project_id`` is added later by the file-writer path, since it is
+    the only field that requires reading ``pyproject.toml`` from the CWD.
+
+    Fields whose values match the schema defaults are omitted. The top-level
+    ``defaults`` key documents what each missing field means.
     """
-    project_id = _read_project_id()
     schema: dict = {
         "schema_version": 1,
         "defaults": _build_schema_defaults(),
-        "project_id": project_id,
         "name": app.name,
         "version": app.version,
         "help": app.help,
@@ -6258,6 +6273,23 @@ def _dump_schema(app: App) -> dict:
             cf_schema[name] = entry
         schema["config_fields"] = cf_schema
     return schema
+
+
+def _dump_schema(app: App) -> dict:
+    """Produce the full schema dict including ``project_id`` (reads the CWD).
+
+    Delegates the bulk of the work to :func:`_dump_schema_core` and inserts
+    ``project_id`` immediately after ``defaults`` so the on-disk layout is
+    stable and byte-identical to the core dict once ``project_id`` is removed.
+    """
+    core = _dump_schema_core(app)
+    project_id = _read_project_id()
+    result: dict = {}
+    for key, value in core.items():
+        result[key] = value
+        if key == "defaults":
+            result["project_id"] = project_id
+    return result
 
 
 def _check_schema_project_id(file_path: str, new_project_id: str) -> None:

@@ -8414,3 +8414,71 @@ func TestConfigConflictModeFiresBeforeMutex(t *testing.T) {
 		t.Fatalf("expected conflict error, got %q", r.Stderr)
 	}
 }
+
+// TestDumpSchemaDictNoCWD verifies App.DumpSchemaDict() returns the schema core
+// without project_id and without any CWD/filesystem access. DumpSchemaDict reads
+// only the in-memory App, so it never touches go.mod or the CWD -- no chdir is
+// needed to prove this (project_id is absent regardless of the working dir).
+func TestDumpSchemaDictNoCWD(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "A test app")
+	app.Command("greet", "Say hello", func(args map[string]interface{}) int { return 0 })
+
+	d := app.DumpSchemaDict()
+	if d["schema_version"] != 1 {
+		t.Fatalf("expected schema_version 1, got %v", d["schema_version"])
+	}
+	if d["version"] != "1.0.0" {
+		t.Fatalf("expected version 1.0.0, got %v", d["version"])
+	}
+	if d["name"] != "testapp" {
+		t.Fatalf("expected name testapp, got %v", d["name"])
+	}
+	if _, ok := d["project_id"]; ok {
+		t.Fatalf("expected project_id to be absent, got %v", d["project_id"])
+	}
+	if _, ok := d["commands"]; !ok {
+		t.Fatalf("expected commands key present")
+	}
+}
+
+// TestDumpSchemaDictEqualsFileMinusProjectID verifies the method output equals
+// the file-writer output with project_id removed, byte-identical by construction.
+func TestDumpSchemaDictEqualsFileMinusProjectID(t *testing.T) {
+	// Note: cannot use chdirTemp here because earlier tests in the suite leave
+	// the process CWD inside a removed temp dir (they os.Chdir(t.TempDir())
+	// without restoring), which makes os.Getwd() fail. Chdir with an absolute
+	// path works regardless, so we avoid Getwd entirely.
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module example.com/testproject\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp("myapp", "2.3.4", "My great app", WithEnvPrefix("MYAPP"))
+	app.Command("deploy", "Deploy the app", func(args map[string]interface{}) int { return 0 },
+		WithFlags(BoolFlag("force-deploy", "Force deploy", Default(false))),
+	)
+
+	r := app.Test([]string{"--dump-schema"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".strictcli", "schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var written map[string]interface{}
+	if err := json.Unmarshal(data, &written); err != nil {
+		t.Fatal(err)
+	}
+	delete(written, "project_id")
+
+	method := app.DumpSchemaDict()
+
+	wb, _ := json.MarshalIndent(written, "", "  ")
+	mb, _ := json.MarshalIndent(method, "", "  ")
+	if string(wb) != string(mb) {
+		t.Fatalf("method output != file output minus project_id:\nmethod=%s\nfile  =%s", mb, wb)
+	}
+}

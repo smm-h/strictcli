@@ -1103,3 +1103,58 @@ class TestSchemaProjectIdMismatch:
 
         result = app.test(["--dump-schema"])
         assert result.exit_code == 0
+
+
+class TestDumpSchemaDict:
+    """App.dump_schema_dict() returns the CWD-free schema core dict."""
+
+    def test_returns_version_without_project_id(self, tmp_path, monkeypatch):
+        # Run from a directory with NO pyproject.toml to prove no CWD access.
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        monkeypatch.chdir(empty)
+        app = _make_app()
+
+        @app.command("greet", help="Say hello")
+        def greet():
+            pass
+
+        d = app.dump_schema_dict()
+        assert d["schema_version"] == 1
+        assert d["version"] == "1.0.0"
+        assert d["name"] == "testapp"
+        assert "project_id" not in d
+        assert "commands" in d
+
+    def test_no_pyproject_does_not_raise(self, tmp_path, monkeypatch):
+        empty = tmp_path / "empty2"
+        empty.mkdir()
+        monkeypatch.chdir(empty)
+        assert not (empty / "pyproject.toml").exists()
+        app = _make_app()
+        # Must not raise even though _read_project_id() would.
+        d = app.dump_schema_dict()
+        assert isinstance(d, dict)
+
+    def test_equals_file_writer_minus_project_id(self, tmp_path, monkeypatch):
+        # tmp_path has a pyproject.toml (autouse fixture), so the file writer works.
+        monkeypatch.chdir(tmp_path)
+        app = _make_app(env_prefix="TESTAPP")
+
+        @app.command("greet", help="Say hello")
+        @strictcli.flag("loud", type=bool, help="be loud", default=False)
+        def greet(loud):
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+        written = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        method = app.dump_schema_dict()
+
+        # File-writer output minus project_id must equal the method output.
+        written_minus = {k: v for k, v in written.items() if k != "project_id"}
+        assert written_minus == method
+
+        # Byte-identical by construction: serializing the method output equals
+        # serializing the file output with the project_id key removed.
+        assert json.dumps(method, indent=2) == json.dumps(written_minus, indent=2)

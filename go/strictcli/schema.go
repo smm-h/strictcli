@@ -341,16 +341,16 @@ func readProjectID() (string, error) {
 	return "", fmt.Errorf("Cannot determine project_id: no module directive in go.mod")
 }
 
-// dumpSchema produces a JSON-serializable map representing the app's command tree.
-// Fields matching their defaults are omitted; see buildSchemaDefaults().
-func dumpSchema(app *App) (map[string]interface{}, error) {
-	projectID, err := readProjectID()
-	if err != nil {
-		return nil, err
-	}
+// dumpSchemaCore builds the full schema map, excluding project_id.
+//
+// This is the CWD-free, filesystem-free core of schema production. It reads
+// only the in-memory App (name, version, help, flags, commands, groups, etc.).
+// project_id is the only field that requires reading go.mod from the CWD, so it
+// is added later by the file-writer path (dumpSchema). This function cannot
+// fail. Fields matching their defaults are omitted; see buildSchemaDefaults().
+func dumpSchemaCore(app *App) map[string]interface{} {
 	schema := map[string]interface{}{
 		"schema_version": 1,
-		"project_id":     projectID,
 		"name":           app.Name,
 		"version":        app.Version,
 		"help":           app.Help,
@@ -486,7 +486,31 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 		}
 		schema["checks"] = checksMap
 	}
+	return schema
+}
+
+// dumpSchema produces the full schema map including project_id (reads the CWD).
+// It delegates to dumpSchemaCore and adds project_id (read from go.mod).
+func dumpSchema(app *App) (map[string]interface{}, error) {
+	projectID, err := readProjectID()
+	if err != nil {
+		return nil, err
+	}
+	schema := dumpSchemaCore(app)
+	schema["project_id"] = projectID
 	return schema, nil
+}
+
+// DumpSchemaDict returns the app's full schema as a map, excluding project_id.
+//
+// This is the public, CWD-free accessor for the schema. Unlike the
+// --dump-schema flag (which writes .strictcli/schema.json and derives
+// project_id from go.mod in the current working directory), this method reads
+// only the in-memory App and performs no filesystem or CWD access, and cannot
+// fail. The returned map is equivalent to the written schema file with the
+// project_id field removed.
+func (a *App) DumpSchemaDict() map[string]interface{} {
+	return dumpSchemaCore(a)
 }
 
 // checkSchemaProjectID verifies that an existing schema file belongs to the
