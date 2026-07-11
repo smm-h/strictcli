@@ -1,1 +1,2 @@
 {"id":"18c0201bf41feddd6f6ca771b3ef4846b6d964435a474921","commits":["5a51902d797ccb7876752152c841645cc64d651d"],"user_facing":false,"packages":["go-strictcli"]}
+{"id":"18c140693f186a361d7f3368f1fe46cc80540b753f6cf425","commits":["0843a75514d61da3b872370e4dd8e8f30f147807"],"user_facing":true,"description":"**`DumpSchemaDict()`.** New public `App` method returning the CLI schema as a `map[string]interface{}` (with version, without `project_id`), computed with zero filesystem or working-directory access.","type":"feature","packages":["go-strictcli"]}
