@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -498,19 +499,31 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			if !hasConfig {
 				continue
 			}
-			if _, alreadySet := cliSet[f.Name]; alreadySet {
-				// Flag set by CLI or env, config also has a value
-				if conflictMode == "error" {
-					existingSource := "cli"
-					if envNames[f.Name] {
-						existingSource = "env"
+			// Effective mode: per-flag override if set, else the app default.
+			effectiveMode := conflictMode
+			if f.hasConflictMode {
+				effectiveMode = f.ConflictMode
+			}
+			if existing, alreadySet := cliSet[f.Name]; alreadySet {
+				// Flag set by CLI or env, config also has a value. This is a
+				// conflict ONLY when the values diverge; identical values agree.
+				if effectiveMode == "error" {
+					coerced, errStr := coerceConfigValue(configVal, f)
+					if errStr != "" {
+						return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
 					}
-					return nil, nil, nil, fmt.Sprintf(
-						"flag '%s' set in both %s and config; remove one",
-						f.Name, existingSource,
-					)
+					if !valuesEqualForConflict(existing, coerced, f) {
+						existingSource := "cli"
+						if envNames[f.Name] {
+							existingSource = "env"
+						}
+						return nil, nil, nil, fmt.Sprintf(
+							"flag '%s' set in both %s and config; remove one",
+							f.Name, existingSource,
+						)
+					}
 				}
-				continue // cli-wins: skip config value
+				continue // cli-wins, or error mode with matching values
 			}
 			coerced, errStr := coerceConfigValue(configVal, f)
 			if errStr != "" {
@@ -1024,6 +1037,45 @@ func splitEscaped(value string, sep byte) []string {
 	}
 	parts = append(parts, string(current))
 	return parts
+}
+
+// valuesEqualForConflict compares a CLI/env value and a config value for
+// conflict-mode equality. Equality semantics (pinned):
+//   - scalars: exact equality.
+//   - plain repeatable lists: order-sensitive exact equality.
+//   - Unique flags: order-insensitive multiset equality.
+//
+// When the two values are equal, config+CLI/env co-presence is NOT a conflict.
+func valuesEqualForConflict(cliVal, configVal interface{}, f *Flag) bool {
+	if f.Unique {
+		cliArr, ok1 := cliVal.([]interface{})
+		cfgArr, ok2 := configVal.([]interface{})
+		if ok1 && ok2 {
+			return multisetEqual(cliArr, cfgArr)
+		}
+	}
+	return reflect.DeepEqual(cliVal, configVal)
+}
+
+// multisetEqual reports whether two slices contain the same elements regardless
+// of order (order-insensitive multiset comparison).
+func multisetEqual(a, b []interface{}) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int, len(a))
+	for _, v := range a {
+		counts[fmt.Sprintf("%T:%v", v, v)]++
+	}
+	for _, v := range b {
+		counts[fmt.Sprintf("%T:%v", v, v)]--
+	}
+	for _, c := range counts {
+		if c != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // findDuplicate returns the first duplicate value in the slice, or nil if all unique.

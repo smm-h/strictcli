@@ -108,6 +108,10 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # runtime effect; the entity name differs by API-surface convention.
     'App.config_conflict_mode must be "cli-wins" or "error", got *':
         "Go counterpart is 'WithConfigConflictMode: mode must be ...' (option function name)",
+    # Python validates the per-flag conflict_mode kwarg by field name; Go uses
+    # the option function name (ConflictMode). Same validation, same effect.
+    'Flag *: conflict_mode must be "cli-wins" or "error", got *':
+        "Go counterpart is 'ConflictMode: mode must be ...' (option function name)",
     # Python validates unique as bool at registration; Go uses typed bool field
     'Flag *: unique must be True or False':
         "Go uses typed bool field for Unique; no runtime type check needed",
@@ -284,6 +288,10 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
     # the field name (App.config_conflict_mode). Same validation.
     'WithConfigConflictMode: mode must be "cli-wins" or "error", got *':
         "Python counterpart is 'App.config_conflict_mode must be ...' (field name)",
+    # Go uses the option function name (ConflictMode); Python uses the flag kwarg
+    # name (conflict_mode). Same validation, same effect.
+    'ConflictMode: mode must be "cli-wins" or "error", got *':
+        "Python counterpart is 'Flag ...: conflict_mode must be ...' (flag kwarg name)",
     # Go has a plain-string return for non-whole float->int coercion in config;
     # Python covers this generically via 'expected integer, got *'
     'expected integer, got float':

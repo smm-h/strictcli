@@ -67,6 +67,13 @@ func serializeFlag(f Flag) map[string]interface{} {
 		m["unique"] = true
 	}
 
+	// conflict_mode: serialized only when explicitly set (omitted when
+	// inheriting the app default). Additive; schema_version stays 1, so
+	// consumers must treat absence as "inherit the app config_conflict_mode".
+	if f.hasConflictMode {
+		m["conflict_mode"] = f.ConflictMode
+	}
+
 	// env_separator: default "" (omit when empty)
 	if f.EnvSeparator != "" {
 		m["env_separator"] = f.EnvSeparator

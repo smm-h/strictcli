@@ -294,6 +294,9 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 		// (Python auto-defaults this for list types and disallows it for dict types)
 		opts = append(opts, strictcli.Unique(false))
 	}
+	if v, ok := fd["conflict_mode"]; ok {
+		opts = append(opts, strictcli.ConflictMode(v.(string)))
+	}
 	if v, ok := fd["env_separator"]; ok {
 		opts = append(opts, strictcli.EnvSeparator(v.(string)))
 	}

@@ -787,6 +787,23 @@ def _split_escaped(value: str, sep: str) -> list[str]:
     return parts
 
 
+def _values_equal_for_conflict(cli_val: object, config_val: object, flag: "Flag") -> bool:
+    """Compare a CLI/env value and a config value for conflict-mode equality.
+
+    Equality semantics (pinned):
+    - scalars: exact equality.
+    - plain repeatable lists: order-sensitive exact equality.
+    - Unique flags: order-insensitive multiset equality.
+
+    When the two values are equal, config+CLI/env co-presence is NOT a conflict
+    (they agree), so error mode does not fire.
+    """
+    if flag.unique is True and isinstance(cli_val, list) and isinstance(config_val, list):
+        # Order-insensitive multiset comparison.
+        return sorted(cli_val, key=repr) == sorted(config_val, key=repr)
+    return cli_val == config_val
+
+
 def _find_duplicate(values: list) -> object | None:
     """Return the first duplicate value in the list, or None if all unique."""
     seen: set = set()
@@ -1398,6 +1415,11 @@ class Flag:
     validate: Callable | None = None
     repeatable: bool = False
     unique: object = _MISSING
+    # Per-flag config conflict mode. _MISSING means "inherit the app default".
+    # When set explicitly, must be "cli-wins" or "error". Applies to flags only:
+    # standalone ConfigFields have no CLI/env conflict surface, and a
+    # flag-colliding ConfigField inherits the flag's handling.
+    conflict_mode: object = _MISSING
     # Compound type fields (set by __post_init__, not by caller)
     compound: str = "scalar"  # "scalar", "list", or "dict"
     item_type: type | None = None  # for list[T]: the T
@@ -1481,6 +1503,13 @@ class Flag:
                 raise ValueError(f'Flag "{self.name}": unique requires repeatable=True')
             if isinstance(self.unique, _MissingSentinel) and not self.repeatable:
                 self.unique = False
+        # Validate conflict_mode (per-flag override of the app config conflict mode)
+        if not isinstance(self.conflict_mode, _MissingSentinel):
+            if self.conflict_mode not in ("cli-wins", "error"):
+                raise ValueError(
+                    f'Flag "{self.name}": conflict_mode must be "cli-wins" or '
+                    f'"error", got {self.conflict_mode!r}'
+                )
         # Validate env_separator
         if self.compound == "dict":
             # Dict flags use JSON for env vars, not env_separator
@@ -3591,14 +3620,28 @@ class App:
                 param = _flag_param_name(f.name)
                 if param not in self._config_data:
                     continue
+                # Effective mode: per-flag override if set, else the app default.
+                effective_mode = (
+                    f.conflict_mode
+                    if not isinstance(f.conflict_mode, _MissingSentinel)
+                    else self.config_conflict_mode
+                )
                 if f.name in cli_set:
-                    if self.config_conflict_mode == "error":
-                        existing_source = global_sources.get(param, "cli")
-                        raise _ParseError(
-                            f"flag '{f.name}' set in both "
-                            f"{existing_source} and config; remove one"
-                        )
-                    continue  # cli-wins: skip config value
+                    # Conflict ONLY when config diverges from the CLI/env value.
+                    if effective_mode == "error":
+                        try:
+                            coerced = _coerce_config_value(self._config_data[param], f)
+                        except ValueError as e:
+                            raise _ParseError(
+                                f"--{f.name}: config value error: {e}"
+                            )
+                        if not _values_equal_for_conflict(cli_set[f.name], coerced, f):
+                            existing_source = global_sources.get(param, "cli")
+                            raise _ParseError(
+                                f"flag '{f.name}' set in both "
+                                f"{existing_source} and config; remove one"
+                            )
+                    continue  # cli-wins, or error mode with matching values
                 try:
                     coerced = _coerce_config_value(self._config_data[param], f)
                 except ValueError as e:
@@ -4749,15 +4792,29 @@ def _parse_command(
             param = _flag_param_name(f.name)
             if param not in config_data:
                 continue
+            # Effective mode: per-flag override if set, else the app default.
+            effective_mode = (
+                f.conflict_mode
+                if not isinstance(f.conflict_mode, _MissingSentinel)
+                else conflict_mode
+            )
             if f.name in cli_set:
-                # Flag set by CLI or env, config also has a value
-                if conflict_mode == "error":
-                    existing_source = "env" if f.name in env_names else "cli"
-                    raise _ParseError(
-                        f"flag '{f.name}' set in both "
-                        f"{existing_source} and config; remove one"
-                    )
-                continue  # cli-wins: skip config value
+                # Flag set by CLI or env, config also has a value. This is a
+                # conflict ONLY when the values diverge; identical values agree.
+                if effective_mode == "error":
+                    try:
+                        coerced = _coerce_config_value(config_data[param], f)
+                    except ValueError as e:
+                        raise _ParseError(
+                            f"--{f.name}: config value error: {e}"
+                        )
+                    if not _values_equal_for_conflict(cli_set[f.name], coerced, f):
+                        existing_source = "env" if f.name in env_names else "cli"
+                        raise _ParseError(
+                            f"flag '{f.name}' set in both "
+                            f"{existing_source} and config; remove one"
+                        )
+                continue  # cli-wins, or error mode with matching values
             try:
                 coerced = _coerce_config_value(config_data[param], f)
             except ValueError as e:
@@ -5129,6 +5186,7 @@ def flag(
     validate: Callable | None = None,
     repeatable: bool = False,
     unique: object = _MISSING,
+    conflict_mode: object = _MISSING,
 ) -> Callable[[F], F]:
     """Module-level decorator to attach a Flag to a command handler."""
 
@@ -5147,6 +5205,7 @@ def flag(
             validate=validate,
             repeatable=repeatable,
             unique=unique,
+            conflict_mode=conflict_mode,
         )
         if not hasattr(func, "_strictcli_flags"):
             func._strictcli_flags = []
@@ -5982,6 +6041,12 @@ def _serialize_flag(f: Flag) -> dict:
         d["repeatable"] = f.repeatable
     if f.unique is True:
         d["unique"] = True
+    # Per-flag conflict mode: serialized only when explicitly set (omitted when
+    # inheriting the app default). This is additive; schema_version stays 1, so
+    # consumers get no version signal for this field -- they must treat its
+    # absence as "inherit the app-level config_conflict_mode".
+    if not isinstance(f.conflict_mode, _MissingSentinel):
+        d["conflict_mode"] = f.conflict_mode
     if f.env_separator is not None:
         d["env_separator"] = f.env_separator
     negatable = f.negatable if f.type is bool and f.compound == "scalar" else None

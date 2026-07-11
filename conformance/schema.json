@@ -362,6 +362,11 @@
         "unique": {
           "type": "boolean"
         },
+        "conflict_mode": {
+          "type": "string",
+          "enum": ["cli-wins", "error"],
+          "description": "Per-flag override of the app config conflict mode. Absent means inherit the app-level config_conflict_mode."
+        },
         "env_separator": {
           "type": "string"
         }

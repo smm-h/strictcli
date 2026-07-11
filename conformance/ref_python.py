@@ -77,6 +77,9 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
     if "unique" in flag_def:
         parts.append(f"unique={flag_def['unique']}")
 
+    if "conflict_mode" in flag_def:
+        parts.append(f"conflict_mode={flag_def['conflict_mode']!r}")
+
     if "env_separator" in flag_def:
         parts.append(f"env_separator={flag_def['env_separator']!r}")
 
@@ -502,6 +505,8 @@ def _emit_command_registration(
             fd_parts.append("repeatable=True")
         if "unique" in f:
             fd_parts.append(f"unique={f['unique']}")
+        if "conflict_mode" in f:
+            fd_parts.append(f"conflict_mode={f['conflict_mode']!r}")
         if "env_separator" in f:
             fd_parts.append(f"env_separator={f['env_separator']!r}")
         if "negatable" in f and not f["negatable"]:

@@ -40,6 +40,7 @@ IMPL_EXCLUSIONS: dict[str, str] = {
     "Handler": "runtime-only (Go)",
     "PassthroughHandler": "runtime-only (Go)",
     "hasDefault": "private implementation detail (Go)",
+    "hasConflictMode": "private implementation detail (Go)",
     "type": "Python Flag.type uses native types; schema uses 'type' string enum",
     "checks_embed": "runtime-only (bytes data, not serializable to JSON schema)",
     "checksEmbed": "runtime-only (Go field for WithChecksEmbed, not serializable to JSON schema)",
@@ -121,6 +122,7 @@ GO_TO_SCHEMA: dict[str, str] = {
     "EnvSeparator": "env_separator",
     "Choices": "choices_str",  # schema splits into choices_str/choices_int
     "Type": "type",
+    "ConflictMode": "conflict_mode",  # Go Flag.ConflictMode = schema flag.conflict_mode
 }
 
 # Schema field name -> Python field name
@@ -481,7 +483,7 @@ def check_option_funcs_coverage(
         "WithChecks", "WithChecksEmbed",
         "WithTags",
         "WithHidden", "WithInteractive", "WithConfigFields",
-        "Unique", "EnvSeparator",
+        "Unique", "EnvSeparator", "ConflictMode",
         "WithNoDefaultConfigPath",
         "WithConfigConflictMode",
     }

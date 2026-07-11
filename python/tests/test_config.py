@@ -1682,10 +1682,16 @@ def test_conflict_mode_implied_excluded(tmp_path, monkeypatch):
 
 
 def test_conflict_mode_fires_before_mutex(tmp_path, monkeypatch):
-    """Conflict fires before mutex when both would error."""
+    """Conflict fires before mutex when both would error.
+
+    Under divergence-awareness, a conflict requires the config value to differ
+    from the CLI value. Config sets format_json=false while the CLI passes
+    --format-json (true): the values diverge, so the conflict fires. The CLI
+    also passes --format-yaml so mutex would also fire -- conflict wins.
+    """
     config_dir = tmp_path / "testapp"
     config_dir.mkdir(parents=True)
-    (config_dir / "config.json").write_text('{"format_json": true}')
+    (config_dir / "config.json").write_text('{"format_json": false}')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = strictcli.App(
         name="testapp", version="1.0.0", help="test",
@@ -1701,7 +1707,111 @@ def test_conflict_mode_fires_before_mutex(tmp_path, monkeypatch):
     def run(format_json, format_yaml):
         pass
 
-    r = app.test(["run", "--format-json"])
+    r = app.test(["run", "--format-json", "--format-yaml"])
     assert r.exit_code == 1
     # Should mention conflict (set in both), not mutex
     assert "set in both" in r.stderr
+
+
+# --- Phase 2.2: divergence-aware conflict mode + per-flag override ---
+
+def _conflict_app(conflict_mode="error", flag_conflict_mode=strictcli._MISSING,
+                  flag_type=str, default="default-val", unique=strictcli._MISSING,
+                  repeatable=False):
+    """Build an app with a single 'run' command flag 'target'."""
+    app = strictcli.App(
+        name="testapp", version="1.0.0", help="test",
+        config=True, config_conflict_mode=conflict_mode,
+    )
+
+    @app.command("run", help="run")
+    @strictcli.flag("target", type=flag_type, help="target", default=default,
+                    repeatable=repeatable, unique=unique,
+                    conflict_mode=flag_conflict_mode)
+    def run(target):
+        print(f"target={target}")
+
+    return app
+
+
+def _write_cfg(tmp_path, monkeypatch, payload):
+    config_dir = tmp_path / "testapp"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.json").write_text(json.dumps(payload))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+
+
+def test_conflict_error_identical_scalar_passes(tmp_path, monkeypatch):
+    """Error mode: identical config+CLI value is NOT a conflict."""
+    _write_cfg(tmp_path, monkeypatch, {"target": "same"})
+    app = _conflict_app(conflict_mode="error")
+    r = app.test(["run", "--target", "same"])
+    assert r.exit_code == 0, r.stderr
+    assert "target=same" in r.stdout
+
+
+def test_conflict_error_divergent_scalar_errors(tmp_path, monkeypatch):
+    """Error mode: divergent config+CLI value IS a conflict."""
+    _write_cfg(tmp_path, monkeypatch, {"target": "from-config"})
+    app = _conflict_app(conflict_mode="error")
+    r = app.test(["run", "--target", "from-cli"])
+    assert r.exit_code == 1
+    assert "set in both cli and config; remove one" in r.stderr
+
+
+def test_per_flag_error_beats_app_cli_wins(tmp_path, monkeypatch):
+    """Per-flag conflict_mode='error' overrides app default cli-wins."""
+    _write_cfg(tmp_path, monkeypatch, {"target": "from-config"})
+    app = _conflict_app(conflict_mode="cli-wins", flag_conflict_mode="error")
+    r = app.test(["run", "--target", "from-cli"])
+    assert r.exit_code == 1
+    assert "set in both cli and config; remove one" in r.stderr
+
+
+def test_per_flag_cli_wins_beats_app_error(tmp_path, monkeypatch):
+    """Per-flag conflict_mode='cli-wins' overrides app default error."""
+    _write_cfg(tmp_path, monkeypatch, {"target": "from-config"})
+    app = _conflict_app(conflict_mode="error", flag_conflict_mode="cli-wins")
+    r = app.test(["run", "--target", "from-cli"])
+    assert r.exit_code == 0, r.stderr
+    assert "target=from-cli" in r.stdout
+
+
+def test_conflict_repeatable_order_sensitive(tmp_path, monkeypatch):
+    """Plain repeatable: same elements different order diverge -> error."""
+    _write_cfg(tmp_path, monkeypatch, {"target": ["a", "b"]})
+    app = _conflict_app(conflict_mode="error", default=None,
+                        repeatable=True, unique=False)
+    # Same order -> equal -> pass
+    r = app.test(["run", "--target", "a", "--target", "b"])
+    assert r.exit_code == 0, r.stderr
+    # Different order -> divergent -> error
+    app2 = _conflict_app(conflict_mode="error", default=None,
+                         repeatable=True, unique=False)
+    r2 = app2.test(["run", "--target", "b", "--target", "a"])
+    assert r2.exit_code == 1
+    assert "set in both" in r2.stderr
+
+
+def test_conflict_unique_order_insensitive(tmp_path, monkeypatch):
+    """Unique: same elements different order are equal (multiset) -> pass."""
+    _write_cfg(tmp_path, monkeypatch, {"target": ["a", "b"]})
+    app = _conflict_app(conflict_mode="error", default=None,
+                        repeatable=True, unique=True)
+    r = app.test(["run", "--target", "b", "--target", "a"])
+    assert r.exit_code == 0, r.stderr
+
+
+def test_conflict_malformed_config_value_errors_cleanly(tmp_path, monkeypatch):
+    """Error mode co-presence: a malformed config value errors cleanly."""
+    _write_cfg(tmp_path, monkeypatch, {"target": "not-an-int"})
+    app = _conflict_app(conflict_mode="error", flag_type=int, default=0)
+    r = app.test(["run", "--target", "5"])
+    assert r.exit_code == 1
+    assert "config value error" in r.stderr
+
+
+def test_flag_conflict_mode_invalid_value_raises():
+    """Registration: invalid per-flag conflict_mode is a ValueError."""
+    with pytest.raises(ValueError, match="conflict_mode"):
+        strictcli.Flag(name="x", type=str, help="h", conflict_mode="bogus")

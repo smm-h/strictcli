@@ -8394,7 +8394,11 @@ func TestConfigConflictModeFiresBeforeMutex(t *testing.T) {
 	tmpDir, cleanup := configTestSetup(t)
 	defer cleanup()
 
-	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"format_json": true})
+	// Under divergence-awareness a conflict requires the config value to differ
+	// from the CLI value. Config sets format_json=false while the CLI passes
+	// --format-json (true): values diverge -> conflict fires. The CLI also
+	// passes --format-yaml so mutex would also fire -- conflict wins.
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"format_json": false})
 
 	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
 	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
@@ -8405,7 +8409,7 @@ func TestConfigConflictModeFiresBeforeMutex(t *testing.T) {
 	)
 
 	// Both conflict AND mutex would fire. Conflict should fire first.
-	r := app.Test([]string{"run", "--format-json"})
+	r := app.Test([]string{"run", "--format-json", "--format-yaml"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
@@ -8413,6 +8417,135 @@ func TestConfigConflictModeFiresBeforeMutex(t *testing.T) {
 	if !strings.Contains(r.Stderr, "set in both") {
 		t.Fatalf("expected conflict error, got %q", r.Stderr)
 	}
+}
+
+// --- Phase 2.2: divergence-aware conflict mode + per-flag override ---
+
+func TestConflictErrorIdenticalScalarPasses(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"target": "same"})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+	app.Command("run", "run it", func(args map[string]interface{}) int {
+		fmt.Printf("target=%s", args["target"])
+		return 0
+	}, WithFlags(StringFlag("target", "a target", Default("default-val"))))
+
+	r := app.Test([]string{"run", "--target", "same"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0 (identical values agree), got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "target=same") {
+		t.Fatalf("expected target=same, got %q", r.Stdout)
+	}
+}
+
+func TestConflictPerFlagErrorBeatsAppCliWins(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"target": "from-config"})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("cli-wins"))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "a target", Default("default-val"), ConflictMode("error"))))
+
+	r := app.Test([]string{"run", "--target", "from-cli"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1 (per-flag error), got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "set in both cli and config; remove one") {
+		t.Fatalf("expected conflict error, got %q", r.Stderr)
+	}
+}
+
+func TestConflictPerFlagCliWinsBeatsAppError(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"target": "from-config"})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+	app.Command("run", "run it", func(args map[string]interface{}) int {
+		fmt.Printf("target=%s", args["target"])
+		return 0
+	}, WithFlags(StringFlag("target", "a target", Default("default-val"), ConflictMode("cli-wins"))))
+
+	r := app.Test([]string{"run", "--target", "from-cli"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0 (per-flag cli-wins), got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "target=from-cli") {
+		t.Fatalf("expected target=from-cli, got %q", r.Stdout)
+	}
+}
+
+func TestConflictRepeatableOrderSensitive(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"target": []interface{}{"a", "b"}})
+
+	newApp := func() *App {
+		app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+		app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+			WithFlags(ListFlag(TypeStr, "target", "targets", Unique(false))))
+		return app
+	}
+
+	// Same order -> equal -> pass
+	r := newApp().Test([]string{"run", "--target", "a", "--target", "b"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0 (same order), got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	// Different order -> divergent -> error
+	r2 := newApp().Test([]string{"run", "--target", "b", "--target", "a"})
+	if r2.ExitCode != 1 {
+		t.Fatalf("expected exit 1 (order-sensitive divergence), got %d: stderr=%q", r2.ExitCode, r2.Stderr)
+	}
+	if !strings.Contains(r2.Stderr, "set in both") {
+		t.Fatalf("expected conflict error, got %q", r2.Stderr)
+	}
+}
+
+func TestConflictUniqueOrderInsensitive(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"target": []interface{}{"a", "b"}})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(ListFlag(TypeStr, "target", "targets", Unique(true))))
+
+	r := app.Test([]string{"run", "--target", "b", "--target", "a"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0 (multiset equal), got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestConflictMalformedConfigValueErrorsCleanly(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"target": "not-an-int"})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(IntFlag("target", "a target", Default(0))))
+
+	r := app.Test([]string{"run", "--target", "5"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1 (clean config value error), got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "config value error") {
+		t.Fatalf("expected config value error, got %q", r.Stderr)
+	}
+}
+
+func TestConflictModeInvalidPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatalf("expected panic on invalid conflict mode")
+		}
+	}()
+	StringFlag("x", "help", ConflictMode("bogus"))
 }
 
 // TestDumpSchemaDictNoCWD verifies App.DumpSchemaDict() returns the schema core

@@ -72,6 +72,8 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
         if ft.startswith("list[") or ft.startswith("dict["):
             # Compound types in Go require explicit unique; default to false
             opts.append("strictcli.Unique(false)")
+    if "conflict_mode" in flag_def:
+        opts.append(f'strictcli.ConflictMode("{flag_def["conflict_mode"]}")')
     if "env_separator" in flag_def:
         opts.append(f'strictcli.EnvSeparator("{flag_def["env_separator"]}")')
     if "negatable" in flag_def and not flag_def["negatable"]:

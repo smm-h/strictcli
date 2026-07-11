@@ -102,9 +102,17 @@ type Flag struct {
 	Unique       bool
 	EnvSeparator string
 
+	// ConflictMode is the per-flag override of the app config conflict mode.
+	// Empty string (with hasConflictMode false) means "inherit the app default".
+	// When set, must be "cli-wins" or "error". Applies to flags only:
+	// standalone ConfigFields have no CLI/env conflict surface, and a
+	// flag-colliding ConfigField inherits the flag's handling.
+	ConflictMode string
+
 	// hasDefault distinguishes between "default explicitly set to nil" and "no default"
-	hasDefault bool
-	hasUnique  bool
+	hasDefault      bool
+	hasUnique       bool
+	hasConflictMode bool
 }
 
 // Arg represents a positional argument.
@@ -423,6 +431,20 @@ func Unique(b bool) FlagOption {
 	return func(f *Flag) {
 		f.Unique = b
 		f.hasUnique = true
+	}
+}
+
+// ConflictMode sets the per-flag config conflict mode, overriding the app-level
+// default (WithConfigConflictMode). Must be "cli-wins" or "error". This applies
+// only to flags; standalone ConfigFields have no CLI/env conflict surface, and a
+// flag-colliding ConfigField inherits the flag's handling.
+func ConflictMode(mode string) FlagOption {
+	return func(f *Flag) {
+		if mode != "cli-wins" && mode != "error" {
+			panic(fmt.Sprintf("ConflictMode: mode must be \"cli-wins\" or \"error\", got %q", mode))
+		}
+		f.ConflictMode = mode
+		f.hasConflictMode = true
 	}
 }
 
@@ -2423,15 +2445,27 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 			if !hasConfig {
 				continue
 			}
-			if _, alreadySet := globalValues[f.Name]; alreadySet {
-				if a.configConflictMode == "error" {
-					existingSource := globalSources[param]
-					return nil, nil, nil, fmt.Sprintf(
-						"flag '%s' set in both %s and config; remove one",
-						f.Name, existingSource,
-					)
+			// Effective mode: per-flag override if set, else the app default.
+			effectiveMode := a.configConflictMode
+			if f.hasConflictMode {
+				effectiveMode = f.ConflictMode
+			}
+			if existing, alreadySet := globalValues[f.Name]; alreadySet {
+				// Conflict ONLY when config diverges from the CLI/env value.
+				if effectiveMode == "error" {
+					coerced, errStr := coerceConfigValue(configVal, f)
+					if errStr != "" {
+						return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+					}
+					if !valuesEqualForConflict(existing, coerced, f) {
+						existingSource := globalSources[param]
+						return nil, nil, nil, fmt.Sprintf(
+							"flag '%s' set in both %s and config; remove one",
+							f.Name, existingSource,
+						)
+					}
 				}
-				continue // cli-wins: skip config value
+				continue // cli-wins, or error mode with matching values
 			}
 			coerced, errStr := coerceConfigValue(configVal, f)
 			if errStr != "" {
