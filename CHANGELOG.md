@@ -425,7 +425,7 @@ built-in flags.
 
 - [go-strictcli] **Parse-time config loading.** Config files are now loaded at parse time (not construction time), ensuring late-written config files are honored.
 - [go-strictcli] **`--config` flag and `WithNoDefaultConfigPath` option.** `--config <path>` selects a config file explicitly; `WithNoDefaultConfigPath()` requires explicit `--config` instead of searching the default path.
-- [go-strictcli] **Hard-error config loading.** Malformed TOML and JSON config files produce hard errors with line/column position information.
+- [go-strictcli] **Hard-error config loading and config conflict mode.** Malformed TOML and JSON config files produce hard errors with line/column position information. `WithConfigConflictMode("error")` makes a value set both in the config file and on the CLI (or env) a hard error instead of silently letting the CLI win; the default stays `cli-wins`.
 - [go-strictcli] **`--hermetic` flag.** Ignores env vars and config, using only CLI flags and defaults. Mutually exclusive with `--config` and config subcommands.
 - [go-strictcli] **`ctx.Source` provenance API.** `ctx.Source(flag)` returns the origin of each flag value: `cli`, `env`, `config`, `default`, or `implied`.
 
