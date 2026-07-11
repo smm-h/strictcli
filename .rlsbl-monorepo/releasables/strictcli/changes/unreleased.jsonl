@@ -1,0 +1,1 @@
+{"id":"18c140682252c27f4b381a97e77d47f581578f738a0a70d6","commits":["0843a75514d61da3b872370e4dd8e8f30f147807"],"user_facing":true,"description":"**`dump_schema_dict()`.** New public `App` method returning the CLI schema as a dict (with version, without `project_id`), computed with zero filesystem or working-directory access.","type":"feature","packages":["strictcli"]}
