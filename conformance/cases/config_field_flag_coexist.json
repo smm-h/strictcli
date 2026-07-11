@@ -1,0 +1,60 @@
+[
+  {
+    "name": "field-flag coexist: config show --plain renders colliding key once with annotation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"target\": \"deployed\"}",
+      "config_fields_def": [
+        {"name": "target", "type": "str", "help": "the deploy target", "default": "prod"}
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "target", "help": "deploy target", "type": "str", "default": "prod"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "show", "--plain"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["target = deployed  (source: config)  -- the deploy target"],
+      "stdout_not_contains": "Config fields:"
+    }
+  },
+  {
+    "name": "field-flag coexist: config show --json renders colliding key once (flag entry)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"target\": \"deployed\"}",
+      "config_fields_def": [
+        {"name": "target", "type": "str", "help": "the deploy target", "default": "prod"}
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "target", "help": "deploy target", "type": "str", "default": "prod"}
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "show", "--json"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["\"deployed\"", "\"source\": \"config\""],
+      "stdout_not_contains": "\"type\""
+    }
+  }
+]

@@ -1370,8 +1370,42 @@ func checkGroupTagContracts(g *Group, contracts map[string]string, globalFlags [
 }
 
 // Command registers a top-level command.
+// checkFlagConfigFieldDefault panics when a colliding flag and config field have
+// conflicting explicit defaults.
+//
+// A ConfigField whose name equals a flag's param name is a validation-only
+// declaration that annotates the flag. Their defaults must agree. The matrix:
+// both absent OK; equal OK; both present unequal = error; one absent OK (the
+// flag's default wins for rendering). A nil flag default means "no default".
+func checkFlagConfigFieldDefault(flagName string, flagDefault interface{}, cf *ConfigField) {
+	flagHasDefault := flagDefault != nil
+	cfHasDefault := cf.HasDefault && cf.Default != nil
+	if flagHasDefault && cfHasDefault && !reflect.DeepEqual(flagDefault, cf.Default) {
+		panic(fmt.Sprintf(
+			"config field %q collides with flag %q but their defaults disagree (%v vs %v); remove one default or make them equal",
+			cf.Name, flagName, cf.Default, flagDefault,
+		))
+	}
+}
+
+// checkCmdFieldCollisions panics if any of the command's flags collides with a
+// registered config field whose default disagrees. Config fields registered
+// after this command are checked from the App.ConfigField() side instead.
+func (a *App) checkCmdFieldCollisions(cmd *Command) {
+	if len(a.configFields) == 0 {
+		return
+	}
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
+		if cf, ok := a.configFields[flagParamName(f.Name)]; ok {
+			checkFlagConfigFieldDefault(f.Name, f.Default, cf)
+		}
+	}
+}
+
 func (a *App) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
 	cmd := buildAndValidateCommand(name, help, handler, a.EnvPrefix, a.globalFlags, nil, opts)
+	a.checkCmdFieldCollisions(cmd)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
@@ -1385,6 +1419,7 @@ func (a *App) DataCommand(name, help string, handler DataHandler, opts ...CmdOpt
 	}
 	cmd := buildAndValidateCommand(name, help, wrapper, a.EnvPrefix, a.globalFlags, nil, opts)
 	cmd.dataHandler = handler
+	a.checkCmdFieldCollisions(cmd)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
@@ -1395,6 +1430,7 @@ func (a *App) DataCommand(name, help string, handler DataHandler, opts ...CmdOpt
 // Additional CmdOptions (e.g., WithMutex, WithDependencies) can be passed.
 func (a *App) RegisterHandler(name, help string, factory func() Handler, opts ...CmdOption) {
 	cmd := buildHandlerCommand(name, help, factory, a, a.EnvPrefix, a.globalFlags, nil, opts)
+	a.checkCmdFieldCollisions(cmd)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
@@ -1513,6 +1549,9 @@ func (g *Group) Command(name, help string, handler func(map[string]interface{}) 
 		panic(fmt.Sprintf("command %q collides with an existing group", name))
 	}
 	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
+	if g.app != nil {
+		g.app.checkCmdFieldCollisions(cmd)
+	}
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
 }
@@ -1528,6 +1567,9 @@ func (g *Group) DataCommand(name, help string, handler DataHandler, opts ...CmdO
 	}
 	cmd := buildAndValidateCommand(name, help, wrapper, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
 	cmd.dataHandler = handler
+	if g.app != nil {
+		g.app.checkCmdFieldCollisions(cmd)
+	}
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
 }
@@ -1538,6 +1580,9 @@ func (g *Group) RegisterHandler(name, help string, factory func() Handler, opts 
 		panic(fmt.Sprintf("command %q collides with an existing group", name))
 	}
 	cmd := buildHandlerCommand(name, help, factory, g.app, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
+	if g.app != nil {
+		g.app.checkCmdFieldCollisions(cmd)
+	}
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
 }

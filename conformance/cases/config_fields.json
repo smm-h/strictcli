@@ -52,7 +52,7 @@
           "handler_prints": "port={port}",
           "config_fields": ["port"],
           "flags": [
-            {"name": "port", "help": "server port", "type": "int", "default": 3000}
+            {"name": "port", "help": "server port", "type": "int", "default": 8080}
           ]
         }
       ]
@@ -60,7 +60,7 @@
     "argv": ["run"],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "port=3000"
+      "stdout_equals": "port=8080"
     }
   },
   {

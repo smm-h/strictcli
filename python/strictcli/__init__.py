@@ -660,21 +660,33 @@ def _generate_config_template_toml(
     """Generate a TOML config template with comments."""
     lines: list[str] = []
 
+    # A config field whose name equals a flag's param name is validation-only:
+    # it annotates the flag and the key is rendered once (on the flag).
+    flag_params = {_flag_param_name(f.name) for f in flags}
+    colliding = {n: cf for n, cf in config_fields.items() if n in flag_params}
+
     # Flag-backed keys (flat)
     for f in flags:
         param = _flag_param_name(f.name)
-        lines.append(f"# {f.help}")
+        comment = f"# {f.help}"
+        cf_collide = colliding.get(param)
+        if cf_collide is not None:
+            comment += f" -- {cf_collide.help}"
+        lines.append(comment)
         if f.default is not None:
             lines.append(f"{param} = {_toml_format_scalar(f.default)}")
         else:
             lines.append(f"# {param} =")
         lines.append("")
 
-    # Config field keys (possibly nested via dot names)
+    # Config field keys (possibly nested via dot names). Skip colliding fields
+    # (already rendered on the flag line above).
     # Group by first segment for TOML sections
     top_level: list[tuple[str, "ConfigField"]] = []
     sections: dict[str, list[tuple[str, "ConfigField"]]] = {}
     for name, cf in config_fields.items():
+        if name in colliding:
+            continue
         parts = name.split(".")
         if len(parts) == 1:
             top_level.append((name, cf))
@@ -731,6 +743,9 @@ def _generate_config_template_json(
 ) -> str:
     """Generate a JSON config template."""
     data: dict = {}
+    # A config field colliding with a flag's param name is validation-only; the
+    # flag owns the rendered value, so the key appears once.
+    flag_params = {_flag_param_name(f.name) for f in flags}
     # Flag-backed keys
     for f in flags:
         param = _flag_param_name(f.name)
@@ -739,8 +754,11 @@ def _generate_config_template_json(
         else:
             data[param] = None
 
-    # Config field keys (nested via dot names)
+    # Config field keys (nested via dot names). Skip colliding fields (rendered
+    # once via the flag above).
     for name, cf in config_fields.items():
+        if name in flag_params:
+            continue
         if not cf.required:
             _nested_set(data, name, cf.default)
         else:
@@ -802,6 +820,26 @@ def _values_equal_for_conflict(cli_val: object, config_val: object, flag: "Flag"
         # Order-insensitive multiset comparison.
         return sorted(cli_val, key=repr) == sorted(config_val, key=repr)
     return cli_val == config_val
+
+
+def _check_flag_configfield_default(
+    flag_name: str, flag_default: object, cf: "ConfigField"
+) -> None:
+    """Raise ValueError when a colliding flag and config field have conflicting
+    explicit defaults.
+
+    A ConfigField whose name equals a flag's param name is a validation-only
+    declaration -- it annotates the flag. Their defaults must agree. The matrix:
+    both absent OK; equal OK; both present unequal = error; one absent OK (the
+    flag's default wins for rendering). A flag default of None means "no
+    default" (absent); a ConfigField default of _MISSING means absent.
+    """
+    flag_has_default = flag_default is not None
+    cf_has_default = not isinstance(cf.default, _MissingSentinel)
+    if flag_has_default and cf_has_default and flag_default != cf.default:
+        raise ValueError(
+            f'config field "{cf.name}" collides with flag "{flag_name}" but their defaults disagree ({cf.default!r} vs {flag_default!r}); remove one default or make them equal'
+        )
 
 
 def _find_duplicate(values: list) -> object | None:
@@ -2216,6 +2254,13 @@ class App:
                 f'config field name "{name}" conflicts with framework field'
             )
         cf = ConfigField(name=name, type=type, help=help, default=default)
+        # A config field colliding with an existing flag's param name is a
+        # validation-only declaration that annotates the flag; their defaults
+        # must agree. Flags registered after this field are checked from the
+        # command-builder side instead.
+        for f in self._collect_all_flags():
+            if _flag_param_name(f.name) == name:
+                _check_flag_configfield_default(f.name, f.default, cf)
         self._config_fields[name] = cf
         return cf
 
@@ -2637,6 +2682,22 @@ class App:
             _collect_from_group(grp)
         return flags
 
+    def _colliding_config_fields(self) -> dict[str, ConfigField]:
+        """Return {flag_param_name: ConfigField} for config fields whose name
+        equals a flag's param name.
+
+        Such config fields are validation-only: they annotate the colliding
+        flag rather than rendering as a separate config key. Callers use this to
+        render the key once (on the flag line, with the config field's help as a
+        trailing annotation).
+        """
+        flag_params = {_flag_param_name(f.name) for f in self._collect_all_flags()}
+        return {
+            name: cf
+            for name, cf in self._config_fields.items()
+            if name in flag_params
+        }
+
     def _register_config_group(self) -> None:
         """Register the auto-generated 'config' command group."""
         config_grp = Group(
@@ -2672,14 +2733,18 @@ class App:
             use_json = _kw.get("json", False)
             config_data = app_ref._config_data
             all_flags = app_ref._collect_all_flags()
+            colliding = app_ref._colliding_config_fields()
             if use_json:
                 result = {}
                 for f in all_flags:
                     param = _flag_param_name(f.name)
                     value, source = _resolve_flag_show_source(f, config_data)
                     result[param] = {"value": value, "source": source}
-                # Include config fields
+                # Include config fields (skip those colliding with a flag: they
+                # are validation-only and render once, on the flag entry).
                 for cf_name, cf in app_ref._config_fields.items():
+                    if cf_name in colliding:
+                        continue
                     found, value = _nested_get(config_data, cf_name)
                     if found:
                         source = "config"
@@ -2705,12 +2770,22 @@ class App:
             for f in all_flags:
                 param = _flag_param_name(f.name)
                 value, source = _resolve_flag_show_source(f, config_data)
-                print(f"{param} = {_format_config_value(value)}  (source: {source})")
-            # Include config fields in plain output
-            if app_ref._config_fields:
+                line = f"{param} = {_format_config_value(value)}  (source: {source})"
+                # A colliding config field annotates the flag line (rendered once).
+                cf_collide = colliding.get(param)
+                if cf_collide is not None:
+                    line += f"  -- {cf_collide.help}"
+                print(line)
+            # Include config fields in plain output (skip colliding ones: they
+            # are rendered as an annotation on the flag line above).
+            non_colliding_fields = {
+                n: cf for n, cf in app_ref._config_fields.items()
+                if n not in colliding
+            }
+            if non_colliding_fields:
                 print()
                 print("Config fields:")
-                for cf_name, cf in app_ref._config_fields.items():
+                for cf_name, cf in non_colliding_fields.items():
                     found, value = _nested_get(config_data, cf_name)
                     if found:
                         source = "config"
@@ -4991,6 +5066,15 @@ def _build_and_validate_command(
                 raise ValueError(
                     f'command "{name}": flag "{f.name}" collides with a global flag'
                 )
+
+    # Validate: a command flag colliding with a config field (validation-only
+    # coexistence) must have an agreeing default. Config fields registered after
+    # this command are checked from the App.config_field() side instead.
+    if config_fields_ref:
+        for f in all_flags:
+            cf = config_fields_ref.get(_flag_param_name(f.name))
+            if cf is not None:
+                _check_flag_configfield_default(f.name, f.default, cf)
 
     # Validate: no duplicate arg names
     seen_arg_names: set[str] = set()

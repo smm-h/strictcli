@@ -1515,3 +1515,154 @@ func TestNoDefaultConfigPathWithConfigFlag(t *testing.T) {
 		t.Fatalf("expected port=3333 from --config with no-default-config-path, got %q", r.Stdout)
 	}
 }
+
+// === Phase 2.3: ConfigField / Flag coexistence ===
+
+func TestFieldFlagShowPlainRendersOnceWithAnnotation(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"target": "prod"}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target")))
+	app.ConfigField("target", ConfigFieldHelp("the deploy target"))
+
+	r := app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", r.ExitCode, r.Stderr)
+	}
+	// One line for target, on the flag line, with the annotation.
+	count := strings.Count(r.Stdout, "target =")
+	if count != 1 {
+		t.Fatalf("expected exactly one 'target =' line, got %d:\n%s", count, r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "-- the deploy target") {
+		t.Fatalf("expected annotation on flag line, got: %s", r.Stdout)
+	}
+	if strings.Contains(r.Stdout, "Config fields:") {
+		t.Fatalf("colliding field must not appear in Config fields section: %s", r.Stdout)
+	}
+}
+
+func TestFieldFlagShowJSONRendersOnce(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	os.WriteFile(configFile, []byte(`{"target": "prod"}`), 0o644)
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target")))
+	app.ConfigField("target", ConfigFieldHelp("the deploy target"))
+
+	r := app.Test([]string{"config", "show", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", r.ExitCode, r.Stderr)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+		t.Fatalf("bad json: %v\n%s", err, r.Stdout)
+	}
+	entry, ok := result["target"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected target entry, got: %v", result["target"])
+	}
+	if entry["value"] != "prod" || entry["source"] != "config" {
+		t.Fatalf("expected flag entry value/source, got: %v", entry)
+	}
+	// The config-field-only keys must be absent (rendered as flag entry, once).
+	if _, has := entry["type"]; has {
+		t.Fatalf("colliding key rendered as config-field entry, not flag: %v", entry)
+	}
+}
+
+func TestFieldFlagInitTomlRendersOnce(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.toml"
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile), WithConfigFormat("toml"))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
+
+	r := app.Test([]string{"config", "init"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", r.ExitCode, r.Stderr)
+	}
+	content, _ := os.ReadFile(configFile)
+	if c := strings.Count(string(content), "target ="); c != 1 {
+		t.Fatalf("expected exactly one 'target =' entry, got %d:\n%s", c, content)
+	}
+	if !strings.Contains(string(content), "-- the deploy target") {
+		t.Fatalf("expected annotation in template, got:\n%s", content)
+	}
+}
+
+func TestFieldFlagInitJSONRendersOnce(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.json"
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
+
+	r := app.Test([]string{"config", "init"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", r.ExitCode, r.Stderr)
+	}
+	content, _ := os.ReadFile(configFile)
+	var data map[string]interface{}
+	if err := json.Unmarshal(content, &data); err != nil {
+		t.Fatalf("bad json: %v\n%s", err, content)
+	}
+	if data["target"] != "prod" {
+		t.Fatalf("expected target=prod once, got: %v", data)
+	}
+	if strings.Count(string(content), "\"target\"") != 1 {
+		t.Fatalf("expected target key once, got:\n%s", content)
+	}
+}
+
+func TestFieldFlagUnequalDefaultsFieldAfterFlagPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("expected panic on unequal defaults")
+		}
+	}()
+	app := NewApp("test", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("staging"))
+}
+
+func TestFieldFlagUnequalDefaultsFlagAfterFieldPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("expected panic on unequal defaults")
+		}
+	}()
+	app := NewApp("test", "1.0.0", "test app", WithConfig())
+	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("staging"))
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+}
+
+func TestFieldFlagEqualDefaultsOK(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
+}
+
+func TestFieldFlagOneAbsentDefaultOK(t *testing.T) {
+	// Flag has default, field has none.
+	app := NewApp("test", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+	app.ConfigField("target", ConfigFieldHelp("the deploy target"))
+
+	// Field has default, flag has none.
+	app2 := NewApp("test", "1.0.0", "test app", WithConfig())
+	app2.Command("run", "run it", func(args map[string]interface{}) int { return 0 },
+		WithFlags(StringFlag("target", "deploy target")))
+	app2.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
+}

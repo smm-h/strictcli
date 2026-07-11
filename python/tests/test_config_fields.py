@@ -993,3 +993,107 @@ class TestSchemaWithConfigFields:
 
         bound = schema["config_fields"]["db.url"]["bound_commands"]
         assert "server start" in bound
+
+
+# ---- Phase 2.3: ConfigField / Flag coexistence ----
+
+
+class TestConfigFieldFlagCoexistence:
+    """A config field colliding with a flag's param name is validation-only:
+    it annotates the flag and renders once."""
+
+    def _app_field_after_flag(self, tmp_path, config_data=None,
+                              flag_default=None, field_default=strictcli._MISSING):
+        app = _build_config_app(tmp_path, config_data=config_data or {})
+
+        @app.command(name="run", help="run")
+        @strictcli.flag("target", type=str, help="deploy target", default=flag_default)
+        def run(target):
+            pass
+
+        app.config_field("target", type=str, help="the deploy target",
+                         default=field_default)
+        return app
+
+    def test_show_plain_renders_key_once_with_annotation(self, tmp_path):
+        app = self._app_field_after_flag(tmp_path, config_data={"target": "prod"})
+        result = app.test(["config", "show", "--plain"])
+        assert result.exit_code == 0
+        # The flag line carries the config field help as a trailing annotation.
+        target_lines = [ln for ln in result.stdout.splitlines() if ln.startswith("target ")]
+        assert len(target_lines) == 1, result.stdout
+        assert "-- the deploy target" in target_lines[0]
+        # Not duplicated under a "Config fields:" section.
+        assert "Config fields:" not in result.stdout
+
+    def test_show_json_renders_key_once(self, tmp_path):
+        app = self._app_field_after_flag(tmp_path, config_data={"target": "prod"})
+        result = app.test(["config", "show", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        # Single entry: the flag entry (value + source), not the config-field entry.
+        assert data["target"]["value"] == "prod"
+        assert data["target"]["source"] == "config"
+        # The config-field-only keys must be absent (rendered as flag, once).
+        assert "type" not in data["target"]
+        assert "required" not in data["target"]
+
+    def test_init_toml_renders_key_once_with_annotation(self, tmp_path):
+        init_path = str(tmp_path / "cfg.toml")
+        app = strictcli.App(name="testapp", version="1.0.0", help="t",
+                            config=True, config_path=init_path, config_format="toml")
+
+        @app.command(name="run", help="run")
+        @strictcli.flag("target", type=str, help="deploy target", default="prod")
+        def run(target):
+            pass
+
+        app.config_field("target", type=str, help="the deploy target", default="prod")
+        result = app.test(["config", "init"])
+        assert result.exit_code == 0
+        content = open(init_path).read()
+        assert content.count("target =") == 1, content
+        assert "-- the deploy target" in content
+
+    def test_init_json_renders_key_once(self, tmp_path):
+        init_path = str(tmp_path / "cfg.json")
+        app = strictcli.App(name="testapp", version="1.0.0", help="t",
+                            config=True, config_path=init_path)
+
+        @app.command(name="run", help="run")
+        @strictcli.flag("target", type=str, help="deploy target", default="prod")
+        def run(target):
+            pass
+
+        app.config_field("target", type=str, help="the deploy target", default="prod")
+        result = app.test(["config", "init"])
+        assert result.exit_code == 0
+        data = json.loads(open(init_path).read())
+        assert list(data.keys()).count("target") == 1
+        assert data["target"] == "prod"
+
+    def test_unequal_defaults_field_after_flag_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="defaults disagree"):
+            self._app_field_after_flag(tmp_path, flag_default="prod",
+                                       field_default="staging")
+
+    def test_unequal_defaults_flag_after_field_raises(self, tmp_path):
+        app = _build_config_app(tmp_path)
+        app.config_field("target", type=str, help="the deploy target",
+                         default="staging")
+        with pytest.raises(ValueError, match="defaults disagree"):
+            @app.command(name="run", help="run")
+            @strictcli.flag("target", type=str, help="deploy target", default="prod")
+            def run(target):
+                pass
+
+    def test_equal_defaults_ok(self, tmp_path):
+        # Should not raise.
+        self._app_field_after_flag(tmp_path, flag_default="prod",
+                                   field_default="prod")
+
+    def test_one_absent_default_ok(self, tmp_path):
+        # Flag has default, config field has none -> OK (flag wins).
+        self._app_field_after_flag(tmp_path, flag_default="prod")
+        # Field has default, flag has none -> OK.
+        self._app_field_after_flag(tmp_path, flag_default=None, field_default="prod")

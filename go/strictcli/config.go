@@ -211,8 +211,39 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 		}
 	}
 
+	// A config field colliding with an existing flag's param name is a
+	// validation-only declaration that annotates the flag; their defaults must
+	// agree. Flags registered after this field are checked from the command
+	// registration side instead.
+	for _, f := range a.collectAllFlags() {
+		if flagParamName(f.Name) == name {
+			checkFlagConfigFieldDefault(f.Name, f.Default, cf)
+		}
+	}
+
 	a.configFields[name] = cf
 	a.configFieldOrder = append(a.configFieldOrder, name)
+}
+
+// collidingConfigFields returns config fields whose name equals a flag's param
+// name, keyed by that param name. Such fields are validation-only: they
+// annotate the colliding flag and render once (on the flag), not as a separate
+// config key.
+func (a *App) collidingConfigFields() map[string]*ConfigField {
+	result := make(map[string]*ConfigField)
+	if len(a.configFields) == 0 {
+		return result
+	}
+	flagParams := make(map[string]bool)
+	for _, f := range a.collectAllFlags() {
+		flagParams[flagParamName(f.Name)] = true
+	}
+	for name, cf := range a.configFields {
+		if flagParams[name] {
+			result[name] = cf
+		}
+	}
+	return result
 }
 
 // registerFrameworkField declares an internal framework config field.
@@ -705,6 +736,7 @@ func (a *App) registerConfigGroup() {
 		useJSON := args["json"].(bool)
 		configData := a.configData
 		allFlags := a.collectAllFlags()
+		colliding := a.collidingConfigFields()
 
 		if useJSON {
 			result := make(map[string]interface{})
@@ -716,8 +748,12 @@ func (a *App) registerConfigGroup() {
 					"source": source,
 				}
 			}
-			// Include config fields
+			// Include config fields (skip those colliding with a flag: they are
+			// validation-only and render once, on the flag entry).
 			for _, name := range a.configFieldOrder {
+				if _, isColliding := colliding[name]; isColliding {
+					continue
+				}
 				cf := a.configFields[name]
 				var value interface{}
 				var source string
@@ -756,13 +792,25 @@ func (a *App) registerConfigGroup() {
 		for _, f := range allFlags {
 			param := flagParamName(f.Name)
 			value, source := resolveFlagShowSource(&f, configData)
-			fmt.Printf("%s = %v  (source: %s)\n", param, formatConfigValue(value), source)
+			line := fmt.Sprintf("%s = %v  (source: %s)", param, formatConfigValue(value), source)
+			// A colliding config field annotates the flag line (rendered once).
+			if cf, isColliding := colliding[param]; isColliding {
+				line += fmt.Sprintf("  -- %s", cf.Help)
+			}
+			fmt.Println(line)
 		}
-		// Include config fields
-		if len(a.configFieldOrder) > 0 {
+		// Include config fields (skip colliding ones: rendered as an annotation
+		// on the flag line above).
+		var nonColliding []string
+		for _, name := range a.configFieldOrder {
+			if _, isColliding := colliding[name]; !isColliding {
+				nonColliding = append(nonColliding, name)
+			}
+		}
+		if len(nonColliding) > 0 {
 			fmt.Println()
 			fmt.Println("Config fields:")
-			for _, name := range a.configFieldOrder {
+			for _, name := range nonColliding {
 				cf := a.configFields[name]
 				var value interface{}
 				var source string
@@ -1111,10 +1159,18 @@ func (a *App) generateTomlTemplate(allFlags []Flag) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("# Configuration for %s\n\n", a.Name))
 
+	// A config field colliding with a flag's param name is validation-only: it
+	// annotates the flag and the key renders once (on the flag).
+	colliding := a.collidingConfigFields()
+
 	// Write flags as top-level keys
 	for _, f := range allFlags {
 		param := flagParamName(f.Name)
-		sb.WriteString(fmt.Sprintf("# %s (type: %s)\n", f.Help, flagTypeName[f.Type]))
+		comment := fmt.Sprintf("# %s (type: %s)", f.Help, flagTypeName[f.Type])
+		if cf, isColliding := colliding[param]; isColliding {
+			comment += fmt.Sprintf(" -- %s", cf.Help)
+		}
+		sb.WriteString(comment + "\n")
 		if f.hasDefault && f.Default != nil {
 			sb.WriteString(fmt.Sprintf("%s = %s\n", param, formatTomlValue(f.Default)))
 		} else {
@@ -1133,6 +1189,9 @@ func (a *App) generateTomlTemplate(allFlags []Flag) string {
 	var sectionOrder []string
 
 	for _, name := range a.configFieldOrder {
+		if _, isColliding := colliding[name]; isColliding {
+			continue // rendered once on the flag line above
+		}
 		cf := a.configFields[name]
 		if idx := strings.LastIndex(name, "."); idx != -1 {
 			section := name[:idx]
@@ -1185,6 +1244,10 @@ func (a *App) generateTomlTemplate(allFlags []Flag) string {
 func (a *App) generateJSONTemplate(allFlags []Flag) string {
 	result := make(map[string]interface{})
 
+	// A config field colliding with a flag's param name is validation-only; the
+	// flag owns the rendered value, so the key appears once.
+	colliding := a.collidingConfigFields()
+
 	// Add flags
 	for _, f := range allFlags {
 		param := flagParamName(f.Name)
@@ -1195,8 +1258,12 @@ func (a *App) generateJSONTemplate(allFlags []Flag) string {
 		}
 	}
 
-	// Add config fields, nesting dot-names into objects via nestedSet
+	// Add config fields, nesting dot-names into objects via nestedSet. Skip
+	// colliding fields (rendered once via the flag above).
 	for _, name := range a.configFieldOrder {
+		if _, isColliding := colliding[name]; isColliding {
+			continue
+		}
 		cf := a.configFields[name]
 		if cf.HasDefault && cf.Default != nil {
 			nestedSet(result, name, cf.Default)
