@@ -7,10 +7,30 @@ import (
 	"strings"
 )
 
-// CheckRunResult holds the outcome of running a single check.
+// CheckRunResult holds the outcome of running a single check. The verdict is
+// derived from the minted CheckOutcome -- the runner's exit/cascade logic and
+// the formatters all consume the same derived accessors (one source of truth).
 type CheckRunResult struct {
-	Name   string
-	Result CheckResult
+	Name    string
+	Outcome CheckOutcome
+}
+
+// Status returns the derived label ("pass", "fail", "warn", "skip") used for
+// display and JSON output.
+func (r CheckRunResult) Status() string {
+	return deriveStatus(r.Outcome)
+}
+
+// Gated reports whether the outcome carries an error-severity problem (derived
+// FAIL). Cascade (skipping dependents) and the FAIL exit key on this predicate.
+func (r CheckRunResult) Gated() bool {
+	return r.Status() == "fail"
+}
+
+// Warned reports whether the outcome carries only warn-severity problems
+// (derived WARN). The --ignore-warnings predicate keys on this.
+func (r CheckRunResult) Warned() bool {
+	return r.Status() == "warn"
 }
 
 // resolveCheckOrder builds a DAG from depends_on, expands the selected set to include
@@ -171,12 +191,12 @@ func findCycle(checkDefs map[string]*checkDef, expanded map[string]bool, inDegre
 // Returns results and an exit code (0 = all pass or all warn with ignoreWarnings, 1 otherwise).
 func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext, ignoreWarnings bool) ([]CheckRunResult, int) {
 	results := make([]CheckRunResult, 0, len(order))
-	// Track checks whose dependents should be cascade-skipped.
-	// A check is "failed" for cascade purposes only if it returned fail
-	// or was itself cascade-skipped. A warn satisfies the dependency
-	// (dependents still run) regardless of ignoreWarnings -- it only
-	// affects the exit code. Explicit skip from a check impl is NOT a
-	// failure -- dependents still run.
+	// Track checks whose dependents should be cascade-skipped. Cascade keys
+	// ONLY on a derived FAIL (Gated: an error-severity problem present) or a
+	// cascade-skip. A WARN outcome satisfies the dependency (dependents still
+	// run) and only affects the exit code -- warn-severity checks physically
+	// cannot cascade because WarnReporter lacks error-minting. An explicit
+	// SKIP from an impl is NOT a failure -- dependents still run.
 	failedChecks := make(map[string]bool)
 
 	exitCode := 0
@@ -193,29 +213,35 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 		}
 
 		if skipReason != "" {
-			r := CheckResult{Status: "skip", Message: skipReason}
-			results = append(results, CheckRunResult{Name: name, Result: r})
+			// Internally minted skip outcome (in-package construction is the
+			// runner's own mint; user impls can only mint via reporters).
+			o := CheckOutcome{minted: true, kind: "skipped", message: skipReason}
+			results = append(results, CheckRunResult{Name: name, Outcome: o})
 			failedChecks[name] = true
 			exitCode = 1
 			continue
 		}
 
 		// Run the check
-		r := def.impl(ctx)
-		results = append(results, CheckRunResult{Name: name, Result: r})
+		o := def.impl(ctx)
+		// Belt-and-braces: an impl must return a reporter-minted outcome.
+		if !o.minted {
+			panic(fmt.Sprintf("check %q returned an outcome not minted by its reporter; use reporter methods (Passed/Skipped/Found)", name))
+		}
+		r := CheckRunResult{Name: name, Outcome: o}
+		results = append(results, r)
 
-		switch r.Status {
-		case "fail":
+		switch {
+		case r.Gated():
 			failedChecks[name] = true
 			exitCode = 1
-		case "warn":
-			// Warn satisfies the dependency (no cascade), but still
-			// makes the run exit non-zero unless warnings are ignored.
+		case r.Warned():
+			// Warn satisfies the dependency (no cascade), but still makes
+			// the run exit non-zero unless warnings are ignored.
 			if !ignoreWarnings {
 				exitCode = 1
 			}
-		case "skip":
-			// Explicit skip from impl: not a failure, no cascade, no exit code change
+			// pass / skip: not a failure, no cascade, no exit code change.
 		}
 	}
 

@@ -10,17 +10,156 @@ import (
 	tomledit "github.com/smm-h/go-toml-edit"
 )
 
-// CheckResult holds the outcome of a single check execution.
-type CheckResult struct {
-	Status  string   // "pass", "fail", "warn", "skip"
-	Message string   // one-line summary
-	Details []string // specific findings
-}
-
 // CheckContext provides project context to check implementations.
 type CheckContext interface {
 	ProjectRoot() string
 }
+
+// checkProblem is a single minted finding: text plus severity. It is
+// unexported and has no public constructor -- problems are minted only via
+// reporter methods (Warn/Error).
+type checkProblem struct {
+	text     string
+	severity string // "error" or "warn"
+}
+
+// CheckOutcome is the ceiling-typed result of a check implementation. Its
+// fields are unexported so callers cannot forge one: a valid CheckOutcome is
+// obtained ONLY through reporter methods (Passed/Skipped/Found). The zero value
+// has minted=false and is rejected by the runner (belt-and-braces against an
+// impl that returns something a reporter did not mint).
+type CheckOutcome struct {
+	minted   bool           // proves this value came from a reporter
+	kind     string         // "passed", "skipped", "found"
+	message  string         // pass/found message or skip reason
+	problems []checkProblem // accumulated problems (only for kind == "found")
+}
+
+// orderedProblems returns the outcome's problems grouped by severity: all
+// error-severity problems first, then all warn-severity problems. Insertion
+// order is preserved within each group.
+func (o CheckOutcome) orderedProblems() []checkProblem {
+	var errs, warns []checkProblem
+	for _, p := range o.problems {
+		if p.severity == "error" {
+			errs = append(errs, p)
+		} else {
+			warns = append(warns, p)
+		}
+	}
+	return append(errs, warns...)
+}
+
+// reporterCore holds the problem accumulator and the shared minting methods
+// (Warn/Passed/Skipped/Found) promoted into both reporter types. Error-minting
+// lives ONLY on ErrorReporter, so WarnReporter structurally lacks it (calling
+// Error on a *WarnReporter is a compile error).
+type reporterCore struct {
+	problems []checkProblem
+}
+
+// Warn mints a warn-severity problem. Non-empty text is required.
+func (r *reporterCore) Warn(text string) {
+	if strings.TrimSpace(text) == "" {
+		panic("Warn: text must be a non-empty string")
+	}
+	r.problems = append(r.problems, checkProblem{text: text, severity: "warn"})
+}
+
+// Passed finalizes a terminal PASS outcome. It hard-errors if any problems were
+// accumulated (an impl that found problems cannot claim it passed -- use Found).
+func (r *reporterCore) Passed(message string) CheckOutcome {
+	if strings.TrimSpace(message) == "" {
+		panic("Passed: message must be a non-empty string")
+	}
+	if len(r.problems) > 0 {
+		panic("Passed: problems were reported; a check that found problems cannot pass -- use Found")
+	}
+	return CheckOutcome{minted: true, kind: "passed", message: message}
+}
+
+// Skipped finalizes a terminal SKIP outcome. It hard-errors if any problems were
+// accumulated.
+func (r *reporterCore) Skipped(reason string) CheckOutcome {
+	if strings.TrimSpace(reason) == "" {
+		panic("Skipped: reason must be a non-empty string")
+	}
+	if len(r.problems) > 0 {
+		panic("Skipped: problems were reported; a check that found problems cannot skip")
+	}
+	return CheckOutcome{minted: true, kind: "skipped", message: reason}
+}
+
+// Found finalizes an outcome carrying the accumulated problems. It hard-errors
+// when no problems were accumulated (nothing found means the check passed -- say
+// so explicitly with Passed).
+func (r *reporterCore) Found(message string) CheckOutcome {
+	if strings.TrimSpace(message) == "" {
+		panic("Found: message must be a non-empty string")
+	}
+	if len(r.problems) == 0 {
+		panic("Found: no problems were reported; nothing found means pass -- use Passed")
+	}
+	return CheckOutcome{
+		minted:   true,
+		kind:     "found",
+		message:  message,
+		problems: append([]checkProblem(nil), r.problems...),
+	}
+}
+
+// WarnReporter is handed to warn-severity check impls. It can mint warn-severity
+// problems and terminal outcomes but structurally LACKS error-minting: there is
+// no Error method in its method set, so an attempt to raise an error-severity
+// problem from a warn check fails to compile.
+type WarnReporter struct {
+	reporterCore
+}
+
+// ErrorReporter is handed to error-severity check impls. It has everything
+// WarnReporter has PLUS Error (mints an error-severity problem).
+type ErrorReporter struct {
+	reporterCore
+}
+
+// Error mints an error-severity problem. Non-empty text is required. This method
+// exists only on ErrorReporter -- see the WarnReporter doc comment.
+func (r *ErrorReporter) Error(text string) {
+	if strings.TrimSpace(text) == "" {
+		panic("Error: text must be a non-empty string")
+	}
+	r.problems = append(r.problems, checkProblem{text: text, severity: "error"})
+}
+
+// deriveStatus maps a minted CheckOutcome to a display/verdict label.
+// found + any error-severity problem => "fail"; found + only warns => "warn";
+// passed => "pass"; skipped => "skip".
+func deriveStatus(o CheckOutcome) string {
+	switch o.kind {
+	case "passed":
+		return "pass"
+	case "skipped":
+		return "skip"
+	case "found":
+		for _, p := range o.problems {
+			if p.severity == "error" {
+				return "fail"
+			}
+		}
+		return "warn"
+	default:
+		panic(fmt.Sprintf("deriveStatus: unknown outcome kind %q", o.kind))
+	}
+}
+
+// Scope adapter asymmetry (deliberate, documented): Python exposes a
+// set_scope_adapter hook that projects a check's context or skips it. Go has no
+// scope adapter yet -- no Go consumer needs scoped checks. When the first Go
+// scope consumer appears, add SetScopeAdapter here with the same contract as
+// Python's (returns a replacement context OR a skip directive; it can no longer
+// mint arbitrary outcomes), and wire it into runChecks alongside the cascade
+// logic. Until then, checkDef.scope is parsed and carried but never consulted at
+// run time on the Go side.
 
 // checkDef holds the definition of a single check loaded from checks.toml.
 type checkDef struct {
@@ -32,7 +171,11 @@ type checkDef struct {
 	needsNetwork bool
 	dependsOn    []string
 	scope        string // optional, defaults to ""
-	impl         func(CheckContext) CheckResult // registered implementation, nil initially
+	// impl is the wrapped runner installed at registration time. It constructs
+	// the appropriate reporter and invokes the user's function. nil until
+	// registered via RegisterErrorCheck/RegisterWarnCheck.
+	impl     func(CheckContext) CheckOutcome
+	implForm string // "error" or "warn" -- the registration form, for the severity cross-check
 }
 
 // identifierRe validates identifier names (check names, tag names): lowercase letter followed by lowercase letters, digits, or hyphens.

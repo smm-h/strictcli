@@ -45,9 +45,11 @@ func (a *App) RunChecks(ctx CheckContext, opts RunChecksOptions) ([]CheckRunResu
 }
 
 // FormatCheckResults formats check results as a human-readable string.
-// Same layout as the check command's human output: status label, name, message, and details.
-// When verbose is true, details are shown for passing checks too.
-// No trailing newline -- callers use fmt.Println().
+// Layout: the derived status label, name, and message, with minted problems
+// listed under the check row grouped by severity (error problems first, then
+// warn problems), each tagged with its severity. Problems are shown for
+// fail/warn/skip outcomes or when verbose is true. No trailing newline --
+// callers use fmt.Println().
 func FormatCheckResults(results []CheckRunResult, verbose bool) string {
 	if len(results) == 0 {
 		return ""
@@ -70,16 +72,17 @@ func FormatCheckResults(results []CheckRunResult, verbose bool) string {
 
 	var b strings.Builder
 	for i, r := range results {
-		label := statusLabel[r.Result.Status]
+		status := r.Status()
+		label := statusLabel[status]
 		if label == "" {
-			label = strings.ToUpper(r.Result.Status)
+			label = strings.ToUpper(status)
 		}
-		fmt.Fprintf(&b, "%-4s  %-*s    %s", label, nameWidth, r.Name, r.Result.Message)
+		fmt.Fprintf(&b, "%-4s  %-*s    %s", label, nameWidth, r.Name, r.Outcome.message)
 
-		showDetails := r.Result.Status == "fail" || r.Result.Status == "warn" || r.Result.Status == "skip" || verbose
-		if showDetails {
-			for _, detail := range r.Result.Details {
-				fmt.Fprintf(&b, "\n        %s", detail)
+		showProblems := status == "fail" || status == "warn" || status == "skip" || verbose
+		if showProblems {
+			for _, p := range r.Outcome.orderedProblems() {
+				fmt.Fprintf(&b, "\n        [%s] %s", p.severity, p.text)
 			}
 		}
 
@@ -90,28 +93,33 @@ func FormatCheckResults(results []CheckRunResult, verbose bool) string {
 	return b.String()
 }
 
-// FormatCheckResultsJSON formats check results as a JSON array string.
-// Same schema as the check command's JSON output. Empty details are serialized as []
-// rather than null. No trailing newline.
+// FormatCheckResultsJSON formats check results as a JSON array string. Each
+// entry carries the derived status plus the minted problems (each with its
+// severity and text). Empty problems serialize as [] rather than null. No
+// trailing newline.
 func FormatCheckResultsJSON(results []CheckRunResult) string {
+	type jsonProblem struct {
+		Severity string `json:"severity"`
+		Text     string `json:"text"`
+	}
 	type jsonResult struct {
-		Name    string   `json:"name"`
-		Status  string   `json:"status"`
-		Message string   `json:"message"`
-		Details []string `json:"details"`
+		Name     string        `json:"name"`
+		Status   string        `json:"status"`
+		Message  string        `json:"message"`
+		Problems []jsonProblem `json:"problems"`
 	}
 
 	entries := make([]jsonResult, len(results))
 	for i, r := range results {
-		details := r.Result.Details
-		if details == nil {
-			details = []string{}
+		problems := make([]jsonProblem, 0, len(r.Outcome.problems))
+		for _, p := range r.Outcome.problems {
+			problems = append(problems, jsonProblem{Severity: p.severity, Text: p.text})
 		}
 		entries[i] = jsonResult{
-			Name:    r.Name,
-			Status:  r.Result.Status,
-			Message: r.Result.Message,
-			Details: details,
+			Name:     r.Name,
+			Status:   r.Status(),
+			Message:  r.Outcome.message,
+			Problems: problems,
 		}
 	}
 

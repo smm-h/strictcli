@@ -5,25 +5,78 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
 )
 
-func TestCheckResultFields(t *testing.T) {
-	r := CheckResult{
-		Status:  "pass",
-		Message: "all good",
-		Details: []string{"detail1", "detail2"},
+// passOutcome / failOutcome / warnOutcome / skipOutcome are in-package test
+// minters. They exercise the real reporter minting path (the only way to obtain
+// a CheckOutcome) so that behavioral tests can express expected outcomes
+// concisely. failOutcome/warnOutcome mint one problem per variadic arg (or a
+// single problem from the message when none are given).
+func passOutcome(msg string) CheckOutcome {
+	r := &ErrorReporter{}
+	return r.Passed(msg)
+}
+
+func skipOutcome(reason string) CheckOutcome {
+	r := &ErrorReporter{}
+	return r.Skipped(reason)
+}
+
+func failOutcome(msg string, problems ...string) CheckOutcome {
+	r := &ErrorReporter{}
+	if len(problems) == 0 {
+		r.Error(msg)
 	}
-	if r.Status != "pass" {
-		t.Errorf("expected status 'pass', got %q", r.Status)
+	for _, p := range problems {
+		r.Error(p)
 	}
-	if r.Message != "all good" {
-		t.Errorf("expected message 'all good', got %q", r.Message)
+	return r.Found(msg)
+}
+
+func warnOutcome(msg string, problems ...string) CheckOutcome {
+	r := &ErrorReporter{}
+	if len(problems) == 0 {
+		r.Warn(msg)
 	}
-	if len(r.Details) != 2 {
-		t.Errorf("expected 2 details, got %d", len(r.Details))
+	for _, p := range problems {
+		r.Warn(p)
+	}
+	return r.Found(msg)
+}
+
+func TestCheckOutcome_DerivedStatus(t *testing.T) {
+	// A minted outcome's verdict is derived: passed => pass, skipped => skip,
+	// found with an error problem => fail, found with only warns => warn.
+	cases := []struct {
+		outcome CheckOutcome
+		want    string
+	}{
+		{passOutcome("all good"), "pass"},
+		{skipOutcome("n/a"), "skip"},
+		{failOutcome("broken", "detail1", "detail2"), "fail"},
+		{warnOutcome("minor"), "warn"},
+	}
+	for _, c := range cases {
+		if got := deriveStatus(c.outcome); got != c.want {
+			t.Errorf("deriveStatus = %q, want %q", got, c.want)
+		}
+	}
+	// Mixed: an error check that reports both an error and a warn derives FAIL,
+	// and preserves both problems (error grouped before warn).
+	er := &ErrorReporter{}
+	er.Warn("a warning")
+	er.Error("an error")
+	mixed := er.Found("mixed findings")
+	if deriveStatus(mixed) != "fail" {
+		t.Fatalf("mixed outcome should derive fail, got %q", deriveStatus(mixed))
+	}
+	ordered := mixed.orderedProblems()
+	if len(ordered) != 2 || ordered[0].severity != "error" || ordered[1].severity != "warn" {
+		t.Fatalf("expected error-first ordering, got %+v", ordered)
 	}
 }
 
@@ -351,7 +404,7 @@ version = "1.0"
 
 func TestLoadChecksToml_InvalidCheckName(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		checkName string
 	}{
 		{"starts with number", "1bad"},
@@ -534,8 +587,8 @@ func TestRegisterCheck_DeclaredName(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("lint-code", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	if app.checkDefs["lint-code"].impl == nil {
@@ -559,8 +612,8 @@ func TestRegisterCheck_UndeclaredName_Panics(t *testing.T) {
 		}
 	}()
 
-	app.RegisterCheck("nonexistent", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass"}
+	app.RegisterErrorCheck("nonexistent", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 }
 
@@ -568,8 +621,8 @@ func TestRegisterCheck_DuplicatePanics(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("lint-code", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass"}
+	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	defer func() {
@@ -583,8 +636,8 @@ func TestRegisterCheck_DuplicatePanics(t *testing.T) {
 		}
 	}()
 
-	app.RegisterCheck("lint-code", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass"}
+	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 }
 
@@ -602,8 +655,8 @@ func TestRegisterCheck_NoToml_Panics(t *testing.T) {
 		}
 	}()
 
-	app.RegisterCheck("foo", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass"}
+	app.RegisterErrorCheck("foo", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 }
 
@@ -617,8 +670,8 @@ func TestDoubleEntry_DeclaredButNotRegistered(t *testing.T) {
 	})
 
 	// Only register one of two checks
-	app.RegisterCheck("lint-code", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass"}
+	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 	// check-deps is NOT registered
 
@@ -642,11 +695,11 @@ func TestDoubleEntry_AllRegistered_NoError(t *testing.T) {
 		fmt.Print("hello")
 		return 0
 	})
-	app.RegisterCheck("lint-code", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass"}
+	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-deps", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass"}
+	app.RegisterWarnCheck("check-deps", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	r := app.Test([]string{"greet"})
@@ -664,7 +717,7 @@ func makeCheckDefs(defs map[string]struct {
 	tags      []string
 	severity  string
 	dependsOn []string
-	impl      func(CheckContext) CheckResult
+	impl      func(CheckContext) CheckOutcome
 }) map[string]*checkDef {
 	result := make(map[string]*checkDef, len(defs))
 	for name, d := range defs {
@@ -686,14 +739,14 @@ func TestRunChecks_SinglePass(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "pass", Message: "all good"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return passOutcome("all good")
 			},
 		},
 	})
@@ -707,8 +760,8 @@ func TestRunChecks_SinglePass(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	if results[0].Result.Status != "pass" {
-		t.Fatalf("expected pass, got %q", results[0].Result.Status)
+	if results[0].Status() != "pass" {
+		t.Fatalf("expected pass, got %q", results[0].Status())
 	}
 }
 
@@ -717,14 +770,14 @@ func TestRunChecks_SingleFail(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "fail", Message: "broken"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return failOutcome("broken")
 			},
 		},
 	})
@@ -735,8 +788,8 @@ func TestRunChecks_SingleFail(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
 	}
-	if results[0].Result.Status != "fail" {
-		t.Fatalf("expected fail, got %q", results[0].Result.Status)
+	if results[0].Status() != "fail" {
+		t.Fatalf("expected fail, got %q", results[0].Status())
 	}
 }
 
@@ -746,24 +799,24 @@ func TestRunChecks_DependencyChain_Pass(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-b": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
+			impl: func(ctx CheckContext) CheckOutcome {
 				callOrder = append(callOrder, "check-b")
-				return CheckResult{Status: "pass", Message: "ok"}
+				return passOutcome("ok")
 			},
 		},
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-b"},
-			impl: func(ctx CheckContext) CheckResult {
+			impl: func(ctx CheckContext) CheckOutcome {
 				callOrder = append(callOrder, "check-a")
-				return CheckResult{Status: "pass", Message: "ok"}
+				return passOutcome("ok")
 			},
 		},
 	})
@@ -793,23 +846,23 @@ func TestRunChecks_DependencyFailure_Skip(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-b": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "fail", Message: "broken"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return failOutcome("broken")
 			},
 		},
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-b"},
-			impl: func(ctx CheckContext) CheckResult {
+			impl: func(ctx CheckContext) CheckOutcome {
 				t.Fatal("check-a should not have been called")
-				return CheckResult{}
+				return CheckOutcome{}
 			},
 		},
 	})
@@ -824,14 +877,14 @@ func TestRunChecks_DependencyFailure_Skip(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
-	if results[0].Result.Status != "fail" {
-		t.Fatalf("expected check-b fail, got %q", results[0].Result.Status)
+	if results[0].Status() != "fail" {
+		t.Fatalf("expected check-b fail, got %q", results[0].Status())
 	}
-	if results[1].Result.Status != "skip" {
-		t.Fatalf("expected check-a skip, got %q", results[1].Result.Status)
+	if results[1].Status() != "skip" {
+		t.Fatalf("expected check-a skip, got %q", results[1].Status())
 	}
-	if !strings.Contains(results[1].Result.Message, `dependency "check-b" failed`) {
-		t.Fatalf("expected skip message about check-b, got %q", results[1].Result.Message)
+	if !strings.Contains(results[1].Outcome.message, `dependency "check-b" failed`) {
+		t.Fatalf("expected skip message about check-b, got %q", results[1].Outcome.message)
 	}
 }
 
@@ -840,32 +893,32 @@ func TestRunChecks_TransitiveSkip(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-c": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "fail", Message: "broken"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return failOutcome("broken")
 			},
 		},
 		"check-b": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-c"},
-			impl: func(ctx CheckContext) CheckResult {
+			impl: func(ctx CheckContext) CheckOutcome {
 				t.Fatal("check-b should not run")
-				return CheckResult{}
+				return CheckOutcome{}
 			},
 		},
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-b"},
-			impl: func(ctx CheckContext) CheckResult {
+			impl: func(ctx CheckContext) CheckOutcome {
 				t.Fatal("check-a should not run")
-				return CheckResult{}
+				return CheckOutcome{}
 			},
 		},
 	})
@@ -879,14 +932,14 @@ func TestRunChecks_TransitiveSkip(t *testing.T) {
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
-	if results[0].Result.Status != "fail" {
-		t.Fatalf("expected check-c fail, got %q", results[0].Result.Status)
+	if results[0].Status() != "fail" {
+		t.Fatalf("expected check-c fail, got %q", results[0].Status())
 	}
-	if results[1].Result.Status != "skip" {
-		t.Fatalf("expected check-b skip, got %q", results[1].Result.Status)
+	if results[1].Status() != "skip" {
+		t.Fatalf("expected check-b skip, got %q", results[1].Status())
 	}
-	if results[2].Result.Status != "skip" {
-		t.Fatalf("expected check-a skip, got %q", results[2].Result.Status)
+	if results[2].Status() != "skip" {
+		t.Fatalf("expected check-a skip, got %q", results[2].Status())
 	}
 }
 
@@ -933,9 +986,9 @@ func TestResolveCheckOrder_ThreeNodeCycle(t *testing.T) {
 
 func TestFilterChecks_ByTag(t *testing.T) {
 	defs := map[string]*checkDef{
-		"lint-code": {name: "lint-code", tags: []string{"code", "fast"}, severity: "error"},
+		"lint-code":  {name: "lint-code", tags: []string{"code", "fast"}, severity: "error"},
 		"check-deps": {name: "check-deps", tags: []string{"deps"}, severity: "warn"},
-		"lint-docs": {name: "lint-docs", tags: []string{"docs", "fast"}, severity: "error"},
+		"lint-docs":  {name: "lint-docs", tags: []string{"docs", "fast"}, severity: "error"},
 	}
 
 	selected, err := filterChecks(defs, "fast", "", false)
@@ -958,8 +1011,8 @@ func TestFilterChecks_ByTag(t *testing.T) {
 
 func TestFilterChecks_ByGlob(t *testing.T) {
 	defs := map[string]*checkDef{
-		"lint-code": {name: "lint-code", tags: []string{"code"}, severity: "error"},
-		"lint-docs": {name: "lint-docs", tags: []string{"docs"}, severity: "error"},
+		"lint-code":  {name: "lint-code", tags: []string{"code"}, severity: "error"},
+		"lint-docs":  {name: "lint-docs", tags: []string{"docs"}, severity: "error"},
 		"check-deps": {name: "check-deps", tags: []string{"deps"}, severity: "warn"},
 	}
 
@@ -982,7 +1035,7 @@ func TestFilterChecks_ByGlob(t *testing.T) {
 
 func TestFilterChecks_RunAll(t *testing.T) {
 	defs := map[string]*checkDef{
-		"lint-code": {name: "lint-code", tags: []string{"code"}, severity: "error"},
+		"lint-code":  {name: "lint-code", tags: []string{"code"}, severity: "error"},
 		"check-deps": {name: "check-deps", tags: []string{"deps"}, severity: "warn"},
 	}
 
@@ -998,8 +1051,8 @@ func TestFilterChecks_RunAll(t *testing.T) {
 
 func TestFilterChecks_TagAndGlob_Intersection(t *testing.T) {
 	defs := map[string]*checkDef{
-		"lint-code": {name: "lint-code", tags: []string{"code", "fast"}, severity: "error"},
-		"lint-docs": {name: "lint-docs", tags: []string{"docs"}, severity: "error"},
+		"lint-code":  {name: "lint-code", tags: []string{"code", "fast"}, severity: "error"},
+		"lint-docs":  {name: "lint-docs", tags: []string{"docs"}, severity: "error"},
 		"check-deps": {name: "check-deps", tags: []string{"deps", "fast"}, severity: "warn"},
 	}
 
@@ -1054,14 +1107,14 @@ func TestRunChecks_WarnWithIgnoreWarnings(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "warn",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "warn", Message: "minor issue"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return warnOutcome("minor issue")
 			},
 		},
 	})
@@ -1080,14 +1133,14 @@ func TestRunChecks_WarnWithoutIgnoreWarnings(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "warn",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "warn", Message: "minor issue"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return warnOutcome("minor issue")
 			},
 		},
 	})
@@ -1144,23 +1197,23 @@ func TestRunChecks_WarnDependency_RunsDependent(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-b": {
 			tags:      []string{"fast"},
 			severity:  "warn",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "warn", Message: "warning"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return warnOutcome("warning")
 			},
 		},
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-b"},
-			impl: func(ctx CheckContext) CheckResult {
+			impl: func(ctx CheckContext) CheckOutcome {
 				aRan = true
-				return CheckResult{Status: "pass", Message: "ok"}
+				return passOutcome("ok")
 			},
 		},
 	})
@@ -1174,11 +1227,11 @@ func TestRunChecks_WarnDependency_RunsDependent(t *testing.T) {
 	if !aRan {
 		t.Fatal("expected check-a to run when dependency warned")
 	}
-	if results[0].Result.Status != "warn" {
-		t.Fatalf("expected check-b warn, got %q", results[0].Result.Status)
+	if results[0].Status() != "warn" {
+		t.Fatalf("expected check-b warn, got %q", results[0].Status())
 	}
-	if results[1].Result.Status != "pass" {
-		t.Fatalf("expected check-a pass, got %q", results[1].Result.Status)
+	if results[1].Status() != "pass" {
+		t.Fatalf("expected check-a pass, got %q", results[1].Status())
 	}
 }
 
@@ -1188,30 +1241,30 @@ func TestRunChecks_WarnDependency_TransitiveDependentsRun(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-c": {
 			tags:      []string{"fast"},
 			severity:  "warn",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "warn", Message: "warning"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return warnOutcome("warning")
 			},
 		},
 		"check-b": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-c"},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "pass", Message: "ok"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return passOutcome("ok")
 			},
 		},
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-b"},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "pass", Message: "ok"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return passOutcome("ok")
 			},
 		},
 	})
@@ -1222,14 +1275,14 @@ func TestRunChecks_WarnDependency_TransitiveDependentsRun(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1 (warn without ignoreWarnings), got %d", exitCode)
 	}
-	if results[0].Result.Status != "warn" {
-		t.Fatalf("expected check-c warn, got %q", results[0].Result.Status)
+	if results[0].Status() != "warn" {
+		t.Fatalf("expected check-c warn, got %q", results[0].Status())
 	}
-	if results[1].Result.Status != "pass" {
-		t.Fatalf("expected check-b pass, got %q", results[1].Result.Status)
+	if results[1].Status() != "pass" {
+		t.Fatalf("expected check-b pass, got %q", results[1].Status())
 	}
-	if results[2].Result.Status != "pass" {
-		t.Fatalf("expected check-a pass, got %q", results[2].Result.Status)
+	if results[2].Status() != "pass" {
+		t.Fatalf("expected check-a pass, got %q", results[2].Status())
 	}
 }
 
@@ -1238,22 +1291,22 @@ func TestRunChecks_WarnDependency_RunsWhenIgnored(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-b": {
 			tags:      []string{"fast"},
 			severity:  "warn",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "warn", Message: "warning"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return warnOutcome("warning")
 			},
 		},
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-b"},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "pass", Message: "ok"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return passOutcome("ok")
 			},
 		},
 	})
@@ -1264,11 +1317,11 @@ func TestRunChecks_WarnDependency_RunsWhenIgnored(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0 (warnings ignored), got %d", exitCode)
 	}
-	if results[0].Result.Status != "warn" {
-		t.Fatalf("expected check-b warn, got %q", results[0].Result.Status)
+	if results[0].Status() != "warn" {
+		t.Fatalf("expected check-b warn, got %q", results[0].Status())
 	}
-	if results[1].Result.Status != "pass" {
-		t.Fatalf("expected check-a pass, got %q", results[1].Result.Status)
+	if results[1].Status() != "pass" {
+		t.Fatalf("expected check-a pass, got %q", results[1].Status())
 	}
 }
 
@@ -1309,11 +1362,11 @@ func TestCheckCommand_NoFlags_ShowsHelp(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 	app.SetCheckContext(func() CheckContext {
 		return &testCheckContext{root: "/tmp"}
@@ -1336,11 +1389,11 @@ func TestCheckCommand_List_Human(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	r := app.Test([]string{"check", "--list"})
@@ -1365,11 +1418,11 @@ func TestCheckCommand_List_JSON(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	r := app.Test([]string{"check", "--list", "--json"})
@@ -1403,11 +1456,11 @@ func TestCheckCommand_All_Passing(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "1.0.0 across 2 targets"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("1.0.0 across 2 targets")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "all commits covered"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("all commits covered")
 	})
 	app.SetCheckContext(func() CheckContext {
 		return &testCheckContext{root: "/tmp"}
@@ -1426,12 +1479,12 @@ func TestCheckCommand_All_WithFailure(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "fail", Message: "version mismatch", Details: []string{"pyproject: 1.0.0", "package.json: 1.0.1"}}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return failOutcome("version mismatch", "pyproject: 1.0.0", "package.json: 1.0.1")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		t.Fatal("changelog-coverage should not run if version-consistency fails")
-		return CheckResult{}
+		return CheckOutcome{}
 	})
 	app.SetCheckContext(func() CheckContext {
 		return &testCheckContext{root: "/tmp"}
@@ -1453,11 +1506,11 @@ func TestCheckCommand_TagFilter(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 	app.SetCheckContext(func() CheckContext {
 		return &testCheckContext{root: "/tmp"}
@@ -1477,11 +1530,11 @@ func TestCheckCommand_NameGlob(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 	app.SetCheckContext(func() CheckContext {
 		return &testCheckContext{root: "/tmp"}
@@ -1502,13 +1555,13 @@ func TestCheckCommand_DryRun(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		t.Fatal("should not run in dry-run mode")
-		return CheckResult{}
+		return CheckOutcome{}
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		t.Fatal("should not run in dry-run mode")
-		return CheckResult{}
+		return CheckOutcome{}
 	})
 
 	r := app.Test([]string{"check", "--all", "--dry-run"})
@@ -1534,11 +1587,11 @@ func TestCheckCommand_All_JSON(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "covered"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("covered")
 	})
 	app.SetCheckContext(func() CheckContext {
 		return &testCheckContext{root: "/tmp"}
@@ -1573,23 +1626,28 @@ func TestCheckCommand_All_Verbose(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok", Details: []string{"pyproject.toml: 1.0.0", "package.json: 1.0.0"}}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "covered"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("covered")
 	})
 	app.SetCheckContext(func() CheckContext {
 		return &testCheckContext{root: "/tmp"}
 	})
 
+	// A passing outcome carries NO problems (Passed hard-errors if any were
+	// reported), so --verbose has nothing extra to reveal for a pure PASS: the
+	// run succeeds and shows PASS rows, but no problem lines appear.
 	r := app.Test([]string{"check", "--all", "--verbose"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
-	// With verbose, passing check details should be shown
-	if !strings.Contains(r.Stdout, "pyproject.toml: 1.0.0") {
-		t.Fatalf("expected verbose details in output, got %q", r.Stdout)
+	if !strings.Contains(r.Stdout, "PASS") {
+		t.Fatalf("expected PASS in verbose output, got %q", r.Stdout)
+	}
+	if strings.Contains(r.Stdout, "[error]") || strings.Contains(r.Stdout, "[warn]") {
+		t.Fatalf("passing checks must show no problem lines, got %q", r.Stdout)
 	}
 }
 
@@ -1597,11 +1655,11 @@ func TestCheckCommand_IgnoreWarnings(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "warn", Message: "tag not pushed"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return warnOutcome("tag not pushed")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 	app.SetCheckContext(func() CheckContext {
 		return &testCheckContext{root: "/tmp"}
@@ -1639,11 +1697,11 @@ func TestCheckCommand_NoContextFactory_Error(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 	// Deliberately NOT calling SetCheckContext
 
@@ -1663,11 +1721,11 @@ func TestDumpSchema_WithChecks(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.RegisterCheck("version-consistency", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("changelog-coverage", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 	app.Command("noop", "does nothing", func(args map[string]interface{}) int {
 		return 0
@@ -1964,8 +2022,8 @@ func TestRegisterCheck_NotEnabled_Message(t *testing.T) {
 		}
 	}()
 
-	app.RegisterCheck("foo", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass"}
+	app.RegisterErrorCheck("foo", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 }
 
@@ -2064,14 +2122,14 @@ func TestRunChecks_ExplicitSkip_ExitZero(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "skip", Message: "not applicable"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return skipOutcome("not applicable")
 			},
 		},
 	})
@@ -2085,8 +2143,8 @@ func TestRunChecks_ExplicitSkip_ExitZero(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	if results[0].Result.Status != "skip" {
-		t.Fatalf("expected skip, got %q", results[0].Result.Status)
+	if results[0].Status() != "skip" {
+		t.Fatalf("expected skip, got %q", results[0].Status())
 	}
 }
 
@@ -2096,23 +2154,23 @@ func TestRunChecks_ExplicitSkip_NoCascade(t *testing.T) {
 		tags      []string
 		severity  string
 		dependsOn []string
-		impl      func(CheckContext) CheckResult
+		impl      func(CheckContext) CheckOutcome
 	}{
 		"check-a": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{},
-			impl: func(ctx CheckContext) CheckResult {
-				return CheckResult{Status: "skip", Message: "not applicable"}
+			impl: func(ctx CheckContext) CheckOutcome {
+				return skipOutcome("not applicable")
 			},
 		},
 		"check-b": {
 			tags:      []string{"fast"},
 			severity:  "error",
 			dependsOn: []string{"check-a"},
-			impl: func(ctx CheckContext) CheckResult {
+			impl: func(ctx CheckContext) CheckOutcome {
 				bRan = true
-				return CheckResult{Status: "pass", Message: "ok"}
+				return passOutcome("ok")
 			},
 		},
 	})
@@ -2129,11 +2187,11 @@ func TestRunChecks_ExplicitSkip_NoCascade(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
-	if results[0].Result.Status != "skip" {
-		t.Fatalf("expected check-a skip, got %q", results[0].Result.Status)
+	if results[0].Status() != "skip" {
+		t.Fatalf("expected check-a skip, got %q", results[0].Status())
 	}
-	if results[1].Result.Status != "pass" {
-		t.Fatalf("expected check-b pass, got %q", results[1].Result.Status)
+	if results[1].Status() != "pass" {
+		t.Fatalf("expected check-b pass, got %q", results[1].Status())
 	}
 }
 
@@ -2176,14 +2234,14 @@ depends_on = []
 
 func TestRunChecks_AllPass(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2198,22 +2256,22 @@ func TestRunChecks_AllPass(t *testing.T) {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
 	for _, r := range results {
-		if r.Result.Status != "pass" {
-			t.Fatalf("expected pass for %q, got %q", r.Name, r.Result.Status)
+		if r.Status() != "pass" {
+			t.Fatalf("expected pass for %q, got %q", r.Name, r.Status())
 		}
 	}
 }
 
 func TestRunChecks_OneFail(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "fail", Message: "broken"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return failOutcome("broken")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2227,7 +2285,7 @@ func TestRunChecks_OneFail(t *testing.T) {
 	// check-a fails, check-b depends on check-a so it's skipped
 	foundFail := false
 	for _, r := range results {
-		if r.Result.Status == "fail" {
+		if r.Status() == "fail" {
 			foundFail = true
 		}
 	}
@@ -2238,15 +2296,15 @@ func TestRunChecks_OneFail(t *testing.T) {
 
 func TestRunChecks_TagFiltering(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		t.Fatal("check-b should not run with tag=fast")
-		return CheckResult{}
+		return CheckOutcome{}
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2265,15 +2323,15 @@ func TestRunChecks_TagFiltering(t *testing.T) {
 
 func TestRunChecks_NameGlob(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		t.Fatal("check-b should not run with glob check-a")
-		return CheckResult{}
+		return CheckOutcome{}
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2294,14 +2352,14 @@ func TestRunChecks_NameGlob(t *testing.T) {
 
 func TestRunChecks_RunAll(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2317,17 +2375,17 @@ func TestRunChecks_RunAll(t *testing.T) {
 func TestRunChecks_DependencyOrdering(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
 	callOrder := []string{}
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		callOrder = append(callOrder, "check-a")
-		return CheckResult{Status: "pass", Message: "ok"}
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		callOrder = append(callOrder, "check-b")
-		return CheckResult{Status: "pass", Message: "ok"}
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
 		callOrder = append(callOrder, "check-c")
-		return CheckResult{Status: "pass", Message: "ok"}
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2356,15 +2414,15 @@ func TestRunChecks_DependencyOrdering(t *testing.T) {
 
 func TestRunChecks_DependencyFailureCascade(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "fail", Message: "broken"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return failOutcome("broken")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		t.Fatal("check-b should be skipped due to check-a failure")
-		return CheckResult{}
+		return CheckOutcome{}
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2378,8 +2436,8 @@ func TestRunChecks_DependencyFailureCascade(t *testing.T) {
 	// Find check-b result -- it should be skip
 	for _, r := range results {
 		if r.Name == "check-b" {
-			if r.Result.Status != "skip" {
-				t.Fatalf("expected check-b to be skipped, got %q", r.Result.Status)
+			if r.Status() != "skip" {
+				t.Fatalf("expected check-b to be skipped, got %q", r.Status())
 			}
 			return
 		}
@@ -2389,14 +2447,14 @@ func TestRunChecks_DependencyFailureCascade(t *testing.T) {
 
 func TestRunChecks_WarnWithIgnoreWarningsFalse(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "warn", Message: "minor issue"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return warnOutcome("minor issue")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2411,14 +2469,14 @@ func TestRunChecks_WarnWithIgnoreWarningsFalse(t *testing.T) {
 
 func TestRunChecks_WarnWithIgnoreWarningsTrue(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "warn", Message: "minor issue"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return warnOutcome("minor issue")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2433,14 +2491,14 @@ func TestRunChecks_WarnWithIgnoreWarningsTrue(t *testing.T) {
 
 func TestRunChecks_NoMatches(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-b", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-b", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
-	app.RegisterCheck("check-c", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterWarnCheck("check-c", func(ctx CheckContext, _ *WarnReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2472,8 +2530,8 @@ func TestRunChecks_ErrorWhenChecksNotEnabled(t *testing.T) {
 func TestRunChecks_ErrorWhenRegistrationsIncomplete(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, threeChecksToml)
 	// Only register one of three checks
-	app.RegisterCheck("check-a", func(ctx CheckContext) CheckResult {
-		return CheckResult{Status: "pass", Message: "ok"}
+	app.RegisterErrorCheck("check-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
@@ -2490,8 +2548,8 @@ func TestRunChecks_ErrorWhenRegistrationsIncomplete(t *testing.T) {
 
 func TestFormatCheckResults_NonEmpty(t *testing.T) {
 	results := []CheckRunResult{
-		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "all good"}},
-		{Name: "check-b", Result: CheckResult{Status: "fail", Message: "broken"}},
+		{Name: "check-a", Outcome: passOutcome("all good")},
+		{Name: "check-b", Outcome: failOutcome("broken")},
 	}
 	out := FormatCheckResults(results, false)
 	if out == "" {
@@ -2507,10 +2565,10 @@ func TestFormatCheckResults_NonEmpty(t *testing.T) {
 
 func TestFormatCheckResults_Labels(t *testing.T) {
 	results := []CheckRunResult{
-		{Name: "a", Result: CheckResult{Status: "pass", Message: "ok"}},
-		{Name: "b", Result: CheckResult{Status: "fail", Message: "bad"}},
-		{Name: "c", Result: CheckResult{Status: "warn", Message: "hmm"}},
-		{Name: "d", Result: CheckResult{Status: "skip", Message: "skipped"}},
+		{Name: "a", Outcome: passOutcome("ok")},
+		{Name: "b", Outcome: failOutcome("bad")},
+		{Name: "c", Outcome: warnOutcome("hmm")},
+		{Name: "d", Outcome: skipOutcome("skipped")},
 	}
 	out := FormatCheckResults(results, false)
 	if !strings.Contains(out, "PASS") {
@@ -2527,25 +2585,34 @@ func TestFormatCheckResults_Labels(t *testing.T) {
 	}
 }
 
-func TestFormatCheckResults_VerboseShowsPassDetails(t *testing.T) {
+func TestFormatCheckResults_PassHasNoProblemsEvenVerbose(t *testing.T) {
+	// A passing outcome carries no problems, so neither the default nor the
+	// verbose formatting emits any problem lines for it.
 	results := []CheckRunResult{
-		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok", Details: []string{"detail-line-1"}}},
+		{Name: "check-a", Outcome: passOutcome("ok")},
 	}
-	// Without verbose, pass details should NOT appear
 	nonVerbose := FormatCheckResults(results, false)
-	if strings.Contains(nonVerbose, "detail-line-1") {
-		t.Fatalf("expected no details without verbose, got %q", nonVerbose)
+	if strings.Contains(nonVerbose, "[error]") || strings.Contains(nonVerbose, "[warn]") {
+		t.Fatalf("expected no problem lines for pass, got %q", nonVerbose)
 	}
-	// With verbose, pass details should appear
 	verbose := FormatCheckResults(results, true)
-	if !strings.Contains(verbose, "detail-line-1") {
-		t.Fatalf("expected details with verbose, got %q", verbose)
+	if strings.Contains(verbose, "[error]") || strings.Contains(verbose, "[warn]") {
+		t.Fatalf("expected no problem lines for pass even verbose, got %q", verbose)
+	}
+	// The FAIL/WARN problem lines DO show. A failing outcome's error problems
+	// appear under its row.
+	failing := []CheckRunResult{
+		{Name: "check-b", Outcome: failOutcome("broken", "detail-line-1")},
+	}
+	out := FormatCheckResults(failing, false)
+	if !strings.Contains(out, "detail-line-1") {
+		t.Fatalf("expected problem line for fail, got %q", out)
 	}
 }
 
 func TestFormatCheckResults_NoTrailingNewline(t *testing.T) {
 	results := []CheckRunResult{
-		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok"}},
+		{Name: "check-a", Outcome: passOutcome("ok")},
 	}
 	out := FormatCheckResults(results, false)
 	if strings.HasSuffix(out, "\n") {
@@ -2568,8 +2635,8 @@ func TestFormatCheckResults_EmptyInput(t *testing.T) {
 
 func TestFormatCheckResultsJSON_ValidJSON(t *testing.T) {
 	results := []CheckRunResult{
-		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok"}},
-		{Name: "check-b", Result: CheckResult{Status: "fail", Message: "bad", Details: []string{"line1"}}},
+		{Name: "check-a", Outcome: passOutcome("ok")},
+		{Name: "check-b", Outcome: failOutcome("bad", "line1")},
 	}
 	out := FormatCheckResultsJSON(results)
 	var parsed []map[string]interface{}
@@ -2581,23 +2648,23 @@ func TestFormatCheckResultsJSON_ValidJSON(t *testing.T) {
 	}
 }
 
-func TestFormatCheckResultsJSON_EmptyDetailsNotNull(t *testing.T) {
+func TestFormatCheckResultsJSON_EmptyProblemsNotNull(t *testing.T) {
 	results := []CheckRunResult{
-		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok"}},
+		{Name: "check-a", Outcome: passOutcome("ok")},
 	}
 	out := FormatCheckResultsJSON(results)
-	// Verify details is [] not null
-	if strings.Contains(out, `"details":null`) {
-		t.Fatalf("expected details to be [], not null, got %q", out)
+	// A passing result carries no problems: the field must serialize as [] not null.
+	if strings.Contains(out, `"problems":null`) {
+		t.Fatalf("expected problems to be [], not null, got %q", out)
 	}
-	if !strings.Contains(out, `"details":[]`) {
-		t.Fatalf("expected details:[], got %q", out)
+	if !strings.Contains(out, `"problems":[]`) {
+		t.Fatalf("expected problems:[], got %q", out)
 	}
 }
 
 func TestFormatCheckResultsJSON_NoTrailingNewline(t *testing.T) {
 	results := []CheckRunResult{
-		{Name: "check-a", Result: CheckResult{Status: "pass", Message: "ok"}},
+		{Name: "check-a", Outcome: passOutcome("ok")},
 	}
 	out := FormatCheckResultsJSON(results)
 	if strings.HasSuffix(out, "\n") {
@@ -2607,14 +2674,17 @@ func TestFormatCheckResultsJSON_NoTrailingNewline(t *testing.T) {
 
 func TestFormatCheckResultsJSON_FieldValues(t *testing.T) {
 	results := []CheckRunResult{
-		{Name: "check-a", Result: CheckResult{Status: "fail", Message: "broken", Details: []string{"d1", "d2"}}},
+		{Name: "check-a", Outcome: failOutcome("broken", "d1", "d2")},
 	}
 	out := FormatCheckResultsJSON(results)
 	var parsed []struct {
-		Name    string   `json:"name"`
-		Status  string   `json:"status"`
-		Message string   `json:"message"`
-		Details []string `json:"details"`
+		Name     string `json:"name"`
+		Status   string `json:"status"`
+		Message  string `json:"message"`
+		Problems []struct {
+			Severity string `json:"severity"`
+			Text     string `json:"text"`
+		} `json:"problems"`
 	}
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("failed to parse JSON: %v", err)
@@ -2632,8 +2702,11 @@ func TestFormatCheckResultsJSON_FieldValues(t *testing.T) {
 	if e.Message != "broken" {
 		t.Errorf("expected message 'broken', got %q", e.Message)
 	}
-	if len(e.Details) != 2 || e.Details[0] != "d1" || e.Details[1] != "d2" {
-		t.Errorf("expected details [d1, d2], got %v", e.Details)
+	if len(e.Problems) != 2 || e.Problems[0].Text != "d1" || e.Problems[1].Text != "d2" {
+		t.Errorf("expected problems [d1, d2], got %+v", e.Problems)
+	}
+	if e.Problems[0].Severity != "error" || e.Problems[1].Severity != "error" {
+		t.Errorf("expected error-severity problems, got %+v", e.Problems)
 	}
 }
 
@@ -2787,6 +2860,230 @@ func TestEnableChecks_IdempotentCommandRegistration(t *testing.T) {
 	}
 	if len(app.checkDefs) != 2 {
 		t.Errorf("expected 2 check defs preserved, got %d", len(app.checkDefs))
+	}
+}
+
+// --- Phase 3.1: ceiling-typed outcome / reporter tests ---
+
+func TestReporter_PassedWithProblemsPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic: Passed after a problem was reported")
+		} else if !strings.Contains(fmt.Sprintf("%v", r), "cannot pass") {
+			t.Fatalf("unexpected panic: %v", r)
+		}
+	}()
+	rep := &ErrorReporter{}
+	rep.Error("found something")
+	rep.Passed("all good") // must panic: a check that found problems cannot pass
+}
+
+func TestReporter_SkippedWithProblemsPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic: Skipped after a problem was reported")
+		}
+	}()
+	rep := &ErrorReporter{}
+	rep.Warn("a warning")
+	rep.Skipped("n/a") // must panic
+}
+
+func TestReporter_EmptyFoundPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic: Found with no problems")
+		} else if !strings.Contains(fmt.Sprintf("%v", r), "use Passed") {
+			t.Fatalf("unexpected panic: %v", r)
+		}
+	}()
+	rep := &ErrorReporter{}
+	rep.Found("nothing here") // must panic: nothing found means pass
+}
+
+func TestReporter_EmptyInputsPanic(t *testing.T) {
+	cases := []struct {
+		name string
+		fn   func()
+	}{
+		{"Warn empty", func() { (&ErrorReporter{}).Warn("") }},
+		{"Error empty", func() { (&ErrorReporter{}).Error("") }},
+		{"Passed empty", func() { (&ErrorReporter{}).Passed("") }},
+		{"Skipped empty", func() { (&ErrorReporter{}).Skipped("") }},
+		{"Found empty message", func() {
+			rep := &ErrorReporter{}
+			rep.Error("x")
+			rep.Found("")
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Fatalf("%s: expected panic for empty input", c.name)
+				}
+			}()
+			c.fn()
+		})
+	}
+}
+
+func TestWarnReporter_LacksErrorMethod(t *testing.T) {
+	// Structural guarantee: WarnReporter has no Error method, so a warn check
+	// physically cannot mint an error-severity problem. This is enforced at
+	// COMPILE time -- writing (&WarnReporter{}).Error("x") does not compile, so
+	// a compile-failure proof is impossible from within a passing suite. We
+	// assert the property via reflection as a regression guard against someone
+	// accidentally promoting Error onto WarnReporter (e.g. by moving it to the
+	// shared reporterCore).
+	if _, ok := reflect.TypeOf(&WarnReporter{}).MethodByName("Error"); ok {
+		t.Fatal("WarnReporter must NOT expose an Error method")
+	}
+	if _, ok := reflect.TypeOf(&ErrorReporter{}).MethodByName("Error"); !ok {
+		t.Fatal("ErrorReporter must expose an Error method")
+	}
+	// Both reporters share the warn/passed/skipped/found minting surface.
+	for _, m := range []string{"Warn", "Passed", "Skipped", "Found"} {
+		if _, ok := reflect.TypeOf(&WarnReporter{}).MethodByName(m); !ok {
+			t.Fatalf("WarnReporter must expose %s", m)
+		}
+		if _, ok := reflect.TypeOf(&ErrorReporter{}).MethodByName(m); !ok {
+			t.Fatalf("ErrorReporter must expose %s", m)
+		}
+	}
+}
+
+func TestRegisterErrorCheck_OnWarnSeverity_Panics(t *testing.T) {
+	checksPath := writeChecksFile(t, validChecksToml) // check-deps is severity "warn"
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic registering a warn check via RegisterErrorCheck")
+		}
+		msg := fmt.Sprintf("%v", r)
+		for _, want := range []string{"check-deps", `severity "warn"`, "RegisterErrorCheck", "use RegisterWarnCheck"} {
+			if !strings.Contains(msg, want) {
+				t.Fatalf("panic message missing %q: %s", want, msg)
+			}
+		}
+	}()
+	app.RegisterErrorCheck("check-deps", func(ctx CheckContext, r *ErrorReporter) CheckOutcome {
+		return r.Passed("ok")
+	})
+}
+
+func TestRegisterWarnCheck_OnErrorSeverity_Panics(t *testing.T) {
+	checksPath := writeChecksFile(t, validChecksToml) // lint-code is severity "error"
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic registering an error check via RegisterWarnCheck")
+		}
+		msg := fmt.Sprintf("%v", r)
+		for _, want := range []string{"lint-code", `severity "error"`, "RegisterWarnCheck", "use RegisterErrorCheck"} {
+			if !strings.Contains(msg, want) {
+				t.Fatalf("panic message missing %q: %s", want, msg)
+			}
+		}
+	}()
+	app.RegisterWarnCheck("lint-code", func(ctx CheckContext, r *WarnReporter) CheckOutcome {
+		return r.Passed("ok")
+	})
+}
+
+func TestRunChecks_NonMintedOutcome_Panics(t *testing.T) {
+	// Belt-and-braces: an impl that returns a zero (non-minted) CheckOutcome is
+	// a hard error at the runner.
+	defs := map[string]*checkDef{
+		"check-a": {
+			name: "check-a", tags: []string{"fast"}, severity: "error", dependsOn: []string{},
+			impl: func(ctx CheckContext) CheckOutcome { return CheckOutcome{} },
+		},
+	}
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for non-minted outcome")
+		}
+		if !strings.Contains(fmt.Sprintf("%v", r), "not minted by its reporter") {
+			t.Fatalf("unexpected panic: %v", r)
+		}
+	}()
+	runChecks(defs, []string{"check-a"}, &testCheckContext{root: "/tmp"}, false)
+}
+
+func TestCheckRunResult_GatedWarnedConsistency(t *testing.T) {
+	cases := []struct {
+		outcome CheckOutcome
+		status  string
+		gated   bool
+		warned  bool
+	}{
+		{passOutcome("ok"), "pass", false, false},
+		{skipOutcome("n/a"), "skip", false, false},
+		{failOutcome("bad", "x"), "fail", true, false},
+		{warnOutcome("hmm"), "warn", false, true},
+	}
+	for _, c := range cases {
+		r := CheckRunResult{Name: "c", Outcome: c.outcome}
+		if r.Status() != c.status {
+			t.Errorf("Status()=%q want %q", r.Status(), c.status)
+		}
+		if r.Gated() != c.gated {
+			t.Errorf("Gated()=%v want %v (status %q)", r.Gated(), c.gated, c.status)
+		}
+		if r.Warned() != c.warned {
+			t.Errorf("Warned()=%v want %v (status %q)", r.Warned(), c.warned, c.status)
+		}
+	}
+}
+
+func TestRunChecks_ErrorCheckOnlyWarns_NoCascade(t *testing.T) {
+	// An error-severity check whose impl only reports warnings derives WARN,
+	// which must NOT cascade to dependents (cascade keys on Gated/error only).
+	bRan := false
+	defs := map[string]*checkDef{
+		"check-a": {
+			name: "check-a", tags: []string{"fast"}, severity: "error", dependsOn: []string{},
+			impl: func(ctx CheckContext) CheckOutcome { return warnOutcome("soft issue") },
+		},
+		"check-b": {
+			name: "check-b", tags: []string{"fast"}, severity: "error", dependsOn: []string{"check-a"},
+			impl: func(ctx CheckContext) CheckOutcome { bRan = true; return passOutcome("ok") },
+		},
+	}
+	results, exitCode := runChecks(defs, []string{"check-a", "check-b"}, &testCheckContext{root: "/tmp"}, false)
+	if !bRan {
+		t.Fatal("dependent must run when dependency only warned")
+	}
+	if exitCode != 1 {
+		t.Fatalf("expected exit 1 (warn, not ignored), got %d", exitCode)
+	}
+	if results[0].Status() != "warn" || results[1].Status() != "pass" {
+		t.Fatalf("expected [warn, pass], got [%s, %s]", results[0].Status(), results[1].Status())
+	}
+}
+
+func TestFormatCheckResults_MixedOutcomeShowsBothGroups(t *testing.T) {
+	// A FAIL outcome carrying both error and warn problems shows both groups,
+	// error problems first then warn problems.
+	rep := &ErrorReporter{}
+	rep.Warn("a warning line")
+	rep.Error("an error line")
+	mixed := rep.Found("mixed findings")
+	out := FormatCheckResults([]CheckRunResult{{Name: "chk", Outcome: mixed}}, false)
+	if !strings.Contains(out, "FAIL") {
+		t.Fatalf("expected FAIL label, got %q", out)
+	}
+	eIdx := strings.Index(out, "[error] an error line")
+	wIdx := strings.Index(out, "[warn] a warning line")
+	if eIdx < 0 || wIdx < 0 {
+		t.Fatalf("expected both problem groups, got %q", out)
+	}
+	if eIdx > wIdx {
+		t.Fatalf("expected error problems before warn problems, got %q", out)
 	}
 }
 
