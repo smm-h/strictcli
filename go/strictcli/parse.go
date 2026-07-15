@@ -539,6 +539,44 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			cliSet[f.Name] = coerced
 			configNames[f.Name] = true
 		}
+
+		// Config-conflict detection for GLOBAL flags parsed AFTER the command
+		// name (`tool cmd --global X`). This is CONFLICT-DETECTION ONLY: config
+		// values for globals were already APPLIED during the pre-command
+		// global-flag pass (extractGlobalFlags), so applying them again here
+		// would be a second application site -- wrong even if idempotent. We
+		// must never write a config value into cliSet for a global here.
+		// Globals that reach cliSet at this point are purely CLI-parsed
+		// (post-command env for globals is never resolved here), so the
+		// divergence source is always "cli".
+		for i := range globalFlags {
+			f := &globalFlags[i]
+			existing, alreadySet := cliSet[f.Name]
+			if !alreadySet {
+				continue
+			}
+			param := flagParamName(f.Name)
+			configVal, hasConfig := configData[param]
+			if !hasConfig {
+				continue
+			}
+			effectiveMode := conflictMode
+			if f.hasConflictMode {
+				effectiveMode = f.ConflictMode
+			}
+			if effectiveMode != "error" {
+				continue
+			}
+			coerced, errStr := coerceConfigValue(configVal, f)
+			if errStr != "" {
+				return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+			}
+			if !valuesEqualForConflict(existing, coerced, f) {
+				return nil, nil, nil, fmt.Sprintf(
+					"flag '%s' set in both cli and config; remove one", f.Name,
+				)
+			}
+		}
 	}
 	} // end if !hermetic
 
@@ -838,6 +876,14 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 		f := &cmd.flags[i]
 		if s, ok := rawSources[f.Name]; ok {
 			sources[flagParamName(f.Name)] = s
+		}
+	}
+	// Global flags parsed post-command emit their source label too (always
+	// "cli" here; env/config for globals resolve in the pre-command pass).
+	// Without this, `tool cmd --global X` reports source "default" for it.
+	for name := range globalFlagNames {
+		if s, ok := rawSources[name]; ok {
+			sources[flagParamName(name)] = s
 		}
 	}
 

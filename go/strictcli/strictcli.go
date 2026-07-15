@@ -1214,9 +1214,40 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	return a
 }
 
-// RegisterCheck registers a check implementation for a check declared in checks.toml.
-// Panics if no checks.toml was discovered, if the name is not declared, or if it's a duplicate.
-func (a *App) RegisterCheck(name string, fn func(CheckContext) CheckResult) {
+// RegisterErrorCheck registers an error-severity check implementation for a
+// check declared with severity = "error" in checks.toml. The impl receives an
+// *ErrorReporter (which can mint both error- and warn-severity problems) and
+// must return a CheckOutcome obtained from that reporter.
+//
+// Panics if checks are not enabled, the name is not declared, it is already
+// registered, or the declared severity is not "error" (see registerCheckImpl).
+func (a *App) RegisterErrorCheck(name string, fn func(CheckContext, *ErrorReporter) CheckOutcome) {
+	a.registerCheckImpl(name, "error", func(ctx CheckContext) CheckOutcome {
+		r := &ErrorReporter{}
+		return fn(ctx, r)
+	})
+}
+
+// RegisterWarnCheck registers a warn-severity check implementation for a check
+// declared with severity = "warn" in checks.toml. The impl receives a
+// *WarnReporter, which structurally lacks error-minting: a warn check cannot
+// produce an error-severity problem, so it can never cascade.
+//
+// Panics under the same conditions as RegisterErrorCheck, with the severity
+// cross-check requiring the declared severity to be "warn".
+func (a *App) RegisterWarnCheck(name string, fn func(CheckContext, *WarnReporter) CheckOutcome) {
+	a.registerCheckImpl(name, "warn", func(ctx CheckContext) CheckOutcome {
+		r := &WarnReporter{}
+		return fn(ctx, r)
+	})
+}
+
+// registerCheckImpl is the single registration chokepoint shared by
+// RegisterErrorCheck and RegisterWarnCheck. It enforces the double-entry
+// contract (declared vs registered) and cross-checks the registration FORM
+// against the TOML-declared severity so that, e.g., calling RegisterErrorCheck
+// on a severity="warn" definition is a hard error.
+func (a *App) registerCheckImpl(name, form string, run func(CheckContext) CheckOutcome) {
 	if !a.checksEnabled {
 		panic(fmt.Sprintf("cannot register check %q: checks not enabled", name))
 	}
@@ -1227,7 +1258,18 @@ func (a *App) RegisterCheck(name string, fn func(CheckContext) CheckResult) {
 	if def.impl != nil {
 		panic(fmt.Sprintf("check %q: duplicate registration", name))
 	}
-	def.impl = fn
+	if def.severity != form {
+		used, want := "RegisterErrorCheck", "RegisterWarnCheck"
+		if form == "warn" {
+			used, want = "RegisterWarnCheck", "RegisterErrorCheck"
+		}
+		panic(fmt.Sprintf(
+			"check %q: declared severity %q in checks.toml but registered via %s; use %s",
+			name, def.severity, used, want,
+		))
+	}
+	def.impl = run
+	def.implForm = form
 }
 
 // SetCheckContext sets the factory function that provides CheckContext to check implementations.
@@ -2167,8 +2209,14 @@ func (a *App) doParse(argv []string) parseResult {
 	for k, v := range globalValues {
 		kwargs[k] = v
 	}
-	// Merge global sources into command sources
+	// Merge global sources into command sources. This mirrors the VALUE merge
+	// above: for a global set post-command, parseCommand already placed the
+	// correct (cli) source into cmdSources, so the pre-command source label
+	// (typically "default") must NOT overwrite it.
 	for k, v := range globalSourceMap {
+		if _, isPost := postGlobalValues[k]; isPost {
+			continue // post-command position wins
+		}
 		cmdSources[k] = v
 	}
 	return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources}
