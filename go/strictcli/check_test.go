@@ -2733,6 +2733,63 @@ bogus = true
 	}
 }
 
+func TestAddCheckDef_RejectsDuplicate(t *testing.T) {
+	checksPath := writeChecksFile(t, validChecksToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+
+	err := app.addCheckDef(&checkDef{name: "lint-code"})
+	if err == nil {
+		t.Fatal("expected duplicate error, got nil")
+	}
+	if !strings.Contains(err.Error(), `duplicate check definition "lint-code"`) {
+		t.Errorf("expected duplicate error, got %q", err.Error())
+	}
+}
+
+func TestAddCheckDef_InsertsAndSortsOrder(t *testing.T) {
+	checksPath := writeChecksFile(t, validChecksToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+
+	if err := app.addCheckDef(&checkDef{name: "aaa-first"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if app.checkDefs["aaa-first"] == nil {
+		t.Fatal("expected aaa-first to be inserted")
+	}
+	// checkOrder must stay sorted after a dynamic addition.
+	if !sort.StringsAreSorted(app.checkOrder) {
+		t.Errorf("expected checkOrder sorted, got %v", app.checkOrder)
+	}
+	if app.checkOrder[0] != "aaa-first" {
+		t.Errorf("expected aaa-first first after sort, got %v", app.checkOrder)
+	}
+}
+
+func TestEnableChecks_IdempotentCommandRegistration(t *testing.T) {
+	checksPath := writeChecksFile(t, validChecksToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+
+	// Calling enableChecks again must not double-register the check command.
+	app.enableChecks()
+	app.enableChecks()
+
+	count := 0
+	for _, name := range app.cmdOrder {
+		if name == "check" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected check command registered exactly once, got %d in cmdOrder %v", count, app.cmdOrder)
+	}
+	if !app.checksEnabled {
+		t.Error("expected checksEnabled to remain true")
+	}
+	if len(app.checkDefs) != 2 {
+		t.Errorf("expected 2 check defs preserved, got %d", len(app.checkDefs))
+	}
+}
+
 // Ensure unused imports don't cause errors
 var _ = sort.Strings
 var _ = fmt.Sprintf

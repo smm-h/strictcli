@@ -1190,10 +1190,12 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		if appName != a.Name {
 			panic(fmt.Sprintf("checks.toml: app %q does not match app name %q", appName, a.Name))
 		}
-		a.checkDefs = defs
-		a.checkOrder = order
-		a.checksEnabled = true
-		a.registerCheckCommand()
+		a.enableChecks()
+		for _, name := range order {
+			if err := a.addCheckDef(defs[name]); err != nil {
+				panic(err.Error())
+			}
+		}
 	} else if len(a.checksEmbed) > 0 {
 		appName, defs, order, err := parseChecksToml(a.checksEmbed)
 		if err != nil {
@@ -1202,10 +1204,12 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		if appName != a.Name {
 			panic(fmt.Sprintf("checks.toml: app %q does not match app name %q", appName, a.Name))
 		}
-		a.checkDefs = defs
-		a.checkOrder = order
-		a.checksEnabled = true
-		a.registerCheckCommand()
+		a.enableChecks()
+		for _, name := range order {
+			if err := a.addCheckDef(defs[name]); err != nil {
+				panic(err.Error())
+			}
+		}
 	}
 	return a
 }

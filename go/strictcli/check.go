@@ -49,6 +49,30 @@ var knownCheckFields = map[string]bool{
 	"scope":         true,
 }
 
+// addCheckDef inserts a check definition into the registry, rejecting
+// duplicate names as a hard error. It maintains checkOrder in sorted order so
+// that dynamic additions keep deterministic listing. This is the single
+// internal insertion point for check definitions (TOML loading routes through
+// it; future provider-sourced defs will too).
+func (a *App) addCheckDef(def *checkDef) error {
+	if a.checkDefs == nil {
+		a.checkDefs = make(map[string]*checkDef)
+	}
+	if _, exists := a.checkDefs[def.name]; exists {
+		return fmt.Errorf("duplicate check definition %q", def.name)
+	}
+	a.checkDefs[def.name] = def
+	a.checkOrder = append(a.checkOrder, def.name)
+	a.resortCheckOrder()
+	return nil
+}
+
+// resortCheckOrder re-sorts checkOrder so that additions made after the initial
+// parse remain in deterministic (sorted) order.
+func (a *App) resortCheckOrder() {
+	sort.Strings(a.checkOrder)
+}
+
 // loadChecksToml reads a checks.toml file from disk and parses it.
 func loadChecksToml(path string) (string, map[string]*checkDef, []string, error) {
 	data, err := os.ReadFile(path)

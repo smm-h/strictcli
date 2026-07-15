@@ -7,8 +7,23 @@ import (
 	"strings"
 )
 
+// enableChecks turns on the check system exactly once. It flips checksEnabled,
+// initializes the check registry if absent, and registers the auto-generated
+// "check" command a single time. Idempotent: calling it again is a no-op, which
+// prevents double-registration (Command appends to cmdOrder on every call).
+func (a *App) enableChecks() {
+	if a.checksEnabled {
+		return
+	}
+	a.checksEnabled = true
+	if a.checkDefs == nil {
+		a.checkDefs = make(map[string]*checkDef)
+	}
+	a.registerCheckCommand()
+}
+
 // registerCheckCommand registers the auto-generated "check" command.
-// Called from NewApp when checksEnabled is true.
+// Called from enableChecks when the check system is turned on.
 func (a *App) registerCheckCommand() {
 	a.Command("check", "Run project checks registered via the check framework and report results", func(args map[string]interface{}) int {
 		runAll := args["all"].(bool)
