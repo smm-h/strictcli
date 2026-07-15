@@ -3348,8 +3348,14 @@ class App:
                 global_values[gf.name] = post_global[gf.name]
             kwargs[_flag_param_name(gf.name)] = global_values[gf.name]
 
-        # Merge global sources into command sources
+        # Merge global sources into command sources. This mirrors the VALUE
+        # merge above: for a global set post-command, _parse_command already
+        # placed the correct (cli) source into `sources`, so the pre-command
+        # source label (typically "default") must NOT overwrite it.
+        post_global_params = {_flag_param_name(n) for n in post_global}
         for k, v in global_source_map.items():
+            if k in post_global_params:
+                continue  # post-command position wins
             sources[k] = v
 
         return cmd, kwargs, sources
@@ -4557,6 +4563,13 @@ def _validate_and_build_kwargs(
     for f in cmd.flags:
         if f.name in raw_sources:
             sources[_flag_param_name(f.name)] = raw_sources[f.name]
+    # Global flags parsed post-command emit their source label too (always
+    # "cli" here, since post-command tokens are CLI-only -- env and config for
+    # globals are resolved in the pre-command global-flag pass). Without this,
+    # `tool cmd --global X` would report source "default" for the global.
+    for name in global_flag_names:
+        if name in raw_sources:
+            sources[_flag_param_name(name)] = raw_sources[name]
 
     return cmd, kwargs, global_cli_set, sources
 
@@ -4935,6 +4948,37 @@ def _parse_command(
                     )
             cli_set[f.name] = coerced
             config_names.add(f.name)
+
+    # Step 4.3: config-conflict detection for GLOBAL flags parsed AFTER the
+    # command name (`tool cmd --global X`). This is CONFLICT-DETECTION ONLY:
+    # config values for globals were already APPLIED during the pre-command
+    # global-flag pass (_parse_global_flags), so applying them again here would
+    # be a second application site -- wrong even if idempotent. We must never
+    # write a config value into cli_set for a global here. Globals that reach
+    # cli_set at this point are purely CLI-parsed (post-command env for globals
+    # is never resolved here), so the divergence source is always "cli".
+    if config_data and not hermetic and global_flags:
+        for f in global_flags:
+            if f.name not in cli_set:
+                continue
+            param = _flag_param_name(f.name)
+            if param not in config_data:
+                continue
+            effective_mode = (
+                f.conflict_mode
+                if not isinstance(f.conflict_mode, _MissingSentinel)
+                else conflict_mode
+            )
+            if effective_mode != "error":
+                continue
+            try:
+                coerced = _coerce_config_value(config_data[param], f)
+            except ValueError as e:
+                raise _ParseError(f"--{f.name}: config value error: {e}")
+            if not _values_equal_for_conflict(cli_set[f.name], coerced, f):
+                raise _ParseError(
+                    f"flag '{f.name}' set in both cli and config; remove one"
+                )
 
     # Wrap cli_set into a _SourcedStore with proper source attribution.
     # CLI-parsed values are _Source.CLI, env-resolved values are _Source.ENV,
