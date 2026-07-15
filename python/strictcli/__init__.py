@@ -2174,21 +2174,23 @@ class App:
             checks_toml_path = Path(self.checks_path).resolve()
             if not checks_toml_path.is_file():
                 raise ValueError(f"checks_path does not exist: {self.checks_path}")
-            app_name, self._check_defs = _load_checks_toml(checks_toml_path)
+            app_name, parsed_defs = _load_checks_toml(checks_toml_path)
             if app_name != self.name:
                 raise ValueError(
                     f'checks.toml: app "{app_name}" does not match app name "{self.name}"'
                 )
-            self._checks_enabled = True
-            self._register_check_command()
+            self._enable_checks()
+            for cdef in parsed_defs.values():
+                self._add_check_def(cdef)
         elif self.checks_embed is not None:
-            app_name, self._check_defs = _parse_checks_toml(self.checks_embed)
+            app_name, parsed_defs = _parse_checks_toml(self.checks_embed)
             if app_name != self.name:
                 raise ValueError(
                     f'checks.toml: app "{app_name}" does not match app name "{self.name}"'
                 )
-            self._checks_enabled = True
-            self._register_check_command()
+            self._enable_checks()
+            for cdef in parsed_defs.values():
+                self._add_check_def(cdef)
         else:
             self._check_defs: dict[str, _CheckDef] = {}
             self._checks_enabled = False
@@ -2489,6 +2491,33 @@ class App:
             for name, result in raw_results
         ]
         return (results, exit_code)
+
+    def _enable_checks(self) -> None:
+        """Turn on the check system exactly once.
+
+        Flips ``_checks_enabled``, initializes the check registry if it is not
+        already present, and registers the auto-generated ``check`` command a
+        single time. Idempotent: calling it again is a no-op. Callers (currently
+        the TOML-loading branches) route through this so that future check
+        sources share the same enablement path.
+        """
+        if getattr(self, "_checks_enabled", False):
+            return
+        self._checks_enabled = True
+        if not hasattr(self, "_check_defs"):
+            self._check_defs: dict[str, _CheckDef] = {}
+        self._register_check_command()
+
+    def _add_check_def(self, cdef: _CheckDef) -> None:
+        """Single internal insertion point for check definitions.
+
+        Rejects duplicate names as a hard error and inserts the definition into
+        the registry. TOML loading routes through here; this is also the future
+        insertion point for provider-sourced definitions.
+        """
+        if cdef.name in self._check_defs:
+            raise ValueError(f'duplicate check definition "{cdef.name}"')
+        self._check_defs[cdef.name] = cdef
 
     def _register_check_command(self) -> None:
         """Register the auto-generated 'check' command when checks.toml exists."""

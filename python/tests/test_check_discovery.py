@@ -476,3 +476,61 @@ scope = "project"
             checks_path=str(toml_file),
         )
         assert app._check_defs["my-check"].scope == "project"
+
+
+class TestInternalAddPath:
+    """Tests for the internal _add_check_def / _enable_checks helpers."""
+
+    def _enabled_app(self):
+        return strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_embed=VALID_TOML.encode(),
+        )
+
+    def test_add_check_def_rejects_duplicate_name(self):
+        """Adding a def whose name already exists is a hard error."""
+        app = self._enabled_app()
+        from strictcli import _CheckDef
+
+        dup = _CheckDef(
+            name="lint-code",
+            tags=["x"],
+            severity="error",
+            fast=True,
+            pure=True,
+            needs_network=False,
+            depends_on=[],
+            scope="",
+        )
+        with pytest.raises(ValueError, match='duplicate check definition "lint-code"'):
+            app._add_check_def(dup)
+
+    def test_add_check_def_inserts_new(self):
+        """A fresh name is inserted into the registry."""
+        app = self._enabled_app()
+        from strictcli import _CheckDef
+
+        new = _CheckDef(
+            name="brand-new",
+            tags=["x"],
+            severity="error",
+            fast=True,
+            pure=True,
+            needs_network=False,
+            depends_on=[],
+            scope="",
+        )
+        app._add_check_def(new)
+        assert app._check_defs["brand-new"] is new
+
+    def test_enable_checks_idempotent_command_registration(self):
+        """Calling _enable_checks again must not double-register the command."""
+        app = self._enabled_app()
+        assert app._checks_enabled is True
+        cmd_before = app._commands["check"]
+        app._enable_checks()
+        app._enable_checks()
+        assert app._commands["check"] is cmd_before
+        # Registry and flag stay intact.
+        assert app._checks_enabled is True
+        assert "lint-code" in app._check_defs
