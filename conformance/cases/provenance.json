@@ -237,5 +237,65 @@
       "exit_code": 0,
       "stdout_equals": "cli"
     }
+  },
+  {
+    "name": "ctx.source: global flag set AFTER command reports source 'cli' (not 'default')",
+    "app": {
+      "name": "provenance-test",
+      "version": "1.0.0",
+      "help": "Test post-command global provenance",
+      "global_flags": [
+        {
+          "name": "settings",
+          "help": "settings path",
+          "type": "str",
+          "default": "from-default"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:settings}",
+          "flags": []
+        }
+      ]
+    },
+    "argv": ["run", "--settings", "from-cli"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "cli"
+    }
+  },
+  {
+    "name": "ctx.source: global flag set BEFORE command reports source 'cli' (regression)",
+    "app": {
+      "name": "provenance-test",
+      "version": "1.0.0",
+      "help": "Test pre-command global provenance",
+      "global_flags": [
+        {
+          "name": "settings",
+          "help": "settings path",
+          "type": "str",
+          "default": "from-default"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:settings}",
+          "flags": []
+        }
+      ]
+    },
+    "argv": ["--settings", "from-cli", "run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "cli"
+    }
   }
 ]

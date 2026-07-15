@@ -328,5 +328,165 @@
       "exit_code": 0,
       "stdout_contains": "ok"
     }
+  },
+  {
+    "name": "config-conflict: global flag after command diverges (error mode) is hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"settings\": \"from-config\"}",
+      "global_flags": [
+        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default"}
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["run", "--settings", "from-cli"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag 'settings' set in both cli and config; remove one"
+    }
+  },
+  {
+    "name": "config-conflict: global flag after command per-flag error beats app cli-wins",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "cli-wins",
+      "config_content": "{\"settings\": \"from-config\"}",
+      "global_flags": [
+        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default", "conflict_mode": "error"}
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["run", "--settings", "from-cli"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag 'settings' set in both cli and config; remove one"
+    }
+  },
+  {
+    "name": "config-conflict: global flag before command still diverges (error mode, regression)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"settings\": \"from-config\"}",
+      "global_flags": [
+        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default"}
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["--settings", "from-cli", "run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag 'settings' set in both cli and config; remove one"
+    }
+  },
+  {
+    "name": "config-conflict: global flag after command matching value passes (error mode)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"settings\": \"same\"}",
+      "global_flags": [
+        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default"}
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["run", "--settings", "same"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "ok"
+    }
+  },
+  {
+    "name": "config-conflict: global flag after command cli-wins silently overrides config",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "cli-wins",
+      "config_content": "{\"settings\": \"from-config\"}",
+      "global_flags": [
+        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default"}
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "settings={settings}"
+        }
+      ]
+    },
+    "argv": ["run", "--settings", "from-cli"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "settings=from-cli"
+    }
+  },
+  {
+    "name": "config-conflict: env matches config then global cli diverges after command (error mode)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"settings\": \"shared\"}",
+      "global_flags": [
+        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default", "env": "MYAPP_SETTINGS"}
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["run", "--settings", "from-cli"],
+    "env": {
+      "MYAPP_SETTINGS": "shared"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag 'settings' set in both cli and config; remove one"
+    }
   }
 ]
