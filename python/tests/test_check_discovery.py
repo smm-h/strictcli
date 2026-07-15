@@ -4,6 +4,7 @@ import pytest
 
 import strictcli
 from strictcli import _parse_checks_toml
+from conftest import pass_outcome
 
 
 VALID_TOML = """\
@@ -145,11 +146,16 @@ class TestCheckDecorator:
             checks_path=str(toml_file),
         )
 
-        @app.check("lint-code")
-        def lint_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="OK")
+        @app.error_check("lint-code")
+        def lint_impl(ctx, reporter):
+            return reporter.passed("OK")
 
-        assert app._check_defs["lint-code"].impl is lint_impl
+        # The registered impl is the wrapper that constructs a reporter and
+        # invokes the decorated function; the decorated function is returned
+        # unchanged, and the registration form is recorded.
+        assert app._check_defs["lint-code"].impl is not None
+        assert app._check_defs["lint-code"].impl_form == "error"
+        assert lint_impl.__name__ == "lint_impl"
 
     def test_undeclared_name_raises(self, tmp_path):
         toml_file = tmp_path / "checks.toml"
@@ -161,8 +167,8 @@ class TestCheckDecorator:
         )
 
         with pytest.raises(ValueError, match='cannot register check "nonexistent"'):
-            @app.check("nonexistent")
-            def bad_impl(ctx):
+            @app.error_check("nonexistent")
+            def bad_impl(ctx, reporter):
                 pass
 
     def test_duplicate_registration_raises(self, tmp_path):
@@ -174,13 +180,13 @@ class TestCheckDecorator:
             checks_path=str(toml_file),
         )
 
-        @app.check("lint-code")
-        def first(ctx):
+        @app.error_check("lint-code")
+        def first(ctx, reporter):
             pass
 
         with pytest.raises(ValueError, match='check "lint-code": duplicate registration'):
-            @app.check("lint-code")
-            def second(ctx):
+            @app.error_check("lint-code")
+            def second(ctx, reporter):
                 pass
 
     def test_no_toml_raises(self, tmp_path, monkeypatch):
@@ -189,8 +195,8 @@ class TestCheckDecorator:
         app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
         with pytest.raises(ValueError, match="checks not enabled"):
-            @app.check("anything")
-            def bad(ctx):
+            @app.error_check("anything")
+            def bad(ctx, reporter):
                 pass
 
     def test_register_check_not_enabled_message(self, tmp_path):
@@ -201,8 +207,8 @@ class TestCheckDecorator:
             ValueError,
             match=r'cannot register check "my-check": checks not enabled',
         ):
-            @app.check("my-check")
-            def impl(ctx):
+            @app.error_check("my-check")
+            def impl(ctx, reporter):
                 pass
 
 
@@ -222,9 +228,9 @@ class TestDoubleEntryValidation:
             print("hello")
 
         # Only register one of the two checks
-        @app.check("lint-code")
-        def lint_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="OK")
+        @app.error_check("lint-code")
+        def lint_impl(ctx, reporter):
+            return pass_outcome("OK")
 
         # check-deps is not registered -- should fail validation
         result = app.test(["hello"])
@@ -245,13 +251,13 @@ class TestDoubleEntryValidation:
         def hello(**kw):
             print("hello")
 
-        @app.check("lint-code")
-        def lint_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="OK")
+        @app.error_check("lint-code")
+        def lint_impl(ctx, reporter):
+            return pass_outcome("OK")
 
-        @app.check("check-deps")
-        def deps_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="OK")
+        @app.warn_check("check-deps")
+        def deps_impl(ctx, reporter):
+            return pass_outcome("OK")
 
         result = app.test(["hello"])
         assert result.exit_code == 0
@@ -534,3 +540,82 @@ class TestInternalAddPath:
         # Registry and flag stay intact.
         assert app._checks_enabled is True
         assert "lint-code" in app._check_defs
+
+
+class TestSeverityCrossCheck:
+    """The registration form must match the TOML-declared severity."""
+
+    def _app(self, tmp_path):
+        # VALID_TOML: lint-code severity="error", check-deps severity="warn".
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(VALID_TOML)
+        return strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+
+    def test_error_check_on_warn_severity_raises(self, tmp_path):
+        app = self._app(tmp_path)
+        with pytest.raises(
+            ValueError,
+            match=r'check "check-deps": declared severity "warn" in checks.toml '
+            r"but registered via @app.error_check; use @app.warn_check",
+        ):
+            @app.error_check("check-deps")
+            def deps(ctx, reporter):
+                return reporter.passed("ok")
+
+    def test_warn_check_on_error_severity_raises(self, tmp_path):
+        app = self._app(tmp_path)
+        with pytest.raises(
+            ValueError,
+            match=r'check "lint-code": declared severity "error" in checks.toml '
+            r"but registered via @app.warn_check; use @app.error_check",
+        ):
+            @app.warn_check("lint-code")
+            def lint(ctx, reporter):
+                return reporter.passed("ok")
+
+    def test_correct_forms_register(self, tmp_path):
+        app = self._app(tmp_path)
+
+        @app.error_check("lint-code")
+        def lint(ctx, reporter):
+            return reporter.passed("ok")
+
+        @app.warn_check("check-deps")
+        def deps(ctx, reporter):
+            return reporter.passed("ok")
+
+        assert app._check_defs["lint-code"].impl_form == "error"
+        assert app._check_defs["check-deps"].impl_form == "warn"
+
+    def test_real_reporter_binding_error_check_can_report_error(self, tmp_path):
+        # The error_check impl receives an ErrorReporter and can mint an error
+        # problem (deriving FAIL); the warn_check impl receives a WarnReporter.
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(VALID_TOML)
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+
+        @app.error_check("lint-code")
+        def lint(ctx, reporter):
+            reporter.error("boom")
+            return reporter.found("failed")
+
+        @app.warn_check("check-deps")
+        def deps(ctx, reporter):
+            assert not hasattr(reporter, "error")
+            return reporter.passed("ok")
+
+        app.set_check_context(
+            lambda: type("C", (), {"project_root": tmp_path})()
+        )
+        results, exit_code = app.run_checks(
+            type("C", (), {"project_root": tmp_path})(),
+            name_glob="lint-code",
+        )
+        assert exit_code == 1
+        assert results[0].status == "fail"

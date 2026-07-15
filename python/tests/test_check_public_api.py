@@ -9,11 +9,12 @@ import pytest
 import strictcli
 from strictcli import (
     CheckContext,
-    CheckResult,
     CheckRunResult,
+    SkipCheck,
     format_check_results,
     format_check_results_json,
 )
+from conftest import pass_outcome, fail_outcome, warn_outcome, skip_outcome
 
 
 TWO_CHECKS_TOML = """\
@@ -97,7 +98,7 @@ class SimpleContext:
 def _make_app(tmp_path, toml_content, impls=None, register_all=True):
     """Build an app with checks, optionally registering implementations.
 
-    impls: dict of check name -> callable(ctx) returning CheckResult.
+    impls: dict of check name -> callable(ctx) returning a minted outcome.
     register_all: if True and a check has no entry in impls, register a
     default passing impl.
     """
@@ -118,9 +119,7 @@ def _make_app(tmp_path, toml_content, impls=None, register_all=True):
                 app._check_defs[name].impl = impls[name]
             else:
                 app._check_defs[name].impl = (
-                    lambda ctx, n=name: CheckResult(
-                        status="pass", message=f"{n} OK",
-                    )
+                    lambda ctx, n=name: pass_outcome(f"{n} OK")
                 )
     else:
         for name, fn in impls.items():
@@ -136,24 +135,24 @@ def _make_app(tmp_path, toml_content, impls=None, register_all=True):
 
 class TestCheckRunResult:
     def test_fields_accessible(self):
-        cr = CheckResult(status="pass", message="OK")
-        r = CheckRunResult(name="my-check", result=cr)
+        cr = pass_outcome("OK")
+        r = CheckRunResult(name="my-check", outcome=cr)
         assert r.name == "my-check"
-        assert r.result is cr
-        assert r.result.status == "pass"
-        assert r.result.message == "OK"
+        assert r.outcome is cr
+        assert r.status == "pass"
+        assert r.message == "OK"
 
     def test_frozen(self):
-        cr = CheckResult(status="pass", message="OK")
-        r = CheckRunResult(name="my-check", result=cr)
+        cr = pass_outcome("OK")
+        r = CheckRunResult(name="my-check", outcome=cr)
         with pytest.raises(FrozenInstanceError):
             r.name = "other"  # type: ignore[misc]
 
     def test_frozen_result_field(self):
-        cr = CheckResult(status="pass", message="OK")
-        r = CheckRunResult(name="my-check", result=cr)
+        cr = pass_outcome("OK")
+        r = CheckRunResult(name="my-check", outcome=cr)
         with pytest.raises(FrozenInstanceError):
-            r.result = CheckResult(status="fail", message="bad")  # type: ignore[misc]
+            r.outcome = fail_outcome("bad")  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -170,17 +169,17 @@ class TestRunChecks:
         assert len(results) == 2
         for r in results:
             assert isinstance(r, CheckRunResult)
-            assert r.result.status == "pass"
+            assert r.status == "pass"
 
     def test_one_fails(self, tmp_path):
         impls = {
-            "alpha": lambda ctx: CheckResult(status="fail", message="broken"),
+            "alpha": lambda ctx: fail_outcome("broken"),
         }
         app = _make_app(tmp_path, TWO_CHECKS_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
         results, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 1
-        statuses = {r.name: r.result.status for r in results}
+        statuses = {r.name: r.status for r in results}
         assert statuses["alpha"] == "fail"
         assert statuses["beta"] == "pass"
 
@@ -217,22 +216,20 @@ class TestRunChecks:
 
     def test_dependency_failure_cascade(self, tmp_path):
         impls = {
-            "base": lambda ctx: CheckResult(status="fail", message="base broken"),
+            "base": lambda ctx: fail_outcome("base broken"),
         }
         app = _make_app(tmp_path, DEP_CHAIN_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
         results, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 1
-        statuses = {r.name: r.result.status for r in results}
+        statuses = {r.name: r.status for r in results}
         assert statuses["base"] == "fail"
         assert statuses["mid"] == "skip"
         assert statuses["top"] == "skip"
 
     def test_warn_without_ignore(self, tmp_path):
         impls = {
-            "warn-check": lambda ctx: CheckResult(
-                status="warn", message="caution",
-            ),
+            "warn-check": lambda ctx: warn_outcome("caution"),
         }
         app = _make_app(tmp_path, WARN_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
@@ -240,13 +237,11 @@ class TestRunChecks:
             ctx, run_all=True, ignore_warnings=False,
         )
         assert exit_code == 1
-        assert results[0].result.status == "warn"
+        assert results[0].status == "warn"
 
     def test_warn_with_ignore(self, tmp_path):
         impls = {
-            "warn-check": lambda ctx: CheckResult(
-                status="warn", message="caution",
-            ),
+            "warn-check": lambda ctx: warn_outcome("caution"),
         }
         app = _make_app(tmp_path, WARN_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
@@ -254,7 +249,7 @@ class TestRunChecks:
             ctx, run_all=True, ignore_warnings=True,
         )
         assert exit_code == 0
-        assert results[0].result.status == "warn"
+        assert results[0].status == "warn"
 
     def test_no_matches_empty(self, tmp_path):
         app = _make_app(tmp_path, TWO_CHECKS_TOML)
@@ -304,10 +299,7 @@ class TestFormatCheckResults:
 
     def test_format_fail(self, tmp_path):
         impls = {
-            "only": lambda ctx: CheckResult(
-                status="fail", message="broken",
-                details=["line 1 bad", "line 2 bad"],
-            ),
+            "only": lambda ctx: fail_outcome("broken", "line 1 bad", "line 2 bad"),
         }
         app = _make_app(tmp_path, SINGLE_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
@@ -330,29 +322,23 @@ class TestFormatCheckResults:
         for line in lines:
             assert "PASS" in line
 
-    def test_verbose_shows_pass_details(self, tmp_path):
+    def test_verbose_pass_has_no_problems(self, tmp_path):
+        # A passing outcome carries no problems, so neither the default nor the
+        # verbose formatting emits problem lines for it.
         impls = {
-            "only": lambda ctx: CheckResult(
-                status="pass", message="all good",
-                details=["checked 42 items"],
-            ),
+            "only": lambda ctx: pass_outcome("all good"),
         }
         app = _make_app(tmp_path, SINGLE_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
         results, _ = app.run_checks(ctx, run_all=True)
-        # Without verbose, pass details are hidden
         output_normal = format_check_results(results, verbose=False)
-        assert "checked 42 items" not in output_normal
-        # With verbose, pass details are shown
+        assert "[error]" not in output_normal and "[warn]" not in output_normal
         output_verbose = format_check_results(results, verbose=True)
-        assert "checked 42 items" in output_verbose
+        assert "[error]" not in output_verbose and "[warn]" not in output_verbose
 
     def test_fail_details_shown_without_verbose(self, tmp_path):
         impls = {
-            "only": lambda ctx: CheckResult(
-                status="fail", message="broken",
-                details=["detail line"],
-            ),
+            "only": lambda ctx: fail_outcome("broken", "detail line"),
         }
         app = _make_app(tmp_path, SINGLE_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
@@ -397,30 +383,30 @@ class TestFormatCheckResultsJson:
         assert item["name"] == "only"
         assert item["status"] == "pass"
         assert item["message"] == "only OK"
-        assert item["details"] == []
+        assert item["problems"] == []
 
-    def test_empty_details_is_list(self, tmp_path):
+    def test_empty_problems_is_list(self, tmp_path):
         app = _make_app(tmp_path, SINGLE_CHECK_TOML)
         ctx = SimpleContext(project_root=tmp_path)
         results, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results_json(results)
         parsed = json.loads(output)
-        assert parsed[0]["details"] == []
-        assert parsed[0]["details"] is not None
+        assert parsed[0]["problems"] == []
+        assert parsed[0]["problems"] is not None
 
-    def test_details_with_content(self, tmp_path):
+    def test_problems_with_content(self, tmp_path):
         impls = {
-            "only": lambda ctx: CheckResult(
-                status="fail", message="broken",
-                details=["issue 1", "issue 2"],
-            ),
+            "only": lambda ctx: fail_outcome("broken", "issue 1", "issue 2"),
         }
         app = _make_app(tmp_path, SINGLE_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
         results, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results_json(results)
         parsed = json.loads(output)
-        assert parsed[0]["details"] == ["issue 1", "issue 2"]
+        assert parsed[0]["problems"] == [
+            {"severity": "error", "text": "issue 1"},
+            {"severity": "error", "text": "issue 2"},
+        ]
 
     def test_empty_results(self):
         output = format_check_results_json([])
@@ -478,22 +464,23 @@ class TestSetScopeAdapter:
         assert len(adapter_calls) == 1
         assert adapter_calls[0] == "changelog"
 
-    def test_adapter_returning_check_result(self, tmp_path):
+    def test_adapter_returning_skip_check(self, tmp_path):
         impl_called = []
 
         def impl(ctx):
             impl_called.append(True)
-            return CheckResult(status="pass", message="should not run")
+            return pass_outcome("should not run")
 
         app = _make_app(tmp_path, SCOPED_CHECK_TOML, impls={"scoped-check": impl})
 
         def adapter(ctx, scope):
-            return CheckResult(status="skip", message="adapter skipped")
+            return SkipCheck("adapter skipped")
 
         app.set_scope_adapter(adapter)
 
         ctx = SimpleContext(project_root=tmp_path)
         results, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 0
-        assert results[0].result.status == "skip"
+        assert results[0].status == "skip"
+        assert "adapter skipped" in results[0].message
         assert len(impl_called) == 0

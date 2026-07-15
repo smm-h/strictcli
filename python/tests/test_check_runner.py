@@ -8,13 +8,14 @@ import pytest
 import strictcli
 from strictcli import (
     CheckContext,
-    CheckResult,
+    SkipCheck,
     _CheckDef,
     _filter_checks,
     _match_tag_expr,
     _resolve_check_order,
     _run_checks,
 )
+from conftest import pass_outcome, fail_outcome, warn_outcome, skip_outcome
 
 
 @dataclass
@@ -143,7 +144,7 @@ class TestRunChecks:
         defs = {
             "a": _make_check_def(
                 "a",
-                impl=lambda ctx: CheckResult(status="pass", message="All good"),
+                impl=lambda ctx: pass_outcome("All good"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -158,7 +159,7 @@ class TestRunChecks:
         defs = {
             "a": _make_check_def(
                 "a",
-                impl=lambda ctx: CheckResult(status="fail", message="Broken"),
+                impl=lambda ctx: fail_outcome("Broken"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -171,12 +172,12 @@ class TestRunChecks:
         defs = {
             "b": _make_check_def(
                 "b",
-                impl=lambda ctx: CheckResult(status="pass", message="B OK"),
+                impl=lambda ctx: pass_outcome("B OK"),
             ),
             "a": _make_check_def(
                 "a",
                 depends_on=["b"],
-                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+                impl=lambda ctx: pass_outcome("A OK"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -192,12 +193,12 @@ class TestRunChecks:
         defs = {
             "b": _make_check_def(
                 "b",
-                impl=lambda ctx: CheckResult(status="fail", message="B failed"),
+                impl=lambda ctx: fail_outcome("B failed"),
             ),
             "a": _make_check_def(
                 "a",
                 depends_on=["b"],
-                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+                impl=lambda ctx: pass_outcome("A OK"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -216,17 +217,17 @@ class TestRunChecks:
         defs = {
             "c": _make_check_def(
                 "c",
-                impl=lambda ctx: CheckResult(status="fail", message="C failed"),
+                impl=lambda ctx: fail_outcome("C failed"),
             ),
             "b": _make_check_def(
                 "b",
                 depends_on=["c"],
-                impl=lambda ctx: CheckResult(status="pass", message="B OK"),
+                impl=lambda ctx: pass_outcome("B OK"),
             ),
             "a": _make_check_def(
                 "a",
                 depends_on=["b"],
-                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+                impl=lambda ctx: pass_outcome("A OK"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -244,7 +245,7 @@ class TestRunChecks:
             "a": _make_check_def(
                 "a",
                 severity="warn",
-                impl=lambda ctx: CheckResult(status="warn", message="Watch out"),
+                impl=lambda ctx: warn_outcome("Watch out"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -258,7 +259,7 @@ class TestRunChecks:
             "a": _make_check_def(
                 "a",
                 severity="warn",
-                impl=lambda ctx: CheckResult(status="warn", message="Watch out"),
+                impl=lambda ctx: warn_outcome("Watch out"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -274,12 +275,12 @@ class TestRunChecks:
         defs = {
             "b": _make_check_def(
                 "b",
-                impl=lambda ctx: CheckResult(status="warn", message="Warning"),
+                impl=lambda ctx: warn_outcome("Warning"),
             ),
             "a": _make_check_def(
                 "a",
                 depends_on=["b"],
-                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+                impl=lambda ctx: pass_outcome("A OK"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -296,17 +297,17 @@ class TestRunChecks:
         defs = {
             "c": _make_check_def(
                 "c",
-                impl=lambda ctx: CheckResult(status="warn", message="Warning"),
+                impl=lambda ctx: warn_outcome("Warning"),
             ),
             "b": _make_check_def(
                 "b",
                 depends_on=["c"],
-                impl=lambda ctx: CheckResult(status="pass", message="B OK"),
+                impl=lambda ctx: pass_outcome("B OK"),
             ),
             "a": _make_check_def(
                 "a",
                 depends_on=["b"],
-                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+                impl=lambda ctx: pass_outcome("A OK"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -319,18 +320,19 @@ class TestRunChecks:
         assert statuses["b"] == "pass"
         assert statuses["a"] == "pass"
 
-    def test_warn_from_scope_adapter_runs_dependent(self, tmp_path, monkeypatch):
-        # When the scope adapter short-circuits a check with a warn result,
-        # the warn must also satisfy dependencies (no cascade-skip).
+    def test_skip_from_scope_adapter_runs_dependent(self, tmp_path, monkeypatch):
+        # When the scope adapter skips a check via SkipCheck, the skip must also
+        # satisfy dependencies (no cascade-skip) -- an explicit skip is not a
+        # failure. (The adapter can no longer mint a warn; that path is gone.)
         defs = {
             "b": _make_check_def(
                 "b",
-                impl=lambda ctx: CheckResult(status="pass", message="unused"),
+                impl=lambda ctx: pass_outcome("unused"),
             ),
             "a": _make_check_def(
                 "a",
                 depends_on=["b"],
-                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+                impl=lambda ctx: pass_outcome("A OK"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -338,28 +340,28 @@ class TestRunChecks:
         app._check_defs["b"].scope = "some-scope"
 
         def adapter(context, scope):
-            return CheckResult(status="warn", message="adapter warning")
+            return SkipCheck("adapter skipped b")
 
         ctx = SimpleContext(project_root=tmp_path)
         order = _resolve_check_order(app._check_defs, {"a", "b"})
         results, exit_code = _run_checks(
             app._check_defs, order, ctx, ignore_warnings=False, scope_adapter=adapter
         )
-        assert exit_code == 1
+        assert exit_code == 0
         statuses = {name: r.status for name, r in results}
-        assert statuses["b"] == "warn"
+        assert statuses["b"] == "skip"
         assert statuses["a"] == "pass"
 
     def test_warn_does_not_cascade_when_ignored(self, tmp_path, monkeypatch):
         defs = {
             "b": _make_check_def(
                 "b",
-                impl=lambda ctx: CheckResult(status="warn", message="Warning"),
+                impl=lambda ctx: warn_outcome("Warning"),
             ),
             "a": _make_check_def(
                 "a",
                 depends_on=["b"],
-                impl=lambda ctx: CheckResult(status="pass", message="A OK"),
+                impl=lambda ctx: pass_outcome("A OK"),
             ),
         }
         app = self._make_app_with_checks(defs, tmp_path, monkeypatch)
@@ -370,6 +372,18 @@ class TestRunChecks:
         statuses = {name: r.status for name, r in results}
         assert statuses["b"] == "warn"
         assert statuses["a"] == "pass"
+
+
+class TestNonMintedOutcome:
+    def test_impl_returning_non_outcome_raises(self):
+        # Belt-and-braces: an impl that returns something not minted by a
+        # reporter is a hard error at the runner.
+        defs = {
+            "a": _make_check_def("a", impl=lambda ctx: "not an outcome"),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        with pytest.raises(TypeError, match="not an outcome minted by its reporter"):
+            _run_checks(defs, ["a"], ctx, False)
 
 
 class TestFilterChecks:
@@ -455,7 +469,7 @@ class TestScopeAdapter:
         defs = {
             "a": _make_check_def(
                 "a",
-                impl=lambda ctx: CheckResult(status="pass", message="ok"),
+                impl=lambda ctx: pass_outcome("ok"),
             ),
         }
         ctx = SimpleContext(project_root=Path("/tmp"))
@@ -470,7 +484,7 @@ class TestScopeAdapter:
                 name="a", tags=["default"], severity="error",
                 fast=True, pure=True, needs_network=False,
                 depends_on=[], scope="changelog",
-                impl=lambda ctx: CheckResult(status="pass", message="ok"),
+                impl=lambda ctx: pass_outcome("ok"),
             ),
         }
         ctx = SimpleContext(project_root=Path("/tmp"))
@@ -491,7 +505,7 @@ class TestScopeAdapter:
         def impl(ctx):
             assert hasattr(ctx, "scope_value")
             assert ctx.scope_value == "changelog"
-            return CheckResult(status="pass", message="scoped ok")
+            return pass_outcome("scoped ok")
 
         defs = {
             "a": _CheckDef(
@@ -507,16 +521,16 @@ class TestScopeAdapter:
         assert results[0][1].status == "pass"
         assert results[0][1].message == "scoped ok"
 
-    def test_scope_adapter_returns_check_result_skip(self):
-        """Adapter returning CheckResult(skip) is used directly, impl not called."""
+    def test_scope_adapter_returns_skip_check(self):
+        """Adapter returning SkipCheck skips the check; impl is not called."""
         impl_called = []
 
         def adapter(ctx, scope):
-            return CheckResult(status="skip", message="scope not applicable")
+            return SkipCheck("scope not applicable")
 
         def impl(ctx):
             impl_called.append(True)
-            return CheckResult(status="pass", message="should not run")
+            return pass_outcome("should not run")
 
         defs = {
             "a": _CheckDef(
@@ -530,57 +544,55 @@ class TestScopeAdapter:
         results, exit_code = _run_checks(defs, ["a"], ctx, False, scope_adapter=adapter)
         assert exit_code == 0
         assert results[0][1].status == "skip"
-        assert results[0][1].message == "scope not applicable"
+        assert "scope not applicable" in results[0][1].message
         assert len(impl_called) == 0
 
-    def test_scope_adapter_returns_check_result_fail(self):
-        """Adapter returning CheckResult(fail) causes failure and cascades."""
+    def test_scope_adapter_skip_does_not_cascade(self):
+        """A SkipCheck from the adapter is not a failure: dependents still run
+        (an adapter can no longer fail a check -- that path is gone)."""
+        b_ran = []
+
         def adapter(ctx, scope):
-            return CheckResult(status="fail", message="scope resolution failed")
+            return SkipCheck("skipping a")
 
         defs = {
             "a": _CheckDef(
                 name="a", tags=["default"], severity="error",
                 fast=True, pure=True, needs_network=False,
                 depends_on=[], scope="changelog",
-                impl=lambda ctx: CheckResult(status="pass", message="should not run"),
+                impl=lambda ctx: pass_outcome("should not run"),
             ),
             "b": _make_check_def(
                 "b", depends_on=["a"],
-                impl=lambda ctx: CheckResult(status="pass", message="b ok"),
+                impl=lambda ctx: (b_ran.append(True), pass_outcome("b ok"))[1],
             ),
         }
         ctx = SimpleContext(project_root=Path("/tmp"))
         results, exit_code = _run_checks(defs, ["a", "b"], ctx, False, scope_adapter=adapter)
-        assert exit_code == 1
+        assert exit_code == 0
         statuses = {name: r.status for name, r in results}
-        assert statuses["a"] == "fail"
-        assert statuses["b"] == "skip"
+        assert statuses["a"] == "skip"
+        assert statuses["b"] == "pass"
+        assert b_ran == [True]
 
-    def test_scope_adapter_returns_check_result_warn(self):
-        """Adapter returning CheckResult(warn) respects ignore_warnings."""
+    def test_scope_adapter_skip_reason_surfaced(self):
+        """The SkipCheck reason appears in the derived skip outcome's message."""
         def adapter(ctx, scope):
-            return CheckResult(status="warn", message="scope warning")
+            return SkipCheck("changelog not present")
 
         defs = {
             "a": _CheckDef(
                 name="a", tags=["default"], severity="warn",
                 fast=True, pure=True, needs_network=False,
                 depends_on=[], scope="changelog",
-                impl=lambda ctx: CheckResult(status="pass", message="should not run"),
+                impl=lambda ctx: pass_outcome("should not run"),
             ),
         }
         ctx = SimpleContext(project_root=Path("/tmp"))
-
-        # Without ignore_warnings: exit_code 1
         results, exit_code = _run_checks(defs, ["a"], ctx, False, scope_adapter=adapter)
-        assert exit_code == 1
-        assert results[0][1].status == "warn"
-
-        # With ignore_warnings: exit_code 0
-        results, exit_code = _run_checks(defs, ["a"], ctx, True, scope_adapter=adapter)
         assert exit_code == 0
-        assert results[0][1].status == "warn"
+        assert results[0][1].status == "skip"
+        assert "changelog not present" in results[0][1].message
 
     def test_mixed_scoped_and_unscoped_checks(self):
         """Adapter is only called for checks with non-empty scope."""
@@ -595,11 +607,11 @@ class TestScopeAdapter:
                 name="scoped", tags=["default"], severity="error",
                 fast=True, pure=True, needs_network=False,
                 depends_on=[], scope="changelog",
-                impl=lambda ctx: CheckResult(status="pass", message="scoped ok"),
+                impl=lambda ctx: pass_outcome("scoped ok"),
             ),
             "unscoped": _make_check_def(
                 "unscoped",
-                impl=lambda ctx: CheckResult(status="pass", message="unscoped ok"),
+                impl=lambda ctx: pass_outcome("unscoped ok"),
             ),
         }
         ctx = SimpleContext(project_root=Path("/tmp"))

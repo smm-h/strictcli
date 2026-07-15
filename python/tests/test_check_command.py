@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import strictcli
-from strictcli import CheckResult
+from conftest import pass_outcome, fail_outcome, warn_outcome
 
 
 TWO_CHECKS_TOML = """\
@@ -68,7 +68,7 @@ def _setup_checks_app(tmp_path, monkeypatch, toml_content, register_impls=True,
                        pass_results=None):
     """Create a temp dir with checks.toml, build an App, and register impls.
 
-    pass_results: dict mapping check name to CheckResult. If None, all return pass.
+    pass_results: dict mapping check name to a minted outcome. If None, all return pass.
     """
     toml_file = tmp_path / "checks.toml"
     toml_file.write_text(toml_content)
@@ -87,7 +87,7 @@ def _setup_checks_app(tmp_path, monkeypatch, toml_content, register_impls=True,
                 app._check_defs[name].impl = lambda ctx, r=result: r
             else:
                 app._check_defs[name].impl = (
-                    lambda ctx, n=name: CheckResult(status="pass", message=f"{n} OK")
+                    lambda ctx, n=name: pass_outcome(f"{n} OK")
                 )
 
     app.set_check_context(lambda: SimpleContext(project_root=tmp_path))
@@ -173,7 +173,7 @@ class TestCheckExecution:
         app = _setup_checks_app(
             tmp_path, monkeypatch, TWO_CHECKS_TOML,
             pass_results={
-                "version-check": CheckResult(status="fail", message="version mismatch"),
+                "version-check": fail_outcome("version mismatch"),
             },
         )
         result = app.test(["check", "--all"])
@@ -193,7 +193,7 @@ class TestCheckExecution:
             def make_impl(n):
                 def impl(ctx):
                     ran.append(n)
-                    return CheckResult(status="pass", message=f"{n} OK")
+                    return pass_outcome(f"{n} OK")
                 return impl
             app._check_defs[name].impl = make_impl(name)
 
@@ -213,7 +213,7 @@ class TestCheckExecution:
             def make_impl(n):
                 def impl(ctx):
                     ran.append(n)
-                    return CheckResult(status="pass", message=f"{n} OK")
+                    return pass_outcome(f"{n} OK")
                 return impl
             app._check_defs[name].impl = make_impl(name)
 
@@ -236,7 +236,7 @@ class TestCheckDryRun:
             def make_impl(n):
                 def impl(ctx):
                     ran.append(n)
-                    return CheckResult(status="pass", message=f"{n} OK")
+                    return pass_outcome(f"{n} OK")
                 return impl
             app._check_defs[name].impl = make_impl(name)
 
@@ -262,39 +262,38 @@ class TestCheckJsonOutput:
             assert "name" in item
             assert "status" in item
             assert "message" in item
-            assert "details" in item
+            assert "problems" in item
+            assert isinstance(item["problems"], list)
 
 
 class TestCheckVerbose:
-    def test_verbose_shows_details_for_passing(self, tmp_path, monkeypatch):
-        """--all --verbose shows details for passing checks too."""
+    def test_verbose_pass_has_no_problem_lines(self, tmp_path, monkeypatch):
+        """A passing check carries no problems, so --verbose reveals nothing
+        extra: the run shows PASS but emits no problem lines."""
         app = _setup_checks_app(
             tmp_path, monkeypatch, TWO_CHECKS_TOML,
             pass_results={
-                "version-check": CheckResult(
-                    status="pass", message="All good",
-                    details=["version 1.0.0 in 2 files"],
-                ),
+                "version-check": pass_outcome("All good"),
             },
         )
         result = app.test(["check", "--all", "--verbose"])
         assert result.exit_code == 0
-        assert "version 1.0.0 in 2 files" in result.stdout
+        assert "PASS" in result.stdout
+        assert "[error]" not in result.stdout
+        assert "[warn]" not in result.stdout
 
-    def test_non_verbose_hides_pass_details(self, tmp_path, monkeypatch):
-        """Without --verbose, passing check details are hidden."""
+    def test_non_verbose_pass_has_no_problem_lines(self, tmp_path, monkeypatch):
+        """Without --verbose, a passing check shows no problem lines either."""
         app = _setup_checks_app(
             tmp_path, monkeypatch, TWO_CHECKS_TOML,
             pass_results={
-                "version-check": CheckResult(
-                    status="pass", message="All good",
-                    details=["version 1.0.0 in 2 files"],
-                ),
+                "version-check": pass_outcome("All good"),
             },
         )
         result = app.test(["check", "--all"])
         assert result.exit_code == 0
-        assert "version 1.0.0 in 2 files" not in result.stdout
+        assert "[error]" not in result.stdout
+        assert "[warn]" not in result.stdout
 
 
 class TestCheckIgnoreWarnings:
@@ -303,7 +302,7 @@ class TestCheckIgnoreWarnings:
         app = _setup_checks_app(
             tmp_path, monkeypatch, THREE_CHECKS_WITH_DEP_TOML,
             pass_results={
-                "lint-check": CheckResult(status="warn", message="minor issue"),
+                "lint-check": warn_outcome("minor issue"),
             },
         )
         result = app.test(["check", "--all", "--ignore-warnings"])
@@ -315,7 +314,7 @@ class TestCheckIgnoreWarnings:
         app = _setup_checks_app(
             tmp_path, monkeypatch, THREE_CHECKS_WITH_DEP_TOML,
             pass_results={
-                "lint-check": CheckResult(status="warn", message="minor issue"),
+                "lint-check": warn_outcome("minor issue"),
             },
         )
         result = app.test(["check", "--all"])
@@ -334,7 +333,7 @@ class TestCheckNoContextFactory:
         )
         for name in app._check_defs:
             app._check_defs[name].impl = (
-                lambda ctx, n=name: CheckResult(status="pass", message=f"{n} OK")
+                lambda ctx, n=name: pass_outcome(f"{n} OK")
             )
         # Do NOT call set_check_context
 
@@ -349,10 +348,7 @@ class TestCheckFailDetails:
         app = _setup_checks_app(
             tmp_path, monkeypatch, TWO_CHECKS_TOML,
             pass_results={
-                "version-check": CheckResult(
-                    status="fail", message="3 commits not covered",
-                    details=["a1b2c3d: fix typo", "e4f5g6h: add feature"],
-                ),
+                "version-check": fail_outcome("3 commits not covered", "a1b2c3d: fix typo", "e4f5g6h: add feature"),
             },
         )
         result = app.test(["check", "--all"])

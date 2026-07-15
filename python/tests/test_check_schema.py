@@ -4,6 +4,7 @@ import json
 
 import pytest
 import strictcli
+from conftest import pass_outcome
 
 
 @pytest.fixture(autouse=True)
@@ -46,13 +47,13 @@ class TestSchemaWithChecks:
             checks_path=str(toml_file),
         )
 
-        @app.check("lint-code")
-        def lint_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="ok")
+        @app.error_check("lint-code")
+        def lint_impl(ctx, reporter):
+            return pass_outcome("ok")
 
-        @app.check("check-deps")
-        def deps_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="ok")
+        @app.warn_check("check-deps")
+        def deps_impl(ctx, reporter):
+            return pass_outcome("ok")
 
         @app.command("noop", help="Does nothing")
         def noop():
@@ -75,13 +76,13 @@ class TestSchemaWithChecks:
             checks_path=str(toml_file),
         )
 
-        @app.check("lint-code")
-        def lint_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="ok")
+        @app.error_check("lint-code")
+        def lint_impl(ctx, reporter):
+            return pass_outcome("ok")
 
-        @app.check("check-deps")
-        def deps_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="ok")
+        @app.warn_check("check-deps")
+        def deps_impl(ctx, reporter):
+            return pass_outcome("ok")
 
         @app.command("noop", help="Does nothing")
         def noop():
@@ -160,13 +161,13 @@ class TestSchemaWithScope:
             checks_path=str(toml_file),
         )
 
-        @app.check("scoped-check")
-        def scoped_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="ok")
+        @app.error_check("scoped-check")
+        def scoped_impl(ctx, reporter):
+            return pass_outcome("ok")
 
-        @app.check("unscoped-check")
-        def unscoped_impl(ctx):
-            return strictcli.CheckResult(status="pass", message="ok")
+        @app.warn_check("unscoped-check")
+        def unscoped_impl(ctx, reporter):
+            return pass_outcome("ok")
 
         @app.command("noop", help="Does nothing")
         def noop():

@@ -8,7 +8,8 @@ __all__ = [
     "App", "Flag", "Arg", "FlagSet", "MutexGroup", "CoRequired", "Requires",
     "Implies", "Passthrough", "DeprecatedCommand", "Result", "InvokeError",
     "flag", "arg",
-    "CheckResult", "CheckContext", "CheckRunResult",
+    "CheckContext", "CheckRunResult",
+    "ErrorReporter", "WarnReporter", "SkipCheck",
     "format_check_results", "format_check_results_json",
     "ConfigField",
     "Context",
@@ -2058,30 +2059,206 @@ class Tool:
     execute: Callable
 
 
-@dataclass
-class CheckResult:
-    """Result of running a single check."""
+# Module-private mint token: a _CheckOutcome can be constructed only by code
+# that holds this token (the reporters and the runner's internal skip mint).
+# This is the seal that makes forging an outcome directly impossible.
+_MINT_TOKEN = object()
 
-    status: str
+
+@dataclass(frozen=True)
+class _CheckProblem:
+    """A single minted finding: text plus severity ("error" or "warn").
+
+    Module-private -- problems are minted only via reporter methods.
+    """
+
+    text: str
+    severity: str
+
+
+@dataclass(frozen=True)
+class _CheckOutcome:
+    """The ceiling-typed result of a check implementation.
+
+    Module-private with a construction guard: a valid outcome is obtained ONLY
+    through reporter methods (passed/skipped/found) or the runner's internal
+    skip mint, both of which pass ``_MINT_TOKEN``. Direct construction raises.
+    """
+
+    kind: str  # "passed", "skipped", "found"
     message: str
-    details: list[str] = field(default_factory=list)
+    problems: tuple[_CheckProblem, ...] = ()
+    _token: object = None
 
     def __post_init__(self) -> None:
-        if self.status not in ("pass", "fail", "warn", "skip"):
-            raise ValueError(
-                f'CheckResult.status must be one of "pass", "fail", "warn", "skip", '
-                f"got {self.status!r}"
+        if self._token is not _MINT_TOKEN:
+            raise TypeError(
+                "_CheckOutcome cannot be constructed directly; "
+                "obtain one from a reporter (passed/skipped/found)"
             )
-        if not isinstance(self.message, str) or not self.message.strip():
-            raise ValueError("CheckResult.message must be a non-empty string")
+
+    @property
+    def status(self) -> str:
+        """Derived verdict label ("pass"/"fail"/"warn"/"skip")."""
+        return _derive_status(self)
+
+    def _ordered_problems(self) -> tuple[_CheckProblem, ...]:
+        """Problems grouped by severity: all error problems, then all warns."""
+        errs = tuple(p for p in self.problems if p.severity == "error")
+        warns = tuple(p for p in self.problems if p.severity == "warn")
+        return errs + warns
+
+
+def _mint_skip(message: str) -> _CheckOutcome:
+    """Runner-internal mint for cascade/scope skip outcomes."""
+    return _CheckOutcome(kind="skipped", message=message, _token=_MINT_TOKEN)
+
+
+def _derive_status(outcome: _CheckOutcome) -> str:
+    """Map a minted outcome to its verdict label.
+
+    passed => pass; skipped => skip; found with an error problem => fail;
+    found with only warns => warn.
+    """
+    if outcome.kind == "passed":
+        return "pass"
+    if outcome.kind == "skipped":
+        return "skip"
+    if any(p.severity == "error" for p in outcome.problems):
+        return "fail"
+    return "warn"
+
+
+class _ReporterCore:
+    """Shared problem accumulator and minting surface for both reporters.
+
+    Holds warn()/passed()/skipped()/found(). Error-minting lives ONLY on
+    ErrorReporter, so WarnReporter structurally lacks it (accessing ``.error``
+    on a WarnReporter is an AttributeError at runtime and a type error under
+    mypy).
+    """
+
+    def __init__(self) -> None:
+        self._problems: list[_CheckProblem] = []
+
+    def warn(self, text: str) -> None:
+        """Mint a warn-severity problem. Non-empty text required."""
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("warn(text) requires a non-empty string")
+        self._problems.append(_CheckProblem(text=text, severity="warn"))
+
+    def passed(self, message: str) -> _CheckOutcome:
+        """Finalize a terminal PASS. Errors if any problems were reported."""
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("passed(message) requires a non-empty string")
+        if self._problems:
+            raise ValueError(
+                "passed() called after problems were reported; "
+                "a check that found problems cannot pass -- use found()"
+            )
+        return _CheckOutcome(kind="passed", message=message, _token=_MINT_TOKEN)
+
+    def skipped(self, reason: str) -> _CheckOutcome:
+        """Finalize a terminal SKIP. Errors if any problems were reported."""
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("skipped(reason) requires a non-empty string")
+        if self._problems:
+            raise ValueError(
+                "skipped() called after problems were reported; "
+                "a check that found problems cannot skip"
+            )
+        return _CheckOutcome(kind="skipped", message=reason, _token=_MINT_TOKEN)
+
+    def found(self, message: str) -> _CheckOutcome:
+        """Finalize an outcome carrying the accumulated problems.
+
+        Errors when nothing was reported -- nothing found means pass, so say so
+        explicitly with passed().
+        """
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("found(message) requires a non-empty string")
+        if not self._problems:
+            raise ValueError(
+                "found() called with no problems; "
+                "nothing found means pass -- use passed()"
+            )
+        return _CheckOutcome(
+            kind="found",
+            message=message,
+            problems=tuple(self._problems),
+            _token=_MINT_TOKEN,
+        )
+
+
+class WarnReporter(_ReporterCore):
+    """Reporter handed to warn-severity check impls.
+
+    Can mint warn-severity problems and terminal outcomes but structurally
+    LACKS error-minting: there is no ``error`` method, so a warn check cannot
+    produce an error-severity problem and can never cascade.
+    """
+
+
+class ErrorReporter(_ReporterCore):
+    """Reporter handed to error-severity check impls.
+
+    Everything WarnReporter has PLUS ``error`` (mints an error-severity problem).
+    """
+
+    def error(self, text: str) -> None:
+        """Mint an error-severity problem. Non-empty text required."""
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("error(text) requires a non-empty string")
+        self._problems.append(_CheckProblem(text=text, severity="error"))
+
+
+@dataclass(frozen=True)
+class SkipCheck:
+    """Directive a scope adapter returns to skip a check with a reason.
+
+    The adapter can no longer mint arbitrary outcomes -- it either returns a
+    replacement context (context projection) or this skip directive.
+    """
+
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("SkipCheck.reason must be a non-empty string")
 
 
 @dataclass(frozen=True)
 class CheckRunResult:
-    """A named check result returned by App.run_checks()."""
+    """A named check outcome returned by App.run_checks().
+
+    The verdict is derived from the minted outcome; the runner's exit/cascade
+    logic and the formatters all consume these same accessors (one source of
+    truth).
+    """
 
     name: str
-    result: CheckResult
+    outcome: _CheckOutcome
+
+    @property
+    def status(self) -> str:
+        """Derived label: "pass", "fail", "warn", or "skip"."""
+        return _derive_status(self.outcome)
+
+    @property
+    def message(self) -> str:
+        return self.outcome.message
+
+    @property
+    def problems(self) -> tuple[_CheckProblem, ...]:
+        return self.outcome.problems
+
+    def gated(self) -> bool:
+        """Whether the outcome carries an error-severity problem (derived FAIL)."""
+        return self.status == "fail"
+
+    def warned(self) -> bool:
+        """Whether the outcome carries only warn-severity problems (derived WARN)."""
+        return self.status == "warn"
 
 
 @runtime_checkable
@@ -2104,6 +2281,7 @@ class _CheckDef:
     depends_on: list[str]
     scope: str = ""
     impl: object | None = None
+    impl_form: str = ""  # "error" or "warn" -- registration form, for the severity cross-check
 
 
 @dataclass
@@ -2293,8 +2471,32 @@ class App:
         self._framework_fields[name] = cf
         return cf
 
-    def check(self, name: str) -> Callable[[F], F]:
-        """Decorator to register a check implementation."""
+    def error_check(self, name: str) -> Callable[[F], F]:
+        """Decorator registering an error-severity check implementation.
+
+        The decorated function takes ``(ctx, reporter)`` where ``reporter`` is
+        an :class:`ErrorReporter` (annotate it as such for mypy binding). It
+        must return a :class:`_CheckOutcome` obtained from that reporter. The
+        check must be declared ``severity = "error"`` in checks.toml.
+        """
+        return self._make_check_decorator(name, "error")
+
+    def warn_check(self, name: str) -> Callable[[F], F]:
+        """Decorator registering a warn-severity check implementation.
+
+        The decorated function takes ``(ctx, reporter)`` where ``reporter`` is
+        a :class:`WarnReporter` (which structurally lacks ``error``, so a warn
+        check cannot cascade). The check must be declared ``severity = "warn"``.
+        """
+        return self._make_check_decorator(name, "warn")
+
+    def _make_check_decorator(self, name: str, form: str) -> Callable[[F], F]:
+        """Build the shared registration decorator for error/warn checks.
+
+        Enforces the double-entry contract (declared vs registered) and
+        cross-checks the registration FORM against the TOML-declared severity so
+        that ``@app.error_check`` on a severity="warn" definition is a hard error.
+        """
         def decorator(fn: F) -> F:
             if not self._checks_enabled:
                 raise ValueError(
@@ -2306,9 +2508,24 @@ class App:
                     f'cannot register check "{name}": '
                     f"not declared in checks.toml"
                 )
-            if self._check_defs[name].impl is not None:
+            cdef = self._check_defs[name]
+            if cdef.impl is not None:
                 raise ValueError(f'check "{name}": duplicate registration')
-            self._check_defs[name].impl = fn
+            if cdef.severity != form:
+                used = f"@app.{form}_check"
+                want = f"@app.{cdef.severity}_check"
+                raise ValueError(
+                    f'check "{name}": declared severity "{cdef.severity}" in '
+                    f"checks.toml but registered via {used}; use {want}"
+                )
+            reporter_cls = ErrorReporter if form == "error" else WarnReporter
+
+            def run(ctx: CheckContext) -> _CheckOutcome:
+                reporter = reporter_cls()
+                return fn(ctx, reporter)
+
+            cdef.impl = run
+            cdef.impl_form = form
             return fn
         return decorator
 
@@ -2454,8 +2671,16 @@ class App:
         """Set the scope adapter callback for scoped checks.
 
         The adapter is called as ``adapter(context, scope_string)`` and must
-        return either a replacement context object (used for the check's impl)
-        or a ``CheckResult`` (used directly, skipping the impl call).
+        return one of:
+
+        - a replacement context object -- used as the check's context (context
+          projection), or
+        - a :class:`SkipCheck` directive -- skips the check with the given
+          reason (no cascade, no exit-code change).
+
+        The adapter can no longer mint arbitrary outcomes: it either projects
+        the context or skips. (This is the Python-only scope hook; Go has no
+        scope adapter -- see the note in the Go ``check.go``.)
         """
         self._scope_adapter = adapter
 
@@ -2487,8 +2712,8 @@ class App:
             scope_adapter=self._scope_adapter,
         )
         results = [
-            CheckRunResult(name=name, result=result)
-            for name, result in raw_results
+            CheckRunResult(name=name, outcome=outcome)
+            for name, outcome in raw_results
         ]
         return (results, exit_code)
 
@@ -2572,7 +2797,7 @@ class App:
             )
 
             results_wrapped = [
-                CheckRunResult(name=n, result=r) for n, r in raw_results
+                CheckRunResult(name=n, outcome=o) for n, o in raw_results
             ]
             if json:
                 print(format_check_results_json(results_wrapped))
@@ -5992,29 +6217,31 @@ def _run_checks(
     context: CheckContext,
     ignore_warnings: bool,
     scope_adapter: object | None = None,
-) -> tuple[list[tuple[str, CheckResult]], int]:
-    """Execute checks in order, skipping dependents of failed checks.
+) -> tuple[list[tuple[str, _CheckOutcome]], int]:
+    """Execute checks in order, skipping dependents of gated (FAIL) checks.
 
     Returns (results_list, exit_code). exit_code is 0 if all pass (or all
     warn with ignore_warnings=True), 1 otherwise.
     """
-    results: list[tuple[str, CheckResult]] = []
-    # Checks whose dependents should be cascade-skipped: only fail or
-    # cascade-skip qualifies. A warn satisfies the dependency (dependents
-    # still run) regardless of ignore_warnings -- it only affects the exit
-    # code. Explicit skip from an impl is not a failure either.
+    results: list[tuple[str, _CheckOutcome]] = []
+    # Checks whose dependents should be cascade-skipped: cascade keys ONLY on a
+    # derived FAIL (an error-severity problem present) or a cascade-skip. A WARN
+    # outcome satisfies the dependency (dependents still run) and only affects
+    # the exit code -- warn-severity checks physically cannot cascade because
+    # WarnReporter lacks error-minting. An explicit SKIP is not a failure.
     failed_checks: set[str] = set()
     exit_code = 0
 
-    def record(name: str, result: CheckResult) -> None:
+    def record(name: str, outcome: _CheckOutcome) -> None:
         nonlocal exit_code
-        if result.status == "fail":
+        status = _derive_status(outcome)
+        if status == "fail":
             failed_checks.add(name)
             exit_code = 1
-        elif result.status == "warn":
+        elif status == "warn":
             if not ignore_warnings:
                 exit_code = 1
-        # "skip" from an impl or adapter: no cascade, no exit code change.
+        # "pass" / "skip": no cascade, no exit code change.
 
     for name in check_names:
         cdef = check_defs[name]
@@ -6027,28 +6254,33 @@ def _run_checks(
                 break
 
         if failed_dep is not None:
-            result = CheckResult(
-                status="skip",
-                message=f'skipped: dependency "{failed_dep}" failed',
-            )
+            outcome = _mint_skip(f'skipped: dependency "{failed_dep}" failed')
             failed_checks.add(name)
-            results.append((name, result))
+            results.append((name, outcome))
             exit_code = 1
             continue
 
-        # Apply scope adapter if the check has a scope and an adapter is set
+        # Apply scope adapter if the check has a scope and an adapter is set.
+        # The adapter returns a replacement context OR a SkipCheck directive.
         check_context = context
         if cdef.scope and scope_adapter is not None:
             adapted = scope_adapter(context, cdef.scope)
-            if isinstance(adapted, CheckResult):
-                results.append((name, adapted))
-                record(name, adapted)
+            if isinstance(adapted, SkipCheck):
+                outcome = _mint_skip(f"skipped: {adapted.reason}")
+                results.append((name, outcome))
+                # Explicit skip: no cascade, no exit code change.
                 continue
             check_context = adapted
 
-        result = cdef.impl(check_context)
-        results.append((name, result))
-        record(name, result)
+        outcome = cdef.impl(check_context)
+        # Belt-and-braces: an impl must return a reporter-minted outcome.
+        if not isinstance(outcome, _CheckOutcome):
+            raise TypeError(
+                f'check "{name}" returned {outcome!r}, not an outcome minted by '
+                f"its reporter (use passed/skipped/found)"
+            )
+        results.append((name, outcome))
+        record(name, outcome)
 
     return results, exit_code
 
@@ -6110,7 +6342,13 @@ def _check_dry_run_mode(
 def format_check_results(
     results: list[CheckRunResult], verbose: bool = False,
 ) -> str:
-    """Format check results as a human-readable aligned string."""
+    """Format check results as a human-readable aligned string.
+
+    Shows the derived status label, name, and message, with minted problems
+    listed under the check row grouped by severity (error problems first, then
+    warn problems), each tagged with its severity. Problems appear for
+    fail/warn/skip outcomes or when verbose is True.
+    """
     if not results:
         return ""
 
@@ -6118,27 +6356,33 @@ def format_check_results(
     lines: list[str] = []
 
     for r in results:
-        label = _CHECK_STATUS_LABELS[r.result.status]
-        lines.append(f"{label}  {r.name:<{name_width}}    {r.result.message}")
+        status = r.status
+        label = _CHECK_STATUS_LABELS[status]
+        lines.append(f"{label}  {r.name:<{name_width}}    {r.outcome.message}")
 
-        show_details = r.result.details and (
-            verbose or r.result.status in ("fail", "warn", "skip")
-        )
-        if show_details:
-            for detail in r.result.details:
-                lines.append(f"        {detail}")
+        show_problems = verbose or status in ("fail", "warn", "skip")
+        if show_problems:
+            for p in r.outcome._ordered_problems():
+                lines.append(f"        [{p.severity}] {p.text}")
 
     return "\n".join(lines)
 
 
 def format_check_results_json(results: list[CheckRunResult]) -> str:
-    """Format check results as a JSON string."""
+    """Format check results as a JSON string.
+
+    Each entry carries the derived status plus the minted problems (each with
+    its severity and text). Problems serialize as [] when empty.
+    """
     items = [
         {
             "name": r.name,
-            "status": r.result.status,
-            "message": r.result.message,
-            "details": r.result.details if r.result.details is not None else [],
+            "status": r.status,
+            "message": r.outcome.message,
+            "problems": [
+                {"severity": p.severity, "text": p.text}
+                for p in r.outcome.problems
+            ],
         }
         for r in results
     ]
