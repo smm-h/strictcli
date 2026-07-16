@@ -28,6 +28,7 @@ GO_PARSE = PROJECT_ROOT / "go" / "strictcli" / "parse.go"
 GO_CHECK = PROJECT_ROOT / "go" / "strictcli" / "check.go"
 GO_CHECK_RUNNER = PROJECT_ROOT / "go" / "strictcli" / "check_runner.go"
 GO_CHECK_PUBLIC = PROJECT_ROOT / "go" / "strictcli" / "check_public.go"
+GO_CHECK_PROVIDER = PROJECT_ROOT / "go" / "strictcli" / "check_provider.go"
 GO_TAGDSL = PROJECT_ROOT / "go" / "strictcli" / "tagdsl.go"
 GO_CONFIG = PROJECT_ROOT / "go" / "strictcli" / "config.go"
 GO_ROUTING = PROJECT_ROOT / "go" / "strictcli" / "routing.go"
@@ -83,6 +84,16 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # there is no Go counterpart to this construction-time validation.
     'SkipCheck.reason must be a non-empty string':
         "Python-only scope-adapter skip directive; Go has no scope adapter",
+    # Check-provider input validation is dynamic in Python (untyped provider
+    # callback + list); Go's RegisterCheckProvider is statically typed
+    # (func() []CheckSpec), so these three degrees of freedom cannot go wrong at
+    # runtime and have no Go counterpart.
+    'check provider must be callable':
+        "Go RegisterCheckProvider takes a typed func value; no callable check needed",
+    'check provider must return a list of CheckSpec, got *':
+        "Go provider return type is []CheckSpec (statically typed); no runtime check",
+    'check provider returned a non-CheckSpec value: *':
+        "Go provider elements are CheckSpec (statically typed); no runtime check",
     # Python Command.__post_init__ calls _require_non_empty_str
     'Command.help must be a non-empty string':
         "Python dataclass __post_init__; Go uses 'missing help text' message",
@@ -542,6 +553,7 @@ def extract_go_errors(
     check_src: str,
     check_runner_src: str,
     check_public_src: str,
+    check_provider_src: str,
     tagdsl_src: str,
     config_src: str,
     routing_src: str,
@@ -644,6 +656,15 @@ def extract_go_errors(
 
     # --- Registration errors from check_runner.go (fmt.Errorf for cycle detection) ---
     for m in errorf_pat.finditer(check_runner_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Reporter/materialization panics from check_provider.go ---
+    # The provider severity-mismatch panic is worded in parity with the Python
+    # ValueError raised by _materialize_check_providers (method-agnostic: the
+    # constructor name sits in a %s/{} placeholder so it normalizes to *).
+    for m in panic_plain.finditer(check_provider_src):
+        results.append(("registration", m.group(1)))
+    for m in panic_sprintf.finditer(check_provider_src):
         results.append(("registration", m.group(1)))
 
     # --- Registration errors from check_public.go (fmt.Errorf for public API) ---
@@ -842,6 +863,7 @@ def main() -> int:
     go_check_source = GO_CHECK.read_text()
     go_check_runner_source = GO_CHECK_RUNNER.read_text()
     go_check_public_source = GO_CHECK_PUBLIC.read_text()
+    go_check_provider_source = GO_CHECK_PROVIDER.read_text()
     go_tagdsl_source = GO_TAGDSL.read_text()
     go_config_source = GO_CONFIG.read_text()
     go_routing_source = GO_ROUTING.read_text()
@@ -852,7 +874,8 @@ def main() -> int:
     go_raw = extract_go_errors(
         go_strictcli_source, go_parse_source,
         go_check_source, go_check_runner_source,
-        go_check_public_source, go_tagdsl_source,
+        go_check_public_source, go_check_provider_source,
+        go_tagdsl_source,
         go_config_source, go_routing_source,
         go_invoke_source,
     )

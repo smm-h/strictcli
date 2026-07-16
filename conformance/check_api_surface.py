@@ -530,6 +530,8 @@ CHECK_RUNNER_TYPES: list[tuple[str, str, dict[str, str]]] = [
 CHECK_RUNNER_APP_METHODS: list[tuple[str, str]] = [
     ("run_checks", "RunChecks"),
     ("tag_contract", "TagContract"),
+    ("register_check_provider", "RegisterCheckProvider"),
+    ("reset_check_provider_cache", "ResetCheckProviderCache"),
 ]
 
 # Module-level (Python) / package-level (Go) functions.
@@ -537,6 +539,8 @@ CHECK_RUNNER_APP_METHODS: list[tuple[str, str]] = [
 CHECK_RUNNER_FUNCTIONS: list[tuple[str, str]] = [
     ("format_check_results", "FormatCheckResults"),
     ("format_check_results_json", "FormatCheckResultsJSON"),
+    ("error_check_spec", "NewErrorCheckSpec"),
+    ("warn_check_spec", "NewWarnCheckSpec"),
 ]
 
 
