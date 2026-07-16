@@ -3220,6 +3220,74 @@ func TestRunChecks_Partition_PureDependingOnImpureIsListed(t *testing.T) {
 	}
 }
 
+func TestRunChecks_Partition_FailedPureDependencyCascadesOverListing(t *testing.T) {
+	// A genuinely FAILED pure dependency cascade-skips its pure dependent even
+	// under PureOnly -- the failed-dependency cascade takes precedence over the
+	// purity listing (the dependent is skipped, not listed).
+	app := makeAppWithRegisteredChecks(t, partitionToml)
+	app.RegisterErrorCheck("pure-a", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return failOutcome("pure-a failed", "boom")
+	})
+	registerAllPassing(t, app, "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, impureListed, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, PureOnly: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	byName := map[string]string{}
+	for _, r := range results {
+		byName[r.Name] = r.Status()
+	}
+	if byName["pure-a"] != "fail" {
+		t.Fatalf("pure-a status = %q, want fail", byName["pure-a"])
+	}
+	if byName["dep-on-pure"] != "skip" {
+		t.Fatalf("dep-on-pure status = %q, want skip (cascade over listing)", byName["dep-on-pure"])
+	}
+	for _, n := range impureListed {
+		if n == "dep-on-pure" {
+			t.Fatal("dep-on-pure must cascade-skip, not be listed")
+		}
+	}
+	if exitCode != 1 {
+		t.Fatalf("exit = %d, want 1 (failed pure check gates)", exitCode)
+	}
+}
+
+func TestRunChecks_Partition_ListedCheckContributesNoExitCode(t *testing.T) {
+	// A check listed (not executed) under PureOnly contributes NOTHING to the
+	// exit code -- even an impl that would fail never runs, so it cannot gate.
+	app := makeAppWithRegisteredChecks(t, partitionToml)
+	ran := map[string]bool{}
+	app.RegisterErrorCheck("impure-c", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		ran["impure-c"] = true
+		return failOutcome("would fail", "nope")
+	})
+	registerAllPassing(t, app, "pure-a", "net-b", "dep-on-impure", "dep-on-pure")
+
+	ctx := &testCheckContext{root: "/tmp"}
+	_, impureListed, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, PureOnly: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ran["impure-c"] {
+		t.Fatal("impure-c is listed under pure_only and must never execute")
+	}
+	listed := false
+	for _, n := range impureListed {
+		if n == "impure-c" {
+			listed = true
+		}
+	}
+	if !listed {
+		t.Fatalf("expected impure-c in impureListed, got %v", impureListed)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exit = %d, want 0 (a listed unexecuted check cannot gate)", exitCode)
+	}
+}
+
 func TestRunChecks_Partition_OffIsUnchanged(t *testing.T) {
 	// With PureOnly off, every selected check executes and nothing is listed.
 	app := makeAppWithRegisteredChecks(t, partitionToml)

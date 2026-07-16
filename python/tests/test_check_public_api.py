@@ -627,3 +627,39 @@ class TestRunChecksPurityPartition:
         assert result.exit_code == 0
         assert "[pure]" in result.stdout
         assert "[impure]" in result.stdout
+
+    def test_failed_pure_dependency_cascades_over_listing(self, tmp_path):
+        """A genuinely FAILED pure dependency cascade-skips its pure dependent
+        even under pure_only -- the failed-dependency cascade takes precedence
+        over the purity listing (the dependent is skipped, not listed)."""
+        impls = {"pure-a": lambda ctx: fail_outcome("pure-a failed", "boom")}
+        app = _make_app(tmp_path, PARTITION_TOML, impls=impls)
+        ctx = SimpleContext(project_root=tmp_path)
+        results, impure_listed, exit_code = app.run_checks(
+            ctx, run_all=True, pure_only=True,
+        )
+        by_name = {r.name: r for r in results}
+        assert by_name["pure-a"].status == "fail"
+        # dep-on-pure is pure and its dep FAILED -> cascade-skip wins over listing.
+        assert by_name["dep-on-pure"].status == "skip"
+        assert "dep-on-pure" not in impure_listed
+        assert exit_code == 1
+
+    def test_listed_check_contributes_no_exit_code(self, tmp_path):
+        """A check listed (not executed) under pure_only contributes NOTHING to
+        the exit code -- even an impl that would fail never runs, so it cannot
+        gate the run."""
+        ran: list[str] = []
+
+        def impure_fail(ctx):
+            ran.append("impure-c")
+            return fail_outcome("would fail", "nope")
+
+        app = _make_app(tmp_path, PARTITION_TOML, impls={"impure-c": impure_fail})
+        ctx = SimpleContext(project_root=tmp_path)
+        results, impure_listed, exit_code = app.run_checks(
+            ctx, run_all=True, pure_only=True,
+        )
+        assert "impure-c" in impure_listed
+        assert "impure-c" not in ran  # listed checks never execute
+        assert exit_code == 0  # a listed (unexecuted) check cannot gate
