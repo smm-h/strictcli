@@ -10,6 +10,7 @@ __all__ = [
     "flag", "arg",
     "CheckContext", "CheckRunResult",
     "ErrorReporter", "WarnReporter", "SkipCheck",
+    "CheckSpec", "error_check_spec", "warn_check_spec",
     "format_check_results", "format_check_results_json",
     "ConfigField",
     "Context",
@@ -2370,6 +2371,85 @@ class _CheckDef:
     impl_form: str = ""  # "error" or "warn" -- registration form, for the severity cross-check
 
 
+@dataclass(frozen=True)
+class CheckSpec:
+    """A fully-formed, ceiling-typed check produced by a check provider.
+
+    Opaque by construction: build one only via :func:`error_check_spec` or
+    :func:`warn_check_spec`, which bind the reporter form to the declared
+    severity so the impl cannot mint a problem its severity forbids. Providers
+    return lists of these (see :meth:`App.register_check_provider`).
+    """
+
+    name: str
+    tags: list[str]
+    severity: str
+    fast: bool
+    pure: bool
+    needs_network: bool
+    depends_on: list[str]
+    scope: str
+    _impl: Callable  # (ctx) -> _CheckOutcome, reporter already bound
+    _impl_form: str  # "error" or "warn" -- bound by the constructor
+
+
+def error_check_spec(
+    *,
+    name: str,
+    tags: list[str],
+    fast: bool,
+    pure: bool,
+    needs_network: bool,
+    depends_on: list[str],
+    impl: Callable,
+    severity: str = "error",
+    scope: str = "",
+) -> CheckSpec:
+    """Build an error-severity check spec for a provider.
+
+    ``impl`` receives ``(ctx, reporter)`` where ``reporter`` is an
+    :class:`ErrorReporter` (can mint both error- and warn-severity problems).
+    ``severity`` must be ``"error"`` -- a mismatch is a hard error at
+    materialization (the provider analog of the TOML/register severity check).
+    """
+    def run(ctx: CheckContext) -> _CheckOutcome:
+        return impl(ctx, ErrorReporter())
+
+    return CheckSpec(
+        name=name, tags=list(tags), severity=severity, fast=fast, pure=pure,
+        needs_network=needs_network, depends_on=list(depends_on), scope=scope,
+        _impl=run, _impl_form="error",
+    )
+
+
+def warn_check_spec(
+    *,
+    name: str,
+    tags: list[str],
+    fast: bool,
+    pure: bool,
+    needs_network: bool,
+    depends_on: list[str],
+    impl: Callable,
+    severity: str = "warn",
+    scope: str = "",
+) -> CheckSpec:
+    """Build a warn-severity check spec for a provider.
+
+    ``impl`` receives ``(ctx, reporter)`` where ``reporter`` is a
+    :class:`WarnReporter`, which structurally lacks error-minting: a warn check
+    cannot cascade. ``severity`` must be ``"warn"``.
+    """
+    def run(ctx: CheckContext) -> _CheckOutcome:
+        return impl(ctx, WarnReporter())
+
+    return CheckSpec(
+        name=name, tags=list(tags), severity=severity, fast=fast, pure=pure,
+        needs_network=needs_network, depends_on=list(depends_on), scope=scope,
+        _impl=run, _impl_form="warn",
+    )
+
+
 @dataclass
 class App:
     """The root CLI application."""
@@ -2474,6 +2554,11 @@ class App:
         # Discover checks TOML
         self._check_context_factory: Callable | None = None
         self._scope_adapter: Callable | None = None
+        # Check-provider hook state. Providers populate the registry lazily at
+        # the first registry read (materialization), memoized per cwd.
+        self._check_providers: list[Callable] = []
+        self._provider_sourced_names: set[str] = set()
+        self._provider_materialized_cwd: str | None = None
         if self.checks_path is not None and self.checks_embed is not None:
             raise ValueError("cannot use both checks_path and checks_embed")
         if self.checks_path is not None:
@@ -2832,6 +2917,106 @@ class App:
         """
         self._scope_adapter = adapter
 
+    def register_check_provider(
+        self, provider: Callable[[], list[CheckSpec]],
+    ) -> None:
+        """Register a provider that supplies check specs at materialization time.
+
+        Three check-system hooks (do not confuse them):
+
+        1. Check provider (this method) -- REGISTRY POPULATION. A provider
+           returns a list of fully-formed check specs (metadata + a ceiling-typed
+           impl). Providers are the TOML-less way to add checks: they run lazily
+           at the first registry read (materialization) and their specs go
+           through the same single add-path as TOML-declared checks, so a name
+           colliding with a TOML check or another provider's check is the usual
+           hard error. Registering a provider ENABLES the check system (a
+           TOML-less app with a provider gets a working ``check`` command).
+        2. Check-context factory (:meth:`set_check_context`) -- PROJECT
+           CONSTRUCTION. Called once per run to build the CheckContext handed to
+           every check impl. Answers "what project are we checking?".
+        3. Scope adapter (:meth:`set_scope_adapter`, Python-only) -- PER-CHECK
+           CONTEXT PROJECTION. Called per scoped check to project the context or
+           skip the check.
+
+        A provider decides WHICH checks exist; the context factory decides WHAT
+        project they see; the scope adapter decides HOW an individual check sees
+        that project.
+
+        A provider that returns an empty list is honest-empty (no checks for
+        this context) and a valid no-op. A provider that raises is a hard error
+        in every mode.
+        """
+        if not callable(provider):
+            raise ValueError("check provider must be callable")
+        self._enable_checks()
+        self._check_providers.append(provider)
+        # Registering a new provider invalidates any prior materialization.
+        self._provider_materialized_cwd = None
+
+    def reset_check_provider_cache(self) -> None:
+        """Drop provider-sourced definitions and clear the materialization memo.
+
+        The next registry read re-runs all providers. Intended for tests and
+        long-lived singletons. Does NOT unregister the providers themselves.
+        """
+        for name in self._provider_sourced_names:
+            self._check_defs.pop(name, None)
+        self._provider_sourced_names = set()
+        self._provider_materialized_cwd = None
+
+    def _materialize_check_providers(self) -> None:
+        """Run providers and insert their specs, memoized on the cwd.
+
+        Single chokepoint called at the start of every registry read (the check
+        command handler and :meth:`run_checks`). A repeat call in the same cwd
+        is a cheap no-op; a cwd change re-runs the providers (dropping the
+        previous provider-sourced defs first).
+        """
+        if not self._check_providers:
+            return
+        cwd = os.getcwd()
+        if self._provider_materialized_cwd == cwd:
+            return
+        # First materialization or cwd changed: drop stale provider defs, re-run.
+        for name in self._provider_sourced_names:
+            self._check_defs.pop(name, None)
+        self._provider_sourced_names = set()
+        for provider in self._check_providers:
+            result = provider()  # a raising provider is a hard error in every mode
+            if result is None:
+                result = []
+            if not isinstance(result, (list, tuple)):
+                raise ValueError(
+                    f"check provider must return a list of CheckSpec, "
+                    f"got {type(result).__name__}"
+                )
+            for spec in result:
+                if not isinstance(spec, CheckSpec):
+                    raise ValueError(
+                        f"check provider returned a non-CheckSpec value: {spec!r}"
+                    )
+                if spec.severity != spec._impl_form:
+                    used = f"{spec._impl_form}_check_spec"
+                    want = f"{spec.severity}_check_spec"
+                    raise ValueError(
+                        f'check "{spec.name}": declared severity '
+                        f'"{spec.severity}" but registered via {used}; '
+                        f"use {want}"
+                    )
+                cdef = _CheckDef(
+                    name=spec.name, tags=list(spec.tags), severity=spec.severity,
+                    fast=spec.fast, pure=spec.pure,
+                    needs_network=spec.needs_network,
+                    depends_on=list(spec.depends_on), scope=spec.scope,
+                    impl=spec._impl, impl_form=spec._impl_form,
+                )
+                # Routes through the single add-path: a name colliding with a
+                # TOML check or another provider's check is the usual hard error.
+                self._add_check_def(cdef)
+                self._provider_sourced_names.add(spec.name)
+        self._provider_materialized_cwd = cwd
+
     def run_checks(
         self,
         context: CheckContext,
@@ -2861,6 +3046,8 @@ class App:
         """
         if not self._checks_enabled:
             raise ValueError("checks are not enabled on this App")
+        # Materialize provider-sourced checks before any registry read.
+        self._materialize_check_providers()
         err = self._validate_check_registrations()
         if err:
             raise ValueError(err)
@@ -2914,6 +3101,9 @@ class App:
             list: bool, json: bool, ignore_warnings: bool,
             verbose: bool, dry_run: bool, **_kw,
         ) -> int:
+            # Materialize provider-sourced checks before any registry read
+            # (covers the list, dry-run, and execution branches below).
+            app_ref._materialize_check_providers()
             # Treat empty strings as "not provided"
             tag_expr = tag if tag else None
             name_glob = name if name else None
