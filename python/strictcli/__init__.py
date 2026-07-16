@@ -14,6 +14,7 @@ __all__ = [
     "ConfigField",
     "Context",
     "Tool",
+    "RelativeToRoot",
 ]
 
 import contextlib
@@ -46,6 +47,41 @@ class _MissingSentinel:
 _MISSING = _MissingSentinel()
 
 
+class RelativeToRoot:
+    """Opaque marker: a filesystem path relative to a declared infrastructure root.
+
+    Produced as ``RelativeToRoot(env_var, *parts)`` and accepted by a flag's
+    ``default=`` and by ``App(config_path=...)``. env_var names the root
+    (declared via ``App(infra_root={env_var: default})``); parts are joined onto
+    the resolved root path. Config-path markers resolve eagerly at construction;
+    flag-default markers resolve when defaults are applied at parse time. A marker
+    referencing an undeclared root is a registration-time hard error.
+    """
+
+    __slots__ = ("env_var", "parts")
+
+    def __init__(self, env_var: str, *parts: str) -> None:
+        self.env_var = env_var
+        self.parts = list(parts)
+
+    def __repr__(self) -> str:
+        return f"RelativeToRoot({self.env_var!r}, {', '.join(map(repr, self.parts))})"
+
+
+def _resolve_infra_root_path(ref: RelativeToRoot, roots: dict[str, str]) -> str:
+    """Resolve a RelativeToRoot marker against a roots map (env var -> path).
+
+    Raises ValueError if the marker references an undeclared root.
+    """
+    root = roots.get(ref.env_var)
+    if root is None:
+        raise ValueError(
+            f'RelativeToRoot references undeclared infra root "{ref.env_var}"; '
+            f"declare it via App(infra_root={{...}})"
+        )
+    return os.path.join(root, *ref.parts)
+
+
 # ---------------------------------------------------------------------------
 # Source provenance (Phase 0c)
 # ---------------------------------------------------------------------------
@@ -57,6 +93,7 @@ class _Source:
     CONFIG = "config"    # from a config file
     DEFAULT = "default"  # from the flag's default value
     IMPLIED = "implied"  # injected by an Implies dependency
+    INFRA = "infra"      # default resolved through a RelativeToRoot infra root
 
 
 class _SourcedEntry:
@@ -137,6 +174,17 @@ class _SourcedStore:
         return store
 
 
+class _InfraAccess:
+    """A Context's view of infrastructure env vars: resolved root values
+    (captured at construction) and declared handshake env vars (read live)."""
+
+    __slots__ = ("roots", "handshakes")
+
+    def __init__(self, roots: dict[str, str], handshakes: set[str]) -> None:
+        self.roots = roots
+        self.handshakes = handshakes
+
+
 class Context:
     """Structured output context for command handlers.
 
@@ -144,12 +192,13 @@ class Context:
     and an emit method for structured data output.
     """
 
-    def __init__(self, stdout=None, stderr=None, sources=None):
+    def __init__(self, stdout=None, stderr=None, sources=None, infra=None):
         self._stdout = stdout or sys.stdout
         self._stderr = stderr or sys.stderr
         self._emit_data = _MISSING
         self._emit_called = False
-        self._sources = sources or {}  # flag-name -> source label (cli/env/config/default/implied)
+        self._sources = sources or {}  # flag-name -> source label (cli/env/config/default/implied/infra)
+        self._infra = infra  # _InfraAccess | None
 
     def info(self, msg: str) -> None:
         """Write an informational message to stdout."""
@@ -170,7 +219,9 @@ class Context:
     def source(self, name: str) -> str:
         """Return the provenance source label for a flag.
 
-        Returns one of: "cli", "env", "config", "default", "implied".
+        Returns one of: "cli", "env", "config", "default", "implied", "infra".
+        ("infra" indicates the value came from a RelativeToRoot default resolved
+        through a declared infrastructure root.)
         Raises KeyError if the flag name is not found.
         """
         key = name.replace("-", "_")
@@ -180,6 +231,30 @@ class Context:
         if name in self._sources:
             return self._sources[name]
         raise KeyError(f"no source info for flag {name!r}")
+
+    def infra_value(self, env_var: str) -> tuple[str | None, bool]:
+        """Return the value of a declared infrastructure env var.
+
+        For a declared location root (``infra_root``), returns the value
+        resolved eagerly at construction (env var if set, else the declared
+        default) and ``True`` -- the resolved value is always available.
+
+        For a declared handshake var (``handshake_env``), reads the environment
+        LIVE at call time (handshakes are set by the invoking process and carry
+        no construction-time value), returning ``(value, is_set)``.
+
+        Raises KeyError if env_var is neither a declared root nor handshake var.
+        """
+        if self._infra is not None:
+            if env_var in self._infra.roots:
+                return self._infra.roots[env_var], True
+            if env_var in self._infra.handshakes:
+                if env_var in os.environ:
+                    return os.environ[env_var], True
+                return None, False
+        raise KeyError(
+            f'"{env_var}" is not a declared infra root or handshake env var'
+        )
 
     def emit(self, data) -> None:
         """Write JSON-serialized data to stdout and store for programmatic retrieval.
@@ -1913,6 +1988,7 @@ class Group:
     _accumulated_tags: frozenset[str] = frozenset()
     hidden: bool = False
     _config_fields_ref: dict[str, ConfigField] = field(default_factory=dict)
+    _infra_root_names: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
@@ -1937,7 +2013,8 @@ class Group:
                      tags=own_tags,
                      _accumulated_tags=self._accumulated_tags | own_tags,
                      hidden=hidden,
-                     _config_fields_ref=self._config_fields_ref)
+                     _config_fields_ref=self._config_fields_ref,
+                     _infra_root_names=self._infra_root_names)
         self._groups[name] = grp
         return grp
 
@@ -1995,6 +2072,7 @@ class Group:
                 interactive=interactive,
                 config_fields=config_fields,
                 config_fields_ref=self._config_fields_ref,
+                infra_root_names=self._infra_root_names,
             )
             self.commands[name] = cmd
             return func
@@ -2297,6 +2375,11 @@ class App:
     config_format: str = "json"
     config_conflict_mode: str = "cli-wins"
     no_default_config_path: bool = False
+    # Infrastructure env vars. infra_root maps a location env var -> its default
+    # path (dict preserves declaration order). handshake_env maps a cross-tool
+    # protocol env var -> its help string.
+    infra_root: dict[str, str] | None = None
+    handshake_env: dict[str, str] | None = None
     checks_path: str | Path | None = None
     checks_embed: bytes | None = None
     flags: list[Flag] = field(default_factory=list)
@@ -2329,6 +2412,43 @@ class App:
         self._global_flags: list[Flag] = list(self.flags)
         self._last_global_values: dict[str, object] = {}
         self._last_sources: dict[str, str] = {}
+
+        # Resolve infrastructure roots eagerly, at construction. Infra vars have
+        # no argv dependency, so resolution is sound here -- and this is WHY it
+        # is hermetic-immune: there is no argv yet to consult, so --hermetic
+        # (which only suppresses argv-derived config/env behavior) can never
+        # affect location roots.
+        self._infra_roots: dict[str, str] = {}
+        self._infra_root_order: list[str] = []
+        self._infra_root_defaults: dict[str, str] = {}
+        self._infra_root_from_env: dict[str, bool] = {}
+        if self.infra_root:
+            for env_var, default_path in self.infra_root.items():
+                if env_var in os.environ:
+                    self._infra_roots[env_var] = os.path.expanduser(os.environ[env_var])
+                    self._infra_root_from_env[env_var] = True
+                else:
+                    self._infra_roots[env_var] = os.path.expanduser(default_path)
+                    self._infra_root_from_env[env_var] = False
+                self._infra_root_order.append(env_var)
+                self._infra_root_defaults[env_var] = default_path
+        self._handshake_envs: dict[str, str] = dict(self.handshake_env) if self.handshake_env else {}
+        self._handshake_order: list[str] = list(self.handshake_env.keys()) if self.handshake_env else []
+        for ev in self._handshake_order:
+            if not self._handshake_envs[ev] or not self._handshake_envs[ev].strip():
+                raise ValueError(f'handshake_env "{ev}": help must be a non-empty string')
+            if ev in self._infra_roots:
+                raise ValueError(f'handshake_env "{ev}" is already declared as an infra root')
+        # A shared frozenset of declared root names, threaded to commands/groups
+        # so flag-default markers can be validated at registration time.
+        self._infra_root_names: frozenset[str] = frozenset(self._infra_roots)
+        # Resolve the config-path marker (if any) now that roots exist.
+        if isinstance(self.config_path, RelativeToRoot):
+            self.config_path = _resolve_infra_root_path(self.config_path, self._infra_roots)
+        # Validate global flag default markers against declared roots.
+        for f in self._global_flags:
+            self._validate_flag_infra_marker(f)
+
         # Validate config_format
         if self.config_format not in ("json", "toml"):
             raise ValueError(
@@ -2381,6 +2501,26 @@ class App:
 
         # Config parse error (for config show to pick up)
         self._config_parse_err: str | None = None
+
+    def _validate_flag_infra_marker(self, f: Flag) -> None:
+        """Panic if a flag's default is a RelativeToRoot marker referencing an
+        undeclared root. Called at registration for construction-time errors."""
+        if isinstance(f.default, RelativeToRoot):
+            if f.default.env_var not in self._infra_roots:
+                raise ValueError(
+                    f'flag "{f.name}": RelativeToRoot references undeclared infra '
+                    f'root "{f.default.env_var}"; declare it via App(infra_root={{...}})'
+                )
+
+    def _infra_access(self) -> "_InfraAccess | None":
+        """Snapshot infra data for a Context: resolved roots + declared handshake
+        env var names. Returns None when nothing is declared."""
+        if not self._infra_roots and not self._handshake_envs:
+            return None
+        return _InfraAccess(
+            roots=dict(self._infra_roots),
+            handshakes=set(self._handshake_envs),
+        )
 
     @property
     def config_file_path(self) -> str:
@@ -2872,6 +3012,7 @@ class App:
                 interactive=interactive,
                 config_fields=config_fields,
                 config_fields_ref=self._config_fields,
+                infra_root_names=self._infra_root_names,
             )
             self._commands[name] = cmd
             return func
@@ -2887,7 +3028,8 @@ class App:
                      tags=own_tags,
                      _accumulated_tags=own_tags,
                      hidden=hidden,
-                     _config_fields_ref=self._config_fields)
+                     _config_fields_ref=self._config_fields,
+                     _infra_root_names=self._infra_root_names)
         self._groups[name] = grp
         return grp
 
@@ -3018,6 +3160,26 @@ class App:
                     if not isinstance(cf.default, _MissingSentinel):
                         entry["default"] = cf.default
                     result[cf_name] = entry
+                # Infrastructure section (roots + handshakes)
+                if app_ref._infra_root_order or app_ref._handshake_order:
+                    infra: dict = {}
+                    for ev in app_ref._infra_root_order:
+                        infra[ev] = {
+                            "kind": "root",
+                            "source": "env" if app_ref._infra_root_from_env[ev] else "default",
+                            "resolved": app_ref._infra_roots[ev],
+                        }
+                    for ev in app_ref._handshake_order:
+                        is_set = ev in os.environ
+                        hs_entry: dict = {
+                            "kind": "handshake",
+                            "set": is_set,
+                            "help": app_ref._handshake_envs[ev],
+                        }
+                        if is_set:
+                            hs_entry["value"] = os.environ[ev]
+                        infra[ev] = hs_entry
+                    result["__infrastructure__"] = infra
                 print(json.dumps(result, indent=2, sort_keys=True))
                 return 0
             # --plain
@@ -3056,6 +3218,18 @@ class App:
                         f"  (source: {source})"
                         f"  -- {cf.help}"
                     )
+            # Infrastructure section (roots + handshakes)
+            if app_ref._infra_root_order or app_ref._handshake_order:
+                print()
+                print("Infrastructure:")
+                for ev in app_ref._infra_root_order:
+                    src = "env-set" if app_ref._infra_root_from_env[ev] else "default"
+                    print(f"  {ev} (root) = {app_ref._infra_roots[ev]}  (source: {src})")
+                for ev in app_ref._handshake_order:
+                    if ev in os.environ:
+                        print(f"  {ev} (handshake) = {os.environ[ev]}  (set)  -- {app_ref._handshake_envs[ev]}")
+                    else:
+                        print(f"  {ev} (handshake) = <unset>  -- {app_ref._handshake_envs[ev]}")
             return 0
 
         config_show_flags = [
@@ -3560,6 +3734,7 @@ class App:
                 stdin_consumed_by=stdin_state,
                 conflict_mode=self.config_conflict_mode,
                 hermetic=is_hermetic,
+                infra_roots=self._infra_roots,
             )
         except _ParseError as e:
             prefix_parts = [self.name] + path + [cmd.name]
@@ -4004,8 +4179,12 @@ class App:
         for f in self._global_flags:
             if f.name in cli_set:
                 continue
+            src_label = "default"
             if f.repeatable:
                 cli_set[f.name] = list(f.default) if f.default else []
+            elif isinstance(f.default, RelativeToRoot):
+                cli_set[f.name] = _resolve_infra_root_path(f.default, self._infra_roots)
+                src_label = "infra"
             elif f.default is not None:
                 cli_set[f.name] = f.default
             else:
@@ -4020,7 +4199,7 @@ class App:
                         f"--{f.name}"
                     )
                 raise _ParseError(f"global flag '--{f.name}' is required")
-            global_sources[_flag_param_name(f.name)] = "default"
+            global_sources[_flag_param_name(f.name)] = src_label
 
         # Validate choices for global flags
         for f in self._global_flags:
@@ -4091,7 +4270,7 @@ class App:
             if cmd.passthrough is not None:
                 result = cmd.passthrough.handler(cmd.name, data, self._last_global_values)
             elif cmd.needs_context:
-                ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=sources)
+                ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=sources, infra=self._infra_access())
                 result = cmd.handler(ctx, **data)
             else:
                 result = cmd.handler(**data)
@@ -4167,7 +4346,7 @@ class App:
                             cmd.name, data, self._last_global_values,
                         )
                     elif cmd.needs_context:
-                        ctx = Context(stdout=stdout_buf, stderr=stderr_buf, sources=sources)
+                        ctx = Context(stdout=stdout_buf, stderr=stderr_buf, sources=sources, infra=self._infra_access())
                         handler_return = cmd.handler(ctx, **data)
                     else:
                         handler_return = cmd.handler(**data)
@@ -4241,6 +4420,8 @@ class App:
                 param_name = _flag_param_name(gf.name)
                 if param_name in kwargs:
                     global_values[param_name] = kwargs[param_name]
+                elif isinstance(gf.default, RelativeToRoot):
+                    global_values[param_name] = _resolve_infra_root_path(gf.default, self._infra_roots)
                 elif gf.default is not None:
                     global_values[param_name] = gf.default
                 else:
@@ -4301,7 +4482,7 @@ class App:
 
         # Validate and build final kwargs via the shared validation pipeline
         _cmd, final_kwargs, _global_cli_set, invoke_sources = _validate_and_build_kwargs(
-            cmd, store, positionals, global_flag_names,
+            cmd, store, positionals, global_flag_names, self._infra_roots,
         )
 
         # Merge global flag values into final kwargs
@@ -4310,14 +4491,17 @@ class App:
                 final_kwargs[_flag_param_name(gf.name)] = _global_cli_set[gf.name]
             elif _flag_param_name(gf.name) not in final_kwargs:
                 # Global flag not provided -- use its default
-                if gf.default is not None:
+                if isinstance(gf.default, RelativeToRoot):
+                    final_kwargs[_flag_param_name(gf.name)] = _resolve_infra_root_path(gf.default, self._infra_roots)
+                    invoke_sources[_flag_param_name(gf.name)] = "infra"
+                elif gf.default is not None:
                     final_kwargs[_flag_param_name(gf.name)] = gf.default
 
         # Store sources for function handlers that need provenance info
         self._last_sources = invoke_sources
 
         if cmd.needs_context:
-            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources)
+            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources, infra=self._infra_access())
             result = cmd.handler(ctx, **final_kwargs)
             if not isinstance(ctx._emit_data, _MissingSentinel):
                 return ctx._emit_data
@@ -4626,6 +4810,7 @@ def _validate_and_build_kwargs(
     store: _SourcedStore,
     positionals: list[str],
     global_flag_names: set[str],
+    infra_roots: dict[str, str] | None = None,
 ) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Validate parsed values and build the kwargs dict for the command handler.
 
@@ -4698,6 +4883,11 @@ def _validate_and_build_kwargs(
         elif f.repeatable:
             # Repeatable flags default to [] (never required)
             store.set(f.name, list(f.default) if f.default else [], _Source.DEFAULT)
+        elif isinstance(f.default, RelativeToRoot):
+            # A RelativeToRoot marker resolves through the declared infra roots
+            # and reports source "infra" (distinguishable from a plain default).
+            resolved = _resolve_infra_root_path(f.default, infra_roots or {})
+            store.set(f.name, resolved, _Source.INFRA)
         elif f.default is not None:
             store.set(f.name, f.default, _Source.DEFAULT)
         elif f.name in mutex_flag_names:
@@ -4807,6 +4997,7 @@ def _parse_command(
     stdin_consumed_by: list[str | None] | None = None,
     conflict_mode: str = "cli-wins",
     hermetic: bool = False,
+    infra_roots: dict[str, str] | None = None,
 ) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Parse tokens against a resolved command's flags and args.
 
@@ -5217,7 +5408,7 @@ def _parse_command(
         else:
             store.set(k, v, _Source.CLI)
 
-    return _validate_and_build_kwargs(cmd, store, positionals, global_flag_names)
+    return _validate_and_build_kwargs(cmd, store, positionals, global_flag_names, infra_roots)
 
 
 def _flag_param_name(flag_name: str) -> str:
@@ -5251,6 +5442,7 @@ def _build_and_validate_command(
     interactive: bool = False,
     config_fields: list[str] | None = None,
     config_fields_ref: dict[str, ConfigField] | None = None,
+    infra_root_names: frozenset[str] | None = None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
@@ -5536,6 +5728,16 @@ def _build_and_validate_command(
                     f"got {type(dep.value).__name__!r}"
                 )
 
+    # Validate flag-default RelativeToRoot markers against declared roots.
+    _root_names = infra_root_names or frozenset()
+    for f in all_flags:
+        if isinstance(f.default, RelativeToRoot) and f.default.env_var not in _root_names:
+            raise ValueError(
+                f'command "{name}": flag "{f.name}": RelativeToRoot references '
+                f'undeclared infra root "{f.default.env_var}"; declare it via '
+                f'App(infra_root={{...}})'
+            )
+
     return Command(
         name=name,
         help=help,
@@ -5681,6 +5883,19 @@ def _format_app_help(app: App) -> str:
         for flag_str, help_text in flag_strs:
             padding = max_flag_len - len(flag_str) + 4
             lines.append(f"  {flag_str}{' ' * padding}{help_text}")
+
+    if app._infra_root_order or app._handshake_order:
+        lines.append("")
+        lines.append("Infrastructure:")
+        lines.append("  (location/handshake env vars; not suppressed by --hermetic)")
+        all_evs = list(app._infra_root_order) + list(app._handshake_order)
+        max_len = max(len(ev) for ev in all_evs)
+        for ev in app._infra_root_order:
+            padding = max_len - len(ev) + 4
+            lines.append(f"  {ev}{' ' * padding}root (default: {app._infra_root_defaults[ev]})")
+        for ev in app._handshake_order:
+            padding = max_len - len(ev) + 4
+            lines.append(f"  {ev}{' ' * padding}{app._handshake_envs[ev]}")
 
     lines.append("")
     lines.append(f"Use '{app.name} <command> --help' for more information.")
@@ -6738,6 +6953,23 @@ def _dump_schema_core(app: App) -> dict:
                 entry["bound_commands"] = bindings[name]
             cf_schema[name] = entry
         schema["config_fields"] = cf_schema
+    # infra: only present when roots or handshake vars are declared. Resolved
+    # root values are intentionally EXCLUDED -- the schema must be machine-stable
+    # (not machine-specific). Only the declared env var and default path (both
+    # stable declarations) are emitted for roots.
+    if app._infra_root_order or app._handshake_order:
+        infra: dict = {}
+        if app._infra_root_order:
+            infra["roots"] = [
+                {"env_var": ev, "default": app._infra_root_defaults[ev]}
+                for ev in app._infra_root_order
+            ]
+        if app._handshake_order:
+            infra["handshakes"] = [
+                {"env_var": ev, "help": app._handshake_envs[ev]}
+                for ev in app._handshake_order
+            ]
+        schema["infra"] = infra
     return schema
 
 
