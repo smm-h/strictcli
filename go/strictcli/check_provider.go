@@ -89,6 +89,11 @@ func NewWarnCheckSpec(meta CheckSpecMeta, impl func(CheckContext, *WarnReporter)
 // registered; their specs are materialized in registration order. A registered
 // provider is re-run whenever the registry is materialized fresh (first read or
 // after a cwd change / ResetCheckProviderCache).
+//
+// Reentrancy: a provider must not trigger check execution during
+// materialization (e.g. by calling RunChecks or the check command). Doing so
+// re-enters materialization while it is in progress -- behavior is undefined
+// (unbounded recursion). A provider's job is to return specs, nothing else.
 func (a *App) RegisterCheckProvider(provider func() []CheckSpec) {
 	a.enableChecks()
 	a.checkProviders = append(a.checkProviders, provider)

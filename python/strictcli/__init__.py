@@ -2956,6 +2956,12 @@ class App:
         A provider that returns an empty list is honest-empty (no checks for
         this context) and a valid no-op. A provider that raises is a hard error
         in every mode.
+
+        Reentrancy: a provider must not trigger check execution during
+        materialization (e.g. by calling :meth:`run_checks` or the check
+        command). Doing so re-enters materialization while it is in progress --
+        behavior is undefined (unbounded recursion). A provider's job is to
+        return specs, nothing else.
         """
         if not callable(provider):
             raise ValueError("check provider must be callable")

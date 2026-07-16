@@ -498,7 +498,12 @@ func dumpSchemaCore(app *App) map[string]interface{} {
 		schema["config_fields"] = cfSchema
 	}
 
-	// checks: only present when checks are enabled (not a default-omission case)
+	// checks: only present when checks are enabled (not a default-omission case).
+	// Only TOML-declared checks appear here. Provider-sourced checks
+	// (RegisterCheckProvider) are deliberately EXCLUDED: providers materialize
+	// lazily per-cwd at check-run time, so they are not part of the static,
+	// committed schema. The schema describes the declared surface, not the
+	// dynamically-materialized one.
 	if app.checksEnabled {
 		checksMap := make(map[string]interface{})
 		for name, def := range app.checkDefs {
