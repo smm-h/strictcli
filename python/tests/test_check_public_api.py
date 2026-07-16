@@ -484,3 +484,46 @@ class TestSetScopeAdapter:
         assert results[0].status == "skip"
         assert "adapter skipped" in results[0].message
         assert len(impl_called) == 0
+
+    def test_adapter_returning_invalid_context_raises(self, tmp_path):
+        """A non-SkipCheck return that is not a valid CheckContext is a hard error.
+
+        The adapter contract is: return a SkipCheck OR an object satisfying the
+        CheckContext protocol (i.e. exposing a project_root attribute). Anything
+        else -- here an int -- must be rejected loudly instead of being silently
+        passed to the check impl as a bogus context.
+        """
+        impl_called = []
+
+        def impl(ctx):
+            impl_called.append(True)
+            return pass_outcome("should not run")
+
+        app = _make_app(tmp_path, SCOPED_CHECK_TOML, impls={"scoped-check": impl})
+
+        def adapter(ctx, scope):
+            return 42  # neither a SkipCheck nor a CheckContext
+
+        app.set_scope_adapter(adapter)
+
+        ctx = SimpleContext(project_root=tmp_path)
+        with pytest.raises(TypeError, match="scope adapter"):
+            app.run_checks(ctx, run_all=True)
+        assert len(impl_called) == 0
+
+    def test_adapter_returning_object_without_project_root_raises(self, tmp_path):
+        """An object lacking project_root does not satisfy the CheckContext protocol."""
+
+        class NotAContext:
+            pass
+
+        app = _make_app(tmp_path, SCOPED_CHECK_TOML)
+
+        def adapter(ctx, scope):
+            return NotAContext()
+
+        app.set_scope_adapter(adapter)
+
+        ctx = SimpleContext(project_root=tmp_path)
+        with pytest.raises(TypeError, match="project_root"):
+            app.run_checks(ctx, run_all=True)

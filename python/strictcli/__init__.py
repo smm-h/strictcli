@@ -6493,6 +6493,16 @@ def _run_checks(
                 results.append((name, outcome))
                 # Explicit skip: no cascade, no exit code change.
                 continue
+            # A non-SkipCheck return is used as the check's replacement context.
+            # Enforce the adapter contract: it must satisfy the CheckContext
+            # protocol (expose a project_root attribute). Anything else is a
+            # hard error rather than a bogus context silently handed to the impl.
+            if not hasattr(adapted, "project_root"):
+                raise TypeError(
+                    f'scope adapter for check "{name}" returned {adapted!r}; a '
+                    f"scope adapter must return a SkipCheck or a CheckContext "
+                    f"(an object exposing a project_root attribute)"
+                )
             check_context = adapted
 
         outcome = cdef.impl(check_context)
