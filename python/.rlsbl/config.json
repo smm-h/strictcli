@@ -8,10 +8,12 @@
   "pipelines": {
     "pypi": {
       "type": "pypi",
+      "target": "pypi",
       "local": false
     },
     "npm": {
       "type": "npm",
+      "target": "npm",
       "local": false,
       "provenance": true
     }
