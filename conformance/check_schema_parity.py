@@ -42,6 +42,8 @@ RICH_APP = {
     "help": "A comprehensive test app for schema parity",
     "env_prefix": "RICH",
     "config": True,
+    "infra_root": {"RICH_HOME": "/var/lib/richapp"},
+    "handshake_env": {"RICH_SESSION": "Session token from the invoking process"},
     "global_flags": [
         {
             "name": "verbose",

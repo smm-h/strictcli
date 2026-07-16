@@ -92,6 +92,10 @@ SCHEMA_TEST_ONLY: set[str] = {
     # handler_style tells the code generator which handler shape to emit
     # (e.g. "context" vs "classic") -- not a real Command struct field.
     "handler_style",
+    # default_relative_to_root is an alternate JSON encoding of a flag default
+    # (a RelativeToRoot marker) for code generation -- the real API is
+    # default=RelativeToRoot(...), covered by the "default" field.
+    "default_relative_to_root",
 }
 
 # Per-entity schema fields that are JSON discriminators, not real API fields:
@@ -161,6 +165,8 @@ SCHEMA_TO_GO: dict[str, str] = {
     "app.no_default_config_path": "noDefaultConfigPath",  # Go App.noDefaultConfigPath (unexported, set via WithNoDefaultConfigPath())
     "app.config_conflict_mode": "configConflictMode",  # Go App.configConflictMode (unexported, set via WithConfigConflictMode())
     "app.checks_path": "checksPath",  # Go App.checksPath (unexported, set via WithChecks())
+    "app.infra_root": "infraRootDecls",  # Go App.infraRootDecls (unexported, set via WithInfraRoot())
+    "app.handshake_env": "handshakeEnvs",  # Go App.handshakeEnvs (unexported, set via WithHandshakeEnv())
     "app.tag_contracts": "tagContracts",  # Go App.tagContracts (unexported, set via TagContract())
     "command.flags": "flags",  # Go Command.flags (unexported)
     "command.args": "args",  # Go Command.args (unexported)
@@ -486,6 +492,8 @@ def check_option_funcs_coverage(
         "Unique", "EnvSeparator", "ConflictMode",
         "WithNoDefaultConfigPath",
         "WithConfigConflictMode",
+        "WithInfraRoot", "WithHandshakeEnv", "WithConfigPathRelativeToRoot",
+        "RelativeToRoot",
     }
     actual = go_fields.get("_option_funcs", set())
     unknown = actual - known_option_funcs

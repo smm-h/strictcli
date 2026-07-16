@@ -1,0 +1,125 @@
+[
+  {
+    "name": "infra: flag default resolves through root (env set), source is 'infra'",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test infra root resolution",
+      "infra_root": { "MYAPP_HOME": "/var/lib/myapp" },
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:db}:{db}",
+          "flags": [
+            {
+              "name": "db",
+              "help": "Database path",
+              "type": "str",
+              "default_relative_to_root": { "env_var": "MYAPP_HOME", "parts": ["db.sqlite"] }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "env": { "MYAPP_HOME": "/opt/data" },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "infra:/opt/data/db.sqlite"
+    }
+  },
+  {
+    "name": "infra: root unset -> declared default resolves, source is 'infra'",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test infra root default",
+      "infra_root": { "MYAPP_HOME": "/var/lib/myapp" },
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:db}:{db}",
+          "flags": [
+            {
+              "name": "db",
+              "help": "Database path",
+              "type": "str",
+              "default_relative_to_root": { "env_var": "MYAPP_HOME", "parts": ["db.sqlite"] }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "infra:/var/lib/myapp/db.sqlite"
+    }
+  },
+  {
+    "name": "infra: hermetic still resolves the marker (root has no argv dependency)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test infra hermetic immunity",
+      "infra_root": { "MYAPP_HOME": "/var/lib/myapp" },
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:db}:{db}",
+          "flags": [
+            {
+              "name": "db",
+              "help": "Database path",
+              "type": "str",
+              "default_relative_to_root": { "env_var": "MYAPP_HOME", "parts": ["db.sqlite"] }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--hermetic", "run"],
+    "env": { "MYAPP_HOME": "/opt/data" },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "infra:/opt/data/db.sqlite"
+    }
+  },
+  {
+    "name": "infra: CLI value overrides the marker default, source is 'cli'",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "Test infra CLI override",
+      "infra_root": { "MYAPP_HOME": "/var/lib/myapp" },
+      "commands": [
+        {
+          "name": "run",
+          "help": "Run it",
+          "handler_style": "context",
+          "handler_prints": "{source:db}:{db}",
+          "flags": [
+            {
+              "name": "db",
+              "help": "Database path",
+              "type": "str",
+              "default_relative_to_root": { "env_var": "MYAPP_HOME", "parts": ["db.sqlite"] }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["run", "--db", "/tmp/custom.db"],
+    "env": { "MYAPP_HOME": "/opt/data" },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "cli:/tmp/custom.db"
+    }
+  }
+]

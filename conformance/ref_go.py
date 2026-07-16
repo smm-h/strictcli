@@ -20,7 +20,11 @@ def _emit_flag_opts(flag_def: dict) -> list[str]:
     opts = []
     if "short" in flag_def:
         opts.append(f'strictcli.Short("{flag_def["short"]}")')
-    if "default" in flag_def:
+    if "default_relative_to_root" in flag_def:
+        rtr = flag_def["default_relative_to_root"]
+        rtr_args = ", ".join([f'"{rtr["env_var"]}"'] + [f'"{p}"' for p in rtr.get("parts", [])])
+        opts.append(f"strictcli.Default(strictcli.RelativeToRoot({rtr_args}))")
+    elif "default" in flag_def:
         default = flag_def["default"]
         if default is None:
             opts.append("strictcli.Default(nil)")
@@ -480,6 +484,10 @@ def generate(app_def: dict) -> str:
         app_opts.append("strictcli.WithNoDefaultConfigPath()")
     if "config_conflict_mode" in app_def and app_def["config_conflict_mode"] != "cli-wins":
         app_opts.append(f'strictcli.WithConfigConflictMode("{app_def["config_conflict_mode"]}")')
+    for env_var, default_path in app_def.get("infra_root", {}).items():
+        app_opts.append(f'strictcli.WithInfraRoot("{env_var}", "{default_path}")')
+    for env_var, hlp in app_def.get("handshake_env", {}).items():
+        app_opts.append(f'strictcli.WithHandshakeEnv("{env_var}", "{hlp}")')
     if has_checks:
         app_opts.append('strictcli.WithChecks(checksPath)')
     opts_str = ""

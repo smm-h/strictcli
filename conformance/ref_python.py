@@ -45,7 +45,11 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
     if "short" in flag_def:
         parts.append(f"short={flag_def['short']!r}")
 
-    if "default" in flag_def:
+    if "default_relative_to_root" in flag_def:
+        rtr = flag_def["default_relative_to_root"]
+        rtr_args = ", ".join([repr(rtr["env_var"])] + [repr(p) for p in rtr.get("parts", [])])
+        parts.append(f"default=strictcli.RelativeToRoot({rtr_args})")
+    elif "default" in flag_def:
         default = flag_def["default"]
         if default is None:
             parts.append("default=None")
@@ -481,7 +485,11 @@ def _emit_command_registration(
         fd_parts.append(f"help={f['help']!r}")
         if "short" in f:
             fd_parts.append(f"short={f['short']!r}")
-        if "default" in f:
+        if "default_relative_to_root" in f:
+            rtr = f["default_relative_to_root"]
+            rtr_args = ", ".join([repr(rtr["env_var"])] + [repr(p) for p in rtr.get("parts", [])])
+            fd_parts.append(f"default=strictcli.RelativeToRoot({rtr_args})")
+        elif "default" in f:
             default = f["default"]
             if default is None:
                 fd_parts.append("default=None")
@@ -626,6 +634,10 @@ def generate(app_def: dict) -> str:
         app_parts.append("no_default_config_path=True")
     if "config_conflict_mode" in app_def and app_def["config_conflict_mode"] != "cli-wins":
         app_parts.append(f"config_conflict_mode={app_def['config_conflict_mode']!r}")
+    if "infra_root" in app_def:
+        app_parts.append(f"infra_root={app_def['infra_root']!r}")
+    if "handshake_env" in app_def:
+        app_parts.append(f"handshake_env={app_def['handshake_env']!r}")
     if has_checks:
         app_parts.append("checks_path=_checks_path")
     if global_flags:

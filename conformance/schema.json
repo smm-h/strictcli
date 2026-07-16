@@ -101,6 +101,16 @@
           "default": "cli-wins",
           "description": "Conflict resolution mode for config values. In 'error' mode, config+cli and config+env overlaps are hard errors."
         },
+        "infra_root": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Infrastructure location roots: env var name -> default path. Resolved eagerly at construction; immune to --hermetic."
+        },
+        "handshake_env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Handshake env vars: env var name -> help string. Read live at access time via the infra accessor."
+        },
         "config_content": {
           "type": "string",
           "description": "Raw config file content to write before running the test"
@@ -335,6 +345,16 @@
             { "type": "null" },
             { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "type": "number" }] } }
           ]
+        },
+        "default_relative_to_root": {
+          "type": "object",
+          "required": ["env_var"],
+          "additionalProperties": false,
+          "properties": {
+            "env_var": { "type": "string" },
+            "parts": { "type": "array", "items": { "type": "string" } }
+          },
+          "description": "Flag default that resolves through a declared infra root (RelativeToRoot marker)."
         },
         "env": { "type": "string" },
         "prefixed": { "type": "boolean", "default": true },

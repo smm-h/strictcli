@@ -56,6 +56,16 @@ func main() {
 	if v, ok := appDef["config_conflict_mode"]; ok && v.(string) != "cli-wins" {
 		appOpts = append(appOpts, strictcli.WithConfigConflictMode(v.(string)))
 	}
+	if v, ok := appDef["infra_root"]; ok {
+		for envVar, def := range v.(map[string]interface{}) {
+			appOpts = append(appOpts, strictcli.WithInfraRoot(envVar, def.(string)))
+		}
+	}
+	if v, ok := appDef["handshake_env"]; ok {
+		for envVar, hlp := range v.(map[string]interface{}) {
+			appOpts = append(appOpts, strictcli.WithHandshakeEnv(envVar, hlp.(string)))
+		}
+	}
 	if v, ok := appDef["checks_toml"]; ok {
 		appOpts = append(appOpts, strictcli.WithChecksEmbed([]byte(v.(string))))
 	}
@@ -218,6 +228,16 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 
 	if v, ok := fd["short"]; ok {
 		opts = append(opts, strictcli.Short(v.(string)))
+	}
+	if v, ok := fd["default_relative_to_root"]; ok {
+		rtr := v.(map[string]interface{})
+		var parts []string
+		if ps, ok := rtr["parts"]; ok {
+			for _, p := range ps.([]interface{}) {
+				parts = append(parts, p.(string))
+			}
+		}
+		opts = append(opts, strictcli.Default(strictcli.RelativeToRoot(rtr["env_var"].(string), parts...)))
 	}
 	if v, ok := fd["default"]; ok {
 		if v == nil {
