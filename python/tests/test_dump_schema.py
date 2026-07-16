@@ -1158,3 +1158,65 @@ class TestDumpSchemaDict:
         # Byte-identical by construction: serializing the method output equals
         # serializing the file output with the project_id key removed.
         assert json.dumps(method, indent=2) == json.dumps(written_minus, indent=2)
+
+
+class TestSchemaMarkerDefault:
+    """A RelativeToRoot marker default serializes machine-stably.
+
+    Regression: previously the raw marker was assigned to d["default"] and
+    json.dumps crashed with TypeError. The marker must serialize as
+    {"relative_to_root": {"env_var": ..., "parts": [...]}} -- only the declared
+    env var and path parts, never a resolved machine-specific path -- and
+    identically across the Python and Go implementations.
+    """
+
+    def test_command_and_global_flag_round_trip(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("MYAPP_HOME", raising=False)
+        app = _make_app(
+            infra_root={"MYAPP_HOME": "/var/lib/myapp"},
+            flags=[
+                strictcli.Flag(
+                    name="global-db",
+                    type=str,
+                    help="global db path",
+                    default=strictcli.RelativeToRoot("MYAPP_HOME", "global.sqlite"),
+                )
+            ],
+        )
+
+        @app.command("run", help="run it")
+        @strictcli.flag(
+            "db",
+            help="db path",
+            default=strictcli.RelativeToRoot("MYAPP_HOME", "sub", "db.sqlite"),
+        )
+        def run(db):
+            return 0
+
+        # The full --dump-schema round-trip must not crash and must write the
+        # machine-stable marker shape.
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+
+        want_global = {
+            "relative_to_root": {"env_var": "MYAPP_HOME", "parts": ["global.sqlite"]}
+        }
+        assert data["global_flags"][0]["default"] == want_global
+
+        cmd_flag = data["commands"]["run"]["flags"][0]
+        want_cmd = {
+            "relative_to_root": {
+                "env_var": "MYAPP_HOME",
+                "parts": ["sub", "db.sqlite"],
+            }
+        }
+        assert cmd_flag["default"] == want_cmd
+
+        # No resolved/machine-specific joined path leaks into the schema. The
+        # infra roots section legitimately carries the declared default root,
+        # but the marker must never emit the root joined with its parts.
+        dumped = json.dumps(data)
+        assert "/var/lib/myapp/global.sqlite" not in dumped
+        assert "/var/lib/myapp/sub/db.sqlite" not in dumped

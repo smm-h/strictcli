@@ -69,6 +69,16 @@ class RelativeToRoot:
         return f"RelativeToRoot({self.env_var!r}, {', '.join(map(repr, self.parts))})"
 
 
+def _serialize_marker(ref: RelativeToRoot) -> dict:
+    """Serialize a RelativeToRoot marker to a machine-stable JSON shape.
+
+    Emits only the declared env var and path parts -- never the resolved,
+    machine-specific path. The shape is identical across the Python and Go
+    implementations so the schema round-trips and cross-language byte-compares.
+    """
+    return {"relative_to_root": {"env_var": ref.env_var, "parts": list(ref.parts)}}
+
+
 def _resolve_infra_root_path(ref: RelativeToRoot, roots: dict[str, str]) -> str:
     """Resolve a RelativeToRoot marker against a roots map (env var -> path).
 
@@ -6893,8 +6903,13 @@ def _serialize_flag(f: Flag) -> dict:
     }
     if f.short is not None:
         d["short"] = f.short
+    # A RelativeToRoot marker default is serialized machine-stably: only the
+    # declared env var and path parts (no resolved, machine-specific path). This
+    # shape is identical across the Python and Go implementations.
+    if isinstance(f.default, RelativeToRoot):
+        d["default"] = _serialize_marker(f.default)
     # For dict flags, only emit default if non-empty
-    if f.compound == "dict":
+    elif f.compound == "dict":
         if f.default:
             d["default"] = f.default
     elif f.default is not None:
