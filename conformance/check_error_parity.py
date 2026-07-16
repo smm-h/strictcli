@@ -78,6 +78,11 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # Python _require_non_empty_str uses generic {class_name}.{field_name} pattern
     '*.* must be a non-empty string':
         "Python uses generic _require_non_empty_str; Go has entity-specific messages",
+    # SkipCheck is the Python-only scope-adapter skip directive; Go has no scope
+    # adapter (see the deliberate-asymmetry note in go/strictcli/check.go), so
+    # there is no Go counterpart to this construction-time validation.
+    'SkipCheck.reason must be a non-empty string':
+        "Python-only scope-adapter skip directive; Go has no scope adapter",
     # Python Command.__post_init__ calls _require_non_empty_str
     'Command.help must be a non-empty string':
         "Python dataclass __post_init__; Go uses 'missing help text' message",
@@ -624,6 +629,17 @@ def extract_go_errors(
         r'fmt\.Errorf\(\s*"((?:[^"\\]|\\.)*)"',
     )
     for m in errorf_pat.finditer(check_src):
+        results.append(("registration", m.group(1)))
+
+    # --- Reporter-minting panics from check.go ---
+    # The reporter methods (Warn/Error/Passed/Skipped/Found) and deriveStatus
+    # raise programmer-error panics whose wording is kept in parity with the
+    # Python ValueErrors raised by the corresponding reporter methods. These are
+    # panic("...") and panic(fmt.Sprintf("...", ...)) forms, which the general
+    # strictcli.go/config.go panic scanners above do not cover for check.go.
+    for m in panic_plain.finditer(check_src):
+        results.append(("registration", m.group(1)))
+    for m in panic_sprintf.finditer(check_src):
         results.append(("registration", m.group(1)))
 
     # --- Registration errors from check_runner.go (fmt.Errorf for cycle detection) ---

@@ -59,9 +59,14 @@ type reporterCore struct {
 }
 
 // Warn mints a warn-severity problem. Non-empty text is required.
+//
+// Reporter validation messages are worded identically to the Python
+// implementation (method-agnostic phrasing, no "Warn:"/"warn:" prefix) so the
+// two implementations are byte-for-byte in parity -- see conformance/
+// check_error_parity.py, which scans these panics.
 func (r *reporterCore) Warn(text string) {
 	if strings.TrimSpace(text) == "" {
-		panic("Warn: text must be a non-empty string")
+		panic("problem text must be a non-empty string")
 	}
 	r.problems = append(r.problems, checkProblem{text: text, severity: "warn"})
 }
@@ -70,10 +75,10 @@ func (r *reporterCore) Warn(text string) {
 // accumulated (an impl that found problems cannot claim it passed -- use Found).
 func (r *reporterCore) Passed(message string) CheckOutcome {
 	if strings.TrimSpace(message) == "" {
-		panic("Passed: message must be a non-empty string")
+		panic("outcome message must be a non-empty string")
 	}
 	if len(r.problems) > 0 {
-		panic("Passed: problems were reported; a check that found problems cannot pass -- use Found")
+		panic("problems were reported; a check that found problems cannot pass -- use found instead")
 	}
 	return CheckOutcome{minted: true, kind: "passed", message: message}
 }
@@ -82,10 +87,10 @@ func (r *reporterCore) Passed(message string) CheckOutcome {
 // accumulated.
 func (r *reporterCore) Skipped(reason string) CheckOutcome {
 	if strings.TrimSpace(reason) == "" {
-		panic("Skipped: reason must be a non-empty string")
+		panic("skip reason must be a non-empty string")
 	}
 	if len(r.problems) > 0 {
-		panic("Skipped: problems were reported; a check that found problems cannot skip")
+		panic("problems were reported; a check that found problems cannot skip")
 	}
 	return CheckOutcome{minted: true, kind: "skipped", message: reason}
 }
@@ -95,10 +100,10 @@ func (r *reporterCore) Skipped(reason string) CheckOutcome {
 // so explicitly with Passed).
 func (r *reporterCore) Found(message string) CheckOutcome {
 	if strings.TrimSpace(message) == "" {
-		panic("Found: message must be a non-empty string")
+		panic("outcome message must be a non-empty string")
 	}
 	if len(r.problems) == 0 {
-		panic("Found: no problems were reported; nothing found means pass -- use Passed")
+		panic("no problems were reported; nothing found means pass -- use passed instead")
 	}
 	return CheckOutcome{
 		minted:   true,
@@ -126,7 +131,7 @@ type ErrorReporter struct {
 // exists only on ErrorReporter -- see the WarnReporter doc comment.
 func (r *ErrorReporter) Error(text string) {
 	if strings.TrimSpace(text) == "" {
-		panic("Error: text must be a non-empty string")
+		panic("problem text must be a non-empty string")
 	}
 	r.problems = append(r.problems, checkProblem{text: text, severity: "error"})
 }
@@ -148,7 +153,7 @@ func deriveStatus(o CheckOutcome) string {
 		}
 		return "warn"
 	default:
-		panic(fmt.Sprintf("deriveStatus: unknown outcome kind %q", o.kind))
+		panic(fmt.Sprintf("unknown check outcome kind %q", o.kind))
 	}
 }
 

@@ -2893,7 +2893,7 @@ func TestReporter_EmptyFoundPanics(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
 			t.Fatal("expected panic: Found with no problems")
-		} else if !strings.Contains(fmt.Sprintf("%v", r), "use Passed") {
+		} else if !strings.Contains(fmt.Sprintf("%v", r), "use passed instead") {
 			t.Fatalf("unexpected panic: %v", r)
 		}
 	}()

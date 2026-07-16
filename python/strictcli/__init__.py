@@ -2202,9 +2202,13 @@ def _derive_status(outcome: _CheckOutcome) -> str:
         return "pass"
     if outcome.kind == "skipped":
         return "skip"
-    if any(p.severity == "error" for p in outcome.problems):
-        return "fail"
-    return "warn"
+    if outcome.kind == "found":
+        if any(p.severity == "error" for p in outcome.problems):
+            return "fail"
+        return "warn"
+    # Defensive: outcomes are only ever minted with one of the three kinds
+    # above. Mirrors the Go implementation's panic so the two stay in parity.
+    raise ValueError(f"unknown check outcome kind {outcome.kind!r}")
 
 
 class _ReporterCore:
@@ -2219,31 +2223,35 @@ class _ReporterCore:
     def __init__(self) -> None:
         self._problems: list[_CheckProblem] = []
 
+    # Reporter validation messages are worded identically to the Go
+    # implementation (method-agnostic phrasing, no "warn(text)"/"Warn:" prefix)
+    # so the two implementations are byte-for-byte in parity -- see
+    # conformance/check_error_parity.py.
     def warn(self, text: str) -> None:
         """Mint a warn-severity problem. Non-empty text required."""
         if not isinstance(text, str) or not text.strip():
-            raise ValueError("warn(text) requires a non-empty string")
+            raise ValueError("problem text must be a non-empty string")
         self._problems.append(_CheckProblem(text=text, severity="warn"))
 
     def passed(self, message: str) -> _CheckOutcome:
         """Finalize a terminal PASS. Errors if any problems were reported."""
         if not isinstance(message, str) or not message.strip():
-            raise ValueError("passed(message) requires a non-empty string")
+            raise ValueError("outcome message must be a non-empty string")
         if self._problems:
             raise ValueError(
-                "passed() called after problems were reported; "
-                "a check that found problems cannot pass -- use found()"
+                "problems were reported; a check that found problems "
+                "cannot pass -- use found instead"
             )
         return _CheckOutcome(kind="passed", message=message, _token=_MINT_TOKEN)
 
     def skipped(self, reason: str) -> _CheckOutcome:
         """Finalize a terminal SKIP. Errors if any problems were reported."""
         if not isinstance(reason, str) or not reason.strip():
-            raise ValueError("skipped(reason) requires a non-empty string")
+            raise ValueError("skip reason must be a non-empty string")
         if self._problems:
             raise ValueError(
-                "skipped() called after problems were reported; "
-                "a check that found problems cannot skip"
+                "problems were reported; a check that found problems "
+                "cannot skip"
             )
         return _CheckOutcome(kind="skipped", message=reason, _token=_MINT_TOKEN)
 
@@ -2254,11 +2262,11 @@ class _ReporterCore:
         explicitly with passed().
         """
         if not isinstance(message, str) or not message.strip():
-            raise ValueError("found(message) requires a non-empty string")
+            raise ValueError("outcome message must be a non-empty string")
         if not self._problems:
             raise ValueError(
-                "found() called with no problems; "
-                "nothing found means pass -- use passed()"
+                "no problems were reported; nothing found means pass "
+                "-- use passed instead"
             )
         return _CheckOutcome(
             kind="found",
@@ -2286,7 +2294,7 @@ class ErrorReporter(_ReporterCore):
     def error(self, text: str) -> None:
         """Mint an error-severity problem. Non-empty text required."""
         if not isinstance(text, str) or not text.strip():
-            raise ValueError("error(text) requires a non-empty string")
+            raise ValueError("problem text must be a non-empty string")
         self._problems.append(_CheckProblem(text=text, severity="error"))
 
 
