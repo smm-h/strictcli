@@ -148,16 +148,31 @@
     },
     "check": {
       "type": "object",
-      "required": ["name", "check_returns", "check_message"],
+      "required": ["name", "mint", "message"],
       "additionalProperties": false,
+      "description": "A check-impl stub for code generation. The registration form (error vs warn) is NOT specified here -- generators derive it from the check's severity in the embedded checks_toml. This object only describes what the impl mints via its reporter.",
       "properties": {
         "name": { "type": "string" },
-        "check_returns": { "enum": ["pass", "fail", "warn", "skip"] },
-        "check_message": { "type": "string" },
-        "check_details": {
+        "mint": {
+          "enum": ["passed", "skipped", "found"],
+          "description": "Which terminal outcome the reporter mints. 'found' requires at least one problem; 'passed'/'skipped' forbid problems."
+        },
+        "message": {
+          "type": "string",
+          "description": "The pass/found message or skip reason passed to reporter.passed/found/skipped."
+        },
+        "problems": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": []
+          "items": {
+            "type": "object",
+            "required": ["severity", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "severity": { "enum": ["error", "warn"] },
+              "text": { "type": "string" }
+            }
+          },
+          "description": "Problems the reporter mints before found(). Only valid when mint == 'found'. A warn-severity check may only mint 'warn' problems."
         }
       }
     },

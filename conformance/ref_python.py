@@ -10,6 +10,17 @@ from __future__ import annotations
 import json
 import keyword
 import textwrap
+import tomllib
+
+
+def _check_severities(checks_toml: str) -> dict[str, str]:
+    """Parse the embedded checks_toml and return a name->severity map.
+
+    The registration form (error vs warn) is derived from severity -- there is
+    no per-check registration field in the case fixture.
+    """
+    data = tomllib.loads(checks_toml)
+    return {name: c["severity"] for name, c in data.get("checks", {}).items()}
 
 
 def _flag_param(name: str) -> str:
@@ -706,16 +717,24 @@ def generate(app_def: dict) -> str:
     if app_def.get("tag_contracts"):
         lines.append("")
 
-    # Register checks if defined
+    # Register checks if defined. The registration form (error_check vs
+    # warn_check) is derived from the check's severity in the embedded
+    # checks_toml -- the case only describes what the impl mints via its reporter.
     if has_checks:
+        severities = _check_severities(app_def["checks_toml"])
         for check_def in app_def.get("checks", []):
             cname = check_def["name"]
-            cstatus = check_def["check_returns"]
-            cmessage = check_def["check_message"]
-            cdetails = check_def.get("check_details", [])
-            lines.append(f"    @app.check({cname!r})")
-            lines.append(f"    def check_{cname.replace('-', '_')}(ctx):")
-            lines.append(f"        return strictcli.CheckResult(status={cstatus!r}, message={cmessage!r}, details={cdetails!r})")
+            mint = check_def["mint"]
+            message = check_def["message"]
+            problems = check_def.get("problems", [])
+            decorator = "warn_check" if severities.get(cname) == "warn" else "error_check"
+            fn_name = f"check_{cname.replace('-', '_')}"
+            lines.append(f"    @app.{decorator}({cname!r})")
+            lines.append(f"    def {fn_name}(ctx, reporter):")
+            for p in problems:
+                pmethod = "error" if p["severity"] == "error" else "warn"
+                lines.append(f"        reporter.{pmethod}({p['text']!r})")
+            lines.append(f"        return reporter.{mint}({message!r})")
             lines.append("")
 
         lines.append("    class _CheckCtx:")

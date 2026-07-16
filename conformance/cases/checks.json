@@ -10,13 +10,13 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         },
         {
           "name": "format",
-          "check_returns": "pass",
-          "check_message": "formatted"
+          "mint": "passed",
+          "message": "formatted"
         }
       ]
     },
@@ -46,13 +46,13 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         },
         {
           "name": "format",
-          "check_returns": "pass",
-          "check_message": "formatted"
+          "mint": "passed",
+          "message": "formatted"
         }
       ]
     },
@@ -83,13 +83,13 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         },
         {
           "name": "format",
-          "check_returns": "pass",
-          "check_message": "formatted"
+          "mint": "passed",
+          "message": "formatted"
         }
       ]
     },
@@ -113,13 +113,19 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "fail",
-          "check_message": "lint errors found"
+          "mint": "found",
+          "message": "lint errors found",
+          "problems": [
+            {
+              "severity": "error",
+              "text": "lint errors found"
+            }
+          ]
         },
         {
           "name": "format",
-          "check_returns": "pass",
-          "check_message": "formatted"
+          "mint": "passed",
+          "message": "formatted"
         }
       ]
     },
@@ -143,8 +149,14 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "warn",
-          "check_message": "minor issues"
+          "mint": "found",
+          "message": "minor issues",
+          "problems": [
+            {
+              "severity": "warn",
+              "text": "minor issues"
+            }
+          ]
         }
       ]
     },
@@ -168,8 +180,14 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "warn",
-          "check_message": "minor issues"
+          "mint": "found",
+          "message": "minor issues",
+          "problems": [
+            {
+              "severity": "warn",
+              "text": "minor issues"
+            }
+          ]
         }
       ]
     },
@@ -194,13 +212,13 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         },
         {
           "name": "format",
-          "check_returns": "pass",
-          "check_message": "formatted"
+          "mint": "passed",
+          "message": "formatted"
         }
       ]
     },
@@ -226,13 +244,13 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         },
         {
           "name": "format",
-          "check_returns": "pass",
-          "check_message": "formatted"
+          "mint": "passed",
+          "message": "formatted"
         }
       ]
     },
@@ -258,8 +276,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         }
       ]
     },
@@ -284,8 +302,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         }
       ]
     },
@@ -313,8 +331,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         }
       ]
     },
@@ -344,13 +362,13 @@
       "checks": [
         {
           "name": "compile",
-          "check_returns": "pass",
-          "check_message": "compiled ok"
+          "mint": "passed",
+          "message": "compiled ok"
         },
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "lint ok"
+          "mint": "passed",
+          "message": "lint ok"
         }
       ]
     },
@@ -378,13 +396,19 @@
       "checks": [
         {
           "name": "compile",
-          "check_returns": "fail",
-          "check_message": "compile failed"
+          "mint": "found",
+          "message": "compile failed",
+          "problems": [
+            {
+              "severity": "error",
+              "text": "compile failed"
+            }
+          ]
         },
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "lint ok"
+          "mint": "passed",
+          "message": "lint ok"
         }
       ]
     },
@@ -411,13 +435,19 @@
       "checks": [
         {
           "name": "compile",
-          "check_returns": "warn",
-          "check_message": "compiled with warnings"
+          "mint": "found",
+          "message": "compiled with warnings",
+          "problems": [
+            {
+              "severity": "warn",
+              "text": "compiled with warnings"
+            }
+          ]
         },
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "lint ok"
+          "mint": "passed",
+          "message": "lint ok"
         }
       ]
     },
@@ -447,8 +477,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         }
       ]
     },
@@ -472,8 +502,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         }
       ]
     },
@@ -496,8 +526,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         }
       ]
     },
@@ -521,8 +551,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good"
+          "mint": "passed",
+          "message": "all good"
         }
       ]
     },
@@ -546,8 +576,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "skip",
-          "check_message": "not applicable"
+          "mint": "skipped",
+          "message": "not applicable"
         }
       ]
     },
@@ -571,13 +601,13 @@
       "checks": [
         {
           "name": "compile",
-          "check_returns": "skip",
-          "check_message": "not applicable"
+          "mint": "skipped",
+          "message": "not applicable"
         },
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "lint ok"
+          "mint": "passed",
+          "message": "lint ok"
         }
       ]
     },
@@ -605,18 +635,30 @@
       "checks": [
         {
           "name": "check-a",
-          "check_returns": "pass",
-          "check_message": "a passed"
+          "mint": "passed",
+          "message": "a passed"
         },
         {
           "name": "check-b",
-          "check_returns": "fail",
-          "check_message": "b failed"
+          "mint": "found",
+          "message": "b failed",
+          "problems": [
+            {
+              "severity": "error",
+              "text": "b failed"
+            }
+          ]
         },
         {
           "name": "check-c",
-          "check_returns": "warn",
-          "check_message": "c warned"
+          "mint": "found",
+          "message": "c warned",
+          "problems": [
+            {
+              "severity": "warn",
+              "text": "c warned"
+            }
+          ]
         }
       ]
     },
@@ -645,18 +687,24 @@
       "checks": [
         {
           "name": "check-a",
-          "check_returns": "pass",
-          "check_message": "a passed"
+          "mint": "passed",
+          "message": "a passed"
         },
         {
           "name": "check-b",
-          "check_returns": "fail",
-          "check_message": "b failed"
+          "mint": "found",
+          "message": "b failed",
+          "problems": [
+            {
+              "severity": "error",
+              "text": "b failed"
+            }
+          ]
         },
         {
           "name": "check-c",
-          "check_returns": "pass",
-          "check_message": "c passed"
+          "mint": "passed",
+          "message": "c passed"
         }
       ]
     },
@@ -687,18 +735,18 @@
       "checks": [
         {
           "name": "check-alpha",
-          "check_returns": "pass",
-          "check_message": "alpha passed"
+          "mint": "passed",
+          "message": "alpha passed"
         },
         {
           "name": "check-beta",
-          "check_returns": "pass",
-          "check_message": "beta passed"
+          "mint": "passed",
+          "message": "beta passed"
         },
         {
           "name": "check-gamma",
-          "check_returns": "pass",
-          "check_message": "gamma passed"
+          "mint": "passed",
+          "message": "gamma passed"
         }
       ]
     },
@@ -729,9 +777,8 @@
       "checks": [
         {
           "name": "lint",
-          "check_returns": "pass",
-          "check_message": "all good",
-          "check_details": ["checked 42 files", "no issues found"]
+          "mint": "passed",
+          "message": "checked 42 files, no issues found"
         }
       ]
     },
@@ -760,8 +807,8 @@
       "checks": [
         {
           "name": "scoped-check",
-          "check_returns": "pass",
-          "check_message": "scoped check ok"
+          "mint": "passed",
+          "message": "scoped check ok"
         }
       ]
     },
@@ -787,8 +834,8 @@
       "checks": [
         {
           "name": "scoped-check",
-          "check_returns": "pass",
-          "check_message": "scoped check ok"
+          "mint": "passed",
+          "message": "scoped check ok"
         }
       ]
     },
@@ -816,8 +863,8 @@
       "checks": [
         {
           "name": "no-scope",
-          "check_returns": "pass",
-          "check_message": "no scope ok"
+          "mint": "passed",
+          "message": "no scope ok"
         }
       ]
     },

@@ -8,6 +8,17 @@ output, and calls app.Run().
 from __future__ import annotations
 
 import json
+import tomllib
+
+
+def _check_severities(checks_toml: str) -> dict[str, str]:
+    """Parse the embedded checks_toml and return a name->severity map.
+
+    The Go registration form (RegisterErrorCheck vs RegisterWarnCheck) is derived
+    from severity -- there is no per-check registration field in the case fixture.
+    """
+    data = tomllib.loads(checks_toml)
+    return {name: c["severity"] for name, c in data.get("checks", {}).items()}
 
 
 def _flag_param(name: str) -> str:
@@ -565,20 +576,32 @@ def generate(app_def: dict) -> str:
     if app_def.get("tag_contracts"):
         lines.append("")
 
-    # Register checks if defined
+    # Register checks if defined. The registration form (RegisterErrorCheck vs
+    # RegisterWarnCheck) is derived from the check's severity in the embedded
+    # checks_toml -- the case only describes what the impl mints via its reporter.
     if has_checks:
+        severities = _check_severities(app_def["checks_toml"])
+
+        def _go_str(s: str) -> str:
+            return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
         for check_def in app_def.get("checks", []):
             cname = check_def["name"]
-            cstatus = check_def["check_returns"]
-            cmessage = check_def["check_message"]
-            cdetails = check_def.get("check_details", [])
-            if cdetails:
-                details_items = ", ".join(f'"{d}"' for d in cdetails)
-                details_str = f"[]string{{{details_items}}}"
+            mint = check_def["mint"]
+            message = check_def["message"]
+            problems = check_def.get("problems", [])
+            mint_method = {"passed": "Passed", "skipped": "Skipped", "found": "Found"}[mint]
+            if severities.get(cname) == "warn":
+                reg, reporter_type = "RegisterWarnCheck", "WarnReporter"
             else:
-                details_str = "[]string{}"
-            lines.append(f'\tapp.RegisterCheck("{cname}", func(ctx strictcli.CheckContext) strictcli.CheckResult {{')
-            lines.append(f'\t\treturn strictcli.CheckResult{{Status: "{cstatus}", Message: "{cmessage}", Details: {details_str}}}')
+                reg, reporter_type = "RegisterErrorCheck", "ErrorReporter"
+            lines.append(
+                f'\tapp.{reg}("{cname}", func(ctx strictcli.CheckContext, r *strictcli.{reporter_type}) strictcli.CheckOutcome {{'
+            )
+            for p in problems:
+                pmethod = "Error" if p["severity"] == "error" else "Warn"
+                lines.append(f'\t\tr.{pmethod}({_go_str(p["text"])})')
+            lines.append(f'\t\treturn r.{mint_method}({_go_str(message)})')
             lines.append('\t})')
             lines.append("")
 

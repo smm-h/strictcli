@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	tomledit "github.com/smm-h/go-toml-edit"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -147,28 +148,39 @@ func main() {
 		}
 	}
 
-	// Register checks.
+	// Register checks. The registration FORM (error vs warn) is derived from the
+	// check's declared severity in the embedded checks_toml -- there is no
+	// per-check registration field. The case only specifies what the impl mints
+	// (mint + message + problems); the reporter is minted here per severity.
 	if _, ok := appDef["checks_toml"]; ok {
 		if checks, ok := appDef["checks"]; ok {
+			severities := checkSeverities(appDef["checks_toml"].(string))
 			for _, c := range checks.([]interface{}) {
 				cd := c.(map[string]interface{})
 				cname := cd["name"].(string)
-				cstatus := cd["check_returns"].(string)
-				cmessage := cd["check_message"].(string)
-				var cdetails []string
-				if d, ok := cd["check_details"]; ok {
-					for _, item := range d.([]interface{}) {
-						cdetails = append(cdetails, item.(string))
+				mint := cd["mint"].(string)
+				message := cd["message"].(string)
+				var problems []checkProblemSpec
+				if p, ok := cd["problems"]; ok {
+					for _, item := range p.([]interface{}) {
+						pm := item.(map[string]interface{})
+						problems = append(problems, checkProblemSpec{
+							severity: pm["severity"].(string),
+							text:     pm["text"].(string),
+						})
 					}
 				}
 				// Capture for closure.
-				status, message, details := cstatus, cmessage, cdetails
-				app.RegisterCheck(cname, func(ctx strictcli.CheckContext) strictcli.CheckResult {
-					if details == nil {
-						details = []string{}
-					}
-					return strictcli.CheckResult{Status: status, Message: message, Details: details}
-				})
+				m, msg, probs := mint, message, problems
+				if severities[cname] == "warn" {
+					app.RegisterWarnCheck(cname, func(ctx strictcli.CheckContext, r *strictcli.WarnReporter) strictcli.CheckOutcome {
+						return mintWarnOutcome(r, m, msg, probs)
+					})
+				} else {
+					app.RegisterErrorCheck(cname, func(ctx strictcli.CheckContext, r *strictcli.ErrorReporter) strictcli.CheckOutcome {
+						return mintErrorOutcome(r, m, msg, probs)
+					})
+				}
 			}
 		}
 
@@ -194,6 +206,73 @@ func main() {
 type testCheckCtx struct{}
 
 func (c *testCheckCtx) ProjectRoot() string { return "." }
+
+// checkProblemSpec is a single problem the case asks the impl to mint.
+type checkProblemSpec struct {
+	severity string // "error" or "warn"
+	text     string
+}
+
+// checkSeverities parses the embedded checks_toml and returns a name->severity
+// map. The registration form is derived from this (there is no per-check
+// registration field in the case). A parse failure yields an empty map, which
+// falls back to error-severity registration -- the strictcli severity
+// cross-check would then surface any genuine mismatch as a panic.
+func checkSeverities(tomlStr string) map[string]string {
+	result := map[string]string{}
+	var raw map[string]interface{}
+	if err := tomledit.Unmarshal([]byte(tomlStr), &raw); err != nil {
+		return result
+	}
+	checks, ok := raw["checks"].(map[string]interface{})
+	if !ok {
+		return result
+	}
+	for name, v := range checks {
+		if fields, ok := v.(map[string]interface{}); ok {
+			if sev, ok := fields["severity"].(string); ok {
+				result[name] = sev
+			}
+		}
+	}
+	return result
+}
+
+// mintErrorOutcome replays the case's problems onto an ErrorReporter and mints
+// the requested terminal outcome.
+func mintErrorOutcome(r *strictcli.ErrorReporter, mint, message string, problems []checkProblemSpec) strictcli.CheckOutcome {
+	for _, p := range problems {
+		if p.severity == "error" {
+			r.Error(p.text)
+		} else {
+			r.Warn(p.text)
+		}
+	}
+	switch mint {
+	case "passed":
+		return r.Passed(message)
+	case "skipped":
+		return r.Skipped(message)
+	default:
+		return r.Found(message)
+	}
+}
+
+// mintWarnOutcome replays the case's problems onto a WarnReporter (which can
+// only mint warn-severity problems) and mints the requested terminal outcome.
+func mintWarnOutcome(r *strictcli.WarnReporter, mint, message string, problems []checkProblemSpec) strictcli.CheckOutcome {
+	for _, p := range problems {
+		r.Warn(p.text)
+	}
+	switch mint {
+	case "passed":
+		return r.Passed(message)
+	case "skipped":
+		return r.Skipped(message)
+	default:
+		return r.Found(message)
+	}
+}
 
 // target abstracts over App and Group for command registration.
 type target interface {
