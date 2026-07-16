@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from strictcli import App, CheckResult
+from strictcli import App, ErrorReporter
 
 TOOL_DIR = Path(__file__).resolve().parent
 CONFORMANCE_DIR = TOOL_DIR.parent
@@ -27,8 +27,13 @@ app = App(
 app.set_check_context(lambda: ConformanceContext(project_root=PROJECT_ROOT))
 
 
-def _run_script(script: str, *args: str) -> CheckResult:
-    """Run a conformance script and return a CheckResult."""
+def _run_script(reporter: ErrorReporter, script: str, *args: str):
+    """Run a conformance script and mint an outcome via the reporter.
+
+    Exit 0 mints a terminal pass; a non-zero exit mints error-severity problems
+    (the script's stdout/stderr) and a terminal ``found`` outcome, which derives
+    to FAIL. All conformance checks are error-severity, so a failure gates.
+    """
     script_path = CONFORMANCE_DIR / script
     result = subprocess.run(
         [sys.executable, str(script_path), *args],
@@ -37,42 +42,42 @@ def _run_script(script: str, *args: str) -> CheckResult:
         cwd=str(CONFORMANCE_DIR),
     )
     if result.returncode == 0:
-        return CheckResult(status="pass", message=f"{script} passed")
-    details = []
+        return reporter.passed(f"{script} passed")
+    problems = []
     if result.stdout.strip():
-        details.append(result.stdout.strip())
+        problems.append(result.stdout.strip())
     if result.stderr.strip():
-        details.append(result.stderr.strip())
-    return CheckResult(
-        status="fail",
-        message=f"{script} failed (exit code {result.returncode})",
-        details=details,
-    )
+        problems.append(result.stderr.strip())
+    if not problems:
+        problems.append(f"exited with code {result.returncode} and no output")
+    for text in problems:
+        reporter.error(text)
+    return reporter.found(f"{script} failed (exit code {result.returncode})")
 
 
-@app.check("api-surface")
-def check_api_surface(ctx):
-    return _run_script("check_api_surface.py")
+@app.error_check("api-surface")
+def check_api_surface(ctx, reporter):
+    return _run_script(reporter, "check_api_surface.py")
 
 
-@app.check("error-parity")
-def check_error_parity(ctx):
-    return _run_script("check_error_parity.py")
+@app.error_check("error-parity")
+def check_error_parity(ctx, reporter):
+    return _run_script(reporter, "check_error_parity.py")
 
 
-@app.check("conformance-python")
-def check_conformance_python(ctx):
-    return _run_script("run.py", "--target", "python")
+@app.error_check("conformance-python")
+def check_conformance_python(ctx, reporter):
+    return _run_script(reporter, "run.py", "--target", "python")
 
 
-@app.check("conformance-go")
-def check_conformance_go(ctx):
-    return _run_script("run.py", "--target", "go")
+@app.error_check("conformance-go")
+def check_conformance_go(ctx, reporter):
+    return _run_script(reporter, "run.py", "--target", "go")
 
 
-@app.check("conformance-parity")
-def check_conformance_parity(ctx):
-    return _run_script("run.py", "--both")
+@app.error_check("conformance-parity")
+def check_conformance_parity(ctx, reporter):
+    return _run_script(reporter, "run.py", "--both")
 
 
 def main():
