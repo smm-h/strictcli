@@ -187,9 +187,27 @@ func findCycle(checkDefs map[string]*checkDef, expanded map[string]bool, inDegre
 	return ""
 }
 
+// checkIsPure reports whether a check is executable under the purity partition:
+// it must be declared pure AND not require network access. Everything else is
+// "impure" for partition purposes.
+func checkIsPure(def *checkDef) bool {
+	return def.pure && !def.needsNetwork
+}
+
 // runChecks executes checks in order, skipping dependents of failed checks.
-// Returns results and an exit code (0 = all pass or all warn with ignoreWarnings, 1 otherwise).
-func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext, ignoreWarnings bool) ([]CheckRunResult, int) {
+// Returns results, the ordered names of checks that were NOT executed because of
+// the purity partition (empty unless pureOnly is set), and an exit code (0 = all
+// pass or all warn with ignoreWarnings, 1 otherwise).
+//
+// Purity partition (pureOnly): when set, only checks that are pure and do not
+// need network EXECUTE; every other selected check is listed (its name appended
+// to impureListed) but NOT run and contributes NOTHING to the exit code. A check
+// also joins the listing if any of its dependencies was listed -- an unexecuted
+// dependency means the check's precondition cannot be verified, so it cannot run
+// either. The failed-dependency cascade takes precedence over the listing: a
+// genuinely failed (executed) pure dependency still cascade-skips its dependents
+// as usual.
+func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext, ignoreWarnings bool, pureOnly bool) ([]CheckRunResult, []string, int) {
 	results := make([]CheckRunResult, 0, len(order))
 	// Track checks whose dependents should be cascade-skipped. Cascade keys
 	// ONLY on a derived FAIL (Gated: an error-severity problem present) or a
@@ -198,6 +216,10 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 	// cannot cascade because WarnReporter lacks error-minting. An explicit
 	// SKIP from an impl is NOT a failure -- dependents still run.
 	failedChecks := make(map[string]bool)
+	// Track checks that were listed (not executed) under the purity partition,
+	// so that dependents whose precondition cannot be verified join the listing.
+	listedChecks := make(map[string]bool)
+	var impureListed []string
 
 	exitCode := 0
 	for _, name := range order {
@@ -220,6 +242,25 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 			failedChecks[name] = true
 			exitCode = 1
 			continue
+		}
+
+		// Purity partition: list (do not execute) impure checks and any check
+		// that depends on a listed one. Listed checks contribute no exit code.
+		if pureOnly {
+			listed := !checkIsPure(def)
+			if !listed {
+				for _, dep := range def.dependsOn {
+					if listedChecks[dep] {
+						listed = true
+						break
+					}
+				}
+			}
+			if listed {
+				listedChecks[name] = true
+				impureListed = append(impureListed, name)
+				continue
+			}
 		}
 
 		// Run the check
@@ -245,7 +286,7 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 		}
 	}
 
-	return results, exitCode
+	return results, impureListed, exitCode
 }
 
 // filterChecks selects checks based on tag expression, name glob, or runAll flag.

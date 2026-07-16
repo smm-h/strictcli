@@ -752,7 +752,7 @@ func TestRunChecks_SinglePass(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp/test"}
-	results, exitCode := runChecks(defs, []string{"check-a"}, ctx, false)
+	results, _, exitCode := runChecks(defs, []string{"check-a"}, ctx, false, false)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
@@ -783,7 +783,7 @@ func TestRunChecks_SingleFail(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp/test"}
-	results, exitCode := runChecks(defs, []string{"check-a"}, ctx, false)
+	results, _, exitCode := runChecks(defs, []string{"check-a"}, ctx, false, false)
 
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
@@ -827,7 +827,7 @@ func TestRunChecks_DependencyChain_Pass(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	results, exitCode := runChecks(defs, order, ctx, false)
+	results, _, exitCode := runChecks(defs, order, ctx, false, false)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
@@ -869,7 +869,7 @@ func TestRunChecks_DependencyFailure_Skip(t *testing.T) {
 
 	ctx := &testCheckContext{root: "/tmp/test"}
 	// Order: check-b first, then check-a
-	results, exitCode := runChecks(defs, []string{"check-b", "check-a"}, ctx, false)
+	results, _, exitCode := runChecks(defs, []string{"check-b", "check-a"}, ctx, false, false)
 
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
@@ -924,7 +924,7 @@ func TestRunChecks_TransitiveSkip(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp/test"}
-	results, exitCode := runChecks(defs, []string{"check-c", "check-b", "check-a"}, ctx, false)
+	results, _, exitCode := runChecks(defs, []string{"check-c", "check-b", "check-a"}, ctx, false, false)
 
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", exitCode)
@@ -1122,7 +1122,7 @@ func TestRunChecks_WarnWithIgnoreWarnings(t *testing.T) {
 	ctx := &testCheckContext{root: "/tmp/test"}
 
 	// With ignoreWarnings=true, exit code should be 0
-	_, exitCode := runChecks(defs, []string{"check-a"}, ctx, true)
+	_, _, exitCode := runChecks(defs, []string{"check-a"}, ctx, true, false)
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0 with ignoreWarnings=true, got %d", exitCode)
 	}
@@ -1148,7 +1148,7 @@ func TestRunChecks_WarnWithoutIgnoreWarnings(t *testing.T) {
 	ctx := &testCheckContext{root: "/tmp/test"}
 
 	// With ignoreWarnings=false, exit code should be 1
-	_, exitCode := runChecks(defs, []string{"check-a"}, ctx, false)
+	_, _, exitCode := runChecks(defs, []string{"check-a"}, ctx, false, false)
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1 with ignoreWarnings=false, got %d", exitCode)
 	}
@@ -1219,7 +1219,7 @@ func TestRunChecks_WarnDependency_RunsDependent(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp/test"}
-	results, exitCode := runChecks(defs, []string{"check-b", "check-a"}, ctx, false)
+	results, _, exitCode := runChecks(defs, []string{"check-b", "check-a"}, ctx, false, false)
 
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1 (warn without ignoreWarnings), got %d", exitCode)
@@ -1270,7 +1270,7 @@ func TestRunChecks_WarnDependency_TransitiveDependentsRun(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp/test"}
-	results, exitCode := runChecks(defs, []string{"check-c", "check-b", "check-a"}, ctx, false)
+	results, _, exitCode := runChecks(defs, []string{"check-c", "check-b", "check-a"}, ctx, false, false)
 
 	if exitCode != 1 {
 		t.Fatalf("expected exit code 1 (warn without ignoreWarnings), got %d", exitCode)
@@ -1312,7 +1312,7 @@ func TestRunChecks_WarnDependency_RunsWhenIgnored(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp/test"}
-	results, exitCode := runChecks(defs, []string{"check-b", "check-a"}, ctx, true)
+	results, _, exitCode := runChecks(defs, []string{"check-b", "check-a"}, ctx, true, false)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0 (warnings ignored), got %d", exitCode)
@@ -2135,7 +2135,7 @@ func TestRunChecks_ExplicitSkip_ExitZero(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp/test"}
-	results, exitCode := runChecks(defs, []string{"check-a"}, ctx, false)
+	results, _, exitCode := runChecks(defs, []string{"check-a"}, ctx, false, false)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0 for explicit skip, got %d", exitCode)
@@ -2176,7 +2176,7 @@ func TestRunChecks_ExplicitSkip_NoCascade(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp/test"}
-	results, exitCode := runChecks(defs, []string{"check-a", "check-b"}, ctx, false)
+	results, _, exitCode := runChecks(defs, []string{"check-a", "check-b"}, ctx, false, false)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
@@ -2245,7 +2245,7 @@ func TestRunChecks_AllPass(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2275,7 +2275,7 @@ func TestRunChecks_OneFail(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2309,7 +2309,7 @@ func TestRunChecks_TagFiltering(t *testing.T) {
 
 	ctx := &testCheckContext{root: "/tmp"}
 	// Only "fast" tagged checks: check-a and check-c
-	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{TagExpr: "fast"})
+	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{TagExpr: "fast"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2335,7 +2335,7 @@ func TestRunChecks_NameGlob(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{NameGlob: "check-a"})
+	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{NameGlob: "check-a"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2363,7 +2363,7 @@ func TestRunChecks_RunAll(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	results, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	results, _, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2389,7 +2389,7 @@ func TestRunChecks_DependencyOrdering(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	_, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	_, _, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2426,7 +2426,7 @@ func TestRunChecks_DependencyFailureCascade(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2458,7 +2458,7 @@ func TestRunChecks_WarnWithIgnoreWarningsFalse(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	_, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, IgnoreWarnings: false})
+	_, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, IgnoreWarnings: false})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2480,7 +2480,7 @@ func TestRunChecks_WarnWithIgnoreWarningsTrue(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	_, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, IgnoreWarnings: true})
+	_, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, IgnoreWarnings: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2502,7 +2502,7 @@ func TestRunChecks_NoMatches(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	results, exitCode, err := app.RunChecks(ctx, RunChecksOptions{NameGlob: "nonexistent-*"})
+	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{NameGlob: "nonexistent-*"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2518,7 +2518,7 @@ func TestRunChecks_ErrorWhenChecksNotEnabled(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
 
 	ctx := &testCheckContext{root: "/tmp"}
-	_, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	_, _, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err == nil {
 		t.Fatal("expected error when checks not enabled")
 	}
@@ -2535,7 +2535,7 @@ func TestRunChecks_ErrorWhenRegistrationsIncomplete(t *testing.T) {
 	})
 
 	ctx := &testCheckContext{root: "/tmp"}
-	_, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	_, _, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err == nil {
 		t.Fatal("expected error when registrations incomplete")
 	}
@@ -3011,7 +3011,7 @@ func TestRunChecks_NonMintedOutcome_Panics(t *testing.T) {
 			t.Fatalf("unexpected panic: %v", r)
 		}
 	}()
-	runChecks(defs, []string{"check-a"}, &testCheckContext{root: "/tmp"}, false)
+	runChecks(defs, []string{"check-a"}, &testCheckContext{root: "/tmp"}, false, false)
 }
 
 func TestCheckRunResult_GatedWarnedConsistency(t *testing.T) {
@@ -3054,7 +3054,7 @@ func TestRunChecks_ErrorCheckOnlyWarns_NoCascade(t *testing.T) {
 			impl: func(ctx CheckContext) CheckOutcome { bRan = true; return passOutcome("ok") },
 		},
 	}
-	results, exitCode := runChecks(defs, []string{"check-a", "check-b"}, &testCheckContext{root: "/tmp"}, false)
+	results, _, exitCode := runChecks(defs, []string{"check-a", "check-b"}, &testCheckContext{root: "/tmp"}, false, false)
 	if !bRan {
 		t.Fatal("dependent must run when dependency only warned")
 	}
@@ -3084,6 +3084,183 @@ func TestFormatCheckResults_MixedOutcomeShowsBothGroups(t *testing.T) {
 	}
 	if eIdx > wIdx {
 		t.Fatalf("expected error problems before warn problems, got %q", out)
+	}
+}
+
+// --- Phase 3.2: purity partition tests ---
+
+// partitionToml mixes pure/network/impure checks and dependency edges so the
+// purity partition can be exercised end to end. pure-a and dep-on-pure execute;
+// net-b (needs network), impure-c (pure=false), and dep-on-impure (pure but
+// depends on the listed impure-c) are listed, not executed.
+const partitionToml = `
+app = "testapp"
+
+[checks.pure-a]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
+[checks.net-b]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = true
+needs_network = true
+depends_on = []
+
+[checks.impure-c]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = false
+needs_network = false
+depends_on = []
+
+[checks.dep-on-impure]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = ["impure-c"]
+
+[checks.dep-on-pure]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = ["pure-a"]
+`
+
+func registerAllPassing(t *testing.T, app *App, names ...string) {
+	t.Helper()
+	for _, n := range names {
+		app.RegisterErrorCheck(n, func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+			return passOutcome("ok")
+		})
+	}
+}
+
+func TestRunChecks_Partition_ExecutesPureListsImpure(t *testing.T) {
+	app := makeAppWithRegisteredChecks(t, partitionToml)
+	registerAllPassing(t, app, "pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, impureListed, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, PureOnly: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0 (listed checks contribute no exit code), got %d", exitCode)
+	}
+
+	executed := map[string]bool{}
+	for _, r := range results {
+		executed[r.Name] = true
+		if r.Status() != "pass" {
+			t.Fatalf("expected pass for executed %q, got %q", r.Name, r.Status())
+		}
+	}
+	wantExecuted := map[string]bool{"pure-a": true, "dep-on-pure": true}
+	if !reflect.DeepEqual(executed, wantExecuted) {
+		t.Fatalf("executed set = %v, want %v", executed, wantExecuted)
+	}
+
+	listed := map[string]bool{}
+	for _, n := range impureListed {
+		listed[n] = true
+	}
+	wantListed := map[string]bool{"net-b": true, "impure-c": true, "dep-on-impure": true}
+	if !reflect.DeepEqual(listed, wantListed) {
+		t.Fatalf("impureListed set = %v, want %v", listed, wantListed)
+	}
+	// Listed checks must NOT appear in results (outcome vocabulary stays pure).
+	for _, r := range results {
+		if wantListed[r.Name] {
+			t.Fatalf("listed check %q leaked into results", r.Name)
+		}
+	}
+}
+
+func TestRunChecks_Partition_PureDependingOnImpureIsListed(t *testing.T) {
+	// The decided cascade rule: a pure check whose dependency is impure (hence
+	// unexecuted) cannot verify its precondition, so it joins the listing rather
+	// than executing or failing.
+	app := makeAppWithRegisteredChecks(t, partitionToml)
+	ran := map[string]bool{}
+	for _, n := range []string{"pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure"} {
+		name := n
+		app.RegisterErrorCheck(name, func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+			ran[name] = true
+			return passOutcome("ok")
+		})
+	}
+
+	ctx := &testCheckContext{root: "/tmp"}
+	_, impureListed, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, PureOnly: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ran["dep-on-impure"] {
+		t.Fatal("dep-on-impure (pure, depends on listed impure-c) must NOT execute")
+	}
+	found := false
+	for _, n := range impureListed {
+		if n == "dep-on-impure" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected dep-on-impure in impureListed, got %v", impureListed)
+	}
+}
+
+func TestRunChecks_Partition_OffIsUnchanged(t *testing.T) {
+	// With PureOnly off, every selected check executes and nothing is listed.
+	app := makeAppWithRegisteredChecks(t, partitionToml)
+	registerAllPassing(t, app, "pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
+
+	ctx := &testCheckContext{root: "/tmp"}
+	results, impureListed, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", exitCode)
+	}
+	if len(results) != 5 {
+		t.Fatalf("expected all 5 checks executed, got %d", len(results))
+	}
+	if len(impureListed) != 0 {
+		t.Fatalf("expected empty impureListed with partition off, got %v", impureListed)
+	}
+}
+
+func TestCheckCommand_DryRun_PurityAnnotation(t *testing.T) {
+	checksPath := writeChecksFile(t, partitionToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	registerAllPassing(t, app, "pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
+
+	r := app.Test([]string{"check", "--all", "--dry-run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "[pure]") {
+		t.Fatalf("expected a [pure] annotation, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "[impure]") {
+		t.Fatalf("expected an [impure] annotation, got %q", r.Stdout)
+	}
+	// net-b needs network -> impure; pure-a -> pure. Assert the specific lines.
+	for _, want := range []string{"net-b", "impure-c"} {
+		if !strings.Contains(r.Stdout, want) {
+			t.Fatalf("expected %q listed, got %q", want, r.Stdout)
+		}
 	}
 }
 

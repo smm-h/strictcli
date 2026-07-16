@@ -151,10 +151,14 @@ func (a *App) checkDryRun(runAll bool, tagExpr, nameGlob string) int {
 	fmt.Printf("Would run %d %s:\n", len(order), noun)
 	for i, name := range order {
 		def := a.checkDefs[name]
+		purity := "impure"
+		if checkIsPure(def) {
+			purity = "pure"
+		}
 		if len(def.dependsOn) > 0 {
-			fmt.Printf("  %d. %s (depends on: %s)\n", i+1, name, strings.Join(def.dependsOn, ", "))
+			fmt.Printf("  %d. %s (depends on: %s) [%s]\n", i+1, name, strings.Join(def.dependsOn, ", "), purity)
 		} else {
-			fmt.Printf("  %d. %s\n", i+1, name)
+			fmt.Printf("  %d. %s [%s]\n", i+1, name, purity)
 		}
 	}
 	return 0
@@ -168,7 +172,10 @@ func (a *App) checkRun(runAll bool, tagExpr, nameGlob string, jsonOut, ignoreWar
 	}
 
 	ctx := a.checkContextFactory()
-	results, exitCode, err := a.RunChecks(ctx, RunChecksOptions{
+	// The check command executes all selected checks; the purity partition is an
+	// API-only mode (RunChecksOptions.PureOnly) consumed programmatically, so no
+	// checks are ever left in the impure listing here.
+	results, _, exitCode, err := a.RunChecks(ctx, RunChecksOptions{
 		TagExpr:        tagExpr,
 		NameGlob:       nameGlob,
 		RunAll:         runAll,

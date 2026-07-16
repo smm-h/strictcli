@@ -12,36 +12,46 @@ type RunChecksOptions struct {
 	NameGlob       string
 	RunAll         bool
 	IgnoreWarnings bool
+	// PureOnly enables the purity partition: only checks that are declared pure
+	// AND do not need network access are executed; every other selected check is
+	// returned in the impureListed name list (see RunChecks) without being run
+	// and without contributing to the exit code. Off by default -- the zero
+	// value preserves today's behavior byte-for-byte.
+	PureOnly bool
 }
 
-// RunChecks executes checks programmatically and returns the results, exit code, and any error.
-// The exit code follows the same rules as the check command: 0 for all pass (or warn with
-// IgnoreWarnings), 1 for any failure/warn/cascade-skip.
-func (a *App) RunChecks(ctx CheckContext, opts RunChecksOptions) ([]CheckRunResult, int, error) {
+// RunChecks executes checks programmatically and returns the executed results,
+// the ordered names of checks left unexecuted by the purity partition, the exit
+// code, and any error. The exit code follows the same rules as the check
+// command: 0 for all pass (or warn with IgnoreWarnings), 1 for any
+// failure/warn/cascade-skip. impureListed is empty unless opts.PureOnly is set;
+// listed checks contribute nothing to the exit code (a consumer renders them as
+// e.g. "would run: <name> (impure)").
+func (a *App) RunChecks(ctx CheckContext, opts RunChecksOptions) ([]CheckRunResult, []string, int, error) {
 	if !a.checksEnabled {
-		return nil, 0, fmt.Errorf("checks are not enabled on this App")
+		return nil, nil, 0, fmt.Errorf("checks are not enabled on this App")
 	}
 
 	if errMsg := a.validateCheckRegistrations(); errMsg != "" {
-		return nil, 0, fmt.Errorf("%s", errMsg)
+		return nil, nil, 0, fmt.Errorf("%s", errMsg)
 	}
 
 	selected, err := filterChecks(a.checkDefs, opts.TagExpr, opts.NameGlob, opts.RunAll)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
 	if len(selected) == 0 {
-		return []CheckRunResult{}, 0, nil
+		return []CheckRunResult{}, nil, 0, nil
 	}
 
 	order, err := resolveCheckOrder(a.checkDefs, selected)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
-	results, exitCode := runChecks(a.checkDefs, order, ctx, opts.IgnoreWarnings)
-	return results, exitCode, nil
+	results, impureListed, exitCode := runChecks(a.checkDefs, order, ctx, opts.IgnoreWarnings, opts.PureOnly)
+	return results, impureListed, exitCode, nil
 }
 
 // FormatCheckResults formats check results as a human-readable string.
