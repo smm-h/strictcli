@@ -613,7 +613,7 @@ class TestSeverityCrossCheck:
         app.set_check_context(
             lambda: type("C", (), {"project_root": tmp_path})()
         )
-        results, exit_code = app.run_checks(
+        results, _, exit_code = app.run_checks(
             type("C", (), {"project_root": tmp_path})(),
             name_glob="lint-code",
         )

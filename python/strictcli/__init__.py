@@ -2840,11 +2840,24 @@ class App:
         name_glob: str | None = None,
         run_all: bool = False,
         ignore_warnings: bool = False,
-    ) -> tuple[list[CheckRunResult], int]:
+        pure_only: bool = False,
+    ) -> tuple[list[CheckRunResult], list[str], int]:
         """Run checks programmatically with filtering and dependency resolution.
 
-        Returns (results, exit_code) where results is a list of CheckRunResult
-        and exit_code is 0 if all pass (or all warn with ignore_warnings), else 1.
+        Returns (results, impure_listed, exit_code):
+
+        - results: the executed checks as a list of CheckRunResult.
+        - impure_listed: the ordered names of checks NOT executed because of the
+          purity partition (empty unless ``pure_only`` is set). Listed checks
+          contribute nothing to the exit code -- a consumer renders them as e.g.
+          ``"would run: <name> (impure)"``.
+        - exit_code: 0 if all executed checks pass (or all warn with
+          ``ignore_warnings``), else 1.
+
+        With ``pure_only`` set, only checks that are declared pure AND do not
+        need network access execute; every other selected check (including a
+        pure check that depends on a listed one) is listed instead. The default
+        (``pure_only`` False) is byte-identical to the previous behavior.
         """
         if not self._checks_enabled:
             raise ValueError("checks are not enabled on this App")
@@ -2853,17 +2866,17 @@ class App:
             raise ValueError(err)
         selected = _filter_checks(self._check_defs, tag_expr, name_glob, run_all)
         if not selected:
-            return ([], 0)
+            return ([], [], 0)
         order = _resolve_check_order(self._check_defs, selected)
-        raw_results, exit_code = _run_checks(
+        raw_results, impure_listed, exit_code = _run_checks(
             self._check_defs, order, context, ignore_warnings,
-            scope_adapter=self._scope_adapter,
+            scope_adapter=self._scope_adapter, pure_only=pure_only,
         )
         results = [
             CheckRunResult(name=name, outcome=outcome)
             for name, outcome in raw_results
         ]
-        return (results, exit_code)
+        return (results, impure_listed, exit_code)
 
     def _enable_checks(self) -> None:
         """Turn on the check system exactly once.
@@ -2939,7 +2952,10 @@ class App:
                 )
                 return 1
             context = app_ref._check_context_factory()
-            raw_results, exit_code = _run_checks(
+            # The check command executes all selected checks; the purity
+            # partition is an API-only mode (run_checks pure_only=), so nothing
+            # is ever left in the impure listing here.
+            raw_results, _impure_listed, exit_code = _run_checks(
                 app_ref._check_defs, order, context, ignore_warnings,
                 scope_adapter=app_ref._scope_adapter,
             )
@@ -6434,17 +6450,32 @@ def _find_cycle(
     return " -> ".join(sorted(nodes))
 
 
+def _check_is_pure(cdef: _CheckDef) -> bool:
+    """Whether a check is executable under the purity partition: declared pure
+    AND not requiring network access. Everything else is "impure"."""
+    return cdef.pure and not cdef.needs_network
+
+
 def _run_checks(
     check_defs: dict,
     check_names: list[str],
     context: CheckContext,
     ignore_warnings: bool,
     scope_adapter: object | None = None,
-) -> tuple[list[tuple[str, _CheckOutcome]], int]:
+    pure_only: bool = False,
+) -> tuple[list[tuple[str, _CheckOutcome]], list[str], int]:
     """Execute checks in order, skipping dependents of gated (FAIL) checks.
 
-    Returns (results_list, exit_code). exit_code is 0 if all pass (or all
-    warn with ignore_warnings=True), 1 otherwise.
+    Returns (results_list, impure_listed, exit_code). impure_listed holds the
+    ordered names of checks left unexecuted by the purity partition (empty
+    unless pure_only=True); listed checks contribute nothing to the exit code.
+    exit_code is 0 if all executed checks pass (or all warn with
+    ignore_warnings=True), 1 otherwise.
+
+    Purity partition (pure_only): only pure, non-network checks execute; every
+    other check is listed. A check also joins the listing if any dependency was
+    listed (its precondition cannot be verified). The failed-dependency cascade
+    takes precedence over the listing.
     """
     results: list[tuple[str, _CheckOutcome]] = []
     # Checks whose dependents should be cascade-skipped: cascade keys ONLY on a
@@ -6453,6 +6484,10 @@ def _run_checks(
     # the exit code -- warn-severity checks physically cannot cascade because
     # WarnReporter lacks error-minting. An explicit SKIP is not a failure.
     failed_checks: set[str] = set()
+    # Checks listed (not executed) under the purity partition, so dependents
+    # whose precondition cannot be verified join the listing.
+    listed_checks: set[str] = set()
+    impure_listed: list[str] = []
     exit_code = 0
 
     def record(name: str, outcome: _CheckOutcome) -> None:
@@ -6482,6 +6517,17 @@ def _run_checks(
             results.append((name, outcome))
             exit_code = 1
             continue
+
+        # Purity partition: list (do not execute) impure checks and any check
+        # that depends on a listed one. Listed checks contribute no exit code.
+        if pure_only:
+            listed = not _check_is_pure(cdef)
+            if not listed:
+                listed = any(dep in listed_checks for dep in cdef.depends_on)
+            if listed:
+                listed_checks.add(name)
+                impure_listed.append(name)
+                continue
 
         # Apply scope adapter if the check has a scope and an adapter is set.
         # The adapter returns a replacement context OR a SkipCheck directive.
@@ -6515,7 +6561,7 @@ def _run_checks(
         results.append((name, outcome))
         record(name, outcome)
 
-    return results, exit_code
+    return results, impure_listed, exit_code
 
 
 # ---------------------------------------------------------------------------
@@ -6564,11 +6610,12 @@ def _check_dry_run_mode(
     print(f"Would run {len(order)} check{'s' if len(order) != 1 else ''}:")
     for i, name in enumerate(order, 1):
         cdef = check_defs[name]
+        purity = "pure" if _check_is_pure(cdef) else "impure"
         deps = [d for d in cdef.depends_on if d in set(order)]
         if deps:
-            print(f"  {i}. {name} (depends on: {', '.join(deps)})")
+            print(f"  {i}. {name} (depends on: {', '.join(deps)}) [{purity}]")
         else:
-            print(f"  {i}. {name}")
+            print(f"  {i}. {name} [{purity}]")
 
 
 

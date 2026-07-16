@@ -164,7 +164,7 @@ class TestRunChecks:
     def test_all_pass(self, tmp_path):
         app = _make_app(tmp_path, TWO_CHECKS_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, run_all=True)
+        results, _, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 0
         assert len(results) == 2
         for r in results:
@@ -177,7 +177,7 @@ class TestRunChecks:
         }
         app = _make_app(tmp_path, TWO_CHECKS_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, run_all=True)
+        results, _, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 1
         statuses = {r.name: r.status for r in results}
         assert statuses["alpha"] == "fail"
@@ -186,7 +186,7 @@ class TestRunChecks:
     def test_tag_filtering(self, tmp_path):
         app = _make_app(tmp_path, TWO_CHECKS_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, tag_expr="release")
+        results, _, exit_code = app.run_checks(ctx, tag_expr="release")
         assert exit_code == 0
         assert len(results) == 1
         assert results[0].name == "alpha"
@@ -194,7 +194,7 @@ class TestRunChecks:
     def test_name_glob(self, tmp_path):
         app = _make_app(tmp_path, TWO_CHECKS_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, name_glob="bet*")
+        results, _, exit_code = app.run_checks(ctx, name_glob="bet*")
         assert exit_code == 0
         assert len(results) == 1
         assert results[0].name == "beta"
@@ -202,14 +202,14 @@ class TestRunChecks:
     def test_run_all(self, tmp_path):
         app = _make_app(tmp_path, TWO_CHECKS_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         names = {r.name for r in results}
         assert names == {"alpha", "beta"}
 
     def test_dependency_ordering(self, tmp_path):
         app = _make_app(tmp_path, DEP_CHAIN_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, run_all=True)
+        results, _, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 0
         names = [r.name for r in results]
         assert names.index("base") < names.index("mid") < names.index("top")
@@ -220,7 +220,7 @@ class TestRunChecks:
         }
         app = _make_app(tmp_path, DEP_CHAIN_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, run_all=True)
+        results, _, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 1
         statuses = {r.name: r.status for r in results}
         assert statuses["base"] == "fail"
@@ -233,7 +233,7 @@ class TestRunChecks:
         }
         app = _make_app(tmp_path, WARN_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(
+        results, _, exit_code = app.run_checks(
             ctx, run_all=True, ignore_warnings=False,
         )
         assert exit_code == 1
@@ -245,7 +245,7 @@ class TestRunChecks:
         }
         app = _make_app(tmp_path, WARN_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(
+        results, _, exit_code = app.run_checks(
             ctx, run_all=True, ignore_warnings=True,
         )
         assert exit_code == 0
@@ -254,7 +254,7 @@ class TestRunChecks:
     def test_no_matches_empty(self, tmp_path):
         app = _make_app(tmp_path, TWO_CHECKS_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, tag_expr="nonexistent")
+        results, _, exit_code = app.run_checks(ctx, tag_expr="nonexistent")
         assert results == []
         assert exit_code == 0
 
@@ -283,7 +283,7 @@ class TestFormatCheckResults:
     def test_returns_string(self, tmp_path):
         app = _make_app(tmp_path, SINGLE_CHECK_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results(results)
         assert isinstance(output, str)
         assert len(output) > 0
@@ -291,7 +291,7 @@ class TestFormatCheckResults:
     def test_format_pass(self, tmp_path):
         app = _make_app(tmp_path, SINGLE_CHECK_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results(results)
         assert "PASS" in output
         assert "only" in output
@@ -303,7 +303,7 @@ class TestFormatCheckResults:
         }
         app = _make_app(tmp_path, SINGLE_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results(results)
         assert "FAIL" in output
         assert "broken" in output
@@ -313,7 +313,7 @@ class TestFormatCheckResults:
     def test_aligned_columns(self, tmp_path):
         app = _make_app(tmp_path, TWO_CHECKS_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results(results)
         lines = output.split("\n")
         # Both check names should be padded to same width
@@ -330,7 +330,7 @@ class TestFormatCheckResults:
         }
         app = _make_app(tmp_path, SINGLE_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output_normal = format_check_results(results, verbose=False)
         assert "[error]" not in output_normal and "[warn]" not in output_normal
         output_verbose = format_check_results(results, verbose=True)
@@ -342,7 +342,7 @@ class TestFormatCheckResults:
         }
         app = _make_app(tmp_path, SINGLE_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results(results, verbose=False)
         assert "detail line" in output
 
@@ -353,7 +353,7 @@ class TestFormatCheckResults:
     def test_no_trailing_newline(self, tmp_path):
         app = _make_app(tmp_path, SINGLE_CHECK_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results(results)
         assert not output.endswith("\n")
 
@@ -367,7 +367,7 @@ class TestFormatCheckResultsJson:
     def test_returns_valid_json(self, tmp_path):
         app = _make_app(tmp_path, TWO_CHECKS_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results_json(results)
         parsed = json.loads(output)
         assert isinstance(parsed, list)
@@ -376,7 +376,7 @@ class TestFormatCheckResultsJson:
     def test_json_structure(self, tmp_path):
         app = _make_app(tmp_path, SINGLE_CHECK_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results_json(results)
         parsed = json.loads(output)
         item = parsed[0]
@@ -388,7 +388,7 @@ class TestFormatCheckResultsJson:
     def test_empty_problems_is_list(self, tmp_path):
         app = _make_app(tmp_path, SINGLE_CHECK_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results_json(results)
         parsed = json.loads(output)
         assert parsed[0]["problems"] == []
@@ -400,7 +400,7 @@ class TestFormatCheckResultsJson:
         }
         app = _make_app(tmp_path, SINGLE_CHECK_TOML, impls=impls)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results_json(results)
         parsed = json.loads(output)
         assert parsed[0]["problems"] == [
@@ -416,7 +416,7 @@ class TestFormatCheckResultsJson:
     def test_no_trailing_newline(self, tmp_path):
         app = _make_app(tmp_path, SINGLE_CHECK_TOML)
         ctx = SimpleContext(project_root=tmp_path)
-        results, _ = app.run_checks(ctx, run_all=True)
+        results, _, _ = app.run_checks(ctx, run_all=True)
         output = format_check_results_json(results)
         assert not output.endswith("\n")
 
@@ -459,7 +459,7 @@ class TestSetScopeAdapter:
         app.set_scope_adapter(adapter)
 
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, run_all=True)
+        results, _, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 0
         assert len(adapter_calls) == 1
         assert adapter_calls[0] == "changelog"
@@ -479,7 +479,7 @@ class TestSetScopeAdapter:
         app.set_scope_adapter(adapter)
 
         ctx = SimpleContext(project_root=tmp_path)
-        results, exit_code = app.run_checks(ctx, run_all=True)
+        results, _, exit_code = app.run_checks(ctx, run_all=True)
         assert exit_code == 0
         assert results[0].status == "skip"
         assert "adapter skipped" in results[0].message
@@ -527,3 +527,103 @@ class TestSetScopeAdapter:
         ctx = SimpleContext(project_root=tmp_path)
         with pytest.raises(TypeError, match="project_root"):
             app.run_checks(ctx, run_all=True)
+
+
+PARTITION_TOML = """\
+app = "testapp"
+
+[checks.pure-a]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
+[checks.net-b]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = true
+needs_network = true
+depends_on = []
+
+[checks.impure-c]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = false
+needs_network = false
+depends_on = []
+
+[checks.dep-on-impure]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = ["impure-c"]
+
+[checks.dep-on-pure]
+tags = ["p"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = ["pure-a"]
+"""
+
+
+class TestRunChecksPurityPartition:
+    """The purity partition: pure_only executes pure/non-network checks and
+    lists the rest without executing them or touching the exit code."""
+
+    def test_executes_pure_lists_impure(self, tmp_path):
+        app = _make_app(tmp_path, PARTITION_TOML)
+        ctx = SimpleContext(project_root=tmp_path)
+        results, impure_listed, exit_code = app.run_checks(
+            ctx, run_all=True, pure_only=True,
+        )
+        assert exit_code == 0  # listed checks contribute no exit code
+        executed = {r.name for r in results}
+        assert executed == {"pure-a", "dep-on-pure"}
+        for r in results:
+            assert r.status == "pass"
+        assert set(impure_listed) == {"net-b", "impure-c", "dep-on-impure"}
+        # Listed checks must not leak into results (outcome vocabulary stays pure)
+        assert not (executed & set(impure_listed))
+
+    def test_pure_depending_on_impure_is_listed(self, tmp_path):
+        ran = []
+
+        impls = {}
+        for name in ("pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure"):
+            def make(n):
+                def impl(ctx):
+                    ran.append(n)
+                    return pass_outcome(f"{n} OK")
+                return impl
+            impls[name] = make(name)
+
+        app = _make_app(tmp_path, PARTITION_TOML, impls=impls)
+        ctx = SimpleContext(project_root=tmp_path)
+        _, impure_listed, _ = app.run_checks(ctx, run_all=True, pure_only=True)
+        # dep-on-impure is pure but depends on the listed impure-c, so it cannot
+        # verify its precondition and joins the listing instead of executing.
+        assert "dep-on-impure" not in ran
+        assert "dep-on-impure" in impure_listed
+
+    def test_partition_off_is_unchanged(self, tmp_path):
+        app = _make_app(tmp_path, PARTITION_TOML)
+        ctx = SimpleContext(project_root=tmp_path)
+        results, impure_listed, exit_code = app.run_checks(ctx, run_all=True)
+        assert exit_code == 0
+        assert len(results) == 5  # every check executes
+        assert impure_listed == []
+
+    def test_dry_run_annotates_purity(self, tmp_path):
+        app = _make_app(tmp_path, PARTITION_TOML)
+        result = app.test(["check", "--all", "--dry-run"])
+        assert result.exit_code == 0
+        assert "[pure]" in result.stdout
+        assert "[impure]" in result.stdout
