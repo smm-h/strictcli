@@ -26,6 +26,10 @@ func (a *App) enableChecks() {
 // Called from enableChecks when the check system is turned on.
 func (a *App) registerCheckCommand() {
 	a.Command("check", "Run project checks registered via the check framework and report results", func(args map[string]interface{}) int {
+		// Materialize provider-sourced checks before any registry read (covers
+		// the --list, --dry-run, and execution branches below).
+		a.materializeCheckProviders()
+
 		runAll := args["all"].(bool)
 		tagExpr := args["tag"].(string)
 		nameGlob := args["name"].(string)

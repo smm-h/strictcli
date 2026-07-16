@@ -32,6 +32,9 @@ func (a *App) RunChecks(ctx CheckContext, opts RunChecksOptions) ([]CheckRunResu
 		return nil, nil, 0, fmt.Errorf("checks are not enabled on this App")
 	}
 
+	// Materialize provider-sourced checks before any registry read.
+	a.materializeCheckProviders()
+
 	if errMsg := a.validateCheckRegistrations(); errMsg != "" {
 		return nil, nil, 0, fmt.Errorf("%s", errMsg)
 	}

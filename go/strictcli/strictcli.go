@@ -306,6 +306,14 @@ type App struct {
 	checkOrder          []string // sorted check names for deterministic listing
 	checkContextFactory func() CheckContext
 
+	// Check-provider hook state. Providers populate the registry lazily at the
+	// first registry read (materialization), memoized per cwd. See
+	// check_provider.go for the mechanics.
+	checkProviders          []func() []CheckSpec
+	providerMaterialized    bool            // true once providers ran for providerMaterializedCwd
+	providerMaterializedCwd string          // os.Getwd() at last materialization
+	providerSourcedNames    map[string]bool // def names added by providers (dropped on re-materialization)
+
 	stdinConsumedBy *string // tracks which flag consumed stdin via @-
 	tagContracts    map[string]string // tag name -> required flag name
 
