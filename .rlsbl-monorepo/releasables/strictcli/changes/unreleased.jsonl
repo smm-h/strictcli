@@ -6,3 +6,4 @@
 {"id":"18c2b3baa9417747cc6e700f4b2e46258f9e18749fc8c618","commits":["d8e329f82a7a4c365dc83127ccb47c2ddb0fbe61"],"user_facing":true,"description":"**Fix: --dump-schema serializes RelativeToRoot flag defaults machine-stably.** Schema output is now deterministic across platforms.","type":"fix","packages":["strictcli"]}
 {"id":"18c2b3bc6ce99f2aadb06187cee24ce9aac413101b220452","commits":["08110254dc2ac981c1a179ca66bad7ad04b22533","885973a9fffe27d8c0ce897b1502cae1eea1732e","d66371fe2fcf9f59b8ba7c7c1607bbfbb2cfac10"],"user_facing":false,"packages":["strictcli"]}
 {"id":"18c2b3be30d82fa1a83fb6c242ab4c6795fccbade6879614","commits":["18cd84b97d0ec0d473512c00eb68907611894047"],"user_facing":false,"packages":["strictcli"]}
+{"id":"18c2b3bfb676aa17d1f7bc9575b04268a137e8d907b6e1bc","commits":["ab6782a7dfd9f06e23c13c92c78f76c34325dad6"],"user_facing":false,"packages":["strictcli"]}
