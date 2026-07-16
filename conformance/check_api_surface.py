@@ -515,7 +515,7 @@ def check_option_funcs_coverage(
 CHECK_RUNNER_TYPES: list[tuple[str, str, dict[str, str]]] = [
     ("CheckRunResult", "CheckRunResult", {
         "name": "Name",
-        "result": "Result",
+        "outcome": "Outcome",
     }),
     ("RunChecksOptions", "RunChecksOptions", {
         "tag_expr": "TagExpr",
@@ -541,6 +541,23 @@ CHECK_RUNNER_FUNCTIONS: list[tuple[str, str]] = [
     ("format_check_results_json", "FormatCheckResultsJSON"),
     ("error_check_spec", "NewErrorCheckSpec"),
     ("warn_check_spec", "NewWarnCheckSpec"),
+]
+
+# Public check-outcome types that must exist in BOTH implementations (name
+# parity). ErrorReporter/WarnReporter are the ceiling-typed reporters handed to
+# check impls; CheckSpec is the provider-sourced check descriptor.
+CHECK_RUNNER_SHARED_TYPES: list[str] = [
+    "ErrorReporter",
+    "WarnReporter",
+    "CheckSpec",
+]
+
+# Python-only check symbols: present in Python, no Go counterpart by design.
+# SkipCheck is the scope-adapter skip directive; Go has no scope adapter (see the
+# deliberate-asymmetry note in go/strictcli/check.go), so it is a justified
+# Python-only exclusion rather than a cross-impl parity requirement.
+PYTHON_ONLY_CHECK_SYMBOLS: list[str] = [
+    "SkipCheck",
 ]
 
 
@@ -672,6 +689,26 @@ def check_check_runner_functions(go_source: str) -> list[str]:
     return errors
 
 
+def check_check_runner_shared_types(go_source: str) -> list[str]:
+    """Check that the shared check-outcome types exist in both implementations,
+    and that Python-only check symbols exist in Python."""
+    errors: list[str] = []
+    sys.path.insert(0, str(PROJECT_ROOT / "python"))
+    import strictcli
+
+    for name in CHECK_RUNNER_SHARED_TYPES:
+        if not hasattr(strictcli, name):
+            errors.append(f"Python type '{name}' not found in strictcli module")
+        if not re.search(rf"\btype {name} struct\b", go_source):
+            errors.append(f"Go type '{name}' not found")
+
+    for name in PYTHON_ONLY_CHECK_SYMBOLS:
+        if not hasattr(strictcli, name):
+            errors.append(f"Python-only symbol '{name}' not found in strictcli module")
+
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -690,6 +727,7 @@ def main() -> int:
     all_errors.extend(check_check_runner_types(go_source, go_fields))
     all_errors.extend(check_check_runner_methods(go_source))
     all_errors.extend(check_check_runner_functions(go_source))
+    all_errors.extend(check_check_runner_shared_types(go_source))
 
     if all_errors:
         print(f"API surface check FAILED ({len(all_errors)} issue(s)):\n")
@@ -717,6 +755,8 @@ def main() -> int:
         print(f"  {py_cls}/{go_struct}: {len(field_map)} fields (cross-impl parity)")
     print(f"  App methods (check runner): {len(CHECK_RUNNER_APP_METHODS)}")
     print(f"  Package functions (check runner): {len(CHECK_RUNNER_FUNCTIONS)}")
+    print(f"  Shared check types (cross-impl): {len(CHECK_RUNNER_SHARED_TYPES)}")
+    print(f"  Python-only check symbols: {len(PYTHON_ONLY_CHECK_SYMBOLS)}")
     return 0
 
 
