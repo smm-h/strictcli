@@ -60,6 +60,17 @@ RICH_APP = {
             "env": "RICH_LOG_LEVEL",
             "choices_str": ["debug", "info", "warn", "error"],
         },
+        # Global flag with a RelativeToRoot marker default. Locks in that markers
+        # serialize identically (machine-stable) across both implementations.
+        {
+            "name": "state-file",
+            "type": "str",
+            "help": "State file relative to the infra root",
+            "default_relative_to_root": {
+                "env_var": "RICH_HOME",
+                "parts": ["state", "app.db"],
+            },
+        },
     ],
     "commands": [
         # 1. Simple command with all flag types
@@ -90,6 +101,16 @@ RICH_APP = {
                     "name": "dry-run",
                     "type": "bool",
                     "help": "Dry run mode",
+                },
+                # Command flag with a RelativeToRoot marker default.
+                {
+                    "name": "cache-file",
+                    "type": "str",
+                    "help": "Cache file relative to the infra root",
+                    "default_relative_to_root": {
+                        "env_var": "RICH_HOME",
+                        "parts": ["cache.bin"],
+                    },
                 },
             ],
             "args": [
