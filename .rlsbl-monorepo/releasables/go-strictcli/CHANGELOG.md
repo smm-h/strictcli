@@ -2,24 +2,42 @@
 
 # Changelog
 
-## 0.21.0
+## 0.22.0
 
-Public schema-dict accessor, divergence-aware config conflict mode with per-flag override, and validation-only ConfigField/flag coexistence
+Check outcome model (sealed reporters, per-problem severity, purity partition), check providers, InfraEnv location roots, global-flag conflict fix, conformance parity.
 
 <details>
 <summary>Context</summary>
 
-Phase 2 additions, all backward compatible:
-- DumpSchemaDict() exposes the CLI schema as a map with no filesystem or CWD
-  access (the --dump-schema writer path adds project_id on top).
-- WithConfigConflictMode("error") now only errors when the config and CLI/env
-  values actually diverge; identical values agree. A per-flag ConflictMode
-  option overrides the app default for a single flag.
-- A config field whose name equals a flag's param name is a validation-only
-  annotation of that flag: it renders once (in config show/init) and its
-  default must agree with the flag's default (registration panic otherwise).
+Breaking changes (minor bump in 0.x):
+
+- CheckResult deleted. Check handlers now receive a ceiling-typed reporter
+  (ErrorReporter for error-severity checks, WarnReporter for warn-severity)
+  and return outcomes via reporter.Passed / Reporter.Found / Reporter.Skipped.
+- RegisterCheck replaced by RegisterErrorCheck / RegisterWarnCheck methods
+  that enforce the severity-form contract at registration time.
+- Check implementations change from fn(ctx) CheckResult to
+  fn(ctx, reporter) outcome.
+- Scope adapters return SkipCheck instead of CheckResult.
 
 </details>
+
+### Breaking
+
+- [go-strictcli] **Breaking: sealed reporter outcome model.** CheckResult removed; check handlers now receive a ceiling-typed reporter (ErrorReporter / WarnReporter) and return outcomes via reporter.Passed / reporter.Found / reporter.Skipped. Registration via app.RegisterErrorCheck / app.RegisterWarnCheck replaces app.RegisterCheck.
+
+### Features
+
+- [go-strictcli] **InfraEnv primitive.** New location-root concept with RelativeToRoot flag modifier, handshake env vars, and InfraEnv interface for tools that manage infrastructure directories.
+- [go-strictcli] **Check providers.** RegisterCheckProvider() hook for scoped, lazy per-cwd check materialization. CheckSpec constructors for provider-supplied check definitions.
+- [go-strictcli] **Purity partition.** Check runner now splits checks into pure (no subprocess, no network) and impure sets; --dry-run runs pure checks only.
+
+### Fixes
+
+- [go-strictcli] **Fix: global-flag config-conflict now checked in post-command position.** Flags placed after the command token are now conflict-checked against config values, matching the pre-command behavior.
+- [go-strictcli] **Fix: --dump-schema serializes RelativeToRoot flag defaults machine-stably.** Schema output is now deterministic across platforms.
+
+## 0.21.0
 
 ### Features
 
