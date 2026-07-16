@@ -24,6 +24,30 @@ var flagTypeName = map[FlagType]string{
 	TypeDictFloat: "dict[float]",
 }
 
+// serializeDefault converts a default value to a JSON-serializable form. A
+// RelativeToRoot marker (InfraRootPath) has unexported fields that would marshal
+// to an empty object; instead it is serialized machine-stably as
+// {"relative_to_root": {"env_var": ..., "parts": [...]}} -- only the declared env
+// var and path parts, never a resolved machine-specific path. This shape is
+// identical to the Python implementation so the schema cross-language byte-compares.
+// All other values pass through unchanged.
+func serializeDefault(v interface{}) interface{} {
+	m, ok := v.(InfraRootPath)
+	if !ok {
+		return v
+	}
+	parts := make([]interface{}, len(m.parts))
+	for i, p := range m.parts {
+		parts[i] = p
+	}
+	return map[string]interface{}{
+		"relative_to_root": map[string]interface{}{
+			"env_var": m.envVar,
+			"parts":   parts,
+		},
+	}
+}
+
 // serializeFlag converts a Flag to a JSON-serializable map matching the Python format.
 // Fields matching their defaults are omitted; see buildSchemaDefaults().
 func serializeFlag(f Flag) map[string]interface{} {
@@ -44,7 +68,7 @@ func serializeFlag(f Flag) map[string]interface{} {
 		dflt = []interface{}{}
 	}
 	if dflt != nil {
-		m["default"] = dflt
+		m["default"] = serializeDefault(dflt)
 	}
 
 	// env: default nil (omit when empty string -> nil)
