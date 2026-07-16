@@ -3,7 +3,7 @@
     "pypi",
     "npm"
   ],
-  "private": false,
+  "publish_mode": "ci",
   "push_timeout": 300,
   "pipelines": {
     "pypi": {

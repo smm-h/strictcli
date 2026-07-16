@@ -1,4 +1,4 @@
 {
-  "private": false,
+  "publish_mode": "ci",
   "coverage_unit": "commit"
 }
