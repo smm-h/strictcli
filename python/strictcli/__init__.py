@@ -88,7 +88,7 @@ def _resolve_infra_root_path(ref: RelativeToRoot, roots: dict[str, str]) -> str:
     if root is None:
         raise ValueError(
             f'RelativeToRoot references undeclared infra root "{ref.env_var}"; '
-            f"declare it via App(infra_root={{...}})"
+            f"declare it as an infra root"
         )
     return os.path.join(root, *ref.parts)
 
@@ -2534,9 +2534,9 @@ class App:
         self._handshake_order: list[str] = list(self.handshake_env.keys()) if self.handshake_env else []
         for ev in self._handshake_order:
             if not self._handshake_envs[ev] or not self._handshake_envs[ev].strip():
-                raise ValueError(f'handshake_env "{ev}": help must be a non-empty string')
+                raise ValueError(f'handshake env var "{ev}": help must be a non-empty string')
             if ev in self._infra_roots:
-                raise ValueError(f'handshake_env "{ev}" is already declared as an infra root')
+                raise ValueError(f'handshake env var "{ev}" is already declared as an infra root')
         # A shared frozenset of declared root names, threaded to commands/groups
         # so flag-default markers can be validated at registration time.
         self._infra_root_names: frozenset[str] = frozenset(self._infra_roots)
@@ -2612,7 +2612,7 @@ class App:
             if f.default.env_var not in self._infra_roots:
                 raise ValueError(
                     f'flag "{f.name}": RelativeToRoot references undeclared infra '
-                    f'root "{f.default.env_var}"; declare it via App(infra_root={{...}})'
+                    f'root "{f.default.env_var}"; declare it as an infra root'
                 )
 
     def _infra_access(self) -> "_InfraAccess | None":
@@ -5958,8 +5958,7 @@ def _build_and_validate_command(
         if isinstance(f.default, RelativeToRoot) and f.default.env_var not in _root_names:
             raise ValueError(
                 f'command "{name}": flag "{f.name}": RelativeToRoot references '
-                f'undeclared infra root "{f.default.env_var}"; declare it via '
-                f'App(infra_root={{...}})'
+                f'undeclared infra root "{f.default.env_var}"; declare it as an infra root'
             )
 
     return Command(

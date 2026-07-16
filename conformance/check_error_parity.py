@@ -102,11 +102,6 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
     # signature due to format string structure.
     'Flag *: default * is not in choices *':
         "Python f-string normalizes without brackets; Go counterpart is 'Flag *: default * is not in choices [*]'",
-    # Python validates CheckResult fields at construction; Go uses typed struct
-    'CheckResult.message must be a non-empty string':
-        "Go uses typed struct fields; no runtime validation needed",
-    'CheckResult.status must be one of "pass", "fail", "warn", "skip", got *':
-        "Go uses typed struct fields; no runtime validation needed",
     # Python validates Implies.value type at registration; Go uses typed bool field
     'command *: Implies value must be a bool, got *':
         "Go Implies struct has typed bool Value field; no runtime type check needed",
@@ -249,6 +244,19 @@ PY_ONLY_EXCLUSIONS: dict[str, str] = {
         "Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
     "global flag '--*' must be passed as --* or --no-*":
         "Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+    # --- InfraEnv structural / extraction asymmetries ---
+    # The bare resolve-time RelativeToRoot message is aligned word-for-word with
+    # Go's (resolveInfraRootPath in strictcli.go), but Go emits it via a
+    # `return fmt.Errorf(...)` in the resolve path, which the Go extractor does
+    # not scan (it scans registration panics + `return fmt.Sprintf`). The wording
+    # is in parity; only the extraction site differs.
+    'RelativeToRoot references undeclared infra root *; declare it as an infra root':
+        "Go counterpart is an aligned fmt.Errorf in resolveInfraRootPath, not in the extracted registration set",
+    # Python validates flag-default markers per-command with a `command "X":`
+    # prefix as well; Go validates each flag once at registration (flag-context
+    # only), so the command-prefixed variant is a Python-only surface.
+    'command *: flag *: RelativeToRoot references undeclared infra root *; declare it as an infra root':
+        "Go has no command-context flag-marker validation; it validates per-flag at registration",
 }
 
 # Go-only: errors that have no Python counterpart by design
@@ -380,6 +388,15 @@ GO_ONLY_EXCLUSIONS: dict[str, str] = {
     # --- List flag env separator ---
     '--*: list flag with env requires env_separator':
         "Go-specific list/env interaction validation; Python handles differently",
+    # --- InfraEnv structural asymmetries ---
+    # Go's WithInfraRoot/WithHandshakeEnv are additive option calls, so a repeat
+    # declaration is a runtime duplicate error. Python's App(infra_root={...},
+    # handshake_env={...}) takes dicts keyed by env var, so a duplicate key is
+    # impossible by construction -- there is no Python surface for these.
+    'duplicate infra root env var *':
+        "Python infra_root is a dict keyed by env var; duplicates are impossible by construction",
+    'duplicate handshake env var *':
+        "Python handshake_env is a dict keyed by env var; duplicates are impossible by construction",
 }
 
 # Dead code: errors present in both implementations but unreachable at runtime.

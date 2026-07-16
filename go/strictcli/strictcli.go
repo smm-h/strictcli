@@ -431,13 +431,13 @@ func WithInfraRoot(envVar, defaultPath string) AppOption {
 func WithHandshakeEnv(envVar, help string) AppOption {
 	return func(a *App) {
 		if strings.TrimSpace(help) == "" {
-			panic(fmt.Sprintf("WithHandshakeEnv: help for %q must be a non-empty string", envVar))
+			panic(fmt.Sprintf("handshake env var %q: help must be a non-empty string", envVar))
 		}
 		if a.handshakeEnvs == nil {
 			a.handshakeEnvs = make(map[string]string)
 		}
 		if _, dup := a.handshakeEnvs[envVar]; dup {
-			panic(fmt.Sprintf("WithHandshakeEnv: duplicate handshake env var %q", envVar))
+			panic(fmt.Sprintf("duplicate handshake env var %q", envVar))
 		}
 		a.handshakeEnvs[envVar] = help
 		a.handshakeOrder = append(a.handshakeOrder, envVar)
@@ -1266,7 +1266,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	a.infraRootFromEnv = make(map[string]bool)
 	for _, decl := range a.infraRootDecls {
 		if _, dup := a.infraRoots[decl.envVar]; dup {
-			panic(fmt.Sprintf("WithInfraRoot: duplicate infra root env var %q", decl.envVar))
+			panic(fmt.Sprintf("duplicate infra root env var %q", decl.envVar))
 		}
 		if val, ok := os.LookupEnv(decl.envVar); ok {
 			a.infraRoots[decl.envVar] = expandTilde(val)
@@ -1280,7 +1280,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	// Handshake env vars must not collide with declared roots.
 	for _, ev := range a.handshakeOrder {
 		if _, isRoot := a.infraRoots[ev]; isRoot {
-			panic(fmt.Sprintf("WithHandshakeEnv: %q is already declared as an infra root", ev))
+			panic(fmt.Sprintf("handshake env var %q is already declared as an infra root", ev))
 		}
 	}
 	// Resolve the config-path marker (if any) now that roots exist.
@@ -1597,7 +1597,7 @@ func expandTilde(p string) string {
 func resolveInfraRootPath(ref InfraRootPath, roots map[string]string) (string, error) {
 	root, ok := roots[ref.envVar]
 	if !ok {
-		return "", fmt.Errorf("RelativeToRoot references undeclared infra root %q; declare it with WithInfraRoot", ref.envVar)
+		return "", fmt.Errorf("RelativeToRoot references undeclared infra root %q; declare it as an infra root", ref.envVar)
 	}
 	return filepath.Join(append([]string{root}, ref.parts...)...), nil
 }
@@ -1614,7 +1614,7 @@ func (a *App) resolveInfraPath(ref InfraRootPath) (string, error) {
 func (a *App) validateFlagInfraMarker(f *Flag) {
 	if ref, ok := f.Default.(InfraRootPath); ok {
 		if _, declared := a.infraRoots[ref.envVar]; !declared {
-			panic(fmt.Sprintf("flag %q: RelativeToRoot references undeclared infra root %q; declare it with WithInfraRoot", f.Name, ref.envVar))
+			panic(fmt.Sprintf("flag %q: RelativeToRoot references undeclared infra root %q; declare it as an infra root", f.Name, ref.envVar))
 		}
 	}
 }
