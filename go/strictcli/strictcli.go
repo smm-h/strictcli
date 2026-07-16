@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -167,6 +168,32 @@ func (CoRequired) isDependency() {}
 func (Requires) isDependency()   {}
 func (Implies) isDependency()    {}
 
+// InfraRootPath is an opaque marker produced by RelativeToRoot. It represents a
+// filesystem path built from a declared infrastructure root (identified by its
+// env var name) joined with zero or more path parts. Config-path markers resolve
+// eagerly at construction; flag-default markers resolve when defaults are applied
+// at parse time. A marker referencing an undeclared root is a registration-time
+// hard error.
+type InfraRootPath struct {
+	envVar string
+	parts  []string
+}
+
+// RelativeToRoot returns a marker representing a path relative to a declared
+// infrastructure root. envVar names the root (declared via WithInfraRoot); parts
+// are joined onto the resolved root path. Accepted by flag Default(...) and
+// WithConfigPathRelativeToRoot.
+func RelativeToRoot(envVar string, parts ...string) InfraRootPath {
+	return InfraRootPath{envVar: envVar, parts: append([]string{}, parts...)}
+}
+
+// infraRootDecl is a raw WithInfraRoot declaration, collected during the options
+// loop and resolved eagerly after the loop completes in NewApp.
+type infraRootDecl struct {
+	envVar      string
+	defaultPath string
+}
+
 // PassthroughHandler is the handler type for passthrough commands.
 type PassthroughHandler func(name string, args []string, globals map[string]interface{}) int
 
@@ -295,6 +322,22 @@ type App struct {
 	// configConflictMode controls whether config+cli and config+env overlaps
 	// are hard errors. Valid values: "cli-wins" (default), "error".
 	configConflictMode string
+
+	// Infrastructure env vars (location roots + handshake signals).
+	// infraRootDecls holds raw WithInfraRoot declarations; they are resolved
+	// eagerly in NewApp (post-options) into infraRoots. Resolution never
+	// consults the hermetic flag: infra vars have no argv dependency, which is
+	// WHY eager construction-time resolution is sound (and hermetic-immune).
+	infraRootDecls   []infraRootDecl
+	infraRoots       map[string]string // env var -> resolved absolute path
+	infraRootOrder   []string          // env var names in declaration order
+	infraRootFromEnv map[string]bool   // env var -> value came from the env var (vs default)
+	configPathRef    *InfraRootPath    // set by WithConfigPathRelativeToRoot
+
+	// Handshake env vars: cross-tool protocol signals. No default, no eager
+	// resolution -- read live via os.LookupEnv at access time.
+	handshakeEnvs  map[string]string // env var -> help
+	handshakeOrder []string          // env var names in declaration order
 }
 
 // dispatchCtx carries per-dispatch state to struct handler wrappers.
@@ -359,6 +402,47 @@ func WithConfigConflictMode(mode string) AppOption {
 			panic(fmt.Sprintf("WithConfigConflictMode: mode must be \"cli-wins\" or \"error\", got %q", mode))
 		}
 		a.configConflictMode = mode
+	}
+}
+
+// WithInfraRoot declares an infrastructure location root: an env var that, when
+// set, overrides defaultPath as the base directory for the tool's data. Multiple
+// roots are allowed (keyed by env var name). Roots are resolved eagerly at
+// construction and are immune to --hermetic (hermetic suppresses config and
+// behavioral env, never location). A leading ~ in the value or default is
+// expanded to the user's home directory.
+func WithInfraRoot(envVar, defaultPath string) AppOption {
+	return func(a *App) {
+		a.infraRootDecls = append(a.infraRootDecls, infraRootDecl{envVar: envVar, defaultPath: defaultPath})
+	}
+}
+
+// WithHandshakeEnv declares a handshake env var: a cross-tool protocol signal set
+// by the invoking process. It has no default and no resolution semantics beyond
+// "read live at access time" via ctx.InfraValue.
+func WithHandshakeEnv(envVar, help string) AppOption {
+	return func(a *App) {
+		if strings.TrimSpace(help) == "" {
+			panic(fmt.Sprintf("WithHandshakeEnv: help for %q must be a non-empty string", envVar))
+		}
+		if a.handshakeEnvs == nil {
+			a.handshakeEnvs = make(map[string]string)
+		}
+		if _, dup := a.handshakeEnvs[envVar]; dup {
+			panic(fmt.Sprintf("WithHandshakeEnv: duplicate handshake env var %q", envVar))
+		}
+		a.handshakeEnvs[envVar] = help
+		a.handshakeOrder = append(a.handshakeOrder, envVar)
+	}
+}
+
+// WithConfigPathRelativeToRoot overrides the config file path with a location
+// relative to a declared infrastructure root. The marker is resolved eagerly at
+// construction into the absolute config path override.
+func WithConfigPathRelativeToRoot(envVar string, parts ...string) AppOption {
+	return func(a *App) {
+		ref := RelativeToRoot(envVar, parts...)
+		a.configPathRef = &ref
 	}
 }
 
@@ -1164,6 +1248,42 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	for _, opt := range opts {
 		opt(a)
 	}
+
+	// Resolve infrastructure roots eagerly, immediately after options are
+	// applied. Infra vars have no argv dependency, so their resolution is sound
+	// at construction time -- and this is precisely WHY it is hermetic-immune:
+	// there is no argv yet to consult, so --hermetic (which only suppresses
+	// argv-derived config/env behavior) can never affect location roots.
+	a.infraRoots = make(map[string]string)
+	a.infraRootFromEnv = make(map[string]bool)
+	for _, decl := range a.infraRootDecls {
+		if _, dup := a.infraRoots[decl.envVar]; dup {
+			panic(fmt.Sprintf("WithInfraRoot: duplicate infra root env var %q", decl.envVar))
+		}
+		if val, ok := os.LookupEnv(decl.envVar); ok {
+			a.infraRoots[decl.envVar] = expandTilde(val)
+			a.infraRootFromEnv[decl.envVar] = true
+		} else {
+			a.infraRoots[decl.envVar] = expandTilde(decl.defaultPath)
+			a.infraRootFromEnv[decl.envVar] = false
+		}
+		a.infraRootOrder = append(a.infraRootOrder, decl.envVar)
+	}
+	// Handshake env vars must not collide with declared roots.
+	for _, ev := range a.handshakeOrder {
+		if _, isRoot := a.infraRoots[ev]; isRoot {
+			panic(fmt.Sprintf("WithHandshakeEnv: %q is already declared as an infra root", ev))
+		}
+	}
+	// Resolve the config-path marker (if any) now that roots exist.
+	if a.configPathRef != nil {
+		resolved, err := a.resolveInfraPath(*a.configPathRef)
+		if err != nil {
+			panic(err.Error())
+		}
+		a.configPathOverride = resolved
+	}
+
 	// Default config format to "json" if not set
 	if a.configFormat == "" {
 		a.configFormat = "json"
@@ -1449,9 +1569,76 @@ func (a *App) checkCmdFieldCollisions(cmd *Command) {
 	}
 }
 
+// expandTilde expands a leading ~ (as ~ or ~/...) to the user's home directory.
+func expandTilde(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = os.Getenv("HOME")
+		}
+		if p == "~" {
+			return home
+		}
+		return filepath.Join(home, p[2:])
+	}
+	return p
+}
+
+// resolveInfraRootPath resolves an InfraRootPath marker against a roots map.
+// Returns an error if the marker references an undeclared root.
+func resolveInfraRootPath(ref InfraRootPath, roots map[string]string) (string, error) {
+	root, ok := roots[ref.envVar]
+	if !ok {
+		return "", fmt.Errorf("RelativeToRoot references undeclared infra root %q; declare it with WithInfraRoot", ref.envVar)
+	}
+	return filepath.Join(append([]string{root}, ref.parts...)...), nil
+}
+
+// resolveInfraPath resolves an InfraRootPath marker against the declared roots.
+// Returns an error if the marker references an undeclared root.
+func (a *App) resolveInfraPath(ref InfraRootPath) (string, error) {
+	return resolveInfraRootPath(ref, a.infraRoots)
+}
+
+// validateFlagInfraMarker panics if a flag's Default is an InfraRootPath marker
+// that references an undeclared root. Called at registration time so that a
+// dangling marker is a construction-time hard error.
+func (a *App) validateFlagInfraMarker(f *Flag) {
+	if ref, ok := f.Default.(InfraRootPath); ok {
+		if _, declared := a.infraRoots[ref.envVar]; !declared {
+			panic(fmt.Sprintf("flag %q: RelativeToRoot references undeclared infra root %q; declare it with WithInfraRoot", f.Name, ref.envVar))
+		}
+	}
+}
+
+// validateCmdInfraMarkers validates every flag on a command at registration.
+func (a *App) validateCmdInfraMarkers(cmd *Command) {
+	for i := range cmd.flags {
+		a.validateFlagInfraMarker(&cmd.flags[i])
+	}
+}
+
+// infraAccess snapshots the app's infra data for a Context: resolved roots
+// (captured value) plus the set of declared handshake env vars (read live).
+func (a *App) infraAccess() *infraAccess {
+	if len(a.infraRoots) == 0 && len(a.handshakeEnvs) == 0 {
+		return nil
+	}
+	roots := make(map[string]string, len(a.infraRoots))
+	for k, v := range a.infraRoots {
+		roots[k] = v
+	}
+	handshakes := make(map[string]bool, len(a.handshakeEnvs))
+	for k := range a.handshakeEnvs {
+		handshakes[k] = true
+	}
+	return &infraAccess{roots: roots, handshakes: handshakes}
+}
+
 func (a *App) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
 	cmd := buildAndValidateCommand(name, help, handler, a.EnvPrefix, a.globalFlags, nil, opts)
 	a.checkCmdFieldCollisions(cmd)
+	a.validateCmdInfraMarkers(cmd)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
@@ -1466,6 +1653,7 @@ func (a *App) DataCommand(name, help string, handler DataHandler, opts ...CmdOpt
 	cmd := buildAndValidateCommand(name, help, wrapper, a.EnvPrefix, a.globalFlags, nil, opts)
 	cmd.dataHandler = handler
 	a.checkCmdFieldCollisions(cmd)
+	a.validateCmdInfraMarkers(cmd)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
@@ -1477,6 +1665,7 @@ func (a *App) DataCommand(name, help string, handler DataHandler, opts ...CmdOpt
 func (a *App) RegisterHandler(name, help string, factory func() Handler, opts ...CmdOption) {
 	cmd := buildHandlerCommand(name, help, factory, a, a.EnvPrefix, a.globalFlags, nil, opts)
 	a.checkCmdFieldCollisions(cmd)
+	a.validateCmdInfraMarkers(cmd)
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
@@ -1533,6 +1722,7 @@ func (a *App) GlobalFlag(f Flag) {
 			panic(fmt.Sprintf("duplicate global flag name %q", f.Name))
 		}
 	}
+	a.validateFlagInfraMarker(&f)
 	a.globalFlags = append(a.globalFlags, f)
 }
 
@@ -1597,6 +1787,7 @@ func (g *Group) Command(name, help string, handler func(map[string]interface{}) 
 	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
 	if g.app != nil {
 		g.app.checkCmdFieldCollisions(cmd)
+		g.app.validateCmdInfraMarkers(cmd)
 	}
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
@@ -1615,6 +1806,7 @@ func (g *Group) DataCommand(name, help string, handler DataHandler, opts ...CmdO
 	cmd.dataHandler = handler
 	if g.app != nil {
 		g.app.checkCmdFieldCollisions(cmd)
+		g.app.validateCmdInfraMarkers(cmd)
 	}
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
@@ -1628,6 +1820,7 @@ func (g *Group) RegisterHandler(name, help string, factory func() Handler, opts 
 	cmd := buildHandlerCommand(name, help, factory, g.app, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
 	if g.app != nil {
 		g.app.checkCmdFieldCollisions(cmd)
+		g.app.validateCmdInfraMarkers(cmd)
 	}
 	g.Commands[name] = cmd
 	g.order = append(g.order, name)
@@ -2196,7 +2389,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 	}
 
-	kwargs, postGlobalValues, cmdSources, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode, preScan.hermetic)
+	kwargs, postGlobalValues, cmdSources, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode, preScan.hermetic, a.infraRoots)
 	if err != "" {
 		parts := append([]string{a.Name}, path...)
 		parts = append(parts, cmd.Name)
@@ -2587,12 +2780,12 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 		if _, ok := globalValues[f.Name]; ok {
 			continue
 		}
-		val, errMsg := applyFlagDefault(f, nil, "global ")
+		val, src, errMsg := applyFlagDefault(f, nil, "global ", a.infraRoots)
 		if errMsg != "" {
 			return nil, nil, nil, errMsg
 		}
 		globalValues[f.Name] = val
-		globalSources[flagParamName(f.Name)] = "default"
+		globalSources[flagParamName(f.Name)] = sourceLabelString(src)
 	}
 
 	// Validate choices for global flags
@@ -2879,7 +3072,7 @@ func buildHandlerCommand(name, help string, factory func() Handler, app *App, en
 			globals = dc.globals
 			sources = dc.sources
 		}
-		ctx := newContext(stdout, stderr, globals, sources)
+		ctx := newContext(stdout, stderr, globals, sources, app.infraAccess())
 		code := handler.Run(ctx)
 
 		// If the handler emitted data, it needs to be available to the caller.

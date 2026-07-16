@@ -779,6 +779,34 @@ func (a *App) registerConfigGroup() {
 				}
 				result[name] = cfEntry
 			}
+			// Infrastructure section (roots + handshakes)
+			if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 {
+				infra := make(map[string]interface{})
+				for _, ev := range a.infraRootOrder {
+					src := "default"
+					if a.infraRootFromEnv[ev] {
+						src = "env"
+					}
+					infra[ev] = map[string]interface{}{
+						"kind":     "root",
+						"source":   src,
+						"resolved": a.infraRoots[ev],
+					}
+				}
+				for _, ev := range a.handshakeOrder {
+					val, isSet := os.LookupEnv(ev)
+					entry := map[string]interface{}{
+						"kind": "handshake",
+						"set":  isSet,
+						"help": a.handshakeEnvs[ev],
+					}
+					if isSet {
+						entry["value"] = val
+					}
+					infra[ev] = entry
+				}
+				result["__infrastructure__"] = infra
+			}
 			data, err := json.MarshalIndent(result, "", "  ")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
@@ -830,6 +858,26 @@ func (a *App) registerConfigGroup() {
 				}
 				fmt.Printf("  %s (%s, %s) = %v  (source: %s)  -- %s\n",
 					name, flagTypeName[cf.Type], reqStr, formatConfigValue(value), source, cf.Help)
+			}
+		}
+		// Infrastructure section (roots + handshakes)
+		if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 {
+			fmt.Println()
+			fmt.Println("Infrastructure:")
+			for _, ev := range a.infraRootOrder {
+				src := "default"
+				if a.infraRootFromEnv[ev] {
+					src = "env-set"
+				}
+				fmt.Printf("  %s (root) = %s  (source: %s)\n", ev, a.infraRoots[ev], src)
+			}
+			for _, ev := range a.handshakeOrder {
+				val, isSet := os.LookupEnv(ev)
+				if isSet {
+					fmt.Printf("  %s (handshake) = %s  (set)  -- %s\n", ev, val, a.handshakeEnvs[ev])
+				} else {
+					fmt.Printf("  %s (handshake) = <unset>  -- %s\n", ev, a.handshakeEnvs[ev])
+				}
 			}
 		}
 		return 0

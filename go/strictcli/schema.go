@@ -493,6 +493,42 @@ func dumpSchemaCore(app *App) map[string]interface{} {
 		}
 		schema["checks"] = checksMap
 	}
+
+	// infra: only present when infrastructure roots or handshake vars are
+	// declared. Resolved root values are intentionally EXCLUDED -- the schema
+	// must be machine-stable (not machine-specific). Only the declared env var
+	// and default path (both stable declarations) are emitted for roots.
+	if len(app.infraRootOrder) > 0 || len(app.handshakeOrder) > 0 {
+		infra := make(map[string]interface{})
+		if len(app.infraRootOrder) > 0 {
+			roots := make([]interface{}, 0, len(app.infraRootOrder))
+			for _, ev := range app.infraRootOrder {
+				var def string
+				for _, d := range app.infraRootDecls {
+					if d.envVar == ev {
+						def = d.defaultPath
+						break
+					}
+				}
+				roots = append(roots, map[string]interface{}{
+					"env_var": ev,
+					"default": def,
+				})
+			}
+			infra["roots"] = roots
+		}
+		if len(app.handshakeOrder) > 0 {
+			handshakes := make([]interface{}, 0, len(app.handshakeOrder))
+			for _, ev := range app.handshakeOrder {
+				handshakes = append(handshakes, map[string]interface{}{
+					"env_var": ev,
+					"help":    app.handshakeEnvs[ev],
+				})
+			}
+			infra["handshakes"] = handshakes
+		}
+		schema["infra"] = infra
+	}
 	return schema
 }
 

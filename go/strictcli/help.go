@@ -74,6 +74,38 @@ func formatAppHelp(app *App) string {
 		}
 	}
 
+	if len(app.infraRootOrder) > 0 || len(app.handshakeOrder) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Infrastructure:")
+		lines = append(lines, "  (location/handshake env vars; not suppressed by --hermetic)")
+		maxLen := 0
+		for _, ev := range app.infraRootOrder {
+			if len(ev) > maxLen {
+				maxLen = len(ev)
+			}
+		}
+		for _, ev := range app.handshakeOrder {
+			if len(ev) > maxLen {
+				maxLen = len(ev)
+			}
+		}
+		for _, ev := range app.infraRootOrder {
+			padding := maxLen - len(ev) + 4
+			var def string
+			for _, d := range app.infraRootDecls {
+				if d.envVar == ev {
+					def = d.defaultPath
+					break
+				}
+			}
+			lines = append(lines, fmt.Sprintf("  %s%sroot (default: %s)", ev, strings.Repeat(" ", padding), def))
+		}
+		for _, ev := range app.handshakeOrder {
+			padding := maxLen - len(ev) + 4
+			lines = append(lines, fmt.Sprintf("  %s%s%s", ev, strings.Repeat(" ", padding), app.handshakeEnvs[ev]))
+		}
+	}
+
 	lines = append(lines, "")
 	lines = append(lines, fmt.Sprintf("Use '%s <command> --help' for more information.", app.Name))
 

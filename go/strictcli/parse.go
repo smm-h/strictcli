@@ -20,7 +20,27 @@ const (
 	SourceConfig  Source = iota // from a config file
 	SourceDefault Source = iota // from the flag's default value
 	SourceImplied Source = iota // injected by an Implies dependency
+	SourceInfra   Source = iota // default resolved through a RelativeToRoot infra root
 )
+
+// sourceLabelString maps a Source to its provenance label string.
+func sourceLabelString(src Source) string {
+	switch src {
+	case SourceCLI:
+		return "cli"
+	case SourceEnv:
+		return "env"
+	case SourceConfig:
+		return "config"
+	case SourceDefault:
+		return "default"
+	case SourceImplied:
+		return "implied"
+	case SourceInfra:
+		return "infra"
+	}
+	return "default"
+}
 
 // sourcedEntry stores a value alongside its provenance.
 type sourcedEntry struct {
@@ -99,18 +119,7 @@ func (s *sourcedStore) toMap() map[string]interface{} {
 func (s *sourcedStore) sourceMap() map[string]string {
 	m := make(map[string]string, len(s.entries))
 	for k, e := range s.entries {
-		switch e.source {
-		case SourceCLI:
-			m[k] = "cli"
-		case SourceEnv:
-			m[k] = "env"
-		case SourceConfig:
-			m[k] = "config"
-		case SourceDefault:
-			m[k] = "default"
-		case SourceImplied:
-			m[k] = "implied"
-		}
+		m[k] = sourceLabelString(e.source)
 	}
 	return m
 }
@@ -172,7 +181,7 @@ func resolveAtPrefix(flagName, raw string, stdinConsumedBy **string) (string, st
 // conflictMode is "cli-wins" (default) or "error" (config+cli/env overlap is an error).
 // When hermetic is true, env var and config resolution are skipped entirely.
 // Returns (kwargs, postGlobalValues, sources, errorString).
-func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string, hermetic bool) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string, hermetic bool, infraRoots map[string]string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
 	// Build flag lookup maps
 	longLookup := make(map[string]*Flag)    // --flag-name -> Flag
 	shortLookup := make(map[string]*Flag)   // -x -> Flag
@@ -594,14 +603,14 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 	}
 
-	return validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)
+	return validateAndBuildKwargs(cmd, store, positionals, globalFlagNames, infraRoots)
 }
 
 // applyFlagDefault resolves the default value for a flag that was not provided
 // on the command line. Returns (value, errorMsg). If errorMsg is non-empty, the
 // flag is required and was not provided. The prefix is prepended to error
 // messages (e.g. "global " for global flags, "" for command flags).
-func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string) (interface{}, string) {
+func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string, roots map[string]string) (interface{}, Source, string) {
 	if IsDictType(f.Type) {
 		if f.hasDefault && f.Default != nil {
 			src := f.Default.(map[string]interface{})
@@ -609,33 +618,43 @@ func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string) (i
 			for k, v := range src {
 				m[k] = v
 			}
-			return m, ""
+			return m, SourceDefault, ""
 		}
-		return map[string]interface{}{}, ""
+		return map[string]interface{}{}, SourceDefault, ""
 	}
 	if f.Repeatable {
 		if f.hasDefault && f.Default != nil {
 			src := f.Default.([]interface{})
-			return append([]interface{}{}, src...), ""
+			return append([]interface{}{}, src...), SourceDefault, ""
 		}
-		return []interface{}{}, ""
+		return []interface{}{}, SourceDefault, ""
 	}
 	if f.hasDefault && f.Default != nil {
-		return f.Default, ""
+		// A RelativeToRoot marker resolves through the declared infra roots and
+		// reports source "infra" (distinguishable from a plain default).
+		if ref, ok := f.Default.(InfraRootPath); ok {
+			resolved, err := resolveInfraRootPath(ref, roots)
+			if err != nil {
+				// Should be unreachable: markers are validated at registration.
+				return nil, SourceDefault, fmt.Sprintf("%s%s", prefix, err.Error())
+			}
+			return resolved, SourceInfra, ""
+		}
+		return f.Default, SourceDefault, ""
 	}
 	if f.hasDefault && f.Default == nil {
-		return nil, ""
+		return nil, SourceDefault, ""
 	}
 	if mutexFlagNames != nil && mutexFlagNames[f.Name] {
-		return nil, ""
+		return nil, SourceDefault, ""
 	}
 	if f.Type == TypeBool && f.Negatable {
-		return nil, fmt.Sprintf("%sflag '--%s' must be passed as --%s or --no-%s", prefix, f.Name, f.Name, f.Name)
+		return nil, SourceDefault, fmt.Sprintf("%sflag '--%s' must be passed as --%s or --no-%s", prefix, f.Name, f.Name, f.Name)
 	}
 	if f.Type == TypeBool && !f.Negatable {
-		return nil, fmt.Sprintf("%sflag '--%s' must be passed as --%s", prefix, f.Name, f.Name)
+		return nil, SourceDefault, fmt.Sprintf("%sflag '--%s' must be passed as --%s", prefix, f.Name, f.Name)
 	}
-	return nil, fmt.Sprintf("%sflag '--%s' is required", prefix, f.Name)
+	return nil, SourceDefault, fmt.Sprintf("%sflag '--%s' is required", prefix, f.Name)
 }
 
 // validateAndBuildKwargs performs pure validation and kwargs assembly on the
@@ -645,7 +664,7 @@ func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string) (i
 // runs custom validation, resolves positional args, and builds the final
 // kwargs map.
 // Returns (kwargs, postGlobalValues, errorString).
-func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []string, globalFlagNames map[string]bool) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
+func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []string, globalFlagNames map[string]bool, infraRoots map[string]string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
 	// Enforce mutex group constraints (before defaults).
 	// Only cli/env/config sources count as "present" for mutex evaluation.
 	// Default and implied sources do NOT trigger mutex violations.
@@ -741,11 +760,11 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 		if store.has(f.Name) {
 			continue
 		}
-		val, errMsg := applyFlagDefault(f, mutexFlagNames, "")
+		val, src, errMsg := applyFlagDefault(f, mutexFlagNames, "", infraRoots)
 		if errMsg != "" {
 			return nil, nil, nil, errMsg
 		}
-		store.set(f.Name, val, SourceDefault)
+		store.set(f.Name, val, src)
 	}
 
 	// Validate choices

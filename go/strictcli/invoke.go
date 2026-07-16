@@ -96,7 +96,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			if v, ok := kwargs[paramName]; ok {
 				globalKwargs[paramName] = v
 			} else {
-				val, errMsg := applyFlagDefault(&gf, nil, "global ")
+				val, _, errMsg := applyFlagDefault(&gf, nil, "global ", a.infraRoots)
 				if errMsg != "" {
 					return invokeResult{exitCode: 1, err: errMsg}
 				}
@@ -197,7 +197,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 	}
 
 	// Run validation and build final kwargs
-	validatedKwargs, postGlobalValues, sources, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames)
+	validatedKwargs, postGlobalValues, sources, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames, a.infraRoots)
 	if errStr != "" {
 		return invokeResult{exitCode: 1, err: errStr}
 	}
@@ -220,11 +220,14 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			continue
 		}
 		// Apply defaults
-		val, errMsg := applyFlagDefault(gf, nil, "global ")
+		val, src, errMsg := applyFlagDefault(gf, nil, "global ", a.infraRoots)
 		if errMsg != "" {
 			return invokeResult{exitCode: 1, err: errMsg}
 		}
 		validatedKwargs[paramName] = val
+		if sources != nil {
+			sources[paramName] = sourceLabelString(src)
+		}
 	}
 
 	// Store sources for function handlers that need provenance info
