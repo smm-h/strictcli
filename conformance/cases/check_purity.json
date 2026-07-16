@@ -1,0 +1,92 @@
+[
+  {
+    "name": "checks: dry-run annotates pure check as [pure]",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "lint",
+          "mint": "passed",
+          "message": "all good"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--all",
+      "--dry-run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "Would run",
+        "lint",
+        "[pure]"
+      ]
+    }
+  },
+  {
+    "name": "checks: dry-run annotates impure check (pure=false) as [impure]",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.deploy]\ntags = [\"release\"]\nseverity = \"error\"\nfast = false\npure = false\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "deploy",
+          "mint": "passed",
+          "message": "deployed"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--all",
+      "--dry-run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "Would run",
+        "deploy",
+        "[impure]"
+      ]
+    }
+  },
+  {
+    "name": "checks: dry-run annotates network check (needs_network=true) as [impure]",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.fetch]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = true\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "fetch",
+          "mint": "passed",
+          "message": "fetched"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--all",
+      "--dry-run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "Would run",
+        "fetch",
+        "[impure]"
+      ]
+    }
+  }
+]

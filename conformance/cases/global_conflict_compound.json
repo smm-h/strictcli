@@ -1,0 +1,140 @@
+[
+  {
+    "name": "config-conflict: bool global flag after command diverges (error mode) is hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"verbose\": true}",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "verbose output",
+          "default": false
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--no-verbose"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "set in both cli and config"
+    }
+  },
+  {
+    "name": "config-conflict: bool global flag after command matching value passes (error mode)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"verbose\": true}",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "verbose output",
+          "default": false
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "ok"
+    }
+  },
+  {
+    "name": "config-conflict: list global flag after command diverges (error mode) is hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"tags\": [\"from-config\"]}",
+      "global_flags": [
+        {
+          "name": "tags",
+          "type": "list[str]",
+          "help": "tags",
+          "unique": false,
+          "default": ["from-default"]
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--tags",
+      "from-cli"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "set in both cli and config"
+    }
+  },
+  {
+    "name": "config-conflict: dict global flag after command diverges (error mode) is hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_conflict_mode": "error",
+      "config_content": "{\"labels\": {\"a\": \"from-config\"}}",
+      "global_flags": [
+        {
+          "name": "labels",
+          "type": "dict[str,str]",
+          "help": "labels"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--labels",
+      "a=from-cli"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "set in both cli and config"
+    }
+  }
+]
