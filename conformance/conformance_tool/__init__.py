@@ -85,5 +85,10 @@ def check_schema_parity(ctx, reporter):
     return _run_script(reporter, "check_schema_parity.py")
 
 
+@app.error_check("float-fuzz")
+def check_float_fuzz(ctx, reporter):
+    return _run_script(reporter, "check_float_fuzz.py")
+
+
 def main():
     app.run()

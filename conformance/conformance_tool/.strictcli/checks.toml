@@ -47,3 +47,11 @@ fast = false
 pure = false
 needs_network = false
 depends_on = []
+
+[checks.float-fuzz]
+tags = ["pre-release", "conformance", "parity"]
+severity = "error"
+fast = false
+pure = false
+needs_network = false
+depends_on = []
