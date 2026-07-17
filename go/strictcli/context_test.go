@@ -2,14 +2,12 @@ package strictcli
 
 import (
 	"bytes"
-	"encoding/json"
-	"strings"
 	"testing"
 )
 
 func TestContextInfoWritesToStdout(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	ctx.Info("hello world")
 
@@ -23,7 +21,7 @@ func TestContextInfoWritesToStdout(t *testing.T) {
 
 func TestContextWarnWritesToStderr(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	ctx.Warn("something is off")
 
@@ -37,7 +35,7 @@ func TestContextWarnWritesToStderr(t *testing.T) {
 
 func TestContextDebugWritesToStdout(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	ctx.Debug("trace info")
 
@@ -51,7 +49,7 @@ func TestContextDebugWritesToStdout(t *testing.T) {
 
 func TestContextErrorWritesToStderr(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil)
 
 	ctx.Error("something broke")
 
@@ -63,81 +61,13 @@ func TestContextErrorWritesToStderr(t *testing.T) {
 	}
 }
 
-func TestContextEmitWritesJSONAndStoresData(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil, nil)
-
-	data := map[string]interface{}{
-		"name":  "widget",
-		"count": float64(42),
-	}
-	ctx.Emit(data)
-
-	// Verify JSON was written to stdout
-	output := strings.TrimSpace(stdout.String())
-	var decoded map[string]interface{}
-	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
-		t.Fatalf("Emit output is not valid JSON: %v\nOutput: %q", err, output)
-	}
-	if decoded["name"] != "widget" {
-		t.Fatalf("expected name='widget', got %v", decoded["name"])
-	}
-	if decoded["count"] != float64(42) {
-		t.Fatalf("expected count=42, got %v", decoded["count"])
-	}
-
-	// Verify stored data via emitResult
-	stored := ctx.emitResult()
-	storedMap, ok := stored.(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected emitResult to be map[string]interface{}, got %T", stored)
-	}
-	if storedMap["name"] != "widget" {
-		t.Fatalf("expected stored name='widget', got %v", storedMap["name"])
-	}
-
-	// Verify nothing went to stderr
-	if stderr.Len() != 0 {
-		t.Fatalf("expected empty stderr, got %q", stderr.String())
-	}
-}
-
-func TestContextEmitCalledTwicePanics(t *testing.T) {
-	var stdout bytes.Buffer
-	ctx := newContext(&stdout, &stdout, nil, nil, nil)
-
-	ctx.Emit("first")
-
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("expected panic on second Emit call")
-		}
-		msg, ok := r.(string)
-		if !ok {
-			t.Fatalf("expected string panic, got %T: %v", r, r)
-		}
-		if !strings.Contains(msg, "Emit called more than once") {
-			t.Fatalf("unexpected panic message: %q", msg)
-		}
-	}()
-
-	ctx.Emit("second")
-}
-
 func TestNewContextWithNilWriters(t *testing.T) {
 	// nil writers should not crash — they are replaced with io.Discard
-	ctx := newContext(nil, nil, nil, nil, nil)
+	ctx := newContext(nil, nil, nil, nil)
 
 	// These should not panic
 	ctx.Info("info message")
 	ctx.Warn("warn message")
 	ctx.Debug("debug message")
 	ctx.Error("error message")
-	ctx.Emit("data")
-
-	// Verify emitResult still works
-	if ctx.emitResult() != "data" {
-		t.Fatalf("expected emitResult='data', got %v", ctx.emitResult())
-	}
 }

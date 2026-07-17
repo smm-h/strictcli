@@ -19,7 +19,7 @@ func TestSchemaMarkerDefault_CommandAndGlobalFlag(t *testing.T) {
 		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"))
 	app.GlobalFlag(StringFlag("global-db", "global db path",
 		Default(RelativeToRoot("MYAPP_HOME", "global.sqlite"))))
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int { return 0 },
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(StringFlag("db", "db path",
 			Default(RelativeToRoot("MYAPP_HOME", "sub", "db.sqlite")))))
 

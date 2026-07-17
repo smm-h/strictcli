@@ -8,10 +8,10 @@ import (
 )
 
 // captureHandler returns a handler that records the kwargs it receives.
-func captureHandler(captured *map[string]interface{}) func(map[string]interface{}) int {
-	return func(kwargs map[string]interface{}) int {
+func captureHandler(captured *map[string]interface{}) func(ctx *Context, kwargs map[string]interface{}) Outcome {
+	return func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		*captured = kwargs
-		return 0
+		return Exit(0)
 	}
 }
 
@@ -19,9 +19,9 @@ func captureHandler(captured *map[string]interface{}) func(map[string]interface{
 func buildInvokeTestApp(captured *map[string]interface{}) *App {
 	app := NewApp("testapp", "1.0.0", "test application")
 
-	app.Command("greet", "say hello", func(kwargs map[string]interface{}) int {
+	app.Command("greet", "say hello", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		*captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		StringFlag("name", "who to greet"),
 	))
@@ -428,7 +428,7 @@ func TestInvokePassthroughCommand(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
-	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
+	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		capturedName = name
 		capturedArgs = args
 		capturedGlobals = globals
@@ -456,7 +456,7 @@ func TestInvokePassthroughCommand(t *testing.T) {
 func TestInvokePassthroughUnknownKwargs(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
-	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
+	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
 	})
 
@@ -480,7 +480,7 @@ func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(StringFlag("token", "auth token"))
 	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
-	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
+	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
 	})
 
@@ -504,7 +504,7 @@ func TestInvokePassthroughMissingRequiredBoolGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	// A required bool global flag: no Default, so it must be provided explicitly.
 	app.GlobalFlag(BoolFlag("force-run", "force operation"))
-	app.Passthrough("exec", "execute command", func(name string, args []string, globals map[string]interface{}) int {
+	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
 	})
 
@@ -525,7 +525,7 @@ func TestInvokePassthroughMissingRequiredBoolGlobalFlag(t *testing.T) {
 
 func TestInvokeUnknownCommand(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("greet", "say hello", func(kwargs map[string]interface{}) int { return 0 })
+	app.Command("greet", "say hello", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) })
 
 	ir := app.invoke("nonexistent", map[string]interface{}{})
 	if ir.err == "" {
@@ -546,8 +546,8 @@ func TestInvokeUnknownParameter(t *testing.T) {
 	)
 
 	ir := app.invoke("greet", map[string]interface{}{
-		"name":         "world",
-		"nonexistent":  "value",
+		"name":        "world",
+		"nonexistent": "value",
 	})
 	if ir.err == "" {
 		t.Fatal("expected error for unknown parameter")
@@ -634,8 +634,8 @@ func TestInvokeMutexGroup(t *testing.T) {
 
 func TestInvokeExitCode(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("fail", "always fails", func(kwargs map[string]interface{}) int {
-		return 42
+	app.Command("fail", "always fails", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(42)
 	})
 
 	ir := app.invoke("fail", map[string]interface{}{})
@@ -683,10 +683,10 @@ func TestInvokeHandlerReceivesOutput(t *testing.T) {
 	// Verify that invoke actually calls the handler and it can produce output.
 	app := NewApp("myapp", "1.0.0", "test app")
 	var called bool
-	app.Command("ping", "ping", func(kwargs map[string]interface{}) int {
+	app.Command("ping", "ping", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		called = true
 		fmt.Print("pong")
-		return 0
+		return Exit(0)
 	})
 
 	ir := app.invoke("ping", map[string]interface{}{})
@@ -819,29 +819,22 @@ func TestInvokeImpliesDependency(t *testing.T) {
 	}
 }
 
-// sourceCapturingHandler is a struct handler that captures ctx.Source() results.
-type sourceCapturingHandler struct {
-	Name    string `cli:"name" help:"who to greet"`
-	Verbose bool   `cli:"verbose" help:"verbose output" default:"false"`
-}
-
-func (h *sourceCapturingHandler) Run(ctx *Context) int {
-	// Store the sources in a package-level variable so the test can inspect them
-	capturedSources["name"] = ctx.Source("name")
-	capturedSources["verbose"] = ctx.Source("verbose")
-	return 0
-}
-
 var capturedSources = map[string]string{}
 
-func TestCallStructHandlerSourceProvenance(t *testing.T) {
+func TestCallHandlerSourceProvenance(t *testing.T) {
 	// Reset captured sources
 	capturedSources = map[string]string{}
 
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.RegisterHandler("greet", "greet someone", func() Handler {
-		return &sourceCapturingHandler{}
-	})
+	app.Command("greet", "greet someone", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		// Store the sources in a package-level variable so the test can inspect them
+		capturedSources["name"] = ctx.Source("name")
+		capturedSources["verbose"] = ctx.Source("verbose")
+		return Exit(0)
+	}, WithFlags(
+		StringFlag("name", "who to greet"),
+		BoolFlag("verbose", "verbose output", Default(false)),
+	))
 
 	// Call with "name" provided, "verbose" absent (should get default)
 	result, err := app.Call("greet", map[string]interface{}{

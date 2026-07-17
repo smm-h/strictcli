@@ -69,26 +69,3 @@ func TestGlobalFlagNonReservedAllowed(t *testing.T) {
 	app.GlobalFlag(StringFlag("output", "output file"))
 	// No panic means success.
 }
-
-// TestRegisterGlobalsReservedName verifies that RegisterGlobals also rejects
-// reserved names (existing behavior, regression test).
-func TestRegisterGlobalsReservedName(t *testing.T) {
-	type BadGlobals struct {
-		Help string `cli:"help" help:"bad"`
-	}
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("expected panic for RegisterGlobals with reserved name 'help'")
-		}
-		msg, ok := r.(string)
-		if !ok {
-			t.Fatalf("expected string panic, got %T: %v", r, r)
-		}
-		if !strings.Contains(msg, "reserved") {
-			t.Fatalf("expected 'reserved' in panic, got %q", msg)
-		}
-	}()
-	app := NewApp("testapp", "1.0.0", "test")
-	RegisterGlobals[BadGlobals](app)
-}

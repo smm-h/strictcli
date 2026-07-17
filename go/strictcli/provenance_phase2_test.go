@@ -19,9 +19,9 @@ func TestEnvSourceLabel(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL")),
 	))
@@ -46,9 +46,9 @@ func TestConfigSourceLabel(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))
@@ -72,9 +72,9 @@ func TestCliOverridesConfig(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))
@@ -96,9 +96,9 @@ func TestCliOverridesEnv(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL")),
 	))
@@ -125,9 +125,9 @@ func TestEnvOverridesConfig(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithEnvPrefix("MYAPP"), WithConfig(), WithConfigPath(configFile))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
 	))
@@ -151,9 +151,9 @@ func TestDefaultWithConfigAvailableButAbsent(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))
@@ -180,9 +180,9 @@ func TestGlobalFlagEnvSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Env("MYAPP_VERBOSE"), Default(false)))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"run"})
@@ -205,9 +205,9 @@ func TestGlobalFlagConfigSource(t *testing.T) {
 		WithConfig(), WithConfigPath(configFile))
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"run"})
@@ -225,9 +225,9 @@ func TestGlobalFlagCliSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"--verbose", "run"})
@@ -245,9 +245,9 @@ func TestGlobalFlagDefaultSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"run"})
@@ -272,8 +272,8 @@ func TestConfigShowReportsEnv(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithEnvPrefix("MYAPP"), WithConfig())
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
 	))
@@ -304,8 +304,8 @@ func TestConfigShowReportsConfig(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))
@@ -328,8 +328,8 @@ func TestConfigShowReportsConfig(t *testing.T) {
 // for a flag with no config or env value.
 func TestConfigShowReportsDefault(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithConfig())
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))
@@ -357,9 +357,9 @@ func TestConfigShowReportsDefault(t *testing.T) {
 func TestInvokeProvidedKwargSourceIsCli(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))
@@ -378,9 +378,9 @@ func TestInvokeProvidedKwargSourceIsCli(t *testing.T) {
 func TestInvokeAbsentKwargSourceIsDefault(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	var sources map[string]string
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))
@@ -402,8 +402,8 @@ func TestInvokeAbsentKwargSourceIsDefault(t *testing.T) {
 // between Go and Python (param = value  (source: label)).
 func TestConfigShowPlainFormat(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithConfig())
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))

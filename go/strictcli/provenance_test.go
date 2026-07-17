@@ -14,8 +14,8 @@ import (
 // for mutex evaluation.
 func TestMutexDefaultSourceNotPresent(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("out", "output", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
 			BoolFlag("json", "JSON output", Default(false)),
@@ -34,8 +34,8 @@ func TestMutexDefaultSourceNotPresent(t *testing.T) {
 	// Also test via invoke: provide only "json". "text" is absent and will
 	// be defaulted. Mutex should not fire.
 	app2 := NewApp("myapp", "1.0.0", "test app")
-	app2.Command("out", "output", func(kwargs map[string]interface{}) int {
-		return 0
+	app2.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
 			BoolFlag("json", "JSON output", Default(false)),
@@ -52,8 +52,8 @@ func TestMutexDefaultSourceNotPresent(t *testing.T) {
 // mutex violation. Implied values do not count as "present" for mutex.
 func TestMutexImpliedSourceNotPresent(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("out", "output", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
 			BoolFlag("json", "JSON output", Default(nil)),
@@ -91,8 +91,8 @@ func TestMutexCliAndConfigBothPresent(t *testing.T) {
 	// For now, we test via invoke with two values provided (both SourceCLI),
 	// which is the equivalent scenario.
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("out", "output", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
 			StringFlag("json", "JSON output", Default(nil)),
@@ -113,8 +113,8 @@ func TestMutexCliAndConfigBothPresent(t *testing.T) {
 // should PASS. Implied values count as "present" for dependency checks.
 func TestRequiresImpliedSourceCountsAsPresent(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("deploy", "deploy", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("deploy", "deploy", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	},
 		WithFlags(
 			BoolFlag("all", "deploy all", Default(false)),
@@ -142,8 +142,8 @@ func TestRequiresImpliedSourceCountsAsPresent(t *testing.T) {
 // should FAIL. Default values do NOT count as "present" for dependency checks.
 func TestRequiresDefaultSourceNotPresent(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("deploy", "deploy", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("deploy", "deploy", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	},
 		WithFlags(
 			StringFlag("target", "deploy target"),
@@ -175,8 +175,8 @@ func TestRequiresDefaultSourceNotPresent(t *testing.T) {
 // Test that invoke with a provided kwarg treats it as SourceCLI for mutex.
 func TestInvokeMutexProvidedKwargIsCliSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("out", "output", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
 			StringFlag("json", "JSON output", Default(nil)),
@@ -195,8 +195,8 @@ func TestInvokeMutexProvidedKwargIsCliSource(t *testing.T) {
 // as present for Requires.
 func TestInvokeDefaultedNotPresentForRequires(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("deploy", "deploy", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("deploy", "deploy", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	},
 		WithFlags(
 			StringFlag("target", "deploy target"),

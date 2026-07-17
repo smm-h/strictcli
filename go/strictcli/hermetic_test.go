@@ -36,10 +36,10 @@ func TestHermeticSkipsEnv(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	var sources map[string]string
 	var levelVal interface{}
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
 		levelVal = kwargs["level"]
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
 	))
@@ -67,10 +67,10 @@ func TestHermeticSkipsEnvGlobalFlags(t *testing.T) {
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Env("MYAPP_VERBOSE"), Default(false)))
 	var sources map[string]string
 	var verboseVal interface{}
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
 		verboseVal = kwargs["verbose"]
-		return 0
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"--hermetic", "run"})
@@ -93,10 +93,10 @@ func TestHermeticCLIFlagStillWorks(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	var sources map[string]string
 	var levelVal interface{}
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
 		levelVal = kwargs["level"]
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
 	))
@@ -123,10 +123,10 @@ func TestHermeticSkipsConfig(t *testing.T) {
 		WithConfig(), WithConfigPath(configFile))
 	var sources map[string]string
 	var levelVal interface{}
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
 		levelVal = kwargs["level"]
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
 	))
@@ -146,8 +146,8 @@ func TestHermeticSkipsConfig(t *testing.T) {
 // TestHermeticConfigMutualExclusion verifies --hermetic + --config is an error.
 func TestHermeticConfigMutualExclusion(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithConfig())
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"--hermetic", "--config", "/tmp/foo.json", "run"})
@@ -162,8 +162,8 @@ func TestHermeticConfigMutualExclusion(t *testing.T) {
 // TestHermeticConfigSubcommandError verifies --hermetic + config subcommand is an error.
 func TestHermeticConfigSubcommandError(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithConfig())
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"--hermetic", "config", "show"})
@@ -182,8 +182,8 @@ func TestHermeticRequiredFlagMissing(t *testing.T) {
 	defer os.Unsetenv("MYAPP_NAME")
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		StringFlag("name", "name to use", Env("MYAPP_NAME")),
 	))
@@ -207,9 +207,9 @@ func TestHermeticOnAppWithoutConfig(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	var levelVal interface{}
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		levelVal = kwargs["level"]
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
 	))
@@ -227,8 +227,8 @@ func TestHermeticOnAppWithoutConfig(t *testing.T) {
 // bool flag with no CLI value produces a hard error.
 func TestHermeticRequiredBoolMissing(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		BoolFlag("verbose", "enable verbose"),
 	))
@@ -249,8 +249,8 @@ func TestHermeticRequiredBoolMissing(t *testing.T) {
 func TestHermeticAbsentFromSchema(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(BoolFlag("verbose", "enable verbose", Default(false)))
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 
 	// Verify hermetic is not in globalFlags (which feed the schema)

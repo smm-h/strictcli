@@ -664,9 +664,9 @@ func TestDoubleEntry_DeclaredButNotRegistered(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.Command("greet", "say hello", func(args map[string]interface{}) int {
+	app.Command("greet", "say hello", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("hello")
-		return 0
+		return Exit(0)
 	})
 
 	// Only register one of two checks
@@ -691,9 +691,9 @@ func TestDoubleEntry_AllRegistered_NoError(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	app.Command("greet", "say hello", func(args map[string]interface{}) int {
+	app.Command("greet", "say hello", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("hello")
-		return 0
+		return Exit(0)
 	})
 	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
@@ -1680,8 +1680,8 @@ func TestCheckCommand_IgnoreWarnings(t *testing.T) {
 
 func TestCheckCommand_NotInHelp_WithoutToml(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
-	app.Command("greet", "say hello", func(args map[string]interface{}) int {
-		return 0
+	app.Command("greet", "say hello", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"--help"})
@@ -1727,8 +1727,8 @@ func TestDumpSchema_WithChecks(t *testing.T) {
 	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
-	app.Command("noop", "does nothing", func(args map[string]interface{}) int {
-		return 0
+	app.Command("noop", "does nothing", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"--dump-schema"})
@@ -1820,8 +1820,8 @@ func TestDumpSchema_WithChecks(t *testing.T) {
 func TestDumpSchema_WithoutChecks(t *testing.T) {
 	chdirTemp(t)
 	app := NewApp("testapp", "1.0.0", "test app")
-	app.Command("noop", "does nothing", func(args map[string]interface{}) int {
-		return 0
+	app.Command("noop", "does nothing", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 
 	r := app.Test([]string{"--dump-schema"})

@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// nopHandler is a handler that does nothing and returns 0.
-func nopHandler(kwargs map[string]interface{}) int {
-	return 0
+// nopHandler is a handler that does nothing and returns exit 0.
+func nopHandler(ctx *Context, kwargs map[string]interface{}) Outcome {
+	return Exit(0)
 }
 
 // --- JsonSchema tests ---
@@ -53,10 +53,10 @@ func TestJsonSchemaAllScalarTypes(t *testing.T) {
 func TestJsonSchemaRequiredFlags(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("deploy", "deploy something", nopHandler, WithFlags(
-		StringFlag("target", "deploy target"),               // required (no default)
+		StringFlag("target", "deploy target"),                // required (no default)
 		IntFlag("replicas", "replica count"),                 // required (no default)
 		StringFlag("region", "region", Default("us-east-1")), // optional (has default)
-		BoolFlag("dry-run", "dry run mode", Default(false)),                  // optional (has default)
+		BoolFlag("dry-run", "dry run mode", Default(false)),  // optional (has default)
 		FloatFlag("threshold", "threshold", Default(0.5)),    // optional (has default)
 	))
 
@@ -162,8 +162,8 @@ func TestJsonSchemaDictType(t *testing.T) {
 	props := schema["properties"].(map[string]interface{})
 
 	cases := []struct {
-		param    string
-		valType  string
+		param   string
+		valType string
 	}{
 		{"labels", "string"},
 		{"counts", "integer"},
@@ -714,11 +714,8 @@ func TestExecuteReturnsError(t *testing.T) {
 
 func TestExecuteDataHandler(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.DataCommand("info", "get info", func(kwargs map[string]interface{}) HandlerResult {
-		return HandlerResult{
-			Data:     map[string]string{"version": "1.0.0"},
-			ExitCode: 0,
-		}
+	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return ExitData(0, map[string]string{"version": "1.0.0"})
 	})
 
 	tools := app.AsTools()

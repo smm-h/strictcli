@@ -47,8 +47,8 @@ func buildGlobalConflictApp(t *testing.T, conflictMode, flagConflictMode, config
 	}
 	app.GlobalFlag(StringFlag("settings", "settings path", flagOpts...))
 
-	app.Command("run", "run something", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 	return app
 }
@@ -123,9 +123,9 @@ func TestPostCommandGlobalProvenanceIsCli(t *testing.T) {
 	var sources map[string]string
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(StringFlag("settings", "settings path", Default("default-val")))
-	app.Command("run", "run something", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	})
 	r := app.Test([]string{"run", "--settings", "from-cli"})
 	if r.ExitCode != 0 {
@@ -140,9 +140,9 @@ func TestPreCommandGlobalProvenanceIsCli(t *testing.T) {
 	var sources map[string]string
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(StringFlag("settings", "settings path", Default("default-val")))
-	app.Command("run", "run something", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	})
 	r := app.Test([]string{"--settings", "from-cli", "run"})
 	if r.ExitCode != 0 {
@@ -158,9 +158,9 @@ func TestPostCommandGlobalProvenanceConfigWhenNotOnCli(t *testing.T) {
 	var sources map[string]string
 	app := NewApp("myapp", "1.0.0", "test app", WithConfig(), WithConfigPath(path))
 	app.GlobalFlag(StringFlag("settings", "settings path", Default("default-val")))
-	app.Command("run", "run something", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		sources = app.LastSources
-		return 0
+		return Exit(0)
 	})
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {

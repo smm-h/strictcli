@@ -12,21 +12,21 @@ import (
 // mcpTestApp creates a standard test app with commands for MCP testing.
 func mcpTestApp() *App {
 	app := NewApp("testapp", "1.0.0", "test application")
-	app.Command("greet", "greet someone", func(kwargs map[string]interface{}) int {
+	app.Command("greet", "greet someone", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		fmt.Printf("Hello, %s!", kwargs["name"])
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		StringFlag("name", "who to greet"),
 	))
-	app.Command("status", "check status", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("status", "check status", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 	app.Command("secret", "hidden command", nopHandler, WithHidden())
 	app.Command("wizard", "interactive wizard", nopHandler, WithInteractive())
 
 	dns := app.Group("dns", "manage DNS")
-	dns.Command("list", "list DNS records", func(kwargs map[string]interface{}) int {
-		return 0
+	dns.Command("list", "list DNS records", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		StringFlag("zone", "DNS zone"),
 	))
@@ -372,8 +372,8 @@ func TestMCPToolsCallMissingName(t *testing.T) {
 
 func TestMCPToolsCallNoArguments(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
-	app.Command("status", "check status", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("status", "check status", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	})
 
 	resp, err := sendMCPRequest(app, "tools/call", 8, map[string]interface{}{
@@ -391,11 +391,8 @@ func TestMCPToolsCallNoArguments(t *testing.T) {
 
 func TestMCPToolsCallDataHandler(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
-	app.DataCommand("info", "get info", func(kwargs map[string]interface{}) HandlerResult {
-		return HandlerResult{
-			Data:     map[string]interface{}{"status": "ok", "count": 42},
-			ExitCode: 0,
-		}
+	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return ExitData(0, map[string]interface{}{"status": "ok", "count": 42})
 	})
 
 	resp, err := sendMCPRequest(app, "tools/call", 9, map[string]interface{}{
@@ -668,8 +665,8 @@ func TestMCPNameResolutionNestedGroup(t *testing.T) {
 
 func TestMCPViaPipe(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
-	app.Command("echo", "echo back", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("echo", "echo back", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		StringFlag("msg", "message to echo"),
 	))

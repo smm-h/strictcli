@@ -154,9 +154,9 @@ func TestDictFlagNoChoices(t *testing.T) {
 func TestListFlagStrParsing(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeStr, "tag", "tags to apply", Unique(false)),
 	))
@@ -174,9 +174,9 @@ func TestListFlagStrParsing(t *testing.T) {
 func TestListFlagIntParsing(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids to process", Unique(false)),
 	))
@@ -194,9 +194,9 @@ func TestListFlagIntParsing(t *testing.T) {
 func TestListFlagFloatParsing(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeFloat, "weight", "weights", Unique(false)),
 	))
@@ -213,8 +213,8 @@ func TestListFlagFloatParsing(t *testing.T) {
 
 func TestListFlagIntTypeError(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
 	))
@@ -230,8 +230,8 @@ func TestListFlagIntTypeError(t *testing.T) {
 
 func TestListFlagUnique(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeStr, "tag", "tags", Unique(true)),
 	))
@@ -248,9 +248,9 @@ func TestListFlagUnique(t *testing.T) {
 func TestListFlagDefault(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeStr, "tag", "tags", Unique(false), Default([]interface{}{"default-tag"})),
 	))
@@ -268,9 +268,9 @@ func TestListFlagDefault(t *testing.T) {
 func TestListFlagEmptyDefault(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeStr, "tag", "tags", Unique(false)),
 	))
@@ -288,9 +288,9 @@ func TestListFlagEmptyDefault(t *testing.T) {
 func TestListFlagEqualsSyntax(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
 	))
@@ -310,9 +310,9 @@ func TestListFlagEqualsSyntax(t *testing.T) {
 func TestDictFlagStrParsing(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -330,9 +330,9 @@ func TestDictFlagStrParsing(t *testing.T) {
 func TestDictFlagIntParsing(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeInt, "port", "port mappings", Unique(false)),
 	))
@@ -350,9 +350,9 @@ func TestDictFlagIntParsing(t *testing.T) {
 func TestDictFlagFloatParsing(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeFloat, "rate", "rates", Unique(false)),
 	))
@@ -370,9 +370,9 @@ func TestDictFlagFloatParsing(t *testing.T) {
 func TestDictFlagJSONParsing(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -390,9 +390,9 @@ func TestDictFlagJSONParsing(t *testing.T) {
 func TestDictFlagJSONIntParsing(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeInt, "port", "port mappings", Unique(false)),
 	))
@@ -409,8 +409,8 @@ func TestDictFlagJSONIntParsing(t *testing.T) {
 
 func TestDictFlagMissingEquals(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -426,8 +426,8 @@ func TestDictFlagMissingEquals(t *testing.T) {
 
 func TestDictFlagEmptyKey(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -443,8 +443,8 @@ func TestDictFlagEmptyKey(t *testing.T) {
 
 func TestDictFlagIntTypeError(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeInt, "port", "port mappings", Unique(false)),
 	))
@@ -461,9 +461,9 @@ func TestDictFlagIntTypeError(t *testing.T) {
 func TestDictFlagDefault(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false),
 			Default(map[string]interface{}{"X-Default": "yes"})),
@@ -482,9 +482,9 @@ func TestDictFlagDefault(t *testing.T) {
 func TestDictFlagEmptyDefault(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -502,9 +502,9 @@ func TestDictFlagEmptyDefault(t *testing.T) {
 func TestDictFlagMergesMultipleEntries(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
 	))
@@ -523,9 +523,9 @@ func TestDictFlagMergesMultipleEntries(t *testing.T) {
 func TestDictFlagOverwriteKey(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
 	))
@@ -544,9 +544,9 @@ func TestDictFlagOverwriteKey(t *testing.T) {
 func TestDictFlagEqualsSyntax(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
 	))
@@ -564,9 +564,9 @@ func TestDictFlagEqualsSyntax(t *testing.T) {
 func TestDictFlagValueWithEquals(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
 	))
@@ -587,9 +587,9 @@ func TestDictFlagValueWithEquals(t *testing.T) {
 func TestListFlagEnvVar(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false),
 			Env("TEST_IDS"), Prefixed(false), EnvSeparator(",")),
@@ -611,9 +611,9 @@ func TestListFlagEnvVar(t *testing.T) {
 func TestDictFlagEnvVar(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false),
 			Env("TEST_HEADERS"), Prefixed(false)),
@@ -634,8 +634,8 @@ func TestDictFlagEnvVar(t *testing.T) {
 
 func TestDictFlagEnvVarInvalidJSON(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false),
 			Env("TEST_HEADERS_BAD"), Prefixed(false)),
@@ -663,9 +663,9 @@ func TestListFlagConfigCoercion(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
 	))
@@ -688,9 +688,9 @@ func TestDictFlagConfigCoercion(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -710,9 +710,9 @@ func TestDictFlagConfigCoercion(t *testing.T) {
 func TestListFlagInvoke(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
 	))
@@ -735,9 +735,9 @@ func TestListFlagInvoke(t *testing.T) {
 func TestListFlagInvokeTypedSlice(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
 	))
@@ -761,9 +761,9 @@ func TestListFlagInvokeTypedSlice(t *testing.T) {
 func TestDictFlagInvoke(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -786,9 +786,9 @@ func TestDictFlagInvoke(t *testing.T) {
 func TestDictFlagInvokeTypedMap(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -814,9 +814,9 @@ func TestDictFlagInvokeTypedMap(t *testing.T) {
 func TestVariadicArgListInt(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("sum", "sum numbers", func(kwargs map[string]interface{}) int {
+	app.Command("sum", "sum numbers", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithArgs(
 		NewArg("numbers", "numbers to sum", Variadic(), ArgType(ListOf(TypeInt))),
 	))
@@ -834,9 +834,9 @@ func TestVariadicArgListInt(t *testing.T) {
 func TestVariadicArgListFloat(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("sum", "sum numbers", func(kwargs map[string]interface{}) int {
+	app.Command("sum", "sum numbers", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithArgs(
 		NewArg("weights", "weight values", Variadic(), ArgType(ListOf(TypeFloat))),
 	))
@@ -853,8 +853,8 @@ func TestVariadicArgListFloat(t *testing.T) {
 
 func TestVariadicArgListIntTypeError(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("sum", "sum numbers", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("sum", "sum numbers", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithArgs(
 		NewArg("numbers", "numbers to sum", Variadic(), ArgType(ListOf(TypeInt))),
 	))
@@ -899,8 +899,8 @@ func TestDictArgPanics(t *testing.T) {
 func TestListFlagSchema(t *testing.T) {
 	chdirTemp(t)
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids to process", Unique(false)),
 	))
@@ -921,8 +921,8 @@ func TestListFlagSchema(t *testing.T) {
 func TestDictFlagSchema(t *testing.T) {
 	chdirTemp(t)
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -944,8 +944,8 @@ func TestDictFlagSchema(t *testing.T) {
 
 func TestListFlagHelp(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids to process", Unique(false)),
 	))
@@ -964,8 +964,8 @@ func TestListFlagHelp(t *testing.T) {
 
 func TestDictFlagHelp(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
 	))
@@ -987,9 +987,9 @@ func TestDictFlagHelp(t *testing.T) {
 func TestDictFlagJSONRoundTrip(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "data", "data map", Unique(false)),
 	))
@@ -1011,9 +1011,9 @@ func TestDictFlagJSONRoundTrip(t *testing.T) {
 func TestDictFlagMixedJSONAndKV(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
 	))
@@ -1036,9 +1036,9 @@ func TestInvokeMatchesTestForListFlag(t *testing.T) {
 
 	makeApp := func(captured *map[string]interface{}) *App {
 		app := NewApp("test", "1.0.0", "test app")
-		app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+		app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 			*captured = kwargs
-			return 0
+			return Exit(0)
 		}, WithFlags(
 			ListFlag(TypeInt, "id", "ids", Unique(false)),
 		))
@@ -1071,9 +1071,9 @@ func TestInvokeMatchesTestForDictFlag(t *testing.T) {
 
 	makeApp := func(captured *map[string]interface{}) *App {
 		app := NewApp("test", "1.0.0", "test app")
-		app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+		app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 			*captured = kwargs
-			return 0
+			return Exit(0)
 		}, WithFlags(
 			DictFlag(TypeStr, "header", "headers", Unique(false)),
 		))
@@ -1107,8 +1107,8 @@ func TestInvokeMatchesTestForDictFlag(t *testing.T) {
 
 func TestDictFlagInvalidJSON(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "data", "data map", Unique(false)),
 	))
@@ -1126,8 +1126,8 @@ func TestDictFlagInvalidJSON(t *testing.T) {
 
 func TestDictFlagJSONTypeMismatch(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
-		return 0
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeInt, "data", "data map", Unique(false)),
 	))
@@ -1185,9 +1185,9 @@ func TestListFlagDefaultTypeMismatch(t *testing.T) {
 func TestDictFlagEnvWithoutSeparator(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run it", func(kwargs map[string]interface{}) int {
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		captured = kwargs
-		return 0
+		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false),
 			Env("TEST_DICT_NO_SEP"), Prefixed(false)),
