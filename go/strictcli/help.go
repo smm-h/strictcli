@@ -222,7 +222,7 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 			}
 			if !a.Required {
 				if a.hasDefault {
-					metaParts = append(metaParts, fmt.Sprintf("default: %v", a.Default))
+					metaParts = append(metaParts, fmt.Sprintf("default: %s", formatDefaultValue(a.Default)))
 				} else {
 					metaParts = append(metaParts, "optional")
 				}
@@ -392,7 +392,7 @@ func buildFlagMeta(f Flag) string {
 			}
 		}
 	} else if f.hasDefault && f.Default != nil {
-		metaParts = append(metaParts, fmt.Sprintf("default: %v", f.Default))
+		metaParts = append(metaParts, fmt.Sprintf("default: %s", formatDefaultValue(f.Default)))
 	} else if f.hasDefault {
 		metaParts = append(metaParts, "optional")
 	} else {

@@ -1165,11 +1165,7 @@ func formatValueForError(value interface{}) string {
 		}
 		return "false"
 	case float64:
-		s := strconv.FormatFloat(v, 'f', -1, 64)
-		if !strings.Contains(s, ".") {
-			s += ".0"
-		}
-		return s
+		return formatFloatCanonical(v)
 	case int:
 		return strconv.Itoa(v)
 	case string:

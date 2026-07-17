@@ -1340,11 +1340,7 @@ func formatTomlValue(v interface{}) string {
 	case int:
 		return fmt.Sprintf("%d", val)
 	case float64:
-		s := fmt.Sprintf("%v", val)
-		if !strings.Contains(s, ".") {
-			s += ".0"
-		}
-		return s
+		return formatFloatCanonical(val)
 	default:
 		return fmt.Sprintf("%v", val)
 	}
@@ -1370,6 +1366,8 @@ func formatConfigValue(v interface{}) string {
 		return "[" + strings.Join(parts, ", ") + "]"
 	case string:
 		return val
+	case float64:
+		return formatFloatCanonical(val)
 	default:
 		return fmt.Sprintf("%v", val)
 	}
