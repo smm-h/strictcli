@@ -11,3 +11,4 @@
 {"id":"18c3247c0b18d15231f1708eee054f008949d43057881fa5","commits":["fb8544de74a44b7f7688e60f87878594fc208043"],"user_facing":true,"description":"`config set` on TOML config files now preserves comments and key order instead of alphabetizing and stripping them","type":"fix","packages":["go-strictcli"]}
 {"id":"18c32491445f32f99cf2629c5e5e4ddc8ffa6cdc00ad28ef","commits":["3e6cffb6da773ba0fb352a42488ff5dca0c1501a"],"user_facing":true,"description":"`Test()` (Go) now captures handler output of any size instead of truncating at 64KB or deadlocking on large output","type":"fix","packages":["go-strictcli"]}
 {"id":"18c324e254f95c1b2bb7c69f15444cb4bfe84ea3688c31a2","commits":["f9a03b4a8647fa6ed3b4dfe1ea812a9ba864675a"],"user_facing":false,"packages":["go-strictcli"]}
+{"id":"18c324fdf6da8f751762373758b74bfc98d45dccbe2260ef","commits":["bffc8660f65c8223632711a308ba37753d98da3d"],"user_facing":false,"packages":["go-strictcli"]}
