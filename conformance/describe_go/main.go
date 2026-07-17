@@ -63,16 +63,16 @@ type valueDecl struct {
 }
 
 type apiSurface struct {
-	SchemaVersion       int         `json:"schema_version"`
-	Package             string      `json:"package"`
-	OptionTypes         []string    `json:"option_types"`
-	Structs             []structDecl `json:"structs"`
-	OptionConstructors  []funcDecl  `json:"option_constructors"`
-	Functions           []funcDecl  `json:"functions"`
-	GenericFunctions    []funcDecl  `json:"generic_functions"`
-	Methods             []funcDecl  `json:"methods"`
-	Constants           []valueDecl `json:"constants"`
-	Variables           []valueDecl `json:"variables"`
+	SchemaVersion      int          `json:"schema_version"`
+	Package            string       `json:"package"`
+	OptionTypes        []string     `json:"option_types"`
+	Structs            []structDecl `json:"structs"`
+	OptionConstructors []funcDecl   `json:"option_constructors"`
+	Functions          []funcDecl   `json:"functions"`
+	GenericFunctions   []funcDecl   `json:"generic_functions"`
+	Methods            []funcDecl   `json:"methods"`
+	Constants          []valueDecl  `json:"constants"`
+	Variables          []valueDecl  `json:"variables"`
 }
 
 func main() {
