@@ -4653,7 +4653,7 @@ class App:
                 result = cmd.handler(ctx, **data)
             exit_code, out_data = _interpret_handler_return(result)
             if out_data is not _MISSING:
-                print(json.dumps(out_data, default=str))
+                print(json.dumps(out_data, default=str, separators=(",", ":")))
             sys.exit(exit_code)
 
     def test(self, argv: list[str]) -> Result:
@@ -4725,7 +4725,7 @@ class App:
                     exit_code, out_data = _interpret_handler_return(handler_return)
                     if out_data is not _MISSING:
                         result_data = out_data
-                        print(json.dumps(out_data, default=str))
+                        print(json.dumps(out_data, default=str, separators=(",", ":")))
                 except SystemExit as e:
                     exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
 
