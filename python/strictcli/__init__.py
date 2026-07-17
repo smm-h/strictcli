@@ -19,12 +19,14 @@ __all__ = [
 ]
 
 import contextlib
+import decimal
 import keyword
 import fnmatch
 import importlib.metadata
 import inspect
 import io
 import json
+import math
 import os
 import re
 import subprocess
@@ -375,7 +377,9 @@ def _toml_format_scalar(value: object) -> str:
     if isinstance(value, str):
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
-    if isinstance(value, (int, float)):
+    if isinstance(value, float):
+        return _format_float_canonical(value)
+    if isinstance(value, int):
         return str(value)
     escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
@@ -524,6 +528,8 @@ def _format_config_value(value: object) -> str:
         return json.dumps(value)
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, float):
+        return _format_float_canonical(value)
     return str(value)
 
 
@@ -939,19 +945,76 @@ def _find_duplicate(values: list) -> object | None:
     return None
 
 
+def _format_float_canonical(value: float) -> str:
+    """Format a float in strictcli canonical form (SCF).
+
+    Rules (must match the Go implementation for cross-language parity):
+    1. Shortest decimal string that round-trips to the identical IEEE-754 double
+       (Python's ``repr`` already yields shortest round-trip digits).
+    2. Integer-valued floats in fixed notation always carry a trailing ``.0``.
+    3. ``-0.0`` is preserved as ``-0.0``.
+    4. Fixed notation for ``|x|`` in ``[1e-6, 1e21)``; scientific outside. Zero
+       (``0.0`` / ``-0.0``) is always rendered fixed.
+    5. Scientific spelling: lowercase ``e``, explicit sign, no zero-padding on
+       the exponent (e.g. ``1e+21``, ``1e-7``, ``1.5e+300``).
+    6. The ``.0`` rule applies only in the fixed branch, never scientific.
+    """
+    # Zero carve-out (covers both 0.0 and -0.0).
+    if value == 0.0:
+        return "-0.0" if math.copysign(1.0, value) < 0 else "0.0"
+    absval = -value if value < 0 else value
+    sign = "-" if value < 0 else ""
+    if 1e-6 <= absval < 1e21:
+        # Fixed notation, expanded from the shortest round-trip digits.
+        s = format(decimal.Decimal(repr(absval)), "f")
+        if "." not in s:
+            s += ".0"
+        return sign + s
+    # Scientific notation: one digit before the point, shortest mantissa.
+    r = repr(absval)
+    if "e" in r or "E" in r:
+        mant, exp_part = re.split("[eE]", r)
+        exp = int(exp_part)
+    else:
+        mant, exp = r, 0
+    if "." in mant:
+        int_part, frac_part = mant.split(".")
+    else:
+        int_part, frac_part = mant, ""
+    digits = (int_part + frac_part).lstrip("0")
+    point_exp = exp - len(frac_part)
+    stripped = digits.rstrip("0")
+    if stripped == "":
+        stripped = "0"
+    point_exp += len(digits) - len(stripped)
+    digits = stripped
+    sci_exp = point_exp + len(digits) - 1
+    mantissa = digits if len(digits) == 1 else digits[0] + "." + digits[1:]
+    exp_sign = "+" if sci_exp >= 0 else "-"
+    return f"{sign}{mantissa}e{exp_sign}{abs(sci_exp)}"
+
+
+def _format_default_for_help(value: object) -> str:
+    """Format a default value for help text.
+
+    Floats use the canonical form (SCF); every other type is rendered exactly
+    as before (``str``), keeping non-float help output byte-identical.
+    """
+    if isinstance(value, float):
+        return _format_float_canonical(value)
+    return str(value)
+
+
 def _format_value_for_error(value: object) -> str:
     """Format a value for inclusion in error messages (without quotes).
 
-    Floats always include a decimal point. Bools are lowercase.
+    Floats use the canonical form (SCF). Bools are lowercase.
     Strings are returned as-is.
     """
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, float):
-        s = str(value)
-        if "." not in s:
-            s += ".0"
-        return s
+        return _format_float_canonical(value)
     return str(value)
 
 
@@ -5024,14 +5087,18 @@ def _validate_choices(
     vals = val if repeatable else [val]
     for v in vals:
         if v not in choices:
-            choices_str = ", ".join(str(c) for c in choices)
+            choices_str = ", ".join(
+                _format_float_canonical(c) if isinstance(c, float) else str(c)
+                for c in choices
+            )
+            v_str = _format_float_canonical(v) if isinstance(v, float) else str(v)
             if is_arg:
                 raise _ParseError(
-                    f"argument '{name}': invalid value '{v}', "
+                    f"argument '{name}': invalid value '{v_str}', "
                     f"must be one of: {choices_str}"
                 )
             raise _ParseError(
-                f"--{name}: invalid value '{v}', must be one of: {choices_str}"
+                f"--{name}: invalid value '{v_str}', must be one of: {choices_str}"
             )
 
 
@@ -6249,7 +6316,7 @@ def _build_flag_meta(f: Flag) -> str:
     if f.compound == "dict":
         # Dict flags are never required; show default only if non-empty
         if f.default:
-            meta_parts.append(f"default: {f.default}")
+            meta_parts.append(f"default: {_format_default_for_help(f.default)}")
     elif f.type is bool and f.compound == "scalar" and f.default is not None:
         meta_parts.append(f"default: {'true' if f.default else 'false'}")
     elif f.repeatable:
@@ -6258,7 +6325,7 @@ def _build_flag_meta(f: Flag) -> str:
             joined = ", ".join(_format_value_for_error(elem) for elem in f.default)
             meta_parts.append(f"default: {joined}")
     elif f.default is not None:
-        meta_parts.append(f"default: {f.default}")
+        meta_parts.append(f"default: {_format_default_for_help(f.default)}")
     else:
         meta_parts.append("required")
     return " [" + "] [".join(meta_parts) + "]"
@@ -6288,7 +6355,7 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
                 meta_parts.append(f"choices: {choices_str}")
             if not a.required:
                 if not isinstance(a.default, _MissingSentinel):
-                    meta_parts.append(f"default: {a.default}")
+                    meta_parts.append(f"default: {_format_default_for_help(a.default)}")
                 else:
                     meta_parts.append("optional")
             meta = ""
