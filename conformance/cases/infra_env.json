@@ -10,7 +10,6 @@
         {
           "name": "run",
           "help": "Run it",
-          "handler_style": "context",
           "handler_prints": "{source:db}:{db}",
           "flags": [
             {
@@ -41,7 +40,6 @@
         {
           "name": "run",
           "help": "Run it",
-          "handler_style": "context",
           "handler_prints": "{source:db}:{db}",
           "flags": [
             {
@@ -71,7 +69,6 @@
         {
           "name": "run",
           "help": "Run it",
-          "handler_style": "context",
           "handler_prints": "{source:db}:{db}",
           "flags": [
             {
@@ -102,7 +99,6 @@
         {
           "name": "run",
           "help": "Run it",
-          "handler_style": "context",
           "handler_prints": "{source:db}:{db}",
           "flags": [
             {

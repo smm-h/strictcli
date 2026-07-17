@@ -10,7 +10,6 @@
         {
           "name": "run",
           "help": "Run with hermetic",
-          "handler_style": "context",
           "handler_prints": "{source:output}:{source:level}:{output}:{level}",
           "flags": [
             {
@@ -52,7 +51,6 @@
         {
           "name": "run",
           "help": "Run with hermetic",
-          "handler_style": "context",
           "handler_prints": "{source:level}:{level}",
           "flags": [
             {
@@ -188,7 +186,6 @@
         {
           "name": "run",
           "help": "Run it",
-          "handler_style": "context",
           "handler_prints": "{source:level}",
           "flags": [
             {
