@@ -1,4 +1,5 @@
 {
+  "__rlsbl_version__": "0.107.0",
   "strictcli": "20db711b8a7745c3ab41814b827e946d60e937e82ee3984e86f39567717199b1",
   "go-strictcli": "99e3d99a39b74e78754fde47f5aeeba1e93e71367762273c37d245cf6cb3eb14",
   "conformance": null

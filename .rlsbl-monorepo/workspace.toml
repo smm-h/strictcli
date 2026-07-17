@@ -1,5 +1,5 @@
 [[releasables]]
-name = "strictcli"
+name = "py-strictcli"
 
 [[releasables]]
 name = "go-strictcli"
@@ -7,7 +7,7 @@ name = "go-strictcli"
 [[projects]]
 path = "python/"
 name = "strictcli"
-releasable = "strictcli"
+releasable = "py-strictcli"
 watch = ["python/**", "LICENSE"]
 
 [[projects]]

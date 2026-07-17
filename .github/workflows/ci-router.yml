@@ -31,19 +31,84 @@ jobs:
             - 'conformance/**'
             - 'python/**'
             - 'go/**'
-  strictcli-ci:
-    needs: detect
+  strictcli-ci-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # requires-python: >= 3.11
+        python-version: ['3.12', '3.13', '3.14']
+    steps:
+    - uses: actions/checkout@v6
+    - uses: astral-sh/setup-uv@v7
+    - run: uv python install ${{ matrix.python-version }}
+    - run: uv sync
+    - run: uv run python -c "import strictcli"
+    defaults:
+      run:
+        working-directory: python
+    name: strictcli-ci / test
+    needs:
+    - detect
     if: needs.detect.outputs.strictcli == 'true'
-    uses: ./.github/workflows/strictcli-ci.yml
-  strictcli-ci-pypi:
-    needs: detect
+  strictcli-ci-pypi-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # requires-python: >= 3.11
+        python-version: ['3.12', '3.13', '3.14']
+    steps:
+    - uses: actions/checkout@v6
+    - uses: astral-sh/setup-uv@v7
+    - run: uv python install ${{ matrix.python-version }}
+    - run: uv sync --locked
+    - run: uv run python -c "import strictcli"
+    - run: uv run pytest
+    defaults:
+      run:
+        working-directory: python
+    name: strictcli-ci-pypi / test
+    needs:
+    - detect
     if: needs.detect.outputs.strictcli == 'true'
-    uses: ./.github/workflows/strictcli-ci-pypi.yml
-  go-strictcli-ci:
-    needs: detect
+  go-strictcli-ci-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      # go.mod: go 1.25.7
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: go/go.mod
+    - run: go vet ./...
+    - run: go test ./... -race -short -timeout=10m
+    defaults:
+      run:
+        working-directory: go
+    name: go-strictcli-ci / test
+    needs:
+    - detect
     if: needs.detect.outputs.go-strictcli == 'true'
-    uses: ./.github/workflows/go-strictcli-ci.yml
-  conformance-ci:
-    needs: detect
+  conformance-ci-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v6
+    - uses: astral-sh/setup-uv@v7
+    - run: uv python install 3.13
+    - uses: actions/setup-go@v6
+      with:
+        go-version: '1.25'
+        cache-dependency-path: go/go.sum
+    - name: Install strictcli and conformance tool
+      working-directory: .
+      run: |
+        pip install -e ./python --break-system-packages
+        pip install -e ./conformance --break-system-packages
+    - name: Conformance checks
+      run: conformance check --tag pre-release
+    defaults:
+      run:
+        working-directory: conformance
+    name: conformance-ci / test
+    needs:
+    - detect
     if: needs.detect.outputs.conformance == 'true'
-    uses: ./.github/workflows/conformance-ci.yml
