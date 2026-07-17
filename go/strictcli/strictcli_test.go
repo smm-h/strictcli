@@ -7615,7 +7615,7 @@ func TestArgTypeAndChoicesInHelp(t *testing.T) {
 }
 
 func TestSchemaArgType(t *testing.T) {
-	os.Chdir(t.TempDir())
+	t.Chdir(t.TempDir())
 	os.WriteFile("go.mod", []byte("module test\n"), 0o644)
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
@@ -7646,7 +7646,7 @@ func TestSchemaArgType(t *testing.T) {
 }
 
 func TestSchemaArgChoices(t *testing.T) {
-	os.Chdir(t.TempDir())
+	t.Chdir(t.TempDir())
 	os.WriteFile("go.mod", []byte("module test\n"), 0o644)
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
@@ -7676,7 +7676,7 @@ func TestSchemaArgChoices(t *testing.T) {
 }
 
 func TestSchemaArgTypeInDefaults(t *testing.T) {
-	os.Chdir(t.TempDir())
+	t.Chdir(t.TempDir())
 	os.WriteFile("go.mod", []byte("module test\n"), 0o644)
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
@@ -7796,7 +7796,7 @@ func TestArgIntWithOptionalDefault(t *testing.T) {
 }
 
 func TestSchemaArgNoChoicesOmitted(t *testing.T) {
-	os.Chdir(t.TempDir())
+	t.Chdir(t.TempDir())
 	os.WriteFile("go.mod", []byte("module test\n"), 0o644)
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
@@ -7983,7 +7983,7 @@ func TestConfigEditIsInteractive(t *testing.T) {
 func TestSchemaHiddenCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0o644)
-	os.Chdir(tmpDir)
+	t.Chdir(tmpDir)
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("secret", "A secret command", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
@@ -8009,7 +8009,7 @@ func TestSchemaHiddenCommand(t *testing.T) {
 func TestSchemaInteractiveCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0o644)
-	os.Chdir(tmpDir)
+	t.Chdir(tmpDir)
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("edit", "Edit something", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
@@ -8035,7 +8035,7 @@ func TestSchemaInteractiveCommand(t *testing.T) {
 func TestSchemaHiddenGroup(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0o644)
-	os.Chdir(tmpDir)
+	t.Chdir(tmpDir)
 	app := NewApp("myapp", "1.0.0", "test app")
 	grp := app.Group("secret", "A hidden group")
 	grp.Hidden = true
@@ -8577,17 +8577,13 @@ func TestDumpSchemaDictNoCWD(t *testing.T) {
 // TestDumpSchemaDictEqualsFileMinusProjectID verifies the method output equals
 // the file-writer output with project_id removed, byte-identical by construction.
 func TestDumpSchemaDictEqualsFileMinusProjectID(t *testing.T) {
-	// Note: cannot use chdirTemp here because earlier tests in the suite leave
-	// the process CWD inside a removed temp dir (they os.Chdir(t.TempDir())
-	// without restoring), which makes os.Getwd() fail. Chdir with an absolute
-	// path works regardless, so we avoid Getwd entirely.
 	tmpDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module example.com/testproject\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
+	// t.Chdir changes into tmpDir and restores the original CWD when the test
+	// ends, keeping the process CWD hygienic under shuffled test ordering.
+	t.Chdir(tmpDir)
 	app := NewApp("myapp", "2.3.4", "My great app", WithEnvPrefix("MYAPP"))
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(BoolFlag("force-deploy", "Force deploy", Default(false))),
