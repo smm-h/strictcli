@@ -4,12 +4,11 @@ import "fmt"
 
 // Outcome is the opaque, branded result of a command handler. It is constructed
 // only via Exit or ExitData and carries an exit code plus, optionally, structured
-// data. When data is present, the framework JSON-prints it to stdout (the same
-// path the old DataHandler used) and makes it available to Test and Call.
+// data. When data is present, the framework JSON-prints it to stdout as one
+// compact line and makes it available to Test and Call.
 type Outcome struct {
-	code    int
-	data    interface{}
-	hasData bool
+	code int
+	data interface{}
 }
 
 // Exit returns an Outcome that terminates the command with the given exit code
@@ -23,7 +22,7 @@ func Exit(code int) Outcome {
 // it for programmatic callers (Test/Call). Data emission is possible ONLY through
 // this constructor.
 func ExitData(code int, data interface{}) Outcome {
-	return Outcome{code: code, data: data, hasData: true}
+	return Outcome{code: code, data: data}
 }
 
 // Get returns the value stored under name in kwargs, typed as T.
