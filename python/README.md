@@ -1,6 +1,6 @@
 # strictcli
 
-A strict, zero-dependency CLI framework for Python.
+A strict CLI framework for Python.
 
 strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework errors at registration time. Four types only: `str`, `bool`, `int`, `float`. No magic type inference, no implicit defaults.
 

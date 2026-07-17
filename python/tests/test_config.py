@@ -1029,55 +1029,50 @@ def test_config_unique_enforcement_global_flag(tmp_path, monkeypatch):
 # --- TOML array write round-trip tests ---
 
 
-def test_toml_write_string_array(tmp_path):
-    """_write_toml_flat writes string arrays and they round-trip."""
+def _toml_write_roundtrip(tmp_path, values):
+    """Write each key via _write_config_set (toml) and read back via tomllib."""
     path = str(tmp_path / "config.toml")
-    strictcli._write_toml_flat({"tags": ["a", "b"]}, path)
+    data = {}
+    for key, value in values.items():
+        strictcli._write_config_set(data, path, "toml", key, value)
     with open(path, "rb") as f:
-        data = tomllib.load(f)
+        return tomllib.load(f)
+
+
+def test_toml_write_string_array(tmp_path):
+    """config-set TOML write handles string arrays and they round-trip."""
+    data = _toml_write_roundtrip(tmp_path, {"tags": ["a", "b"]})
     assert data["tags"] == ["a", "b"]
 
 
 def test_toml_write_int_array(tmp_path):
-    """_write_toml_flat writes int arrays and they round-trip."""
-    path = str(tmp_path / "config.toml")
-    strictcli._write_toml_flat({"nums": [1, 2, 3]}, path)
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
+    """config-set TOML write handles int arrays and they round-trip."""
+    data = _toml_write_roundtrip(tmp_path, {"nums": [1, 2, 3]})
     assert data["nums"] == [1, 2, 3]
 
 
 def test_toml_write_float_array(tmp_path):
-    """_write_toml_flat writes float arrays and they round-trip."""
-    path = str(tmp_path / "config.toml")
-    strictcli._write_toml_flat({"rates": [1.5, 2.5]}, path)
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
+    """config-set TOML write handles float arrays and they round-trip."""
+    data = _toml_write_roundtrip(tmp_path, {"rates": [1.5, 2.5]})
     assert data["rates"] == [1.5, 2.5]
 
 
 def test_toml_write_empty_array(tmp_path):
-    """_write_toml_flat writes empty arrays and they round-trip."""
-    path = str(tmp_path / "config.toml")
-    strictcli._write_toml_flat({"items": []}, path)
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
+    """config-set TOML write handles empty arrays and they round-trip."""
+    data = _toml_write_roundtrip(tmp_path, {"items": []})
     assert data["items"] == []
 
 
 def test_toml_write_mixed_scalars_and_arrays(tmp_path):
-    """_write_toml_flat writes mixed scalar and array values correctly."""
-    path = str(tmp_path / "config.toml")
-    strictcli._write_toml_flat({
+    """config-set TOML write handles mixed scalar and array values correctly."""
+    data = _toml_write_roundtrip(tmp_path, {
         "name": "test",
         "count": 42,
         "rate": 3.14,
         "debug": True,
         "tags": ["a", "b", "c"],
         "nums": [1, 2],
-    }, path)
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
+    })
     assert data["name"] == "test"
     assert data["count"] == 42
     assert data["rate"] == 3.14
@@ -1087,13 +1082,10 @@ def test_toml_write_mixed_scalars_and_arrays(tmp_path):
 
 
 def test_toml_write_array_with_special_chars(tmp_path):
-    """_write_toml_flat writes string arrays with special chars correctly."""
-    path = str(tmp_path / "config.toml")
-    strictcli._write_toml_flat({
+    """config-set TOML write handles string arrays with special chars correctly."""
+    data = _toml_write_roundtrip(tmp_path, {
         "paths": ['C:\\Users\\me', 'say "hello"', "back\\slash"],
-    }, path)
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
+    })
     assert data["paths"] == ['C:\\Users\\me', 'say "hello"', "back\\slash"]
 
 
@@ -1815,3 +1807,88 @@ def test_flag_conflict_mode_invalid_value_raises():
     """Registration: invalid per-flag conflict_mode is a ValueError."""
     with pytest.raises(ValueError, match="conflict_mode"):
         strictcli.Flag(name="x", type=str, help="h", conflict_mode="bogus")
+
+
+# --- Config set: TOML comment/order preservation (Phase 8.2) ---
+
+
+def test_config_set_toml_preserves_comments_and_order(tmp_path):
+    """config set on a commented, custom-ordered TOML config keeps comments and
+    ordering intact, changing only the targeted key (comment-preserving edit)."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        "# strictcli config for myapp\n"
+        "zeta = \"keep-me\"  # trailing comment on zeta\n"
+        "\n"
+        "# a comment above alpha\n"
+        "alpha = 1\n"
+        "beta = true\n"
+    )
+
+    app = strictcli.App(
+        name="myapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_format="toml",
+        config_path=str(config_file),
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("zeta", type=str, help="a string", default="")
+    @strictcli.flag("alpha", type=int, help="a number", default=0)
+    @strictcli.flag("beta", type=bool, help="a bool", default=False)
+    def run(ctx, zeta, alpha, beta):
+        pass
+
+    r = app.test(["config", "set", "alpha", "42"])
+    assert r.exit_code == 0
+
+    text = config_file.read_text()
+    # Comments preserved
+    assert "# strictcli config for myapp" in text
+    assert "# trailing comment on zeta" in text
+    assert "# a comment above alpha" in text
+    # Only alpha changed
+    assert "alpha = 42" in text
+    assert "alpha = 1" not in text
+    # Untouched keys retained
+    assert 'zeta = "keep-me"' in text
+    assert "beta = true" in text
+    # Original ordering (zeta before alpha before beta) preserved
+    assert text.index("zeta") < text.index("alpha") < text.index("beta")
+
+
+def test_config_set_toml_unset_preserves_comments(tmp_path):
+    """config set --default (unset) removes only the target key, keeping the
+    surrounding comments and other keys intact."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        "# header comment\n"
+        "alpha = 1\n"
+        "beta = 2  # keep this comment\n"
+    )
+
+    app = strictcli.App(
+        name="myapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_format="toml",
+        config_path=str(config_file),
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("alpha", type=int, help="a number", default=0)
+    @strictcli.flag("beta", type=int, help="another number", default=0)
+    def run(ctx, alpha, beta):
+        pass
+
+    r = app.test(["config", "set", "alpha", "--default"])
+    assert r.exit_code == 0
+
+    text = config_file.read_text()
+    assert "# header comment" in text
+    assert "alpha" not in text
+    assert "beta = 2" in text
+    assert "# keep this comment" in text

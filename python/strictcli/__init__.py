@@ -1,4 +1,4 @@
-"""A strict, zero-dependency CLI framework for Python with mandatory help text, type-safe flags, groups, and schema export."""
+"""A strict CLI framework for Python with mandatory help text, type-safe flags, groups, and schema export."""
 
 from __future__ import annotations
 
@@ -33,6 +33,9 @@ import subprocess
 import sys
 import time
 import tomllib
+
+import tomlkit
+from tomlkit.items import InlineTable, Table
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -434,32 +437,78 @@ def _toml_format_scalar(value: object) -> str:
     return f'"{escaped}"'
 
 
-def _write_toml_flat(data: dict, path: str) -> None:
-    """Write a flat dict as a TOML file.
+def _load_toml_doc(path: str) -> "tomlkit.TOMLDocument":
+    """Load a TOML file as a comment/order-preserving tomlkit document.
 
-    Supports str, int, float, bool, list, and dict values. This avoids
-    requiring a TOML writer dependency for the simple key=value configs
-    that 'config set' produces.
+    Returns an empty document if the file does not exist yet.
     """
-    lines: list[str] = []
-    # Write non-table values first, then tables
-    tables: list[tuple[str, dict]] = []
-    for key, value in data.items():
-        if isinstance(value, dict):
-            tables.append((key, value))
-        elif isinstance(value, list):
-            elements = ", ".join(_toml_format_scalar(elem) for elem in value)
-            lines.append(f"{key} = [{elements}]")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            return tomlkit.parse(fh.read())
+    return tomlkit.document()
+
+
+def _toml_value_item(value: object) -> object:
+    """Build a tomlkit item for ``value`` using canonical scalar formatting.
+
+    Scalars and lists are rendered through ``_toml_format_scalar`` (so floats
+    keep their canonical spelling) and re-parsed into properly formatted
+    tomlkit items. Dicts become section tables with keys sorted for
+    deterministic output.
+    """
+    if isinstance(value, dict):
+        tbl = tomlkit.table()
+        for k in sorted(value):
+            tbl[k] = _toml_value_item(value[k])
+        return tbl
+    if isinstance(value, list):
+        rendered = "[" + ", ".join(_toml_format_scalar(e) for e in value) + "]"
+        return tomlkit.parse(f"_ = {rendered}")["_"]
+    rendered = _toml_format_scalar(value)
+    return tomlkit.parse(f"_ = {rendered}")["_"]
+
+
+def _toml_set_nested(doc: "tomlkit.TOMLDocument", dotted_key: str, value: object) -> None:
+    """Set a dot-separated key on a tomlkit document, preserving comments/order.
+
+    Only the target key is (re)written; intermediate tables are created as
+    needed. Comments and ordering of all other keys are untouched.
+    """
+    parts = dotted_key.split(".")
+    current: object = doc
+    for part in parts[:-1]:
+        nxt = current.get(part) if hasattr(current, "get") else None
+        if not isinstance(nxt, (Table, InlineTable)):
+            tbl = tomlkit.table()
+            current[part] = tbl
+            current = current[part]
         else:
-            lines.append(f"{key} = {_toml_format_scalar(value)}")
-    # Write TOML tables for dict values
-    for key, table in tables:
-        lines.append("")
-        lines.append(f"[{key}]")
-        for k, v in table.items():
-            lines.append(f"{k} = {_toml_format_scalar(v)}")
-    with open(path, "w") as f:
-        f.write("\n".join(lines) + "\n" if lines else "")
+            current = nxt
+    current[parts[-1]] = _toml_value_item(value)
+
+
+def _toml_del_nested(doc: "tomlkit.TOMLDocument", dotted_key: str) -> bool:
+    """Delete a dot-separated key from a tomlkit document.
+
+    Returns True if the key was found and removed. Prunes now-empty
+    intermediate tables. Comments/order of untouched keys are preserved.
+    """
+    parts = dotted_key.split(".")
+    parents: list[tuple[object, str]] = []
+    current: object = doc
+    for part in parts[:-1]:
+        nxt = current.get(part) if hasattr(current, "get") else None
+        if not isinstance(nxt, (Table, InlineTable)):
+            return False
+        parents.append((current, part))
+        current = nxt
+    if parts[-1] not in current:
+        return False
+    del current[parts[-1]]
+    for parent, key in reversed(parents):
+        if len(parent[key]) == 0:
+            del parent[key]
+    return True
 
 
 def _coerce_config_scalar(value: object, flag_type: type) -> object:
@@ -715,11 +764,9 @@ def _config_set_field(
         return 1
 
     if use_default:
-        found = _nested_delete(existing, key)
-        if not found:
+        if not _write_config_unset(existing, path, config_format, key):
             print(f"config set: key '{key}' not in config", file=sys.stderr)
             return 1
-        _write_config_data(existing, path, config_format)
         return 0
 
     # Coerce string value to the config field's type
@@ -742,57 +789,45 @@ def _config_set_field(
         print(f"config set: key '{key}': {e}", file=sys.stderr)
         return 1
 
-    _nested_set(existing, key, typed_value)
-    _write_config_data(existing, path, config_format)
+    _write_config_set(existing, path, config_format, key, typed_value)
     return 0
 
 
-def _write_config_data(data: dict, path: str, config_format: str) -> None:
-    """Write config data to disk in the appropriate format."""
+def _write_config_set(data: dict, path: str, config_format: str, key: str, value: object) -> None:
+    """Set ``key`` = ``value`` in config and persist.
+
+    For TOML, edits are comment/order-preserving: the existing file is loaded
+    into a tomlkit document, only the changed key is written, and the document
+    is dumped back. JSON is serialized from the in-memory ``data`` dict.
+    """
+    _nested_set(data, key, value)
     if config_format == "toml":
-        _write_toml_nested(data, path)
+        doc = _load_toml_doc(path)
+        _toml_set_nested(doc, key, value)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(tomlkit.dumps(doc))
     else:
         with open(path, "w") as fh:
             fh.write(json.dumps(data, indent=2) + "\n")
 
 
-def _write_toml_nested(data: dict, path: str) -> None:
-    """Write a nested dict as a TOML file with sections.
+def _write_config_unset(data: dict, path: str, config_format: str, key: str) -> bool:
+    """Remove ``key`` from config and persist. Returns False if key was absent.
 
-    Top-level scalars are written first, then nested dicts become [section] headers.
-    Only supports one level of nesting (matching config field dot-name semantics).
+    For TOML, the removal is comment/order-preserving (only the target key is
+    dropped). JSON is serialized from the in-memory ``data`` dict.
     """
-    lines: list[str] = []
-    # Write top-level scalars first
-    for key, value in data.items():
-        if isinstance(value, dict):
-            continue
-        if isinstance(value, list):
-            elements = ", ".join(_toml_format_scalar(elem) for elem in value)
-            lines.append(f"{key} = [{elements}]")
-        else:
-            lines.append(f"{key} = {_toml_format_scalar(value)}")
-    # Write sections for nested dicts
-    for key, value in data.items():
-        if not isinstance(value, dict):
-            continue
-        if lines:
-            lines.append("")
-        lines.append(f"[{key}]")
-        for sub_key, sub_value in value.items():
-            if isinstance(sub_value, dict):
-                # Two-level nesting -- use dotted section header
-                lines.append("")
-                lines.append(f"[{key}.{sub_key}]")
-                for k, v in sub_value.items():
-                    lines.append(f"{k} = {_toml_format_scalar(v)}")
-            elif isinstance(sub_value, list):
-                elements = ", ".join(_toml_format_scalar(elem) for elem in sub_value)
-                lines.append(f"{sub_key} = [{elements}]")
-            else:
-                lines.append(f"{sub_key} = {_toml_format_scalar(sub_value)}")
-    with open(path, "w") as f:
-        f.write("\n".join(lines) + "\n" if lines else "")
+    if not _nested_delete(data, key):
+        return False
+    if config_format == "toml":
+        doc = _load_toml_doc(path)
+        _toml_del_nested(doc, key)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(tomlkit.dumps(doc))
+    else:
+        with open(path, "w") as fh:
+            fh.write(json.dumps(data, indent=2) + "\n")
+    return True
 
 
 def _generate_config_template_toml(
@@ -3678,32 +3713,22 @@ class App:
             # --clear: repeatable/dict flags only
             if use_clear:
                 if matched_flag.compound == "dict":
-                    existing[key] = {}
+                    cleared: object = {}
                 elif matched_flag.repeatable:
-                    existing[key] = []
+                    cleared = []
                 else:
                     print("config set: --clear is only for repeatable flags",
                           file=sys.stderr)
                     return 1
-                if app_ref.config_format == "toml":
-                    _write_toml_flat(existing, path)
-                else:
-                    with open(path, "w") as fh:
-                        fh.write(json.dumps(existing, indent=2) + "\n")
+                _write_config_set(existing, path, app_ref.config_format, key, cleared)
                 return 0
 
             # --default: remove the key from config
             if use_default:
-                if key not in existing:
+                if not _write_config_unset(existing, path, app_ref.config_format, key):
                     print(f"config set: key '{key}' not in config",
                           file=sys.stderr)
                     return 1
-                del existing[key]
-                if app_ref.config_format == "toml":
-                    _write_toml_flat(existing, path)
-                else:
-                    with open(path, "w") as fh:
-                        fh.write(json.dumps(existing, indent=2) + "\n")
                 return 0
 
             # Coerce the string value to the flag's type
@@ -3789,12 +3814,7 @@ class App:
                     print(f"config set: key '{key}': {e}", file=sys.stderr)
                     return 1
 
-            existing[key] = typed_value
-            if app_ref.config_format == "toml":
-                _write_toml_flat(existing, path)
-            else:
-                with open(path, "w") as fh:
-                    fh.write(json.dumps(existing, indent=2) + "\n")
+            _write_config_set(existing, path, app_ref.config_format, key, typed_value)
             return 0
 
         config_grp.commands["set"] = Command(

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "strictcli"
 version = "0.28.0"
-description = "A strict, zero-dependency CLI framework for Python"
+description = "A strict CLI framework for Python"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -17,6 +17,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "tomlkit>=0.15.1",
 ]
 
 [dependency-groups]
