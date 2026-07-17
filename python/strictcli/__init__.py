@@ -14,6 +14,7 @@ __all__ = [
     "format_check_results", "format_check_results_json",
     "ConfigField",
     "Context",
+    "Outcome", "outcome",
     "Tool",
     "RelativeToRoot",
 ]
@@ -201,15 +202,15 @@ class _InfraAccess:
 class Context:
     """Structured output context for command handlers.
 
+    Always injected as the first positional argument to every handler.
     Provides info/warn/debug/error methods that route to the correct stream,
-    and an emit method for structured data output.
+    plus source/infra_value provenance accessors. To return structured data,
+    a handler returns ``strictcli.outcome(data=...)``.
     """
 
     def __init__(self, stdout=None, stderr=None, sources=None, infra=None):
         self._stdout = stdout or sys.stdout
         self._stderr = stderr or sys.stderr
-        self._emit_data = _MISSING
-        self._emit_called = False
         self._sources = sources or {}  # flag-name -> source label (cli/env/config/default/implied/infra)
         self._infra = infra  # _InfraAccess | None
 
@@ -269,16 +270,64 @@ class Context:
             f'"{env_var}" is not a declared infra root or handshake env var'
         )
 
-    def emit(self, data) -> None:
-        """Write JSON-serialized data to stdout and store for programmatic retrieval.
 
-        Raises RuntimeError if called more than once.
-        """
-        if self._emit_called:
-            raise RuntimeError("emit called more than once; bundle data into a single value")
-        self._emit_called = True
-        self._emit_data = data
-        print(json.dumps(data, default=str), file=self._stdout)
+# Module-private brand token: an Outcome can be constructed only through the
+# ``outcome()`` factory (which holds this token). Direct construction raises,
+# so a return value is an Outcome only when the framework minted it -- no
+# structural shape detection.
+_OUTCOME_TOKEN = object()
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """A structured result returned by a command handler.
+
+    Built exclusively via the :func:`outcome` factory. Carries an exit code
+    and optional structured data. When ``data`` is not ``None`` the framework
+    JSON-prints it to stdout; ``test()``/``call()`` capture it as ``data``.
+    """
+
+    exit_code: int
+    data: object = None
+    _token: object = None
+
+    def __post_init__(self) -> None:
+        if self._token is not _OUTCOME_TOKEN:
+            raise TypeError(
+                "Outcome cannot be constructed directly; "
+                "build one with strictcli.outcome(...)"
+            )
+
+
+def outcome(exit_code: int = 0, data: object = None) -> Outcome:
+    """Build an :class:`Outcome` for a command handler to return.
+
+    Args:
+        exit_code: process exit code (default 0).
+        data: optional structured data; when not None it is JSON-printed to
+            stdout and captured by ``test()``/``call()``.
+    """
+    return Outcome(exit_code=exit_code, data=data, _token=_OUTCOME_TOKEN)
+
+
+def _interpret_handler_return(result: object) -> tuple[int, object]:
+    """Map a command handler's return value to ``(exit_code, data)``.
+
+    ``data`` is ``_MISSING`` when there is no structured payload to emit.
+    The only permitted returns are ``int`` (exit code), ``None`` (exit 0),
+    or an :class:`Outcome` built via :func:`outcome`. Anything else is a
+    hard error.
+    """
+    if result is None:
+        return 0, _MISSING
+    if isinstance(result, Outcome):
+        return result.exit_code, (_MISSING if result.data is None else result.data)
+    if isinstance(result, int):
+        return result, _MISSING
+    raise TypeError(
+        "command handler must return int (exit code), None (exit 0), or "
+        f"strictcli.outcome(...); got {type(result).__name__}"
+    )
 
 
 def _config_path(app_name: str, *, override: str | None = None, config_format: str = "json") -> str:
@@ -2010,7 +2059,7 @@ class Passthrough:
     """Marks a command as passthrough -- all tokens after the command name are
     forwarded to the handler as a raw list, bypassing flag/arg parsing."""
 
-    handler: Callable  # func(name: str, args: list[str], globals: dict) -> int
+    handler: Callable  # func(ctx: Context, name: str, args: list[str], globals: dict) -> int | None | Outcome
 
 
 @dataclass
@@ -2038,7 +2087,6 @@ class Command:
     hidden: bool = False
     interactive: bool = False
     config_fields: tuple[str, ...] = ()
-    needs_context: bool = False
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
@@ -3176,7 +3224,7 @@ class App:
         app_ref = self  # capture for closure
 
         def _check_handler(
-            *, all: bool, tag: str, name: str,
+            ctx, *, all: bool, tag: str, name: str,
             list: bool, json: bool, ignore_warnings: bool,
             verbose: bool, dry_run: bool, **_kw,
         ) -> int:
@@ -3402,7 +3450,7 @@ class App:
         config_grp.commands["path"] = Command(
             name="path",
             help="Print the absolute path to the config file for this application",
-            handler=lambda **_kw: print(_config_path(
+            handler=lambda ctx, **_kw: print(_config_path(
                 app_ref.name,
                 override=app_ref.config_path,
                 config_format=app_ref.config_format,
@@ -3414,7 +3462,7 @@ class App:
         # Source resolution uses the shared precedence chain: env > config > default.
         # "cli" is structurally impossible here -- config show is a subcommand,
         # so the app's own flags were never passed on the command line.
-        def _config_show_handler(**_kw) -> int:
+        def _config_show_handler(ctx, **_kw) -> int:
             # If there was a config parse error, show it instead of values
             if app_ref._config_parse_err:
                 print(f"error: {app_ref._config_parse_err}", file=sys.stderr)
@@ -3539,7 +3587,7 @@ class App:
         )
 
         # config set
-        def _config_set_handler(key, value=None, **_kw) -> int:
+        def _config_set_handler(ctx, key, value=None, **_kw) -> int:
             path = _config_path(
                 app_ref.name,
                 override=app_ref.config_path,
@@ -3736,7 +3784,7 @@ class App:
         )
 
         # config edit
-        def _config_edit_handler(**_kw) -> None:
+        def _config_edit_handler(ctx, **_kw) -> None:
             path = _config_path(
                 app_ref.name,
                 override=app_ref.config_path,
@@ -3762,7 +3810,7 @@ class App:
         )
 
         # config init
-        def _config_init_handler(**_kw) -> int:
+        def _config_init_handler(ctx, **_kw) -> int:
             cfg_path = _config_path(
                 app_ref.name,
                 override=app_ref.config_path,
@@ -4560,20 +4608,15 @@ class App:
             sys.exit(1)
         else:
             self._last_sources = sources
+            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=sources, infra=self._infra_access())
             if cmd.passthrough is not None:
-                result = cmd.passthrough.handler(cmd.name, data, self._last_global_values)
-            elif cmd.needs_context:
-                ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=sources, infra=self._infra_access())
+                result = cmd.passthrough.handler(ctx, cmd.name, data, self._last_global_values)
+            else:
                 result = cmd.handler(ctx, **data)
-            else:
-                result = cmd.handler(**data)
-            if isinstance(result, int):
-                sys.exit(result)
-            elif result is None:
-                sys.exit(0)
-            else:
-                print(json.dumps(result, default=str))
-                sys.exit(0)
+            exit_code, out_data = _interpret_handler_return(result)
+            if out_data is not _MISSING:
+                print(json.dumps(out_data, default=str))
+            sys.exit(exit_code)
 
     def test(self, argv: list[str]) -> Result:
         """Run the CLI with given argv, capturing output and exit code."""
@@ -4634,22 +4677,17 @@ class App:
             self._last_sources = sources
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
                 try:
+                    ctx = Context(stdout=stdout_buf, stderr=stderr_buf, sources=sources, infra=self._infra_access())
                     if cmd.passthrough is not None:
                         handler_return = cmd.passthrough.handler(
-                            cmd.name, data, self._last_global_values,
+                            ctx, cmd.name, data, self._last_global_values,
                         )
-                    elif cmd.needs_context:
-                        ctx = Context(stdout=stdout_buf, stderr=stderr_buf, sources=sources, infra=self._infra_access())
-                        handler_return = cmd.handler(ctx, **data)
                     else:
-                        handler_return = cmd.handler(**data)
-                    if isinstance(handler_return, int):
-                        exit_code = handler_return
-                    elif handler_return is not None:
-                        result_data = handler_return
-                    # Capture emit data from Context-aware handlers
-                    if cmd.needs_context and not isinstance(ctx._emit_data, _MissingSentinel):
-                        result_data = ctx._emit_data
+                        handler_return = cmd.handler(ctx, **data)
+                    exit_code, out_data = _interpret_handler_return(handler_return)
+                    if out_data is not _MISSING:
+                        result_data = out_data
+                        print(json.dumps(out_data, default=str))
                 except SystemExit as e:
                     exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
 
@@ -4722,9 +4760,14 @@ class App:
                         f"global flag '--{gf.name}' is required"
                     )
 
-            return cmd.passthrough.handler(
-                cmd.name, raw_args, global_values,
+            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources={}, infra=self._infra_access())
+            result = cmd.passthrough.handler(
+                ctx, cmd.name, raw_args, global_values,
             )
+            _interpret_handler_return(result)  # validate return type
+            if isinstance(result, Outcome):
+                return result.data
+            return result
 
         # Build reverse mapping: param_name (underscore) -> flag.name (dashes)
         param_to_flag: dict[str, str] = {}
@@ -4793,13 +4836,12 @@ class App:
         # Store sources for function handlers that need provenance info
         self._last_sources = invoke_sources
 
-        if cmd.needs_context:
-            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources, infra=self._infra_access())
-            result = cmd.handler(ctx, **final_kwargs)
-            if not isinstance(ctx._emit_data, _MissingSentinel):
-                return ctx._emit_data
-            return result
-        return cmd.handler(**final_kwargs)
+        ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources, infra=self._infra_access())
+        result = cmd.handler(ctx, **final_kwargs)
+        _interpret_handler_return(result)  # validate return type
+        if isinstance(result, Outcome):
+            return result.data
+        return result
 
     def call(self, command_path: str, **kwargs: object) -> object:
         """Invoke a command programmatically and return its result.
@@ -5904,12 +5946,11 @@ def _build_and_validate_command(
     )
     param_names = set(sig.parameters.keys())
 
-    # Detect Context injection: if the first parameter's annotation is Context,
-    # exclude it from validation — it will be injected at dispatch time.
-    needs_context = False
+    # The first parameter is always the context slot: the framework injects a
+    # Context as the handler's first positional argument at dispatch time. It
+    # is never matched against a flag or arg, and needs no annotation.
     params_list = list(sig.parameters.values())
-    if params_list and params_list[0].annotation is Context:
-        needs_context = True
+    if params_list:
         param_names.discard(params_list[0].name)
 
     expected_names: set[str] = set()
@@ -6047,7 +6088,6 @@ def _build_and_validate_command(
         hidden=hidden,
         interactive=interactive,
         config_fields=resolved_config_fields,
-        needs_context=needs_context,
     )
 
 
