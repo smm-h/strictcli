@@ -44,7 +44,6 @@ IMPL_EXCLUSIONS: dict[str, str] = {
     "type": "Python Flag.type uses native types; schema uses 'type' string enum",
     "checks_embed": "runtime-only (bytes data, not serializable to JSON schema)",
     "checksEmbed": "runtime-only (Go field for WithChecksEmbed, not serializable to JSON schema)",
-    "LastSources": "Go-only runtime state (source provenance map from most recent parse)",
 }
 
 # Per-entity exclusions: fields present in one implementation but not
@@ -76,10 +75,13 @@ SCHEMA_TEST_ONLY: set[str] = {
     # test definition -- they are not attributes of the Command struct itself.
     "deprecated",
     "deprecated_message",
-    # checks/checks_toml tell the conformance code generators what to generate
-    # (e.g. error parity checks) -- not part of the strictcli API.
+    # checks/checks_toml/providers tell the conformance code generators what to
+    # generate (e.g. error parity checks) -- not part of the strictcli API.
+    # providers drives register_check_provider() / RegisterCheckProvider() calls;
+    # it is a codegen directive, not an App struct field.
     "checks",
     "checks_toml",
+    "providers",
     # config_content provides inline config file content for test cases --
     # not a real App parameter (the test runner writes it to a temp file).
     "config_content",
@@ -89,9 +91,10 @@ SCHEMA_TEST_ONLY: set[str] = {
     # config_fields_def defines config field registrations in test cases --
     # not a real App struct field (it drives code generation).
     "config_fields_def",
-    # handler_style tells the code generator which handler shape to emit
-    # (e.g. "context" vs "classic") -- not a real Command struct field.
-    "handler_style",
+    # handler_returns pins an explicit handler Outcome for the survivor-contract
+    # test cases (exit/data/exit_data/none/bad) -- it drives code generation and
+    # is not a real Command struct field.
+    "handler_returns",
     # default_relative_to_root is an alternate JSON encoding of a flag default
     # (a RelativeToRoot marker) for code generation -- the real API is
     # default=RelativeToRoot(...), covered by the "default" field.
@@ -561,6 +564,43 @@ PYTHON_ONLY_CHECK_SYMBOLS: list[str] = [
 ]
 
 
+# The structured-return (Outcome) API surface. Outcome is a branded type in both
+# implementations; Python constructs it via the outcome() factory, Go via the
+# Exit/ExitData constructors. Get/GetOpt are Go-only typed kwargs accessors
+# (Python handlers receive natively-typed **kwargs, so they have no counterpart).
+OUTCOME_GO_ONLY_ACCESSORS: list[str] = ["Get", "GetOpt"]
+
+
+def check_outcome_api(go_source: str) -> list[str]:
+    """Check the Outcome return-contract surface exists in both implementations."""
+    errors: list[str] = []
+    sys.path.insert(0, str(PROJECT_ROOT / "python"))
+    import strictcli
+
+    # Shared branded type: Outcome exists in both.
+    if not hasattr(strictcli, "Outcome"):
+        errors.append("Python type 'Outcome' not found in strictcli module")
+    if not re.search(r"\btype Outcome struct\b", go_source):
+        errors.append("Go type 'Outcome' not found")
+
+    # Python factory.
+    py_funcs = get_python_module_functions()
+    if "outcome" not in py_funcs:
+        errors.append("Python module function 'outcome' not found")
+
+    # Go constructors (package-level funcs).
+    for gofn in ("Exit", "ExitData"):
+        if not re.search(rf"^func {gofn}\(", go_source, re.MULTILINE):
+            errors.append(f"Go constructor '{gofn}' not found")
+
+    # Go-only generic typed accessors (declared as `func Name[T any](...)`).
+    for gofn in OUTCOME_GO_ONLY_ACCESSORS:
+        if not re.search(rf"^func {gofn}\[", go_source, re.MULTILINE):
+            errors.append(f"Go generic accessor '{gofn}' not found")
+
+    return errors
+
+
 def get_python_check_runner_types() -> dict[str, set[str]]:
     """Return {class_name: {field_names}} for Python check runner dataclasses."""
     sys.path.insert(0, str(PROJECT_ROOT / "python"))
@@ -728,6 +768,7 @@ def main() -> int:
     all_errors.extend(check_check_runner_methods(go_source))
     all_errors.extend(check_check_runner_functions(go_source))
     all_errors.extend(check_check_runner_shared_types(go_source))
+    all_errors.extend(check_outcome_api(go_source))
 
     if all_errors:
         print(f"API surface check FAILED ({len(all_errors)} issue(s)):\n")
@@ -757,6 +798,7 @@ def main() -> int:
     print(f"  Package functions (check runner): {len(CHECK_RUNNER_FUNCTIONS)}")
     print(f"  Shared check types (cross-impl): {len(CHECK_RUNNER_SHARED_TYPES)}")
     print(f"  Python-only check symbols: {len(PYTHON_ONLY_CHECK_SYMBOLS)}")
+    print(f"  Outcome API: Outcome type + outcome()/Exit/ExitData + Go accessors {OUTCOME_GO_ONLY_ACCESSORS}")
     return 0
 
 
