@@ -159,14 +159,14 @@ func main() {
 				cd := c.(map[string]interface{})
 				cname := cd["name"].(string)
 				// Capture for closure.
-				m, msg, probs := cd["mint"].(string), cd["message"].(string), parseProblems(cd)
+				m, msg, probs, notes := cd["mint"].(string), cd["message"].(string), parseProblems(cd), parseNotes(cd)
 				if severities[cname] == "warn" {
 					app.RegisterWarnCheck(cname, func(ctx strictcli.CheckContext, r *strictcli.WarnReporter) strictcli.CheckOutcome {
-						return mintWarnOutcome(r, m, msg, probs)
+						return mintWarnOutcome(r, m, msg, probs, notes)
 					})
 				} else {
 					app.RegisterErrorCheck(cname, func(ctx strictcli.CheckContext, r *strictcli.ErrorReporter) strictcli.CheckOutcome {
-						return mintErrorOutcome(r, m, msg, probs)
+						return mintErrorOutcome(r, m, msg, probs, notes)
 					})
 				}
 			}
@@ -186,7 +186,7 @@ func main() {
 				for _, s := range specDefs {
 					sd := s.(map[string]interface{})
 					meta := providerSpecMeta(sd)
-					m, msg, probs := sd["mint"].(string), sd["message"].(string), parseProblems(sd)
+					m, msg, probs, notes := sd["mint"].(string), sd["message"].(string), parseProblems(sd), parseNotes(sd)
 					implForm := meta.Severity
 					if v, ok := sd["impl_form"]; ok {
 						implForm = v.(string)
@@ -194,12 +194,12 @@ func main() {
 					if implForm == "warn" {
 						specs = append(specs, strictcli.NewWarnCheckSpec(meta,
 							func(ctx strictcli.CheckContext, r *strictcli.WarnReporter) strictcli.CheckOutcome {
-								return mintWarnOutcome(r, m, msg, probs)
+								return mintWarnOutcome(r, m, msg, probs, notes)
 							}))
 					} else {
 						specs = append(specs, strictcli.NewErrorCheckSpec(meta,
 							func(ctx strictcli.CheckContext, r *strictcli.ErrorReporter) strictcli.CheckOutcome {
-								return mintErrorOutcome(r, m, msg, probs)
+								return mintErrorOutcome(r, m, msg, probs, notes)
 							}))
 					}
 				}
@@ -253,6 +253,18 @@ func parseProblems(cd map[string]interface{}) []checkProblemSpec {
 		}
 	}
 	return problems
+}
+
+// parseNotes extracts the optional "notes" list from a check/spec def. Notes are
+// verdict-inert informational strings replayed onto the reporter via Note().
+func parseNotes(cd map[string]interface{}) []string {
+	var notes []string
+	if n, ok := cd["notes"]; ok {
+		for _, item := range n.([]interface{}) {
+			notes = append(notes, item.(string))
+		}
+	}
+	return notes
 }
 
 // providerSpecMeta builds a CheckSpecMeta from a provider spec def, carrying all
@@ -310,7 +322,10 @@ func checkSeverities(tomlStr string) map[string]string {
 
 // mintErrorOutcome replays the case's problems onto an ErrorReporter and mints
 // the requested terminal outcome.
-func mintErrorOutcome(r *strictcli.ErrorReporter, mint, message string, problems []checkProblemSpec) strictcli.CheckOutcome {
+func mintErrorOutcome(r *strictcli.ErrorReporter, mint, message string, problems []checkProblemSpec, notes []string) strictcli.CheckOutcome {
+	for _, n := range notes {
+		r.Note(n)
+	}
 	for _, p := range problems {
 		if p.severity == "error" {
 			r.Error(p.text)
@@ -330,7 +345,10 @@ func mintErrorOutcome(r *strictcli.ErrorReporter, mint, message string, problems
 
 // mintWarnOutcome replays the case's problems onto a WarnReporter (which can
 // only mint warn-severity problems) and mints the requested terminal outcome.
-func mintWarnOutcome(r *strictcli.WarnReporter, mint, message string, problems []checkProblemSpec) strictcli.CheckOutcome {
+func mintWarnOutcome(r *strictcli.WarnReporter, mint, message string, problems []checkProblemSpec, notes []string) strictcli.CheckOutcome {
+	for _, n := range notes {
+		r.Note(n)
+	}
 	for _, p := range problems {
 		r.Warn(p.text)
 	}
@@ -346,20 +364,20 @@ func mintWarnOutcome(r *strictcli.WarnReporter, mint, message string, problems [
 
 // target abstracts over App and Group for command registration.
 type target interface {
-	Command(name, help string, handler func(map[string]interface{}) int, opts ...strictcli.CmdOption)
+	Command(name, help string, handler func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome, opts ...strictcli.CmdOption)
 	Deprecated(name, message string)
 }
 
 type appTarget struct{ a *strictcli.App }
 
-func (t appTarget) Command(name, help string, handler func(map[string]interface{}) int, opts ...strictcli.CmdOption) {
+func (t appTarget) Command(name, help string, handler func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome, opts ...strictcli.CmdOption) {
 	t.a.Command(name, help, handler, opts...)
 }
 func (t appTarget) Deprecated(name, message string) { t.a.Deprecated(name, message) }
 
 type groupTarget struct{ g *strictcli.Group }
 
-func (t groupTarget) Command(name, help string, handler func(map[string]interface{}) int, opts ...strictcli.CmdOption) {
+func (t groupTarget) Command(name, help string, handler func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome, opts ...strictcli.CmdOption) {
 	t.g.Command(name, help, handler, opts...)
 }
 func (t groupTarget) Deprecated(name, message string) { t.g.Deprecated(name, message) }
@@ -708,16 +726,34 @@ func collectAllFlagDefs(cmdDef map[string]interface{}, globalFlags []map[string]
 }
 
 // makeHandler builds a normal command handler function from a command definition.
-func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interface{}, app *strictcli.App) func(map[string]interface{}) int {
-	handlerPrints := cmdDef["handler_prints"].(string)
+func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interface{}) func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
+	// handler_returns pins an explicit Outcome (survivor-contract cases): an
+	// exit-only, data-only, exit+data, or None-equivalent return. When present,
+	// the template-printing path is skipped entirely.
+	if hrRaw, ok := cmdDef["handler_returns"]; ok {
+		hr := hrRaw.(map[string]interface{})
+		kind := hr["kind"].(string)
+		code := 0
+		if v, ok := hr["code"]; ok {
+			code = int(v.(float64))
+		}
+		data := hr["data"]
+		return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
+			switch kind {
+			case "data":
+				return strictcli.ExitData(0, data)
+			case "exit_data":
+				return strictcli.ExitData(code, data)
+			default: // "exit" or "none" (Go has no None; None maps to Exit(0))
+				return strictcli.Exit(code)
+			}
+		}
+	}
+
+	template := cmdDef["handler_prints"].(string)
 	exitCode := 0
 	if v, ok := cmdDef["handler_exit_code"]; ok {
 		exitCode = int(v.(float64))
-	}
-
-	handlerStyle := "classic"
-	if v, ok := cmdDef["handler_style"]; ok {
-		handlerStyle = v.(string)
 	}
 
 	allFlags := collectAllFlagDefs(cmdDef, globalFlags)
@@ -731,27 +767,17 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 	}
 
 	// Capture for closure.
-	template := handlerPrints
 	ec := exitCode
-	style := handlerStyle
 
-	return func(args map[string]interface{}) int {
+	return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
 		out := template
 
-		// For context-style handlers, substitute {source:name} patterns
-		// using the app's LastSources map populated during dispatch.
-		if style == "context" {
-			for _, fd := range allFlags {
-				name := fd["name"].(string)
-				key := strings.ReplaceAll(name, "-", "_")
-				sourceKey := "{source:" + name + "}"
-				if strings.Contains(out, sourceKey) {
-					if s, ok := app.LastSources[key]; ok {
-						out = strings.ReplaceAll(out, sourceKey, s)
-					} else {
-						out = strings.ReplaceAll(out, sourceKey, "unknown")
-					}
-				}
+		// Substitute {source:name} provenance references via ctx.Source().
+		for _, fd := range allFlags {
+			name := fd["name"].(string)
+			sourceKey := "{source:" + name + "}"
+			if strings.Contains(out, sourceKey) {
+				out = strings.ReplaceAll(out, sourceKey, ctx.Source(name))
 			}
 		}
 
@@ -868,7 +894,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 		}
 
 		fmt.Println(out)
-		return ec
+		return strictcli.Exit(ec)
 	}
 }
 
@@ -880,7 +906,7 @@ func makePassthroughHandler(cmdDef map[string]interface{}, globalFlags []map[str
 	}
 	ec := exitCode
 
-	return func(name string, args []string, globals map[string]interface{}) int {
+	return func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
 		// Print global flag values.
 		for _, gf := range globalFlags {
 			gfName := gf["name"].(string)
@@ -945,7 +971,8 @@ func registerCommand(cmdDef map[string]interface{}, t target, globalFlags []map[
 	}
 
 	// Normal command.
-	handler := makeHandler(cmdDef, globalFlags, app)
+	handler := makeHandler(cmdDef, globalFlags)
+	_ = app
 	opts := buildCmdOptions(cmdDef)
 	t.Command(name, help, handler, opts...)
 }
