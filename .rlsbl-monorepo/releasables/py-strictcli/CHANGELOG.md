@@ -2,25 +2,42 @@
 
 # Changelog
 
-## 0.28.0
+## 0.29.0
 
-Check outcome model (sealed reporters, per-problem severity, purity partition), check providers, InfraEnv location roots, global-flag conflict fix, conformance parity.
+Breaking: ctx-first handler signatures, Outcome return type, required version, tomlkit config writes, float canon, notes channel, 7 parity fixes
 
 <details>
 <summary>Context</summary>
 
-Breaking changes (minor bump in 0.x):
+Coordinated contract redesign across Python and Go implementations.
 
-- CheckResult deleted. Check handlers now receive a ceiling-typed reporter
-  (ErrorReporter for error-severity checks, WarnReporter for warn-severity)
-  and return outcomes via reporter.passed / reporter.found / reporter.skipped.
-- @app.check replaced by @app.error_check / @app.warn_check decorators that
-  enforce the severity-form contract at registration time.
-- Check implementations change from fn(ctx) -> CheckResult to
-  fn(ctx, reporter) -> outcome.
-- Scope adapters return SkipCheck(reason=...) instead of CheckResult("skip", ...).
+Migration recipe:
+- Handler signatures: ctx is now the first parameter (was kwargs-only)
+- Handlers return Outcome instead of int exit codes
+- version= is now required on App() -- use version=importlib.metadata.version("pkg")
+- Config writes use tomlkit for comment-preserving round-trips
+- Float canonicalization aligns cross-language behavior
+- Notes channel for non-error diagnostic output
 
 </details>
+
+### Breaking
+
+- [strictcli] **Handler contract redesign.** Command and passthrough handlers now always receive `ctx` as their first argument (no annotation required), and must return `int` (exit code), `None` (exit 0), or `strictcli.outcome(exit_code, data)`. `Context.emit` is removed and any other return value is a hard error. `strictcli.outcome(...)` is the new way to return structured data.
+- [strictcli] **Breaking: `version` is now required on `App`.** The metadata auto-detect fallback is gone. Migrate with `version=importlib.metadata.version("<dist>")`.
+
+### Features
+
+- [strictcli] **Check reporters gain a note channel and --verbose now shows notes, durations, and a count summary.** Check implementations can record informational notes via reporter.note (allowed on any outcome, including a pass) that never affect status or exit codes. Under --verbose, results now render per-check notes, per-check durations, and a trailing pass/fail/warn/skip count summary; JSON output always includes notes and duration_ms fields.
+
+### Fixes
+
+- [strictcli] **Canonical float formatting.** Floats now render consistently in help defaults, `config show`, TOML `config set` writes, and choices/validation error messages: shortest round-trip decimal, integer-valued floats keep a trailing `.0`, `-0.0` is preserved, fixed notation for magnitudes in [1e-6, 1e21) and scientific (`1e+21`, `1e-7`) outside. Fixes malformed output like `1e+16.0` in error messages.
+- [strictcli] **Compact JSON data output.** Handler `outcome(data=...)` now prints one compact JSON line (no spaces after `,`/`:`), matching the Go implementation byte-for-byte.
+- [strictcli] **`config set`/`config set --default` preserve comments and key order in TOML config files.** Edits now touch only the changed key instead of rewriting the whole file.
+- [strictcli] **Python-Go parity fixes.** @-prefix file/stdin trimming now trims only Go's cutset (space, tab, CR, LF), preserving other whitespace; tag/check/config-field name validation rejects trailing newlines; `config edit` prints `error: editor failed` and exits 1 when the editor fails or is missing; MCP JSON-RPC errors match Go (`Parse error`, `Method not found`) and non-object JSON is reported as a parse error; dict flag values render with deterministically sorted keys in help defaults and error messages.
+
+## 0.28.0
 
 ### Breaking
 
