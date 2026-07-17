@@ -8,7 +8,8 @@
     "go": {
       "type": "go",
       "target": "go",
-      "local": false
+      "local": false,
+      "artifact": "library"
     }
   },
   "coverage_unit": "commit"
