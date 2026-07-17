@@ -644,24 +644,82 @@ func (a *App) collectAllFlags() []Flag {
 	return flags
 }
 
-// writeConfigFile marshals the config map and writes it to disk.
-func writeConfigFile(data map[string]interface{}, path string, format string) int {
-	var raw []byte
-	var err error
+// configChange describes a single config mutation applied to the file.
+// For TOML it is applied to the parsed document (preserving comments and
+// key order); for JSON the whole map is re-marshaled and the change is
+// already reflected in it.
+type configChange struct {
+	key    string      // dot-separated key path
+	value  interface{} // value to set; ignored when remove is true
+	remove bool        // true = delete the key
+}
+
+// writeConfigFile persists a single config mutation to disk.
+//
+// The JSON branch re-marshals the full data map (the caller has already
+// applied the change to it). The TOML branch parses the existing file,
+// applies the change via go-toml-edit's document API, and re-serializes —
+// preserving comments, formatting, and key order for all untouched keys.
+func writeConfigFile(data map[string]interface{}, path string, format string, change configChange) int {
 	switch format {
 	case "toml":
-		raw, err = tomledit.Marshal(data)
+		return writeConfigFileTOML(path, change)
 	default:
-		raw, err = json.MarshalIndent(data, "", "  ")
-		if err == nil {
-			raw = append(raw, '\n')
+		raw, err := json.MarshalIndent(data, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot marshal config: %s\n", err)
+			return 1
+		}
+		raw = append(raw, '\n')
+		if err := os.WriteFile(path, raw, 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
+			return 1
+		}
+		return 0
+	}
+}
+
+// writeConfigFileTOML applies a single mutation to a TOML config file while
+// preserving comments and the existing key order. It parses the file into
+// go-toml-edit's lossless document AST, applies the change, and writes the
+// bytes back. Bytes() (round-trip fidelity) is used rather than Format() so
+// that unrelated formatting — blank lines, alignment, comment placement —
+// survives byte-for-byte; only the changed key is touched.
+func writeConfigFileTOML(path string, change configChange) int {
+	var doc *tomledit.DocumentNode
+	existingBytes, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "error: cannot read config file: %s\n", err)
+			return 1
+		}
+		// New file: start from an empty document.
+		doc, err = tomledit.Parse(nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot initialize config document: %s\n", err)
+			return 1
+		}
+	} else {
+		doc, err = tomledit.Parse(existingBytes)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot parse config file: %s\n", err)
+			return 1
 		}
 	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: cannot marshal config: %s\n", err)
-		return 1
+
+	if change.remove {
+		if err := doc.Delete(change.key); err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot update config: %s\n", err)
+			return 1
+		}
+	} else {
+		if err := doc.SetCreate(change.key, change.value); err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot update config: %s\n", err)
+			return 1
+		}
 	}
-	if err := os.WriteFile(path, raw, 0o644); err != nil {
+
+	if err := os.WriteFile(path, doc.Bytes(), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
 		return 1
 	}
@@ -953,7 +1011,7 @@ func (a *App) registerConfigGroup() {
 				return Exit(1)
 			}
 			existing[key] = []interface{}{}
-			return Exit(writeConfigFile(existing, path, a.configFormat))
+			return Exit(writeConfigFile(existing, path, a.configFormat, configChange{key: key, value: []interface{}{}}))
 		}
 
 		// --default: remove the key from config
@@ -963,7 +1021,7 @@ func (a *App) registerConfigGroup() {
 				return Exit(1)
 			}
 			nestedDelete(existing, key)
-			return Exit(writeConfigFile(existing, path, a.configFormat))
+			return Exit(writeConfigFile(existing, path, a.configFormat, configChange{key: key, remove: true}))
 		}
 
 		// Config field: coerce to config field type
@@ -995,7 +1053,7 @@ func (a *App) registerConfigGroup() {
 				typedValue = value
 			}
 			nestedSet(existing, key, typedValue)
-			return Exit(writeConfigFile(existing, path, a.configFormat))
+			return Exit(writeConfigFile(existing, path, a.configFormat, configChange{key: key, value: typedValue}))
 		}
 
 		// Flag: coerce the string value to the flag's type
@@ -1066,7 +1124,7 @@ func (a *App) registerConfigGroup() {
 		}
 
 		existing[key] = typedValue
-		return Exit(writeConfigFile(existing, path, a.configFormat))
+		return Exit(writeConfigFile(existing, path, a.configFormat, configChange{key: key, value: typedValue}))
 	}, WithArgs(
 		NewArg("key", "The config key to set, matching a registered flag name"),
 		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",

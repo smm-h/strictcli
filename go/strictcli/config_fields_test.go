@@ -1666,3 +1666,99 @@ func TestFieldFlagOneAbsentDefaultOK(t *testing.T) {
 		WithFlags(StringFlag("target", "deploy target")))
 	app2.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
 }
+
+// TestConfigSetTOMLPreservesComments verifies that `config set` on a TOML
+// config file preserves comments and custom key ordering byte-for-byte,
+// changing only the targeted key's value. Regression for phase 8.2: the
+// previous implementation re-marshaled a plain map, destroying comments and
+// alphabetizing keys.
+func TestConfigSetTOMLPreservesComments(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.toml"
+
+	// Untouched keys (zulu, port) keep alignment padding to prove it survives.
+	// The changed key (region) uses a single space before its inline comment:
+	// go-toml-edit normalizes pre-comment whitespace to one space when it
+	// rewrites a value node, so this keeps the expected output deterministic
+	// while the value itself stays the same length.
+	original := `# Top-of-file comment must survive
+# second line of banner
+
+zulu = "z"            # trailing comment on an unregistered key
+region = "us-east-1" # inline note on region
+
+# --- server block ---
+[server]
+port = 8080           # the listen port
+host = "localhost"
+`
+	if err := os.WriteFile(configFile, []byte(original), 0o644); err != nil {
+		t.Fatalf("write seed config: %v", err)
+	}
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile), WithConfigFormat("toml"))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+	app.ConfigField("server.host", ConfigFieldHelp("Server host"), ConfigFieldDefault("localhost"))
+	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
+	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+
+	r := app.Test([]string{"config", "set", "region", "us-west-2"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set exit %d, stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	got, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	want := strings.Replace(original, `region = "us-east-1"`, `region = "us-west-2"`, 1)
+	if string(got) != want {
+		t.Fatalf("TOML config not preserved byte-for-byte.\n--- want ---\n%s\n--- got ---\n%s", want, got)
+	}
+}
+
+// TestConfigSetTOMLDefaultRemovesKeyPreservingRest verifies `config set --default`
+// deletes only the targeted key from a TOML config while preserving comments
+// and ordering of the remaining keys.
+func TestConfigSetTOMLDefaultRemovesKeyPreservingRest(t *testing.T) {
+	dir := t.TempDir()
+	configFile := dir + "/config.toml"
+
+	original := `# banner comment
+region = "us-east-1"
+
+# server section comment
+[server]
+host = "example.com"  # keep me
+port = 9090
+`
+	if err := os.WriteFile(configFile, []byte(original), 0o644); err != nil {
+		t.Fatalf("write seed config: %v", err)
+	}
+
+	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile), WithConfigFormat("toml"))
+	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
+	app.ConfigField("server.host", ConfigFieldHelp("Server host"), ConfigFieldDefault("localhost"))
+	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
+	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+
+	r := app.Test([]string{"config", "set", "server.port", "--default"})
+	if r.ExitCode != 0 {
+		t.Fatalf("config set --default exit %d, stderr: %s", r.ExitCode, r.Stderr)
+	}
+
+	got, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	gotStr := string(got)
+	if strings.Contains(gotStr, "port") {
+		t.Fatalf("expected server.port removed, got:\n%s", gotStr)
+	}
+	// Untouched comments and keys must remain.
+	for _, must := range []string{"# banner comment", `region = "us-east-1"`, "# server section comment", `host = "example.com"  # keep me`} {
+		if !strings.Contains(gotStr, must) {
+			t.Fatalf("expected %q preserved, got:\n%s", must, gotStr)
+		}
+	}
+}
