@@ -80,5 +80,10 @@ def check_conformance_parity(ctx, reporter):
     return _run_script(reporter, "run.py", "--both")
 
 
+@app.error_check("schema-parity")
+def check_schema_parity(ctx, reporter):
+    return _run_script(reporter, "check_schema_parity.py")
+
+
 def main():
     app.run()

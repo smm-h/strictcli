@@ -39,3 +39,11 @@ fast = false
 pure = false
 needs_network = false
 depends_on = ["conformance-python", "conformance-go"]
+
+[checks.schema-parity]
+tags = ["pre-release", "conformance", "parity"]
+severity = "error"
+fast = false
+pure = false
+needs_network = false
+depends_on = []
