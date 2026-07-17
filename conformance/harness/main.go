@@ -158,20 +158,8 @@ func main() {
 			for _, c := range checks.([]interface{}) {
 				cd := c.(map[string]interface{})
 				cname := cd["name"].(string)
-				mint := cd["mint"].(string)
-				message := cd["message"].(string)
-				var problems []checkProblemSpec
-				if p, ok := cd["problems"]; ok {
-					for _, item := range p.([]interface{}) {
-						pm := item.(map[string]interface{})
-						problems = append(problems, checkProblemSpec{
-							severity: pm["severity"].(string),
-							text:     pm["text"].(string),
-						})
-					}
-				}
 				// Capture for closure.
-				m, msg, probs := mint, message, problems
+				m, msg, probs := cd["mint"].(string), cd["message"].(string), parseProblems(cd)
 				if severities[cname] == "warn" {
 					app.RegisterWarnCheck(cname, func(ctx strictcli.CheckContext, r *strictcli.WarnReporter) strictcli.CheckOutcome {
 						return mintWarnOutcome(r, m, msg, probs)
@@ -183,7 +171,46 @@ func main() {
 				}
 			}
 		}
+	}
 
+	// Register check providers. Each provider is a list of specs it returns;
+	// every spec carries its 8 meta fields inline (providers have no TOML). The
+	// registration form (NewErrorCheckSpec vs NewWarnCheckSpec) is the spec's
+	// impl_form (defaults to its meta severity); a spec whose impl_form differs
+	// from its severity pins the materialization-time severity-mismatch panic.
+	if providers, ok := appDef["providers"]; ok {
+		for _, prov := range providers.([]interface{}) {
+			specDefs := prov.([]interface{})
+			app.RegisterCheckProvider(func() []strictcli.CheckSpec {
+				var specs []strictcli.CheckSpec
+				for _, s := range specDefs {
+					sd := s.(map[string]interface{})
+					meta := providerSpecMeta(sd)
+					m, msg, probs := sd["mint"].(string), sd["message"].(string), parseProblems(sd)
+					implForm := meta.Severity
+					if v, ok := sd["impl_form"]; ok {
+						implForm = v.(string)
+					}
+					if implForm == "warn" {
+						specs = append(specs, strictcli.NewWarnCheckSpec(meta,
+							func(ctx strictcli.CheckContext, r *strictcli.WarnReporter) strictcli.CheckOutcome {
+								return mintWarnOutcome(r, m, msg, probs)
+							}))
+					} else {
+						specs = append(specs, strictcli.NewErrorCheckSpec(meta,
+							func(ctx strictcli.CheckContext, r *strictcli.ErrorReporter) strictcli.CheckOutcome {
+								return mintErrorOutcome(r, m, msg, probs)
+							}))
+					}
+				}
+				return specs
+			})
+		}
+	}
+
+	_, hasToml := appDef["checks_toml"]
+	_, hasProviders := appDef["providers"]
+	if hasToml || hasProviders {
 		app.SetCheckContext(func() strictcli.CheckContext {
 			return &testCheckCtx{}
 		})
@@ -211,6 +238,49 @@ func (c *testCheckCtx) ProjectRoot() string { return "." }
 type checkProblemSpec struct {
 	severity string // "error" or "warn"
 	text     string
+}
+
+// parseProblems extracts the optional "problems" list from a check/spec def.
+func parseProblems(cd map[string]interface{}) []checkProblemSpec {
+	var problems []checkProblemSpec
+	if p, ok := cd["problems"]; ok {
+		for _, item := range p.([]interface{}) {
+			pm := item.(map[string]interface{})
+			problems = append(problems, checkProblemSpec{
+				severity: pm["severity"].(string),
+				text:     pm["text"].(string),
+			})
+		}
+	}
+	return problems
+}
+
+// providerSpecMeta builds a CheckSpecMeta from a provider spec def, carrying all
+// eight declarative meta fields inline (providers have no TOML).
+func providerSpecMeta(sd map[string]interface{}) strictcli.CheckSpecMeta {
+	toStrList := func(key string) []string {
+		var out []string
+		if v, ok := sd[key]; ok && v != nil {
+			for _, x := range v.([]interface{}) {
+				out = append(out, x.(string))
+			}
+		}
+		return out
+	}
+	scope := ""
+	if v, ok := sd["scope"]; ok && v != nil {
+		scope = v.(string)
+	}
+	return strictcli.CheckSpecMeta{
+		Name:         sd["name"].(string),
+		Tags:         toStrList("tags"),
+		Severity:     sd["severity"].(string),
+		Fast:         sd["fast"].(bool),
+		Pure:         sd["pure"].(bool),
+		NeedsNetwork: sd["needs_network"].(bool),
+		DependsOn:    toStrList("depends_on"),
+		Scope:        scope,
+	}
 }
 
 // checkSeverities parses the embedded checks_toml and returns a name->severity

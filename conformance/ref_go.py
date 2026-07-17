@@ -21,6 +21,31 @@ def _check_severities(checks_toml: str) -> dict[str, str]:
     return {name: c["severity"] for name, c in data.get("checks", {}).items()}
 
 
+def _go_str(s: str) -> str:
+    """Escape a Python string into a Go double-quoted string literal."""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _emit_check_impl_body_go(check_def: dict, indent: str) -> list[str]:
+    """Emit the reporter-minting body lines of a Go check impl.
+
+    Shared by TOML-declared checks (RegisterErrorCheck / RegisterWarnCheck) and
+    provider-sourced specs (NewErrorCheckSpec / NewWarnCheckSpec impls). Both
+    receive ``(ctx, r)``; the body mints any problems then returns a terminal
+    outcome via the reporter ``r``.
+    """
+    mint = check_def["mint"]
+    message = check_def["message"]
+    problems = check_def.get("problems", [])
+    mint_method = {"passed": "Passed", "skipped": "Skipped", "found": "Found"}[mint]
+    body = []
+    for p in problems:
+        pmethod = "Error" if p["severity"] == "error" else "Warn"
+        body.append(f'{indent}r.{pmethod}({_go_str(p["text"])})')
+    body.append(f'{indent}return r.{mint_method}({_go_str(message)})')
+    return body
+
+
 def _flag_param(name: str) -> str:
     """Convert a flag name to a Go map key (e.g. dry-run -> dry_run)."""
     return name.replace("-", "_")
@@ -439,17 +464,19 @@ def generate(app_def: dict) -> str:
 
     Returns the source code as a string.
     """
-    has_checks = bool(app_def.get("checks_toml"))
+    has_toml = bool(app_def.get("checks_toml"))
+    has_providers = bool(app_def.get("providers"))
+    has_checks = has_toml or has_providers
 
     lines = []
     lines.append("package main")
     lines.append("")
     lines.append("import (")
-    if has_checks:
+    if has_toml:
         lines.append('\t"crypto/sha256"')
     lines.append('\t"fmt"')
     lines.append('\t"os"')
-    if has_checks:
+    if has_toml:
         lines.append('\t"path/filepath"')
     lines.append('\t"strings"')
     lines.append("")
@@ -471,7 +498,7 @@ def generate(app_def: dict) -> str:
     lines.append("")
 
     # Write checks.toml to a temp file and pass via WithChecks(path)
-    if has_checks:
+    if has_toml:
         checks_toml = app_def["checks_toml"]
         # Escape for Go double-quoted string
         escaped_toml = checks_toml.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
@@ -499,7 +526,7 @@ def generate(app_def: dict) -> str:
         app_opts.append(f'strictcli.WithInfraRoot("{env_var}", "{default_path}")')
     for env_var, hlp in app_def.get("handshake_env", {}).items():
         app_opts.append(f'strictcli.WithHandshakeEnv("{env_var}", "{hlp}")')
-    if has_checks:
+    if has_toml:
         app_opts.append('strictcli.WithChecks(checksPath)')
     opts_str = ""
     if app_opts:
@@ -579,18 +606,11 @@ def generate(app_def: dict) -> str:
     # Register checks if defined. The registration form (RegisterErrorCheck vs
     # RegisterWarnCheck) is derived from the check's severity in the embedded
     # checks_toml -- the case only describes what the impl mints via its reporter.
-    if has_checks:
+    if has_toml:
         severities = _check_severities(app_def["checks_toml"])
-
-        def _go_str(s: str) -> str:
-            return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
         for check_def in app_def.get("checks", []):
             cname = check_def["name"]
-            mint = check_def["mint"]
-            message = check_def["message"]
-            problems = check_def.get("problems", [])
-            mint_method = {"passed": "Passed", "skipped": "Skipped", "found": "Found"}[mint]
             if severities.get(cname) == "warn":
                 reg, reporter_type = "RegisterWarnCheck", "WarnReporter"
             else:
@@ -598,13 +618,50 @@ def generate(app_def: dict) -> str:
             lines.append(
                 f'\tapp.{reg}("{cname}", func(ctx strictcli.CheckContext, r *strictcli.{reporter_type}) strictcli.CheckOutcome {{'
             )
-            for p in problems:
-                pmethod = "Error" if p["severity"] == "error" else "Warn"
-                lines.append(f'\t\tr.{pmethod}({_go_str(p["text"])})')
-            lines.append(f'\t\treturn r.{mint_method}({_go_str(message)})')
+            lines.extend(_emit_check_impl_body_go(check_def, "\t\t"))
             lines.append('\t})')
             lines.append("")
 
+    # Register check providers. Each provider is a list of specs it returns;
+    # every spec carries its 8 meta fields inline (providers have no TOML). The
+    # registration form (NewErrorCheckSpec vs NewWarnCheckSpec) is the spec's
+    # impl_form (defaults to its severity); a spec whose impl_form differs from
+    # its meta severity pins the materialization-time severity-mismatch panic.
+    if has_providers:
+        def _go_str_list(items) -> str:
+            return "[]string{" + ", ".join(_go_str(x) for x in items) + "}"
+
+        for provider_specs in app_def["providers"]:
+            lines.append('\tapp.RegisterCheckProvider(func() []strictcli.CheckSpec {')
+            lines.append('\t\treturn []strictcli.CheckSpec{')
+            for spec in provider_specs:
+                impl_form = spec.get("impl_form", spec["severity"])
+                if impl_form == "warn":
+                    ctor, reporter_type = "NewWarnCheckSpec", "WarnReporter"
+                else:
+                    ctor, reporter_type = "NewErrorCheckSpec", "ErrorReporter"
+                lines.append(f'\t\t\tstrictcli.{ctor}(')
+                lines.append('\t\t\t\tstrictcli.CheckSpecMeta{')
+                lines.append(f'\t\t\t\t\tName:         {_go_str(spec["name"])},')
+                lines.append(f'\t\t\t\t\tTags:         {_go_str_list(spec["tags"])},')
+                lines.append(f'\t\t\t\t\tSeverity:     {_go_str(spec["severity"])},')
+                lines.append(f'\t\t\t\t\tFast:         {str(bool(spec["fast"])).lower()},')
+                lines.append(f'\t\t\t\t\tPure:         {str(bool(spec["pure"])).lower()},')
+                lines.append(f'\t\t\t\t\tNeedsNetwork: {str(bool(spec["needs_network"])).lower()},')
+                lines.append(f'\t\t\t\t\tDependsOn:    {_go_str_list(spec["depends_on"])},')
+                lines.append(f'\t\t\t\t\tScope:        {_go_str(spec.get("scope", ""))},')
+                lines.append('\t\t\t\t},')
+                lines.append(
+                    f'\t\t\t\tfunc(ctx strictcli.CheckContext, r *strictcli.{reporter_type}) strictcli.CheckOutcome {{'
+                )
+                lines.extend(_emit_check_impl_body_go(spec, "\t\t\t\t\t"))
+                lines.append('\t\t\t\t},')
+                lines.append('\t\t\t),')
+            lines.append('\t\t}')
+            lines.append('\t})')
+            lines.append("")
+
+    if has_checks:
         lines.append('\t// Check context')
         lines.append('\tapp.SetCheckContext(func() strictcli.CheckContext {')
         lines.append('\t\treturn &testCheckCtx{}')

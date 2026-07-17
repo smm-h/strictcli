@@ -23,6 +23,25 @@ def _check_severities(checks_toml: str) -> dict[str, str]:
     return {name: c["severity"] for name, c in data.get("checks", {}).items()}
 
 
+def _emit_check_impl_body(check_def: dict, indent: str) -> list[str]:
+    """Emit the reporter-minting body lines of a check impl.
+
+    Shared by TOML-declared checks (``@app.error_check`` / ``@app.warn_check``)
+    and provider-sourced specs (``error_check_spec`` / ``warn_check_spec``
+    impls). Both receive ``(ctx, reporter)``; the body mints any problems then
+    returns a terminal outcome via the reporter.
+    """
+    mint = check_def["mint"]
+    message = check_def["message"]
+    problems = check_def.get("problems", [])
+    body = []
+    for p in problems:
+        pmethod = "error" if p["severity"] == "error" else "warn"
+        body.append(f"{indent}reporter.{pmethod}({p['text']!r})")
+    body.append(f"{indent}return reporter.{mint}({message!r})")
+    return body
+
+
 def _flag_param(name: str) -> str:
     """Convert a flag name to a Python parameter name (e.g. dry-run -> dry_run).
 
@@ -602,13 +621,16 @@ def generate(app_def: dict) -> str:
 
     Returns the script source as a string.
     """
-    has_checks = bool(app_def.get("checks_toml"))
+    has_toml = bool(app_def.get("checks_toml"))
+    has_providers = bool(app_def.get("providers"))
+    has_checks = has_toml or has_providers
 
     lines = []
     lines.append("import sys")
     lines.append("import os")
-    if has_checks:
+    if has_toml:
         lines.append("import hashlib")
+    if has_checks:
         lines.append("import pathlib")
     lines.append("")
     lines.append("# Add strictcli to path")
@@ -617,7 +639,7 @@ def generate(app_def: dict) -> str:
     lines.append("")
 
     # Write checks.toml to a temp file and pass via checks_path=
-    if has_checks:
+    if has_toml:
         checks_toml = app_def["checks_toml"]
         lines.append("# Write checks.toml to a deterministic temp path")
         lines.append(f"_hash = hashlib.sha256({checks_toml!r}.encode()).hexdigest()[:12]")
@@ -649,7 +671,7 @@ def generate(app_def: dict) -> str:
         app_parts.append(f"infra_root={app_def['infra_root']!r}")
     if "handshake_env" in app_def:
         app_parts.append(f"handshake_env={app_def['handshake_env']!r}")
-    if has_checks:
+    if has_toml:
         app_parts.append("checks_path=_checks_path")
     if global_flags:
         gf_exprs = [_emit_flag(gf) for gf in global_flags]
@@ -720,23 +742,51 @@ def generate(app_def: dict) -> str:
     # Register checks if defined. The registration form (error_check vs
     # warn_check) is derived from the check's severity in the embedded
     # checks_toml -- the case only describes what the impl mints via its reporter.
-    if has_checks:
+    if has_toml:
         severities = _check_severities(app_def["checks_toml"])
         for check_def in app_def.get("checks", []):
             cname = check_def["name"]
-            mint = check_def["mint"]
-            message = check_def["message"]
-            problems = check_def.get("problems", [])
             decorator = "warn_check" if severities.get(cname) == "warn" else "error_check"
             fn_name = f"check_{cname.replace('-', '_')}"
             lines.append(f"    @app.{decorator}({cname!r})")
             lines.append(f"    def {fn_name}(ctx, reporter):")
-            for p in problems:
-                pmethod = "error" if p["severity"] == "error" else "warn"
-                lines.append(f"        reporter.{pmethod}({p['text']!r})")
-            lines.append(f"        return reporter.{mint}({message!r})")
+            lines.extend(_emit_check_impl_body(check_def, "        "))
             lines.append("")
 
+    # Register check providers. Each provider is a list of specs it returns;
+    # every spec carries its 8 meta fields inline (providers have no TOML). The
+    # registration form (error_check_spec vs warn_check_spec) is the spec's
+    # impl_form (defaults to its severity); a spec whose impl_form differs from
+    # its severity pins the materialization-time severity-mismatch hard error.
+    if has_providers:
+        for pi, provider_specs in enumerate(app_def["providers"]):
+            lines.append(f"    def _provider_{pi}():")
+            spec_meta = []
+            for si, spec in enumerate(provider_specs):
+                impl_name = f"_impl_{pi}_{si}"
+                lines.append(f"        def {impl_name}(ctx, reporter):")
+                lines.extend(_emit_check_impl_body(spec, "            "))
+                spec_meta.append((impl_name, spec))
+            lines.append("        return [")
+            for impl_name, spec in spec_meta:
+                impl_form = spec.get("impl_form", spec["severity"])
+                ctor = "warn_check_spec" if impl_form == "warn" else "error_check_spec"
+                lines.append(f"            strictcli.{ctor}(")
+                lines.append(f"                name={spec['name']!r},")
+                lines.append(f"                tags={spec['tags']!r},")
+                lines.append(f"                severity={spec['severity']!r},")
+                lines.append(f"                fast={bool(spec['fast'])},")
+                lines.append(f"                pure={bool(spec['pure'])},")
+                lines.append(f"                needs_network={bool(spec['needs_network'])},")
+                lines.append(f"                depends_on={spec['depends_on']!r},")
+                lines.append(f"                scope={spec.get('scope', '')!r},")
+                lines.append(f"                impl={impl_name},")
+                lines.append(f"            ),")
+            lines.append("        ]")
+            lines.append(f"    app.register_check_provider(_provider_{pi})")
+            lines.append("")
+
+    if has_checks:
         lines.append("    class _CheckCtx:")
         lines.append("        project_root = pathlib.Path('.')")
         lines.append("")

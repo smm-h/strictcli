@@ -128,6 +128,14 @@
           "items": { "$ref": "#/$defs/check" },
           "description": "Check stub definitions for code generation."
         },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/provider_check" }
+          },
+          "description": "Check providers registered via register_check_provider / RegisterCheckProvider. Each element is one provider (a list of the specs it returns). Providers have no TOML, so every spec carries its declarative meta inline."
+        },
         "tag_contracts": {
           "type": "object",
           "additionalProperties": {
@@ -173,6 +181,43 @@
             }
           },
           "description": "Problems the reporter mints before found(). Only valid when mint == 'found'. A warn-severity check may only mint 'warn' problems."
+        }
+      }
+    },
+    "provider_check": {
+      "type": "object",
+      "required": ["name", "tags", "severity", "fast", "pure", "needs_network", "depends_on", "mint", "message"],
+      "additionalProperties": false,
+      "description": "A provider-sourced check spec. Unlike a TOML-declared check, it carries all eight declarative meta fields inline (providers have no TOML). The impl body (mint/message/problems) mirrors a 'check' def. 'impl_form' selects the constructor (error_check_spec / warn_check_spec); when it differs from 'severity', it pins the materialization-time severity-mismatch hard error.",
+      "properties": {
+        "name": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "severity": { "enum": ["error", "warn"] },
+        "fast": { "type": "boolean" },
+        "pure": { "type": "boolean" },
+        "needs_network": { "type": "boolean" },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "scope": { "type": "string" },
+        "impl_form": {
+          "enum": ["error", "warn"],
+          "description": "Which constructor registers the spec. Defaults to 'severity'. A value differing from 'severity' pins the severity-mismatch hard error."
+        },
+        "mint": {
+          "enum": ["passed", "skipped", "found"],
+          "description": "Which terminal outcome the reporter mints."
+        },
+        "message": { "type": "string" },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["severity", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "severity": { "enum": ["error", "warn"] },
+              "text": { "type": "string" }
+            }
+          }
         }
       }
     },
