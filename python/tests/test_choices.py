@@ -11,7 +11,7 @@ def _make_app_with_choices(**flag_kwargs):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("format", help="output format", **flag_kwargs)
-    def cmd(format):
+    def cmd(ctx, format):
         print(f"format={format}")
 
     return app
@@ -50,7 +50,7 @@ def test_choices_with_int_type():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="the port", choices=[80, 443, 8080])
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port}")
 
     r = app.test(["cmd", "--port", "443"])
@@ -64,7 +64,7 @@ def test_invalid_int_choice_rejected():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="the port", choices=[80, 443, 8080])
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port}")
 
     r = app.test(["cmd", "--port", "9090"])
@@ -85,7 +85,7 @@ def test_choices_with_env_var_valid(monkeypatch):
         "format", help="output format", choices=["text", "json"],
         default="text", env="MYAPP_FORMAT",
     )
-    def cmd(format):
+    def cmd(ctx, format):
         print(f"format={format}")
 
     monkeypatch.setenv("MYAPP_FORMAT", "json")
@@ -103,7 +103,7 @@ def test_choices_with_env_var_invalid(monkeypatch):
         "format", help="output format", choices=["text", "json"],
         default="text", env="MYAPP_FORMAT",
     )
-    def cmd(format):
+    def cmd(ctx, format):
         print(f"format={format}")
 
     monkeypatch.setenv("MYAPP_FORMAT", "xml")

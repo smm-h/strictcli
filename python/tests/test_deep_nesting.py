@@ -12,12 +12,12 @@ def _make_3level_app():
     zone = dns.group("zone", help="manage DNS zones")
 
     @zone.command("list", help="list all zones")
-    def list_zones():
+    def list_zones(ctx):
         print("listing zones")
 
     @zone.command("create", help="create a zone")
     @strictcli.flag("name", type=str, help="zone name")
-    def create_zone(name):
+    def create_zone(ctx, name):
         print(f"creating zone {name}")
 
     return app
@@ -31,7 +31,7 @@ def _make_4level_app():
     g3 = g2.group("level3", help="third level")
 
     @g3.command("action", help="do the thing")
-    def action():
+    def action(ctx):
         print("action executed")
 
     return app
@@ -186,13 +186,13 @@ def test_mixed_groups_and_commands():
     grp = app.group("infra", help="infrastructure")
 
     @grp.command("status", help="show status")
-    def status():
+    def status(ctx):
         print("status ok")
 
     sub = grp.group("network", help="network management")
 
     @sub.command("list", help="list networks")
-    def list_nets():
+    def list_nets(ctx):
         print("networks listed")
 
     # Command in group works
@@ -224,7 +224,7 @@ def test_deprecated_command_in_subgroup():
     zone = dns.group("zone", help="manage zones")
 
     @zone.command("list", help="list zones")
-    def list_zones():
+    def list_zones(ctx):
         print("listing")
 
     zone.deprecate("dump", message="use 'list' instead")
@@ -241,7 +241,7 @@ def test_deprecated_shown_in_subgroup_help():
     zone = dns.group("zone", help="manage zones")
 
     @zone.command("list", help="list zones")
-    def list_zones():
+    def list_zones(ctx):
         print("listing")
 
     zone.deprecate("dump", message="use 'list' instead")
@@ -265,7 +265,7 @@ def test_global_flags_with_deep_nesting():
     zone = dns.group("zone", help="manage zones")
 
     @zone.command("list", help="list zones")
-    def list_zones(verbose):
+    def list_zones(ctx, verbose):
         if verbose:
             print("verbose listing")
         else:
@@ -290,7 +290,7 @@ def test_global_flags_after_command_deep_nesting():
     zone = dns.group("zone", help="manage zones")
 
     @zone.command("list", help="list zones")
-    def list_zones(verbose):
+    def list_zones(ctx, verbose):
         if verbose:
             print("verbose listing")
         else:
@@ -312,7 +312,7 @@ def test_name_collision_command_and_subgroup_raises():
 
     with pytest.raises(ValueError, match='command "network" collides with an existing group'):
         @grp.command("network", help="this conflicts")
-        def network():
+        def network(ctx):
             pass
 
 
@@ -322,7 +322,7 @@ def test_name_collision_subgroup_and_command_raises():
     grp = app.group("infra", help="infra group")
 
     @grp.command("network", help="a command")
-    def network():
+    def network(ctx):
         pass
 
     with pytest.raises(ValueError, match='group "network" collides with an existing command'):

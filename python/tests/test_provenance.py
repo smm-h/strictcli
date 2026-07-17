@@ -18,7 +18,7 @@ def test_mutex_default_source_not_present_cli():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("out", help="output command", mutex=[mg])
-    def out(json, text):
+    def out(ctx, json, text):
         print(f"json={json} text={text}")
 
     # Provide only --json. --text has Default(False), so it gets source=default.
@@ -38,7 +38,7 @@ def test_mutex_default_source_not_present_invoke():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("out", help="output command", mutex=[mg])
-    def out(json, text):
+    def out(ctx, json, text):
         print(f"json={json} text={text}")
 
     # Provide only "json" via invoke. "text" is absent, gets defaulted.
@@ -69,7 +69,7 @@ def test_mutex_implied_source_not_present():
         ],
     )
     @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-    def out(json, text, verbose):
+    def out(ctx, json, text, verbose):
         print(f"json={json} text={text}")
 
     # Provide --json and --verbose. --verbose implies --text=True (source=implied).
@@ -99,7 +99,7 @@ def test_mutex_cli_and_config_both_present():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("out", help="output command", mutex=[mg])
-    def out(json, text):
+    def out(ctx, json, text):
         print(f"json={json} text={text}")
 
     # Provide both via invoke (both SourceCLI). Should error.
@@ -130,7 +130,7 @@ def test_requires_implied_source_counts_as_present():
     @strictcli.flag("all", type=bool, default=False, help="deploy all")
     @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
     @strictcli.flag("target", type=str, help="deploy target")
-    def deploy(all, verbose, target):
+    def deploy(ctx, all, verbose, target):
         print(f"all={all} verbose={verbose} target={target}")
 
     # Provide --all and --target. --all implies --verbose (source=implied).
@@ -156,7 +156,7 @@ def test_requires_default_source_not_present():
     )
     @strictcli.flag("target", type=str, help="deploy target")
     @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-    def deploy(target, verbose):
+    def deploy(ctx, target, verbose):
         print(f"target={target} verbose={verbose}")
 
     # Provide --target but NOT --verbose. --verbose has default=False,
@@ -181,7 +181,7 @@ def test_invoke_mutex_provided_kwarg_is_cli_source():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("out", help="output command", mutex=[mg])
-    def out(json, text):
+    def out(ctx, json, text):
         print(f"json={json} text={text}")
 
     # Provide exactly one mutex flag via invoke -- should succeed.
@@ -200,7 +200,7 @@ def test_invoke_defaulted_not_present_for_requires():
     )
     @strictcli.flag("target", type=str, help="deploy target")
     @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-    def deploy(target, verbose):
+    def deploy(ctx, target, verbose):
         print(f"target={target} verbose={verbose}")
 
     # Provide target but not verbose. verbose will be defaulted.

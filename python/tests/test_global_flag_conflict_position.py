@@ -35,7 +35,7 @@ def _app(conflict_mode="error", flag_conflict_mode=strictcli._MISSING,
     )
 
     @app.command("run", help="run something")
-    def run(settings):
+    def run(ctx, settings):
         print(f"settings={settings}")
 
     app._config_path_for_cleanup = config_path

@@ -12,7 +12,7 @@ def test_flag_set_with_single_flag():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", flag_sets=[verbose_flag_set])
-    def cmd(verbose):
+    def cmd(ctx, verbose):
         print(f"verbose={verbose}")
 
     r = app.test(["cmd", "--verbose"])
@@ -32,7 +32,7 @@ def test_flag_set_with_multiple_flags():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", flag_sets=[output_flag_set])
-    def cmd(format, color):
+    def cmd(ctx, format, color):
         print(f"format={format} color={color}")
 
     r = app.test(["cmd", "--format", "json", "--color"])
@@ -50,7 +50,7 @@ def test_flag_set_flags_in_command_flags():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", flag_sets=[flag_set])
-    def cmd(debug):
+    def cmd(ctx, debug):
         pass
 
     assert len(app._commands["cmd"].flags) == 1
@@ -66,7 +66,7 @@ def test_flag_set_flags_in_help():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", flag_sets=[flag_set])
-    def cmd(debug):
+    def cmd(ctx, debug):
         pass
 
     r = app.test(["cmd", "--help"])
@@ -87,7 +87,7 @@ def test_flag_set_flag_values_parsed():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("deploy", help="deploy the app", flag_sets=[auth_flag_set])
-    def deploy(token, insecure):
+    def deploy(ctx, token, insecure):
         print(f"token={token} insecure={insecure}")
 
     # Test with all flag set flags provided

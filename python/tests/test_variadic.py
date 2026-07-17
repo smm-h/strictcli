@@ -14,7 +14,7 @@ def test_variadic_collects_multiple_values():
         help="a command",
         args=[strictcli.Arg(name="files", help="input files", variadic=True)],
     )
-    def cmd(files):
+    def cmd(ctx, files):
         print(f"files={files}")
 
     r = app.test(["cmd", "a.txt", "b.txt", "c.txt"])
@@ -31,7 +31,7 @@ def test_variadic_collects_single_value():
         help="a command",
         args=[strictcli.Arg(name="files", help="input files", variadic=True)],
     )
-    def cmd(files):
+    def cmd(ctx, files):
         print(f"files={files}")
 
     r = app.test(["cmd", "only.txt"])
@@ -48,7 +48,7 @@ def test_variadic_required_zero_values_error():
         help="a command",
         args=[strictcli.Arg(name="files", help="input files", variadic=True)],
     )
-    def cmd(files):
+    def cmd(ctx, files):
         pass
 
     r = app.test(["cmd"])
@@ -66,7 +66,7 @@ def test_variadic_optional_zero_values_empty_list():
         help="a command",
         args=[strictcli.Arg(name="files", help="input files", required=False, variadic=True)],
     )
-    def cmd(files):
+    def cmd(ctx, files):
         received["files"] = files
 
     r = app.test(["cmd"])
@@ -83,7 +83,7 @@ def test_variadic_after_double_dash():
         help="a command",
         args=[strictcli.Arg(name="args", help="arguments", variadic=True)],
     )
-    def cmd(args):
+    def cmd(ctx, args):
         print(f"args={args}")
 
     r = app.test(["cmd", "--", "--flag", "-x", "value"])
@@ -104,7 +104,7 @@ def test_variadic_with_preceding_required_arg():
             strictcli.Arg(name="files", help="files to copy", variadic=True),
         ],
     )
-    def cmd(src, files):
+    def cmd(ctx, src, files):
         received["src"] = src
         received["files"] = files
 
@@ -123,7 +123,7 @@ def test_variadic_shown_in_help():
         help="a command",
         args=[strictcli.Arg(name="files", help="input files", variadic=True)],
     )
-    def cmd(files):
+    def cmd(ctx, files):
         pass
 
     r = app.test(["cmd", "--help"])
@@ -144,7 +144,7 @@ def test_multiple_variadic_args_registration_error():
                 strictcli.Arg(name="b", help="second", variadic=True),
             ],
         )
-        def cmd(a, b):
+        def cmd(ctx, a, b):
             pass
 
 
@@ -161,7 +161,7 @@ def test_variadic_not_last_arg_registration_error():
                 strictcli.Arg(name="dest", help="destination"),
             ],
         )
-        def cmd(files, dest):
+        def cmd(ctx, files, dest):
             pass
 
 
@@ -181,7 +181,7 @@ def test_handler_receives_list_type():
         help="a command",
         args=[strictcli.Arg(name="items", help="items", variadic=True)],
     )
-    def cmd(items):
+    def cmd(ctx, items):
         received["items"] = items
 
     app.test(["cmd", "x", "y"])

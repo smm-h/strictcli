@@ -224,7 +224,7 @@ class TestDoubleEntryValidation:
 
         # Register a dummy command so the app has something to run
         @app.command("hello", help="say hello")
-        def hello(**kw):
+        def hello(ctx, **kw):
             print("hello")
 
         # Only register one of the two checks
@@ -248,7 +248,7 @@ class TestDoubleEntryValidation:
         )
 
         @app.command("hello", help="say hello")
-        def hello(**kw):
+        def hello(ctx, **kw):
             print("hello")
 
         @app.error_check("lint-code")
@@ -269,7 +269,7 @@ class TestDoubleEntryValidation:
         app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
         @app.command("hello", help="say hello")
-        def hello(**kw):
+        def hello(ctx, **kw):
             print("hello")
 
         result = app.test(["hello"])

@@ -13,7 +13,7 @@ def _make_app(handler):
 
 
 def test_handler_returns_zero():
-    def handler():
+    def handler(ctx):
         return 0
 
     result = _make_app(handler).test(["run"])
@@ -21,7 +21,7 @@ def test_handler_returns_zero():
 
 
 def test_handler_returns_one():
-    def handler():
+    def handler(ctx):
         return 1
 
     result = _make_app(handler).test(["run"])
@@ -29,7 +29,7 @@ def test_handler_returns_one():
 
 
 def test_handler_returns_42():
-    def handler():
+    def handler(ctx):
         return 42
 
     result = _make_app(handler).test(["run"])
@@ -39,7 +39,7 @@ def test_handler_returns_42():
 def test_handler_returns_none():
     """Backward compat: None is treated as exit code 0."""
 
-    def handler():
+    def handler(ctx):
         pass  # implicitly returns None
 
     result = _make_app(handler).test(["run"])
@@ -49,7 +49,7 @@ def test_handler_returns_none():
 def test_handler_calls_sys_exit():
     """sys.exit() in handler still works as before."""
 
-    def handler():
+    def handler(ctx):
         sys.exit(2)
 
     result = _make_app(handler).test(["run"])

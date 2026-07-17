@@ -21,7 +21,7 @@ def test_env_source_label(monkeypatch):
 
     @app.command("run", help="run it")
     @strictcli.flag("level", type=int, env="MYAPP_LEVEL", help="level")
-    def run(level):
+    def run(ctx, level):
         return 0
 
     r = app.test(["run"])
@@ -41,7 +41,7 @@ def test_config_source_label():
 
         @app.command("run", help="run it")
         @strictcli.flag("level", type=int, default=0, help="level")
-        def run(level):
+        def run(ctx, level):
             return 0
 
         r = app.test(["run"])
@@ -63,7 +63,7 @@ def test_cli_overrides_config():
 
         @app.command("run", help="run it")
         @strictcli.flag("level", type=int, default=0, help="level")
-        def run(level):
+        def run(ctx, level):
             return 0
 
         r = app.test(["run", "--level", "99"])
@@ -82,7 +82,7 @@ def test_cli_overrides_env(monkeypatch):
 
     @app.command("run", help="run it")
     @strictcli.flag("level", type=int, env="MYAPP_LEVEL", help="level")
-    def run(level):
+    def run(ctx, level):
         return 0
 
     r = app.test(["run", "--level", "99"])
@@ -106,7 +106,7 @@ def test_env_overrides_config(monkeypatch):
         @app.command("run", help="run it")
         @strictcli.flag("level", type=int, env="MYAPP_LEVEL", default=0,
                         help="level")
-        def run(level):
+        def run(ctx, level):
             return 0
 
         r = app.test(["run"])
@@ -128,7 +128,7 @@ def test_default_with_config_available_but_absent():
 
         @app.command("run", help="run it")
         @strictcli.flag("level", type=int, default=0, help="level")
-        def run(level):
+        def run(ctx, level):
             return 0
 
         r = app.test(["run"])
@@ -157,7 +157,7 @@ def test_global_flag_env_source(monkeypatch):
     )
 
     @app.command("run", help="run it")
-    def run(**kw):
+    def run(ctx, **kw):
         return 0
 
     r = app.test(["run"])
@@ -182,7 +182,7 @@ def test_global_flag_config_source():
         )
 
         @app.command("run", help="run it")
-        def run(**kw):
+        def run(ctx, **kw):
             return 0
 
         r = app.test(["run"])
@@ -203,7 +203,7 @@ def test_global_flag_cli_source():
     )
 
     @app.command("run", help="run it")
-    def run(**kw):
+    def run(ctx, **kw):
         return 0
 
     r = app.test(["--verbose", "run"])
@@ -222,7 +222,7 @@ def test_global_flag_default_source():
     )
 
     @app.command("run", help="run it")
-    def run(**kw):
+    def run(ctx, **kw):
         return 0
 
     r = app.test(["run"])
@@ -245,7 +245,7 @@ def test_config_show_reports_env(monkeypatch):
     @app.command("run", help="run it")
     @strictcli.flag("level", type=int, env="MYAPP_LEVEL", default=0,
                     help="level")
-    def run(level):
+    def run(ctx, level):
         return 0
 
     r = app.test(["config", "show", "--json"])
@@ -266,7 +266,7 @@ def test_config_show_reports_config():
 
         @app.command("run", help="run it")
         @strictcli.flag("level", type=int, default=0, help="level")
-        def run(level):
+        def run(ctx, level):
             return 0
 
         r = app.test(["config", "show", "--json"])
@@ -284,7 +284,7 @@ def test_config_show_reports_default():
 
     @app.command("run", help="run it")
     @strictcli.flag("level", type=int, default=0, help="level")
-    def run(level):
+    def run(ctx, level):
         return 0
 
     r = app.test(["config", "show", "--json"])
@@ -304,7 +304,7 @@ def test_invoke_provided_kwarg_source_is_cli():
 
     @app.command("run", help="run it")
     @strictcli.flag("level", type=int, default=0, help="level")
-    def run(level):
+    def run(ctx, level):
         return 0
 
     result = app.call("run", level=42)
@@ -318,7 +318,7 @@ def test_invoke_absent_kwarg_source_is_default():
 
     @app.command("run", help="run it")
     @strictcli.flag("level", type=int, default=0, help="level")
-    def run(level):
+    def run(ctx, level):
         return 0
 
     result = app.call("run")
@@ -338,7 +338,7 @@ def test_config_show_plain_format():
 
     @app.command("run", help="run it")
     @strictcli.flag("level", type=int, default=0, help="level")
-    def run(level):
+    def run(ctx, level):
         return 0
 
     r = app.test(["config", "show", "--plain"])

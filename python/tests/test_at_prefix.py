@@ -11,7 +11,7 @@ def _make_app():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("msg", type=str, help="message")
-    def cmd(msg):
+    def cmd(ctx, msg):
         print(f"msg={msg}")
 
     return app
@@ -24,7 +24,7 @@ def _make_two_str_flags_app():
     @app.command("cmd", help="a command")
     @strictcli.flag("first", type=str, help="first value")
     @strictcli.flag("second", type=str, help="second value")
-    def cmd(first, second):
+    def cmd(ctx, first, second):
         print(f"first={first}")
         print(f"second={second}")
 
@@ -40,7 +40,7 @@ def _make_global_and_cmd_str_app():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("msg", type=str, help="message")
-    def cmd(msg, token):
+    def cmd(ctx, msg, token):
         print(f"msg={msg}")
         print(f"token={token}")
 
@@ -191,7 +191,7 @@ def test_int_flag_ignores_at_prefix():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("count", type=int, help="count")
-    def cmd(count):
+    def cmd(ctx, count):
         print(f"count={count}")
 
     r = app.test(["cmd", "--count", "@5"])
@@ -205,7 +205,7 @@ def test_float_flag_ignores_at_prefix():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="rate")
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate}")
 
     r = app.test(["cmd", "--rate", "@1.5"])
@@ -219,7 +219,7 @@ def test_bool_flag_ignores_at_prefix():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("verbose", type=bool, default=False, help="verbose")
-    def cmd(verbose):
+    def cmd(ctx, verbose):
         print(f"verbose={verbose}")
 
     r = app.test(["cmd", "--verbose"])
@@ -237,7 +237,7 @@ def test_env_var_at_file(tmp_path, monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("msg", type=str, help="message", default="fallback", env="TEST_MSG")
-    def cmd(msg):
+    def cmd(ctx, msg):
         print(f"msg={msg}")
 
     monkeypatch.setenv("TEST_MSG", f"@{f}")
@@ -253,7 +253,7 @@ def test_env_var_at_stdin(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("msg", type=str, help="message", default="fallback", env="TEST_MSG")
-    def cmd(msg):
+    def cmd(ctx, msg):
         print(f"msg={msg}")
 
     monkeypatch.setenv("TEST_MSG", "@-")
@@ -268,7 +268,7 @@ def test_env_var_at_escape(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("msg", type=str, help="message", default="fallback", env="TEST_MSG")
-    def cmd(msg):
+    def cmd(ctx, msg):
         print(f"msg={msg}")
 
     monkeypatch.setenv("TEST_MSG", "@@literal")
@@ -287,7 +287,7 @@ def test_at_file_short_flag(tmp_path):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("msg", type=str, short="m", help="message")
-    def cmd(msg):
+    def cmd(ctx, msg):
         print(f"msg={msg}")
 
     r = app.test(["cmd", "-m", f"@{f}"])
@@ -324,7 +324,7 @@ def test_default_value_not_resolved():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("msg", type=str, help="message", default="@some-file")
-    def cmd(msg):
+    def cmd(ctx, msg):
         print(f"msg={msg}")
 
     r = app.test(["cmd"])

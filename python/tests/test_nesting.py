@@ -9,13 +9,13 @@ def _make_group_app():
     grp = app.group("config", help="manage configuration")
 
     @grp.command("show", help="display current config")
-    def show():
+    def show(ctx):
         print("showing config")
 
     @grp.command("set", help="set a config value")
     @strictcli.flag("key", type=str, help="config key")
     @strictcli.flag("value", type=str, help="config value")
-    def set_(key, value):
+    def set_(ctx, key, value):
         print(f"set {key}={value}")
 
     return app

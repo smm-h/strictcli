@@ -27,7 +27,7 @@ def _build_rlsbl_app():
 
     # Top-level commands
     @app.command("status", help="show release status", flag_sets=[auth_flag_set])
-    def status(token):
+    def status(ctx, token):
         print(f"status: token={'set' if token else 'unset'}")
 
     @app.command(
@@ -38,7 +38,7 @@ def _build_rlsbl_app():
     )
     @strictcli.flag("dry-run", type=bool, default=False, help="preview without making changes")
     @strictcli.flag("yes", type=bool, default=False, help="non-interactive mode")
-    def release(bump, token, dry_run, yes):
+    def release(ctx, bump, token, dry_run, yes):
         parts = [f"releasing {bump}"]
         if dry_run:
             parts.append("(dry-run)")
@@ -53,7 +53,7 @@ def _build_rlsbl_app():
         help="monitor CI for a commit",
         args=[strictcli.Arg(name="sha", help="commit SHA")],
     )
-    def watch(sha):
+    def watch(ctx, sha):
         print(f"watching {sha}")
 
     # Group: config
@@ -61,13 +61,13 @@ def _build_rlsbl_app():
 
     @config.command("show", help="display current config")
     @strictcli.flag("format", type=str, help="output format", default="text", env="RLSBL_FORMAT")
-    def config_show(format):
+    def config_show(ctx, format):
         print(f"config format={format}")
 
     @config.command("set", help="set a config value")
     @strictcli.flag("key", type=str, help="config key")
     @strictcli.flag("value", type=str, help="config value")
-    def config_set(key, value):
+    def config_set(ctx, key, value):
         print(f"config {key}={value}")
 
     return app
@@ -234,7 +234,7 @@ def _build_kwargs_app():
     )
     @strictcli.flag("dry-run", type=bool, default=False, help="preview without making changes")
     @strictcli.flag("replicas", type=int, help="number of replicas", default=1)
-    def deploy_handler(**kwargs):
+    def deploy_handler(ctx, **kwargs):
         parts = [f"target={kwargs['target']}"]
         parts.append(f"dry_run={kwargs['dry_run']}")
         parts.append(f"replicas={kwargs['replicas']}")
@@ -276,7 +276,7 @@ def test_e2e_kwargs_handler_with_flag_sets():
     app = strictcli.App(name="kw", version="1.0.0", help="kwargs test app")
 
     @app.command("push", help="push changes", flag_sets=[auth_flag_set])
-    def push_handler(**kwargs):
+    def push_handler(ctx, **kwargs):
         print(f"token={kwargs['token']}")
         return 0
 
@@ -297,7 +297,7 @@ def test_e2e_kwargs_handler_with_global_flags():
     )
 
     @app.command("run", help="run something")
-    def run_handler(**kwargs):
+    def run_handler(ctx, **kwargs):
         print(f"verbose={kwargs['verbose']}")
         return 0
 
@@ -318,7 +318,7 @@ def test_e2e_kwargs_handler_registration_no_error():
     )
     @strictcli.flag("count", type=int, help="a count", default=0)
     @strictcli.flag("force-it", type=bool, default=False, help="force it")
-    def cmd_handler(**kwargs):
+    def cmd_handler(ctx, **kwargs):
         return 0
 
     r = app.test(["cmd", "--count", "5", "hello"])

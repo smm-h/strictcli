@@ -9,7 +9,7 @@ def _build_app(**kwargs):
 
 def _make_passthrough_handler(capture: dict):
     """Create a passthrough handler that records its call args."""
-    def handler(name, args, globals):
+    def handler(ctx, name, args, globals):
         capture["name"] = name
         capture["args"] = args
         capture["globals"] = globals
@@ -119,7 +119,7 @@ class TestPassthroughInAppHelp:
             pass
 
         @app.command("status", help="show status")
-        def status():
+        def status(ctx):
             pass
 
         result = app.test(["--help"])
@@ -147,7 +147,7 @@ class TestPassthroughCommandHelp:
 
 class TestPassthroughWithFlagsRaisesValueError:
     def test_decorator_flags(self):
-        pt = strictcli.Passthrough(handler=lambda n, a, g: 0)
+        pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
         app = _build_app()
         try:
             @app.command("exec", help="run", passthrough=pt)
@@ -162,7 +162,7 @@ class TestPassthroughWithFlagsRaisesValueError:
 
 class TestPassthroughWithArgsRaisesValueError:
     def test_explicit_args(self):
-        pt = strictcli.Passthrough(handler=lambda n, a, g: 0)
+        pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
         app = _build_app()
         try:
             @app.command(
@@ -177,7 +177,7 @@ class TestPassthroughWithArgsRaisesValueError:
             assert "args" in str(e)
 
     def test_decorator_args(self):
-        pt = strictcli.Passthrough(handler=lambda n, a, g: 0)
+        pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
         app = _build_app()
         try:
             @app.command("exec", help="run", passthrough=pt)
@@ -192,7 +192,7 @@ class TestPassthroughWithArgsRaisesValueError:
 
 class TestPassthroughWithFlagSetsRaisesValueError:
     def test_flag_sets(self):
-        pt = strictcli.Passthrough(handler=lambda n, a, g: 0)
+        pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
         flag_set = strictcli.FlagSet(
             name="auth",
             flags=[strictcli.Flag(name="token", type=str, help="token", default="")],
@@ -210,7 +210,7 @@ class TestPassthroughWithFlagSetsRaisesValueError:
 
 class TestPassthroughWithMutexRaisesValueError:
     def test_mutex(self):
-        pt = strictcli.Passthrough(handler=lambda n, a, g: 0)
+        pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
         mg = strictcli.MutexGroup(flags=[
             strictcli.Flag(name="json", type=bool, default=False, help="json output"),
             strictcli.Flag(name="yaml", type=bool, default=False, help="yaml output"),

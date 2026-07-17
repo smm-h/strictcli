@@ -11,7 +11,7 @@ def _make_app_with_float_flag(**flag_kwargs):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", **flag_kwargs)
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate}")
 
     return app
@@ -31,7 +31,7 @@ def test_float_flag_value_is_float():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate")
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"type={type(rate).__name__}")
 
     r = app.test(["cmd", "--rate", "3.14"])
@@ -61,7 +61,7 @@ def test_float_flag_from_env(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate} type={type(rate).__name__}")
 
     monkeypatch.setenv("MYAPP_RATE", "9.81")
@@ -86,7 +86,7 @@ def test_float_flag_bad_env_value(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate}")
 
     monkeypatch.setenv("MYAPP_RATE", "abc")
@@ -118,7 +118,7 @@ def test_float_flag_negative_value():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate")
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate}")
 
     r = app.test(["cmd", "--rate", "-2.5"])
@@ -194,7 +194,7 @@ def test_float_flag_short_form():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", short="r", type=float, help="the rate")
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate}")
 
     r = app.test(["cmd", "-r", "3.14"])
@@ -216,7 +216,7 @@ def test_float_flag_choices():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", choices=[0.5, 1.0, 2.0])
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate}")
 
     # Valid choice
@@ -236,7 +236,7 @@ def test_float_flag_repeatable():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("weight", type=float, help="a weight", repeatable=True, unique=False)
-    def cmd(weight):
+    def cmd(ctx, weight):
         print(f"weight={weight}")
 
     r = app.test(["cmd", "--weight", "1.5", "--weight", "2.5"])
@@ -266,7 +266,7 @@ def test_float_flag_nan_from_env_includes_env_suffix(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate}")
 
     monkeypatch.setenv("MYAPP_RATE", "nan")
@@ -282,7 +282,7 @@ def test_float_flag_inf_from_env_includes_env_suffix(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate}")
 
     monkeypatch.setenv("MYAPP_RATE", "inf")

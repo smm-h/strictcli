@@ -32,7 +32,7 @@ class TestFrozenCommand:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-        def cmd(verbose):
+        def cmd(ctx, verbose):
             pass
 
         c = app._commands["cmd"]
@@ -42,7 +42,7 @@ class TestFrozenCommand:
         app = _make_app()
 
         @app.command("cmd", help="a command", args=[strictcli.Arg(name="name", help="a name")])
-        def cmd(name):
+        def cmd(ctx, name):
             pass
 
         c = app._commands["cmd"]
@@ -52,7 +52,7 @@ class TestFrozenCommand:
         app = _make_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         c = app._commands["cmd"]
@@ -72,7 +72,7 @@ class TestTagStorageAndValidation:
         app = _make_app()
 
         @app.command("cmd", help="a command", tags={"json"})
-        def cmd():
+        def cmd(ctx):
             pass
 
         c = app._commands["cmd"]
@@ -83,7 +83,7 @@ class TestTagStorageAndValidation:
         with pytest.raises(ValueError, match="invalid tag name"):
 
             @app.command("cmd", help="a command", tags={"JSON"})
-            def cmd():
+            def cmd(ctx):
                 pass
 
     def test_invalid_tag_underscore(self):
@@ -91,7 +91,7 @@ class TestTagStorageAndValidation:
         with pytest.raises(ValueError, match="invalid tag name"):
 
             @app.command("cmd", help="a command", tags={"my_tag"})
-            def cmd():
+            def cmd(ctx):
                 pass
 
     def test_invalid_tag_starts_with_digit(self):
@@ -99,7 +99,7 @@ class TestTagStorageAndValidation:
         with pytest.raises(ValueError, match="invalid tag name"):
 
             @app.command("cmd", help="a command", tags={"1abc"})
-            def cmd():
+            def cmd(ctx):
                 pass
 
     def test_invalid_tag_empty(self):
@@ -107,7 +107,7 @@ class TestTagStorageAndValidation:
         with pytest.raises(ValueError, match="invalid tag name"):
 
             @app.command("cmd", help="a command", tags={""})
-            def cmd():
+            def cmd(ctx):
                 pass
 
     def test_invalid_tag_starts_with_dash(self):
@@ -115,7 +115,7 @@ class TestTagStorageAndValidation:
         with pytest.raises(ValueError, match="invalid tag name"):
 
             @app.command("cmd", help="a command", tags={"-abc"})
-            def cmd():
+            def cmd(ctx):
                 pass
 
     def test_valid_tag_names(self):
@@ -123,19 +123,19 @@ class TestTagStorageAndValidation:
         app = _make_app()
 
         @app.command("c1", help="h", tags={"json"})
-        def c1():
+        def c1(ctx):
             pass
 
         @app.command("c2", help="h", tags={"a"})
-        def c2():
+        def c2(ctx):
             pass
 
         @app.command("c3", help="h", tags={"my-tag"})
-        def c3():
+        def c3(ctx):
             pass
 
         @app.command("c4", help="h", tags={"a1"})
-        def c4():
+        def c4(ctx):
             pass
 
         assert app._commands["c1"].tags == frozenset({"json"})
@@ -157,7 +157,7 @@ class TestGroupTagInheritance:
         grp = app.group("grp", help="a group", tags={"json"})
 
         @grp.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         c = grp.commands["cmd"]
@@ -169,7 +169,7 @@ class TestGroupTagInheritance:
         child = parent.group("child", help="child group", tags={"b"})
 
         @child.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         c = child.commands["cmd"]
@@ -181,7 +181,7 @@ class TestGroupTagInheritance:
         grp = app.group("grp", help="a group", tags={"json"})
 
         @grp.command("cmd", help="a command", tags={"verbose"})
-        def cmd():
+        def cmd(ctx):
             pass
 
         c = grp.commands["cmd"]
@@ -192,7 +192,7 @@ class TestGroupTagInheritance:
         grp = app.group("grp", help="a group", tags={"json"})
 
         @grp.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         c = grp.commands["cmd"]
@@ -212,11 +212,11 @@ class TestGroupTagInheritance:
         grp_b = app.group("beta", help="group b", tags={"slow"})
 
         @grp_a.command("cmd", help="a command")
-        def cmd_a():
+        def cmd_a(ctx):
             pass
 
         @grp_b.command("cmd", help="a command")
-        def cmd_b():
+        def cmd_b(ctx):
             pass
 
         assert grp_a.commands["cmd"].tags == frozenset({"fast"})
@@ -237,7 +237,7 @@ class TestTagContracts:
 
         @app.command("cmd", help="a command", tags={"json"})
         @strictcli.flag("json", type=bool, default=False, help="output json")
-        def cmd(json):
+        def cmd(ctx, json):
             pass
 
         result = app.test(["cmd"])
@@ -248,7 +248,7 @@ class TestTagContracts:
         app.tag_contract("json", requires_flag="json")
 
         @app.command("foo", help="a command", tags={"json"})
-        def foo():
+        def foo(ctx):
             pass
 
         result = app.test(["foo"])
@@ -260,7 +260,7 @@ class TestTagContracts:
         app.tag_contract("json", requires_flag="json")
 
         @app.command("foo", help="a command", tags={"json"})
-        def foo():
+        def foo(ctx):
             pass
 
         result = app.test(["foo"])
@@ -273,7 +273,7 @@ class TestTagContracts:
         grp = app.group("grp", help="a group", tags={"json"})
 
         @grp.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         result = app.test(["grp", "cmd"])
@@ -285,7 +285,7 @@ class TestTagContracts:
         app.tag_contract("json", requires_flag="json")
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         result = app.test(["cmd"])
@@ -298,7 +298,7 @@ class TestTagContracts:
 
         @grp.command("run", help="run something",
                      passthrough=strictcli.Passthrough(
-                         handler=lambda name, args, globals: 0))
+                         handler=lambda ctx, name, args, globals: 0))
         def run():
             pass
 
@@ -310,7 +310,7 @@ class TestTagContracts:
         app = _make_app()
 
         @app.command("foo", help="a command", tags={"json"})
-        def foo():
+        def foo(ctx):
             pass
 
         app.tag_contract("json", requires_flag="json")
@@ -326,7 +326,7 @@ class TestTagContracts:
         app.tag_contract("json", requires_flag="json")
 
         @app.command("cmd", help="a command", tags={"json"})
-        def cmd(json):
+        def cmd(ctx, json):
             pass
 
         result = app.test(["cmd"])
@@ -341,7 +341,7 @@ class TestTagContracts:
         @app_good.command("good", help="has both flags", tags={"json", "verbose"})
         @strictcli.flag("json", type=bool, default=False, help="output json")
         @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-        def good(json, verbose):
+        def good(ctx, json, verbose):
             pass
 
         result = app_good.test(["good"])
@@ -354,7 +354,7 @@ class TestTagContracts:
 
         @app_bad.command("bad", help="missing verbose flag", tags={"json", "verbose"})
         @strictcli.flag("json", type=bool, default=False, help="output json")
-        def bad(json):
+        def bad(ctx, json):
             pass
 
         result = app_bad.test(["bad"])
@@ -381,7 +381,7 @@ class TestSchemaTagOutput:
         app = _make_app()
 
         @app.command("cmd", help="a command", tags={"beta", "admin"})
-        def cmd():
+        def cmd(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -394,7 +394,7 @@ class TestSchemaTagOutput:
         app = _make_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -408,7 +408,7 @@ class TestSchemaTagOutput:
         grp = app.group("admin", help="admin group", tags={"admin"})
 
         @grp.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -421,7 +421,7 @@ class TestSchemaTagOutput:
         app = _make_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         result = app.test(["--dump-schema"])

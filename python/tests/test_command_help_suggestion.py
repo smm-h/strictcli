@@ -9,7 +9,7 @@ def _make_app():
 
     @app.command("stream", help="stream data")
     @strictcli.flag("target", type=str, help="the target")
-    def stream(target):
+    def stream(ctx, target):
         print(f"target={target}")
 
     return app
@@ -22,7 +22,7 @@ def _make_group_app():
 
     @grp.command("set", help="set a value")
     @strictcli.flag("key", type=str, help="config key")
-    def set_(key):
+    def set_(ctx, key):
         print(f"key={key}")
 
     return app

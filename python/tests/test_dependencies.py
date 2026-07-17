@@ -20,7 +20,7 @@ def test_corequired_both_provided_ok():
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
     @strictcli.flag("format", type=str, help="output format", default=None)
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         print(f"output={output} format={format}")
 
     r = app.test(["cmd", "--output", "file.txt", "--format", "json"])
@@ -44,7 +44,7 @@ def test_corequired_neither_provided_ok():
     )
     @strictcli.flag("output", type=str, help="output path", default="")
     @strictcli.flag("format", type=str, help="output format", default="")
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         print(f"output={output} format={format}")
 
     r = app.test(["cmd"])
@@ -68,7 +68,7 @@ def test_corequired_one_provided_error():
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
     @strictcli.flag("format", type=str, help="output format", default=None)
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         pass
 
     r = app.test(["cmd", "--output", "file.txt"])
@@ -88,7 +88,7 @@ def test_corequired_second_provided_without_first_error():
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
     @strictcli.flag("format", type=str, help="output format", default=None)
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         pass
 
     r = app.test(["cmd", "--format", "json"])
@@ -113,7 +113,7 @@ def test_corequired_env_sets_one_cli_sets_another_ok(monkeypatch):
                     env="TEST_DEP_OUTPUT", prefixed=False)
     @strictcli.flag("format", type=str, help="output format", default=None,
                     env="TEST_DEP_FORMAT", prefixed=False)
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         print(f"output={output} format={format}")
 
     monkeypatch.setenv("TEST_DEP_OUTPUT", "env_file.txt")
@@ -135,7 +135,7 @@ def test_corequired_env_sets_one_not_other_error(monkeypatch):
                     env="TEST_DEP_OUTPUT2", prefixed=False)
     @strictcli.flag("format", type=str, help="output format", default=None,
                     env="TEST_DEP_FORMAT2", prefixed=False)
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         pass
 
     monkeypatch.setenv("TEST_DEP_OUTPUT2", "env_file.txt")
@@ -159,7 +159,7 @@ def test_requires_both_provided_ok():
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
     @strictcli.flag("format", type=str, help="output format", default=None)
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         print(f"output={output} format={format}")
 
     r = app.test(["cmd", "--output", "file.txt", "--format", "json"])
@@ -183,7 +183,7 @@ def test_requires_flag_not_provided_ok():
     )
     @strictcli.flag("output", type=str, help="output path", default="")
     @strictcli.flag("format", type=str, help="output format", default="")
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         print(f"output={output} format={format}")
 
     r = app.test(["cmd"])
@@ -207,7 +207,7 @@ def test_requires_depends_on_alone_ok():
     )
     @strictcli.flag("output", type=str, help="output path", default="")
     @strictcli.flag("format", type=str, help="output format", default="")
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         print(f"output={output} format={format}")
 
     r = app.test(["cmd", "--output", "file.txt"])
@@ -231,7 +231,7 @@ def test_requires_flag_without_depends_on_error():
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
     @strictcli.flag("format", type=str, help="output format", default=None)
-    def cmd(output, format):
+    def cmd(ctx, output, format):
         pass
 
     r = app.test(["cmd", "--format", "json"])
@@ -257,7 +257,7 @@ def test_corequired_fewer_than_2_flags_error():
             dependencies=[strictcli.CoRequired(flags=["output"])],
         )
         @strictcli.flag("output", type=str, help="output path", default=None)
-        def cmd(output):
+        def cmd(ctx, output):
             pass
 
 
@@ -277,7 +277,7 @@ def test_corequired_unknown_flag_error():
             dependencies=[strictcli.CoRequired(flags=["output", "nonexistent"])],
         )
         @strictcli.flag("output", type=str, help="output path", default=None)
-        def cmd(output):
+        def cmd(ctx, output):
             pass
 
 
@@ -297,7 +297,7 @@ def test_requires_unknown_flag_error():
             dependencies=[strictcli.Requires(flag="format", depends_on="nonexistent")],
         )
         @strictcli.flag("format", type=str, help="output format", default=None)
-        def cmd(format):
+        def cmd(ctx, format):
             pass
 
 
@@ -312,7 +312,7 @@ def test_requires_unknown_depends_on_error():
             dependencies=[strictcli.Requires(flag="nonexistent", depends_on="format")],
         )
         @strictcli.flag("format", type=str, help="output format", default=None)
-        def cmd(format):
+        def cmd(ctx, format):
             pass
 
 
@@ -332,7 +332,7 @@ def test_requires_same_flag_error():
             dependencies=[strictcli.Requires(flag="output", depends_on="output")],
         )
         @strictcli.flag("output", type=str, help="output path", default=None)
-        def cmd(output):
+        def cmd(ctx, output):
             pass
 
 
@@ -359,7 +359,7 @@ def test_dependency_with_mutex_interaction():
         dependencies=[strictcli.Requires(flag="output", depends_on="json")],
     )
     @strictcli.flag("output", type=str, help="output path", default="")
-    def cmd(output, json, csv):
+    def cmd(ctx, output, json, csv):
         print(f"output={output} json={json} csv={csv}")
 
     # --json alone -> ok
@@ -396,7 +396,7 @@ def test_corequired_duplicate_flag_error():
             dependencies=[strictcli.CoRequired(flags=["output", "output"])],
         )
         @strictcli.flag("output", type=str, help="output path", default=None)
-        def cmd(output):
+        def cmd(ctx, output):
             pass
 
 
@@ -420,7 +420,7 @@ def test_implies_trigger_set_target_auto_set():
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
     @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
-    def cmd(fast, embeddings):
+    def cmd(ctx, fast, embeddings):
         print(f"fast={fast} embeddings={embeddings}")
 
     r = app.test(["cmd", "--fast"])
@@ -444,7 +444,7 @@ def test_implies_trigger_not_set_target_gets_default():
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
     @strictcli.flag("embeddings", type=bool, help="use embeddings", default=True)
-    def cmd(fast, embeddings):
+    def cmd(ctx, fast, embeddings):
         print(f"fast={fast} embeddings={embeddings}")
 
     r = app.test(["cmd"])
@@ -468,7 +468,7 @@ def test_implies_explicit_conflict_error():
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
     @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
-    def cmd(fast, embeddings):
+    def cmd(ctx, fast, embeddings):
         pass
 
     r = app.test(["cmd", "--fast", "--embeddings"])
@@ -494,7 +494,7 @@ def test_implies_explicit_agreement_ok():
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
     @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
-    def cmd(fast, embeddings):
+    def cmd(ctx, fast, embeddings):
         print(f"fast={fast} embeddings={embeddings}")
 
     r = app.test(["cmd", "--fast", "--no-embeddings"])
@@ -519,7 +519,7 @@ def test_implies_unknown_trigger_flag_error():
             dependencies=[strictcli.Implies(flag="nonexistent", implies="embeddings", value=False)],
         )
         @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
-        def cmd(embeddings):
+        def cmd(ctx, embeddings):
             pass
 
 
@@ -539,7 +539,7 @@ def test_implies_unknown_target_flag_error():
             dependencies=[strictcli.Implies(flag="fast", implies="nonexistent", value=False)],
         )
         @strictcli.flag("fast", type=bool, default=False, help="fast mode")
-        def cmd(fast):
+        def cmd(ctx, fast):
             pass
 
 
@@ -559,7 +559,7 @@ def test_implies_self_implication_error():
             dependencies=[strictcli.Implies(flag="fast", implies="fast", value=True)],
         )
         @strictcli.flag("fast", type=bool, default=False, help="fast mode")
-        def cmd(fast):
+        def cmd(ctx, fast):
             pass
 
 
@@ -580,7 +580,7 @@ def test_implies_trigger_not_bool_error():
         )
         @strictcli.flag("name", type=str, help="a name", default="")
         @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
-        def cmd(name, embeddings):
+        def cmd(ctx, name, embeddings):
             pass
 
 
@@ -601,7 +601,7 @@ def test_implies_target_not_bool_error():
         )
         @strictcli.flag("fast", type=bool, default=False, help="fast mode")
         @strictcli.flag("name", type=str, help="a name", default="")
-        def cmd(fast, name):
+        def cmd(ctx, fast, name):
             pass
 
 
@@ -621,7 +621,7 @@ def test_implies_env_var_trigger(monkeypatch):
     @strictcli.flag("fast", type=bool, default=False, help="fast mode",
                     env="TEST_IMPLIES_FAST", prefixed=False)
     @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
-    def cmd(fast, embeddings):
+    def cmd(ctx, fast, embeddings):
         print(f"fast={fast} embeddings={embeddings}")
 
     monkeypatch.setenv("TEST_IMPLIES_FAST", "true")
@@ -650,7 +650,7 @@ def test_implies_with_requires_interaction():
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
     @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
     @strictcli.flag("output", type=str, help="output path", default=None)
-    def cmd(fast, embeddings, output):
+    def cmd(ctx, fast, embeddings, output):
         print(f"fast={fast} embeddings={embeddings} output={output}")
 
     # --fast --output works (Requires satisfied, Implies sets embeddings=False)

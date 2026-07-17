@@ -108,7 +108,7 @@ class TestCheckCommandBasic:
         app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
         @app.command("hello", help="say hello")
-        def hello(**kw):
+        def hello(ctx, **kw):
             print("hello")
 
         result = app.test(["--help"])
@@ -125,7 +125,7 @@ class TestCheckCommandBasic:
         app = _setup_checks_app(tmp_path, monkeypatch, TWO_CHECKS_TOML)
 
         @app.command("hello", help="say hello")
-        def hello(**kw):
+        def hello(ctx, **kw):
             print("hello")
 
         result = app.test(["--help"])

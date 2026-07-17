@@ -52,7 +52,7 @@ def test_matches_config_path_command(tmp_path, monkeypatch):
     )
 
     @app.command("run", help="run something")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["config", "path"])

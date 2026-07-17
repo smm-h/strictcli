@@ -11,7 +11,7 @@ def test_register_command_with_flags_and_args():
 
     @app.command("greet", help="say hello", args=[strictcli.Arg(name="name", help="who to greet")])
     @strictcli.flag("loud", type=bool, default=False, help="shout it")
-    def greet(name, loud):
+    def greet(ctx, name, loud):
         pass
 
     assert "greet" in app._commands
@@ -29,7 +29,7 @@ def test_missing_help_on_command():
     with pytest.raises(ValueError, match="missing help text"):
 
         @app.command("bad", help="")
-        def bad():
+        def bad(ctx):
             pass
 
 
@@ -52,7 +52,7 @@ def test_handler_missing_param():
 
         @app.command("cmd", help="a command")
         @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-        def cmd():
+        def cmd(ctx):
             pass
 
 
@@ -62,7 +62,7 @@ def test_handler_extra_param():
     with pytest.raises(ValueError, match="handler has extra parameter"):
 
         @app.command("cmd", help="a command")
-        def cmd(extra):
+        def cmd(ctx, extra):
             pass
 
 
@@ -74,7 +74,7 @@ def test_duplicate_flag_name():
         @app.command("cmd", help="a command")
         @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
         @strictcli.flag("verbose", type=bool, default=False, help="also verbose")
-        def cmd(verbose):
+        def cmd(ctx, verbose):
             pass
 
 
@@ -85,7 +85,7 @@ def test_env_prefix_without_prefix():
 
         @app.command("cmd", help="a command")
         @strictcli.flag("target", type=str, help="target", default="x", env="WRONG_TARGET")
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
 
@@ -97,7 +97,7 @@ def test_env_prefix_with_prefixed_false():
     @strictcli.flag(
         "target", type=str, help="target", default="x", env="SPECIAL_TARGET", prefixed=False
     )
-    def cmd(target):
+    def cmd(ctx, target):
         pass
 
     assert app._commands["cmd"].flags[0].env == "SPECIAL_TARGET"
@@ -109,7 +109,7 @@ def test_env_prefix_correct():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("target", type=str, help="target", default="x", env="MYAPP_TARGET")
-    def cmd(target):
+    def cmd(ctx, target):
         pass
 
     assert app._commands["cmd"].flags[0].env == "MYAPP_TARGET"
@@ -123,7 +123,7 @@ def test_flag_set_merging():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", flag_sets=[verbose_flag_set])
-    def cmd(verbose):
+    def cmd(ctx, verbose):
         pass
 
     assert len(app._commands["cmd"].flags) == 1
@@ -136,7 +136,7 @@ def test_group_registration():
     grp = app.group("config", help="config commands")
 
     @grp.command("show", help="show config")
-    def show():
+    def show(ctx):
         pass
 
     assert "show" in grp.commands
@@ -152,5 +152,5 @@ def test_group_env_prefix_propagation():
 
         @grp.command("show", help="show config")
         @strictcli.flag("path", type=str, help="path", default="/etc", env="BAD_PATH")
-        def show(path):
+        def show(ctx, path):
             pass

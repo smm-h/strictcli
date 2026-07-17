@@ -147,7 +147,7 @@ def test_toml_config_set_writes_canonical_float(tmp_path):
     @app.command("run", help="run something")
     @strictcli.flag("big", type=float, help="a big rate", default=0.0)
     @strictcli.flag("tiny", type=float, help="a tiny rate", default=0.0)
-    def run(big, tiny):
+    def run(ctx, big, tiny):
         pass
 
     r = app.test(["config", "set", "big", "1e16"])
@@ -193,7 +193,7 @@ def test_config_show_plain_renders_canonical(tmp_path):
     @app.command("run", help="run something")
     @strictcli.flag("big", type=float, help="a big rate", default=0.0)
     @strictcli.flag("tiny", type=float, help="a tiny rate", default=0.0)
-    def run(big, tiny):
+    def run(ctx, big, tiny):
         pass
 
     r = app.test(["config", "show", "--plain"])
@@ -210,7 +210,7 @@ def test_help_float_default_is_canonical():
     @app.command("cmd", help="a command")
     @strictcli.flag("big", type=float, help="a big rate", default=1e16)
     @strictcli.flag("tiny", type=float, help="a tiny rate", default=1e-7)
-    def cmd(big, tiny):
+    def cmd(ctx, big, tiny):
         pass
 
     r = app.test(["cmd", "--help"])
@@ -226,7 +226,7 @@ def test_choices_error_echoes_canonical():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", choices=[1.5, 2.5])
-    def cmd(rate):
+    def cmd(ctx, rate):
         pass
 
     r = app.test(["cmd", "--rate", "1e16"])

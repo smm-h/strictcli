@@ -16,7 +16,7 @@ def _make_app_with_global_verbose():
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="build target", default="all")
-    def run(target, verbose):
+    def run(ctx, target, verbose):
         if verbose:
             print(f"verbose: running {target}")
         else:
@@ -52,7 +52,7 @@ def test_global_str_flag_with_value():
     )
 
     @app.command("run", help="run something")
-    def run(settings):
+    def run(ctx, settings):
         print(f"settings={settings}")
 
     r = app.test(["--settings", "custom.toml", "run"])
@@ -70,7 +70,7 @@ def test_global_int_flag_with_value():
     )
 
     @app.command("build", help="build something")
-    def build(jobs):
+    def build(ctx, jobs):
         print(f"jobs={jobs}")
 
     r = app.test(["--jobs", "4", "build"])
@@ -88,7 +88,7 @@ def test_global_flag_default():
     )
 
     @app.command("run", help="run")
-    def run(settings):
+    def run(ctx, settings):
         print(f"settings={settings}")
 
     r = app.test(["run"])
@@ -106,7 +106,7 @@ def test_global_flag_from_env(monkeypatch):
     )
 
     @app.command("run", help="run")
-    def run(token):
+    def run(ctx, token):
         print(f"token={token}")
 
     monkeypatch.setenv("MYAPP_TOKEN", "secret123")
@@ -125,7 +125,7 @@ def test_global_flag_cli_overrides_env(monkeypatch):
     )
 
     @app.command("run", help="run")
-    def run(token):
+    def run(ctx, token):
         print(f"token={token}")
 
     monkeypatch.setenv("MYAPP_TOKEN", "from-env")
@@ -164,7 +164,7 @@ def test_collision_between_global_and_command_flag():
 
         @app.command("run", help="run something")
         @strictcli.flag("verbose", type=bool, default=False, help="also verbose")
-        def run(verbose):
+        def run(ctx, verbose):
             pass
 
 
@@ -179,7 +179,7 @@ def test_global_flag_with_double_dash_separator():
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="build target", default="all")
-    def run(target, verbose):
+    def run(ctx, target, verbose):
         print(f"verbose={verbose} target={target}")
 
     # -- stops global flag parsing, so --verbose is not consumed as global
@@ -203,7 +203,7 @@ def test_global_flag_negation():
     )
 
     @app.command("run", help="run something")
-    def run(verbose):
+    def run(ctx, verbose):
         print(f"verbose={verbose}")
 
     r = app.test(["--no-verbose", "run"])
@@ -221,7 +221,7 @@ def test_global_flag_short_form():
     )
 
     @app.command("run", help="run something")
-    def run(verbose):
+    def run(ctx, verbose):
         print(f"verbose={verbose}")
 
     r = app.test(["-V", "run"])
@@ -241,7 +241,7 @@ def test_global_flag_with_group():
     grp = app.group("config", help="manage config")
 
     @grp.command("show", help="show config")
-    def show(verbose):
+    def show(ctx, verbose):
         print(f"verbose={verbose}")
 
     r = app.test(["--verbose", "config", "show"])
@@ -263,7 +263,7 @@ def test_global_flag_with_group_and_command_flags():
     @grp.command("set", help="set a value")
     @strictcli.flag("key", type=str, help="config key")
     @strictcli.flag("value", type=str, help="config value")
-    def set_(key, value, verbose):
+    def set_(ctx, key, value, verbose):
         if verbose:
             print(f"verbose: setting {key}={value}")
         else:
@@ -289,7 +289,7 @@ def test_global_flag_collision_in_group():
 
         @grp.command("show", help="show config")
         @strictcli.flag("verbose", type=bool, default=False, help="also verbose")
-        def show(verbose):
+        def show(ctx, verbose):
             pass
 
 
@@ -303,7 +303,7 @@ def test_global_flag_equals_form():
     )
 
     @app.command("run", help="run")
-    def run(settings):
+    def run(ctx, settings):
         print(f"settings={settings}")
 
     r = app.test(["--settings=custom.toml", "run"])
@@ -324,7 +324,7 @@ def test_multiple_global_flags():
     )
 
     @app.command("run", help="run")
-    def run(verbose, settings):
+    def run(ctx, verbose, settings):
         print(f"verbose={verbose} settings={settings}")
 
     r = app.test(["--verbose", "--settings", "custom.toml", "run"])
@@ -338,7 +338,7 @@ def test_no_global_flags_works():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
     @app.command("run", help="run something")
-    def run():
+    def run(ctx):
         print("running")
 
     r = app.test(["run"])

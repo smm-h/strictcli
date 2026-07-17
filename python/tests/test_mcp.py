@@ -48,7 +48,7 @@ class TestMcpInitialize:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         resp = _send_one(app, {
@@ -66,7 +66,7 @@ class TestMcpInitialize:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         resp = _send_one(app, {
@@ -79,7 +79,7 @@ class TestMcpInitialize:
         app = strictcli.App(name="mytool", version="2.5.0", help="my tool")
 
         @app.command("run", help="run something")
-        def run():
+        def run(ctx):
             pass
 
         resp = _send_one(app, {
@@ -102,7 +102,7 @@ class TestMcpToolsList:
 
         @app.command("deploy", help="deploy the app")
         @strictcli.flag("target", type=str, help="deploy target")
-        def deploy(target):
+        def deploy(ctx, target):
             pass
 
         resp = _send_one(app, {
@@ -120,11 +120,11 @@ class TestMcpToolsList:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         @app.command("status", help="show status")
-        def status():
+        def status(ctx):
             pass
 
         resp = _send_one(app, {
@@ -140,7 +140,7 @@ class TestMcpToolsList:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        def migrate():
+        def migrate(ctx):
             pass
 
         resp = _send_one(app, {
@@ -154,11 +154,11 @@ class TestMcpToolsList:
         app = _build_app()
 
         @app.command("visible", help="visible command")
-        def visible():
+        def visible(ctx):
             pass
 
         @app.command("secret", help="hidden command", hidden=True)
-        def secret():
+        def secret(ctx):
             pass
 
         resp = _send_one(app, {
@@ -173,11 +173,11 @@ class TestMcpToolsList:
         app = _build_app()
 
         @app.command("batch", help="batch operation")
-        def batch():
+        def batch(ctx):
             pass
 
         @app.command("wizard", help="interactive wizard", interactive=True)
-        def wizard():
+        def wizard(ctx):
             pass
 
         resp = _send_one(app, {
@@ -196,7 +196,7 @@ class TestMcpToolsList:
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-        def deploy(target, count, verbose):
+        def deploy(ctx, target, count, verbose):
             pass
 
         resp = _send_one(app, {
@@ -219,8 +219,8 @@ class TestMcpToolsCall:
         app = _build_app()
 
         @app.command("info", help="get info")
-        def info():
-            return {"version": "1.0.0", "status": "ok"}
+        def info(ctx):
+            return strictcli.outcome(data={"version": "1.0.0", "status": "ok"})
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 10, "method": "tools/call",
@@ -239,9 +239,9 @@ class TestMcpToolsCall:
         @app.command("deploy", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
-        def deploy(target, count):
+        def deploy(ctx, target, count):
             captured.update({"target": target, "count": count})
-            return {"deployed": target, "count": count}
+            return strictcli.outcome(data={"deployed": target, "count": count})
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 11, "method": "tools/call",
@@ -257,7 +257,7 @@ class TestMcpToolsCall:
         app = _build_app()
 
         @app.command("noop", help="does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         resp = _send_one(app, {
@@ -271,7 +271,7 @@ class TestMcpToolsCall:
         app = _build_app()
 
         @app.command("count", help="count things")
-        def count():
+        def count(ctx):
             return 42
 
         resp = _send_one(app, {
@@ -287,8 +287,8 @@ class TestMcpToolsCall:
 
         @grp.command("migrate", help="run migrations")
         @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def migrate(dry_run):
-            return {"migrated": True, "dry_run": dry_run}
+        def migrate(ctx, dry_run):
+            return strictcli.outcome(data={"migrated": True, "dry_run": dry_run})
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 14, "method": "tools/call",
@@ -302,7 +302,7 @@ class TestMcpToolsCall:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         resp = _send_one(app, {
@@ -317,7 +317,7 @@ class TestMcpToolsCall:
 
         @app.command("deploy", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target")
-        def deploy(target):
+        def deploy(ctx, target):
             pass
 
         resp = _send_one(app, {
@@ -334,7 +334,7 @@ class TestMcpToolsCall:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         resp = _send_one(app, {
@@ -348,8 +348,8 @@ class TestMcpToolsCall:
         app = _build_app()
 
         @app.command("noop", help="does nothing")
-        def noop():
-            return "ok"
+        def noop(ctx):
+            return strictcli.outcome(data="ok")
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 18, "method": "tools/call",
@@ -371,7 +371,7 @@ class TestMcpNotifications:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         responses = _send_request(app, {
@@ -384,7 +384,7 @@ class TestMcpNotifications:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         responses = _send_request(
@@ -408,7 +408,7 @@ class TestMcpProtocolErrors:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         input_buf = io.StringIO("not valid json\n")
@@ -423,7 +423,7 @@ class TestMcpProtocolErrors:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         resp = _send_one(app, {
@@ -437,7 +437,7 @@ class TestMcpProtocolErrors:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         input_buf = io.StringIO("[1, 2, 3]\n")
@@ -452,7 +452,7 @@ class TestMcpProtocolErrors:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         input_buf = io.StringIO(
@@ -483,9 +483,9 @@ class TestMcpConversation:
 
         @app.command("greet", help="greet someone")
         @strictcli.flag("name", type=str, help="person to greet")
-        def greet(name):
+        def greet(ctx, name):
             captured["name"] = name
-            return {"greeting": f"hello {name}"}
+            return strictcli.outcome(data={"greeting": f"hello {name}"})
 
         responses = _send_request(
             app,
@@ -527,7 +527,7 @@ class TestMcpFlag:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         result = app.test(["--mcp"])
@@ -539,7 +539,7 @@ class TestMcpFlag:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         result = app.test(["cmd", "--mcp"])
@@ -562,8 +562,8 @@ class TestMcpEdgeCases:
 
         @grp2.command("upload", help="upload a file")
         @strictcli.flag("bucket", type=str, help="target bucket")
-        def upload(bucket):
-            return {"uploaded_to": bucket}
+        def upload(ctx, bucket):
+            return strictcli.outcome(data={"uploaded_to": bucket})
 
         # tools/list includes deeply nested commands
         list_resp = _send_one(app, {
@@ -588,7 +588,7 @@ class TestMcpEdgeCases:
         app = _build_app()
 
         @app.command("fail", help="always fails")
-        def fail():
+        def fail(ctx):
             raise RuntimeError("something broke")
 
         resp = _send_one(app, {
@@ -603,7 +603,7 @@ class TestMcpEdgeCases:
         app = _build_app(config=True)
 
         @app.command("run", help="run the app")
-        def run():
+        def run(ctx):
             pass
 
         resp = _send_one(app, {
@@ -622,8 +622,8 @@ class TestMcpEdgeCases:
         app = _build_app()
 
         @app.command("ok", help="always succeeds")
-        def ok():
-            return "success"
+        def ok(ctx):
+            return strictcli.outcome(data="success")
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",

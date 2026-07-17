@@ -52,7 +52,7 @@ def _make_flag_app(monkeypatch):
 
     @app.command("run", help="run it")
     @strictcli.flag("db", help="db path", default=RelativeToRoot("MYAPP_HOME", "db.sqlite"))
-    def run(db):
+    def run(ctx, db):
         captured["db"] = db
         return 0
 
@@ -111,7 +111,7 @@ def test_undeclared_root_marker_raises(monkeypatch):
     with pytest.raises(ValueError, match="undeclared infra root"):
         @app.command("run", help="run it")
         @strictcli.flag("db", help="db path", default=RelativeToRoot("NOPE", "x"))
-        def run(db):
+        def run(ctx, db):
             return 0
 
 
@@ -224,7 +224,7 @@ def test_infra_help_surface(monkeypatch):
               handshake_env={"CI_TOKEN": "CI auth token"})
 
     @app.command("run", help="run it")
-    def run():
+    def run(ctx):
         return 0
 
     r = app.test(["--help"])

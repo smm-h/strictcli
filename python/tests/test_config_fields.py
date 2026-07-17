@@ -312,7 +312,7 @@ class TestCommandConfigFieldBinding:
 
         @app.command(name="serve", help="start server",
                      config_fields=["db.url", "cache.ttl"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         cmd = app._commands["serve"]
@@ -324,14 +324,14 @@ class TestCommandConfigFieldBinding:
         with pytest.raises(ValueError, match='unknown config field "nonexistent"'):
             @app.command(name="serve", help="start server",
                          config_fields=["nonexistent"])
-            def serve(**kw):
+            def serve(ctx, **kw):
                 pass
 
     def test_no_config_fields_default(self):
         app = _build_app()
 
         @app.command(name="serve", help="start server")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         cmd = app._commands["serve"]
@@ -341,7 +341,7 @@ class TestCommandConfigFieldBinding:
         app = _build_app()
 
         @app.command(name="serve", help="start server", config_fields=[])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         cmd = app._commands["serve"]
@@ -354,7 +354,7 @@ class TestCommandConfigFieldBinding:
 
         @grp.command(name="start", help="start server",
                      config_fields=["db.url"])
-        def start(**kw):
+        def start(ctx, **kw):
             pass
 
         cmd = grp.commands["start"]
@@ -366,7 +366,7 @@ class TestCommandConfigFieldBinding:
         with pytest.raises(ValueError, match='unknown config field "missing"'):
             @grp.command(name="start", help="start server",
                          config_fields=["missing"])
-            def start(**kw):
+            def start(ctx, **kw):
                 pass
 
     def test_nested_group_command_binding(self):
@@ -377,7 +377,7 @@ class TestCommandConfigFieldBinding:
 
         @sub.command(name="migrate", help="run migrations",
                      config_fields=["log_level"])
-        def migrate(**kw):
+        def migrate(ctx, **kw):
             pass
 
         cmd = sub.commands["migrate"]
@@ -423,7 +423,7 @@ class TestConfigFieldValidation:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start", config_fields=["db.url"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["serve"])
@@ -435,7 +435,7 @@ class TestConfigFieldValidation:
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
         @app.command(name="serve", help="start", config_fields=["cache.ttl"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             return 0
 
         result = app.test(["serve"])
@@ -446,7 +446,7 @@ class TestConfigFieldValidation:
         app.config_field("db.port", type=int, help="DB port")
 
         @app.command(name="serve", help="start", config_fields=["db.port"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["serve"])
@@ -459,7 +459,7 @@ class TestConfigFieldValidation:
         app.config_field("port", type=int, help="Port")
 
         @app.command(name="serve", help="start", config_fields=["port"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["serve"])
@@ -471,7 +471,7 @@ class TestConfigFieldValidation:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start", config_fields=["db.url"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             return 0
 
         result = app.test(["serve"])
@@ -484,7 +484,7 @@ class TestConfigFieldValidation:
 
         @app.command(name="serve", help="start", config_fields=["port"])
         @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
-        def serve(verbose, **kw):
+        def serve(ctx, verbose, **kw):
             return 0
 
         result = app.test(["serve"])
@@ -498,7 +498,7 @@ class TestConfigFieldValidation:
         )
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             return 0
 
         result = app.test(["serve"])
@@ -511,7 +511,7 @@ class TestConfigFieldValidation:
 
         # This command does NOT bind db.url, so missing db.url is fine
         @app.command(name="ping", help="ping")
-        def ping(**kw):
+        def ping(ctx, **kw):
             return 0
 
         result = app.test(["ping"])
@@ -522,7 +522,7 @@ class TestConfigFieldValidation:
         app.config_field("debug", type=bool, help="Debug mode")
 
         @app.command(name="serve", help="start", config_fields=["debug"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["serve"])
@@ -535,7 +535,7 @@ class TestConfigFieldValidation:
         app.config_field("rate", type=float, help="Rate limit")
 
         @app.command(name="serve", help="start", config_fields=["rate"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             return 0
 
         result = app.test(["serve"])
@@ -550,7 +550,7 @@ class TestConfigSubcommandExemption:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start", config_fields=["db.url"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "show", "--plain"])
@@ -561,7 +561,7 @@ class TestConfigSubcommandExemption:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start", config_fields=["db.url"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "path"])
@@ -572,7 +572,7 @@ class TestConfigSubcommandExemption:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start", config_fields=["db.url"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "db.url", "postgres://localhost/db"])
@@ -588,7 +588,7 @@ class TestConfigSubcommandExemption:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start", config_fields=["db.url"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "init"])
@@ -608,7 +608,7 @@ class TestConfigShowWithFields:
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "show", "--plain"])
@@ -629,7 +629,7 @@ class TestConfigShowWithFields:
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "show", "--json"])
@@ -650,7 +650,7 @@ class TestConfigShowWithFields:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "show", "--json"])
@@ -667,7 +667,7 @@ class TestConfigSetWithFields:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "db.url", "postgres://localhost/db"])
@@ -684,7 +684,7 @@ class TestConfigSetWithFields:
         app.config_field("cache.ttl", type=int, help="Cache TTL")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "cache.ttl", "300"])
@@ -700,7 +700,7 @@ class TestConfigSetWithFields:
         app.config_field("debug", type=bool, help="Debug mode")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "debug", "true"])
@@ -716,7 +716,7 @@ class TestConfigSetWithFields:
         app.config_field("rate", type=float, help="Rate limit")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "rate", "1.5"])
@@ -732,7 +732,7 @@ class TestConfigSetWithFields:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "unknown_key", "value"])
@@ -744,7 +744,7 @@ class TestConfigSetWithFields:
         app.config_field("cache.ttl", type=int, help="Cache TTL")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "cache.ttl", "not_a_number"])
@@ -757,7 +757,7 @@ class TestConfigSetWithFields:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "db.url", "--default"])
@@ -775,7 +775,7 @@ class TestConfigSetWithFields:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "set", "db.url", "--clear"])
@@ -799,7 +799,7 @@ class TestConfigInit:
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "init"])
@@ -823,7 +823,7 @@ class TestConfigInit:
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "init"])
@@ -847,7 +847,7 @@ class TestConfigInit:
         )
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "init"])
@@ -862,7 +862,7 @@ class TestConfigInit:
         )
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         result = app.test(["config", "init"])
@@ -878,7 +878,7 @@ class TestConfigInit:
 
         @app.command(name="serve", help="start")
         @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
-        def serve(verbose, **kw):
+        def serve(ctx, verbose, **kw):
             pass
 
         result = app.test(["config", "init"])
@@ -902,7 +902,7 @@ class TestSchemaWithConfigFields:
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
         @app.command(name="serve", help="start", config_fields=["db.url", "cache.ttl"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         from strictcli import _dump_schema
@@ -925,12 +925,12 @@ class TestSchemaWithConfigFields:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start", config_fields=["db.url"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         @app.command(name="migrate", help="run migrations",
                      config_fields=["db.url"])
-        def migrate(**kw):
+        def migrate(ctx, **kw):
             pass
 
         from strictcli import _dump_schema
@@ -944,7 +944,7 @@ class TestSchemaWithConfigFields:
         app = _build_app()
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         from strictcli import _dump_schema
@@ -957,7 +957,7 @@ class TestSchemaWithConfigFields:
         app.config_field("db.url", type=str, help="Database URL")
 
         @app.command(name="serve", help="start", config_fields=["db.url"])
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         from strictcli import _dump_schema
@@ -970,7 +970,7 @@ class TestSchemaWithConfigFields:
         app = _build_app()
 
         @app.command(name="serve", help="start")
-        def serve(**kw):
+        def serve(ctx, **kw):
             pass
 
         from strictcli import _dump_schema
@@ -985,7 +985,7 @@ class TestSchemaWithConfigFields:
 
         @grp.command(name="start", help="start server",
                      config_fields=["db.url"])
-        def start(**kw):
+        def start(ctx, **kw):
             pass
 
         from strictcli import _dump_schema
@@ -1008,7 +1008,7 @@ class TestConfigFieldFlagCoexistence:
 
         @app.command(name="run", help="run")
         @strictcli.flag("target", type=str, help="deploy target", default=flag_default)
-        def run(target):
+        def run(ctx, target):
             pass
 
         app.config_field("target", type=str, help="the deploy target",
@@ -1045,7 +1045,7 @@ class TestConfigFieldFlagCoexistence:
 
         @app.command(name="run", help="run")
         @strictcli.flag("target", type=str, help="deploy target", default="prod")
-        def run(target):
+        def run(ctx, target):
             pass
 
         app.config_field("target", type=str, help="the deploy target", default="prod")
@@ -1062,7 +1062,7 @@ class TestConfigFieldFlagCoexistence:
 
         @app.command(name="run", help="run")
         @strictcli.flag("target", type=str, help="deploy target", default="prod")
-        def run(target):
+        def run(ctx, target):
             pass
 
         app.config_field("target", type=str, help="the deploy target", default="prod")
@@ -1084,7 +1084,7 @@ class TestConfigFieldFlagCoexistence:
         with pytest.raises(ValueError, match="defaults disagree"):
             @app.command(name="run", help="run")
             @strictcli.flag("target", type=str, help="deploy target", default="prod")
-            def run(target):
+            def run(ctx, target):
                 pass
 
     def test_equal_defaults_ok(self, tmp_path):

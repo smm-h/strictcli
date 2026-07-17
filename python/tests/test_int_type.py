@@ -11,7 +11,7 @@ def _make_app_with_int_flag(**flag_kwargs):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="the port", **flag_kwargs)
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port}")
 
     return app
@@ -31,7 +31,7 @@ def test_int_flag_value_is_int():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="the port")
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"type={type(port).__name__}")
 
     r = app.test(["cmd", "--port", "8080"])
@@ -53,7 +53,7 @@ def test_int_flag_from_env(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="the port", default=80, env="MYAPP_PORT")
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port} type={type(port).__name__}")
 
     monkeypatch.setenv("MYAPP_PORT", "9090")
@@ -78,7 +78,7 @@ def test_int_flag_bad_env_value(monkeypatch):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="the port", default=80, env="MYAPP_PORT")
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port}")
 
     monkeypatch.setenv("MYAPP_PORT", "abc")
@@ -110,7 +110,7 @@ def test_int_flag_negative_value():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("offset", type=int, help="the offset")
-    def cmd(offset):
+    def cmd(ctx, offset):
         print(f"offset={offset}")
 
     r = app.test(["cmd", "--offset", "-5"])
@@ -138,7 +138,7 @@ def test_int_flag_short_form():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", short="p", type=int, help="the port")
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port}")
 
     r = app.test(["cmd", "-p", "8080"])

@@ -1,4 +1,4 @@
-"""Tests for Context class and Context injection into handlers."""
+"""Tests for the Context class, always-injected ctx, and Outcome returns."""
 
 import io
 import json
@@ -49,59 +49,8 @@ class TestContextOutputRouting:
         assert stderr.getvalue() == "fail\n"
 
 
-class TestContextEmit:
-    """Emit writes JSON to stdout and stores data."""
-
-    def test_emit_writes_json_to_stdout(self):
-        stdout = io.StringIO()
-        ctx = Context(stdout=stdout)
-        ctx.emit({"key": "value"})
-        assert stdout.getvalue() == '{"key": "value"}\n'
-
-    def test_emit_stores_data(self):
-        ctx = Context(stdout=io.StringIO())
-        data = {"count": 42}
-        ctx.emit(data)
-        assert ctx._emit_data == {"count": 42}
-        assert ctx._emit_called is True
-
-    def test_emit_none_is_valid(self):
-        """None is valid emit data -- sentinel distinguishes 'not called' from 'called with None'."""
-        stdout = io.StringIO()
-        ctx = Context(stdout=stdout)
-        ctx.emit(None)
-        assert ctx._emit_data is None
-        assert ctx._emit_called is True
-        assert stdout.getvalue() == "null\n"
-
-    def test_emit_called_twice_raises(self):
-        ctx = Context(stdout=io.StringIO())
-        ctx.emit("first")
-        with pytest.raises(RuntimeError, match="emit called more than once"):
-            ctx.emit("second")
-
-    def test_emit_list(self):
-        stdout = io.StringIO()
-        ctx = Context(stdout=stdout)
-        ctx.emit([1, 2, 3])
-        assert json.loads(stdout.getvalue()) == [1, 2, 3]
-
-    def test_emit_string(self):
-        stdout = io.StringIO()
-        ctx = Context(stdout=stdout)
-        ctx.emit("hello")
-        assert json.loads(stdout.getvalue()) == "hello"
-
-    def test_emit_not_called_sentinel(self):
-        """Before emit is called, _emit_data is the sentinel, not None."""
-        ctx = Context(stdout=io.StringIO())
-        assert ctx._emit_called is False
-        from strictcli import _MissingSentinel
-        assert isinstance(ctx._emit_data, _MissingSentinel)
-
-
-class TestContextInjection:
-    """Handler with `ctx: Context` first param receives a Context."""
+class TestContextAlwaysInjected:
+    """Every handler receives a Context as its first positional argument."""
 
     def test_handler_receives_context(self):
         app = _build_app()
@@ -109,7 +58,7 @@ class TestContextInjection:
 
         @app.command("greet", help="greet someone")
         @strictcli.flag("name", type=str, help="person to greet")
-        def greet(ctx: Context, name):
+        def greet(ctx, name):
             captured["ctx"] = ctx
             captured["name"] = name
             ctx.info(f"Hello, {name}!")
@@ -120,27 +69,27 @@ class TestContextInjection:
         assert captured["name"] == "Alice"
         assert "Hello, Alice!" in result.stdout
 
-    def test_handler_without_context_works_as_before(self):
+    def test_context_slot_is_positional_regardless_of_name(self):
+        """The first parameter is the ctx slot even when named something else."""
         app = _build_app()
         captured = {}
 
-        @app.command("greet", help="greet someone")
-        @strictcli.flag("name", type=str, help="person to greet")
-        def greet(name):
-            captured["name"] = name
-            print(f"Hello, {name}!")
+        @app.command("ping", help="ping")
+        def ping(c):
+            captured["c"] = c
+            c.info("pong")
 
-        result = app.test(["greet", "--name", "Bob"])
+        result = app.test(["ping"])
         assert result.exit_code == 0
-        assert captured["name"] == "Bob"
-        assert "Hello, Bob!" in result.stdout
+        assert isinstance(captured["c"], Context)
+        assert "pong" in result.stdout
 
     def test_context_handler_with_no_flags(self):
         app = _build_app()
         captured = {}
 
         @app.command("ping", help="ping")
-        def ping(ctx: Context):
+        def ping(ctx):
             captured["ctx"] = ctx
             ctx.info("pong")
 
@@ -149,159 +98,188 @@ class TestContextInjection:
         assert isinstance(captured["ctx"], Context)
         assert "pong" in result.stdout
 
-
-class TestContextWithTest:
-    """test() on Context-aware handler captures Context output."""
-
-    def test_context_info_captured_in_stdout(self):
+    def test_no_param_handler_is_registration_error(self):
+        """A flag with no handler parameter (first slot consumed by ctx) errors."""
         app = _build_app()
+        with pytest.raises(ValueError, match='missing parameter "name"'):
+            @app.command("greet", help="greet")
+            @strictcli.flag("name", type=str, help="name")
+            def greet(name):  # noqa: only ctx slot, flag 'name' unbound
+                pass
 
-        @app.command("say", help="say something")
-        @strictcli.flag("msg", type=str, help="message")
-        def say(ctx: Context, msg):
-            ctx.info(msg)
 
-        result = app.test(["say", "--msg", "hello"])
-        assert result.exit_code == 0
-        assert result.stdout == "hello\n"
+class TestOutcomeConstruction:
+    """Outcome is a branded frozen class, built only via the factory."""
 
-    def test_context_warn_captured_in_stderr(self):
-        app = _build_app()
+    def test_direct_construction_forbidden(self):
+        with pytest.raises(TypeError, match="cannot be constructed directly"):
+            strictcli.Outcome(exit_code=0, data=None)
 
-        @app.command("warn-me", help="warn")
-        def warn_me(ctx: Context):
-            ctx.warn("danger")
+    def test_factory_builds_outcome(self):
+        oc = strictcli.outcome(exit_code=2, data={"k": 1})
+        assert isinstance(oc, strictcli.Outcome)
+        assert oc.exit_code == 2
+        assert oc.data == {"k": 1}
 
-        result = app.test(["warn-me"])
-        assert result.exit_code == 0
-        assert result.stderr == "danger\n"
+    def test_factory_defaults(self):
+        oc = strictcli.outcome()
+        assert oc.exit_code == 0
+        assert oc.data is None
 
-    def test_context_emit_captured_in_test(self):
+
+class TestOutcomeDataViaTest:
+    """test() captures Outcome data and JSON-prints it to stdout."""
+
+    def test_outcome_data_captured_and_printed(self):
         app = _build_app()
 
         @app.command("data", help="return data")
-        def data(ctx: Context):
-            ctx.emit({"result": 42})
+        def data(ctx):
+            return strictcli.outcome(data={"result": 42})
 
         result = app.test(["data"])
         assert result.exit_code == 0
         assert result.data == {"result": 42}
         assert json.loads(result.stdout) == {"result": 42}
 
-    def test_context_emit_none_captured(self):
+    def test_outcome_exit_code_only(self):
         app = _build_app()
 
-        @app.command("empty", help="emit None")
-        def empty(ctx: Context):
-            ctx.emit(None)
+        @app.command("fail", help="fail")
+        def fail(ctx):
+            return strictcli.outcome(exit_code=3)
+
+        result = app.test(["fail"])
+        assert result.exit_code == 3
+        assert result.data is None
+        assert result.stdout == ""
+
+    def test_outcome_exit_code_and_data(self):
+        app = _build_app()
+
+        @app.command("both", help="both")
+        def both(ctx):
+            return strictcli.outcome(exit_code=1, data=[1, 2, 3])
+
+        result = app.test(["both"])
+        assert result.exit_code == 1
+        assert result.data == [1, 2, 3]
+        assert json.loads(result.stdout) == [1, 2, 3]
+
+    def test_outcome_data_none_not_printed(self):
+        app = _build_app()
+
+        @app.command("empty", help="empty outcome")
+        def empty(ctx):
+            return strictcli.outcome()
 
         result = app.test(["empty"])
         assert result.exit_code == 0
         assert result.data is None
-        assert result.stdout == "null\n"
+        assert result.stdout == ""
 
 
-class TestContextWithCall:
-    """call() on Context-aware handler with emit returns emit'd data."""
+class TestIntAndNoneReturns:
+    """int and None returns keep their meaning."""
 
-    def test_call_returns_emitted_data(self):
+    def test_int_return_is_exit_code(self):
         app = _build_app()
 
-        @app.command("compute", help="compute something")
-        @strictcli.flag("x", type=int, help="value")
-        def compute(ctx: Context, x):
-            ctx.emit({"squared": x * x})
+        @app.command("run", help="run")
+        def run(ctx):
+            return 7
 
-        result = app.call("compute", x=5)
-        assert result == {"squared": 25}
+        result = app.test(["run"])
+        assert result.exit_code == 7
+        assert result.data is None
 
-    def test_call_returns_handler_return_when_no_emit(self):
+    def test_none_return_is_exit_zero(self):
+        app = _build_app()
+
+        @app.command("run", help="run")
+        def run(ctx):
+            ctx.info("done")
+
+        result = app.test(["run"])
+        assert result.exit_code == 0
+        assert result.data is None
+
+
+class TestBadReturnIsHardError:
+    """Returning anything other than int/None/Outcome is a hard error."""
+
+    def test_raw_dict_return_raises(self):
+        app = _build_app()
+
+        @app.command("bad", help="bad")
+        def bad(ctx):
+            return {"nope": True}
+
+        with pytest.raises(TypeError, match="int .exit code., None .exit 0., or"):
+            app.test(["bad"])
+
+    def test_raw_string_return_raises(self):
+        app = _build_app()
+
+        @app.command("bad", help="bad")
+        def bad(ctx):
+            return "nope"
+
+        with pytest.raises(TypeError, match="strictcli.outcome"):
+            app.test(["bad"])
+
+    def test_bad_return_names_type(self):
+        app = _build_app()
+
+        @app.command("bad", help="bad")
+        def bad(ctx):
+            return 3.14
+
+        with pytest.raises(TypeError, match="got float"):
+            app.test(["bad"])
+
+
+class TestOutcomeViaCall:
+    """call() returns the Outcome's data payload."""
+
+    def test_call_returns_outcome_data(self):
         app = _build_app()
 
         @app.command("compute", help="compute")
         @strictcli.flag("x", type=int, help="value")
-        def compute(ctx: Context, x):
+        def compute(ctx, x):
+            return strictcli.outcome(data={"squared": x * x})
+
+        assert app.call("compute", x=5) == {"squared": 25}
+
+    def test_call_returns_int(self):
+        app = _build_app()
+
+        @app.command("compute", help="compute")
+        @strictcli.flag("x", type=int, help="value")
+        def compute(ctx, x):
             return x * 2
 
-        result = app.call("compute", x=5)
-        assert result == 10
+        assert app.call("compute", x=5) == 10
 
-    def test_call_prefers_emit_over_return_value(self):
-        """When handler both emits and returns, emit takes precedence."""
+    def test_call_returns_none_for_exit_only_outcome(self):
         app = _build_app()
 
-        @app.command("both", help="both emit and return")
-        def both(ctx: Context):
-            ctx.emit({"from": "emit"})
-            return {"from": "return"}
+        @app.command("noop", help="noop")
+        def noop(ctx):
+            return strictcli.outcome(exit_code=0)
 
-        result = app.call("both")
-        assert result == {"from": "emit"}
+        assert app.call("noop") is None
 
-    def test_call_without_context_works_as_before(self):
+    def test_call_bad_return_raises(self):
         app = _build_app()
 
-        @app.command("add", help="add")
-        @strictcli.flag("a", type=int, help="first")
-        @strictcli.flag("b", type=int, help="second")
-        def add(a, b):
-            return a + b
+        @app.command("bad", help="bad")
+        def bad(ctx):
+            return {"nope": True}
 
-        result = app.call("add", a=3, b=4)
-        assert result == 7
-
-
-class TestContextRegistration:
-    """needs_context is set at registration time."""
-
-    def test_needs_context_true_for_context_handler(self):
-        app = _build_app()
-
-        @app.command("cmd", help="test")
-        def cmd(ctx: Context):
-            pass
-
-        # Access the registered command
-        registered = app._commands["cmd"]
-        assert registered.needs_context is True
-
-    def test_needs_context_false_for_regular_handler(self):
-        app = _build_app()
-
-        @app.command("cmd", help="test")
-        def cmd():
-            pass
-
-        registered = app._commands["cmd"]
-        assert registered.needs_context is False
-
-    def test_context_param_must_be_first(self):
-        """Context annotation on non-first param is treated as extra parameter error."""
-        app = _build_app()
-        with pytest.raises(ValueError, match="extra parameter"):
-            @app.command("bad", help="test")
-            @strictcli.flag("x", type=int, help="value")
-            def bad(x, ctx: Context):
-                pass
-
-    def test_context_handler_with_multiple_flags(self):
-        app = _build_app()
-        captured = {}
-
-        @app.command("multi", help="multi-flag test")
-        @strictcli.flag("name", type=str, help="name")
-        @strictcli.flag("count", type=int, help="count")
-        @strictcli.flag("verbose", type=bool, default=False, help="verbose")
-        def multi(ctx: Context, name, count, verbose):
-            captured.update(name=name, count=count, verbose=verbose)
-            ctx.info(f"{name}: {count}")
-
-        result = app.test(["multi", "--name", "test", "--count", "3"])
-        assert result.exit_code == 0
-        assert captured["name"] == "test"
-        assert captured["count"] == 3
-        assert captured["verbose"] is False
-        assert "test: 3" in result.stdout
+        with pytest.raises(TypeError, match="strictcli.outcome"):
+            app.call("bad")
 
 
 class TestContextWithGroups:
@@ -313,7 +291,7 @@ class TestContextWithGroups:
         captured = {}
 
         @grp.command("status", help="show status")
-        def status(ctx: Context):
+        def status(ctx):
             captured["ctx"] = ctx
             ctx.info("running")
 
@@ -324,31 +302,28 @@ class TestContextWithGroups:
 
 
 class TestContextWithInvoke:
-    """_invoke() handles Context injection."""
+    """_invoke() injects Context and returns Outcome data."""
 
-    def test_invoke_with_context_handler(self):
+    def test_invoke_returns_outcome_data(self):
         app = _build_app()
         captured = {}
 
         @app.command("cmd", help="test")
         @strictcli.flag("x", type=int, help="value")
-        def cmd(ctx: Context, x):
+        def cmd(ctx, x):
             captured["x"] = x
-            ctx.emit({"doubled": x * 2})
+            return strictcli.outcome(data={"doubled": x * 2})
 
         result = app._invoke("cmd", {"x": 3})
         assert result == {"doubled": 6}
         assert captured["x"] == 3
 
-    def test_invoke_without_context_handler(self):
+    def test_invoke_returns_int(self):
         app = _build_app()
-        captured = {}
 
         @app.command("cmd", help="test")
         @strictcli.flag("x", type=int, help="value")
-        def cmd(x):
-            captured["x"] = x
+        def cmd(ctx, x):
             return x + 1
 
-        result = app._invoke("cmd", {"x": 3})
-        assert result == 4
+        assert app._invoke("cmd", {"x": 3}) == 4

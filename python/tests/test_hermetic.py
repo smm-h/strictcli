@@ -31,7 +31,7 @@ def test_hermetic_skips_env(monkeypatch):
 
     @app.command("run", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", env="MYAPP_LEVEL", default=0)
-    def run(level):
+    def run(ctx, level):
         print(f"level={level}")
         return 0
 
@@ -50,7 +50,7 @@ def test_hermetic_skips_env_global_flags(monkeypatch):
     )
 
     @app.command("run", help="run it")
-    def run(verbose):
+    def run(ctx, verbose):
         print(f"verbose={'true' if verbose else 'false'}")
         return 0
 
@@ -67,7 +67,7 @@ def test_hermetic_cli_flag_still_works(monkeypatch):
 
     @app.command("run", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", env="MYAPP_LEVEL", default=0)
-    def run(level):
+    def run(ctx, level):
         print(f"level={level}")
         return 0
 
@@ -90,7 +90,7 @@ def test_hermetic_skips_config():
 
         @app.command("run", help="run it")
         @strictcli.flag(name="level", type=int, help="verbosity", default=0)
-        def run(level):
+        def run(ctx, level):
             print(f"level={level}")
             return 0
 
@@ -106,7 +106,7 @@ def test_hermetic_config_mutual_exclusion():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", config=True)
 
     @app.command("run", help="run it")
-    def run():
+    def run(ctx):
         return 0
 
     r = app.test(["--hermetic", "--config", "/tmp/foo.json", "run"])
@@ -119,7 +119,7 @@ def test_hermetic_config_subcommand_error():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", config=True)
 
     @app.command("run", help="run it")
-    def run():
+    def run(ctx):
         return 0
 
     r = app.test(["--hermetic", "config", "show"])
@@ -135,7 +135,7 @@ def test_hermetic_required_flag_missing_env_set(monkeypatch):
 
     @app.command("run", help="run it")
     @strictcli.flag(name="name", type=str, help="name", env="MYAPP_NAME")
-    def run(name):
+    def run(ctx, name):
         return 0
 
     r = app.test(["--hermetic", "run"])
@@ -151,7 +151,7 @@ def test_hermetic_on_app_without_config(monkeypatch):
 
     @app.command("run", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", env="MYAPP_LEVEL", default=0)
-    def run(level):
+    def run(ctx, level):
         print(f"level={level}")
         return 0
 
@@ -166,7 +166,7 @@ def test_hermetic_required_bool_missing():
 
     @app.command("run", help="run it")
     @strictcli.flag(name="verbose", type=bool, help="verbose mode")
-    def run(verbose):
+    def run(ctx, verbose):
         return 0
 
     r = app.test(["--hermetic", "run"])
@@ -182,7 +182,7 @@ def test_hermetic_source_is_default_when_env_set(monkeypatch):
 
     @app.command("run", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", env="MYAPP_LEVEL", default=0)
-    def run(level):
+    def run(ctx, level):
         return 0
 
     r = app.test(["--hermetic", "run"])
@@ -196,7 +196,7 @@ def test_hermetic_source_is_cli_for_passed_flag():
 
     @app.command("run", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", default=0)
-    def run(level):
+    def run(ctx, level):
         return 0
 
     r = app.test(["--hermetic", "run", "--level", "5"])

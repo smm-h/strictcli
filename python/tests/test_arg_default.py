@@ -14,7 +14,7 @@ def test_optional_arg_with_default_value_provided():
         help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
     )
-    def cmd(path):
+    def cmd(ctx, path):
         print(f"path={path}")
 
     r = app.test(["cmd", "/tmp/foo"])
@@ -31,7 +31,7 @@ def test_optional_arg_with_default_value_omitted():
         help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
     )
-    def cmd(path):
+    def cmd(ctx, path):
         print(f"path={path}")
 
     r = app.test(["cmd"])
@@ -48,7 +48,7 @@ def test_optional_arg_without_default_omitted():
         help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False)],
     )
-    def cmd(path=None):
+    def cmd(ctx, path=None):
         print(f"path={path}")
 
     r = app.test(["cmd"])
@@ -71,7 +71,7 @@ def test_default_shown_in_help():
         help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
     )
-    def cmd(path):
+    def cmd(ctx, path):
         print(f"path={path}")
 
     r = app.test(["cmd", "--help"])
@@ -89,7 +89,7 @@ def test_optional_arg_without_default_shows_optional_in_help():
         help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False)],
     )
-    def cmd(path=None):
+    def cmd(ctx, path=None):
         print(f"path={path}")
 
     r = app.test(["cmd", "--help"])
@@ -110,7 +110,7 @@ def test_multiple_args_first_required_second_optional_with_default():
             strictcli.Arg(name="dst", help="destination", required=False, default="out"),
         ],
     )
-    def cmd(src, dst):
+    def cmd(ctx, src, dst):
         print(f"src={src} dst={dst}")
 
     # Both provided
@@ -136,7 +136,7 @@ def test_handler_receives_default_when_arg_omitted():
         help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
     )
-    def cmd(path):
+    def cmd(ctx, path):
         received["path"] = path
 
     app.test(["cmd"])
@@ -149,7 +149,7 @@ def test_arg_decorator_with_default():
 
     @app.command("cmd", help="a command")
     @strictcli.arg("path", help="project directory", required=False, default=".")
-    def cmd(path):
+    def cmd(ctx, path):
         print(f"path={path}")
 
     r = app.test(["cmd"])
@@ -164,5 +164,5 @@ def test_arg_decorator_required_with_default_raises():
 
         @app.command("cmd", help="a command")
         @strictcli.arg("path", help="project directory", required=True, default=".")
-        def cmd(path):
+        def cmd(ctx, path):
             pass

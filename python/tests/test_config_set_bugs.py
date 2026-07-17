@@ -33,7 +33,7 @@ def test_config_set_writes_typed_values(tmp_path):
     @strictcli.flag("count", type=int, help="how many", default=0)
     @strictcli.flag("verbose", type=bool, help="be verbose", default=False)
     @strictcli.flag("rate", type=float, help="the rate", default=0.0)
-    def run(count, verbose, rate):
+    def run(ctx, count, verbose, rate):
         pass
 
     r = app.test(["config", "set", "count", "42"])
@@ -73,7 +73,7 @@ def test_config_set_rejects_unknown_key(tmp_path):
 
     @app.command("run", help="run something")
     @strictcli.flag("name", type=str, help="the name", default="")
-    def run(name):
+    def run(ctx, name):
         pass
 
     r = app.test(["config", "set", "nonexistent", "value"])
@@ -97,7 +97,7 @@ def _make_app(tmp_path, **extra_flags):
     @strictcli.flag("count", type=int, help="how many", default=0)
     @strictcli.flag("rate", type=float, help="the rate", default=0.0)
     @strictcli.flag("name", type=str, help="the name", default="")
-    def run(debug, count, rate, name):
+    def run(ctx, debug, count, rate, name):
         pass
 
     return app, config_file
@@ -247,7 +247,7 @@ def test_config_set_round_trip_typed(tmp_path):
     @strictcli.flag("count", type=int, help="how many", default=0)
     @strictcli.flag("rate", type=float, help="the rate", default=0.0)
     @strictcli.flag("name", type=str, help="the name", default="")
-    def run(debug, count, rate, name):
+    def run(ctx, debug, count, rate, name):
         received["debug"] = debug
         received["count"] = count
         received["rate"] = rate

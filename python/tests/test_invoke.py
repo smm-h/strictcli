@@ -19,7 +19,7 @@ class TestInvokeBasicFlags:
 
         @app.command("greet", help="greet someone")
         @strictcli.flag("name", type=str, help="person to greet")
-        def greet(name):
+        def greet(ctx, name):
             captured["name"] = name
 
         app._invoke("greet", {"name": "Alice"})
@@ -37,7 +37,7 @@ class TestInvokeBasicFlags:
 
         @app.command("deploy", help="deploy")
         @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def deploy(dry_run):
+        def deploy(ctx, dry_run):
             captured["dry_run"] = dry_run
 
         app._invoke("deploy", {"dry_run": True})
@@ -54,7 +54,7 @@ class TestInvokeBasicFlags:
 
         @app.command("run", help="run")
         @strictcli.flag("count", type=int, help="number of runs")
-        def run(count):
+        def run(ctx, count):
             captured["count"] = count
 
         app._invoke("run", {"count": 5})
@@ -71,7 +71,7 @@ class TestInvokeBasicFlags:
 
         @app.command("scale", help="scale")
         @strictcli.flag("factor", type=float, help="scale factor")
-        def scale(factor):
+        def scale(ctx, factor):
             captured["factor"] = factor
 
         app._invoke("scale", {"factor": 2.5})
@@ -88,7 +88,7 @@ class TestInvokeBasicFlags:
 
         @app.command("deploy", help="deploy")
         @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def deploy(dry_run):
+        def deploy(ctx, dry_run):
             captured["dry_run"] = dry_run
 
         app._invoke("deploy", {})
@@ -104,7 +104,7 @@ class TestInvokeWithDefaults:
 
         @app.command("greet", help="greet")
         @strictcli.flag("name", type=str, help="name", default="World")
-        def greet(name):
+        def greet(ctx, name):
             captured["name"] = name
 
         app._invoke("greet", {})
@@ -116,7 +116,7 @@ class TestInvokeWithDefaults:
 
         @app.command("greet", help="greet")
         @strictcli.flag("name", type=str, help="name")
-        def greet(name):
+        def greet(ctx, name):
             pass
 
         with pytest.raises(Exception, match="flag '--name' is required"):
@@ -134,7 +134,7 @@ class TestInvokePositionalArgs:
             "deploy", help="deploy",
             args=[strictcli.Arg(name="target", help="deploy target")],
         )
-        def deploy(target):
+        def deploy(ctx, target):
             captured["target"] = target
 
         app._invoke("deploy", {"target": "production"})
@@ -155,7 +155,7 @@ class TestInvokePositionalArgs:
             args=[strictcli.Arg(name="target", help="deploy target")],
         )
         @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def deploy(target, dry_run):
+        def deploy(ctx, target, dry_run):
             captured.update({"target": target, "dry_run": dry_run})
 
         app._invoke("deploy", {"target": "staging", "dry_run": True})
@@ -174,7 +174,7 @@ class TestInvokePositionalArgs:
             "deploy", help="deploy",
             args=[strictcli.Arg(name="target", help="deploy target")],
         )
-        def deploy(target):
+        def deploy(ctx, target):
             pass
 
         with pytest.raises(Exception, match="missing required argument 'target'"):
@@ -188,7 +188,7 @@ class TestInvokePositionalArgs:
             "deploy", help="deploy",
             args=[strictcli.Arg(name="target", help="deploy target", required=False, default="local")],
         )
-        def deploy(target):
+        def deploy(ctx, target):
             captured["target"] = target
 
         app._invoke("deploy", {})
@@ -204,7 +204,7 @@ class TestInvokeNestedCommands:
         grp = app.group("config", help="config management")
 
         @grp.command("show", help="show config")
-        def show():
+        def show(ctx):
             captured["called"] = True
 
         app._invoke("config.show", {})
@@ -217,7 +217,7 @@ class TestInvokeNestedCommands:
         g2 = g1.group("dns", help="DNS management")
 
         @g2.command("list", help="list DNS records")
-        def list_records():
+        def list_records(ctx):
             captured["called"] = True
 
         app._invoke("infra.dns.list", {})
@@ -234,7 +234,7 @@ class TestInvokeGlobalFlags:
         )
 
         @app.command("run", help="run")
-        def run(verbose):
+        def run(ctx, verbose):
             captured["verbose"] = verbose
 
         app._invoke("run", {"verbose": True})
@@ -247,7 +247,7 @@ class TestInvokeGlobalFlags:
         )
 
         @app.command("run", help="run")
-        def run(verbose):
+        def run(ctx, verbose):
             captured["verbose"] = verbose
 
         app._invoke("run", {})
@@ -260,7 +260,7 @@ class TestInvokeGlobalFlags:
         )
 
         @app.command("run", help="run")
-        def run(settings):
+        def run(ctx, settings):
             captured["settings"] = settings
 
         app._invoke("run", {"settings": "custom.toml"})
@@ -273,7 +273,7 @@ class TestInvokeGlobalFlags:
         )
 
         @app.command("run", help="run")
-        def run(settings):
+        def run(ctx, settings):
             captured["settings"] = settings
 
         app._invoke("run", {})
@@ -288,7 +288,7 @@ class TestInvokeGlobalFlags:
 
         @app.command("deploy", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target", default="staging")
-        def deploy(target, verbose):
+        def deploy(ctx, target, verbose):
             captured.update({"target": target, "verbose": verbose})
 
         app._invoke("deploy", {"target": "prod", "verbose": True})
@@ -308,7 +308,7 @@ class TestInvokePassthrough:
     def test_passthrough_basic(self):
         captured = {}
 
-        def pt_handler(name, args, globals):
+        def pt_handler(ctx, name, args, globals):
             captured["name"] = name
             captured["args"] = args
             captured["globals"] = globals
@@ -329,7 +329,7 @@ class TestInvokePassthrough:
     def test_passthrough_empty_args(self):
         captured = {}
 
-        def pt_handler(name, args, globals):
+        def pt_handler(ctx, name, args, globals):
             captured["name"] = name
             captured["args"] = args
             return 0
@@ -349,7 +349,7 @@ class TestInvokePassthrough:
         """Passthrough handler receives global flag values from kwargs."""
         captured = {}
 
-        def pt_handler(name, args, globals):
+        def pt_handler(ctx, name, args, globals):
             captured["globals"] = globals
             return 0
 
@@ -373,7 +373,7 @@ class TestInvokePassthrough:
         """Passthrough handler receives defaults for unprovided global flags."""
         captured = {}
 
-        def pt_handler(name, args, globals):
+        def pt_handler(ctx, name, args, globals):
             captured["globals"] = globals
             return 0
 
@@ -395,7 +395,7 @@ class TestInvokePassthrough:
 
     def test_passthrough_unknown_kwarg_raises(self):
         """Unknown kwargs in passthrough invoke produce an error."""
-        def pt_handler(name, args, globals):
+        def pt_handler(ctx, name, args, globals):
             return 0
 
         app = _build_app()
@@ -410,7 +410,7 @@ class TestInvokePassthrough:
 
     def test_passthrough_missing_required_global_flag_raises(self):
         """Missing required global flag in passthrough invoke produces an error."""
-        def pt_handler(name, args, globals):
+        def pt_handler(ctx, name, args, globals):
             return 0
 
         app = _build_app(
@@ -435,7 +435,7 @@ class TestInvokeReturnValue:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             return 42
 
         assert app._invoke("run", {}) == 42
@@ -444,7 +444,7 @@ class TestInvokeReturnValue:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         assert app._invoke("run", {}) is None
@@ -457,7 +457,7 @@ class TestInvokeUnknownCommand:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         with pytest.raises(Exception, match="unknown command 'nonexistent'"):
@@ -471,7 +471,7 @@ class TestInvokeUnknownKwarg:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         with pytest.raises(Exception, match="unknown parameter 'bogus'"):
@@ -493,7 +493,7 @@ class TestInvokeMutex:
                 ],
             )],
         )
-        def fmt(json, yaml):
+        def fmt(ctx, json, yaml):
             pass
 
         with pytest.raises(Exception, match="mutually exclusive"):
@@ -512,7 +512,7 @@ class TestInvokeMutex:
                 ],
             )],
         )
-        def fmt(json, yaml):
+        def fmt(ctx, json, yaml):
             captured.update({"json": json, "yaml": yaml})
 
         app._invoke("fmt", {"json": True})
@@ -534,7 +534,7 @@ class TestInvokeDependencies:
         )
         @strictcli.flag("host", type=str, help="host", default=None)
         @strictcli.flag("port", type=int, help="port", default=None)
-        def deploy(host, port):
+        def deploy(ctx, host, port):
             pass
 
         with pytest.raises(Exception, match="must be used together"):
@@ -551,7 +551,7 @@ class TestInvokeDependencies:
         )
         @strictcli.flag("host", type=str, help="host", default=None)
         @strictcli.flag("port", type=int, help="port", default=None)
-        def deploy(host, port):
+        def deploy(ctx, host, port):
             pass
 
         with pytest.raises(Exception, match="requires '--host'"):
@@ -566,7 +566,7 @@ class TestInvokeChoices:
 
         @app.command("set-level", help="set level")
         @strictcli.flag("level", type=str, help="log level", choices=["debug", "info", "warn", "error"])
-        def set_level(level):
+        def set_level(ctx, level):
             pass
 
         with pytest.raises(Exception, match="invalid value 'trace'"):
@@ -578,7 +578,7 @@ class TestInvokeChoices:
 
         @app.command("set-level", help="set level")
         @strictcli.flag("level", type=str, help="log level", choices=["debug", "info", "warn", "error"])
-        def set_level(level):
+        def set_level(ctx, level):
             captured["level"] = level
 
         app._invoke("set-level", {"level": "debug"})
@@ -600,7 +600,7 @@ class TestInvokeImplies:
         )
         @strictcli.flag("ci", type=bool, default=False, help="CI mode")
         @strictcli.flag("yes", type=bool, default=False, help="non-interactive")
-        def deploy(ci, yes):
+        def deploy(ctx, ci, yes):
             captured.update({"ci": ci, "yes": yes})
 
         app._invoke("deploy", {"ci": True})
@@ -619,7 +619,7 @@ class TestInvokeVariadicArgs:
             "install", help="install packages",
             args=[strictcli.Arg(name="packages", help="packages to install", variadic=True)],
         )
-        def install(packages):
+        def install(ctx, packages):
             captured["packages"] = packages
 
         app._invoke("install", {"packages": ["foo", "bar", "baz"]})

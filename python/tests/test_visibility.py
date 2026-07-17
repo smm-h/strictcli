@@ -30,11 +30,11 @@ class TestHiddenCommand:
         app = _make_app()
 
         @app.command("visible", help="A visible command")
-        def visible():
+        def visible(ctx):
             pass
 
         @app.command("secret", help="A secret command", hidden=True)
-        def secret():
+        def secret(ctx):
             pass
 
         result = app.test(["--help"])
@@ -45,7 +45,7 @@ class TestHiddenCommand:
         app = _make_app()
 
         @app.command("secret", help="A secret command", hidden=True)
-        def secret():
+        def secret(ctx):
             print("secret output")
 
         result = app.test(["secret"])
@@ -57,7 +57,7 @@ class TestHiddenCommand:
 
         @app.command("secret", help="A secret command", hidden=True)
         @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-        def secret(verbose):
+        def secret(ctx, verbose):
             pass
 
         result = app.test(["secret", "--help"])
@@ -67,7 +67,7 @@ class TestHiddenCommand:
         app = _make_app()
 
         @app.command("normal", help="A normal command")
-        def normal():
+        def normal(ctx):
             pass
 
         cmd = app._commands["normal"]
@@ -77,7 +77,7 @@ class TestHiddenCommand:
         app = _make_app()
 
         @app.command("secret", help="A secret command", hidden=True)
-        def secret():
+        def secret(ctx):
             pass
 
         cmd = app._commands["secret"]
@@ -88,11 +88,11 @@ class TestHiddenCommand:
         app = _make_app()
 
         @app.command("a", help="cmd a", hidden=True)
-        def a():
+        def a(ctx):
             pass
 
         @app.command("b", help="cmd b", hidden=True)
-        def b():
+        def b(ctx):
             pass
 
         result = app.test(["--help"])
@@ -113,11 +113,11 @@ class TestHiddenGroup:
         hidden_grp = app.group("internal", help="Internal group", hidden=True)
 
         @visible_grp.command("cmd", help="Public command")
-        def pub_cmd():
+        def pub_cmd(ctx):
             pass
 
         @hidden_grp.command("cmd", help="Internal command")
-        def int_cmd():
+        def int_cmd(ctx):
             pass
 
         result = app.test(["--help"])
@@ -129,7 +129,7 @@ class TestHiddenGroup:
         hidden_grp = app.group("internal", help="Internal group", hidden=True)
 
         @hidden_grp.command("run", help="Run internal")
-        def run():
+        def run(ctx):
             print("internal run")
 
         result = app.test(["internal", "run"])
@@ -141,7 +141,7 @@ class TestHiddenGroup:
         hidden_grp = app.group("internal", help="Internal group", hidden=True)
 
         @hidden_grp.command("run", help="Run internal")
-        def run():
+        def run(ctx):
             pass
 
         result = app.test(["internal", "--help"])
@@ -155,11 +155,11 @@ class TestHiddenGroup:
         hidden_sub = grp.group("hidden", help="Hidden subgroup", hidden=True)
 
         @visible_sub.command("a", help="cmd a")
-        def a():
+        def a(ctx):
             pass
 
         @hidden_sub.command("b", help="cmd b")
-        def b():
+        def b(ctx):
             pass
 
         result = app.test(["parent", "--help"])
@@ -172,11 +172,11 @@ class TestHiddenGroup:
         grp = app.group("mygroup", help="My group")
 
         @grp.command("visible", help="Visible command")
-        def visible():
+        def visible(ctx):
             pass
 
         @grp.command("secret", help="Secret command", hidden=True)
-        def secret():
+        def secret(ctx):
             pass
 
         result = app.test(["mygroup", "--help"])
@@ -205,7 +205,7 @@ class TestInteractiveCommand:
         app = _make_app()
 
         @app.command("edit", help="Edit interactively", interactive=True)
-        def edit():
+        def edit(ctx):
             pass
 
         result = app.test(["--help"])
@@ -215,7 +215,7 @@ class TestInteractiveCommand:
         app = _make_app()
 
         @app.command("normal", help="A normal command")
-        def normal():
+        def normal(ctx):
             pass
 
         cmd = app._commands["normal"]
@@ -225,7 +225,7 @@ class TestInteractiveCommand:
         app = _make_app()
 
         @app.command("edit", help="Edit interactively", interactive=True)
-        def edit():
+        def edit(ctx):
             pass
 
         cmd = app._commands["edit"]
@@ -236,7 +236,7 @@ class TestInteractiveCommand:
         app = _make_app()
 
         @app.command("secret-edit", help="Secret edit", hidden=True, interactive=True)
-        def secret_edit():
+        def secret_edit(ctx):
             print("secret edit output")
 
         cmd = app._commands["secret-edit"]
@@ -295,7 +295,7 @@ class TestVisibilitySchema:
         app = _make_app()
 
         @app.command("secret", help="A secret command", hidden=True)
-        def secret():
+        def secret(ctx):
             pass
 
         schema = self._load_schema(tmp_path, app)
@@ -310,7 +310,7 @@ class TestVisibilitySchema:
         app = _make_app()
 
         @app.command("edit", help="Edit stuff", interactive=True)
-        def edit():
+        def edit(ctx):
             pass
 
         schema = self._load_schema(tmp_path, app)
@@ -325,7 +325,7 @@ class TestVisibilitySchema:
         app = _make_app()
 
         @app.command("normal", help="Normal command")
-        def normal():
+        def normal(ctx):
             pass
 
         schema = self._load_schema(tmp_path, app)
@@ -341,7 +341,7 @@ class TestVisibilitySchema:
         grp = app.group("internal", help="Internal group", hidden=True)
 
         @grp.command("cmd", help="A command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         schema = self._load_schema(tmp_path, app)
@@ -356,7 +356,7 @@ class TestVisibilitySchema:
         grp = app.group("public", help="Public group")
 
         @grp.command("cmd", help="A command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         schema = self._load_schema(tmp_path, app)
@@ -370,7 +370,7 @@ class TestVisibilitySchema:
         app = _make_app()
 
         @app.command("x", help="x cmd")
-        def x():
+        def x(ctx):
             pass
 
         schema = self._load_schema(tmp_path, app)
@@ -405,11 +405,11 @@ class TestGroupCommandVisibility:
         grp = app.group("mygroup", help="My group")
 
         @grp.command("visible", help="Visible command")
-        def visible():
+        def visible(ctx):
             pass
 
         @grp.command("hidden", help="Hidden command", hidden=True)
-        def hidden():
+        def hidden(ctx):
             pass
 
         result = app.test(["mygroup", "--help"])
@@ -421,7 +421,7 @@ class TestGroupCommandVisibility:
         grp = app.group("mygroup", help="My group")
 
         @grp.command("hidden", help="Hidden command", hidden=True)
-        def hidden():
+        def hidden(ctx):
             print("hidden output")
 
         result = app.test(["mygroup", "hidden"])
@@ -432,7 +432,7 @@ class TestGroupCommandVisibility:
         grp = app.group("mygroup", help="My group")
 
         @grp.command("edit", help="Edit command", interactive=True)
-        def edit():
+        def edit(ctx):
             pass
 
         cmd = grp.commands["edit"]

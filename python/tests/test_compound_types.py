@@ -21,7 +21,7 @@ class TestListFlagRegistration:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="list of ids")
-        def cmd(ids):
+        def cmd(ctx, ids):
             pass
 
         cmd_obj = app._commands["cmd"]
@@ -37,7 +37,7 @@ class TestListFlagRegistration:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("names", type=list[str], help="names")
-        def cmd(names):
+        def cmd(ctx, names):
             pass
 
         cmd_obj = app._commands["cmd"]
@@ -51,7 +51,7 @@ class TestListFlagRegistration:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("values", type=list[float], help="values")
-        def cmd(values):
+        def cmd(ctx, values):
             pass
 
         cmd_obj = app._commands["cmd"]
@@ -77,7 +77,7 @@ class TestListFlagRegistration:
         @strictcli.flag(
             "ids", type=list[int], help="ids", repeatable=True, unique=False,
         )
-        def cmd(ids):
+        def cmd(ctx, ids):
             pass
 
         cmd_obj = app._commands["cmd"]
@@ -91,7 +91,7 @@ class TestListFlagRegistration:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids", unique=True)
-        def cmd(ids):
+        def cmd(ctx, ids):
             pass
 
         cmd_obj = app._commands["cmd"]
@@ -121,7 +121,7 @@ class TestListFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
-        def cmd(ids):
+        def cmd(ctx, ids):
             print(f"ids={ids!r}")
 
         r = app.test(["cmd", "--ids", "1", "--ids", "2", "--ids", "3"])
@@ -134,7 +134,7 @@ class TestListFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("tags", type=list[str], help="tags")
-        def cmd(tags):
+        def cmd(ctx, tags):
             print(f"tags={tags!r}")
 
         r = app.test(["cmd", "--tags", "a", "--tags", "b"])
@@ -147,7 +147,7 @@ class TestListFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("weights", type=list[float], help="weights")
-        def cmd(weights):
+        def cmd(ctx, weights):
             print(f"weights={weights!r}")
 
         r = app.test(["cmd", "--weights", "1.5", "--weights", "2.7"])
@@ -160,7 +160,7 @@ class TestListFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
-        def cmd(ids):
+        def cmd(ctx, ids):
             pass
 
         r = app.test(["cmd", "--ids", "abc"])
@@ -173,7 +173,7 @@ class TestListFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
-        def cmd(ids):
+        def cmd(ctx, ids):
             print(f"ids={ids!r}")
 
         r = app.test(["cmd"])
@@ -186,7 +186,7 @@ class TestListFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
-        def cmd(ids):
+        def cmd(ctx, ids):
             print(f"ids={ids!r}")
 
         r = app.test(["cmd", "--ids=1", "--ids=2"])
@@ -199,7 +199,7 @@ class TestListFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids", unique=True)
-        def cmd(ids):
+        def cmd(ctx, ids):
             pass
 
         r = app.test(["cmd", "--ids", "1", "--ids", "1"])
@@ -215,7 +215,7 @@ class TestListFlagParsing:
             "level", type=list[str], help="levels",
             choices=["debug", "info", "error"],
         )
-        def cmd(level):
+        def cmd(ctx, level):
             print(f"level={level!r}")
 
         r = app.test(["cmd", "--level", "debug", "--level", "info"])
@@ -238,7 +238,7 @@ class TestListFlagEnv:
             "ids", type=list[int], help="ids",
             env="TEST_IDS", env_separator=",",
         )
-        def cmd(ids):
+        def cmd(ctx, ids):
             print(f"ids={ids!r}")
 
         os.environ["TEST_IDS"] = "1,2,3"
@@ -260,7 +260,7 @@ class TestListFlagCall:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
-        def cmd(ids):
+        def cmd(ctx, ids):
             result["ids"] = ids
 
         app.call("cmd", ids=[1, 2, 3])
@@ -298,7 +298,7 @@ class TestListArgRegistration:
                 name="nums", type=list[int], help="numbers", variadic=True,
             ),
         ])
-        def cmd(nums):
+        def cmd(ctx, nums):
             print(f"nums={nums!r}")
 
         r = app.test(["cmd", "1", "2", "3"])
@@ -432,7 +432,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"headers={headers!r}")
 
         r = app.test(["cmd", "--headers", "Accept=json"])
@@ -445,7 +445,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             # Sort for deterministic output
             print(f"headers={dict(sorted(headers.items()))!r}")
 
@@ -464,7 +464,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="counts")
-        def cmd(counts):
+        def cmd(ctx, counts):
             print(f"counts={counts!r}")
 
         r = app.test(["cmd", "--counts", "a=1", "--counts", "b=2"])
@@ -478,7 +478,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("weights", type=dict[str, float], help="weights")
-        def cmd(weights):
+        def cmd(ctx, weights):
             print(f"weights={weights!r}")
 
         r = app.test(["cmd", "--weights", "a=1.5", "--weights", "b=2.7"])
@@ -492,7 +492,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="counts")
-        def cmd(counts):
+        def cmd(ctx, counts):
             pass
 
         r = app.test(["cmd", "--counts", "a=abc"])
@@ -505,7 +505,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             pass
 
         r = app.test(["cmd", "--headers", "noequals"])
@@ -518,7 +518,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             pass
 
         r = app.test(["cmd", "--headers", "=value"])
@@ -531,7 +531,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             pass
 
         r = app.test(["cmd", "--headers", "a=1", "--headers", "a=2"])
@@ -544,7 +544,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"headers={dict(sorted(headers.items()))!r}")
 
         r = app.test([
@@ -560,7 +560,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="counts")
-        def cmd(counts):
+        def cmd(ctx, counts):
             print(f"counts={counts!r}")
 
         r = app.test(["cmd", "--counts", '{"a": 1, "b": 2}'])
@@ -574,7 +574,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="counts")
-        def cmd(counts):
+        def cmd(ctx, counts):
             pass
 
         r = app.test(["cmd", "--counts", '{"a": "not_int"}'])
@@ -587,7 +587,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             pass
 
         r = app.test(["cmd", "--headers", "{invalid json"])
@@ -604,7 +604,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             pass
 
         r = app.test(["cmd", "--headers", '["not", "an", "object"]'])
@@ -618,7 +618,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"headers={headers!r}")
 
         r = app.test(["cmd"])
@@ -631,7 +631,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"headers={headers!r}")
 
         r = app.test(["cmd", "--headers=Accept=json"])
@@ -644,7 +644,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("env", type=dict[str, str], help="env vars")
-        def cmd(env):
+        def cmd(ctx, env):
             print(f"env={env!r}")
 
         r = app.test(["cmd", "--env", "FOO=bar=baz"])
@@ -659,7 +659,7 @@ class TestDictFlagParsing:
         @strictcli.flag(
             "headers", short="H", type=dict[str, str], help="headers",
         )
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"headers={headers!r}")
 
         r = app.test(["cmd", "-H", "Accept=json"])
@@ -672,7 +672,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"count={len(headers)}")
 
         r = app.test([
@@ -689,7 +689,7 @@ class TestDictFlagParsing:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             pass
 
         r = app.test([
@@ -713,7 +713,7 @@ class TestDictFlagEnv:
             "headers", type=dict[str, str], help="headers",
             env="TEST_HEADERS",
         )
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"count={len(headers)}")
 
         os.environ["TEST_HEADERS"] = '{"Accept": "json", "Host": "example.com"}'
@@ -733,7 +733,7 @@ class TestDictFlagEnv:
             "headers", type=dict[str, str], help="headers",
             env="TEST_HEADERS",
         )
-        def cmd(headers):
+        def cmd(ctx, headers):
             pass
 
         os.environ["TEST_HEADERS"] = "not json"
@@ -753,7 +753,7 @@ class TestDictFlagEnv:
             "headers", type=dict[str, str], help="headers",
             env="TEST_HEADERS",
         )
-        def cmd(headers):
+        def cmd(ctx, headers):
             pass
 
         os.environ["TEST_HEADERS"] = '"just a string"'
@@ -773,7 +773,7 @@ class TestDictFlagEnv:
             "headers", type=dict[str, str], help="headers",
             env="TEST_HEADERS",
         )
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"headers={headers!r}")
 
         os.environ["TEST_HEADERS"] = '{"Accept": "xml"}'
@@ -795,7 +795,7 @@ class TestDictFlagCall:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             result["headers"] = headers
 
         app.call("cmd", headers={"Accept": "json", "Host": "example.com"})
@@ -808,7 +808,7 @@ class TestDictFlagCall:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             result["headers"] = headers
 
         app.call("cmd", headers={})
@@ -968,7 +968,7 @@ class TestCompoundGlobalFlags:
         )
 
         @app.command("cmd", help="a command")
-        def cmd(tags):
+        def cmd(ctx, tags):
             print(f"tags={tags!r}")
 
         r = app.test(["--tags", "a", "--tags", "b", "cmd"])
@@ -985,7 +985,7 @@ class TestCompoundGlobalFlags:
         )
 
         @app.command("cmd", help="a command")
-        def cmd(meta):
+        def cmd(ctx, meta):
             print(f"meta={meta!r}")
 
         r = app.test(["--meta", "env=prod", "cmd"])
@@ -1008,7 +1008,7 @@ class TestCompoundEdgeCases:
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
         @strictcli.flag("meta", type=dict[str, str], help="metadata")
-        def cmd(ids, meta):
+        def cmd(ctx, ids, meta):
             print(f"ids={ids!r} meta={meta!r}")
 
         r = app.test([
@@ -1033,7 +1033,7 @@ class TestCompoundEdgeCases:
             "headers", type=dict[str, str], help="headers",
             validate=check_headers,
         )
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"ok")
 
         r = app.test(["cmd", "--headers", "Accept=json"])
@@ -1049,7 +1049,7 @@ class TestCompoundEdgeCases:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
-        def cmd(headers):
+        def cmd(ctx, headers):
             print(f"count={len(headers)}")
 
         r = app.test(["cmd", "--headers={'a': 'b'}".replace("'", '"')])

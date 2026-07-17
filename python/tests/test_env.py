@@ -20,7 +20,7 @@ def _make_env_app(prefixed=True):
         env=env_name,
         prefixed=flag_prefixed,
     )
-    def cmd(target):
+    def cmd(ctx, target):
         print(f"target={target}")
 
     return app, env_name
@@ -50,7 +50,7 @@ def _make_bool_env_app():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("verbose", type=bool, default=False, help="be verbose", env="MYAPP_VERBOSE")
-    def cmd(verbose):
+    def cmd(ctx, verbose):
         print(f"verbose={verbose}")
 
     return app

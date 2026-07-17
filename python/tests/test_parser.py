@@ -9,7 +9,7 @@ def _make_app_with_str_flag(**flag_kwargs):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("target", type=str, help="the target", **flag_kwargs)
-    def cmd(target):
+    def cmd(ctx, target):
         print(f"target={target}")
 
     return app
@@ -21,7 +21,7 @@ def _make_app_with_bool_flag():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-    def cmd(verbose):
+    def cmd(ctx, verbose):
         print(f"verbose={verbose}")
 
     return app
@@ -73,7 +73,7 @@ def test_short_flag_bool():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("verbose", short="v", type=bool, default=False, help="be verbose")
-    def cmd(verbose):
+    def cmd(ctx, verbose):
         print(f"verbose={verbose}")
 
     r = app.test(["cmd", "-v"])
@@ -87,7 +87,7 @@ def test_short_flag_with_value():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("target", short="t", type=str, help="the target")
-    def cmd(target):
+    def cmd(ctx, target):
         print(f"target={target}")
 
     r = app.test(["cmd", "-t", "foo"])
@@ -117,7 +117,7 @@ def test_double_dash_separator():
 
     @app.command("cmd", help="a command", args=[strictcli.Arg(name="path", help="a path")])
     @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-    def cmd(verbose, path):
+    def cmd(ctx, verbose, path):
         print(f"verbose={verbose} path={path}")
 
     r = app.test(["cmd", "--", "--not-a-flag"])
@@ -135,7 +135,7 @@ def test_positional_args_in_order():
         help="a command",
         args=[strictcli.Arg(name="src", help="source"), strictcli.Arg(name="dst", help="dest")],
     )
-    def cmd(src, dst):
+    def cmd(ctx, src, dst):
         print(f"src={src} dst={dst}")
 
     r = app.test(["cmd", "a.txt", "b.txt"])
@@ -149,7 +149,7 @@ def test_missing_required_positional_arg():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", args=[strictcli.Arg(name="path", help="a path")])
-    def cmd(path):
+    def cmd(ctx, path):
         pass
 
     r = app.test(["cmd"])
@@ -162,7 +162,7 @@ def test_extra_positional_arg():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    def cmd():
+    def cmd(ctx):
         pass
 
     r = app.test(["cmd", "surprise"])
@@ -184,7 +184,7 @@ def test_str_flag_value_starting_with_hyphen():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("offset", short="o", type=str, help="the offset")
-    def cmd(offset):
+    def cmd(ctx, offset):
         print(f"offset={offset}")
 
     # Long flag form

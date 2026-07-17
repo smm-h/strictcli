@@ -29,7 +29,7 @@ def test_version_output_with_explicit_version():
     app = strictcli.App(name="myapp", version="5.6.7", help="test app")
 
     @app.command("noop", help="does nothing")
-    def noop():
+    def noop(ctx):
         pass
 
     r = app.test(["--version"])
@@ -43,7 +43,7 @@ def test_version_output_with_auto_detected_version():
         app = strictcli.App(name="my-tool", help="test app")
 
     @app.command("noop", help="does nothing")
-    def noop():
+    def noop(ctx):
         pass
 
     r = app.test(["--version"])
@@ -56,7 +56,7 @@ def test_version_output_with_unknown_fallback():
     app = strictcli.App(name="not-installed-pkg-abc", help="test app")
 
     @app.command("noop", help="does nothing")
-    def noop():
+    def noop(ctx):
         pass
 
     r = app.test(["--version"])
@@ -70,7 +70,7 @@ def test_help_shows_auto_detected_version():
         app = strictcli.App(name="mytool", help="a great tool")
 
     @app.command("noop", help="does nothing")
-    def noop():
+    def noop(ctx):
         pass
 
     r = app.test([])

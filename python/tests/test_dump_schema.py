@@ -32,7 +32,7 @@ class TestDumpSchemaBasic:
         app = _make_app()
 
         @app.command("greet", help="Say hello")
-        def greet():
+        def greet(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -47,7 +47,7 @@ class TestDumpSchemaBasic:
         app = _make_app()
 
         @app.command("greet", help="Say hello")
-        def greet():
+        def greet(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -64,7 +64,7 @@ class TestSchemaContent:
         app = _make_app(name="myapp", version="2.3.4", help="My great app")
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -78,7 +78,7 @@ class TestSchemaContent:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -90,7 +90,7 @@ class TestSchemaContent:
         app = _make_app(env_prefix="MYAPP")
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -102,7 +102,7 @@ class TestSchemaContent:
         app_no_config = _make_app(config=False)
 
         @app_no_config.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app_no_config.test(["--dump-schema"])
@@ -121,7 +121,7 @@ class TestSchemaCommands:
         @strictcli.flag("target", type=str, help="Deploy target", short="t",
                         choices=["prod", "staging"])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
-        def deploy(target, force_deploy):
+        def deploy(ctx, target, force_deploy):
             pass
 
         app.test(["--dump-schema"])
@@ -152,7 +152,7 @@ class TestSchemaCommands:
 
         @app.command("greet", help="Greet someone",
                      args=[strictcli.Arg(name="name", help="Who to greet")])
-        def greet(name):
+        def greet(ctx, name):
             pass
 
         app.test(["--dump-schema"])
@@ -171,7 +171,7 @@ class TestSchemaCommands:
 
         @app.command("run", help="Run a command",
                      passthrough=strictcli.Passthrough(
-                         handler=lambda name, args, globals: 0))
+                         handler=lambda ctx, name, args, globals: 0))
         def run():
             pass
 
@@ -185,7 +185,7 @@ class TestSchemaCommands:
         app = _make_app()
 
         @app.command("greet", help="Say hello")
-        def greet():
+        def greet(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -203,12 +203,12 @@ class TestSchemaGroups:
         dns = app.group("dns", help="DNS management")
 
         @dns.command("list", help="List DNS records")
-        def dns_list():
+        def dns_list(ctx):
             pass
 
         @dns.command("add", help="Add a DNS record")
         @strictcli.flag("type", type=str, help="Record type")
-        def dns_add(type):
+        def dns_add(ctx, type):
             pass
 
         app.test(["--dump-schema"])
@@ -228,7 +228,7 @@ class TestSchemaGroups:
         zone = dns.group("zone", help="Zone management")
 
         @zone.command("list", help="List zones")
-        def zone_list():
+        def zone_list(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -246,7 +246,7 @@ class TestSchemaGroups:
         dns = app.group("dns", help="DNS management")
 
         @dns.command("list", help="List DNS records")
-        def dns_list():
+        def dns_list(ctx):
             pass
 
         dns.deprecate("old-cmd", message="Use 'list' instead")
@@ -272,7 +272,7 @@ class TestSchemaGlobalFlags:
         )
 
         @app.command("noop", help="Does nothing")
-        def noop(verbose, output):
+        def noop(ctx, verbose, output):
             pass
 
         app.test(["--dump-schema"])
@@ -300,7 +300,7 @@ class TestSchemaDeprecated:
         app = _make_app()
 
         @app.command("new-cmd", help="The new command")
-        def new_cmd():
+        def new_cmd(ctx):
             pass
 
         app.deprecate("old-cmd", message="Use 'new-cmd' instead")
@@ -320,7 +320,7 @@ class TestSchemaDirectoryCreation:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -337,7 +337,7 @@ class TestSchemaDirectoryCreation:
         app = _make_app(version="3.0.0")
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -370,7 +370,7 @@ class TestSchemaFlagTypes:
 
         @app.command("cmd", help="A command")
         @strictcli.flag("count", type=int, help="How many", default=5)
-        def cmd(count):
+        def cmd(ctx, count):
             pass
 
         app.test(["--dump-schema"])
@@ -385,7 +385,7 @@ class TestSchemaFlagTypes:
 
         @app.command("cmd", help="A command")
         @strictcli.flag("ratio", type=float, help="The ratio", default=0.5)
-        def cmd(ratio):
+        def cmd(ctx, ratio):
             pass
 
         app.test(["--dump-schema"])
@@ -400,7 +400,7 @@ class TestSchemaFlagTypes:
 
         @app.command("cmd", help="A command")
         @strictcli.flag("tag", type=str, help="A tag", repeatable=True, unique=False)
-        def cmd(tag):
+        def cmd(ctx, tag):
             pass
 
         app.test(["--dump-schema"])
@@ -415,7 +415,7 @@ class TestSchemaFlagTypes:
 
         @app.command("cmd", help="A command")
         @strictcli.flag("token", type=str, help="Auth token", env="MYAPP_TOKEN")
-        def cmd(token):
+        def cmd(ctx, token):
             pass
 
         app.test(["--dump-schema"])
@@ -429,7 +429,7 @@ class TestSchemaFlagTypes:
 
         @app.command("cmd", help="A command")
         @strictcli.flag("force-it", type=bool, default=False, help="Force it", negatable=False)
-        def cmd(force_it):
+        def cmd(ctx, force_it):
             pass
 
         app.test(["--dump-schema"])
@@ -446,7 +446,7 @@ class TestDumpSchemaWithOtherArgs:
         app = _make_app()
 
         @app.command("greet", help="Say hello")
-        def greet():
+        def greet(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -459,7 +459,7 @@ class TestDumpSchemaWithOtherArgs:
         app = _make_app()
 
         @app.command("greet", help="Say hello")
-        def greet():
+        def greet(ctx):
             pass
 
         result = app.test(["greet", "--dump-schema"])
@@ -472,7 +472,7 @@ class TestDumpSchemaWithOtherArgs:
         app = _make_app()
 
         @app.command("greet", help="Say hello")
-        def greet():
+        def greet(ctx):
             pass
 
         result = app.test(["--", "--dump-schema"])
@@ -488,7 +488,7 @@ class TestSchemaDefaults:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -501,7 +501,7 @@ class TestSchemaDefaults:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -556,7 +556,7 @@ class TestSchemaOmitsDefaults:
 
         @app.command("cmd", help="A command")
         @strictcli.flag("name", type=str, help="A name")
-        def cmd(name):
+        def cmd(ctx, name):
             pass
 
         app.test(["--dump-schema"])
@@ -580,7 +580,7 @@ class TestSchemaOmitsDefaults:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -597,7 +597,7 @@ class TestSchemaOmitsDefaults:
         grp = app.group("stuff", help="Stuff management")
 
         @grp.command("do", help="Do stuff")
-        def do_stuff():
+        def do_stuff(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -614,7 +614,7 @@ class TestSchemaOmitsDefaults:
 
         @app.command("cmd", help="A command",
                      args=[strictcli.Arg(name="target", help="The target")])
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
         app.test(["--dump-schema"])
@@ -636,7 +636,7 @@ class TestSchemaNonDefaultValues:
         @app.command("cmd", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
                                          required=False)])
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
         app.test(["--dump-schema"])
@@ -651,7 +651,7 @@ class TestSchemaNonDefaultValues:
         @app.command("cmd", help="A command",
                      args=[strictcli.Arg(name="files", help="Files to process",
                                          variadic=True)])
-        def cmd(files):
+        def cmd(ctx, files):
             pass
 
         app.test(["--dump-schema"])
@@ -665,7 +665,7 @@ class TestSchemaNonDefaultValues:
 
         @app.command("run", help="Run a command",
                      passthrough=strictcli.Passthrough(
-                         handler=lambda name, args, globals: 0))
+                         handler=lambda ctx, name, args, globals: 0))
         def run():
             pass
 
@@ -681,7 +681,7 @@ class TestSchemaNonDefaultValues:
         @app.command("cmd", help="A command")
         @strictcli.flag("level", type=int, help="Level", short="l",
                         default=3, env="MY_LEVEL", choices=[1, 2, 3])
-        def cmd(level):
+        def cmd(ctx, level):
             pass
 
         app.test(["--dump-schema"])
@@ -697,7 +697,7 @@ class TestSchemaNonDefaultValues:
         app = _make_app(config=True)
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -713,7 +713,7 @@ class TestSchemaProjectId:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -728,7 +728,7 @@ class TestSchemaProjectId:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -741,7 +741,7 @@ class TestSchemaProjectId:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -754,7 +754,7 @@ class TestSchemaProjectId:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -770,7 +770,7 @@ class TestSchemaVersion:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -783,7 +783,7 @@ class TestSchemaVersion:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -801,7 +801,7 @@ class TestSchemaConstraints:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -817,7 +817,7 @@ class TestSchemaConstraints:
 
         @app.command("show", help="Show data",
                      mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])])
-        def show(json, text):
+        def show(ctx, json, text):
             pass
 
         app.test(["--dump-schema"])
@@ -837,7 +837,7 @@ class TestSchemaConstraints:
                      dependencies=[strictcli.CoRequired(flags=["host", "port"])])
         @strictcli.flag("host", type=str, help="Hostname")
         @strictcli.flag("port", type=int, help="Port number")
-        def deploy(host, port):
+        def deploy(ctx, host, port):
             pass
 
         app.test(["--dump-schema"])
@@ -856,7 +856,7 @@ class TestSchemaConstraints:
                      dependencies=[strictcli.Requires(flag="port", depends_on="host")])
         @strictcli.flag("host", type=str, help="Hostname")
         @strictcli.flag("port", type=int, help="Port number")
-        def deploy(host, port):
+        def deploy(ctx, host, port):
             pass
 
         app.test(["--dump-schema"])
@@ -877,7 +877,7 @@ class TestSchemaConstraints:
                          flag="force-deploy", implies="yes", value=True)])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
         @strictcli.flag("yes", type=bool, default=False, help="Skip confirmation")
-        def deploy(force_deploy, yes):
+        def deploy(ctx, force_deploy, yes):
             pass
 
         app.test(["--dump-schema"])
@@ -906,7 +906,7 @@ class TestSchemaConstraints:
                      ])
         @strictcli.flag("host", type=str, help="Hostname")
         @strictcli.flag("port", type=int, help="Port number")
-        def deploy(json, text, host, port):
+        def deploy(ctx, json, text, host, port):
             pass
 
         app.test(["--dump-schema"])
@@ -926,7 +926,7 @@ class TestSchemaConstraints:
                          flags=["dry-run", "skip-confirm"])])
         @strictcli.flag("dry-run", type=bool, default=False, help="Dry run")
         @strictcli.flag("skip-confirm", type=bool, default=False, help="Skip confirmation")
-        def deploy(dry_run, skip_confirm):
+        def deploy(ctx, dry_run, skip_confirm):
             pass
 
         app.test(["--dump-schema"])
@@ -944,7 +944,7 @@ class TestSchemaTagContracts:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -958,7 +958,7 @@ class TestSchemaTagContracts:
 
         @app.command("deploy", help="Deploy", tags=["dangerous"])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force it")
-        def deploy(force_deploy):
+        def deploy(ctx, force_deploy):
             pass
 
         app.test(["--dump-schema"])
@@ -975,7 +975,7 @@ class TestSchemaTagContracts:
         @app.command("deploy", help="Deploy", tags=["dangerous", "slow"])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force it")
         @strictcli.flag("timeout", type=int, help="Timeout", default=30)
-        def deploy(force_deploy, timeout):
+        def deploy(ctx, force_deploy, timeout):
             pass
 
         app.test(["--dump-schema"])
@@ -996,7 +996,7 @@ class TestSchemaArgDefaults:
 
         @app.command("cmd", help="A command",
                      args=[strictcli.Arg(name="target", help="The target")])
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
         app.test(["--dump-schema"])
@@ -1011,7 +1011,7 @@ class TestSchemaArgDefaults:
         @app.command("cmd", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
                                          required=False, default="localhost")])
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
         app.test(["--dump-schema"])
@@ -1027,7 +1027,7 @@ class TestSchemaArgDefaults:
         @app.command("cmd", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
                                          required=False, default=None)])
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
         app.test(["--dump-schema"])
@@ -1050,7 +1050,7 @@ class TestSchemaProjectIdMismatch:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -1070,7 +1070,7 @@ class TestSchemaProjectIdMismatch:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -1083,7 +1083,7 @@ class TestSchemaProjectIdMismatch:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -1098,7 +1098,7 @@ class TestSchemaProjectIdMismatch:
         app = _make_app()
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -1116,7 +1116,7 @@ class TestDumpSchemaDict:
         app = _make_app()
 
         @app.command("greet", help="Say hello")
-        def greet():
+        def greet(ctx):
             pass
 
         d = app.dump_schema_dict()
@@ -1143,7 +1143,7 @@ class TestDumpSchemaDict:
 
         @app.command("greet", help="Say hello")
         @strictcli.flag("loud", type=bool, help="be loud", default=False)
-        def greet(loud):
+        def greet(ctx, loud):
             pass
 
         result = app.test(["--dump-schema"])
@@ -1191,7 +1191,7 @@ class TestSchemaMarkerDefault:
             help="db path",
             default=strictcli.RelativeToRoot("MYAPP_HOME", "sub", "db.sqlite"),
         )
-        def run(db):
+        def run(ctx, db):
             return 0
 
         # The full --dump-schema round-trip must not crash and must write the

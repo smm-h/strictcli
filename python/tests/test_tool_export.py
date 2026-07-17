@@ -24,7 +24,7 @@ class TestJsonSchemaBasicTypes:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("name", type=str, help="a name")
-        def cmd(name):
+        def cmd(ctx, name):
             pass
 
         schema = app.json_schema("cmd")
@@ -35,7 +35,7 @@ class TestJsonSchemaBasicTypes:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("count", type=int, help="a count")
-        def cmd(count):
+        def cmd(ctx, count):
             pass
 
         schema = app.json_schema("cmd")
@@ -46,7 +46,7 @@ class TestJsonSchemaBasicTypes:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("factor", type=float, help="a factor")
-        def cmd(factor):
+        def cmd(ctx, factor):
             pass
 
         schema = app.json_schema("cmd")
@@ -57,7 +57,7 @@ class TestJsonSchemaBasicTypes:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-        def cmd(verbose):
+        def cmd(ctx, verbose):
             pass
 
         schema = app.json_schema("cmd")
@@ -71,7 +71,7 @@ class TestJsonSchemaBasicTypes:
         @strictcli.flag("count", type=int, help="integer flag")
         @strictcli.flag("factor", type=float, help="number flag")
         @strictcli.flag("verbose", type=bool, default=False, help="boolean flag")
-        def cmd(name, count, factor, verbose):
+        def cmd(ctx, name, count, factor, verbose):
             pass
 
         schema = app.json_schema("cmd")
@@ -92,7 +92,7 @@ class TestJsonSchemaRequired:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("name", type=str, help="required name")
-        def cmd(name):
+        def cmd(ctx, name):
             pass
 
         schema = app.json_schema("cmd")
@@ -104,7 +104,7 @@ class TestJsonSchemaRequired:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("name", type=str, default="world", help="optional name")
-        def cmd(name):
+        def cmd(ctx, name):
             pass
 
         schema = app.json_schema("cmd")
@@ -116,7 +116,7 @@ class TestJsonSchemaRequired:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-        def cmd(verbose):
+        def cmd(ctx, verbose):
             pass
 
         schema = app.json_schema("cmd")
@@ -128,7 +128,7 @@ class TestJsonSchemaRequired:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("items", type=list[int], help="item list", unique=False)
-        def cmd(items):
+        def cmd(ctx, items):
             pass
 
         schema = app.json_schema("cmd")
@@ -140,7 +140,7 @@ class TestJsonSchemaRequired:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("labels", type=dict[str, str], help="label map")
-        def cmd(labels):
+        def cmd(ctx, labels):
             pass
 
         schema = app.json_schema("cmd")
@@ -151,7 +151,7 @@ class TestJsonSchemaRequired:
         app = _build_app()
 
         @app.command("cmd", help="a command", args=[strictcli.Arg(name="target", help="the target")])
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
         schema = app.json_schema("cmd")
@@ -164,7 +164,7 @@ class TestJsonSchemaRequired:
         @app.command("cmd", help="a command", args=[
             strictcli.Arg(name="target", help="the target", required=False),
         ])
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
         schema = app.json_schema("cmd")
@@ -179,7 +179,7 @@ class TestJsonSchemaChoices:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("env", type=str, choices=["dev", "staging", "prod"], help="environment")
-        def cmd(env):
+        def cmd(ctx, env):
             pass
 
         schema = app.json_schema("cmd")
@@ -191,7 +191,7 @@ class TestJsonSchemaChoices:
         @app.command("cmd", help="a command", args=[
             strictcli.Arg(name="level", help="log level", choices=["debug", "info", "warn"]),
         ])
-        def cmd(level):
+        def cmd(ctx, level):
             pass
 
         schema = app.json_schema("cmd")
@@ -202,7 +202,7 @@ class TestJsonSchemaChoices:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("name", type=str, help="a name")
-        def cmd(name):
+        def cmd(ctx, name):
             pass
 
         schema = app.json_schema("cmd")
@@ -217,7 +217,7 @@ class TestJsonSchemaDescription:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("name", type=str, help="the person's name")
-        def cmd(name):
+        def cmd(ctx, name):
             pass
 
         schema = app.json_schema("cmd")
@@ -229,7 +229,7 @@ class TestJsonSchemaDescription:
         @app.command("cmd", help="a command", args=[
             strictcli.Arg(name="target", help="deployment target"),
         ])
-        def cmd(target):
+        def cmd(ctx, target):
             pass
 
         schema = app.json_schema("cmd")
@@ -245,7 +245,7 @@ class TestJsonSchemaPositionalArgs:
         @app.command("cmd", help="a command", args=[
             strictcli.Arg(name="filename", help="file to process"),
         ])
-        def cmd(filename):
+        def cmd(ctx, filename):
             pass
 
         schema = app.json_schema("cmd")
@@ -258,7 +258,7 @@ class TestJsonSchemaPositionalArgs:
         @app.command("cmd", help="a command", args=[
             strictcli.Arg(name="port", help="port number", type=int),
         ])
-        def cmd(port):
+        def cmd(ctx, port):
             pass
 
         schema = app.json_schema("cmd")
@@ -272,7 +272,7 @@ class TestJsonSchemaPositionalArgs:
             strictcli.Arg(name="target", help="the target"),
         ])
         @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-        def cmd(target, verbose):
+        def cmd(ctx, target, verbose):
             pass
 
         schema = app.json_schema("cmd")
@@ -288,7 +288,7 @@ class TestJsonSchemaListFlag:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("ids", type=list[int], help="list of ids", unique=False)
-        def cmd(ids):
+        def cmd(ctx, ids):
             pass
 
         schema = app.json_schema("cmd")
@@ -301,7 +301,7 @@ class TestJsonSchemaListFlag:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("tags", type=list[str], help="tag list", unique=False)
-        def cmd(tags):
+        def cmd(ctx, tags):
             pass
 
         schema = app.json_schema("cmd")
@@ -314,7 +314,7 @@ class TestJsonSchemaListFlag:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("weights", type=list[float], help="weight list", unique=False)
-        def cmd(weights):
+        def cmd(ctx, weights):
             pass
 
         schema = app.json_schema("cmd")
@@ -331,7 +331,7 @@ class TestJsonSchemaDictFlag:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("labels", type=dict[str, str], help="label map")
-        def cmd(labels):
+        def cmd(ctx, labels):
             pass
 
         schema = app.json_schema("cmd")
@@ -344,7 +344,7 @@ class TestJsonSchemaDictFlag:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="count map")
-        def cmd(counts):
+        def cmd(ctx, counts):
             pass
 
         schema = app.json_schema("cmd")
@@ -362,7 +362,7 @@ class TestJsonSchemaNestedPath:
 
         @grp.command("migrate", help="run migrations")
         @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def migrate(dry_run):
+        def migrate(ctx, dry_run):
             pass
 
         schema = app.json_schema("db.migrate")
@@ -376,7 +376,7 @@ class TestJsonSchemaNestedPath:
 
         @grp2.command("upload", help="upload a file")
         @strictcli.flag("bucket", type=str, help="target bucket")
-        def upload(bucket):
+        def upload(ctx, bucket):
             pass
 
         schema = app.json_schema("cloud.storage.upload")
@@ -391,7 +391,7 @@ class TestJsonSchemaInvalidPath:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        def cmd():
+        def cmd(ctx):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="unknown command"):
@@ -403,7 +403,7 @@ class TestJsonSchemaInvalidPath:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        def migrate():
+        def migrate(ctx):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="is a group"):
@@ -418,7 +418,7 @@ class TestJsonSchemaFlagNameConversion:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def cmd(dry_run):
+        def cmd(ctx, dry_run):
             pass
 
         schema = app.json_schema("cmd")
@@ -435,7 +435,7 @@ class TestJsonSchemaVariadicArg:
         @app.command("cmd", help="a command", args=[
             strictcli.Arg(name="numbers", help="numbers to sum", type=list[int], variadic=True),
         ])
-        def cmd(numbers):
+        def cmd(ctx, numbers):
             pass
 
         schema = app.json_schema("cmd")
@@ -452,7 +452,7 @@ class TestJsonSchemaStructure:
 
         @app.command("cmd", help="a command")
         @strictcli.flag("name", type=str, help="a name")
-        def cmd(name):
+        def cmd(ctx, name):
             pass
 
         schema = app.json_schema("cmd")
@@ -466,7 +466,7 @@ class TestJsonSchemaStructure:
         app = _build_app()
 
         @app.command("noop", help="does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         schema = app.json_schema("noop")
@@ -487,7 +487,7 @@ class TestAsToolsCount:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -498,15 +498,15 @@ class TestAsToolsCount:
         app = _build_app()
 
         @app.command("deploy", help="deploy")
-        def deploy():
+        def deploy(ctx):
             pass
 
         @app.command("status", help="show status")
-        def status():
+        def status(ctx):
             pass
 
         @app.command("rollback", help="rollback")
-        def rollback():
+        def rollback(ctx):
             pass
 
         tools = app.as_tools()
@@ -518,11 +518,11 @@ class TestAsToolsCount:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        def migrate():
+        def migrate(ctx):
             pass
 
         @grp.command("seed", help="seed data")
-        def seed():
+        def seed(ctx):
             pass
 
         tools = app.as_tools()
@@ -536,11 +536,11 @@ class TestAsToolsHiddenExcluded:
         app = _build_app()
 
         @app.command("visible", help="a visible command")
-        def visible():
+        def visible(ctx):
             pass
 
         @app.command("secret", help="a hidden command", hidden=True)
-        def secret():
+        def secret(ctx):
             pass
 
         tools = app.as_tools()
@@ -553,13 +553,13 @@ class TestAsToolsHiddenExcluded:
         app = _build_app()
 
         @app.command("visible", help="a visible command")
-        def visible():
+        def visible(ctx):
             pass
 
         grp = app.group("internal", help="internal commands", hidden=True)
 
         @grp.command("debug", help="debug command")
-        def debug():
+        def debug(ctx):
             pass
 
         tools = app.as_tools()
@@ -575,11 +575,11 @@ class TestAsToolsInteractiveExcluded:
         app = _build_app()
 
         @app.command("batch", help="batch operation")
-        def batch():
+        def batch(ctx):
             pass
 
         @app.command("wizard", help="interactive wizard", interactive=True)
-        def wizard():
+        def wizard(ctx):
             pass
 
         tools = app.as_tools()
@@ -595,7 +595,7 @@ class TestAsToolsConfigCommands:
         app = _build_app(config=True)
 
         @app.command("run", help="run the app")
-        def run():
+        def run(ctx):
             pass
 
         tools = app.as_tools()
@@ -618,7 +618,7 @@ class TestAsToolsToolAttributes:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -629,7 +629,7 @@ class TestAsToolsToolAttributes:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -641,7 +641,7 @@ class TestAsToolsToolAttributes:
 
         @app.command("deploy", help="deploy the app")
         @strictcli.flag("target", type=str, help="deploy target")
-        def deploy(target):
+        def deploy(ctx, target):
             pass
 
         tools = app.as_tools()
@@ -653,7 +653,7 @@ class TestAsToolsToolAttributes:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -671,7 +671,7 @@ class TestAsToolsExecuteIsAsync:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -687,7 +687,7 @@ class TestAsToolsGroupedPaths:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        def migrate():
+        def migrate(ctx):
             pass
 
         tools = app.as_tools()
@@ -700,7 +700,7 @@ class TestAsToolsGroupedPaths:
         grp2 = grp1.group("storage", help="storage commands")
 
         @grp2.command("upload", help="upload a file")
-        def upload():
+        def upload(ctx):
             pass
 
         tools = app.as_tools()
@@ -721,7 +721,7 @@ class TestRouterTool:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -732,7 +732,7 @@ class TestRouterTool:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -744,11 +744,11 @@ class TestRouterTool:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         @app.command("status", help="show status")
-        def status():
+        def status(ctx):
             pass
 
         tools = app.as_tools()
@@ -765,9 +765,9 @@ class TestRouterTool:
 
         @app.command("greet", help="greet someone")
         @strictcli.flag("name", type=str, help="person to greet")
-        def greet(name):
+        def greet(ctx, name):
             captured["name"] = name
-            return {"greeting": f"hello {name}"}
+            return strictcli.outcome(data={"greeting": f"hello {name}"})
 
         tools = app.as_tools()
         router = tools[-1]
@@ -780,11 +780,11 @@ class TestRouterTool:
         app = _build_app()
 
         @app.command("deploy", help="deploy the app")
-        def deploy():
+        def deploy(ctx):
             pass
 
         @app.command("status", help="show status")
-        def status():
+        def status(ctx):
             pass
 
         tools = app.as_tools()
@@ -810,8 +810,8 @@ class TestToolExecute:
         app = _build_app()
 
         @app.command("info", help="get info")
-        def info():
-            return {"version": "1.0.0", "status": "ok"}
+        def info(ctx):
+            return strictcli.outcome(data={"version": "1.0.0", "status": "ok"})
 
         tools = app.as_tools()
         info_tool = next(t for t in tools if t.name == "info")
@@ -825,9 +825,9 @@ class TestToolExecute:
         @app.command("deploy", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
-        def deploy(target, count):
+        def deploy(ctx, target, count):
             captured.update({"target": target, "count": count})
-            return {"deployed": target, "count": count}
+            return strictcli.outcome(data={"deployed": target, "count": count})
 
         tools = app.as_tools()
         deploy_tool = next(t for t in tools if t.name == "deploy")
@@ -840,7 +840,7 @@ class TestToolExecute:
         app = _build_app()
 
         @app.command("noop", help="does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         tools = app.as_tools()
@@ -852,7 +852,7 @@ class TestToolExecute:
         app = _build_app()
 
         @app.command("count", help="count things")
-        def count():
+        def count(ctx):
             return 42
 
         tools = app.as_tools()
@@ -869,7 +869,7 @@ class TestToolExecuteErrors:
 
         @app.command("deploy", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target")
-        def deploy(target):
+        def deploy(ctx, target):
             pass
 
         tools = app.as_tools()
@@ -881,7 +881,7 @@ class TestToolExecuteErrors:
         app = _build_app()
 
         @app.command("deploy", help="deploy")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -893,7 +893,7 @@ class TestToolExecuteErrors:
         app = _build_app()
 
         @app.command("deploy", help="deploy")
-        def deploy():
+        def deploy(ctx):
             pass
 
         tools = app.as_tools()
@@ -912,9 +912,9 @@ class TestToolExecuteGroupedCommand:
 
         @grp.command("migrate", help="run migrations")
         @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def migrate(dry_run):
+        def migrate(ctx, dry_run):
             captured["dry_run"] = dry_run
-            return {"migrated": True, "dry_run": dry_run}
+            return strictcli.outcome(data={"migrated": True, "dry_run": dry_run})
 
         tools = app.as_tools()
         migrate_tool = next(t for t in tools if t.name == "db.migrate")

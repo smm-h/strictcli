@@ -23,7 +23,7 @@ def _make_config_app(config=True, flags=None):
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
     @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-    def run(target, count, verbose):
+    def run(ctx, target, count, verbose):
         print(f"target={target} count={count} verbose={verbose}")
 
     return app
@@ -104,7 +104,7 @@ def test_env_overrides_config(tmp_path, monkeypatch):
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val",
                      env="TESTAPP_TARGET")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     monkeypatch.setenv("TESTAPP_TARGET", "from-env")
@@ -280,7 +280,7 @@ def test_config_with_global_flags(tmp_path, monkeypatch):
     )
 
     @app.command("run", help="run something")
-    def run(output):
+    def run(ctx, output):
         print(f"output={output}")
 
     r = app.test(["run"])
@@ -322,7 +322,7 @@ def test_config_choices_validation(tmp_path, monkeypatch):
     @app.command("run", help="run something")
     @strictcli.flag("format", type=str, help="output format",
                      choices=["json", "yaml", "text"], default="text")
-    def run(format):
+    def run(ctx, format):
         print(f"format={format}")
 
     r = app.test(["run"])
@@ -351,7 +351,7 @@ def test_config_validate_function(tmp_path, monkeypatch):
     @app.command("run", help="run something")
     @strictcli.flag("port", type=int, help="port number", default=8080,
                      validate=validate_port)
-    def run(port):
+    def run(ctx, port):
         print(f"port={port}")
 
     r = app.test(["run"])
@@ -375,7 +375,7 @@ def test_config_float_value(tmp_path, monkeypatch):
 
     @app.command("run", help="run something")
     @strictcli.flag("ratio", type=float, help="ratio value", default=1.0)
-    def run(ratio):
+    def run(ctx, ratio):
         print(f"ratio={ratio}")
 
     r = app.test(["run"])
@@ -399,7 +399,7 @@ def test_config_int_as_float(tmp_path, monkeypatch):
 
     @app.command("run", help="run something")
     @strictcli.flag("ratio", type=float, help="ratio value", default=1.0)
-    def run(ratio):
+    def run(ctx, ratio):
         print(f"ratio={ratio}")
 
     r = app.test(["run"])
@@ -424,7 +424,7 @@ def test_custom_config_path(tmp_path, monkeypatch):
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["run"])
@@ -450,7 +450,7 @@ def test_custom_config_path_tilde_expansion(tmp_path, monkeypatch):
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["run"])
@@ -472,7 +472,7 @@ def test_custom_config_path_config_path_command(tmp_path):
     )
 
     @app.command("run", help="run something")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["config", "path"])
@@ -494,7 +494,7 @@ def test_custom_config_path_config_set(tmp_path):
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["config", "set", "target", "written"])
@@ -524,7 +524,7 @@ def test_toml_format_reads_correctly(tmp_path):
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
     @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-    def run(target, count, verbose):
+    def run(ctx, target, count, verbose):
         print(f"target={target} count={count} verbose={verbose}")
 
     r = app.test(["run"])
@@ -549,7 +549,7 @@ def test_toml_format_set_writes_correctly(tmp_path):
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["config", "set", "target", "toml-written"])
@@ -578,7 +578,7 @@ def test_toml_format_set_preserves_existing(tmp_path):
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["config", "set", "target", "new-val"])
@@ -606,7 +606,7 @@ def test_toml_format_config_path_command(tmp_path):
     )
 
     @app.command("run", help="run something")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["config", "path"])
@@ -627,7 +627,7 @@ def test_toml_format_xdg_default_path(tmp_path, monkeypatch):
     )
 
     @app.command("run", help="run something")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["config", "path"])
@@ -652,7 +652,7 @@ def test_invalid_toml_hard_error(tmp_path):
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["run"])
@@ -699,7 +699,7 @@ def test_toml_config_show(tmp_path):
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
-    def run(target, count):
+    def run(ctx, target, count):
         pass
 
     r = app.test(["config", "show", "--plain"])
@@ -724,7 +724,7 @@ def test_toml_float_value(tmp_path):
 
     @app.command("run", help="run something")
     @strictcli.flag("ratio", type=float, help="ratio value", default=1.0)
-    def run(ratio):
+    def run(ctx, ratio):
         print(f"ratio={ratio}")
 
     r = app.test(["run"])
@@ -804,7 +804,7 @@ def _make_repeatable_config_app(tmp_path, monkeypatch, config_data,
     @app.command("run", help="run something")
     @strictcli.flag(flag_name, type=flag_type, help="the flag",
                      repeatable=True, unique=False)
-    def run(**kwargs):
+    def run(ctx, **kwargs):
         val = kwargs[flag_name.replace("-", "_")]
         print(f"val={val}")
 
@@ -853,7 +853,7 @@ def test_config_array_for_non_repeatable_error(tmp_path, monkeypatch):
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="x")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["run"])
@@ -925,7 +925,7 @@ def _make_unique_config_app(tmp_path, monkeypatch, config_data,
     @app.command("run", help="run something")
     @strictcli.flag(flag_name, type=flag_type, help="the flag",
                      repeatable=True, unique=unique)
-    def run(**kwargs):
+    def run(ctx, **kwargs):
         val = kwargs[flag_name.replace("-", "_")]
         print(f"val={val}")
 
@@ -965,7 +965,7 @@ def test_config_show_plain_array(tmp_path, monkeypatch):
     @app.command("run", help="run something")
     @strictcli.flag("tags", type=str, help="the tags",
                      repeatable=True, unique=False)
-    def run(**kwargs):
+    def run(ctx, **kwargs):
         pass
 
     r = app.test(["config", "show", "--plain"])
@@ -988,7 +988,7 @@ def test_config_show_json_array(tmp_path, monkeypatch):
     @app.command("run", help="run something")
     @strictcli.flag("tags", type=str, help="the tags",
                      repeatable=True, unique=False)
-    def run(**kwargs):
+    def run(ctx, **kwargs):
         pass
 
     r = app.test(["config", "show", "--json"])
@@ -1017,7 +1017,7 @@ def test_config_unique_enforcement_global_flag(tmp_path, monkeypatch):
     )
 
     @app.command("run", help="run something")
-    def run(**kwargs):
+    def run(ctx, **kwargs):
         print(f"tags={kwargs['tags']}")
 
     r = app.test(["run"])
@@ -1123,7 +1123,7 @@ def _make_config_set_app(config_path=None, config_format="json"):
     @strictcli.flag("ids", type=int, help="unique ids", repeatable=True,
                     unique=True)
     @strictcli.flag("name", type=str, help="name", default="default")
-    def run(tags, counts, rates, ids, name):
+    def run(ctx, tags, counts, rates, ids, name):
         print(f"tags={tags} counts={counts} rates={rates} ids={ids} name={name}")
 
     return app
@@ -1326,7 +1326,7 @@ def test_config_flag_selects_file(tmp_path, monkeypatch):
 
     @app.command("serve", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
-    def serve(port):
+    def serve(ctx, port):
         print(f"port={port}")
 
     r = app.test(["--config", custom_path, "serve"])
@@ -1345,7 +1345,7 @@ def test_config_flag_equals_form(tmp_path, monkeypatch):
 
     @app.command("serve", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
-    def serve(port):
+    def serve(ctx, port):
         print(f"port={port}")
 
     r = app.test([f"--config={custom_path}", "serve"])
@@ -1370,7 +1370,7 @@ def test_config_flag_overrides_constructed_path(tmp_path, monkeypatch):
 
     @app.command("serve", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
-    def serve(port):
+    def serve(ctx, port):
         print(f"port={port}")
 
     r = app.test(["--config", override_path, "serve"])
@@ -1383,7 +1383,7 @@ def test_config_flag_on_disabled_app_is_error():
     app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
     @app.command("run", help="run")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["--config", "/tmp/fake.json", "run"])
@@ -1396,7 +1396,7 @@ def test_config_flag_after_command_is_unknown():
     app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
 
     @app.command("run", help="run")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["run", "--config", "/tmp/fake.json"])
@@ -1409,7 +1409,7 @@ def test_config_flag_after_double_dash():
     app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
 
     @app.command("run", help="run")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["--", "--config", "/tmp/fake.json"])
@@ -1425,7 +1425,7 @@ def test_config_flag_not_in_schema(tmp_path, monkeypatch):
     app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
 
     @app.command("run", help="run")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["--dump-schema"])
@@ -1454,7 +1454,7 @@ def test_no_default_config_path(tmp_path, monkeypatch):
 
     @app.command("serve", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
-    def serve(port):
+    def serve(ctx, port):
         print(f"port={port}")
 
     r = app.test(["serve"])
@@ -1476,7 +1476,7 @@ def test_no_default_config_path_with_config_flag(tmp_path, monkeypatch):
 
     @app.command("serve", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
-    def serve(port):
+    def serve(ctx, port):
         print(f"port={port}")
 
     r = app.test(["--config", custom_path, "serve"])
@@ -1497,7 +1497,7 @@ def test_malformed_toml_hard_error(tmp_path):
 
     @app.command("run", help="run")
     @strictcli.flag("name", type=str, help="a name", default="")
-    def run(name):
+    def run(ctx, name):
         print(f"name={name}")
 
     r = app.test(["run"])
@@ -1524,7 +1524,7 @@ def test_missing_via_runtime_flag():
     app = strictcli.App(name="testapp", version="1.0.0", help="test", config=True)
 
     @app.command("run", help="run")
-    def run():
+    def run(ctx):
         pass
 
     r = app.test(["--config", "/nonexistent/path/config.json", "run"])
@@ -1541,7 +1541,7 @@ def test_missing_via_config_path_is_soft():
 
     @app.command("run", help="run")
     @strictcli.flag("name", type=str, help="a name", default="default")
-    def run(name):
+    def run(ctx, name):
         print(f"name={name}")
 
     r = app.test(["run"])
@@ -1591,7 +1591,7 @@ def test_duplicate_key_toml_hard_error(tmp_path):
 
     @app.command("run", help="run")
     @strictcli.flag("name", type=str, help="a name", default="")
-    def run(name):
+    def run(ctx, name):
         print(f"name={name}")
 
     r = app.test(["run"])
@@ -1626,7 +1626,7 @@ def test_conflict_mode_error_cli(tmp_path, monkeypatch):
 
     @app.command("run", help="run")
     @strictcli.flag("target", type=str, help="target", default="default-val")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["run", "--target", "from-cli"])
@@ -1651,7 +1651,7 @@ def test_conflict_mode_error_env(tmp_path, monkeypatch):
     @app.command("run", help="run")
     @strictcli.flag("target", type=str, help="target", default="default-val",
                     env="MY_TARGET")
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     r = app.test(["run"])
@@ -1674,7 +1674,7 @@ def test_conflict_mode_implied_excluded(tmp_path, monkeypatch):
                  dependencies=[strictcli.Implies(flag="debug", implies="verbose", value=True)])
     @strictcli.flag("debug", type=bool, help="enable debug", default=False)
     @strictcli.flag("verbose", type=bool, help="be verbose", default=False)
-    def run(debug, verbose):
+    def run(ctx, debug, verbose):
         print(f"verbose={verbose}")
 
     r = app.test(["run", "--debug"])
@@ -1704,7 +1704,7 @@ def test_conflict_mode_fires_before_mutex(tmp_path, monkeypatch):
                                   help="output as YAML")
 
     @app.command("run", help="run", mutex=[strictcli.MutexGroup(flags=[format_json, format_yaml])])
-    def run(format_json, format_yaml):
+    def run(ctx, format_json, format_yaml):
         pass
 
     r = app.test(["run", "--format-json", "--format-yaml"])
@@ -1728,7 +1728,7 @@ def _conflict_app(conflict_mode="error", flag_conflict_mode=strictcli._MISSING,
     @strictcli.flag("target", type=flag_type, help="target", default=default,
                     repeatable=repeatable, unique=unique,
                     conflict_mode=flag_conflict_mode)
-    def run(target):
+    def run(ctx, target):
         print(f"target={target}")
 
     return app

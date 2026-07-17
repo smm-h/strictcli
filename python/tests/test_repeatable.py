@@ -12,7 +12,7 @@ def _make_app_with_repeatable(**flag_kwargs):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("record", help="a record", repeatable=True, **flag_kwargs)
-    def cmd(record):
+    def cmd(ctx, record):
         print(f"record={record!r}")
 
     return app
@@ -48,7 +48,7 @@ def test_repeatable_with_type_int():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False)
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port!r}")
 
     r = app.test(["cmd", "--port", "80", "--port", "443"])
@@ -80,7 +80,7 @@ def test_repeatable_bad_int_value():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False)
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port!r}")
 
     r = app.test(["cmd", "--port", "80", "--port", "abc"])
@@ -141,7 +141,7 @@ def test_repeatable_with_env_var(monkeypatch):
         "record", help="a record", repeatable=True, unique=False,
         env="MYAPP_RECORD", env_separator=",",
     )
-    def cmd(record):
+    def cmd(ctx, record):
         print(f"record={record!r}")
 
     monkeypatch.setenv("MYAPP_RECORD", "fromenv")
@@ -200,7 +200,7 @@ def test_repeatable_env_var_with_type_int(monkeypatch):
         "port", type=int, help="a port", repeatable=True, unique=False,
         env="MYAPP_PORT", env_separator=",",
     )
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port!r}")
 
     monkeypatch.setenv("MYAPP_PORT", "8080")
@@ -266,7 +266,7 @@ def test_env_separator_shown_in_help():
         "tags", help="tags to apply", repeatable=True, unique=False,
         env="MY_TAGS", env_separator=",",
     )
-    def cmd(tags):
+    def cmd(ctx, tags):
         print(f"tags={tags!r}")
 
     r = app.test(["cmd", "--help"])
@@ -286,7 +286,7 @@ def test_env_separator_splits_value(monkeypatch):
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
     )
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     monkeypatch.setenv("TAGS", "a,b,c")
@@ -304,7 +304,7 @@ def test_env_separator_escaped_separator(monkeypatch):
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
     )
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     monkeypatch.setenv("TAGS", "a\\,b,c")
@@ -322,7 +322,7 @@ def test_env_separator_single_value(monkeypatch):
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
     )
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     monkeypatch.setenv("TAGS", "a")
@@ -340,7 +340,7 @@ def test_env_separator_int_coercion(monkeypatch):
         "count", type=int, help="a count", repeatable=True, unique=False,
         env="COUNTS", env_separator=",",
     )
-    def cmd(count):
+    def cmd(ctx, count):
         print(f"count={count!r}")
 
     monkeypatch.setenv("COUNTS", "1,2,3")
@@ -358,7 +358,7 @@ def test_env_separator_int_coercion_error(monkeypatch):
         "count", type=int, help="a count", repeatable=True, unique=False,
         env="COUNTS", env_separator=",",
     )
-    def cmd(count):
+    def cmd(ctx, count):
         print(f"count={count!r}")
 
     monkeypatch.setenv("COUNTS", "1,abc,3")
@@ -376,7 +376,7 @@ def test_env_separator_unique_duplicate_error(monkeypatch):
         "tag", help="a tag", repeatable=True, unique=True,
         env="TAGS", env_separator=",",
     )
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     monkeypatch.setenv("TAGS", "a,b,a")
@@ -394,7 +394,7 @@ def test_env_separator_unique_no_duplicate(monkeypatch):
         "tag", help="a tag", repeatable=True, unique=True,
         env="TAGS", env_separator=",",
     )
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     monkeypatch.setenv("TAGS", "a,b,c")
@@ -412,7 +412,7 @@ def test_env_separator_cli_overrides_env(monkeypatch):
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
     )
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     monkeypatch.setenv("TAGS", "x,y,z")
@@ -430,7 +430,7 @@ def test_env_separator_colon_separator(monkeypatch):
         "path", help="a path", repeatable=True, unique=False,
         env="PATHS", env_separator=":",
     )
-    def cmd(path):
+    def cmd(ctx, path):
         print(f"path={path!r}")
 
     monkeypatch.setenv("PATHS", "/usr/bin:/usr/local/bin:/home/user/bin")
@@ -451,7 +451,7 @@ def test_env_separator_at_prefix_per_element(monkeypatch, tmp_path):
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
     )
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     monkeypatch.setenv("TAGS", f"@{content_file},b")
@@ -473,7 +473,7 @@ def test_env_separator_global_flag(monkeypatch):
     )
 
     @app.command("cmd", help="a command")
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     monkeypatch.setenv("TAGS", "a,b,c")
@@ -491,7 +491,7 @@ def test_env_separator_float_coercion(monkeypatch):
         "rate", type=float, help="a rate", repeatable=True, unique=False,
         env="RATES", env_separator=",",
     )
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate!r}")
 
     monkeypatch.setenv("RATES", "1.5,2.5,3.5")
@@ -509,7 +509,7 @@ def test_env_separator_float_coercion_error(monkeypatch):
         "rate", type=float, help="a rate", repeatable=True, unique=False,
         env="RATES", env_separator=",",
     )
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate!r}")
 
     monkeypatch.setenv("RATES", "1.5,abc")
@@ -527,7 +527,7 @@ def test_env_separator_float_nan_error(monkeypatch):
         "rate", type=float, help="a rate", repeatable=True, unique=False,
         env="RATES", env_separator=",",
     )
-    def cmd(rate):
+    def cmd(ctx, rate):
         print(f"rate={rate!r}")
 
     monkeypatch.setenv("RATES", "1.5,NaN")
@@ -573,7 +573,7 @@ def test_repeatable_default_int_coerced_to_float():
     @app.command("cmd", help="a command")
     @strictcli.flag("val", type=float, help="a value", repeatable=True, unique=False,
                     default=[1, 2])
-    def cmd(val):
+    def cmd(ctx, val):
         print(f"val={val!r}")
 
     # The flag object should have coerced defaults
@@ -597,7 +597,7 @@ def test_repeatable_default_applied():
     @app.command("cmd", help="a command")
     @strictcli.flag("tag", help="a tag", repeatable=True, unique=False,
                     default=["a", "b"])
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     r = app.test(["cmd"])

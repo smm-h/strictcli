@@ -14,7 +14,7 @@ def _make_app_with_validate(**flag_kwargs):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("port", type=int, help="the port", **flag_kwargs)
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port}")
 
     return app
@@ -46,7 +46,7 @@ def test_validate_runs_on_env_var(monkeypatch):
         "port", type=int, help="the port",
         env="MYAPP_PORT", validate=_positive_int,
     )
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port}")
 
     monkeypatch.setenv("MYAPP_PORT", "0")
@@ -94,7 +94,7 @@ def test_validate_runs_after_choices():
         "port", type=int, help="the port",
         choices=[80, 443], validate=tracking_validator,
     )
-    def cmd(port):
+    def cmd(ctx, port):
         print(f"port={port}")
 
     # Value not in choices -- should fail at choices check, validator never called
@@ -122,7 +122,7 @@ def test_validate_with_str_flag():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("name", help="the name", validate=no_spaces)
-    def cmd(name):
+    def cmd(ctx, name):
         print(f"name={name}")
 
     r = app.test(["cmd", "--name", "hello world"])

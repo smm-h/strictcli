@@ -9,7 +9,7 @@ def _make_app_with_unique_flag(**flag_kwargs):
 
     @app.command("cmd", help="a command")
     @strictcli.flag("tag", help="a tag", repeatable=True, unique=True, **flag_kwargs)
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     return app
@@ -37,7 +37,7 @@ def test_unique_int_dedup():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("count", type=int, help="a count", repeatable=True, unique=True)
-    def cmd(count):
+    def cmd(ctx, count):
         print(f"count={count!r}")
 
     r = app.test(["cmd", "--count", "1", "--count", "1"])
@@ -59,7 +59,7 @@ def test_unique_global_flag_duplicate():
     )
 
     @app.command("cmd", help="a command")
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     r = app.test(["--tag", "a", "--tag", "a", "cmd"])
@@ -85,7 +85,7 @@ def test_unique_false_not_in_help():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("tag", help="a tag", repeatable=True, unique=False)
-    def cmd(tag):
+    def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
     r = app.test(["cmd", "--help"])
@@ -108,7 +108,7 @@ def test_unique_float_dedup():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("val", type=float, help="a value", repeatable=True, unique=True)
-    def cmd(val):
+    def cmd(ctx, val):
         print(f"val={val!r}")
 
     r = app.test(["cmd", "--val", "1.5", "--val", "1.5"])

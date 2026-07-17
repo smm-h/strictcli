@@ -21,7 +21,7 @@ def test_bool_mutex_neither_provided_error():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", mutex=[mg])
-    def cmd(verbose, quiet):
+    def cmd(ctx, verbose, quiet):
         print(f"verbose={verbose} quiet={quiet}")
 
     r = app.test(["cmd"])
@@ -41,7 +41,7 @@ def test_bool_mutex_one_provided():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", mutex=[mg])
-    def cmd(verbose, quiet):
+    def cmd(ctx, verbose, quiet):
         print(f"verbose={verbose} quiet={quiet}")
 
     r = app.test(["cmd", "--verbose"])
@@ -61,7 +61,7 @@ def test_bool_mutex_both_provided_error():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", mutex=[mg])
-    def cmd(verbose, quiet):
+    def cmd(ctx, verbose, quiet):
         pass
 
     r = app.test(["cmd", "--verbose", "--quiet"])
@@ -87,7 +87,7 @@ def test_required_mutex_none_provided_error():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", mutex=[mg])
-    def cmd(verbose, quiet):
+    def cmd(ctx, verbose, quiet):
         pass
 
     r = app.test(["cmd"])
@@ -108,7 +108,7 @@ def test_required_mutex_one_provided_ok():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", mutex=[mg])
-    def cmd(verbose, quiet):
+    def cmd(ctx, verbose, quiet):
         print(f"verbose={verbose} quiet={quiet}")
 
     r = app.test(["cmd", "--quiet"])
@@ -133,7 +133,7 @@ def test_str_mutex_one_provided_ok():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("fetch", help="fetch data", mutex=[mg])
-    def fetch(file, url):
+    def fetch(ctx, file, url):
         print(f"file={file} url={url}")
 
     r = app.test(["fetch", "--file", "data.txt"])
@@ -152,7 +152,7 @@ def test_str_mutex_both_provided_error():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("fetch", help="fetch data", mutex=[mg])
-    def fetch(file, url):
+    def fetch(ctx, file, url):
         pass
 
     r = app.test(["fetch", "--file", "data.txt", "--url", "http://example.com"])
@@ -178,7 +178,7 @@ def test_mixed_type_mutex():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("run", help="run something", mutex=[mg])
-    def run(interactive, script):
+    def run(ctx, interactive, script):
         print(f"interactive={interactive} script={script}")
 
     # One provided -> OK
@@ -209,7 +209,7 @@ def test_mutex_shown_in_help():
 
     @app.command("cmd", help="a command", mutex=[mg])
     @strictcli.flag("name", help="your name", default="anon")
-    def cmd(name, verbose, quiet):
+    def cmd(ctx, name, verbose, quiet):
         pass
 
     r = app.test(["cmd", "--help"])
@@ -233,7 +233,7 @@ def test_required_mutex_shown_in_help():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", mutex=[mg])
-    def cmd(verbose, quiet):
+    def cmd(ctx, verbose, quiet):
         pass
 
     r = app.test(["cmd", "--help"])
@@ -263,7 +263,7 @@ def test_mutex_env_sets_one_cli_sets_another_error(monkeypatch):
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("fetch", help="fetch data", mutex=[mg])
-    def fetch(file, url):
+    def fetch(ctx, file, url):
         pass
 
     monkeypatch.setenv("TEST_FILE", "data.txt")
@@ -289,7 +289,7 @@ def test_mutex_env_sets_one_only_ok(monkeypatch):
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("fetch", help="fetch data", mutex=[mg])
-    def fetch(file, url):
+    def fetch(ctx, file, url):
         print(f"file={file} url={url}")
 
     monkeypatch.setenv("TEST_FILE2", "data.txt")
@@ -317,7 +317,7 @@ def test_mutex_flags_overlap_with_regular_flags_error():
 
         @app.command("cmd", help="a command", mutex=[mg])
         @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
-        def cmd(verbose, quiet):
+        def cmd(ctx, verbose, quiet):
             pass
 
 
@@ -333,7 +333,7 @@ def test_mutex_group_fewer_than_2_flags_error():
     with pytest.raises(ValueError, match="at least 2 flags"):
 
         @app.command("cmd", help="a command", mutex=[mg])
-        def cmd(verbose):
+        def cmd(ctx, verbose):
             pass
 
 
@@ -345,7 +345,7 @@ def test_mutex_group_empty_error():
     with pytest.raises(ValueError, match="at least 2 flags"):
 
         @app.command("cmd", help="a command", mutex=[mg])
-        def cmd():
+        def cmd(ctx):
             pass
 
 
@@ -371,7 +371,7 @@ def test_two_separate_mutex_groups():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", mutex=[mg1, mg2])
-    def cmd(verbose, quiet, json, csv):
+    def cmd(ctx, verbose, quiet, json, csv):
         print(f"verbose={verbose} quiet={quiet} json={json} csv={csv}")
 
     # One from each group -> OK
@@ -411,7 +411,7 @@ def test_overlapping_mutex_groups_error():
     with pytest.raises(ValueError, match="multiple mutex groups"):
 
         @app.command("cmd", help="a command", mutex=[mg1, mg2])
-        def cmd(verbose, quiet, debug):
+        def cmd(ctx, verbose, quiet, debug):
             pass
 
 
@@ -432,7 +432,7 @@ def test_group_command_with_mutex():
     grp = app.group("config", help="configuration commands")
 
     @grp.command("show", help="show config", mutex=[mg])
-    def show(verbose, quiet):
+    def show(ctx, verbose, quiet):
         print(f"verbose={verbose} quiet={quiet}")
 
     r = app.test(["config", "show", "--verbose"])

@@ -10,7 +10,7 @@ def _make_app():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("run", help="run something")
-    def run():
+    def run(ctx):
         return 0
 
     app.deprecate("old-run", message="use 'run' instead")
@@ -41,7 +41,7 @@ def test_group_help_shows_deprecated_section():
     grp = app.group("config", help="config commands")
 
     @grp.command("show", help="show config")
-    def show():
+    def show(ctx):
         return 0
 
     grp.deprecate("dump", message="use 'show' instead")
@@ -59,7 +59,7 @@ def test_invoke_deprecated_group_subcommand():
     grp = app.group("config", help="config commands")
 
     @grp.command("show", help="show config")
-    def show():
+    def show(ctx):
         return 0
 
     grp.deprecate("dump", message="use 'show' instead")
@@ -89,7 +89,7 @@ def test_registration_error_duplicate_with_command():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("run", help="run something")
-    def run():
+    def run(ctx):
         return 0
 
     with pytest.raises(ValueError, match='collides with an existing command'):
@@ -136,7 +136,7 @@ def test_group_registration_error_duplicate_with_command():
     grp = app.group("config", help="config commands")
 
     @grp.command("show", help="show config")
-    def show():
+    def show(ctx):
         return 0
 
     with pytest.raises(ValueError, match='collides with an existing command'):

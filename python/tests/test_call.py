@@ -1,4 +1,4 @@
-"""Tests for App.call(), App.acall(), and structured handler return values."""
+"""Tests for App.call(), App.acall(), and Outcome-based handler returns."""
 
 import asyncio
 import json
@@ -16,13 +16,13 @@ def _build_app(**kwargs):
 
 
 class TestCallReturnsInt:
-    """V1 handler returning int: call() returns int, test().data is None."""
+    """Handler returning int: call() returns int, test().data is None."""
 
     def test_call_returns_int(self):
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             return 42
 
         assert app.call("run") == 42
@@ -31,7 +31,7 @@ class TestCallReturnsInt:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             return 42
 
         result = app.test(["run"])
@@ -42,7 +42,7 @@ class TestCallReturnsInt:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             return 0
 
         result = app.test(["run"])
@@ -51,13 +51,13 @@ class TestCallReturnsInt:
 
 
 class TestCallReturnsNone:
-    """V1 handler returning None: call() returns None, test().data is None."""
+    """Handler returning None: call() returns None, test().data is None."""
 
     def test_call_returns_none(self):
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         assert app.call("run") is None
@@ -66,7 +66,7 @@ class TestCallReturnsNone:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         result = app.test(["run"])
@@ -75,14 +75,14 @@ class TestCallReturnsNone:
 
 
 class TestCallReturnsDict:
-    """V2 handler returning dict: call() returns dict, test().data is dict."""
+    """Handler returning outcome(data=dict): call() returns dict, test().data is dict."""
 
     def test_call_returns_dict(self):
         app = _build_app()
 
         @app.command("status", help="get status")
-        def status():
-            return {"healthy": True, "uptime": 3600}
+        def status(ctx):
+            return strictcli.outcome(data={"healthy": True, "uptime": 3600})
 
         result = app.call("status")
         assert result == {"healthy": True, "uptime": 3600}
@@ -91,8 +91,8 @@ class TestCallReturnsDict:
         app = _build_app()
 
         @app.command("status", help="get status")
-        def status():
-            return {"healthy": True, "uptime": 3600}
+        def status(ctx):
+            return strictcli.outcome(data={"healthy": True, "uptime": 3600})
 
         result = app.test(["status"])
         assert result.data == {"healthy": True, "uptime": 3600}
@@ -103,25 +103,25 @@ class TestCallReturnsDict:
 
         @app.command("status", help="get status")
         @strictcli.flag("verbose", type=bool, default=False, help="include details")
-        def status(verbose):
+        def status(ctx, verbose):
             data = {"healthy": True}
             if verbose:
                 data["details"] = "all systems operational"
-            return data
+            return strictcli.outcome(data=data)
 
         result = app.call("status", verbose=True)
         assert result == {"healthy": True, "details": "all systems operational"}
 
 
 class TestCallReturnsList:
-    """V2 handler returning list: call() returns list."""
+    """Handler returning outcome(data=list): call() returns list."""
 
     def test_call_returns_list(self):
         app = _build_app()
 
         @app.command("list-users", help="list users")
-        def list_users():
-            return ["alice", "bob", "charlie"]
+        def list_users(ctx):
+            return strictcli.outcome(data=["alice", "bob", "charlie"])
 
         result = app.call("list-users")
         assert result == ["alice", "bob", "charlie"]
@@ -130,8 +130,8 @@ class TestCallReturnsList:
         app = _build_app()
 
         @app.command("list-users", help="list users")
-        def list_users():
-            return ["alice", "bob", "charlie"]
+        def list_users(ctx):
+            return strictcli.outcome(data=["alice", "bob", "charlie"])
 
         result = app.test(["list-users"])
         assert result.data == ["alice", "bob", "charlie"]
@@ -139,7 +139,7 @@ class TestCallReturnsList:
 
 
 class TestCallReturnsDataclass:
-    """V2 handler returning dataclass: call() returns dataclass."""
+    """Handler returning outcome(data=dataclass): call() returns dataclass."""
 
     def test_call_returns_dataclass(self):
         @dataclass
@@ -150,8 +150,8 @@ class TestCallReturnsDataclass:
         app = _build_app()
 
         @app.command("status", help="get status")
-        def status():
-            return Status(healthy=True, uptime=3600)
+        def status(ctx):
+            return strictcli.outcome(data=Status(healthy=True, uptime=3600))
 
         result = app.call("status")
         assert isinstance(result, Status)
@@ -167,8 +167,8 @@ class TestCallReturnsDataclass:
         app = _build_app()
 
         @app.command("status", help="get status")
-        def status():
-            return Status(healthy=True, uptime=3600)
+        def status(ctx):
+            return strictcli.outcome(data=Status(healthy=True, uptime=3600))
 
         result = app.test(["status"])
         assert isinstance(result.data, Status)
@@ -178,14 +178,14 @@ class TestCallReturnsDataclass:
 
 
 class TestCallReturnsString:
-    """V2 handler returning a string: call() returns string."""
+    """Handler returning outcome(data=str): call() returns string."""
 
     def test_call_returns_string(self):
         app = _build_app()
 
         @app.command("greet", help="greet")
-        def greet():
-            return "hello world"
+        def greet(ctx):
+            return strictcli.outcome(data="hello world")
 
         result = app.call("greet")
         assert result == "hello world"
@@ -194,8 +194,8 @@ class TestCallReturnsString:
         app = _build_app()
 
         @app.command("greet", help="greet")
-        def greet():
-            return "hello world"
+        def greet(ctx):
+            return strictcli.outcome(data="hello world")
 
         result = app.test(["greet"])
         assert result.data == "hello world"
@@ -209,7 +209,7 @@ class TestCallErrorCases:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="unknown command 'nonexistent'"):
@@ -220,7 +220,7 @@ class TestCallErrorCases:
 
         @app.command("greet", help="greet")
         @strictcli.flag("name", type=str, help="name")
-        def greet(name):
+        def greet(ctx, name):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="flag '--name' is required"):
@@ -233,7 +233,7 @@ class TestCallErrorCases:
             "deploy", help="deploy",
             args=[strictcli.Arg(name="target", help="deploy target")],
         )
-        def deploy(target):
+        def deploy(ctx, target):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="missing required argument 'target'"):
@@ -243,7 +243,7 @@ class TestCallErrorCases:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="unknown parameter 'bogus'"):
@@ -261,7 +261,7 @@ class TestCallErrorCases:
                 ],
             )],
         )
-        def fmt(json, yaml):
+        def fmt(ctx, json, yaml):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="mutually exclusive"):
@@ -273,7 +273,7 @@ class TestCallErrorCases:
         grp = app.group("config", help="config management")
 
         @grp.command("show", help="show config")
-        def show():
+        def show(ctx):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="is a group, not a command"):
@@ -288,74 +288,54 @@ class TestCallErrorCases:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         with pytest.raises(strictcli.InvokeError) as exc_info:
             app.call("nonexistent")
         assert exc_info.value.__cause__ is not None
 
+    def test_bad_return_type_raises(self):
+        """A raw structured return (not via outcome()) is a hard error."""
+        app = _build_app()
+
+        @app.command("bad", help="bad")
+        def bad(ctx):
+            return {"nope": True}
+
+        with pytest.raises(TypeError, match="strictcli.outcome"):
+            app.call("bad")
+
 
 class TestRunWithStructuredData:
-    """run() with V2 handler prints JSON to stdout."""
+    """Outcome data is JSON-printed to stdout by the framework."""
 
-    def test_run_prints_json_for_dict(self):
+    def test_prints_json_for_dict(self):
         app = _build_app()
 
         @app.command("status", help="get status")
-        def status():
-            return {"healthy": True, "count": 5}
+        def status(ctx):
+            return strictcli.outcome(data={"healthy": True, "count": 5})
 
         result = app.test(["status"])
         assert result.exit_code == 0
         assert result.data == {"healthy": True, "count": 5}
+        assert json.loads(result.stdout) == {"healthy": True, "count": 5}
 
-    def test_run_prints_json_for_list(self):
+    def test_prints_json_for_list(self):
         app = _build_app()
 
         @app.command("list-items", help="list items")
-        def list_items():
-            return [1, 2, 3]
+        def list_items(ctx):
+            return strictcli.outcome(data=[1, 2, 3])
 
         result = app.test(["list-items"])
         assert result.exit_code == 0
         assert result.data == [1, 2, 3]
-
-    def test_dict_data_serializes_to_valid_json(self):
-        """Verify json.dumps(result.data, default=str) produces valid JSON.
-
-        This covers the serialization path used by run() at the json.dumps line.
-        """
-        app = _build_app()
-
-        @app.command("status", help="get status")
-        def status():
-            return {"healthy": True, "count": 5, "name": "server-1"}
-
-        result = app.test(["status"])
-        serialized = json.dumps(result.data, default=str)
-        parsed = json.loads(serialized)
-        assert parsed == {"healthy": True, "count": 5, "name": "server-1"}
-
-    def test_list_data_serializes_to_valid_json(self):
-        """Verify list return values serialize correctly."""
-        app = _build_app()
-
-        @app.command("items", help="get items")
-        def items():
-            return [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]
-
-        result = app.test(["items"])
-        serialized = json.dumps(result.data, default=str)
-        parsed = json.loads(serialized)
-        assert parsed == [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]
+        assert json.loads(result.stdout) == [1, 2, 3]
 
     def test_dataclass_serializes_via_default_str(self):
-        """Verify dataclass return values serialize via default=str fallback.
-
-        run() uses json.dumps(result, default=str), which converts
-        non-serializable objects to their str() representation.
-        """
+        """Dataclass data serializes to stdout via json.dumps(default=str)."""
         @dataclass
         class Status:
             healthy: bool
@@ -364,52 +344,44 @@ class TestRunWithStructuredData:
         app = _build_app()
 
         @app.command("status", help="get status")
-        def status():
-            return Status(healthy=True, uptime=3600)
+        def status(ctx):
+            return strictcli.outcome(data=Status(healthy=True, uptime=3600))
 
         result = app.test(["status"])
-        serialized = json.dumps(result.data, default=str)
-        parsed = json.loads(serialized)
+        parsed = json.loads(result.stdout)
         # default=str converts the dataclass to its str() repr
         assert isinstance(parsed, str)
         assert "healthy=True" in parsed
         assert "uptime=3600" in parsed
 
     def test_nested_non_serializable_uses_default_str(self):
-        """Verify that non-serializable values nested in dicts use default=str.
-
-        This tests the exact code path: json.dumps(result, default=str)
-        where result contains types that are not JSON-native.
-        """
+        """Non-serializable values nested in data use default=str on stdout."""
         app = _build_app()
 
         @app.command("info", help="get info")
-        def info():
-            return {
+        def info(ctx):
+            return strictcli.outcome(data={
                 "timestamp": datetime(2025, 1, 15, 10, 30, 0),
                 "path": PurePosixPath("/usr/local/bin"),
                 "count": 42,
-            }
+            })
 
         result = app.test(["info"])
-        serialized = json.dumps(result.data, default=str)
-        parsed = json.loads(serialized)
+        parsed = json.loads(result.stdout)
         assert parsed["timestamp"] == "2025-01-15 10:30:00"
         assert parsed["path"] == "/usr/local/bin"
         assert parsed["count"] == 42
 
     def test_string_return_serializes_to_json_string(self):
-        """Verify string return values produce a JSON string."""
+        """String data produces a JSON string on stdout."""
         app = _build_app()
 
         @app.command("greet", help="greet")
-        def greet():
-            return "hello world"
+        def greet(ctx):
+            return strictcli.outcome(data="hello world")
 
         result = app.test(["greet"])
-        serialized = json.dumps(result.data, default=str)
-        parsed = json.loads(serialized)
-        assert parsed == "hello world"
+        assert json.loads(result.stdout) == "hello world"
 
 
 class TestAcall:
@@ -419,8 +391,8 @@ class TestAcall:
         app = _build_app()
 
         @app.command("status", help="get status")
-        def status():
-            return {"healthy": True}
+        def status(ctx):
+            return strictcli.outcome(data={"healthy": True})
 
         result = asyncio.run(app.acall("status"))
         assert result == {"healthy": True}
@@ -429,7 +401,7 @@ class TestAcall:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             return 42
 
         result = asyncio.run(app.acall("run"))
@@ -439,7 +411,7 @@ class TestAcall:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         result = asyncio.run(app.acall("run"))
@@ -449,7 +421,7 @@ class TestAcall:
         app = _build_app()
 
         @app.command("run", help="run")
-        def run():
+        def run(ctx):
             pass
 
         with pytest.raises(strictcli.InvokeError, match="unknown command 'nonexistent'"):
@@ -460,21 +432,21 @@ class TestAcall:
 
         @app.command("greet", help="greet")
         @strictcli.flag("name", type=str, help="person to greet")
-        def greet(name):
-            return {"greeting": f"hello {name}"}
+        def greet(ctx, name):
+            return strictcli.outcome(data={"greeting": f"hello {name}"})
 
         result = asyncio.run(app.acall("greet", name="Alice"))
         assert result == {"greeting": "hello Alice"}
 
 
 class TestBackwardCompat:
-    """Existing test() behavior unchanged for int/None-returning handlers."""
+    """test() behavior for int/None-returning handlers."""
 
     def test_int_return_sets_exit_code(self):
         app = _build_app()
 
         @app.command("fail", help="fail")
-        def fail():
+        def fail(ctx):
             return 1
 
         result = app.test(["fail"])
@@ -485,7 +457,7 @@ class TestBackwardCompat:
         app = _build_app()
 
         @app.command("ok", help="ok")
-        def ok():
+        def ok(ctx):
             pass
 
         result = app.test(["ok"])
@@ -497,9 +469,9 @@ class TestBackwardCompat:
         app = _build_app()
 
         @app.command("hello", help="hello")
-        def hello():
+        def hello(ctx):
             print("hello world")
-            return {"done": True}
+            return strictcli.outcome(data={"done": True})
 
         result = app.test(["hello"])
         assert "hello world" in result.stdout
@@ -517,8 +489,8 @@ class TestBackwardCompat:
 
         @app.command("greet", help="greet")
         @strictcli.flag("name", type=str, help="name")
-        def greet(name):
-            return {"greeting": f"hello {name}"}
+        def greet(ctx, name):
+            return strictcli.outcome(data={"greeting": f"hello {name}"})
 
         result = app.test(["greet"])  # missing required --name
         assert result.exit_code == 1
@@ -533,8 +505,8 @@ class TestCallNestedCommands:
         grp = app.group("config", help="config management")
 
         @grp.command("show", help="show config")
-        def show():
-            return {"key": "value"}
+        def show(ctx):
+            return strictcli.outcome(data={"key": "value"})
 
         result = app.call("config.show")
         assert result == {"key": "value"}
@@ -545,8 +517,8 @@ class TestCallNestedCommands:
         g2 = g1.group("dns", help="DNS management")
 
         @g2.command("list", help="list DNS records")
-        def list_records():
-            return ["a.example.com", "b.example.com"]
+        def list_records(ctx):
+            return strictcli.outcome(data=["a.example.com", "b.example.com"])
 
         result = app.call("infra.dns.list")
         assert result == ["a.example.com", "b.example.com"]

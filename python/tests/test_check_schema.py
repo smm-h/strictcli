@@ -56,7 +56,7 @@ class TestSchemaWithChecks:
             return pass_outcome("ok")
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -85,7 +85,7 @@ class TestSchemaWithChecks:
             return pass_outcome("ok")
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])
@@ -117,7 +117,7 @@ class TestSchemaWithoutChecks:
         app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         result = app.test(["--dump-schema"])
@@ -170,7 +170,7 @@ class TestSchemaWithScope:
             return pass_outcome("ok")
 
         @app.command("noop", help="Does nothing")
-        def noop():
+        def noop(ctx):
             pass
 
         app.test(["--dump-schema"])

@@ -9,7 +9,7 @@ def _make_full_app():
 
     @app.command("init", help="initialize the project")
     @strictcli.flag("force-overwrite", type=bool, default=False, help="overwrite existing files")
-    def init(force_overwrite):
+    def init(ctx, force_overwrite):
         pass
 
     @app.command(
@@ -18,18 +18,18 @@ def _make_full_app():
         args=[strictcli.Arg(name="target", help="build target")],
     )
     @strictcli.flag("output", short="o", type=str, help="output directory", default="dist")
-    def build(target, output):
+    def build(ctx, target, output):
         pass
 
     grp = app.group("config", help="manage configuration")
 
     @grp.command("show", help="show current config")
-    def show():
+    def show(ctx):
         pass
 
     @grp.command("set", help="set a config value")
     @strictcli.flag("key", type=str, help="config key")
-    def set_(key):
+    def set_(ctx, key):
         pass
 
     return app
@@ -52,7 +52,7 @@ def test_app_level_help_skips_empty_sections():
     app = strictcli.App(name="empty", version="0.0.1", help="empty app")
 
     @app.command("only", help="the only command")
-    def only():
+    def only(ctx):
         pass
 
     r = app.test([])
@@ -135,7 +135,7 @@ def test_help_after_flags():
 
     @app.command("cmd", help="a command")
     @strictcli.flag("verbose", type=bool, default=False, help="enable verbose output")
-    def cmd(verbose):
+    def cmd(ctx, verbose):
         pass
 
     r = app.test(["cmd", "--verbose", "--help"])
@@ -153,7 +153,7 @@ def test_help_not_after_separator():
         help="a command",
         args=[strictcli.Arg(name="items", help="items to process", variadic=True)],
     )
-    def cmd(items):
+    def cmd(ctx, items):
         print(",".join(items))
 
     r = app.test(["cmd", "--", "--help"])
