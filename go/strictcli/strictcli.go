@@ -2,13 +2,16 @@
 package strictcli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // FlagType represents the type of a flag value.
@@ -1926,6 +1929,16 @@ func (a *App) Test(argv []string) Result {
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
+	// Drain both pipes concurrently while the handler runs. A handler that
+	// emits more than the OS pipe buffer (~64KB) would otherwise block on write
+	// (nothing reading) or have its output truncated by a fixed-size read. Using
+	// unbounded io.Copy into bytes.Buffer captures arbitrarily large output.
+	var stdoutBuf, stderrBuf bytes.Buffer
+	var drainWG sync.WaitGroup
+	drainWG.Add(2)
+	go func() { defer drainWG.Done(); io.Copy(&stdoutBuf, stdoutR) }()
+	go func() { defer drainWG.Done(); io.Copy(&stderrBuf, stderrR) }()
+
 	// Context is constructed unconditionally for every dispatch, writing to the
 	// capture pipes.
 	ctx := newContext(stdoutW, stderrW, pr.sources, a.infraAccess())
@@ -1951,9 +1964,9 @@ func (a *App) Test(argv []string) Result {
 	stdoutW.Close()
 	stderrW.Close()
 
-	var stdoutBuf, stderrBuf [64 * 1024]byte
-	stdoutN, _ := stdoutR.Read(stdoutBuf[:])
-	stderrN, _ := stderrR.Read(stderrBuf[:])
+	// Wait for both drain goroutines to finish consuming the pipes, then close
+	// the read ends.
+	drainWG.Wait()
 	stdoutR.Close()
 	stderrR.Close()
 
@@ -1961,8 +1974,8 @@ func (a *App) Test(argv []string) Result {
 	os.Stderr = oldStderr
 
 	return Result{
-		Stdout:   string(stdoutBuf[:stdoutN]),
-		Stderr:   string(stderrBuf[:stderrN]),
+		Stdout:   stdoutBuf.String(),
+		Stderr:   stderrBuf.String(),
 		ExitCode: exitCode,
 		Data:     resultData,
 	}

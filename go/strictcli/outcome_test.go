@@ -173,3 +173,37 @@ func TestGlobalsMergedIntoKwargs(t *testing.T) {
 		t.Fatal("global flag 'verbose' not visible in handler kwargs")
 	}
 }
+
+// TestTestCaptureLargeOutputNotTruncated verifies Test() captures handler
+// output larger than the OS pipe buffer (~64KB) without truncation or
+// deadlock. Regression for phase 8.3go: fixed 64KB read buffers truncated
+// output and a single non-draining read could block the writing handler.
+func TestTestCaptureLargeOutputNotTruncated(t *testing.T) {
+	const n = 500 * 1024 // 500KB, well beyond a 64KB pipe buffer
+	payload := strings.Repeat("a", n)
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("emit", "emit a large payload", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		ctx.Info(payload)  // stdout
+		ctx.Error(payload) // stderr
+		return Exit(0)
+	})
+
+	r := app.Test([]string{"emit"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d, stderr len %d", r.ExitCode, len(r.Stderr))
+	}
+	// Info/Error append a trailing newline.
+	if len(r.Stdout) != n+1 {
+		t.Fatalf("stdout truncated: expected %d bytes, got %d", n+1, len(r.Stdout))
+	}
+	if len(r.Stderr) != n+1 {
+		t.Fatalf("stderr truncated: expected %d bytes, got %d", n+1, len(r.Stderr))
+	}
+	if strings.TrimRight(r.Stdout, "\n") != payload {
+		t.Fatal("stdout content corrupted")
+	}
+	if strings.TrimRight(r.Stderr, "\n") != payload {
+		t.Fatal("stderr content corrupted")
+	}
+}
