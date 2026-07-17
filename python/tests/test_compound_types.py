@@ -423,6 +423,42 @@ class TestDictFlagRegistration:
             )
 
 
+class TestDictDisplayCanonicalSorted:
+    """Dict flag values render as sorted key=value (Go parity)."""
+
+    def test_format_dict_for_display_sorted(self):
+        # Insertion order deliberately unsorted; output must be key-sorted.
+        assert strictcli._format_dict_for_display(
+            {"zebra": 3, "apple": 1, "mango": 2}
+        ) == "apple=1, mango=2, zebra=3"
+
+    def test_format_value_for_error_dict_sorted(self):
+        assert strictcli._format_value_for_error(
+            {"b": "y", "a": "x"}
+        ) == "a=x, b=y"
+
+    def test_format_default_for_help_dict_sorted(self):
+        assert strictcli._format_default_for_help(
+            {"b": 2, "a": 1}
+        ) == "a=1, b=2"
+
+    def test_dict_default_rendered_sorted_in_help(self):
+        """A dict flag's default renders sorted key=value in command help."""
+        app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+        @app.command("cmd", help="a command")
+        @strictcli.flag(
+            "labels", type=dict[str, int], help="labels",
+            default={"zebra": 3, "apple": 1, "mango": 2},
+        )
+        def cmd(ctx, labels):
+            pass
+
+        r = app.test(["cmd", "--help"])
+        assert r.exit_code == 0
+        assert "default: apple=1, mango=2, zebra=3" in r.stdout
+
+
 class TestDictFlagParsing:
     """CLI parsing for dict[str, T] flags."""
 

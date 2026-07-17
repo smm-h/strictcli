@@ -417,6 +417,8 @@ class TestMcpProtocolErrors:
         output_buf.seek(0)
         resp = json.loads(output_buf.readline())
         assert resp["error"]["code"] == -32700
+        # Go-parity: message casing is "Parse error".
+        assert resp["error"]["message"] == "Parse error"
         assert resp["id"] is None
 
     def test_unknown_method(self):
@@ -430,10 +432,16 @@ class TestMcpProtocolErrors:
             "jsonrpc": "2.0", "id": 99, "method": "bogus/method", "params": {},
         })
         assert resp["error"]["code"] == -32601
-        assert "method not found" in resp["error"]["message"]
+        # Go-parity: message casing is "Method not found".
+        assert "Method not found" in resp["error"]["message"]
 
     def test_non_object_json(self):
-        """A JSON line that is not an object gets an invalid request error."""
+        """A non-object JSON line is a parse error (-32700), matching Go.
+
+        Go unmarshals directly into a struct, so a bare array/number/string is a
+        parse error. Python must redirect the (retained) non-dict guard to the
+        same -32700 'Parse error' response rather than emitting -32600.
+        """
         app = _build_app()
 
         @app.command("cmd", help="a command")
@@ -445,7 +453,8 @@ class TestMcpProtocolErrors:
         app.serve_mcp(input=input_buf, output=output_buf)
         output_buf.seek(0)
         resp = json.loads(output_buf.readline())
-        assert resp["error"]["code"] == -32600
+        assert resp["error"]["code"] == -32700
+        assert resp["error"]["message"] == "Parse error"
 
     def test_empty_lines_ignored(self):
         """Blank lines are silently skipped."""

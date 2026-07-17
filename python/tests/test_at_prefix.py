@@ -79,6 +79,31 @@ def test_at_file_trailing_whitespace_strip(tmp_path):
     assert "msg=content" in r.stdout
 
 
+def test_at_file_trim_matches_go_cutset(tmp_path):
+    """@-file trailing trim must match Go's TrimRight cutset (only ' \\t\\n\\r').
+
+    Go trims a fixed ASCII cutset, not the broader Unicode whitespace set that
+    Python's bare str.rstrip() would remove. Vertical tab and form feed are NOT
+    in Go's cutset and must be preserved; a trailing newline IS trimmed.
+    """
+    f = tmp_path / "data.txt"
+    f.write_text("content\v\f\n")
+    app = _make_app()
+    r = app.test(["cmd", "--msg", f"@{f}"])
+    assert r.exit_code == 0
+    assert r.stdout == "msg=content\v\f\n"
+
+
+def test_at_file_trim_removes_ascii_cutset(tmp_path):
+    """Only the Go cutset chars (space, tab, CR, LF) are trimmed from the tail."""
+    f = tmp_path / "data.txt"
+    f.write_text("content \t\r\n")
+    app = _make_app()
+    r = app.test(["cmd", "--msg", f"@{f}"])
+    assert r.exit_code == 0
+    assert "msg=content" in r.stdout
+
+
 def test_at_file_empty(tmp_path):
     """Empty file yields empty string."""
     f = tmp_path / "data.txt"

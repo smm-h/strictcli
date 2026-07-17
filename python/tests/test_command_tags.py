@@ -102,6 +102,15 @@ class TestTagStorageAndValidation:
             def cmd(ctx):
                 pass
 
+    def test_invalid_tag_trailing_newline(self):
+        """Trailing newline rejected via fullmatch (Python re.$ would accept it)."""
+        app = _make_app()
+        with pytest.raises(ValueError, match="invalid tag name"):
+
+            @app.command("cmd", help="a command", tags={"json\n"})
+            def cmd(ctx):
+                pass
+
     def test_invalid_tag_empty(self):
         app = _make_app()
         with pytest.raises(ValueError, match="invalid tag name"):

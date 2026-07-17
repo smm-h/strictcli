@@ -1078,14 +1078,26 @@ def _format_float_canonical(value: float) -> str:
     return f"{sign}{mantissa}e{exp_sign}{abs(sci_exp)}"
 
 
+def _format_dict_for_display(value: dict) -> str:
+    """Render a dict flag value as canonical ``key=value`` pairs.
+
+    Keys are sorted for deterministic output, matching Go's
+    ``formatDictForDisplay``. Values are rendered via ``_format_value_for_error``.
+    """
+    parts = [f"{k}={_format_value_for_error(value[k])}" for k in sorted(value)]
+    return ", ".join(parts)
+
+
 def _format_default_for_help(value: object) -> str:
     """Format a default value for help text.
 
-    Floats use the canonical form (SCF); every other type is rendered exactly
-    as before (``str``), keeping non-float help output byte-identical.
+    Floats use the canonical form (SCF); dict values render as sorted
+    ``key=value`` pairs (matching Go). Every other type is rendered as ``str``.
     """
     if isinstance(value, float):
         return _format_float_canonical(value)
+    if isinstance(value, dict):
+        return _format_dict_for_display(value)
     return str(value)
 
 
@@ -1093,12 +1105,15 @@ def _format_value_for_error(value: object) -> str:
     """Format a value for inclusion in error messages (without quotes).
 
     Floats use the canonical form (SCF). Bools are lowercase.
+    Dict values render as sorted ``key=value`` pairs (matching Go).
     Strings are returned as-is.
     """
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, float):
         return _format_float_canonical(value)
+    if isinstance(value, dict):
+        return _format_dict_for_display(value)
     return str(value)
 
 
@@ -1160,7 +1175,7 @@ def _parse_checks_toml(data: bytes) -> tuple[str, dict[str, _CheckDef]]:
 
     for name, fields in checks_section.items():
         # Validate check name
-        if not _IDENTIFIER_RE.match(name):
+        if not _IDENTIFIER_RE.fullmatch(name):
             raise ValueError(
                 f'checks.toml: invalid check name "{name}" '
                 f"(must match [a-z][a-z0-9-]*)"
@@ -1420,7 +1435,7 @@ def _resolve_at_prefix(
             data = sys.stdin.read(_AT_PREFIX_MAX_SIZE + 1)
             if len(data) > _AT_PREFIX_MAX_SIZE:
                 raise _ParseError(f"--{flag_name}: file exceeds 1 MB limit")
-            return data.rstrip(), flag_name
+            return data.rstrip(" \t\n\r"), flag_name
         except _ParseError:
             raise
         except Exception:
@@ -1434,7 +1449,7 @@ def _resolve_at_prefix(
             data = f.read(_AT_PREFIX_MAX_SIZE + 1)
         if len(data) > _AT_PREFIX_MAX_SIZE:
             raise _ParseError(f"--{flag_name}: file exceeds 1 MB limit")
-        return data.rstrip(), stdin_consumed_by
+        return data.rstrip(" \t\n\r"), stdin_consumed_by
     except _ParseError:
         raise
     except Exception:
@@ -2126,7 +2141,7 @@ class Command:
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
         for tag in self.tags:
-            if not _IDENTIFIER_RE.match(tag):
+            if not _IDENTIFIER_RE.fullmatch(tag):
                 raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
 
 
@@ -2150,7 +2165,7 @@ class Group:
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
         for tag in self.tags:
-            if not _IDENTIFIER_RE.match(tag):
+            if not _IDENTIFIER_RE.fullmatch(tag):
                 raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
 
     def group(self, name: str, *, help: str, tags: set[str] | None = None,
@@ -2260,7 +2275,7 @@ class ConfigField:
             raise ValueError(
                 f"ConfigField.type must be str, bool, int, or float, got {self.type!r}"
             )
-        if not _CONFIG_FIELD_NAME_RE.match(self.name):
+        if not _CONFIG_FIELD_NAME_RE.fullmatch(self.name):
             raise ValueError(
                 f'ConfigField name "{self.name}" is invalid: '
                 f"must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)* "
@@ -2969,7 +2984,7 @@ class App:
 
     def tag_contract(self, tag: str, *, requires_flag: str) -> None:
         """Declare that any command with the given tag must have the named flag."""
-        if not _IDENTIFIER_RE.match(tag):
+        if not _IDENTIFIER_RE.fullmatch(tag):
             raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
         self._tag_contracts[tag] = requires_flag
 
@@ -3836,7 +3851,7 @@ class App:
         )
 
         # config edit
-        def _config_edit_handler(ctx, **_kw) -> None:
+        def _config_edit_handler(ctx, **_kw) -> int:
             path = _config_path(
                 app_ref.name,
                 override=app_ref.config_path,
@@ -3852,7 +3867,18 @@ class App:
                     with open(path, "w") as fh:
                         fh.write("{}\n")
             editor = os.environ.get("EDITOR", "vi")
-            subprocess.run([editor, path])
+            try:
+                proc = subprocess.run([editor, path])
+            except OSError as e:
+                print(f"error: editor failed: {e}", file=sys.stderr)
+                return 1
+            if proc.returncode != 0:
+                print(
+                    f"error: editor failed: exit status {proc.returncode}",
+                    file=sys.stderr,
+                )
+                return 1
+            return 0
 
         config_grp.commands["edit"] = Command(
             name="edit",
@@ -7656,13 +7682,17 @@ def _run_mcp_server(
             msg = json.loads(line)
         except json.JSONDecodeError:
             # Malformed JSON -- send parse error if we can
-            resp = _mcp_jsonrpc_error(None, -32700, "parse error")
+            resp = _mcp_jsonrpc_error(None, -32700, "Parse error")
             out.write(json.dumps(resp) + "\n")
             out.flush()
             continue
 
+        # A non-object JSON value is a parse error, matching Go (which
+        # unmarshals directly into a struct). The guard is retained -- deleting
+        # it would crash on the msg.get(...) calls below -- but it now redirects
+        # to the same -32700 "Parse error" response instead of -32600.
         if not isinstance(msg, dict):
-            resp = _mcp_jsonrpc_error(None, -32600, "invalid request")
+            resp = _mcp_jsonrpc_error(None, -32700, "Parse error")
             out.write(json.dumps(resp) + "\n")
             out.flush()
             continue
@@ -7680,7 +7710,7 @@ def _run_mcp_server(
             resp = handler(req_id, params)
         else:
             resp = _mcp_jsonrpc_error(
-                req_id, -32601, f"method not found: {method}",
+                req_id, -32601, f"Method not found: {method}",
             )
 
         out.write(json.dumps(resp) + "\n")

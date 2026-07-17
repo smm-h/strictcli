@@ -1892,3 +1892,53 @@ def test_config_set_toml_unset_preserves_comments(tmp_path):
     assert "alpha" not in text
     assert "beta = 2" in text
     assert "# keep this comment" in text
+
+
+# --- Config edit: editor failure is a hard error (Phase 8.3) ---
+
+
+def _make_config_edit_app(config_file):
+    app = strictcli.App(
+        name="editapp",
+        version="1.0.0",
+        help="test app",
+        config=True,
+        config_path=str(config_file),
+    )
+
+    @app.command("run", help="run something")
+    @strictcli.flag("opt", type=str, help="an option", default="")
+    def run(ctx, opt):
+        pass
+
+    return app
+
+
+def test_config_edit_editor_failure_is_hard_error(tmp_path, monkeypatch):
+    """A non-zero editor exit is a hard error: exit 1, 'error: editor failed'."""
+    config_file = tmp_path / "config.json"
+    app = _make_config_edit_app(config_file)
+    monkeypatch.setenv("EDITOR", "false")  # /bin/false always exits 1
+    r = app.test(["config", "edit"])
+    assert r.exit_code == 1
+    assert "error: editor failed" in r.stderr
+
+
+def test_config_edit_editor_success(tmp_path, monkeypatch):
+    """A zero editor exit succeeds (exit 0, no error)."""
+    config_file = tmp_path / "config.json"
+    app = _make_config_edit_app(config_file)
+    monkeypatch.setenv("EDITOR", "true")  # /bin/true always exits 0
+    r = app.test(["config", "edit"])
+    assert r.exit_code == 0
+    assert "error: editor failed" not in r.stderr
+
+
+def test_config_edit_editor_not_found_is_hard_error(tmp_path, monkeypatch):
+    """A missing editor binary is a hard error, not a silent success."""
+    config_file = tmp_path / "config.json"
+    app = _make_config_edit_app(config_file)
+    monkeypatch.setenv("EDITOR", "definitely-not-a-real-editor-xyz")
+    r = app.test(["config", "edit"])
+    assert r.exit_code == 1
+    assert "error: editor failed" in r.stderr

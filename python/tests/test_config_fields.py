@@ -198,6 +198,17 @@ class TestConfigFieldNameValidation:
         with pytest.raises(ValueError, match="invalid"):
             app.config_field("serve..port", type=str, help="double dot")
 
+    def test_trailing_newline_rejected(self):
+        """A trailing newline must be rejected (fullmatch, not $-anchored match).
+
+        Python's re.$ matches before a trailing newline, so ``match`` would
+        wrongly accept ``db.url\\n``. Go uses a full-string match; parity
+        requires ``fullmatch`` here.
+        """
+        app = _build_app()
+        with pytest.raises(ValueError, match="invalid"):
+            app.config_field("db.url\n", type=str, help="trailing newline")
+
 
 class TestConfigFieldHelpRequired:
     """Help text is mandatory."""
