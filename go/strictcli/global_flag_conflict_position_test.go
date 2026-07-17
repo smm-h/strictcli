@@ -120,53 +120,53 @@ func TestEnvMatchedThenPostCliDivergesNamesCliAndConfig(t *testing.T) {
 }
 
 func TestPostCommandGlobalProvenanceIsCli(t *testing.T) {
-	var sources map[string]string
+	var capturedCtx *Context
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(StringFlag("settings", "settings path", Default("default-val")))
 	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	})
 	r := app.Test([]string{"run", "--settings", "from-cli"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", r.ExitCode, r.Stderr)
 	}
-	if sources["settings"] != "cli" {
-		t.Fatalf("expected source 'cli' for settings, got %q", sources["settings"])
+	if capturedCtx.Source("settings") != "cli" {
+		t.Fatalf("expected source 'cli' for settings, got %q", capturedCtx.Source("settings"))
 	}
 }
 
 func TestPreCommandGlobalProvenanceIsCli(t *testing.T) {
-	var sources map[string]string
+	var capturedCtx *Context
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(StringFlag("settings", "settings path", Default("default-val")))
 	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	})
 	r := app.Test([]string{"--settings", "from-cli", "run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", r.ExitCode, r.Stderr)
 	}
-	if sources["settings"] != "cli" {
-		t.Fatalf("expected source 'cli' for settings, got %q", sources["settings"])
+	if capturedCtx.Source("settings") != "cli" {
+		t.Fatalf("expected source 'cli' for settings, got %q", capturedCtx.Source("settings"))
 	}
 }
 
 func TestPostCommandGlobalProvenanceConfigWhenNotOnCli(t *testing.T) {
 	path := writeTestConfigJSON(t, `{"settings": "from-config"}`)
-	var sources map[string]string
+	var capturedCtx *Context
 	app := NewApp("myapp", "1.0.0", "test app", WithConfig(), WithConfigPath(path))
 	app.GlobalFlag(StringFlag("settings", "settings path", Default("default-val")))
 	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	})
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", r.ExitCode, r.Stderr)
 	}
-	if sources["settings"] != "config" {
-		t.Fatalf("expected source 'config' for settings, got %q", sources["settings"])
+	if capturedCtx.Source("settings") != "config" {
+		t.Fatalf("expected source 'config' for settings, got %q", capturedCtx.Source("settings"))
 	}
 }

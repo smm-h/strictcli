@@ -300,10 +300,6 @@ type App struct {
 	stdinConsumedBy *string           // tracks which flag consumed stdin via @-
 	tagContracts    map[string]string // tag name -> required flag name
 
-	// LastSources stores the source map from the most recent parse.
-	// Available for function handlers that need provenance info.
-	LastSources map[string]string
-
 	// configParseErr stores a config parse error for config show to pick up.
 	// Set when a config subcommand is routed and the config file was malformed.
 	configParseErr string
@@ -1862,9 +1858,6 @@ func (a *App) Run() {
 		os.Exit(1)
 	}
 
-	// Store sources for function handlers that need provenance info
-	a.LastSources = pr.sources
-
 	if pr.cmd.Passthrough {
 		ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess())
 		code := pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
@@ -1932,9 +1925,6 @@ func (a *App) Test(argv []string) Result {
 	stderrR, stderrW, _ := os.Pipe()
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
-
-	// Store sources for function handlers that need provenance info
-	a.LastSources = pr.sources
 
 	// Context is constructed unconditionally for every dispatch, writing to the
 	// capture pipes.

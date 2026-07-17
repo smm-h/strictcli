@@ -67,7 +67,7 @@ func newInfraFlagApp(t *testing.T) (*App, *map[string]string, *map[string]interf
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		sources = map[string]string{"db": ctx.Source("db")}
 		kw = kwargs
 		return Exit(0)
 	}, WithFlags(

@@ -230,9 +230,6 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 		}
 	}
 
-	// Store sources for function handlers that need provenance info
-	a.LastSources = sources
-
 	// Context is constructed unconditionally. For invoke, stdout/stderr are
 	// discarded -- structured data flows back through the Outcome, not stdout.
 	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess())

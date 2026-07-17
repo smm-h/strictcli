@@ -34,10 +34,10 @@ func TestHermeticSkipsEnv(t *testing.T) {
 	defer os.Unsetenv("MYAPP_LEVEL")
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
-	var sources map[string]string
+	var capturedCtx *Context
 	var levelVal interface{}
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		levelVal = kwargs["level"]
 		return Exit(0)
 	}, WithFlags(
@@ -52,8 +52,8 @@ func TestHermeticSkipsEnv(t *testing.T) {
 	if levelVal != 0 {
 		t.Fatalf("expected level=0 (default), got %v", levelVal)
 	}
-	if sources["level"] != "default" {
-		t.Fatalf("expected source 'default' for level under hermetic, got %q", sources["level"])
+	if capturedCtx.Source("level") != "default" {
+		t.Fatalf("expected source 'default' for level under hermetic, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -65,10 +65,10 @@ func TestHermeticSkipsEnvGlobalFlags(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Env("MYAPP_VERBOSE"), Default(false)))
-	var sources map[string]string
+	var capturedCtx *Context
 	var verboseVal interface{}
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		verboseVal = kwargs["verbose"]
 		return Exit(0)
 	})
@@ -80,8 +80,8 @@ func TestHermeticSkipsEnvGlobalFlags(t *testing.T) {
 	if verboseVal != false {
 		t.Fatalf("expected verbose=false (default), got %v", verboseVal)
 	}
-	if sources["verbose"] != "default" {
-		t.Fatalf("expected source 'default' for verbose under hermetic, got %q", sources["verbose"])
+	if capturedCtx.Source("verbose") != "default" {
+		t.Fatalf("expected source 'default' for verbose under hermetic, got %q", capturedCtx.Source("verbose"))
 	}
 }
 
@@ -91,10 +91,10 @@ func TestHermeticCLIFlagStillWorks(t *testing.T) {
 	defer os.Unsetenv("MYAPP_LEVEL")
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
-	var sources map[string]string
+	var capturedCtx *Context
 	var levelVal interface{}
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		levelVal = kwargs["level"]
 		return Exit(0)
 	}, WithFlags(
@@ -108,8 +108,8 @@ func TestHermeticCLIFlagStillWorks(t *testing.T) {
 	if levelVal != 99 {
 		t.Fatalf("expected level=99 (cli), got %v", levelVal)
 	}
-	if sources["level"] != "cli" {
-		t.Fatalf("expected source 'cli' for level under hermetic, got %q", sources["level"])
+	if capturedCtx.Source("level") != "cli" {
+		t.Fatalf("expected source 'cli' for level under hermetic, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -121,10 +121,10 @@ func TestHermeticSkipsConfig(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
-	var sources map[string]string
+	var capturedCtx *Context
 	var levelVal interface{}
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		levelVal = kwargs["level"]
 		return Exit(0)
 	}, WithFlags(
@@ -138,8 +138,8 @@ func TestHermeticSkipsConfig(t *testing.T) {
 	if levelVal != 0 {
 		t.Fatalf("expected level=0 (default), got %v", levelVal)
 	}
-	if sources["level"] != "default" {
-		t.Fatalf("expected source 'default' for level under hermetic, got %q", sources["level"])
+	if capturedCtx.Source("level") != "default" {
+		t.Fatalf("expected source 'default' for level under hermetic, got %q", capturedCtx.Source("level"))
 	}
 }
 

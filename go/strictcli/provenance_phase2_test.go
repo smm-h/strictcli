@@ -18,9 +18,9 @@ func TestEnvSourceLabel(t *testing.T) {
 	defer os.Unsetenv("MYAPP_LEVEL")
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL")),
@@ -30,8 +30,8 @@ func TestEnvSourceLabel(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["level"] != "env" {
-		t.Fatalf("expected source 'env' for level, got %q", sources["level"])
+	if capturedCtx.Source("level") != "env" {
+		t.Fatalf("expected source 'env' for level, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -45,9 +45,9 @@ func TestConfigSourceLabel(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
@@ -57,8 +57,8 @@ func TestConfigSourceLabel(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["level"] != "config" {
-		t.Fatalf("expected source 'config' for level, got %q", sources["level"])
+	if capturedCtx.Source("level") != "config" {
+		t.Fatalf("expected source 'config' for level, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -71,9 +71,9 @@ func TestCliOverridesConfig(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
@@ -83,8 +83,8 @@ func TestCliOverridesConfig(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["level"] != "cli" {
-		t.Fatalf("expected source 'cli' for level, got %q", sources["level"])
+	if capturedCtx.Source("level") != "cli" {
+		t.Fatalf("expected source 'cli' for level, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -95,9 +95,9 @@ func TestCliOverridesEnv(t *testing.T) {
 	defer os.Unsetenv("MYAPP_LEVEL")
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL")),
@@ -107,8 +107,8 @@ func TestCliOverridesEnv(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["level"] != "cli" {
-		t.Fatalf("expected source 'cli' for level, got %q", sources["level"])
+	if capturedCtx.Source("level") != "cli" {
+		t.Fatalf("expected source 'cli' for level, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -124,9 +124,9 @@ func TestEnvOverridesConfig(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithEnvPrefix("MYAPP"), WithConfig(), WithConfigPath(configFile))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
@@ -136,8 +136,8 @@ func TestEnvOverridesConfig(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["level"] != "env" {
-		t.Fatalf("expected source 'env' for level, got %q", sources["level"])
+	if capturedCtx.Source("level") != "env" {
+		t.Fatalf("expected source 'env' for level, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -150,9 +150,9 @@ func TestDefaultWithConfigAvailableButAbsent(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
@@ -162,8 +162,8 @@ func TestDefaultWithConfigAvailableButAbsent(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["level"] != "default" {
-		t.Fatalf("expected source 'default' for level, got %q", sources["level"])
+	if capturedCtx.Source("level") != "default" {
+		t.Fatalf("expected source 'default' for level, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -179,9 +179,9 @@ func TestGlobalFlagEnvSource(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Env("MYAPP_VERBOSE"), Default(false)))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	})
 
@@ -189,8 +189,8 @@ func TestGlobalFlagEnvSource(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["verbose"] != "env" {
-		t.Fatalf("expected source 'env' for verbose, got %q", sources["verbose"])
+	if capturedCtx.Source("verbose") != "env" {
+		t.Fatalf("expected source 'env' for verbose, got %q", capturedCtx.Source("verbose"))
 	}
 }
 
@@ -204,9 +204,9 @@ func TestGlobalFlagConfigSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	})
 
@@ -214,8 +214,8 @@ func TestGlobalFlagConfigSource(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["verbose"] != "config" {
-		t.Fatalf("expected source 'config' for verbose, got %q", sources["verbose"])
+	if capturedCtx.Source("verbose") != "config" {
+		t.Fatalf("expected source 'config' for verbose, got %q", capturedCtx.Source("verbose"))
 	}
 }
 
@@ -224,9 +224,9 @@ func TestGlobalFlagConfigSource(t *testing.T) {
 func TestGlobalFlagCliSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	})
 
@@ -234,8 +234,8 @@ func TestGlobalFlagCliSource(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["verbose"] != "cli" {
-		t.Fatalf("expected source 'cli' for verbose, got %q", sources["verbose"])
+	if capturedCtx.Source("verbose") != "cli" {
+		t.Fatalf("expected source 'cli' for verbose, got %q", capturedCtx.Source("verbose"))
 	}
 }
 
@@ -244,9 +244,9 @@ func TestGlobalFlagCliSource(t *testing.T) {
 func TestGlobalFlagDefaultSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	})
 
@@ -254,8 +254,8 @@ func TestGlobalFlagDefaultSource(t *testing.T) {
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if sources["verbose"] != "default" {
-		t.Fatalf("expected source 'default' for verbose, got %q", sources["verbose"])
+	if capturedCtx.Source("verbose") != "default" {
+		t.Fatalf("expected source 'default' for verbose, got %q", capturedCtx.Source("verbose"))
 	}
 }
 
@@ -356,9 +356,9 @@ func TestConfigShowReportsDefault(t *testing.T) {
 // invoke gets source "cli".
 func TestInvokeProvidedKwargSourceIsCli(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
@@ -368,8 +368,8 @@ func TestInvokeProvidedKwargSourceIsCli(t *testing.T) {
 	if ir.err != "" {
 		t.Fatalf("invoke failed: %s", ir.err)
 	}
-	if sources["level"] != "cli" {
-		t.Fatalf("expected source 'cli' for level, got %q", sources["level"])
+	if capturedCtx.Source("level") != "cli" {
+		t.Fatalf("expected source 'cli' for level, got %q", capturedCtx.Source("level"))
 	}
 }
 
@@ -377,9 +377,9 @@ func TestInvokeProvidedKwargSourceIsCli(t *testing.T) {
 // via invoke (and thus defaulted) gets source "default".
 func TestInvokeAbsentKwargSourceIsDefault(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	var sources map[string]string
+	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		sources = app.LastSources
+		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
@@ -389,8 +389,8 @@ func TestInvokeAbsentKwargSourceIsDefault(t *testing.T) {
 	if ir.err != "" {
 		t.Fatalf("invoke failed: %s", ir.err)
 	}
-	if sources["level"] != "default" {
-		t.Fatalf("expected source 'default' for level, got %q", sources["level"])
+	if capturedCtx.Source("level") != "default" {
+		t.Fatalf("expected source 'default' for level, got %q", capturedCtx.Source("level"))
 	}
 }
 
