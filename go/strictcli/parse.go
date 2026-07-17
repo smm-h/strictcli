@@ -927,12 +927,12 @@ func validateChoices(name string, val interface{}, repeatable bool, choices []in
 		if isArg {
 			return fmt.Sprintf(
 				"argument '%s': invalid value '%v', must be one of: %s",
-				name, v, formatChoices(choices),
+				name, formatValueForError(v), formatChoices(choices),
 			)
 		}
 		return fmt.Sprintf(
 			"--%s: invalid value '%v', must be one of: %s",
-			name, v, formatChoices(choices),
+			name, formatValueForError(v), formatChoices(choices),
 		)
 	}
 	if repeatable {
@@ -962,7 +962,7 @@ func inChoices(val interface{}, choices []interface{}) bool {
 func formatChoices(choices []interface{}) string {
 	parts := make([]string, len(choices))
 	for i, c := range choices {
-		parts[i] = fmt.Sprintf("%v", c)
+		parts[i] = formatValueForError(c)
 	}
 	return strings.Join(parts, ", ")
 }
