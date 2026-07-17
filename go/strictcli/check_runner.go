@@ -5,6 +5,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 )
 
 // CheckRunResult holds the outcome of running a single check. The verdict is
@@ -13,6 +14,11 @@ import (
 type CheckRunResult struct {
 	Name    string
 	Outcome CheckOutcome
+	// DurationMs is the wall-clock time in integer milliseconds spent inside the
+	// check impl. It is captured around the impl call only; checks that never
+	// execute (cascade-skipped) carry 0. Purely informational -- it never
+	// affects status or exit codes.
+	DurationMs int64
 }
 
 // Status returns the derived label ("pass", "fail", "warn", "skip") used for
@@ -263,13 +269,15 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 			}
 		}
 
-		// Run the check
+		// Run the check, capturing wall-clock duration around the impl call only.
+		start := time.Now()
 		o := def.impl(ctx)
+		durationMs := time.Since(start).Milliseconds()
 		// Belt-and-braces: an impl must return a reporter-minted outcome.
 		if !o.minted {
 			panic(fmt.Sprintf("check %q returned an outcome not minted by its reporter; use reporter methods (Passed/Skipped/Found)", name))
 		}
-		r := CheckRunResult{Name: name, Outcome: o}
+		r := CheckRunResult{Name: name, Outcome: o, DurationMs: durationMs}
 		results = append(results, r)
 
 		switch {

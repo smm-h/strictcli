@@ -63,7 +63,7 @@ func (a *App) registerCheckCommand() {
 			BoolFlag("list", "List all registered checks with their tags and exit without running", Default(false)),
 			BoolFlag("json", "Output check results as machine-readable JSON instead of human text", Default(false)),
 			BoolFlag("ignore-warnings", "Treat warn-severity results as passing so they do not cause nonzero exit", Default(false)),
-			BoolFlag("verbose", "Show full details for passing checks in addition to failures and warnings", Default(false)),
+			BoolFlag("verbose", "Show per-check notes and durations (including on passing checks) plus a trailing pass/fail/warn/skip count summary", Default(false)),
 			BoolFlag("dry-run", "Show which checks would run based on current filters without executing them", Default(false)),
 		),
 	)

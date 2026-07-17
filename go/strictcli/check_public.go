@@ -84,13 +84,29 @@ func FormatCheckResults(results []CheckRunResult, verbose bool) string {
 	}
 
 	var b strings.Builder
+	var passed, failed, warned, skipped int
 	for i, r := range results {
 		status := r.Status()
+		switch status {
+		case "pass":
+			passed++
+		case "fail":
+			failed++
+		case "warn":
+			warned++
+		case "skip":
+			skipped++
+		}
 		label := statusLabel[status]
 		if label == "" {
 			label = strings.ToUpper(status)
 		}
 		fmt.Fprintf(&b, "%-4s  %-*s    %s", label, nameWidth, r.Name, r.Outcome.message)
+		// Under --verbose, append the per-check duration in a stable, pattern-
+		// matchable shape: "(<n>ms)".
+		if verbose {
+			fmt.Fprintf(&b, " (%dms)", r.DurationMs)
+		}
 
 		showProblems := status == "fail" || status == "warn" || status == "skip" || verbose
 		if showProblems {
@@ -98,10 +114,22 @@ func FormatCheckResults(results []CheckRunResult, verbose bool) string {
 				fmt.Fprintf(&b, "\n        [%s] %s", p.severity, p.text)
 			}
 		}
+		// Notes are verdict-inert and surface ONLY under --verbose, on every
+		// outcome including a pass.
+		if verbose {
+			for _, n := range r.Outcome.notes {
+				fmt.Fprintf(&b, "\n        [note] %s", n)
+			}
+		}
 
 		if i < len(results)-1 {
 			b.WriteByte('\n')
 		}
+	}
+	// Under --verbose, append a trailing blank line and a count summary.
+	if verbose {
+		fmt.Fprintf(&b, "\n\n%d passed / %d failed / %d warned / %d skipped",
+			passed, failed, warned, skipped)
 	}
 	return b.String()
 }
@@ -116,10 +144,12 @@ func FormatCheckResultsJSON(results []CheckRunResult) string {
 		Text     string `json:"text"`
 	}
 	type jsonResult struct {
-		Name     string        `json:"name"`
-		Status   string        `json:"status"`
-		Message  string        `json:"message"`
-		Problems []jsonProblem `json:"problems"`
+		Name       string        `json:"name"`
+		Status     string        `json:"status"`
+		Message    string        `json:"message"`
+		Problems   []jsonProblem `json:"problems"`
+		Notes      []string      `json:"notes"`
+		DurationMs int64         `json:"duration_ms"`
 	}
 
 	entries := make([]jsonResult, len(results))
@@ -128,11 +158,15 @@ func FormatCheckResultsJSON(results []CheckRunResult) string {
 		for _, p := range r.Outcome.problems {
 			problems = append(problems, jsonProblem{Severity: p.severity, Text: p.text})
 		}
+		notes := make([]string, 0, len(r.Outcome.notes))
+		notes = append(notes, r.Outcome.notes...)
 		entries[i] = jsonResult{
-			Name:     r.Name,
-			Status:   r.Status(),
-			Message:  r.Outcome.message,
-			Problems: problems,
+			Name:       r.Name,
+			Status:     r.Status(),
+			Message:    r.Outcome.message,
+			Problems:   problems,
+			Notes:      notes,
+			DurationMs: r.DurationMs,
 		}
 	}
 

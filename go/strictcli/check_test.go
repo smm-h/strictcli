@@ -3335,3 +3335,234 @@ func TestCheckCommand_DryRun_PurityAnnotation(t *testing.T) {
 // Ensure unused imports don't cause errors
 var _ = sort.Strings
 var _ = fmt.Sprintf
+
+// --- Verdict-inert notes channel + honest --verbose ---
+
+// passWithNotes / foundWithNotes are in-package minters that attach notes via
+// the real reporter path (Note), so notes tests exercise the sealed model.
+func passWithNotes(msg string, notes ...string) CheckOutcome {
+	r := &ErrorReporter{}
+	for _, n := range notes {
+		r.Note(n)
+	}
+	return r.Passed(msg)
+}
+
+func TestReporterNote_CarriedOnPass(t *testing.T) {
+	o := passWithNotes("all good", "cached", "shortcut")
+	if deriveStatus(o) != "pass" {
+		t.Fatalf("expected pass, got %q", deriveStatus(o))
+	}
+	if len(o.notes) != 2 || o.notes[0] != "cached" || o.notes[1] != "shortcut" {
+		t.Fatalf("expected notes carried, got %+v", o.notes)
+	}
+}
+
+func TestReporterNote_CarriedOnFoundAndSkip(t *testing.T) {
+	er := &ErrorReporter{}
+	er.Note("aside")
+	er.Error("real problem")
+	found := er.Found("bad")
+	if deriveStatus(found) != "fail" || len(found.notes) != 1 || found.notes[0] != "aside" {
+		t.Fatalf("found: expected note carried, got status=%q notes=%+v", deriveStatus(found), found.notes)
+	}
+
+	sr := &ErrorReporter{}
+	sr.Note("skip context")
+	skip := sr.Skipped("nothing to do")
+	if deriveStatus(skip) != "skip" || len(skip.notes) != 1 {
+		t.Fatalf("skip: expected note carried, got status=%q notes=%+v", deriveStatus(skip), skip.notes)
+	}
+}
+
+func TestReporterNote_AvailableOnWarnReporter(t *testing.T) {
+	wr := &WarnReporter{}
+	wr.Note("warn-reporter note")
+	o := wr.Passed("fine")
+	if len(o.notes) != 1 || o.notes[0] != "warn-reporter note" {
+		t.Fatalf("expected note on warn reporter, got %+v", o.notes)
+	}
+}
+
+func TestReporterNote_EmptyPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic on empty note")
+		}
+		if !strings.Contains(fmt.Sprint(r), "note text must be a non-empty string") {
+			t.Fatalf("unexpected panic message: %v", r)
+		}
+	}()
+	(&ErrorReporter{}).Note("   ")
+}
+
+func TestReporterNote_DoesNotDefeatPassedSeal(t *testing.T) {
+	// A note must NOT let a check with problems claim it passed.
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic: problems + Passed")
+		}
+		if !strings.Contains(fmt.Sprint(r), "cannot pass") {
+			t.Fatalf("unexpected panic message: %v", r)
+		}
+	}()
+	er := &ErrorReporter{}
+	er.Note("informational")
+	er.Warn("a real problem")
+	er.Passed("nope")
+}
+
+func TestFormatCheckResults_NotesHiddenNormalShownVerbose(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "a", Outcome: passWithNotes("ok", "visible note")},
+	}
+	normal := FormatCheckResults(results, false)
+	if strings.Contains(normal, "[note]") || strings.Contains(normal, "visible note") {
+		t.Fatalf("notes must be hidden in normal mode, got %q", normal)
+	}
+	verbose := FormatCheckResults(results, true)
+	if !strings.Contains(verbose, "        [note] visible note") {
+		t.Fatalf("expected note line in verbose, got %q", verbose)
+	}
+}
+
+func TestFormatCheckResults_NormalModeUnchanged(t *testing.T) {
+	// Pin the exact normal-mode output; notes/duration/summary must not leak.
+	results := []CheckRunResult{
+		{Name: "alpha", Outcome: passWithNotes("alpha OK", "note")},
+		{Name: "beta", Outcome: passOutcome("beta OK")},
+	}
+	out := FormatCheckResults(results, false)
+	want := "PASS  alpha    alpha OK\nPASS  beta     beta OK"
+	if out != want {
+		t.Fatalf("normal output changed:\n got %q\nwant %q", out, want)
+	}
+}
+
+func TestFormatCheckResults_VerboseDurationShape(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "a", Outcome: passOutcome("ok"), DurationMs: 12},
+	}
+	out := FormatCheckResults(results, true)
+	if !strings.Contains(out, "(12ms)") {
+		t.Fatalf("expected stable duration shape (12ms), got %q", out)
+	}
+}
+
+func TestFormatCheckResults_VerboseCountSummary(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "a", Outcome: passOutcome("ok")},
+		{Name: "b", Outcome: failOutcome("bad", "x")},
+		{Name: "c", Outcome: warnOutcome("hmm", "y")},
+		{Name: "d", Outcome: skipOutcome("skip")},
+	}
+	out := FormatCheckResults(results, true)
+	if !strings.HasSuffix(out, "1 passed / 1 failed / 1 warned / 1 skipped") {
+		t.Fatalf("expected trailing count summary, got %q", out)
+	}
+	if !strings.Contains(out, "\n\n1 passed / 1 failed / 1 warned / 1 skipped") {
+		t.Fatalf("expected blank line before summary, got %q", out)
+	}
+}
+
+func TestFormatCheckResultsJSON_NotesAndDurationAlways(t *testing.T) {
+	results := []CheckRunResult{
+		{Name: "a", Outcome: passWithNotes("ok", "n1"), DurationMs: 7},
+		{Name: "b", Outcome: passOutcome("ok2")},
+	}
+	out := FormatCheckResultsJSON(results)
+	var parsed []struct {
+		Notes      []string `json:"notes"`
+		DurationMs int64    `json:"duration_ms"`
+	}
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+	if len(parsed) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(parsed))
+	}
+	if len(parsed[0].Notes) != 1 || parsed[0].Notes[0] != "n1" || parsed[0].DurationMs != 7 {
+		t.Fatalf("entry 0: expected notes=[n1] duration=7, got %+v", parsed[0])
+	}
+	// Additive keys ALWAYS present, even with no notes: empty [] not null.
+	if parsed[1].Notes == nil {
+		t.Fatalf("entry 1: notes must serialize as [] not null")
+	}
+	if !strings.Contains(out, `"notes":[]`) {
+		t.Fatalf("expected empty notes to serialize as [], got %q", out)
+	}
+}
+
+func TestRunChecks_DurationFieldPresent(t *testing.T) {
+	checksPath := writeChecksFile(t, twoChecksToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
+	})
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("covered")
+	})
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: "/tmp"} })
+	results, _, _, err := app.RunChecks(&testCheckContext{root: "/tmp"}, RunChecksOptions{RunAll: true})
+	if err != nil {
+		t.Fatalf("RunChecks error: %v", err)
+	}
+	for _, r := range results {
+		if r.DurationMs < 0 {
+			t.Fatalf("expected non-negative duration, got %d for %q", r.DurationMs, r.Name)
+		}
+	}
+}
+
+func TestCheckCommand_Verbose_NotesDurationSummary(t *testing.T) {
+	checksPath := writeChecksFile(t, twoChecksToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, r *ErrorReporter) CheckOutcome {
+		r.Note("a verbose-only note")
+		return r.Passed("ok")
+	})
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("covered")
+	})
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: "/tmp"} })
+
+	r := app.Test([]string{"check", "--all", "--verbose"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "[note] a verbose-only note") {
+		t.Fatalf("expected note in verbose output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "ms)") {
+		t.Fatalf("expected duration in verbose output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "2 passed / 0 failed / 0 warned / 0 skipped") {
+		t.Fatalf("expected count summary, got %q", r.Stdout)
+	}
+
+	// Normal mode must reveal none of it.
+	n := app.Test([]string{"check", "--all"})
+	if strings.Contains(n.Stdout, "[note]") || strings.Contains(n.Stdout, "passed /") || strings.Contains(n.Stdout, "ms)") {
+		t.Fatalf("normal mode leaked verbose-only content, got %q", n.Stdout)
+	}
+}
+
+func TestCheckCommand_VerboseHelpText(t *testing.T) {
+	checksPath := writeChecksFile(t, twoChecksToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("ok")
+	})
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
+		return passOutcome("covered")
+	})
+	r := app.Test([]string{"check", "--help"})
+	if !strings.Contains(r.Stdout, "notes") {
+		t.Fatalf("expected verbose help to mention notes, got %q", r.Stdout)
+	}
+	if strings.Contains(r.Stdout, "Show full details for passing checks") {
+		t.Fatalf("stale/lying verbose help text still present, got %q", r.Stdout)
+	}
+}

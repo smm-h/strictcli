@@ -33,6 +33,11 @@ type CheckOutcome struct {
 	kind     string         // "passed", "skipped", "found"
 	message  string         // pass/found message or skip reason
 	problems []checkProblem // accumulated problems (only for kind == "found")
+	// notes is an informational, verdict-inert channel: notes are recorded
+	// unconditionally on ANY outcome (including a pass) via reporter.Note. They
+	// are PROVABLY inert -- excluded from status derivation, gating, problem
+	// ordering, and exit codes. They surface only under --verbose and in JSON.
+	notes []string
 }
 
 // orderedProblems returns the outcome's problems grouped by severity: all
@@ -56,6 +61,21 @@ func (o CheckOutcome) orderedProblems() []checkProblem {
 // Error on a *WarnReporter is a compile error).
 type reporterCore struct {
 	problems []checkProblem
+	// notes accumulates informational messages recorded via Note. Notes are
+	// carried onto the minted outcome but never influence status, gating, or
+	// exit codes -- they are a verdict-inert reporting channel.
+	notes []string
+}
+
+// Note records an informational note. Non-empty text is required. Notes are
+// allowed on EVERY outcome, including a pass -- they never cause the
+// problems-present hard-errors that passed()/skipped() enforce. Notes are
+// verdict-inert: they surface only under --verbose and in JSON output.
+func (r *reporterCore) Note(text string) {
+	if strings.TrimSpace(text) == "" {
+		panic("note text must be a non-empty string")
+	}
+	r.notes = append(r.notes, text)
 }
 
 // Warn mints a warn-severity problem. Non-empty text is required.
@@ -80,7 +100,7 @@ func (r *reporterCore) Passed(message string) CheckOutcome {
 	if len(r.problems) > 0 {
 		panic("problems were reported; a check that found problems cannot pass -- use found instead")
 	}
-	return CheckOutcome{minted: true, kind: "passed", message: message}
+	return CheckOutcome{minted: true, kind: "passed", message: message, notes: append([]string(nil), r.notes...)}
 }
 
 // Skipped finalizes a terminal SKIP outcome. It hard-errors if any problems were
@@ -92,7 +112,7 @@ func (r *reporterCore) Skipped(reason string) CheckOutcome {
 	if len(r.problems) > 0 {
 		panic("problems were reported; a check that found problems cannot skip")
 	}
-	return CheckOutcome{minted: true, kind: "skipped", message: reason}
+	return CheckOutcome{minted: true, kind: "skipped", message: reason, notes: append([]string(nil), r.notes...)}
 }
 
 // Found finalizes an outcome carrying the accumulated problems. It hard-errors
@@ -110,6 +130,7 @@ func (r *reporterCore) Found(message string) CheckOutcome {
 		kind:     "found",
 		message:  message,
 		problems: append([]checkProblem(nil), r.problems...),
+		notes:    append([]string(nil), r.notes...),
 	}
 }
 
