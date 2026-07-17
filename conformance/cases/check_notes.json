@@ -1,0 +1,115 @@
+[
+  {
+    "name": "notes: hidden without --verbose (passing check)",
+    "app": {
+      "name": "notesapp",
+      "version": "1.0.0",
+      "help": "Test the notes/verbose channel",
+      "commands": [],
+      "checks_toml": "app = \"notesapp\"\n[checks.audit]\ntags = [\"ci\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "audit",
+          "mint": "passed",
+          "message": "audit clean",
+          "notes": ["scanned 5 files"]
+        }
+      ]
+    },
+    "argv": ["check", "--name", "audit"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ["audit", "audit clean"],
+      "stdout_not_contains": "[note]"
+    }
+  },
+  {
+    "name": "notes: visible under --verbose on a passing check, with count summary and duration",
+    "app": {
+      "name": "notesapp",
+      "version": "1.0.0",
+      "help": "Test the notes/verbose channel",
+      "commands": [],
+      "checks_toml": "app = \"notesapp\"\n[checks.audit]\ntags = [\"ci\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "audit",
+          "mint": "passed",
+          "message": "audit clean",
+          "notes": ["scanned 5 files", "no findings"]
+        }
+      ]
+    },
+    "argv": ["check", "--name", "audit", "--verbose"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "[note] scanned 5 files",
+        "[note] no findings",
+        "1 passed / 0 failed / 0 warned / 0 skipped"
+      ],
+      "stdout_matches": "\\(\\d+ms\\)"
+    }
+  },
+  {
+    "name": "notes: hidden without --verbose even on a failing check (problems still shown)",
+    "app": {
+      "name": "notesapp",
+      "version": "1.0.0",
+      "help": "Test the notes/verbose channel",
+      "commands": [],
+      "checks_toml": "app = \"notesapp\"\n[checks.gate]\ntags = [\"ci\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "gate",
+          "mint": "found",
+          "message": "gate failed",
+          "problems": [{ "severity": "error", "text": "blocking issue" }],
+          "notes": ["ran deep scan"]
+        }
+      ]
+    },
+    "argv": ["check", "--name", "gate"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": ["gate", "[error] blocking issue"],
+      "stdout_not_contains": "[note]"
+    }
+  },
+  {
+    "name": "notes: verbose shows notes and count summary across passing and failing checks",
+    "app": {
+      "name": "notesapp",
+      "version": "1.0.0",
+      "help": "Test the notes/verbose channel",
+      "commands": [],
+      "checks_toml": "app = \"notesapp\"\n[checks.audit]\ntags = [\"ci\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.gate]\ntags = [\"ci\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "audit",
+          "mint": "passed",
+          "message": "audit clean",
+          "notes": ["scanned 5 files"]
+        },
+        {
+          "name": "gate",
+          "mint": "found",
+          "message": "gate failed",
+          "problems": [{ "severity": "error", "text": "blocking issue" }],
+          "notes": ["ran deep scan"]
+        }
+      ]
+    },
+    "argv": ["check", "--all", "--verbose"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": [
+        "[note] scanned 5 files",
+        "[note] ran deep scan",
+        "[error] blocking issue",
+        "1 passed / 1 failed / 0 warned / 0 skipped"
+      ],
+      "stdout_matches": "\\(\\d+ms\\)"
+    }
+  }
+]
