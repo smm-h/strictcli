@@ -23,6 +23,12 @@
           "default": false,
           "description": "If true, this test case is exempt from schema validation (used for cases that intentionally craft invalid app definitions)."
         },
+        "targets": {
+          "type": "array",
+          "items": { "enum": ["python", "go"] },
+          "minItems": 1,
+          "description": "Restrict which implementations run this case. Absent means both. Used for cases that are only expressible in one language (e.g. Python's bad-return hard error, which Go's type system makes unrepresentable)."
+        },
         "app": {
           "$ref": "#/$defs/app"
         },
@@ -181,6 +187,11 @@
             }
           },
           "description": "Problems the reporter mints before found(). Only valid when mint == 'found'. A warn-severity check may only mint 'warn' problems."
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Verdict-inert informational notes the reporter records via note()/Note(). They surface only under --verbose and in JSON, on any outcome including a pass."
         }
       }
     },
@@ -218,6 +229,11 @@
               "text": { "type": "string" }
             }
           }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Verdict-inert informational notes the reporter records via note()/Note()."
         }
       }
     },
@@ -269,20 +285,25 @@
           "type": "string",
           "description": "Deprecation message shown when the command is invoked or listed in help. Required when deprecated is true."
         },
-        "handler_style": {
-          "type": "string",
-          "enum": ["classic", "context"],
-          "default": "classic",
-          "description": "Handler style: 'classic' (kwargs, current behavior) or 'context' (receives ctx, can call ctx.source(name))."
-        },
         "handler_prints": {
           "type": "string",
-          "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'."
+          "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'; {source:name} is replaced with the provenance source label via ctx.source(name)."
         },
         "handler_exit_code": {
           "type": "integer",
           "default": 0,
-          "description": "The integer value the generated handler returns. Used as the process exit code."
+          "description": "The integer value the generated handler returns (as outcome(exit_code=N) / Exit(N)). Used as the process exit code."
+        },
+        "handler_returns": {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => outcome(data)/ExitData(0,data); 'exit_data' => outcome(exit_code,data)/ExitData(code,data); 'none' => return None (Python)/Exit(0) (Go); 'bad' => an invalid return (Python-only hard error; Go's type system makes it unrepresentable).",
+          "properties": {
+            "kind": { "enum": ["exit", "data", "exit_data", "none", "bad"] },
+            "code": { "type": "integer" },
+            "data": { "description": "Structured data payload for data/exit_data kinds. Author with sorted keys so compact JSON is byte-identical across languages." }
+          }
         },
         "passthrough": {
           "type": "boolean",
@@ -325,9 +346,9 @@
           "help": true,
           "deprecated": true,
           "deprecated_message": true,
-          "handler_style": false,
           "handler_prints": false,
           "handler_exit_code": false,
+          "handler_returns": false,
           "flags": false,
           "args": false,
           "flag_sets": false,
@@ -554,6 +575,20 @@
         "stdout_equals": {
           "type": "string",
           "description": "Exact stdout content."
+        },
+        "stdout_matches": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Regex pattern(s) that must match (re.search) somewhere in stdout. For non-deterministic content like durations."
+        },
+        "stderr_matches": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Regex pattern(s) that must match (re.search) somewhere in stderr."
         },
         "stderr_contains": {
           "oneOf": [

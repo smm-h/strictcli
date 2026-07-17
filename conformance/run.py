@@ -140,6 +140,18 @@ def _check_not_contains(actual: str, expected, stream_name: str) -> list[str]:
     return errors
 
 
+def _check_matches(actual: str, expected, stream_name: str) -> list[str]:
+    """Check that actual matches expected regex pattern(s) via re.search."""
+    errors = []
+    if isinstance(expected, str):
+        expected = [expected]
+    for pat in expected:
+        if not re.search(pat, actual):
+            errors.append(f"  {stream_name} does not match pattern: {pat!r}")
+            errors.append(f"  actual {stream_name}: {actual!r}")
+    return errors
+
+
 def _check_equals(actual: str, expected: str, stream_name: str) -> list[str]:
     """Check exact match. Returns list of error messages."""
     errors = []
@@ -300,6 +312,10 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             errors.extend(
                 _check_not_contains(result.stdout, expect["stdout_not_contains"], "stdout")
             )
+        if "stdout_matches" in expect:
+            errors.extend(
+                _check_matches(result.stdout, expect["stdout_matches"], "stdout")
+            )
 
         # Check stderr
         if "stderr_contains" in expect:
@@ -313,6 +329,10 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         if "stderr_not_contains" in expect:
             errors.extend(
                 _check_not_contains(result.stderr, expect["stderr_not_contains"], "stderr")
+            )
+        if "stderr_matches" in expect:
+            errors.extend(
+                _check_matches(result.stderr, expect["stderr_matches"], "stderr")
             )
 
     except subprocess.TimeoutExpired:
@@ -383,6 +403,11 @@ def _run_both_mode(cases: list[tuple[str, dict]], verbose: bool) -> int:
     for filename, case in cases:
         name = case["name"]
         label = f"{filename}: {name}"
+
+        # Cross-target parity comparison only applies to cases both targets run.
+        targets = case.get("targets")
+        if targets is not None and set(targets) != {"python", "go"}:
+            continue
 
         if verbose:
             print(f"  running: {label} ...", end=" ", flush=True)
@@ -470,6 +495,11 @@ def _run_single_mode(cases: list[tuple[str, dict]], target: str, verbose: bool) 
     for filename, case in cases:
         name = case["name"]
         label = f"{filename}: {name}"
+
+        # Skip cases that declare a target restriction excluding this target.
+        targets = case.get("targets")
+        if targets is not None and target not in targets:
+            continue
 
         if verbose:
             print(f"  running: {label} ...", end=" ", flush=True)
