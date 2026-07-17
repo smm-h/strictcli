@@ -1223,3 +1223,25 @@ func TestFlagTypeNames(t *testing.T) {
 		}
 	}
 }
+
+// TestFormatDictForDisplaySortedKeys verifies that dict values render with
+// keys sorted ascending in canonical "key=value" form. Regression for phase
+// 8.3go: dict display must be deterministic (sorted), not dependent on Go
+// map iteration order or the fmt "map[...]" representation.
+func TestFormatDictForDisplaySortedKeys(t *testing.T) {
+	m := map[string]interface{}{
+		"zebra": "z",
+		"alpha": int64(1),
+		"mike":  true,
+	}
+	got := formatDictForDisplay(m)
+	want := "alpha=1, mike=true, zebra=z"
+	if got != want {
+		t.Fatalf("dict display not canonical/sorted.\nwant: %q\ngot:  %q", want, got)
+	}
+
+	// formatValueForError must route maps through the same canonical form.
+	if fv := formatValueForError(m); fv != want {
+		t.Fatalf("formatValueForError map case: want %q, got %q", want, fv)
+	}
+}

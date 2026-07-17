@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -1170,9 +1171,30 @@ func formatValueForError(value interface{}) string {
 		return strconv.Itoa(v)
 	case string:
 		return v
+	case map[string]interface{}:
+		return formatDictForDisplay(v)
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// formatDictForDisplay renders a dict flag value as canonical, deterministic
+// text for errors and help: keys sorted ascending, each rendered as
+// "key=value" (mirroring the CLI input syntax), values formatted via
+// formatValueForError, joined by ", ". Go's fmt "%v" also sorts map keys, but
+// its "map[k:v]" form is a Go-ism that does not match the input syntax; this
+// makes the canonical form explicit and guaranteed stable.
+func formatDictForDisplay(m map[string]interface{}) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = k + "=" + formatValueForError(m[k])
+	}
+	return strings.Join(parts, ", ")
 }
 
 // coerceToScalar coerces a raw string to a scalar FlagType.

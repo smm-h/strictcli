@@ -11,10 +11,15 @@ import (
 // routed through the canonical formatter; all other types keep their prior
 // fmt "%v" rendering byte-for-byte.
 func formatDefaultValue(v interface{}) string {
-	if f, ok := v.(float64); ok {
-		return formatFloatCanonical(f)
+	switch val := v.(type) {
+	case float64:
+		return formatFloatCanonical(val)
+	case map[string]interface{}:
+		// Dict defaults render in canonical sorted "key=value" form.
+		return formatDictForDisplay(val)
+	default:
+		return fmt.Sprintf("%v", v)
 	}
-	return fmt.Sprintf("%v", v)
 }
 
 // formatFloatCanonical formats a float64 using the strictcli canonical float
