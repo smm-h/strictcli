@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	tomledit "github.com/smm-h/go-toml-edit"
@@ -13,6 +14,7 @@ import (
 // Suppress unused-import errors when templates have no substitutions.
 var _ = strings.ReplaceAll
 var _ = fmt.Println
+var _ = sort.Strings
 
 func main() {
 	defer func() {
@@ -809,8 +811,13 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 				var parts []string
 				if raw != nil {
 					m := raw.(map[string]interface{})
-					for k, v := range m {
-						parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+					keys := make([]string, 0, len(m))
+					for k := range m {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					for _, k := range keys {
+						parts = append(parts, fmt.Sprintf("%s=%v", k, m[k]))
 					}
 				}
 				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
