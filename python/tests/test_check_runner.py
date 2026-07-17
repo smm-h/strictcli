@@ -185,7 +185,7 @@ class TestRunChecks:
         order = _resolve_check_order(app._check_defs, {"a", "b"})
         results, _, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 0
-        statuses = {name: r.status for name, r in results}
+        statuses = {name: r.status for name, r, _ in results}
         assert statuses["a"] == "pass"
         assert statuses["b"] == "pass"
 
@@ -206,11 +206,11 @@ class TestRunChecks:
         order = _resolve_check_order(app._check_defs, {"a", "b"})
         results, _, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 1
-        statuses = {name: r.status for name, r in results}
+        statuses = {name: r.status for name, r, _ in results}
         assert statuses["b"] == "fail"
         assert statuses["a"] == "skip"
         # Verify skip message references the failed dependency
-        skip_result = dict(results)["a"]
+        skip_result = {name: o for name, o, _ in results}["a"]
         assert 'dependency "b" failed' in skip_result.message
 
     def test_transitive_skip(self, tmp_path, monkeypatch):
@@ -235,7 +235,7 @@ class TestRunChecks:
         order = _resolve_check_order(app._check_defs, {"a", "b", "c"})
         results, _, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 1
-        statuses = {name: r.status for name, r in results}
+        statuses = {name: r.status for name, r, _ in results}
         assert statuses["c"] == "fail"
         assert statuses["b"] == "skip"
         assert statuses["a"] == "skip"
@@ -288,7 +288,7 @@ class TestRunChecks:
         order = _resolve_check_order(app._check_defs, {"a", "b"})
         results, _, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 1
-        statuses = {name: r.status for name, r in results}
+        statuses = {name: r.status for name, r, _ in results}
         assert statuses["b"] == "warn"
         assert statuses["a"] == "pass"
 
@@ -315,7 +315,7 @@ class TestRunChecks:
         order = _resolve_check_order(app._check_defs, {"a", "b", "c"})
         results, _, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=False)
         assert exit_code == 1
-        statuses = {name: r.status for name, r in results}
+        statuses = {name: r.status for name, r, _ in results}
         assert statuses["c"] == "warn"
         assert statuses["b"] == "pass"
         assert statuses["a"] == "pass"
@@ -348,7 +348,7 @@ class TestRunChecks:
             app._check_defs, order, ctx, ignore_warnings=False, scope_adapter=adapter
         )
         assert exit_code == 0
-        statuses = {name: r.status for name, r in results}
+        statuses = {name: r.status for name, r, _ in results}
         assert statuses["b"] == "skip"
         assert statuses["a"] == "pass"
 
@@ -369,7 +369,7 @@ class TestRunChecks:
         order = _resolve_check_order(app._check_defs, {"a", "b"})
         results, _, exit_code = _run_checks(app._check_defs, order, ctx, ignore_warnings=True)
         assert exit_code == 0
-        statuses = {name: r.status for name, r in results}
+        statuses = {name: r.status for name, r, _ in results}
         assert statuses["b"] == "warn"
         assert statuses["a"] == "pass"
 
@@ -570,7 +570,7 @@ class TestScopeAdapter:
         ctx = SimpleContext(project_root=Path("/tmp"))
         results, _, exit_code = _run_checks(defs, ["a", "b"], ctx, False, scope_adapter=adapter)
         assert exit_code == 0
-        statuses = {name: r.status for name, r in results}
+        statuses = {name: r.status for name, r, _ in results}
         assert statuses["a"] == "skip"
         assert statuses["b"] == "pass"
         assert b_ran == [True]

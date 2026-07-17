@@ -32,6 +32,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import tomllib
 from collections import deque
 from dataclasses import dataclass, field
@@ -2288,6 +2289,11 @@ class _CheckOutcome:
     kind: str  # "passed", "skipped", "found"
     message: str
     problems: tuple[_CheckProblem, ...] = ()
+    # notes is an informational, verdict-inert channel: notes are recorded
+    # unconditionally on ANY outcome (including a pass) via reporter.note. They
+    # are PROVABLY inert -- excluded from status derivation, gating, problem
+    # ordering, and exit codes. They surface only under --verbose and in JSON.
+    notes: tuple[str, ...] = ()
     _token: object = None
 
     def __post_init__(self) -> None:
@@ -2344,6 +2350,21 @@ class _ReporterCore:
 
     def __init__(self) -> None:
         self._problems: list[_CheckProblem] = []
+        # Notes accumulate informational messages recorded via note(). They are
+        # carried onto the minted outcome but never influence status, gating, or
+        # exit codes -- a verdict-inert reporting channel.
+        self._notes: list[str] = []
+
+    def note(self, text: str) -> None:
+        """Record an informational note. Non-empty text required.
+
+        Notes are allowed on EVERY outcome, including a pass -- they never
+        trigger the problems-present errors that passed()/skipped() enforce.
+        Notes are verdict-inert: they surface only under --verbose and in JSON.
+        """
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("note text must be a non-empty string")
+        self._notes.append(text)
 
     # Reporter validation messages are worded identically to the Go
     # implementation (method-agnostic phrasing, no "warn(text)"/"Warn:" prefix)
@@ -2364,7 +2385,10 @@ class _ReporterCore:
                 "problems were reported; a check that found problems "
                 "cannot pass -- use found instead"
             )
-        return _CheckOutcome(kind="passed", message=message, _token=_MINT_TOKEN)
+        return _CheckOutcome(
+            kind="passed", message=message,
+            notes=tuple(self._notes), _token=_MINT_TOKEN,
+        )
 
     def skipped(self, reason: str) -> _CheckOutcome:
         """Finalize a terminal SKIP. Errors if any problems were reported."""
@@ -2375,7 +2399,10 @@ class _ReporterCore:
                 "problems were reported; a check that found problems "
                 "cannot skip"
             )
-        return _CheckOutcome(kind="skipped", message=reason, _token=_MINT_TOKEN)
+        return _CheckOutcome(
+            kind="skipped", message=reason,
+            notes=tuple(self._notes), _token=_MINT_TOKEN,
+        )
 
     def found(self, message: str) -> _CheckOutcome:
         """Finalize an outcome carrying the accumulated problems.
@@ -2394,6 +2421,7 @@ class _ReporterCore:
             kind="found",
             message=message,
             problems=tuple(self._problems),
+            notes=tuple(self._notes),
             _token=_MINT_TOKEN,
         )
 
@@ -2446,6 +2474,11 @@ class CheckRunResult:
 
     name: str
     outcome: _CheckOutcome
+    # Wall-clock time in integer milliseconds spent inside the check impl.
+    # Captured around the impl call only; checks that never execute
+    # (cascade-skipped) carry 0. Purely informational -- never affects status
+    # or exit codes.
+    duration_ms: int = 0
 
     @property
     def status(self) -> str:
@@ -2459,6 +2492,10 @@ class CheckRunResult:
     @property
     def problems(self) -> tuple[_CheckProblem, ...]:
         return self.outcome.problems
+
+    @property
+    def notes(self) -> tuple[str, ...]:
+        return self.outcome.notes
 
     def gated(self) -> bool:
         """Whether the outcome carries an error-severity problem (derived FAIL)."""
@@ -3187,8 +3224,8 @@ class App:
             scope_adapter=self._scope_adapter, pure_only=pure_only,
         )
         results = [
-            CheckRunResult(name=name, outcome=outcome)
-            for name, outcome in raw_results
+            CheckRunResult(name=name, outcome=outcome, duration_ms=duration_ms)
+            for name, outcome, duration_ms in raw_results
         ]
         return (results, impure_listed, exit_code)
 
@@ -3278,7 +3315,8 @@ class App:
             )
 
             results_wrapped = [
-                CheckRunResult(name=n, outcome=o) for n, o in raw_results
+                CheckRunResult(name=n, outcome=o, duration_ms=d)
+                for n, o, d in raw_results
             ]
             if json:
                 print(format_check_results_json(results_wrapped))
@@ -3299,7 +3337,7 @@ class App:
             Flag(name="list", type=bool, default=False, help="List all registered checks with their tags and exit without running"),
             Flag(name="json", type=bool, default=False, help="Output check results as machine-readable JSON instead of human text"),
             Flag(name="ignore-warnings", type=bool, default=False, help="Treat warn-severity results as passing so they do not cause nonzero exit"),
-            Flag(name="verbose", type=bool, default=False, help="Show full details for passing checks in addition to failures and warnings"),
+            Flag(name="verbose", type=bool, default=False, help="Show per-check notes and durations (including on passing checks) plus a trailing pass/fail/warn/skip count summary"),
             Flag(name="dry-run", type=bool, default=False, help="Show which checks would run based on current filters without executing them"),
         ]
         extra_flags = [f for f in candidate_extra_flags if f.name not in global_flag_names]
@@ -6775,10 +6813,13 @@ def _run_checks(
     ignore_warnings: bool,
     scope_adapter: object | None = None,
     pure_only: bool = False,
-) -> tuple[list[tuple[str, _CheckOutcome]], list[str], int]:
+) -> tuple[list[tuple[str, _CheckOutcome, int]], list[str], int]:
     """Execute checks in order, skipping dependents of gated (FAIL) checks.
 
-    Returns (results_list, impure_listed, exit_code). impure_listed holds the
+    Returns (results_list, impure_listed, exit_code). Each results_list entry is
+    (name, outcome, duration_ms) where duration_ms is the wall-clock time in
+    integer milliseconds spent inside the impl (0 for non-executed checks).
+    impure_listed holds the
     ordered names of checks left unexecuted by the purity partition (empty
     unless pure_only=True); listed checks contribute nothing to the exit code.
     exit_code is 0 if all executed checks pass (or all warn with
@@ -6789,7 +6830,7 @@ def _run_checks(
     listed (its precondition cannot be verified). The failed-dependency cascade
     takes precedence over the listing.
     """
-    results: list[tuple[str, _CheckOutcome]] = []
+    results: list[tuple[str, _CheckOutcome, int]] = []
     # Checks whose dependents should be cascade-skipped: cascade keys ONLY on a
     # derived FAIL (an error-severity problem present) or a cascade-skip. A WARN
     # outcome satisfies the dependency (dependents still run) and only affects
@@ -6826,7 +6867,7 @@ def _run_checks(
         if failed_dep is not None:
             outcome = _mint_skip(f'skipped: dependency "{failed_dep}" failed')
             failed_checks.add(name)
-            results.append((name, outcome))
+            results.append((name, outcome, 0))
             exit_code = 1
             continue
 
@@ -6848,7 +6889,7 @@ def _run_checks(
             adapted = scope_adapter(context, cdef.scope)
             if isinstance(adapted, SkipCheck):
                 outcome = _mint_skip(f"skipped: {adapted.reason}")
-                results.append((name, outcome))
+                results.append((name, outcome, 0))
                 # Explicit skip: no cascade, no exit code change.
                 continue
             # A non-SkipCheck return is used as the check's replacement context.
@@ -6863,14 +6904,17 @@ def _run_checks(
                 )
             check_context = adapted
 
+        # Capture wall-clock duration around the impl call only.
+        _start = time.perf_counter()
         outcome = cdef.impl(check_context)
+        duration_ms = int((time.perf_counter() - _start) * 1000)
         # Belt-and-braces: an impl must return a reporter-minted outcome.
         if not isinstance(outcome, _CheckOutcome):
             raise TypeError(
                 f'check "{name}" returned {outcome!r}, not an outcome minted by '
                 f"its reporter (use passed/skipped/found)"
             )
-        results.append((name, outcome))
+        results.append((name, outcome, duration_ms))
         record(name, outcome)
 
     return results, impure_listed, exit_code
@@ -6946,16 +6990,36 @@ def format_check_results(
 
     name_width = max(len(r.name) for r in results)
     lines: list[str] = []
+    counts = {"pass": 0, "fail": 0, "warn": 0, "skip": 0}
 
     for r in results:
         status = r.status
+        counts[status] += 1
         label = _CHECK_STATUS_LABELS[status]
-        lines.append(f"{label}  {r.name:<{name_width}}    {r.outcome.message}")
+        row = f"{label}  {r.name:<{name_width}}    {r.outcome.message}"
+        # Under --verbose, append the per-check duration in a stable, pattern-
+        # matchable shape: "(<n>ms)".
+        if verbose:
+            row += f" ({r.duration_ms}ms)"
+        lines.append(row)
 
         show_problems = verbose or status in ("fail", "warn", "skip")
         if show_problems:
             for p in r.outcome._ordered_problems():
                 lines.append(f"        [{p.severity}] {p.text}")
+        # Notes are verdict-inert and surface ONLY under --verbose, on every
+        # outcome including a pass.
+        if verbose:
+            for n in r.outcome.notes:
+                lines.append(f"        [note] {n}")
+
+    # Under --verbose, append a trailing blank line and a count summary.
+    if verbose:
+        lines.append("")
+        lines.append(
+            f"{counts['pass']} passed / {counts['fail']} failed / "
+            f"{counts['warn']} warned / {counts['skip']} skipped"
+        )
 
     return "\n".join(lines)
 
@@ -6975,6 +7039,8 @@ def format_check_results_json(results: list[CheckRunResult]) -> str:
                 {"severity": p.severity, "text": p.text}
                 for p in r.outcome.problems
             ],
+            "notes": list(r.outcome.notes),
+            "duration_ms": r.duration_ms,
         }
         for r in results
     ]

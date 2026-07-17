@@ -364,3 +364,59 @@ class TestCheckNoMatchFilters:
         result = app.test(["check", "--tag", "nonexistent"])
         assert result.exit_code == 0
         assert "No checks matched" in result.stdout
+
+
+class TestCheckCommandVerboseNotes:
+    """End-to-end: --verbose surfaces per-check notes (including on passing
+    checks), per-check durations, and a trailing count summary. Notes never
+    affect the exit code."""
+
+    def _noted_pass(self):
+        r = strictcli.ErrorReporter()
+        r.note("a verbose-only note")
+        return r.passed("version OK")
+
+    def test_verbose_shows_notes_duration_and_summary(self, tmp_path, monkeypatch):
+        app = _setup_checks_app(
+            tmp_path, monkeypatch, TWO_CHECKS_TOML,
+            pass_results={"version-check": self._noted_pass()},
+        )
+        result = app.test(["check", "--all", "--verbose"])
+        assert result.exit_code == 0
+        assert "[note] a verbose-only note" in result.stdout
+        import re
+        assert re.search(r"\(\d+ms\)", result.stdout)
+        assert "2 passed / 0 failed / 0 warned / 0 skipped" in result.stdout
+
+    def test_normal_mode_hides_notes(self, tmp_path, monkeypatch):
+        app = _setup_checks_app(
+            tmp_path, monkeypatch, TWO_CHECKS_TOML,
+            pass_results={"version-check": self._noted_pass()},
+        )
+        result = app.test(["check", "--all"])
+        assert result.exit_code == 0
+        assert "[note]" not in result.stdout
+        assert "passed /" not in result.stdout
+        assert "ms)" not in result.stdout
+
+    def test_verbose_flag_help_describes_real_behavior(self, tmp_path, monkeypatch):
+        app = _setup_checks_app(tmp_path, monkeypatch, TWO_CHECKS_TOML)
+        result = app.test(["check", "--help"])
+        assert result.exit_code == 0
+        assert "notes" in result.stdout
+        # The old help text ("Show full details for passing checks") was a lie.
+        assert "Show full details for passing checks" not in result.stdout
+
+    def test_json_includes_notes_and_duration(self, tmp_path, monkeypatch):
+        app = _setup_checks_app(
+            tmp_path, monkeypatch, TWO_CHECKS_TOML,
+            pass_results={"version-check": self._noted_pass()},
+        )
+        result = app.test(["check", "--all", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout.strip())
+        by_name = {item["name"]: item for item in data}
+        assert by_name["version-check"]["notes"] == ["a verbose-only note"]
+        for item in data:
+            assert "notes" in item
+            assert "duration_ms" in item

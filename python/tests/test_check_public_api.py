@@ -663,3 +663,150 @@ class TestRunChecksPurityPartition:
         assert "impure-c" in impure_listed
         assert "impure-c" not in ran  # listed checks never execute
         assert exit_code == 0  # a listed (unexecuted) check cannot gate
+
+
+# ---------------------------------------------------------------------------
+# Verdict-inert notes channel + honest --verbose (per-check notes, duration,
+# trailing count summary). Notes are recorded unconditionally on EVERY outcome
+# (including pass), surface only under --verbose and in JSON, and never affect
+# status, gating, or exit codes.
+# ---------------------------------------------------------------------------
+
+import re
+
+from strictcli import ErrorReporter, WarnReporter
+
+
+def _pass_with_notes(message: str, *notes: str):
+    r = ErrorReporter()
+    for n in notes:
+        r.note(n)
+    return r.passed(message)
+
+
+def _found_with_notes(message: str, problem: str, *notes: str):
+    r = ErrorReporter()
+    for n in notes:
+        r.note(n)
+    r.error(problem)
+    return r.found(message)
+
+
+class TestReporterNote:
+    def test_note_allowed_on_pass_and_carried(self):
+        outcome = _pass_with_notes("all good", "cached result", "took a shortcut")
+        assert outcome.status == "pass"
+        assert outcome.notes == ("cached result", "took a shortcut")
+
+    def test_note_allowed_on_found(self):
+        outcome = _found_with_notes("bad", "the problem", "an aside")
+        assert outcome.status == "fail"
+        assert outcome.notes == ("an aside",)
+
+    def test_note_allowed_on_skip(self):
+        r = ErrorReporter()
+        r.note("context note")
+        outcome = r.skipped("nothing to do")
+        assert outcome.status == "skip"
+        assert outcome.notes == ("context note",)
+
+    def test_note_available_on_warn_reporter(self):
+        r = WarnReporter()
+        r.note("warn-reporter note")
+        outcome = r.passed("fine")
+        assert outcome.notes == ("warn-reporter note",)
+
+    def test_empty_note_rejected(self):
+        r = ErrorReporter()
+        with pytest.raises(ValueError, match="note text must be a non-empty string"):
+            r.note("   ")
+
+    def test_notes_do_not_defeat_passed_problem_seal(self):
+        # A note must NOT let a check with problems claim it passed -- the sealed
+        # invariant (problems + passed => hard error) stays exact.
+        r = ErrorReporter()
+        r.note("informational")
+        r.warn("a real problem")
+        with pytest.raises(ValueError, match="cannot pass"):
+            r.passed("nope")
+
+    def test_notes_do_not_defeat_skipped_problem_seal(self):
+        r = ErrorReporter()
+        r.note("informational")
+        r.error("a real problem")
+        with pytest.raises(ValueError, match="cannot skip"):
+            r.skipped("nope")
+
+
+class TestNotesFormatting:
+    def test_notes_hidden_in_normal_mode(self):
+        results = [CheckRunResult(name="a", outcome=_pass_with_notes("ok", "hidden note"))]
+        out = format_check_results(results, verbose=False)
+        assert "[note]" not in out
+        assert "hidden note" not in out
+
+    def test_notes_shown_in_verbose_including_on_pass(self):
+        results = [CheckRunResult(name="a", outcome=_pass_with_notes("ok", "visible note"))]
+        out = format_check_results(results, verbose=True)
+        assert "        [note] visible note" in out
+
+    def test_normal_mode_output_unchanged(self):
+        # Pin the exact normal-mode output. Notes/duration/summary must not leak in.
+        results = [
+            CheckRunResult(name="alpha", outcome=_pass_with_notes("alpha OK", "note")),
+            CheckRunResult(name="beta", outcome=pass_outcome("beta OK")),
+        ]
+        out = format_check_results(results, verbose=False)
+        assert out == "PASS  alpha    alpha OK\nPASS  beta     beta OK"
+
+    def test_verbose_renders_duration_in_stable_shape(self):
+        results = [CheckRunResult(name="a", outcome=pass_outcome("ok"), duration_ms=12)]
+        out = format_check_results(results, verbose=True)
+        assert "(12ms)" in out
+        assert re.search(r"\(\d+ms\)", out)
+
+    def test_verbose_trailing_count_summary(self):
+        results = [
+            CheckRunResult(name="a", outcome=pass_outcome("ok")),
+            CheckRunResult(name="b", outcome=fail_outcome("bad", "x")),
+            CheckRunResult(name="c", outcome=warn_outcome("hmm", "y")),
+            CheckRunResult(name="d", outcome=skip_outcome("skip")),
+        ]
+        out = format_check_results(results, verbose=True)
+        assert out.endswith("1 passed / 1 failed / 1 warned / 1 skipped")
+        # Summary is preceded by a blank line.
+        assert "\n\n1 passed / 1 failed / 1 warned / 1 skipped" in out
+
+    def test_json_always_includes_notes_and_duration(self):
+        results = [
+            CheckRunResult(name="a", outcome=_pass_with_notes("ok", "n1"), duration_ms=7),
+            CheckRunResult(name="b", outcome=pass_outcome("ok2")),
+        ]
+        parsed = json.loads(format_check_results_json(results))
+        assert parsed[0]["notes"] == ["n1"]
+        assert parsed[0]["duration_ms"] == 7
+        # Additive keys are ALWAYS present, even with no notes.
+        assert parsed[1]["notes"] == []
+        assert "duration_ms" in parsed[1]
+
+
+class TestNotesEndToEnd:
+    def test_notes_do_not_affect_exit_code_or_status(self, tmp_path):
+        def noted_pass(ctx):
+            return _pass_with_notes("all good", "a note that must not gate")
+
+        app = _make_app(tmp_path, TWO_CHECKS_TOML, impls={"alpha": noted_pass})
+        ctx = SimpleContext(project_root=tmp_path)
+        results, _, exit_code = app.run_checks(ctx, run_all=True)
+        assert exit_code == 0
+        by_name = {r.name: r for r in results}
+        assert by_name["alpha"].status == "pass"
+        assert by_name["alpha"].notes == ("a note that must not gate",)
+
+    def test_duration_field_present_after_run(self, tmp_path):
+        app = _make_app(tmp_path, TWO_CHECKS_TOML)
+        ctx = SimpleContext(project_root=tmp_path)
+        results, _, _ = app.run_checks(ctx, run_all=True)
+        for r in results:
+            assert isinstance(r.duration_ms, int)
+            assert r.duration_ms >= 0
