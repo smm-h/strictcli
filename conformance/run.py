@@ -335,6 +335,41 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
                 _check_matches(result.stderr, expect["stderr_matches"], "stderr")
             )
 
+        # Check the seeded config file's content (after the run mutated it).
+        cfg_assert_keys = (
+            "config_file_contains",
+            "config_file_not_contains",
+            "config_file_matches",
+        )
+        if any(k in expect for k in cfg_assert_keys):
+            cfg_path = config_tmp_path or late_config_tmp_path
+            if cfg_path is None or not os.path.exists(cfg_path):
+                errors.append(
+                    "  config_file_* assertion requires a seeded config file "
+                    "(config_content / config_content_late), but none was found"
+                )
+            else:
+                with open(cfg_path, encoding="utf-8") as cf:
+                    cfg_text = cf.read()
+                if "config_file_contains" in expect:
+                    errors.extend(
+                        _check_contains(
+                            cfg_text, expect["config_file_contains"], "config_file"
+                        )
+                    )
+                if "config_file_not_contains" in expect:
+                    errors.extend(
+                        _check_not_contains(
+                            cfg_text, expect["config_file_not_contains"], "config_file"
+                        )
+                    )
+                if "config_file_matches" in expect:
+                    errors.extend(
+                        _check_matches(
+                            cfg_text, expect["config_file_matches"], "config_file"
+                        )
+                    )
+
     except subprocess.TimeoutExpired:
         errors.append("  timed out after 10 seconds")
     except Exception as e:

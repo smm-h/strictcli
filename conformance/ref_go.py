@@ -249,8 +249,13 @@ def _emit_handler_body(cmd_def: dict, indent: str, global_flags: list[dict] | No
                 lines.append(f'{indent}\tvar parts []string')
                 lines.append(f'{indent}\tif raw != nil {{')
                 lines.append(f'{indent}\t\tm := raw.(map[string]interface{{}})')
-                lines.append(f'{indent}\t\tfor k, v := range m {{')
-                lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%s=%v", k, v))')
+                lines.append(f'{indent}\t\tkeys := make([]string, 0, len(m))')
+                lines.append(f'{indent}\t\tfor k := range m {{')
+                lines.append(f'{indent}\t\t\tkeys = append(keys, k)')
+                lines.append(f'{indent}\t\t}}')
+                lines.append(f'{indent}\t\tsort.Strings(keys)')
+                lines.append(f'{indent}\t\tfor _, k := range keys {{')
+                lines.append(f'{indent}\t\t\tparts = append(parts, fmt.Sprintf("%s=%v", k, m[k]))')
                 lines.append(f'{indent}\t\t}}')
                 lines.append(f'{indent}\t}}')
                 lines.append(f'{indent}\t_out = strings.ReplaceAll(_out, "{{{orig_name}}}", strings.Join(parts, ","))')
@@ -544,6 +549,7 @@ def generate(app_def: dict) -> str:
     lines.append('\t"os"')
     if has_toml:
         lines.append('\t"path/filepath"')
+    lines.append('\t"sort"')
     lines.append('\t"strings"')
     lines.append("")
     lines.append('\t"github.com/smm-h/strictcli/go/strictcli"')
@@ -552,6 +558,7 @@ def generate(app_def: dict) -> str:
     # Suppress unused-import errors if template has no substitutions
     lines.append("var _ = fmt.Println")
     lines.append("var _ = strings.ReplaceAll")
+    lines.append("var _ = sort.Strings")
     lines.append("")
     lines.append("func main() {")
     # Recover from panics (registration errors) and exit with code 1

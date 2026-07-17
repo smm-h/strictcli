@@ -1,0 +1,127 @@
+[
+  {
+    "name": "config set: TOML edit preserves comments and key order",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_format": "toml",
+      "config_content": "# strictcli config for myapp\nzeta = \"keep\"  # trailing comment on zeta\n# comment above alpha\nalpha = 1\nbeta = true\n",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "zeta",
+              "help": "a string",
+              "type": "str",
+              "default": ""
+            },
+            {
+              "name": "alpha",
+              "help": "a number",
+              "type": "int",
+              "default": 0
+            },
+            {
+              "name": "beta",
+              "help": "a bool",
+              "type": "bool",
+              "default": false
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["config", "set", "alpha", "42"],
+    "expect": {
+      "exit_code": 0,
+      "config_file_contains": [
+        "# strictcli config for myapp",
+        "# trailing comment on zeta",
+        "# comment above alpha",
+        "alpha = 42",
+        "zeta = \"keep\"",
+        "beta = true"
+      ],
+      "config_file_not_contains": ["alpha = 1"],
+      "config_file_matches": ["zeta[\\s\\S]*alpha[\\s\\S]*beta"]
+    }
+  },
+  {
+    "name": "int: large 64-bit values echoed exactly",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "beyond-double",
+              "type": "int",
+              "help": "an int beyond 2^53"
+            },
+            {
+              "name": "max-int64",
+              "type": "int",
+              "help": "the maximum signed 64-bit integer"
+            }
+          ],
+          "handler_prints": "beyond={beyond-double} max={max-int64}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--beyond-double",
+      "9007199254740993",
+      "--max-int64",
+      "9223372036854775807"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "beyond=9007199254740993 max=9223372036854775807"
+    }
+  },
+  {
+    "name": "dict: multi-key value echoed with deterministically sorted keys",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "labels",
+              "type": "dict[str,int]",
+              "help": "labels"
+            }
+          ],
+          "handler_prints": "labels={labels}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--labels",
+      "zebra=3",
+      "--labels",
+      "apple=1",
+      "--labels",
+      "mango=2"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "labels=apple=1,mango=2,zebra=3"
+    }
+  }
+]

@@ -221,9 +221,10 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
                 f"    _parts[{f['name']!r}] = ','.join(str(x) for x in {pname})"
             )
         elif ftype.startswith("dict["):
-            # Dict compound type: print key=value pairs comma-separated
+            # Dict compound type: print key=value pairs comma-separated, keys
+            # sorted for deterministic (cross-target) output.
             lines.append(
-                f"    _parts[{f['name']!r}] = ','.join(f'{{k}}={{v}}' for k, v in {pname}.items())"
+                f"    _parts[{f['name']!r}] = ','.join(f'{{k}}={{v}}' for k, v in sorted({pname}.items()))"
             )
         elif f.get("repeatable", False):
             # For repeatable, print comma-separated values

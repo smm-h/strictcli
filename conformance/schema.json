@@ -614,6 +614,27 @@
             { "type": "array", "items": { "type": "string" } }
           ],
           "description": "Substring(s) that must NOT appear in stderr."
+        },
+        "config_file_contains": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Substring(s) that must appear in the seeded config file after the run (reads the config_content / config_content_late temp file)."
+        },
+        "config_file_not_contains": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Substring(s) that must NOT appear in the seeded config file after the run."
+        },
+        "config_file_matches": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ],
+          "description": "Regex pattern(s) that must match (re.search) somewhere in the seeded config file after the run. Useful for asserting key ordering."
         }
       }
     }
