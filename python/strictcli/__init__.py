@@ -2677,6 +2677,7 @@ class App:
     handshake_env: dict[str, str] | None = None
     checks_path: str | Path | None = None
     checks_embed: bytes | None = None
+    test_coverage: bool = False
     flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
     _groups: dict[str, Group] = field(default_factory=dict)
@@ -2797,6 +2798,20 @@ class App:
         # Config parse error (for config show to pick up)
         self._config_parse_err: str | None = None
 
+        # Test-coverage instrumentation. When enabled, every test() and call()
+        # invocation records which command was dispatched so a check can verify
+        # that every command in the app's surface has been exercised.
+        self._coverage_shard_counter: int = 0
+        self._coverage_shard_path: str | None = None
+        self._last_resolved_path: list[str] = []
+        if self.test_coverage:
+            self._coverage_shard_path = os.path.join(
+                ".strictcli", "coverage",
+                f"{os.getpid()}-{{n}}.jsonl",
+            )
+            os.makedirs(os.path.join(".strictcli", "coverage"), exist_ok=True)
+            self.register_check_provider(self._test_coverage_provider)
+
     def _validate_flag_infra_marker(self, f: Flag) -> None:
         """Panic if a flag's default is a RelativeToRoot marker referencing an
         undeclared root. Called at registration for construction-time errors."""
@@ -2816,6 +2831,106 @@ class App:
             roots=dict(self._infra_roots),
             handshakes=set(self._handshake_envs),
         )
+
+    def _record_coverage(self, cmd_path: str) -> None:
+        """Append a coverage record for the resolved command path.
+
+        Each test() or call() invocation writes one JSONL line to a per-process
+        shard file. The shard counter increments on each write to keep files
+        small and unique (handles pytest-xdist where multiple workers share a
+        PID namespace within the coverage directory).
+        """
+        if self._coverage_shard_path is None:
+            return
+        path = self._coverage_shard_path.format(n=self._coverage_shard_counter)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"command": cmd_path}) + "\n")
+
+    def _collect_all_command_paths(self) -> set[str]:
+        """Enumerate all non-deprecated leaf command paths as dotted strings."""
+        paths: set[str] = set()
+
+        for name in self._commands:
+            paths.add(name)
+
+        def _walk_group(group: Group, prefix: list[str]) -> None:
+            for cmd_name in group.commands:
+                paths.add(".".join(prefix + [cmd_name]))
+            for sub_name, sub_group in group._groups.items():
+                _walk_group(sub_group, prefix + [sub_name])
+
+        for group_name, group in self._groups.items():
+            _walk_group(group, [group_name])
+
+        return paths
+
+    def _test_coverage_provider(self) -> list[CheckSpec]:
+        """Built-in check provider for cli-test-coverage.
+
+        Registered automatically when test_coverage=True. Merges per-process
+        shard files into the canonical manifest, compares against the schema's
+        command surface (minus deprecated), and hard-FAILs listing every command
+        with zero coverage.
+        """
+        def impl(ctx: CheckContext, reporter: "ErrorReporter") -> "_CheckOutcome":
+            coverage_dir = os.path.join(".strictcli", "coverage")
+            manifest_path = os.path.join(".strictcli", "test-coverage.json")
+
+            # Merge shards
+            covered: set[str] = set()
+            if os.path.isdir(coverage_dir):
+                for fname in os.listdir(coverage_dir):
+                    if not fname.endswith(".jsonl"):
+                        continue
+                    fpath = os.path.join(coverage_dir, fname)
+                    with open(fpath, encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            entry = json.loads(line)
+                            if "command" in entry:
+                                covered.add(entry["command"])
+
+            if not covered:
+                reporter.error("stale or empty manifest")
+                return reporter.found(
+                    "no coverage data: .strictcli/coverage/ contains no shard files"
+                )
+
+            # Write canonical manifest
+            manifest = sorted(covered)
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2)
+                f.write("\n")
+
+            # Compare against command surface (exclude the framework-injected
+            # check command -- it is not a user command)
+            all_commands = self._collect_all_command_paths()
+            all_commands.discard("check")
+            uncovered = sorted(all_commands - covered)
+
+            if uncovered:
+                for cmd in uncovered:
+                    reporter.error(f"no test coverage for command: {cmd}")
+                return reporter.found(
+                    f"{len(uncovered)} command(s) with zero test coverage"
+                )
+            return reporter.passed(
+                f"all {len(all_commands)} commands have test coverage"
+            )
+
+        return [
+            error_check_spec(
+                name="cli-test-coverage",
+                tags=["test"],
+                fast=True,
+                pure=True,
+                needs_network=False,
+                depends_on=[],
+                impl=impl,
+            ),
+        ]
 
     @property
     def config_file_path(self) -> str:
@@ -4111,6 +4226,7 @@ class App:
             raise _HelpRequested(target=self)
 
         cmd, rest, path = self._resolve_command(remaining)
+        self._last_resolved_path = path
 
         # Check for command-level --help/-h anywhere in remaining tokens
         # (but not after "--" separator, which makes everything literal)
@@ -4751,6 +4867,10 @@ class App:
             stderr_buf.write(f"try '{prefix} --help'\n")
             exit_code = 1
         else:
+            # Record test-coverage hit (command-level only).
+            if self.test_coverage:
+                cmd_path = ".".join(self._last_resolved_path + [cmd.name])
+                self._record_coverage(cmd_path)
             # Store sources for function handlers that need provenance info
             self._last_sources = sources
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
@@ -4804,6 +4924,10 @@ class App:
         """
         path_segments = command_path.split(".")
         cmd, _rest, _path = self._resolve_command(path_segments)
+
+        # Record test-coverage hit (command-level only).
+        if self.test_coverage:
+            self._record_coverage(command_path)
 
         # Passthrough commands: forward raw args to the passthrough handler
         if cmd.passthrough is not None:
