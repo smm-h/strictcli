@@ -34,7 +34,10 @@ def _emit_check_impl_body(check_def: dict, indent: str) -> list[str]:
     mint = check_def["mint"]
     message = check_def["message"]
     problems = check_def.get("problems", [])
+    notes = check_def.get("notes", [])
     body = []
+    for n in notes:
+        body.append(f"{indent}reporter.note({n!r})")
     for p in problems:
         pmethod = "error" if p["severity"] == "error" else "warn"
         body.append(f"{indent}reporter.{pmethod}({p['text']!r})")
@@ -183,21 +186,32 @@ def _collect_all_flag_defs(cmd_def: dict, global_flags: list[dict] | None = None
 
 
 def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) -> str:
-    """Emit the handler body that prints the template-substituted output."""
+    """Emit the handler body that prints the template-substituted output.
+
+    Handlers are ctx-first: ``{source:name}`` references resolve via
+    ``ctx.source(name)``; ``{name}`` references resolve to the flag/arg value
+    from kwargs, type-formatted.
+    """
+    import re
     template = cmd_def["handler_prints"]
     all_flags = _collect_all_flag_defs(cmd_def, global_flags)
     flag_types = {}
     for f in all_flags:
         flag_types[f["name"]] = f.get("type", "str")
 
+    # Provenance references: {source:name} -> ctx.source(name).
+    source_refs = sorted(set(re.findall(r"\{source:([^}]+)\}", template)))
+
     # Build a format expression
     params = _collect_params(cmd_def, global_flags)
-    if not params:
+    if not params and not source_refs:
         return f"    print({template!r})"
 
     # We build the output using string concatenation to handle type formatting
     lines = []
     lines.append("    _parts = {}")
+    for name in source_refs:
+        lines.append(f"    _parts[{('source:' + name)!r}] = ctx.source({name!r})")
     for f in all_flags:
         pname = _flag_param(f["name"])
         ftype = f.get("type", "str")
@@ -244,38 +258,6 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     return "\n".join(lines)
 
 
-def _emit_context_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) -> str:
-    """Emit the handler body for context-style handlers.
-
-    The template uses {source:name} to print ctx.source(name) and
-    {name} to print the flag value from kwargs.
-    """
-    import re
-    template = cmd_def["handler_prints"]
-
-    lines = []
-    lines.append("    _out = ''")
-
-    # Split template into parts: {source:name} refs and {name} refs and literals
-    parts = re.split(r'\{(source:[^}]+|[^}]+)\}', template)
-    for i, part in enumerate(parts):
-        if i % 2 == 0:
-            # Literal text
-            if part:
-                lines.append(f"    _out += {part!r}")
-        else:
-            if part.startswith("source:"):
-                flag_name = part[7:]
-                lines.append(f"    _out += ctx.source({flag_name!r})")
-            else:
-                # Value reference -- use kwargs
-                param = _flag_param(part)
-                lines.append(f"    _out += str({param})")
-
-    lines.append("    print(_out)")
-    return "\n".join(lines)
-
-
 def _emit_command_registration(
     cmd_def: dict, target: str, indent: str = "",
     global_flags: list[dict] | None = None,
@@ -292,8 +274,8 @@ def _emit_command_registration(
     if is_passthrough:
         handler_name = cmd_def['name'].replace('-', '_') + '_passthrough_handler'
         # Define the passthrough handler function first
-        # Signature: func(name: str, args: list[str], globals: dict) -> int
-        lines.append(f"{indent}def {handler_name}(name, args, globals):")
+        # Signature: func(ctx, name: str, args: list[str], globals: dict) -> int
+        lines.append(f"{indent}def {handler_name}(ctx, name, args, globals):")
         if global_flags:
             # Print global flag values first
             for gf in global_flags:
@@ -583,37 +565,49 @@ def _emit_command_registration(
             param_strs.append(f"{p}=None")
         else:
             param_strs.append(p)
-    param_str = ", ".join(param_strs)
+    # Handlers are ctx-first under the unified contract.
+    sig_params = ", ".join(["ctx"] + param_strs)
+    fn_name = f"{cmd_def['name'].replace('-', '_')}_handler"
 
-    handler_style = cmd_def.get("handler_style", "classic")
+    lines.extend(decorator_parts)
+    for fd in flag_decorators:
+        lines.append(fd)
+    lines.append(f"{indent}def {fn_name}({sig_params}):")
 
-    if handler_style == "context":
-        handler_body = _emit_context_handler_body(cmd_def, global_flags)
-        lines.extend(decorator_parts)
-        for fd in flag_decorators:
-            lines.append(fd)
-        # Context handler: first param is ctx with type annotation
-        lines.append(f"{indent}def {cmd_def['name'].replace('-', '_')}_handler(ctx: strictcli.Context, {param_str}):")
-        lines.append(handler_body)
-        if exit_code != 0:
-            lines.append(f"{indent}    return {exit_code}")
-        else:
-            lines.append(f"{indent}    return 0")
-        lines.append("")
+    handler_returns = cmd_def.get("handler_returns")
+    if handler_returns is not None:
+        # Survivor-contract cases pin an explicit return value.
+        lines.extend(_emit_handler_return(handler_returns, indent + "    "))
     else:
-        handler_body = _emit_handler_body(cmd_def, global_flags)
-        lines.extend(decorator_parts)
-        for fd in flag_decorators:
-            lines.append(fd)
-        lines.append(f"{indent}def {cmd_def['name'].replace('-', '_')}_handler({param_str}):")
-        lines.append(handler_body)
-        if exit_code != 0:
-            lines.append(f"{indent}    return {exit_code}")
-        else:
-            lines.append(f"{indent}    return 0")
-        lines.append("")
+        lines.append(_emit_handler_body(cmd_def, global_flags))
+        # Unified return: build an Outcome carrying the exit code.
+        lines.append(f"{indent}    return strictcli.outcome(exit_code={exit_code})")
+    lines.append("")
 
     return "\n".join(lines)
+
+
+def _emit_handler_return(hr: dict, indent: str) -> list[str]:
+    """Emit the return statement for a handler_returns spec.
+
+    Kinds: 'exit' (outcome(exit_code)), 'data' (outcome(data)), 'exit_data'
+    (outcome(exit_code, data)), 'none' (return None -> exit 0), and 'bad'
+    (return an invalid value -> the framework's TypeError hard error).
+    """
+    kind = hr["kind"]
+    code = hr.get("code", 0)
+    if kind == "exit":
+        return [f"{indent}return strictcli.outcome(exit_code={code})"]
+    if kind == "data":
+        return [f"{indent}return strictcli.outcome(data={hr['data']!r})"]
+    if kind == "exit_data":
+        return [f"{indent}return strictcli.outcome(exit_code={code}, data={hr['data']!r})"]
+    if kind == "none":
+        return [f"{indent}return None"]
+    if kind == "bad":
+        # A return that is not int, None, or Outcome -- triggers the hard error.
+        return [f"{indent}return ['not-an-outcome']"]
+    raise ValueError(f"unknown handler_returns kind: {kind!r}")
 
 
 def generate(app_def: dict) -> str:

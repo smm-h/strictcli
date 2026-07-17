@@ -37,8 +37,11 @@ def _emit_check_impl_body_go(check_def: dict, indent: str) -> list[str]:
     mint = check_def["mint"]
     message = check_def["message"]
     problems = check_def.get("problems", [])
+    notes = check_def.get("notes", [])
     mint_method = {"passed": "Passed", "skipped": "Skipped", "found": "Found"}[mint]
     body = []
+    for n in notes:
+        body.append(f'{indent}r.Note({_go_str(n)})')
     for p in problems:
         pmethod = "Error" if p["severity"] == "error" else "Warn"
         body.append(f'{indent}r.{pmethod}({_go_str(p["text"])})')
@@ -193,9 +196,17 @@ def _collect_all_flag_defs(cmd_def: dict, global_flags: list[dict] | None = None
 
 
 def _emit_handler_body(cmd_def: dict, indent: str, global_flags: list[dict] | None = None) -> str:
-    """Emit the Go handler body that prints the template-substituted output."""
+    """Emit the Go handler body that prints the template-substituted output.
+
+    Handlers are ctx-first: ``{source:name}`` references resolve via
+    ``ctx.Source(name)``; ``{name}`` references resolve to the flag/arg value.
+    """
+    import re
     template = cmd_def["handler_prints"]
     all_flags = _collect_all_flag_defs(cmd_def, global_flags)
+
+    # Provenance references: {source:name} -> ctx.Source(name).
+    source_refs = sorted(set(re.findall(r"\{source:([^}]+)\}", template)))
 
     # Collect all parameter names (flags then args)
     params = []
@@ -204,11 +215,13 @@ def _emit_handler_body(cmd_def: dict, indent: str, global_flags: list[dict] | No
     for a in cmd_def.get("args", []):
         params.append((a["name"], a["name"], "arg", a))
 
-    if not params:
+    if not params and not source_refs:
         return f'{indent}fmt.Println("{template}")'
 
     lines = []
     lines.append(f'{indent}_out := "{template}"')
+    for name in source_refs:
+        lines.append(f'{indent}_out = strings.ReplaceAll(_out, "{{source:{name}}}", ctx.Source("{name}"))')
 
     for param_key, orig_name, kind, defn in params:
         if kind == "flag":
@@ -411,7 +424,8 @@ def _emit_command_go(
         # Passthrough command: define handler, then register via Command + WithPassthrough.
         # This works for both App and Group targets (Group has no Passthrough method).
         handler_var = f"_pt_{cmd_def['name'].replace('-', '_')}"
-        lines.append(f'{indent}{handler_var} := func(name string, args []string, globals map[string]interface{{}}) int {{')
+        lines.append(f'{indent}{handler_var} := func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{{}}) int {{')
+        lines.append(f'{indent}\t_ = ctx')
         if global_flags:
             # Print global flag values
             for gf in global_flags:
@@ -444,19 +458,50 @@ def _emit_command_go(
         pt_opts.extend(_emit_cmd_options(cmd_def, indent + "\t"))
         lines.append(f'{indent}{target}.Command("{cmd_def["name"]}", "{cmd_def["help"]}", nil, {", ".join(pt_opts)})')
     else:
-        # Normal command with handler_exit_code support
-        handler_body = _emit_handler_body(cmd_def, indent + "\t", global_flags)
         cmd_opts = _emit_cmd_options(cmd_def, indent + "\t")
         opts_args = ""
         if cmd_opts:
             opts_args = ", " + ", ".join(cmd_opts)
-        lines.append(f'{indent}{target}.Command("{cmd_def["name"]}", "{cmd_def["help"]}", func(args map[string]interface{{}}) int {{')
-        lines.append(handler_body)
-        lines.append(f'{indent}\treturn {exit_code}')
+        lines.append(
+            f'{indent}{target}.Command("{cmd_def["name"]}", "{cmd_def["help"]}", '
+            f'func(ctx *strictcli.Context, args map[string]interface{{}}) strictcli.Outcome {{'
+        )
+        handler_returns = cmd_def.get("handler_returns")
+        if handler_returns is not None:
+            # Survivor-contract cases pin an explicit Outcome.
+            lines.append(f'{indent}\t_ = ctx')
+            lines.append(f'{indent}\t_ = args')
+            lines.extend(_emit_handler_return_go(handler_returns, indent + "\t"))
+        else:
+            lines.append(_emit_handler_body(cmd_def, indent + "\t", global_flags))
+            lines.append(f'{indent}\treturn strictcli.Exit({exit_code})')
         lines.append(f"{indent}}}{opts_args})")
 
     lines.append("")
     return lines
+
+
+def _emit_handler_return_go(hr: dict, indent: str) -> list[str]:
+    """Emit the return statement for a handler_returns spec (Go).
+
+    Kinds: 'exit' (Exit(code)), 'data' (ExitData(0, data)), 'exit_data'
+    (ExitData(code, data)), 'none' (Exit(0) -- Go has no None). 'bad' is
+    Python-only (Go's type system makes an invalid return unrepresentable).
+    """
+    kind = hr["kind"]
+    code = hr.get("code", 0)
+    if kind == "exit":
+        return [f"{indent}return strictcli.Exit({code})"]
+    if kind == "none":
+        return [f"{indent}return strictcli.Exit(0)"]
+    if kind in ("data", "exit_data"):
+        c = 0 if kind == "data" else code
+        return [
+            f"{indent}var _data interface{{}}",
+            f"{indent}_ = json.Unmarshal([]byte({_go_str(json.dumps(hr['data']))}), &_data)",
+            f"{indent}return strictcli.ExitData({c}, _data)",
+        ]
+    raise ValueError(f"unknown handler_returns kind (go): {kind!r}")
 
 
 def generate(app_def: dict) -> str:
@@ -468,10 +513,31 @@ def generate(app_def: dict) -> str:
     has_providers = bool(app_def.get("providers"))
     has_checks = has_toml or has_providers
 
+    # Detect whether any command emits structured data (handler_returns of
+    # kind data/exit_data) -- those require encoding/json to build the value.
+    def _needs_json(cmds: list) -> bool:
+        for c in cmds or []:
+            hr = c.get("handler_returns")
+            if hr is not None and hr.get("kind") in ("data", "exit_data"):
+                return True
+        return False
+
+    def _any_data_return(defn: dict) -> bool:
+        if _needs_json(defn.get("commands", [])):
+            return True
+        for g in defn.get("groups", []):
+            if _any_data_return(g):
+                return True
+        return False
+
+    has_data_return = _any_data_return(app_def)
+
     lines = []
     lines.append("package main")
     lines.append("")
     lines.append("import (")
+    if has_data_return:
+        lines.append('\t"encoding/json"')
     if has_toml:
         lines.append('\t"crypto/sha256"')
     lines.append('\t"fmt"')
