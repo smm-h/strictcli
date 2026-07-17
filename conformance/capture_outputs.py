@@ -23,8 +23,6 @@ CONFORMANCE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(CONFORMANCE_DIR))
 
 from run import (
-    _build_go_binary,
-    _cleanup_go_cache,
     _generate_python_script,
     _normalize,
     _run_case,
@@ -313,8 +311,6 @@ def main() -> None:
         print(f"  stdout_equals added: {stats['stdout_added']}", file=sys.stderr)
         print(f"  stderr_equals added: {stats['stderr_added']}", file=sys.stderr)
         print(f"  Files modified: {stats['files_modified']}", file=sys.stderr)
-
-    _cleanup_go_cache()
 
 
 if __name__ == "__main__":

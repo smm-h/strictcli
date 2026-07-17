@@ -11,7 +11,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -29,10 +28,6 @@ CONFORMANCE_DIR = Path(__file__).resolve().parent
 CASES_DIR = CONFORMANCE_DIR / "cases"
 SCHEMA_PATH = CONFORMANCE_DIR / "schema.json"
 PROJECT_ROOT = CONFORMANCE_DIR.parent
-GO_PKG_DIR = PROJECT_ROOT / "go"
-
-# Cache directory for compiled Go binaries (keyed by app-def hash)
-GO_BUILD_CACHE: dict[str, str] = {}
 
 # Go harness: single pre-built binary for all test cases
 HARNESS_DIR = CONFORMANCE_DIR / "harness"
@@ -114,76 +109,6 @@ def _generate_python_script(app_def: dict) -> str:
     """Generate a Python script from an app definition."""
     from ref_python import generate
     return generate(app_def)
-
-
-def _generate_go_source(app_def: dict) -> str:
-    """Generate a Go main.go from an app definition."""
-    from ref_go import generate
-    return generate(app_def)
-
-
-def _build_go_binary(app_def: dict) -> str:
-    """Build a Go binary from an app definition, with caching.
-
-    Returns the path to the compiled binary.
-    """
-    # Cache key: hash of the canonical JSON app definition
-    cache_key = hashlib.sha256(
-        json.dumps(app_def, sort_keys=True).encode()
-    ).hexdigest()[:16]
-
-    if cache_key in GO_BUILD_CACHE:
-        return GO_BUILD_CACHE[cache_key]
-
-    source = _generate_go_source(app_def)
-
-    # Create a temp directory with go.mod and main.go
-    build_dir = tempfile.mkdtemp(prefix="strictcli_go_")
-    main_go = os.path.join(build_dir, "main.go")
-    go_mod = os.path.join(build_dir, "go.mod")
-    binary = os.path.join(build_dir, "app")
-
-    with open(main_go, "w") as f:
-        f.write(source)
-
-    go_mod_content = (
-        "module conformance_test\n\n"
-        "go 1.23\n\n"
-        "require github.com/smm-h/strictcli/go v0.0.0\n\n"
-        f"replace github.com/smm-h/strictcli/go => {GO_PKG_DIR}\n"
-    )
-    with open(go_mod, "w") as f:
-        f.write(go_mod_content)
-
-    # Resolve transitive dependencies
-    tidy_result = subprocess.run(
-        ["go", "mod", "tidy"],
-        cwd=build_dir,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if tidy_result.returncode != 0:
-        raise RuntimeError(
-            f"go mod tidy failed:\n{tidy_result.stderr}\n\n--- main.go ---\n{source}"
-        )
-
-    # Build
-    result = subprocess.run(
-        ["go", "build", "-o", binary, "."],
-        cwd=build_dir,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        # Include generated source in error for debugging
-        raise RuntimeError(
-            f"go build failed:\n{result.stderr}\n\n--- main.go ---\n{source}"
-        )
-
-    GO_BUILD_CACHE[cache_key] = binary
-    return binary
 
 
 def _normalize(s: str) -> str:
@@ -407,14 +332,6 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     return len(errors) == 0, errors, raw_result
 
 
-def _cleanup_go_cache() -> None:
-    """Remove all temporary Go build directories."""
-    for binary_path in GO_BUILD_CACHE.values():
-        build_dir = os.path.dirname(binary_path)
-        shutil.rmtree(build_dir, ignore_errors=True)
-    GO_BUILD_CACHE.clear()
-
-
 def _normalize_temp_paths(s: str) -> str:
     """Replace temp directory paths with a placeholder so cross-target comparison ignores them."""
     tmpdir = re.escape(tempfile.gettempdir())
@@ -533,7 +450,6 @@ def _run_both_mode(cases: list[tuple[str, dict]], verbose: bool) -> int:
 
     # Cleanup
     _cleanup_harness()
-    _cleanup_go_cache()
 
     # Summary
     total = passed + parity_failures + consistent_failures
@@ -583,7 +499,6 @@ def _run_single_mode(cases: list[tuple[str, dict]], target: str, verbose: bool) 
 
     # Cleanup
     _cleanup_harness()
-    _cleanup_go_cache()
 
     # Summary
     total = passed + failed
