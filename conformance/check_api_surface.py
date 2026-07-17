@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """API surface check for strictcli conformance.
 
-Introspects Python classes, parses Go structs, reads the conformance schema,
-and verifies that every real API field exists in all three places (with known
-exclusions for runtime-only or non-serializable features).
+Introspects Python classes, parses Go API surface via the describe_go AST
+dumper, reads the conformance schema, and verifies that every real API field
+exists in all three places (with known exclusions for runtime-only or
+non-serializable features).
+
+The Go side uses the describe_go program (conformance/describe_go/) which
+parses Go source with go/ast and dumps the full API surface as JSON. This
+replaces the fragile regex extraction that previously scanned Go source text.
+
+Each entity (Flag, Arg, App, etc.) is described by an EntityDescriptor that
+bundles the schema def name, per-language source, name maps, and exclusions.
+Adding a new target is a data-entry task: provide a new descriptor with the
+target's fields, name mappings, and exclusions.
 
 Exit 0 if all checks pass, exit 1 with a diff report otherwise.
 """
@@ -14,6 +24,7 @@ import dataclasses
 import inspect
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -24,175 +35,56 @@ from pathlib import Path
 CONFORMANCE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CONFORMANCE_DIR.parent
 SCHEMA_PATH = CONFORMANCE_DIR / "schema.json"
-GO_SOURCE_DIR = PROJECT_ROOT / "go" / "strictcli"
+DESCRIBE_GO_DIR = CONFORMANCE_DIR / "describe_go"
 
 # ---------------------------------------------------------------------------
-# Known exclusions (present in implementations but intentionally absent from
-# the schema, or present in the schema only for test harness purposes)
+# Target sources: per-language field extraction
 # ---------------------------------------------------------------------------
 
-# Implementation fields excluded from the schema (with rationale):
-IMPL_EXCLUSIONS: dict[str, str] = {
-    "validate": "callable, not serializable to JSON",
-    "Validate": "callable, not serializable to JSON (Go struct field)",
-    "ValidateFn": "callable, not serializable to JSON (Go option func)",
-    "handler": "runtime-only (Python)",
-    "Handler": "runtime-only (Go)",
-    "PassthroughHandler": "runtime-only (Go)",
-    "hasDefault": "private implementation detail (Go)",
-    "hasConflictMode": "private implementation detail (Go)",
-    "type": "Python Flag.type uses native types; schema uses 'type' string enum",
-    "checks_embed": "runtime-only (bytes data, not serializable to JSON schema)",
-    "checksEmbed": "runtime-only (Go field for WithChecksEmbed, not serializable to JSON schema)",
-}
 
-# Per-entity exclusions: fields present in one implementation but not
-# meaningful in the schema for that entity (not private, but structural).
-PER_ENTITY_EXCLUSIONS: dict[str, set[str]] = {
-    # Python Group.env_prefix is inherited from App at runtime, not a schema
-    # concept on Group itself (schema Group has no env_prefix).
-    # Python Group.deprecated is a runtime dict of DeprecatedCommand objects,
-    # not serializable to the schema (deprecated commands are declared via
-    # command.deprecated/deprecated_message in test case definitions).
-    "Group": {"env_prefix", "deprecated"},
-    # Python-only compound type fields. Go encodes compound types in the
-    # FlagType bitfield, so these have no Go or schema counterpart.
-    "Flag": {"compound", "item_type", "value_type"},
-    "Arg": {"compound", "item_type"},
-    # Python Command.needs_context is derived from handler type annotations
-    # at registration time (first param annotated as Context). Go uses a
-    # different dispatch mechanism (struct handlers with explicit Context
-    # field). Not a user-facing schema concept.
-    "Command": {"needs_context"},
-}
+def _get_go_api() -> dict:
+    """Run the describe_go AST dumper and return its JSON output.
 
-# Schema fields that exist only for the test harness (not real API fields):
-SCHEMA_TEST_ONLY: set[str] = {
-    "handler_prints",
-    "handler_exit_code",
-    "passthrough_handler_prints",
-    # deprecated/deprecated_message describe deprecated commands in the JSON
-    # test definition -- they are not attributes of the Command struct itself.
-    "deprecated",
-    "deprecated_message",
-    # checks/checks_toml/providers tell the conformance code generators what to
-    # generate (e.g. error parity checks) -- not part of the strictcli API.
-    # providers drives register_check_provider() / RegisterCheckProvider() calls;
-    # it is a codegen directive, not an App struct field.
-    "checks",
-    "checks_toml",
-    "providers",
-    # config_content provides inline config file content for test cases --
-    # not a real App parameter (the test runner writes it to a temp file).
-    "config_content",
-    # config_content_late is like config_content but the generated code writes
-    # the file after app construction (between construction and app.run()).
-    "config_content_late",
-    # config_fields_def defines config field registrations in test cases --
-    # not a real App struct field (it drives code generation).
-    "config_fields_def",
-    # handler_returns pins an explicit handler Outcome for the survivor-contract
-    # test cases (exit/data/exit_data/none/bad) -- it drives code generation and
-    # is not a real Command struct field.
-    "handler_returns",
-    # default_relative_to_root is an alternate JSON encoding of a flag default
-    # (a RelativeToRoot marker) for code generation -- the real API is
-    # default=RelativeToRoot(...), covered by the "default" field.
-    "default_relative_to_root",
-}
-
-# Per-entity schema fields that are JSON discriminators, not real API fields:
-SCHEMA_PER_ENTITY_EXCLUSIONS: dict[str, set[str]] = {
-    "co_required": {"type"},
-    "requires": {"type"},
-}
-
-# ---------------------------------------------------------------------------
-# Name mappings between implementations and schema
-# ---------------------------------------------------------------------------
-
-# Python field name -> schema field name(s)
-# Keyed as "ClassName.field" for per-entity mappings, or just "field" for global.
-PYTHON_TO_SCHEMA: dict[str, list[str]] = {
-    "choices": ["choices_str", "choices_int", "choices_float"],
-    "env_prefix": ["env_prefix"],
-    "variadic": ["variadic"],
-    "negatable": ["negatable"],
-    "App.flags": ["global_flags"],  # Python App.flags = schema app.global_flags
-}
-
-# Go exported field name -> schema field name
-GO_TO_SCHEMA: dict[str, str] = {
-    "IsVariadic": "variadic",
-    "Negatable": "negatable",
-    "EnvPrefix": "env_prefix",
-    "EnvSeparator": "env_separator",
-    "Choices": "choices_str",  # schema splits into choices_str/choices_int
-    "Type": "type",
-    "ConflictMode": "conflict_mode",  # Go Flag.ConflictMode = schema flag.conflict_mode
-}
-
-# Schema field name -> Python field name
-# Keyed as "entity.field" for per-entity overrides, or just "field" for global.
-SCHEMA_TO_PYTHON: dict[str, str] = {
-    "choices_str": "choices",
-    "choices_int": "choices",
-    "choices_float": "choices",
-    "env_prefix": "env_prefix",
-    "variadic": "variadic",
-    "negatable": "negatable",
-    "app.global_flags": "flags",  # schema app.global_flags = Python App.flags
-    "app.commands": "_commands",  # schema app.commands = Python App._commands
-    "app.groups": "_groups",  # schema app.groups = Python App._groups
-    "app.tag_contracts": "_tag_contracts",
-}
-
-# Schema field name -> Go exported field name
-# Keyed as "entity.field" for per-entity overrides, or just "field" for global.
-SCHEMA_TO_GO: dict[str, str] = {
-    "choices_str": "Choices",
-    "choices_int": "Choices",
-    "choices_float": "Choices",
-    "variadic": "IsVariadic",
-    "negatable": "Negatable",
-    "env_prefix": "EnvPrefix",
-    "env_separator": "EnvSeparator",
-    "type": "Type",
-    "depends_on": "DependsOn",
-    "app.commands": "commands",  # Go App.commands (unexported, set via method)
-    "app.global_flags": "globalFlags",  # Go App.globalFlags (unexported, set via method)
-    "app.groups": "groups",  # Go App.groups (unexported, set via method)
-    "app.config": "configEnabled",  # Go App.configEnabled (unexported, set via WithConfig())
-    "app.config_path": "configPathOverride",  # Go App.configPathOverride (unexported, set via WithConfigPath())
-    "app.config_format": "configFormat",  # Go App.configFormat (unexported, set via WithConfigFormat())
-    "app.no_default_config_path": "noDefaultConfigPath",  # Go App.noDefaultConfigPath (unexported, set via WithNoDefaultConfigPath())
-    "app.config_conflict_mode": "configConflictMode",  # Go App.configConflictMode (unexported, set via WithConfigConflictMode())
-    "app.checks_path": "checksPath",  # Go App.checksPath (unexported, set via WithChecks())
-    "app.infra_root": "infraRootDecls",  # Go App.infraRootDecls (unexported, set via WithInfraRoot())
-    "app.handshake_env": "handshakeEnvs",  # Go App.handshakeEnvs (unexported, set via WithHandshakeEnv())
-    "app.tag_contracts": "tagContracts",  # Go App.tagContracts (unexported, set via TagContract())
-    "command.flags": "flags",  # Go Command.flags (unexported)
-    "command.args": "args",  # Go Command.args (unexported)
-    "command.flag_sets": "flagSets",  # Go Command.flagSets (unexported)
-    "command.mutex": "mutex",  # Go Command.mutex (unexported)
-    "command.dependencies": "dependencies",  # Go Command.dependencies (unexported)
-    "command.tags": "tags",  # Go Command.tags (unexported)
-    "command.config_fields": "configFields",  # Go Command.configFields (unexported)
-    "group.tags": "tags",  # Go Group.tags (unexported)
-    "group.commands": "Commands",  # Go Group.Commands (exported)
-}
-
-# Schema fields that map to Python runtime attributes (set in __post_init__,
-# not dataclass fields). These pass the Python check unconditionally since
-# get_python_fields() only collects dataclass fields.
-SCHEMA_PYTHON_RUNTIME_ATTRS: dict[str, str] = {
-    "app.tag_contracts": "_tag_contracts (set in __post_init__, not a dataclass field)",
-}
+    The dumper re-parses Go source on every invocation, so the check
+    always reflects the current working-tree state.
+    """
+    proc = subprocess.run(
+        ["go", "run", "."],
+        cwd=DESCRIBE_GO_DIR,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        print(f"describe_go failed (exit {proc.returncode}):", file=sys.stderr)
+        print(proc.stderr, file=sys.stderr)
+        sys.exit(2)
+    return json.loads(proc.stdout)
 
 
-# ---------------------------------------------------------------------------
-# 1. Introspect Python
-# ---------------------------------------------------------------------------
+def get_go_fields_from_api(api: dict) -> dict[str, set[str]]:
+    """Extract {struct_name: {exported_field_names}} from describe_go JSON.
+
+    Also includes '_option_funcs' key with the set of option constructor names.
+    """
+    result: dict[str, set[str]] = {}
+    for s in api["structs"]:
+        exported = {f["name"] for f in s["fields"] if f["exported"]}
+        if exported:
+            result[s["name"]] = exported
+    result["_option_funcs"] = {f["name"] for f in api["option_constructors"]}
+    return result
+
+
+def get_go_all_fields_from_api(api: dict) -> dict[str, dict[str, bool]]:
+    """Extract {struct_name: {field_name: exported}} from describe_go JSON.
+
+    Includes both exported and unexported fields for schema-to-Go validation.
+    """
+    result: dict[str, dict[str, bool]] = {}
+    for s in api["structs"]:
+        result[s["name"]] = {f["name"]: f["exported"] for f in s["fields"]}
+    return result
+
 
 def get_python_fields() -> dict[str, set[str]]:
     """Return {class_name: {field_names}} for Python dataclasses."""
@@ -221,63 +113,6 @@ def get_python_fields() -> dict[str, set[str]]:
     return result
 
 
-# ---------------------------------------------------------------------------
-# 2. Introspect Go (parse source text)
-# ---------------------------------------------------------------------------
-
-def get_go_source() -> str:
-    """Return the combined Go source text from all non-test files."""
-    parts = []
-    for p in sorted(GO_SOURCE_DIR.glob("*.go")):
-        if p.name.endswith("_test.go"):
-            continue
-        parts.append(p.read_text())
-    return "\n".join(parts)
-
-
-def get_go_fields(source: str) -> dict[str, set[str]]:
-    """Return {struct_name: {exported_field_names}} from Go source."""
-    result: dict[str, set[str]] = {}
-
-    # Parse struct definitions
-    # Match: type StructName struct { ... }
-    struct_pattern = re.compile(
-        r"^type\s+(\w+)\s+struct\s*\{(.*?)\n\}",
-        re.MULTILINE | re.DOTALL,
-    )
-    for m in struct_pattern.finditer(source):
-        name = m.group(1)
-        body = m.group(2)
-        fields: set[str] = set()
-        for line in body.split("\n"):
-            line = line.strip()
-            if not line or line.startswith("//") or line.startswith("/*"):
-                continue
-            # Exported fields start with uppercase
-            field_match = re.match(r"^([A-Z]\w*)\s+", line)
-            if field_match:
-                fields.add(field_match.group(1))
-        if fields:
-            result[name] = fields
-
-    # Parse exported option functions
-    # These are standalone funcs that return FlagOption, ArgOption, CmdOption, AppOption
-    option_funcs: set[str] = set()
-    func_pattern = re.compile(
-        r"^func\s+([A-Z]\w*)\(.*?\)\s+(?:FlagOption|ArgOption|CmdOption|AppOption)\s*\{",
-        re.MULTILINE,
-    )
-    for m in func_pattern.finditer(source):
-        option_funcs.add(m.group(1))
-    result["_option_funcs"] = option_funcs
-
-    return result
-
-
-# ---------------------------------------------------------------------------
-# 3. Read schema
-# ---------------------------------------------------------------------------
-
 def get_schema_fields() -> dict[str, set[str]]:
     """Return {def_name: {field_names}} from the conformance schema."""
     schema = json.loads(SCHEMA_PATH.read_text())
@@ -291,215 +126,427 @@ def get_schema_fields() -> dict[str, set[str]]:
 
 
 # ---------------------------------------------------------------------------
-# 4. Compare
+# Entity descriptors
+#
+# Each descriptor bundles everything needed to check one entity across all
+# targets.  Adding a new target is data entry: provide field names, name
+# maps, and exclusions in the descriptor.
 # ---------------------------------------------------------------------------
 
-# Mapping from schema def names to (Python class name, Go struct name)
-ENTITY_MAP: list[tuple[str, str, str]] = [
-    ("flag", "Flag", "Flag"),
-    ("arg", "Arg", "Arg"),
-    ("flag_set", "FlagSet", "FlagSet"),
-    ("mutex_group", "MutexGroup", "MutexGroup"),
-    ("co_required", "CoRequired", "CoRequired"),
-    ("requires", "Requires", "Requires"),
-    ("command", "Command", "Command"),
-    ("app", "App", "App"),
-    ("group", "Group", "Group"),
-]
+@dataclasses.dataclass(frozen=True)
+class EntityDescriptor:
+    """Describes one API entity for cross-target surface checking."""
+
+    # Schema def name (e.g., "flag"), Python class name, Go struct name
+    schema_def: str
+    python_cls: str
+    go_struct: str
+
+    # Python field -> schema field(s).  Qualified key "ClassName.field" for
+    # per-entity overrides; plain "field" for global mappings applied to
+    # this entity.
+    python_to_schema: dict[str, list[str]] = dataclasses.field(default_factory=dict)
+
+    # Go exported field -> schema field (unqualified).
+    go_to_schema: dict[str, str] = dataclasses.field(default_factory=dict)
+
+    # Schema field -> Python field.  Qualified key "schema_def.field" or
+    # plain "field".
+    schema_to_python: dict[str, str] = dataclasses.field(default_factory=dict)
+
+    # Schema field -> Go field (exported or unexported).  Qualified key
+    # "schema_def.field" or plain "field".
+    schema_to_go: dict[str, str] = dataclasses.field(default_factory=dict)
+
+    # Implementation fields excluded from the schema (global, keyed by field
+    # name with rationale string).
+    impl_exclusions: dict[str, str] = dataclasses.field(default_factory=dict)
+
+    # Per-language entity-specific field exclusions.
+    python_entity_exclusions: set[str] = dataclasses.field(default_factory=set)
+
+    # Schema fields that are test-harness-only (not real API fields).
+    schema_test_only: set[str] = dataclasses.field(default_factory=set)
+
+    # Schema per-entity exclusions (e.g., JSON discriminator "type" field).
+    schema_entity_exclusions: set[str] = dataclasses.field(default_factory=set)
+
+    # Schema fields that map to Python runtime attributes (set in
+    # __post_init__, not dataclass fields).  Rationale string.
+    schema_python_runtime: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
-def check_python_in_schema(
-    py_fields: dict[str, set[str]],
-    schema_fields: dict[str, set[str]],
-) -> list[str]:
-    """Check that every Python field exists in the schema (or is excluded)."""
-    errors: list[str] = []
-    for schema_def, py_cls, _ in ENTITY_MAP:
-        if py_cls not in py_fields or schema_def not in schema_fields:
-            continue
-        s_fields = schema_fields[schema_def]
-        entity_excl = PER_ENTITY_EXCLUSIONS.get(py_cls, set())
-        for field in sorted(py_fields[py_cls]):
-            # Skip private fields
-            if field.startswith("_"):
-                continue
-            # Skip known exclusions
-            if field in IMPL_EXCLUSIONS:
-                continue
-            # Skip per-entity exclusions
-            if field in entity_excl:
-                continue
-            # Check with name mapping (qualified key takes priority)
-            qualified_key = f"{py_cls}.{field}"
-            if qualified_key in PYTHON_TO_SCHEMA:
-                mapped = PYTHON_TO_SCHEMA[qualified_key]
-                if not any(m in s_fields for m in mapped):
-                    errors.append(
-                        f"Python {py_cls}.{field} -> schema {schema_def}: "
-                        f"expected one of {mapped}, found none"
-                    )
-            elif field in PYTHON_TO_SCHEMA:
-                mapped = PYTHON_TO_SCHEMA[field]
-                if not any(m in s_fields for m in mapped):
-                    errors.append(
-                        f"Python {py_cls}.{field} -> schema {schema_def}: "
-                        f"expected one of {mapped}, found none"
-                    )
-            elif field not in s_fields:
-                errors.append(
-                    f"Python {py_cls}.{field} not found in schema {schema_def}"
-                )
-    return errors
+# ---------------------------------------------------------------------------
+# Shared exclusions (apply to multiple entities)
+# ---------------------------------------------------------------------------
+
+# Implementation fields excluded from the schema across all entities.
+_GLOBAL_IMPL_EXCLUSIONS: dict[str, str] = {
+    "validate": "callable, not serializable to JSON",
+    "Validate": "callable, not serializable to JSON (Go struct field)",
+    "ValidateFn": "callable, not serializable to JSON (Go option func)",
+    "handler": "runtime-only (Python)",
+    "Handler": "runtime-only (Go)",
+    "PassthroughHandler": "runtime-only (Go)",
+    "hasDefault": "private implementation detail (Go)",
+    "hasConflictMode": "private implementation detail (Go)",
+    "type": "Python Flag.type uses native types; schema uses 'type' string enum",
+    "checks_embed": "runtime-only (bytes data, not serializable to JSON schema)",
+    "checksEmbed": "runtime-only (Go field for WithChecksEmbed, not serializable to JSON schema)",
+}
+
+# Schema fields that exist only for the test harness (not real API fields).
+# Shared across all entities.
+_GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
+    "handler_prints",
+    "handler_exit_code",
+    "passthrough_handler_prints",
+    "deprecated",
+    "deprecated_message",
+    "checks",
+    "checks_toml",
+    "providers",
+    "config_content",
+    "config_content_late",
+    "config_fields_def",
+    "handler_returns",
+    "default_relative_to_root",
+}
+
+# Shared name mappings (applied to any entity that uses them).
+_SHARED_PYTHON_TO_SCHEMA: dict[str, list[str]] = {
+    "choices": ["choices_str", "choices_int", "choices_float"],
+    "env_prefix": ["env_prefix"],
+    "variadic": ["variadic"],
+    "negatable": ["negatable"],
+}
+
+_SHARED_GO_TO_SCHEMA: dict[str, str] = {
+    "IsVariadic": "variadic",
+    "Negatable": "negatable",
+    "EnvPrefix": "env_prefix",
+    "EnvSeparator": "env_separator",
+    "Choices": "choices_str",
+    "Type": "type",
+    "ConflictMode": "conflict_mode",
+}
+
+_SHARED_SCHEMA_TO_PYTHON: dict[str, str] = {
+    "choices_str": "choices",
+    "choices_int": "choices",
+    "choices_float": "choices",
+    "env_prefix": "env_prefix",
+    "variadic": "variadic",
+    "negatable": "negatable",
+}
+
+_SHARED_SCHEMA_TO_GO: dict[str, str] = {
+    "choices_str": "Choices",
+    "choices_int": "Choices",
+    "choices_float": "Choices",
+    "variadic": "IsVariadic",
+    "negatable": "Negatable",
+    "env_prefix": "EnvPrefix",
+    "env_separator": "EnvSeparator",
+    "type": "Type",
+    "depends_on": "DependsOn",
+}
 
 
-def check_go_in_schema(
-    go_fields: dict[str, set[str]],
-    schema_fields: dict[str, set[str]],
-) -> list[str]:
-    """Check that every Go exported field exists in the schema (or is excluded)."""
-    errors: list[str] = []
-    for schema_def, _, go_struct in ENTITY_MAP:
-        if go_struct not in go_fields or schema_def not in schema_fields:
-            continue
-        s_fields = schema_fields[schema_def]
-        for field in sorted(go_fields[go_struct]):
-            # Skip known exclusions
-            if field in IMPL_EXCLUSIONS:
-                continue
-            # Map Go name to schema name
-            if field in GO_TO_SCHEMA:
-                mapped = GO_TO_SCHEMA[field]
-                if mapped not in s_fields:
-                    errors.append(
-                        f"Go {go_struct}.{field} -> schema {schema_def}: "
-                        f"expected '{mapped}', not found"
-                    )
-            else:
-                # Go uses PascalCase, schema uses snake_case
-                snake = re.sub(r"(?<!^)(?=[A-Z])", "_", field).lower()
-                if snake not in s_fields:
-                    errors.append(
-                        f"Go {go_struct}.{field} (as '{snake}') "
-                        f"not found in schema {schema_def}"
-                    )
-    return errors
+def _build_descriptors() -> list[EntityDescriptor]:
+    """Build the list of entity descriptors."""
+    return [
+        EntityDescriptor(
+            schema_def="flag",
+            python_cls="Flag",
+            go_struct="Flag",
+            python_to_schema=_SHARED_PYTHON_TO_SCHEMA,
+            go_to_schema=_SHARED_GO_TO_SCHEMA,
+            schema_to_python=_SHARED_SCHEMA_TO_PYTHON,
+            schema_to_go=_SHARED_SCHEMA_TO_GO,
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            python_entity_exclusions={"compound", "item_type", "value_type"},
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+        ),
+        EntityDescriptor(
+            schema_def="arg",
+            python_cls="Arg",
+            go_struct="Arg",
+            python_to_schema=_SHARED_PYTHON_TO_SCHEMA,
+            go_to_schema=_SHARED_GO_TO_SCHEMA,
+            schema_to_python=_SHARED_SCHEMA_TO_PYTHON,
+            schema_to_go=_SHARED_SCHEMA_TO_GO,
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            python_entity_exclusions={"compound", "item_type"},
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+        ),
+        EntityDescriptor(
+            schema_def="flag_set",
+            python_cls="FlagSet",
+            go_struct="FlagSet",
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+        ),
+        EntityDescriptor(
+            schema_def="mutex_group",
+            python_cls="MutexGroup",
+            go_struct="MutexGroup",
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+        ),
+        EntityDescriptor(
+            schema_def="co_required",
+            python_cls="CoRequired",
+            go_struct="CoRequired",
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            schema_entity_exclusions={"type"},
+        ),
+        EntityDescriptor(
+            schema_def="requires",
+            python_cls="Requires",
+            go_struct="Requires",
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            schema_to_go=_SHARED_SCHEMA_TO_GO,
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            schema_entity_exclusions={"type"},
+        ),
+        EntityDescriptor(
+            schema_def="command",
+            python_cls="Command",
+            go_struct="Command",
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            python_entity_exclusions={"needs_context"},
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            schema_to_python={
+                "command.flags": "flags",
+                "command.args": "args",
+            },
+            schema_to_go={
+                "command.flags": "flags",
+                "command.args": "args",
+                "command.flag_sets": "flagSets",
+                "command.mutex": "mutex",
+                "command.dependencies": "dependencies",
+                "command.tags": "tags",
+                "command.config_fields": "configFields",
+            },
+        ),
+        EntityDescriptor(
+            schema_def="app",
+            python_cls="App",
+            go_struct="App",
+            python_to_schema={
+                **_SHARED_PYTHON_TO_SCHEMA,
+                "App.flags": ["global_flags"],
+            },
+            go_to_schema=_SHARED_GO_TO_SCHEMA,
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            schema_to_python={
+                **_SHARED_SCHEMA_TO_PYTHON,
+                "app.global_flags": "flags",
+                "app.commands": "_commands",
+                "app.groups": "_groups",
+                "app.tag_contracts": "_tag_contracts",
+            },
+            schema_to_go={
+                **_SHARED_SCHEMA_TO_GO,
+                "app.commands": "commands",
+                "app.global_flags": "globalFlags",
+                "app.groups": "groups",
+                "app.config": "configEnabled",
+                "app.config_path": "configPathOverride",
+                "app.config_format": "configFormat",
+                "app.no_default_config_path": "noDefaultConfigPath",
+                "app.config_conflict_mode": "configConflictMode",
+                "app.checks_path": "checksPath",
+                "app.infra_root": "infraRootDecls",
+                "app.handshake_env": "handshakeEnvs",
+                "app.tag_contracts": "tagContracts",
+            },
+            schema_python_runtime={
+                "app.tag_contracts": "_tag_contracts (set in __post_init__, not a dataclass field)",
+            },
+        ),
+        EntityDescriptor(
+            schema_def="group",
+            python_cls="Group",
+            go_struct="Group",
+            python_to_schema=_SHARED_PYTHON_TO_SCHEMA,
+            go_to_schema=_SHARED_GO_TO_SCHEMA,
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            python_entity_exclusions={"env_prefix", "deprecated"},
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            schema_to_python=_SHARED_SCHEMA_TO_PYTHON,
+            schema_to_go={
+                **_SHARED_SCHEMA_TO_GO,
+                "group.tags": "tags",
+                "group.commands": "Commands",
+            },
+        ),
+    ]
 
 
-def _resolve_schema_to_python(schema_def: str, field: str) -> str:
+# ---------------------------------------------------------------------------
+# Entity checking (unified, descriptor-driven)
+# ---------------------------------------------------------------------------
+
+def _resolve_python_to_schema(desc: EntityDescriptor, field: str) -> list[str] | None:
+    """Resolve a Python field to schema field(s) using the descriptor's name map."""
+    qualified = f"{desc.python_cls}.{field}"
+    if qualified in desc.python_to_schema:
+        return desc.python_to_schema[qualified]
+    if field in desc.python_to_schema:
+        return desc.python_to_schema[field]
+    return None
+
+
+def _resolve_go_to_schema(desc: EntityDescriptor, field: str) -> str | None:
+    """Resolve a Go field to its schema name using the descriptor's name map."""
+    return desc.go_to_schema.get(field)
+
+
+def _resolve_schema_to_python(desc: EntityDescriptor, field: str) -> str:
     """Resolve a schema field to its Python field name."""
-    qualified = f"{schema_def}.{field}"
-    if qualified in SCHEMA_TO_PYTHON:
-        return SCHEMA_TO_PYTHON[qualified]
-    if field in SCHEMA_TO_PYTHON:
-        return SCHEMA_TO_PYTHON[field]
+    qualified = f"{desc.schema_def}.{field}"
+    if qualified in desc.schema_to_python:
+        return desc.schema_to_python[qualified]
+    if field in desc.schema_to_python:
+        return desc.schema_to_python[field]
     return field
 
 
-def _resolve_schema_to_go(schema_def: str, field: str) -> str:
+def _resolve_schema_to_go(desc: EntityDescriptor, field: str) -> str:
     """Resolve a schema field to its Go field name."""
-    qualified = f"{schema_def}.{field}"
-    if qualified in SCHEMA_TO_GO:
-        return SCHEMA_TO_GO[qualified]
-    if field in SCHEMA_TO_GO:
-        return SCHEMA_TO_GO[field]
+    qualified = f"{desc.schema_def}.{field}"
+    if qualified in desc.schema_to_go:
+        return desc.schema_to_go[qualified]
+    if field in desc.schema_to_go:
+        return desc.schema_to_go[field]
     # Convert snake_case to PascalCase
     return "".join(part.capitalize() for part in field.split("_"))
 
 
-def check_schema_in_impls(
+def check_entity(
+    desc: EntityDescriptor,
     py_fields: dict[str, set[str]],
     go_fields: dict[str, set[str]],
+    go_all_fields: dict[str, dict[str, bool]],
     schema_fields: dict[str, set[str]],
-    go_source_text: str,
 ) -> list[str]:
-    """Check that every schema field that is a real API field exists in both implementations."""
+    """Check one entity across Python, Go, and schema using its descriptor."""
     errors: list[str] = []
-    for schema_def, py_cls, go_struct in ENTITY_MAP:
-        if schema_def not in schema_fields:
-            continue
-        py_set = py_fields.get(py_cls, set())
-        go_exported = go_fields.get(go_struct, set())
+    s_fields = schema_fields.get(desc.schema_def, set())
+    py_set = py_fields.get(desc.python_cls, set())
+    go_exported = go_fields.get(desc.go_struct, set())
+    go_all = go_all_fields.get(desc.go_struct, {})
 
-        for field in sorted(schema_fields[schema_def]):
-            # Skip test-only fields
-            if field in SCHEMA_TEST_ONLY:
+    # --- Python -> Schema ---
+    if py_set and s_fields:
+        for field in sorted(py_set):
+            if field.startswith("_"):
                 continue
-            # Skip per-entity schema exclusions (e.g. JSON discriminator "type")
-            if field in SCHEMA_PER_ENTITY_EXCLUSIONS.get(schema_def, set()):
+            if field in desc.impl_exclusions:
+                continue
+            if field in desc.python_entity_exclusions:
+                continue
+
+            mapped = _resolve_python_to_schema(desc, field)
+            if mapped is not None:
+                if not any(m in s_fields for m in mapped):
+                    errors.append(
+                        f"Python {desc.python_cls}.{field} -> schema {desc.schema_def}: "
+                        f"expected one of {mapped}, found none"
+                    )
+            elif field not in s_fields:
+                errors.append(
+                    f"Python {desc.python_cls}.{field} not found in schema {desc.schema_def}"
+                )
+
+    # --- Go -> Schema ---
+    if go_exported and s_fields:
+        for field in sorted(go_exported):
+            if field in desc.impl_exclusions:
+                continue
+
+            mapped = _resolve_go_to_schema(desc, field)
+            if mapped is not None:
+                if mapped not in s_fields:
+                    errors.append(
+                        f"Go {desc.go_struct}.{field} -> schema {desc.schema_def}: "
+                        f"expected '{mapped}', not found"
+                    )
+            else:
+                # Go PascalCase -> snake_case
+                snake = re.sub(r"(?<!^)(?=[A-Z])", "_", field).lower()
+                if snake not in s_fields:
+                    errors.append(
+                        f"Go {desc.go_struct}.{field} (as '{snake}') "
+                        f"not found in schema {desc.schema_def}"
+                    )
+
+    # --- Schema -> both implementations ---
+    if s_fields:
+        for field in sorted(s_fields):
+            if field in desc.schema_test_only:
+                continue
+            if field in desc.schema_entity_exclusions:
                 continue
 
             # Check Python
-            py_name = _resolve_schema_to_python(schema_def, field)
+            py_name = _resolve_schema_to_python(desc, field)
             py_check = py_name in py_set or f"_{py_name}" in py_set
-            # Also accept runtime attributes (set in __post_init__, not dataclass fields)
-            qualified_py = f"{schema_def}.{field}"
-            if not py_check and qualified_py in SCHEMA_PYTHON_RUNTIME_ATTRS:
+            qualified_py = f"{desc.schema_def}.{field}"
+            if not py_check and qualified_py in desc.schema_python_runtime:
                 py_check = True
             if not py_check:
                 errors.append(
-                    f"Schema {schema_def}.{field} (as '{py_name}') "
-                    f"not found in Python {py_cls}"
+                    f"Schema {desc.schema_def}.{field} (as '{py_name}') "
+                    f"not found in Python {desc.python_cls}"
                 )
 
-            # Check Go -- field may be exported (in go_exported set) or
-            # unexported (lowercase in the struct body, accessed via methods).
-            go_name = _resolve_schema_to_go(schema_def, field)
-            go_check = go_name in go_exported
-            if not go_check:
-                # For unexported Go fields, verify they exist in the struct
-                # body by checking for the field name in the source text
-                go_check = _go_struct_has_field(go_source_text, go_struct, go_name)
+            # Check Go -- use describe_go's full field list (exported + unexported)
+            go_name = _resolve_schema_to_go(desc, field)
+            go_check = go_name in go_all
             if not go_check:
                 errors.append(
-                    f"Schema {schema_def}.{field} (as '{go_name}') "
-                    f"not found in Go {go_struct}"
+                    f"Schema {desc.schema_def}.{field} (as '{go_name}') "
+                    f"not found in Go {desc.go_struct}"
                 )
+
     return errors
 
 
-def _go_struct_has_field(source: str, struct_name: str, field_name: str) -> bool:
-    """Check if a Go struct has a field (exported or unexported) by parsing source."""
-    pattern = re.compile(
-        rf"^type\s+{re.escape(struct_name)}\s+struct\s*\{{(.*?)\n\}}",
-        re.MULTILINE | re.DOTALL,
-    )
-    m = pattern.search(source)
-    if not m:
-        return False
-    body = m.group(1)
-    for line in body.split("\n"):
-        line = line.strip()
-        if not line or line.startswith("//"):
-            continue
-        field_match = re.match(r"^(\w+)\s+", line)
-        if field_match and field_match.group(1) == field_name:
-            return True
-    return False
+# ---------------------------------------------------------------------------
+# Option function coverage check
+# ---------------------------------------------------------------------------
+
+# Known Go option constructors (must be updated when new ones are added).
+KNOWN_OPTION_FUNCS: set[str] = {
+    "Short", "Default", "Env", "Prefixed", "Choices", "Repeatable",
+    "ValidateFn", "NegatableOpt",
+    "ArgRequired", "ArgDefault", "Variadic", "ArgType", "ArgChoices",
+    "WithArgs", "WithFlags", "WithFlagSets", "WithMutex", "WithDependencies",
+    "WithPassthrough", "WithEnvPrefix", "WithConfig",
+    "WithConfigPath", "WithConfigFormat",
+    "WithChecks", "WithChecksEmbed",
+    "WithTags",
+    "WithHidden", "WithInteractive", "WithConfigFields",
+    "Unique", "EnvSeparator", "ConflictMode",
+    "WithNoDefaultConfigPath",
+    "WithConfigConflictMode",
+    "WithInfraRoot", "WithHandshakeEnv", "WithConfigPathRelativeToRoot",
+    "RelativeToRoot",
+    # ConfigFieldOption constructors (from describe_go, not matched by old regex)
+    "ConfigFieldDefault", "ConfigFieldHelp", "ConfigFieldType",
+}
 
 
-def check_option_funcs_coverage(
-    go_fields: dict[str, set[str]],
-) -> list[str]:
+def check_option_funcs_coverage(go_fields: dict[str, set[str]]) -> list[str]:
     """Verify that Go option functions map to known features."""
-    # This is informational -- we just ensure we know about all option funcs
-    known_option_funcs = {
-        "Short", "Default", "Env", "Prefixed", "Choices", "Repeatable",
-        "ValidateFn", "NegatableOpt",
-        "ArgRequired", "ArgDefault", "Variadic", "ArgType", "ArgChoices",
-        "WithArgs", "WithFlags", "WithFlagSets", "WithMutex", "WithDependencies",
-        "WithPassthrough", "WithEnvPrefix", "WithConfig",
-        "WithConfigPath", "WithConfigFormat",
-        "WithChecks", "WithChecksEmbed",
-        "WithTags",
-        "WithHidden", "WithInteractive", "WithConfigFields",
-        "Unique", "EnvSeparator", "ConflictMode",
-        "WithNoDefaultConfigPath",
-        "WithConfigConflictMode",
-        "WithInfraRoot", "WithHandshakeEnv", "WithConfigPathRelativeToRoot",
-        "RelativeToRoot",
-    }
     actual = go_fields.get("_option_funcs", set())
-    unknown = actual - known_option_funcs
+    unknown = actual - KNOWN_OPTION_FUNCS
     errors: list[str] = []
     for func_name in sorted(unknown):
         errors.append(
@@ -510,11 +557,10 @@ def check_option_funcs_coverage(
 
 
 # ---------------------------------------------------------------------------
-# 5. Cross-implementation parity for public check runner API
+# Cross-implementation parity for public check runner API
 # ---------------------------------------------------------------------------
 
 # Types that exist in both implementations but NOT in the conformance schema.
-# (python_class, go_struct, {python_field: go_field})
 CHECK_RUNNER_TYPES: list[tuple[str, str, dict[str, str]]] = [
     ("CheckRunResult", "CheckRunResult", {
         "name": "Name",
@@ -529,7 +575,6 @@ CHECK_RUNNER_TYPES: list[tuple[str, str, dict[str, str]]] = [
 ]
 
 # Methods on App that must exist in both implementations.
-# (python_method, go_method)
 CHECK_RUNNER_APP_METHODS: list[tuple[str, str]] = [
     ("run_checks", "RunChecks"),
     ("tag_contract", "TagContract"),
@@ -538,7 +583,6 @@ CHECK_RUNNER_APP_METHODS: list[tuple[str, str]] = [
 ]
 
 # Module-level (Python) / package-level (Go) functions.
-# (python_func, go_func)
 CHECK_RUNNER_FUNCTIONS: list[tuple[str, str]] = [
     ("format_check_results", "FormatCheckResults"),
     ("format_check_results_json", "FormatCheckResultsJSON"),
@@ -546,71 +590,20 @@ CHECK_RUNNER_FUNCTIONS: list[tuple[str, str]] = [
     ("warn_check_spec", "NewWarnCheckSpec"),
 ]
 
-# Public check-outcome types that must exist in BOTH implementations (name
-# parity). ErrorReporter/WarnReporter are the ceiling-typed reporters handed to
-# check impls; CheckSpec is the provider-sourced check descriptor.
+# Public check-outcome types that must exist in BOTH implementations.
 CHECK_RUNNER_SHARED_TYPES: list[str] = [
     "ErrorReporter",
     "WarnReporter",
     "CheckSpec",
 ]
 
-# Python-only check symbols: present in Python, no Go counterpart by design.
-# SkipCheck is the scope-adapter skip directive; Go has no scope adapter (see the
-# deliberate-asymmetry note in go/strictcli/check.go), so it is a justified
-# Python-only exclusion rather than a cross-impl parity requirement.
+# Python-only check symbols.
 PYTHON_ONLY_CHECK_SYMBOLS: list[str] = [
     "SkipCheck",
 ]
 
-
-# The structured-return (Outcome) API surface. Outcome is a branded type in both
-# implementations; Python constructs it via the outcome() factory, Go via the
-# Exit/ExitData constructors. Get/GetOpt are Go-only typed kwargs accessors
-# (Python handlers receive natively-typed **kwargs, so they have no counterpart).
+# Go-only typed kwargs accessors (Python handlers receive natively-typed **kwargs).
 OUTCOME_GO_ONLY_ACCESSORS: list[str] = ["Get", "GetOpt"]
-
-
-def check_outcome_api(go_source: str) -> list[str]:
-    """Check the Outcome return-contract surface exists in both implementations."""
-    errors: list[str] = []
-    sys.path.insert(0, str(PROJECT_ROOT / "python"))
-    import strictcli
-
-    # Shared branded type: Outcome exists in both.
-    if not hasattr(strictcli, "Outcome"):
-        errors.append("Python type 'Outcome' not found in strictcli module")
-    if not re.search(r"\btype Outcome struct\b", go_source):
-        errors.append("Go type 'Outcome' not found")
-
-    # Python factory.
-    py_funcs = get_python_module_functions()
-    if "outcome" not in py_funcs:
-        errors.append("Python module function 'outcome' not found")
-
-    # Go constructors (package-level funcs).
-    for gofn in ("Exit", "ExitData"):
-        if not re.search(rf"^func {gofn}\(", go_source, re.MULTILINE):
-            errors.append(f"Go constructor '{gofn}' not found")
-
-    # Go-only generic typed accessors (declared as `func Name[T any](...)`).
-    for gofn in OUTCOME_GO_ONLY_ACCESSORS:
-        if not re.search(rf"^func {gofn}\[", go_source, re.MULTILINE):
-            errors.append(f"Go generic accessor '{gofn}' not found")
-
-    return errors
-
-
-def get_python_check_runner_types() -> dict[str, set[str]]:
-    """Return {class_name: {field_names}} for Python check runner dataclasses."""
-    sys.path.insert(0, str(PROJECT_ROOT / "python"))
-    import strictcli
-
-    result: dict[str, set[str]] = {}
-    for cls in [strictcli.CheckRunResult]:
-        fields = {f.name for f in dataclasses.fields(cls)}
-        result[cls.__name__] = fields
-    return result
 
 
 def get_python_module_functions() -> set[str]:
@@ -633,22 +626,53 @@ def get_python_app_methods() -> set[str]:
     }
 
 
-def get_go_exported_funcs(source: str) -> set[str]:
-    """Return exported package-level function names (not methods) from Go source."""
-    # Match: func FuncName(...) but NOT func (receiver) FuncName(...)
-    pattern = re.compile(r"^func\s+([A-Z]\w*)\(", re.MULTILINE)
-    return {m.group(1) for m in pattern.finditer(source)}
+def get_python_check_runner_types() -> dict[str, set[str]]:
+    """Return {class_name: {field_names}} for Python check runner dataclasses."""
+    sys.path.insert(0, str(PROJECT_ROOT / "python"))
+    import strictcli
+    result: dict[str, set[str]] = {}
+    for cls in [strictcli.CheckRunResult]:
+        fields = {f.name for f in dataclasses.fields(cls)}
+        result[cls.__name__] = fields
+    return result
 
 
-def get_go_app_methods(source: str) -> set[str]:
-    """Return exported method names on App from Go source."""
-    # Match: func (a *App) MethodName(... or func (a App) MethodName(...
-    pattern = re.compile(r"^func\s+\(\w+\s+\*?App\)\s+([A-Z]\w*)\(", re.MULTILINE)
-    return {m.group(1) for m in pattern.finditer(source)}
+def check_outcome_api(go_api: dict) -> list[str]:
+    """Check the Outcome return-contract surface exists in both implementations."""
+    errors: list[str] = []
+    sys.path.insert(0, str(PROJECT_ROOT / "python"))
+    import strictcli
+
+    # Shared branded type: Outcome exists in both.
+    if not hasattr(strictcli, "Outcome"):
+        errors.append("Python type 'Outcome' not found in strictcli module")
+
+    go_struct_names = {s["name"] for s in go_api["structs"]}
+    if "Outcome" not in go_struct_names:
+        errors.append("Go type 'Outcome' not found")
+
+    # Python factory.
+    py_funcs = get_python_module_functions()
+    if "outcome" not in py_funcs:
+        errors.append("Python module function 'outcome' not found")
+
+    # Go constructors (package-level funcs).
+    go_func_names = {f["name"] for f in go_api["functions"]}
+    for gofn in ("Exit", "ExitData"):
+        if gofn not in go_func_names:
+            errors.append(f"Go constructor '{gofn}' not found")
+
+    # Go-only generic typed accessors.
+    go_generic_names = {f["name"] for f in go_api["generic_functions"]}
+    for gofn in OUTCOME_GO_ONLY_ACCESSORS:
+        if gofn not in go_generic_names:
+            errors.append(f"Go generic accessor '{gofn}' not found")
+
+    return errors
 
 
 def check_check_runner_types(
-    go_source: str,
+    go_api: dict,
     go_fields: dict[str, set[str]],
 ) -> list[str]:
     """Check that check runner types have matching fields in Python and Go."""
@@ -659,8 +683,6 @@ def check_check_runner_types(
         # Check Python fields exist
         py_set = py_types.get(py_cls, set())
         if not py_set and py_cls == "RunChecksOptions":
-            # RunChecksOptions is not a Python dataclass -- it's kwargs on run_checks().
-            # Check that the method signature has the right parameters instead.
             py_app_methods = get_python_app_methods()
             if "run_checks" not in py_app_methods:
                 errors.append(
@@ -699,11 +721,14 @@ def check_check_runner_types(
     return errors
 
 
-def check_check_runner_methods(go_source: str) -> list[str]:
+def check_check_runner_methods(go_api: dict) -> list[str]:
     """Check that App methods for the check runner exist in both implementations."""
     errors: list[str] = []
     py_methods = get_python_app_methods()
-    go_methods = get_go_app_methods(go_source)
+    go_methods = {
+        m["name"] for m in go_api["methods"]
+        if m["receiver"] in ("*App", "App")
+    }
 
     for py_method, go_method in CHECK_RUNNER_APP_METHODS:
         if py_method not in py_methods:
@@ -714,11 +739,11 @@ def check_check_runner_methods(go_source: str) -> list[str]:
     return errors
 
 
-def check_check_runner_functions(go_source: str) -> list[str]:
+def check_check_runner_functions(go_api: dict) -> list[str]:
     """Check that package/module-level functions for the check runner exist in both."""
     errors: list[str] = []
     py_funcs = get_python_module_functions()
-    go_funcs = get_go_exported_funcs(go_source)
+    go_funcs = {f["name"] for f in go_api["functions"]}
 
     for py_func, go_func in CHECK_RUNNER_FUNCTIONS:
         if py_func not in py_funcs:
@@ -729,17 +754,18 @@ def check_check_runner_functions(go_source: str) -> list[str]:
     return errors
 
 
-def check_check_runner_shared_types(go_source: str) -> list[str]:
-    """Check that the shared check-outcome types exist in both implementations,
-    and that Python-only check symbols exist in Python."""
+def check_check_runner_shared_types(go_api: dict) -> list[str]:
+    """Check that the shared check-outcome types exist in both implementations."""
     errors: list[str] = []
     sys.path.insert(0, str(PROJECT_ROOT / "python"))
     import strictcli
 
+    go_struct_names = {s["name"] for s in go_api["structs"]}
+
     for name in CHECK_RUNNER_SHARED_TYPES:
         if not hasattr(strictcli, name):
             errors.append(f"Python type '{name}' not found in strictcli module")
-        if not re.search(rf"\btype {name} struct\b", go_source):
+        if name not in go_struct_names:
             errors.append(f"Go type '{name}' not found")
 
     for name in PYTHON_ONLY_CHECK_SYMBOLS:
@@ -750,25 +776,53 @@ def check_check_runner_shared_types(go_source: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# New-target stub generator
+# ---------------------------------------------------------------------------
+
+def generate_target_stub(target_name: str) -> EntityDescriptor:
+    """Generate a descriptor stub for a hypothetical new target.
+
+    Every field is empty -- the caller must fill in field names, name maps,
+    and exclusions for the new target.  This demonstrates that adding a
+    target is purely data entry.
+    """
+    return EntityDescriptor(
+        schema_def="example",
+        python_cls="Example",
+        go_struct="Example",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main() -> int:
     py_fields = get_python_fields()
-    go_source = get_go_source()
-    go_fields = get_go_fields(go_source)
+    go_api = _get_go_api()
+    go_fields = get_go_fields_from_api(go_api)
+    go_all_fields = get_go_all_fields_from_api(go_api)
     schema_fields = get_schema_fields()
 
+    descriptors = _build_descriptors()
+
     all_errors: list[str] = []
-    all_errors.extend(check_python_in_schema(py_fields, schema_fields))
-    all_errors.extend(check_go_in_schema(go_fields, schema_fields))
-    all_errors.extend(check_schema_in_impls(py_fields, go_fields, schema_fields, go_source))
+
+    # Entity checks (descriptor-driven)
+    for desc in descriptors:
+        all_errors.extend(
+            check_entity(desc, py_fields, go_fields, go_all_fields, schema_fields)
+        )
+
+    # Option function coverage
     all_errors.extend(check_option_funcs_coverage(go_fields))
-    all_errors.extend(check_check_runner_types(go_source, go_fields))
-    all_errors.extend(check_check_runner_methods(go_source))
-    all_errors.extend(check_check_runner_functions(go_source))
-    all_errors.extend(check_check_runner_shared_types(go_source))
-    all_errors.extend(check_outcome_api(go_source))
+
+    # Check runner parity
+    all_errors.extend(check_check_runner_types(go_api, go_fields))
+    all_errors.extend(check_check_runner_methods(go_api))
+    all_errors.extend(check_check_runner_functions(go_api))
+    all_errors.extend(check_check_runner_shared_types(go_api))
+    all_errors.extend(check_outcome_api(go_api))
 
     if all_errors:
         print(f"API surface check FAILED ({len(all_errors)} issue(s)):\n")
@@ -778,17 +832,17 @@ def main() -> int:
 
     print("API surface check passed.")
     # Print summary
-    for schema_def, py_cls, go_struct in ENTITY_MAP:
-        s_count = len(schema_fields.get(schema_def, set()) - SCHEMA_TEST_ONLY)
+    for desc in descriptors:
+        s_count = len(schema_fields.get(desc.schema_def, set()) - desc.schema_test_only)
         py_count = len({
-            f for f in py_fields.get(py_cls, set())
-            if not f.startswith("_") and f not in IMPL_EXCLUSIONS
+            f for f in py_fields.get(desc.python_cls, set())
+            if not f.startswith("_") and f not in desc.impl_exclusions
         })
         go_count = len({
-            f for f in go_fields.get(go_struct, set())
-            if f not in IMPL_EXCLUSIONS
+            f for f in go_fields.get(desc.go_struct, set())
+            if f not in desc.impl_exclusions
         })
-        print(f"  {schema_def}: schema={s_count} python={py_count} go={go_count}")
+        print(f"  {desc.schema_def}: schema={s_count} python={py_count} go={go_count}")
     option_count = len(go_fields.get("_option_funcs", set()))
     print(f"  Go option functions: {option_count}")
     # Print check runner parity summary
@@ -799,6 +853,9 @@ def main() -> int:
     print(f"  Shared check types (cross-impl): {len(CHECK_RUNNER_SHARED_TYPES)}")
     print(f"  Python-only check symbols: {len(PYTHON_ONLY_CHECK_SYMBOLS)}")
     print(f"  Outcome API: Outcome type + outcome()/Exit/ExitData + Go accessors {OUTCOME_GO_ONLY_ACCESSORS}")
+    # New-target diagnostic
+    stub = generate_target_stub("rust")
+    print(f"  New-target stub: {len(dataclasses.fields(stub))} fields to fill per entity")
     return 0
 
 
