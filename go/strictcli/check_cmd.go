@@ -25,36 +25,36 @@ func (a *App) enableChecks() {
 // registerCheckCommand registers the auto-generated "check" command.
 // Called from enableChecks when the check system is turned on.
 func (a *App) registerCheckCommand() {
-	a.Command("check", "Run project checks registered via the check framework and report results", func(args map[string]interface{}) int {
+	a.Command("check", "Run project checks registered via the check framework and report results", func(_ *Context, args map[string]interface{}) Outcome {
 		// Materialize provider-sourced checks before any registry read (covers
 		// the --list, --dry-run, and execution branches below).
 		a.materializeCheckProviders()
 
-		runAll := args["all"].(bool)
-		tagExpr := args["tag"].(string)
-		nameGlob := args["name"].(string)
-		list := args["list"].(bool)
-		jsonOut := args["json"].(bool)
-		ignoreWarnings := args["ignore_warnings"].(bool)
-		verbose := args["verbose"].(bool)
-		dryRun := args["dry_run"].(bool)
+		runAll := Get[bool](args, "all")
+		tagExpr := Get[string](args, "tag")
+		nameGlob := Get[string](args, "name")
+		list := Get[bool](args, "list")
+		jsonOut := Get[bool](args, "json")
+		ignoreWarnings := Get[bool](args, "ignore_warnings")
+		verbose := Get[bool](args, "verbose")
+		dryRun := Get[bool](args, "dry_run")
 
 		if list {
-			return a.checkList(jsonOut)
+			return Exit(a.checkList(jsonOut))
 		}
 
 		if dryRun {
-			return a.checkDryRun(runAll, tagExpr, nameGlob)
+			return Exit(a.checkDryRun(runAll, tagExpr, nameGlob))
 		}
 
 		if runAll || tagExpr != "" || nameGlob != "" {
-			return a.checkRun(runAll, tagExpr, nameGlob, jsonOut, ignoreWarnings, verbose)
+			return Exit(a.checkRun(runAll, tagExpr, nameGlob, jsonOut, ignoreWarnings, verbose))
 		}
 
 		// No flags: show help
 		cmd := a.commands["check"]
 		fmt.Println(formatCommandHelp(a, cmd, ""))
-		return 0
+		return Exit(0)
 	},
 		WithFlags(
 			BoolFlag("all", "Run every registered check regardless of tag or name filters", Default(false)),

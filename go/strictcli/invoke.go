@@ -1,7 +1,6 @@
 package strictcli
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -10,7 +9,7 @@ import (
 // invokeResult holds the outcome of an invoke call.
 type invokeResult struct {
 	exitCode int
-	data     interface{} // structured data from DataHandler (nil for regular handlers)
+	data     interface{} // structured data from an ExitData outcome (nil otherwise)
 	err      string      // non-empty if invocation failed
 }
 
@@ -103,7 +102,8 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 				globalKwargs[paramName] = val
 			}
 		}
-		code := cmd.PassthroughHandler(cmd.Name, args, globalKwargs)
+		ctx := newContext(io.Discard, io.Discard, nil, a.infraAccess())
+		code := cmd.PassthroughHandler(ctx, cmd.Name, args, globalKwargs)
 		return invokeResult{exitCode: code}
 	}
 
@@ -233,35 +233,13 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 	// Store sources for function handlers that need provenance info
 	a.LastSources = sources
 
-	// Set dispatch context for struct handler wrappers
-	var dc *dispatchCtx
-	if cmd.handlerFactory != nil {
-		// For invoke: stdout captures Emit output, stderr is discarded
-		var buf bytes.Buffer
-		dc = &dispatchCtx{
-			stdout:  &buf,
-			stderr:  io.Discard,
-			globals: paramKwargsToFlagNames(validatedKwargs),
-			sources: sources,
-		}
-		a.currentDispatch = dc
-		defer func() { a.currentDispatch = nil }()
-	}
+	// Context is constructed unconditionally. For invoke, stdout/stderr are
+	// discarded -- structured data flows back through the Outcome, not stdout.
+	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess())
 
 	// Call the handler
-	if cmd.dataHandler != nil {
-		hr := cmd.dataHandler(validatedKwargs)
-		return invokeResult{exitCode: hr.ExitCode, data: hr.Data}
-	}
-	code := cmd.Handler(validatedKwargs)
-
-	// Capture emit data from struct handlers
-	var data interface{}
-	if dc != nil && dc.emitData != nil {
-		data = dc.emitData
-	}
-
-	return invokeResult{exitCode: code, data: data}
+	outcome := cmd.Handler(ctx, validatedKwargs)
+	return invokeResult{exitCode: outcome.code, data: outcome.data}
 }
 
 // coerceInvokeValue converts a Go-native value to the internal representation
@@ -348,8 +326,8 @@ func coerceInvokeDict(f *Flag, value interface{}) (interface{}, string) {
 // of raw arguments to forward to the handler.
 //
 // Returns:
-//   - For DataHandler commands: the HandlerResult.Data value
-//   - For regular handlers: the exit code (int)
+//   - For handlers that return ExitData: the data value
+//   - For handlers that return Exit: the exit code (int)
 //   - For passthrough handlers: the exit code (int)
 //
 // Returns an InvokeError if invocation fails (unknown command, missing

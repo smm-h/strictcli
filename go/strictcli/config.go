@@ -716,9 +716,9 @@ func (a *App) registerConfigGroup() {
 	grp := a.Group("config", "Manage persistent configuration values stored in the config file")
 
 	// config path
-	grp.Command("path", "Print the absolute path to the config file for this application", func(args map[string]interface{}) int {
+	grp.Command("path", "Print the absolute path to the config file for this application", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Println(configPath(a.Name, a.configPathOverride, a.configFormat))
-		return 0
+		return Exit(0)
 	})
 
 	// config show
@@ -727,13 +727,13 @@ func (a *App) registerConfigGroup() {
 	// "cli" is structurally impossible here -- config show is a subcommand,
 	// so the app's own flags were never passed on the command line.
 	// If the config file is malformed, shows the parse error instead of values.
-	grp.Command("show", "Show all config values with their sources (config file, env, or default)", func(args map[string]interface{}) int {
+	grp.Command("show", "Show all config values with their sources (config file, env, or default)", func(ctx *Context, args map[string]interface{}) Outcome {
 		// If there was a config parse error, show it instead of values
 		if a.configParseErr != "" {
 			fmt.Fprintf(os.Stderr, "error: %s\n", a.configParseErr)
-			return 1
+			return Exit(1)
 		}
-		useJSON := args["json"].(bool)
+		useJSON := Get[bool](args, "json")
 		configData := a.configData
 		allFlags := a.collectAllFlags()
 		colliding := a.collidingConfigFields()
@@ -810,10 +810,10 @@ func (a *App) registerConfigGroup() {
 			data, err := json.MarshalIndent(result, "", "  ")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
-				return 1
+				return Exit(1)
 			}
 			fmt.Println(string(data))
-			return 0
+			return Exit(0)
 		}
 
 		// --plain
@@ -880,7 +880,7 @@ func (a *App) registerConfigGroup() {
 				}
 			}
 		}
-		return 0
+		return Exit(0)
 	}, WithMutex(
 		MutexGroup{Flags: []Flag{
 			BoolFlag("plain", "Display config values in a human-readable table format", Default(false)),
@@ -889,13 +889,13 @@ func (a *App) registerConfigGroup() {
 	))
 
 	// config set
-	grp.Command("set", "Set a persistent config value that overrides the default for a flag", func(args map[string]interface{}) int {
-		key := args["key"].(string)
+	grp.Command("set", "Set a persistent config value that overrides the default for a flag", func(ctx *Context, args map[string]interface{}) Outcome {
+		key := Get[string](args, "key")
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
-			return 1
+			return Exit(1)
 		}
 		// Read existing config (use the already-loaded data from parse time)
 		existing := a.configData
@@ -915,59 +915,55 @@ func (a *App) registerConfigGroup() {
 		}
 		if matchedFlag == nil && matchedConfigField == nil {
 			fmt.Fprintf(os.Stderr, "config set: unknown key '%s'\n", key)
-			return 1
+			return Exit(1)
 		}
 
-		useClear := args["clear"].(bool)
-		useDefault := args["default"].(bool)
+		useClear := Get[bool](args, "clear")
+		useDefault := Get[bool](args, "default")
 
 		// Validate: exactly one of (value, --clear, --default)
-		hasValue := args["value"] != nil
-		var value string
-		if hasValue {
-			value = args["value"].(string)
-		}
+		value, hasValue := GetOpt[string](args, "value")
 		if useClear && useDefault {
 			fmt.Fprintln(os.Stderr, "config set: --clear and --default are mutually exclusive")
-			return 1
+			return Exit(1)
 		}
 		if hasValue && useClear {
 			fmt.Fprintln(os.Stderr, "config set: cannot provide a value with --clear")
-			return 1
+			return Exit(1)
 		}
 		if hasValue && useDefault {
 			fmt.Fprintln(os.Stderr, "config set: cannot provide a value with --default")
-			return 1
+			return Exit(1)
 		}
 		if !hasValue && !useClear && !useDefault {
 			fmt.Fprintln(os.Stderr, "config set: provide a value, --clear, or --default")
-			return 1
+			return Exit(1)
 		}
 
 		// Config fields do not support --clear (not repeatable)
 		if matchedConfigField != nil && useClear {
 			fmt.Fprintln(os.Stderr, "config set: --clear is only for repeatable flags")
-			return 1
+			return Exit(1)
 		}
 
 		// --clear: repeatable flags only, writes []
 		if useClear {
 			if !matchedFlag.Repeatable {
 				fmt.Fprintln(os.Stderr, "config set: --clear is only for repeatable flags")
-				return 1
+				return Exit(1)
 			}
 			existing[key] = []interface{}{}
-			return writeConfigFile(existing, path, a.configFormat)
+			return Exit(writeConfigFile(existing, path, a.configFormat))
 		}
 
 		// --default: remove the key from config
 		if useDefault {
 			if _, ok := nestedGet(existing, key); !ok {
 				fmt.Fprintf(os.Stderr, "config set: key '%s' not in config\n", key)
-				return 1
+				return Exit(1)
 			}
 			nestedDelete(existing, key)
-			return writeConfigFile(existing, path, a.configFormat)
+			return Exit(writeConfigFile(existing, path, a.configFormat))
 		}
 
 		// Config field: coerce to config field type
@@ -978,28 +974,28 @@ func (a *App) registerConfigGroup() {
 				v, err := parseBoolStrict(value)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-					return 1
+					return Exit(1)
 				}
 				typedValue = v
 			case TypeInt:
 				v, err := parseIntStrict(value)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-					return 1
+					return Exit(1)
 				}
 				typedValue = v
 			case TypeFloat:
 				v, err := parseFloatStrictValue(value)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-					return 1
+					return Exit(1)
 				}
 				typedValue = v
 			case TypeStr:
 				typedValue = value
 			}
 			nestedSet(existing, key, typedValue)
-			return writeConfigFile(existing, path, a.configFormat)
+			return Exit(writeConfigFile(existing, path, a.configFormat))
 		}
 
 		// Flag: coerce the string value to the flag's type
@@ -1014,7 +1010,7 @@ func (a *App) registerConfigGroup() {
 					v, err := parseIntStrict(p)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-						return 1
+						return Exit(1)
 					}
 					coerced[i] = v
 				}
@@ -1023,7 +1019,7 @@ func (a *App) registerConfigGroup() {
 					v, err := parseFloatStrictValue(p)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-						return 1
+						return Exit(1)
 					}
 					coerced[i] = v
 				}
@@ -1037,7 +1033,7 @@ func (a *App) registerConfigGroup() {
 				if dup := findDuplicate(coerced); dup != nil {
 					fmt.Fprintf(os.Stderr, "config set: key '%s': duplicate value '%s'\n",
 						key, formatValueForError(dup))
-					return 1
+					return Exit(1)
 				}
 			}
 			typedValue = coerced
@@ -1047,21 +1043,21 @@ func (a *App) registerConfigGroup() {
 				v, err := parseBoolStrict(value)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-					return 1
+					return Exit(1)
 				}
 				typedValue = v
 			case TypeInt:
 				v, err := parseIntStrict(value)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-					return 1
+					return Exit(1)
 				}
 				typedValue = v
 			case TypeFloat:
 				v, err := parseFloatStrictValue(value)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "config set: key '%s': %s\n", key, err.Error())
-					return 1
+					return Exit(1)
 				}
 				typedValue = v
 			case TypeStr:
@@ -1070,7 +1066,7 @@ func (a *App) registerConfigGroup() {
 		}
 
 		existing[key] = typedValue
-		return writeConfigFile(existing, path, a.configFormat)
+		return Exit(writeConfigFile(existing, path, a.configFormat))
 	}, WithArgs(
 		NewArg("key", "The config key to set, matching a registered flag name"),
 		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
@@ -1081,12 +1077,12 @@ func (a *App) registerConfigGroup() {
 	))
 
 	// config edit
-	grp.Command("edit", "Open the config file for manual editing in $EDITOR (creates if missing)", func(args map[string]interface{}) int {
+	grp.Command("edit", "Open the config file for manual editing in $EDITOR (creates if missing)", func(ctx *Context, args map[string]interface{}) Outcome {
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
-			return 1
+			return Exit(1)
 		}
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			emptyContent := "{}\n"
@@ -1095,7 +1091,7 @@ func (a *App) registerConfigGroup() {
 			}
 			if err := os.WriteFile(path, []byte(emptyContent), 0o644); err != nil {
 				fmt.Fprintf(os.Stderr, "error: cannot create config file: %s\n", err)
-				return 1
+				return Exit(1)
 			}
 		}
 		editor := os.Getenv("EDITOR")
@@ -1108,22 +1104,22 @@ func (a *App) registerConfigGroup() {
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "error: editor failed: %s\n", err)
-			return 1
+			return Exit(1)
 		}
-		return 0
+		return Exit(0)
 	}, WithInteractive())
 
 	// config init
-	grp.Command("init", "Generate a template config file with documented fields and defaults", func(args map[string]interface{}) int {
+	grp.Command("init", "Generate a template config file with documented fields and defaults", func(ctx *Context, args map[string]interface{}) Outcome {
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		if _, err := os.Stat(path); err == nil {
 			fmt.Fprintf(os.Stderr, "error: config file already exists: %s\n", path)
-			return 1
+			return Exit(1)
 		}
 		dirPath := filepath.Dir(path)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
-			return 1
+			return Exit(1)
 		}
 
 		allFlags := a.collectAllFlags()
@@ -1132,17 +1128,17 @@ func (a *App) registerConfigGroup() {
 			content := a.generateTomlTemplate(allFlags)
 			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 				fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
-				return 1
+				return Exit(1)
 			}
 		} else {
 			content := a.generateJSONTemplate(allFlags)
 			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 				fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
-				return 1
+				return Exit(1)
 			}
 		}
 		fmt.Println(path)
-		return 0
+		return Exit(0)
 	})
 }
 
@@ -1229,11 +1225,11 @@ func (a *App) generateTomlTemplate(allFlags []Flag) string {
 
 	// Write config fields, grouping dot-names into TOML sections
 	type sectionEntry struct {
-		key  string
-		cf   *ConfigField
+		key string
+		cf  *ConfigField
 	}
 	sections := make(map[string][]sectionEntry) // section -> entries
-	var topLevel []*ConfigField                  // non-dotted fields
+	var topLevel []*ConfigField                 // non-dotted fields
 	var sectionOrder []string
 
 	for _, name := range a.configFieldOrder {

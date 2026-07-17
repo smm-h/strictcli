@@ -4,7 +4,6 @@ package strictcli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -89,16 +88,16 @@ func DictOf(valueType FlagType) FlagType {
 
 // Flag represents a --flag declaration.
 type Flag struct {
-	Name       string
-	Type       FlagType
-	Help       string
-	Short      string
-	Default    interface{} // nil means no default (required for str/int)
-	Env        string
-	Prefixed   bool
-	Negatable  bool
-	Choices    []interface{}
-	Validate   func(interface{}) error
+	Name         string
+	Type         FlagType
+	Help         string
+	Short        string
+	Default      interface{} // nil means no default (required for str/int)
+	Env          string
+	Prefixed     bool
+	Negatable    bool
+	Choices      []interface{}
+	Validate     func(interface{}) error
 	Repeatable   bool
 	Unique       bool
 	EnvSeparator string
@@ -195,23 +194,13 @@ type infraRootDecl struct {
 }
 
 // PassthroughHandler is the handler type for passthrough commands.
-type PassthroughHandler func(name string, args []string, globals map[string]interface{}) int
-
-// DataHandler is a handler that returns structured data alongside an exit code.
-type DataHandler func(map[string]interface{}) HandlerResult
-
-// HandlerResult is the return type for DataHandler functions.
-type HandlerResult struct {
-	Data     interface{}
-	ExitCode int
-}
+type PassthroughHandler func(ctx *Context, name string, args []string, globals map[string]interface{}) int
 
 // Command is a leaf command with a handler.
 type Command struct {
 	Name               string
 	Help               string
-	Handler            func(map[string]interface{}) int
-	dataHandler        DataHandler
+	Handler            func(ctx *Context, kwargs map[string]interface{}) Outcome
 	flags              []Flag
 	args               []Arg
 	flagSets           []FlagSet
@@ -223,11 +212,6 @@ type Command struct {
 	PassthroughHandler PassthroughHandler
 	Hidden             bool
 	Interactive        bool
-
-	// Struct handler fields (set by RegisterHandler)
-	handlerFactory func() Handler            // creates a fresh handler instance per dispatch
-	handlerType    reflect.Type              // the concrete struct type behind the Handler
-	paramToFlag    map[string]string          // reverse map: param name (underscores) -> flag name (dashes)
 }
 
 // deprecatedCmd is a declaration-only command that prints a message and exits 1.
@@ -246,7 +230,7 @@ type Group struct {
 	accumulatedTags []string // own tags union all ancestor tags; passed as inheritedTags to children
 	envPrefix       string
 
-	// app is a reference to the root App (needed for RegisterHandler dispatch context)
+	// app is a reference to the root App (needed for collision/infra validation)
 	app *App
 
 	// globalFlags is a reference to the app's global flags for collision checking
@@ -280,7 +264,6 @@ type App struct {
 	commands    map[string]*Command
 	groups      map[string]*Group
 	globalFlags []Flag
-	globalsType reflect.Type // set by RegisterGlobals[T], used for validation
 
 	// order preserves insertion order for help display
 	cmdOrder   []string
@@ -289,15 +272,15 @@ type App struct {
 	deprecated    []deprecatedCmd
 	deprecatedMap map[string]string
 
-	configEnabled          bool
-	configPathOverride     string
-	configFormat           string
-	configData             map[string]interface{}
-	configFields           map[string]*ConfigField
-	configFieldOrder       []string
-	frameworkFields        map[string]*ConfigField
-	frameworkFieldOrder    []string
-	noDefaultConfigPath    bool
+	configEnabled       bool
+	configPathOverride  string
+	configFormat        string
+	configData          map[string]interface{}
+	configFields        map[string]*ConfigField
+	configFieldOrder    []string
+	frameworkFields     map[string]*ConfigField
+	frameworkFieldOrder []string
+	noDefaultConfigPath bool
 
 	checksEnabled       bool
 	checksPath          string
@@ -314,10 +297,8 @@ type App struct {
 	providerMaterializedCwd string          // os.Getwd() at last materialization
 	providerSourcedNames    map[string]bool // def names added by providers (dropped on re-materialization)
 
-	stdinConsumedBy *string // tracks which flag consumed stdin via @-
+	stdinConsumedBy *string           // tracks which flag consumed stdin via @-
 	tagContracts    map[string]string // tag name -> required flag name
-
-	currentDispatch *dispatchCtx // set before handler dispatch, cleared after
 
 	// LastSources stores the source map from the most recent parse.
 	// Available for function handlers that need provenance info.
@@ -346,16 +327,6 @@ type App struct {
 	// resolution -- read live via os.LookupEnv at access time.
 	handshakeEnvs  map[string]string // env var -> help
 	handshakeOrder []string          // env var names in declaration order
-}
-
-// dispatchCtx carries per-dispatch state to struct handler wrappers.
-// Set on the App before calling the handler, cleared after return.
-type dispatchCtx struct {
-	stdout   io.Writer
-	stderr   io.Writer
-	globals  map[string]interface{} // keyed by flag name (dashes)
-	sources  map[string]string      // flag param name -> source label
-	emitData interface{}            // set by handler wrapper if ctx.Emit was called
 }
 
 // --- Option types ---
@@ -1643,35 +1614,8 @@ func (a *App) infraAccess() *infraAccess {
 	return &infraAccess{roots: roots, handshakes: handshakes}
 }
 
-func (a *App) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
+func (a *App) Command(name, help string, handler func(ctx *Context, kwargs map[string]interface{}) Outcome, opts ...CmdOption) {
 	cmd := buildAndValidateCommand(name, help, handler, a.EnvPrefix, a.globalFlags, nil, opts)
-	a.checkCmdFieldCollisions(cmd)
-	a.validateCmdInfraMarkers(cmd)
-	a.commands[name] = cmd
-	a.cmdOrder = append(a.cmdOrder, name)
-}
-
-// DataCommand registers a top-level command with a DataHandler that returns structured data.
-func (a *App) DataCommand(name, help string, handler DataHandler, opts ...CmdOption) {
-	// Wrap the data handler as a regular handler for buildAndValidateCommand
-	wrapper := func(kwargs map[string]interface{}) int {
-		result := handler(kwargs)
-		return result.ExitCode
-	}
-	cmd := buildAndValidateCommand(name, help, wrapper, a.EnvPrefix, a.globalFlags, nil, opts)
-	cmd.dataHandler = handler
-	a.checkCmdFieldCollisions(cmd)
-	a.validateCmdInfraMarkers(cmd)
-	a.commands[name] = cmd
-	a.cmdOrder = append(a.cmdOrder, name)
-}
-
-// RegisterHandler registers a struct-based command handler on the app.
-// The factory function creates fresh handler instances for each invocation.
-// Flags and args are extracted from the handler struct's cli:/arg: tags.
-// Additional CmdOptions (e.g., WithMutex, WithDependencies) can be passed.
-func (a *App) RegisterHandler(name, help string, factory func() Handler, opts ...CmdOption) {
-	cmd := buildHandlerCommand(name, help, factory, a, a.EnvPrefix, a.globalFlags, nil, opts)
 	a.checkCmdFieldCollisions(cmd)
 	a.validateCmdInfraMarkers(cmd)
 	a.commands[name] = cmd
@@ -1788,44 +1732,11 @@ func (g *Group) Group(name, help string, tags ...string) *Group {
 }
 
 // Command registers a command within a group.
-func (g *Group) Command(name, help string, handler func(map[string]interface{}) int, opts ...CmdOption) {
+func (g *Group) Command(name, help string, handler func(ctx *Context, kwargs map[string]interface{}) Outcome, opts ...CmdOption) {
 	if _, ok := g.Groups[name]; ok {
 		panic(fmt.Sprintf("command %q collides with an existing group", name))
 	}
 	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
-	if g.app != nil {
-		g.app.checkCmdFieldCollisions(cmd)
-		g.app.validateCmdInfraMarkers(cmd)
-	}
-	g.Commands[name] = cmd
-	g.order = append(g.order, name)
-}
-
-// DataCommand registers a command within a group with a DataHandler that returns structured data.
-func (g *Group) DataCommand(name, help string, handler DataHandler, opts ...CmdOption) {
-	if _, ok := g.Groups[name]; ok {
-		panic(fmt.Sprintf("command %q collides with an existing group", name))
-	}
-	wrapper := func(kwargs map[string]interface{}) int {
-		result := handler(kwargs)
-		return result.ExitCode
-	}
-	cmd := buildAndValidateCommand(name, help, wrapper, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
-	cmd.dataHandler = handler
-	if g.app != nil {
-		g.app.checkCmdFieldCollisions(cmd)
-		g.app.validateCmdInfraMarkers(cmd)
-	}
-	g.Commands[name] = cmd
-	g.order = append(g.order, name)
-}
-
-// RegisterHandler registers a struct-based command handler within a group.
-func (g *Group) RegisterHandler(name, help string, factory func() Handler, opts ...CmdOption) {
-	if _, ok := g.Groups[name]; ok {
-		panic(fmt.Sprintf("command %q collides with an existing group", name))
-	}
-	cmd := buildHandlerCommand(name, help, factory, g.app, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
 	if g.app != nil {
 		g.app.checkCmdFieldCollisions(cmd)
 		g.app.validateCmdInfraMarkers(cmd)
@@ -1955,36 +1866,22 @@ func (a *App) Run() {
 	a.LastSources = pr.sources
 
 	if pr.cmd.Passthrough {
-		code := pr.cmd.PassthroughHandler(pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
+		ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess())
+		code := pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		os.Exit(code)
 	}
 
-	// Set dispatch context for struct handler wrappers
-	if pr.cmd.handlerFactory != nil {
-		a.currentDispatch = &dispatchCtx{
-			stdout:  os.Stdout,
-			stderr:  os.Stderr,
-			globals: paramKwargsToFlagNames(pr.globalKwargs),
-			sources: pr.sources,
+	ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess())
+	outcome := pr.cmd.Handler(ctx, pr.kwargs)
+	if outcome.data != nil {
+		data, err := json.Marshal(outcome.data)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: failed to marshal result data: %s\n", err)
+			os.Exit(1)
 		}
-		defer func() { a.currentDispatch = nil }()
+		fmt.Println(string(data))
 	}
-
-	if pr.cmd.dataHandler != nil {
-		result := pr.cmd.dataHandler(pr.kwargs)
-		if result.Data != nil {
-			data, err := json.Marshal(result.Data)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: failed to marshal result data: %s\n", err)
-				os.Exit(1)
-			}
-			fmt.Println(string(data))
-		}
-		os.Exit(result.ExitCode)
-	}
-
-	code := pr.cmd.Handler(pr.kwargs)
-	os.Exit(code)
+	os.Exit(outcome.code)
 }
 
 // Test runs the CLI with the given argv, capturing output and exit code.
@@ -2039,34 +1936,26 @@ func (a *App) Test(argv []string) Result {
 	// Store sources for function handlers that need provenance info
 	a.LastSources = pr.sources
 
-	// Set dispatch context for struct handler wrappers (uses pipe writers)
-	var dc *dispatchCtx
-	if pr.cmd.handlerFactory != nil {
-		dc = &dispatchCtx{
-			stdout:  stdoutW,
-			stderr:  stderrW,
-			globals: paramKwargsToFlagNames(pr.globalKwargs),
-			sources: pr.sources,
-		}
-		a.currentDispatch = dc
-		defer func() { a.currentDispatch = nil }()
-	}
+	// Context is constructed unconditionally for every dispatch, writing to the
+	// capture pipes.
+	ctx := newContext(stdoutW, stderrW, pr.sources, a.infraAccess())
 
 	var exitCode int
 	var resultData interface{}
 	if pr.cmd.Passthrough {
-		exitCode = pr.cmd.PassthroughHandler(pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
-	} else if pr.cmd.dataHandler != nil {
-		hr := pr.cmd.dataHandler(pr.kwargs)
-		exitCode = hr.ExitCode
-		resultData = hr.Data
+		exitCode = pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 	} else {
-		exitCode = pr.cmd.Handler(pr.kwargs)
-	}
-
-	// Capture emit data from struct handlers
-	if dc != nil && dc.emitData != nil {
-		resultData = dc.emitData
+		outcome := pr.cmd.Handler(ctx, pr.kwargs)
+		exitCode = outcome.code
+		resultData = outcome.data
+		if outcome.data != nil {
+			data, err := json.Marshal(outcome.data)
+			if err != nil {
+				fmt.Fprintf(stderrW, "error: failed to marshal result data: %s\n", err)
+			} else {
+				fmt.Fprintln(stdoutW, string(data))
+			}
+		}
 	}
 
 	stdoutW.Close()
@@ -2572,214 +2461,214 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 
 	// Resolve env vars for global flags not set by CLI (skipped under --hermetic)
 	if !hermetic {
-	for i := range a.globalFlags {
-		f := &a.globalFlags[i]
-		if _, ok := globalValues[f.Name]; ok {
-			continue
-		}
-		if f.Env != "" {
-			envVal, ok := os.LookupEnv(f.Env)
-			if ok {
-				// Compound types: dict parses JSON from env, list uses env_separator
-				if IsDictType(f.Type) {
-					entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
-					if errStr != "" {
-						return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
-					}
-					globalValues[f.Name] = entries
-					globalSources[flagParamName(f.Name)] = "env"
-					continue
-				}
-				if IsListType(f.Type) {
-					if f.EnvSeparator == "" {
-						return nil, nil, nil, fmt.Sprintf("--%s: list flag with env requires env_separator", f.Name)
-					}
-					parts := splitEscaped(envVal, f.EnvSeparator[0])
-					elemType := ItemType(f.Type)
-					coercedList := make([]interface{}, 0, len(parts))
-					for _, element := range parts {
-						val, errStr := coerceToScalar(f.Name, element, elemType, nil)
+		for i := range a.globalFlags {
+			f := &a.globalFlags[i]
+			if _, ok := globalValues[f.Name]; ok {
+				continue
+			}
+			if f.Env != "" {
+				envVal, ok := os.LookupEnv(f.Env)
+				if ok {
+					// Compound types: dict parses JSON from env, list uses env_separator
+					if IsDictType(f.Type) {
+						entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
 						if errStr != "" {
 							return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
 						}
-						coercedList = append(coercedList, val)
+						globalValues[f.Name] = entries
+						globalSources[flagParamName(f.Name)] = "env"
+						continue
 					}
-					if f.Unique {
-						if dup := findDuplicate(coercedList); dup != nil {
-							return nil, nil, nil, fmt.Sprintf(
-								"--%s: duplicate value '%s' (from env var '%s')",
-								f.Name, formatValueForError(dup), f.Env,
-							)
+					if IsListType(f.Type) {
+						if f.EnvSeparator == "" {
+							return nil, nil, nil, fmt.Sprintf("--%s: list flag with env requires env_separator", f.Name)
 						}
-					}
-					globalValues[f.Name] = coercedList
-					globalSources[flagParamName(f.Name)] = "env"
-					continue
-				}
-				switch f.Type {
-				case TypeBool:
-					boolVal, err := parseBoolStrict(envVal)
-					if err != nil {
-						return nil, nil, nil, fmt.Sprintf(
-							"invalid boolean value '%s' for env var '%s' (flag '--%s')",
-							envVal, f.Env, f.Name,
-						)
-					}
-					globalValues[f.Name] = boolVal
-				case TypeInt:
-					if f.Repeatable && f.EnvSeparator != "" {
 						parts := splitEscaped(envVal, f.EnvSeparator[0])
+						elemType := ItemType(f.Type)
 						coercedList := make([]interface{}, 0, len(parts))
 						for _, element := range parts {
-							intVal, err := parseIntStrict(element)
+							val, errStr := coerceToScalar(f.Name, element, elemType, nil)
+							if errStr != "" {
+								return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+							}
+							coercedList = append(coercedList, val)
+						}
+						if f.Unique {
+							if dup := findDuplicate(coercedList); dup != nil {
+								return nil, nil, nil, fmt.Sprintf(
+									"--%s: duplicate value '%s' (from env var '%s')",
+									f.Name, formatValueForError(dup), f.Env,
+								)
+							}
+						}
+						globalValues[f.Name] = coercedList
+						globalSources[flagParamName(f.Name)] = "env"
+						continue
+					}
+					switch f.Type {
+					case TypeBool:
+						boolVal, err := parseBoolStrict(envVal)
+						if err != nil {
+							return nil, nil, nil, fmt.Sprintf(
+								"invalid boolean value '%s' for env var '%s' (flag '--%s')",
+								envVal, f.Env, f.Name,
+							)
+						}
+						globalValues[f.Name] = boolVal
+					case TypeInt:
+						if f.Repeatable && f.EnvSeparator != "" {
+							parts := splitEscaped(envVal, f.EnvSeparator[0])
+							coercedList := make([]interface{}, 0, len(parts))
+							for _, element := range parts {
+								intVal, err := parseIntStrict(element)
+								if err != nil {
+									return nil, nil, nil, fmt.Sprintf(
+										"--%s: %s (from env var '%s')",
+										f.Name, err.Error(), f.Env,
+									)
+								}
+								coercedList = append(coercedList, intVal)
+							}
+							if f.Unique {
+								if dup := findDuplicate(coercedList); dup != nil {
+									return nil, nil, nil, fmt.Sprintf(
+										"--%s: duplicate value '%s' (from env var '%s')",
+										f.Name, formatValueForError(dup), f.Env,
+									)
+								}
+							}
+							globalValues[f.Name] = coercedList
+						} else {
+							intVal, err := parseIntStrict(envVal)
 							if err != nil {
 								return nil, nil, nil, fmt.Sprintf(
 									"--%s: %s (from env var '%s')",
 									f.Name, err.Error(), f.Env,
 								)
 							}
-							coercedList = append(coercedList, intVal)
-						}
-						if f.Unique {
-							if dup := findDuplicate(coercedList); dup != nil {
-								return nil, nil, nil, fmt.Sprintf(
-									"--%s: duplicate value '%s' (from env var '%s')",
-									f.Name, formatValueForError(dup), f.Env,
-								)
+							if f.Repeatable {
+								globalValues[f.Name] = []interface{}{intVal}
+							} else {
+								globalValues[f.Name] = intVal
 							}
 						}
-						globalValues[f.Name] = coercedList
-					} else {
-						intVal, err := parseIntStrict(envVal)
-						if err != nil {
-							return nil, nil, nil, fmt.Sprintf(
-								"--%s: %s (from env var '%s')",
-								f.Name, err.Error(), f.Env,
-							)
-						}
-						if f.Repeatable {
-							globalValues[f.Name] = []interface{}{intVal}
+					case TypeFloat:
+						if f.Repeatable && f.EnvSeparator != "" {
+							parts := splitEscaped(envVal, f.EnvSeparator[0])
+							coercedList := make([]interface{}, 0, len(parts))
+							for _, element := range parts {
+								floatVal, errStr := parseFloatStrict(f.Name, element)
+								if errStr != "" {
+									return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+								}
+								coercedList = append(coercedList, floatVal)
+							}
+							if f.Unique {
+								if dup := findDuplicate(coercedList); dup != nil {
+									return nil, nil, nil, fmt.Sprintf(
+										"--%s: duplicate value '%s' (from env var '%s')",
+										f.Name, formatValueForError(dup), f.Env,
+									)
+								}
+							}
+							globalValues[f.Name] = coercedList
 						} else {
-							globalValues[f.Name] = intVal
-						}
-					}
-				case TypeFloat:
-					if f.Repeatable && f.EnvSeparator != "" {
-						parts := splitEscaped(envVal, f.EnvSeparator[0])
-						coercedList := make([]interface{}, 0, len(parts))
-						for _, element := range parts {
-							floatVal, errStr := parseFloatStrict(f.Name, element)
+							floatVal, errStr := parseFloatStrict(f.Name, envVal)
 							if errStr != "" {
 								return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
 							}
-							coercedList = append(coercedList, floatVal)
-						}
-						if f.Unique {
-							if dup := findDuplicate(coercedList); dup != nil {
-								return nil, nil, nil, fmt.Sprintf(
-									"--%s: duplicate value '%s' (from env var '%s')",
-									f.Name, formatValueForError(dup), f.Env,
-								)
+							if f.Repeatable {
+								globalValues[f.Name] = []interface{}{floatVal}
+							} else {
+								globalValues[f.Name] = floatVal
 							}
 						}
-						globalValues[f.Name] = coercedList
-					} else {
-						floatVal, errStr := parseFloatStrict(f.Name, envVal)
-						if errStr != "" {
-							return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
-						}
-						if f.Repeatable {
-							globalValues[f.Name] = []interface{}{floatVal}
+					default:
+						if f.Repeatable && f.EnvSeparator != "" {
+							parts := splitEscaped(envVal, f.EnvSeparator[0])
+							coercedList := make([]interface{}, 0, len(parts))
+							for _, element := range parts {
+								resolved, errStr := resolveAtPrefix(f.Name, element, &a.stdinConsumedBy)
+								if errStr != "" {
+									return nil, nil, nil, errStr
+								}
+								coercedList = append(coercedList, resolved)
+							}
+							if f.Unique {
+								if dup := findDuplicate(coercedList); dup != nil {
+									return nil, nil, nil, fmt.Sprintf(
+										"--%s: duplicate value '%s' (from env var '%s')",
+										f.Name, formatValueForError(dup), f.Env,
+									)
+								}
+							}
+							globalValues[f.Name] = coercedList
 						} else {
-							globalValues[f.Name] = floatVal
-						}
-					}
-				default:
-					if f.Repeatable && f.EnvSeparator != "" {
-						parts := splitEscaped(envVal, f.EnvSeparator[0])
-						coercedList := make([]interface{}, 0, len(parts))
-						for _, element := range parts {
-							resolved, errStr := resolveAtPrefix(f.Name, element, &a.stdinConsumedBy)
+							resolved, errStr := resolveAtPrefix(f.Name, envVal, &a.stdinConsumedBy)
 							if errStr != "" {
 								return nil, nil, nil, errStr
 							}
-							coercedList = append(coercedList, resolved)
-						}
-						if f.Unique {
-							if dup := findDuplicate(coercedList); dup != nil {
-								return nil, nil, nil, fmt.Sprintf(
-									"--%s: duplicate value '%s' (from env var '%s')",
-									f.Name, formatValueForError(dup), f.Env,
-								)
+							if f.Repeatable {
+								globalValues[f.Name] = []interface{}{resolved}
+							} else {
+								globalValues[f.Name] = resolved
 							}
 						}
-						globalValues[f.Name] = coercedList
-					} else {
-						resolved, errStr := resolveAtPrefix(f.Name, envVal, &a.stdinConsumedBy)
-						if errStr != "" {
-							return nil, nil, nil, errStr
-						}
-						if f.Repeatable {
-							globalValues[f.Name] = []interface{}{resolved}
-						} else {
-							globalValues[f.Name] = resolved
-						}
 					}
+					globalSources[flagParamName(f.Name)] = "env"
+					continue
 				}
-				globalSources[flagParamName(f.Name)] = "env"
-				continue
 			}
 		}
-	}
 
-	// Resolve config values for global flags not set by CLI or env.
-	// In conflict mode "error", detect when config would set a flag
-	// already set by CLI or env.
-	if a.configData != nil {
-		for i := range a.globalFlags {
-			f := &a.globalFlags[i]
-			param := flagParamName(f.Name)
-			configVal, hasConfig := a.configData[param]
-			if !hasConfig {
-				continue
-			}
-			// Effective mode: per-flag override if set, else the app default.
-			effectiveMode := a.configConflictMode
-			if f.hasConflictMode {
-				effectiveMode = f.ConflictMode
-			}
-			if existing, alreadySet := globalValues[f.Name]; alreadySet {
-				// Conflict ONLY when config diverges from the CLI/env value.
-				if effectiveMode == "error" {
-					coerced, errStr := coerceConfigValue(configVal, f)
-					if errStr != "" {
-						return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+		// Resolve config values for global flags not set by CLI or env.
+		// In conflict mode "error", detect when config would set a flag
+		// already set by CLI or env.
+		if a.configData != nil {
+			for i := range a.globalFlags {
+				f := &a.globalFlags[i]
+				param := flagParamName(f.Name)
+				configVal, hasConfig := a.configData[param]
+				if !hasConfig {
+					continue
+				}
+				// Effective mode: per-flag override if set, else the app default.
+				effectiveMode := a.configConflictMode
+				if f.hasConflictMode {
+					effectiveMode = f.ConflictMode
+				}
+				if existing, alreadySet := globalValues[f.Name]; alreadySet {
+					// Conflict ONLY when config diverges from the CLI/env value.
+					if effectiveMode == "error" {
+						coerced, errStr := coerceConfigValue(configVal, f)
+						if errStr != "" {
+							return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+						}
+						if !valuesEqualForConflict(existing, coerced, f) {
+							existingSource := globalSources[param]
+							return nil, nil, nil, fmt.Sprintf(
+								"flag '%s' set in both %s and config; remove one",
+								f.Name, existingSource,
+							)
+						}
 					}
-					if !valuesEqualForConflict(existing, coerced, f) {
-						existingSource := globalSources[param]
-						return nil, nil, nil, fmt.Sprintf(
-							"flag '%s' set in both %s and config; remove one",
-							f.Name, existingSource,
-						)
+					continue // cli-wins, or error mode with matching values
+				}
+				coerced, errStr := coerceConfigValue(configVal, f)
+				if errStr != "" {
+					return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+				}
+				if f.Unique {
+					if arr, ok := coerced.([]interface{}); ok {
+						if dup := findDuplicate(arr); dup != nil {
+							return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
+						}
 					}
 				}
-				continue // cli-wins, or error mode with matching values
+				globalValues[f.Name] = coerced
+				globalSources[flagParamName(f.Name)] = "config"
 			}
-			coerced, errStr := coerceConfigValue(configVal, f)
-			if errStr != "" {
-				return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
-			}
-			if f.Unique {
-				if arr, ok := coerced.([]interface{}); ok {
-					if dup := findDuplicate(arr); dup != nil {
-						return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
-					}
-				}
-			}
-			globalValues[f.Name] = coerced
-			globalSources[flagParamName(f.Name)] = "config"
 		}
-	}
 	} // end if !hermetic
 
 	// Apply defaults for global flags not set
@@ -2818,7 +2707,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 }
 
 // buildAndValidateCommand creates and validates a Command.
-func buildAndValidateCommand(name, help string, handler func(map[string]interface{}) int, envPrefix string, globalFlags []Flag, inheritedTags []string, opts []CmdOption) *Command {
+func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwargs map[string]interface{}) Outcome, envPrefix string, globalFlags []Flag, inheritedTags []string, opts []CmdOption) *Command {
 	if strings.TrimSpace(help) == "" {
 		panic(fmt.Sprintf("command %q: missing help text", name))
 	}
@@ -3001,115 +2890,6 @@ func buildAndValidateCommand(name, help string, handler func(map[string]interfac
 	cmd.tags = mergeTags(inheritedTags, cmd.tags)
 
 	return cmd
-}
-
-// buildHandlerCommand creates a Command from a struct-based Handler factory.
-// It extracts flags/args from the handler struct, builds a reverse param-to-flag
-// map, and wraps the handler in a func(map[string]interface{}) int that performs
-// struct binding at dispatch time.
-func buildHandlerCommand(name, help string, factory func() Handler, app *App, envPrefix string, globalFlags []Flag, inheritedTags []string, opts []CmdOption) *Command {
-	sample := factory()
-	sampleVal := reflect.ValueOf(sample)
-	structType := sampleVal.Type()
-	if structType.Kind() == reflect.Ptr {
-		structType = structType.Elem()
-	}
-
-	// Build a pointer receiver for choices_from method resolution, preserving
-	// the factory-built instance so injected dependencies are visible.
-	var receiver reflect.Value
-	if sampleVal.Kind() == reflect.Ptr && !sampleVal.IsNil() {
-		receiver = sampleVal
-	} else {
-		receiver = reflect.New(structType)
-		if sampleVal.Kind() == reflect.Struct {
-			receiver.Elem().Set(sampleVal)
-		}
-	}
-
-	flags, args := extractFlagsWithReceiver(structType, receiver)
-
-	// Build reverse map: param name (underscores) -> flag name (dashes)
-	paramToFlagMap := make(map[string]string, len(flags))
-	for _, f := range flags {
-		paramToFlagMap[flagParamName(f.Name)] = f.Name
-	}
-
-	// Build the CmdOption list from extracted flags/args, prepended before user opts
-	var extractedOpts []CmdOption
-	if len(flags) > 0 {
-		extractedOpts = append(extractedOpts, WithFlags(flags...))
-	}
-	if len(args) > 0 {
-		extractedOpts = append(extractedOpts, WithArgs(args...))
-	}
-	mergedOpts := append(extractedOpts, opts...)
-
-	// The wrapper handler: called at dispatch time with kwargs from the parse pipeline
-	wrapper := func(kwargs map[string]interface{}) int {
-		handler := factory()
-
-		// Build values map keyed by flag name (dashes) for bindValues
-		flagValues := make(map[string]interface{}, len(kwargs))
-		for paramName, val := range kwargs {
-			if flagName, ok := paramToFlagMap[paramName]; ok {
-				flagValues[flagName] = val
-			}
-			// Arg values: keep as-is (arg names don't have dashes)
-			// They'll be matched by the arg: tag in bindValues
-		}
-		// Also add arg values by their arg names
-		for _, a := range args {
-			if val, ok := kwargs[a.Name]; ok {
-				flagValues[a.Name] = val
-			}
-		}
-
-		if err := bindValues(handler, flagValues); err != nil {
-			panic("strictcli: handler binding: " + err.Error())
-		}
-
-		// Construct Context from the app's current dispatch context
-		dc := app.currentDispatch
-		var stdout, stderr io.Writer
-		var globals map[string]interface{}
-		var sources map[string]string
-		if dc != nil {
-			stdout = dc.stdout
-			stderr = dc.stderr
-			globals = dc.globals
-			sources = dc.sources
-		}
-		ctx := newContext(stdout, stderr, globals, sources, app.infraAccess())
-		code := handler.Run(ctx)
-
-		// If the handler emitted data, it needs to be available to the caller.
-		// Store the emit result on the dispatch context if present (for Test/invoke paths).
-		if dc != nil && ctx.emitData != nil {
-			dc.emitData = ctx.emitData
-		}
-
-		return code
-	}
-
-	cmd := buildAndValidateCommand(name, help, wrapper, envPrefix, globalFlags, inheritedTags, mergedOpts)
-	cmd.handlerFactory = factory
-	cmd.handlerType = structType
-	cmd.paramToFlag = paramToFlagMap
-	return cmd
-}
-
-// paramKwargsToFlagNames converts a map keyed by param names (underscores)
-// to flag names (dashes). Used to prepare globals for Context in dispatch.
-func paramKwargsToFlagNames(kwargs map[string]interface{}) map[string]interface{} {
-	if kwargs == nil {
-		return nil
-	}
-	result := make(map[string]interface{}, len(kwargs))
-	for k, v := range kwargs {
-		result[paramToFlagName(k)] = v
-	}
-	return result
 }
 
 // flagParamName converts a flag name like "dry-run" to a parameter key "dry_run".
