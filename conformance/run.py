@@ -19,7 +19,9 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 import jsonschema
 
@@ -164,20 +166,101 @@ def _check_equals(actual: str, expected: str, stream_name: str) -> list[str]:
     return errors
 
 
-def _make_project_dir(target: str, app_name: str) -> str:
-    """Create a temp directory with the project file needed for --dump-schema.
+# --- N-way target registry ---------------------------------------------------
+#
+# Each registered target is a self-contained descriptor that knows how to
+# prepare a case (turn an app definition + argv into an executable command) and
+# how to write the project marker file needed for --dump-schema. All target-
+# specific code lives in these descriptors; the comparison and orchestration
+# logic below is fully target-agnostic. Adding a future target (e.g. TypeScript)
+# is one _register_target(...) call and zero changes anywhere else.
 
-    Go binaries require go.mod; Python binaries require pyproject.toml.
-    Returns the path to the temp directory.
+
+@dataclass
+class Preparation:
+    """The result of preparing a case for one target: a runnable command."""
+
+    argv: list[str]
+    extra_env: dict[str, str]
+    cleanup_paths: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Target:
+    """A conformance target descriptor.
+
+    prepare(app_def, case_argv) -> Preparation
+        Builds the argv/env for running the case and lists temp files to unlink.
+        May raise RuntimeError if the target's toolchain fails to build; callers
+        translate that into a per-case failure.
+
+    write_project_file(dir, app_name) -> None
+        Writes the project marker file (e.g. go.mod / pyproject.toml) that
+        --dump-schema needs in the working directory to determine project_id.
     """
-    d = tempfile.mkdtemp(prefix="strictcli_proj_")
-    if target == "go":
-        with open(os.path.join(d, "go.mod"), "w") as f:
-            f.write(f"module {app_name}\n\ngo 1.21\n")
-    elif target == "python":
-        with open(os.path.join(d, "pyproject.toml"), "w") as f:
-            f.write(f'[project]\nname = "{app_name}"\n')
-    return d
+
+    name: str
+    prepare: Callable[[dict, list[str]], Preparation]
+    write_project_file: Callable[[str, str], None]
+
+
+TARGETS: dict[str, Target] = {}
+
+
+def _register_target(target: Target) -> None:
+    """Register a target descriptor. The insertion order is the reporting order."""
+    TARGETS[target.name] = target
+
+
+def _prepare_python(app_def: dict, case_argv: list[str]) -> Preparation:
+    script = _generate_python_script(app_def)
+    # Fix the sys.path to use an absolute path so the script works from any
+    # directory (ref_python.py emits a __file__-relative path that only works
+    # inside the conformance dir).
+    python_dir = str(PROJECT_ROOT / "python")
+    script = script.replace(
+        "sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))",
+        f"sys.path.insert(0, {python_dir!r})",
+    )
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".py", prefix="strictcli_py_", delete=False
+    ) as f:
+        f.write(script)
+        script_path = f.name
+    return Preparation(
+        argv=[sys.executable, script_path] + case_argv,
+        extra_env={},
+        cleanup_paths=[script_path],
+    )
+
+
+def _write_python_project_file(d: str, app_name: str) -> None:
+    with open(os.path.join(d, "pyproject.toml"), "w") as f:
+        f.write(f'[project]\nname = "{app_name}"\n')
+
+
+def _prepare_go(app_def: dict, case_argv: list[str]) -> Preparation:
+    binary = _ensure_harness()  # may raise RuntimeError; caller translates it
+    # Write the app definition to a temp file for the harness to read.
+    app_def_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", prefix="strictcli_def_", delete=False
+    )
+    json.dump(app_def, app_def_file, sort_keys=True)
+    app_def_file.close()
+    return Preparation(
+        argv=[binary] + case_argv,
+        extra_env={"CONFORMANCE_APP_DEF": app_def_file.name},
+        cleanup_paths=[app_def_file.name],
+    )
+
+
+def _write_go_project_file(d: str, app_name: str) -> None:
+    with open(os.path.join(d, "go.mod"), "w") as f:
+        f.write(f"module {app_name}\n\ngo 1.21\n")
+
+
+_register_target(Target("python", _prepare_python, _write_python_project_file))
+_register_target(Target("go", _prepare_go, _write_go_project_file))
 
 
 def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.CompletedProcess | None]:
@@ -226,47 +309,23 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         app_def["config_path"] = late_config_tmp_path
         # Keep config_content_late in app_def so generators can emit the write code
 
-    if target == "python":
-        script = _generate_python_script(app_def)
-        # Fix the sys.path to use an absolute path so the script works from
-        # any directory (it's generated with a __file__-relative path by
-        # ref_python.py which only works inside the conformance dir).
-        python_dir = str(PROJECT_ROOT / "python")
-        script = script.replace(
-            "sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))",
-            f"sys.path.insert(0, {python_dir!r})",
-        )
-        # Write script to temp file (in system temp dir, not the project tree)
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", prefix="strictcli_py_", delete=False
-        ) as f:
-            f.write(script)
-            script_path = f.name
-        argv = [sys.executable, script_path] + case_argv
-        cleanup_path = script_path
-        extra_env = {}
-    elif target == "go":
-        try:
-            binary = _ensure_harness()
-        except RuntimeError as e:
-            return False, [f"  harness build error: {e}"], None
-        # Write app definition to a temp file for the harness
-        app_def_file = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", prefix="strictcli_def_", delete=False
-        )
-        json.dump(app_def, app_def_file, sort_keys=True)
-        app_def_file.close()
-        extra_env = {"CONFORMANCE_APP_DEF": app_def_file.name}
-        argv = [binary] + case_argv
-        cleanup_path = app_def_file.name
-    else:
+    descriptor = TARGETS.get(target)
+    if descriptor is None:
         return False, [f"  unsupported target: {target}"], None
+    try:
+        prep = descriptor.prepare(app_def, case_argv)
+    except RuntimeError as e:
+        return False, [f"  harness build error: {e}"], None
+    argv = prep.argv
+    extra_env = prep.extra_env
+    cleanup_paths = prep.cleanup_paths
 
-    # --dump-schema needs go.mod (Go) or pyproject.toml (Python) in the CWD
-    # to determine project_id. Create a temp dir with the right project file.
+    # --dump-schema needs the target's project marker file (go.mod / pyproject.toml)
+    # in the CWD to determine project_id. Create a temp dir with the right file.
     proj_dir = None
     if "--dump-schema" in case_argv:
-        proj_dir = _make_project_dir(target, app_def["name"])
+        proj_dir = tempfile.mkdtemp(prefix="strictcli_proj_")
+        descriptor.write_project_file(proj_dir, app_def["name"])
         run_cwd = proj_dir
     else:
         run_cwd = str(CONFORMANCE_DIR)
@@ -375,8 +434,9 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     except Exception as e:
         errors.append(f"  exception: {e}")
     finally:
-        if cleanup_path is not None:
-            os.unlink(cleanup_path)
+        for cleanup_path in cleanup_paths:
+            if cleanup_path is not None and os.path.exists(cleanup_path):
+                os.unlink(cleanup_path)
         if config_tmp_path is not None:
             os.unlink(config_tmp_path)
         if late_config_tmp_path is not None and os.path.exists(late_config_tmp_path):
@@ -397,112 +457,187 @@ def _normalize_temp_paths(s: str) -> str:
     )
 
 
+def _stream_divergence(stream_name: str, values: dict[str, str]) -> list[str]:
+    """Report N-way divergence for one stream.
+
+    `values` maps target name -> normalized stream text. If all targets agree,
+    returns []. Otherwise groups targets by identical output, identifies the odd
+    one(s) out by majority (a unique largest group is the majority; every other
+    target is odd), and emits a labeled diff. With no majority (e.g. two targets,
+    or an even split) every distinct group is reported without an odd-one-out
+    marker.
+    """
+    groups: dict[str, list[str]] = {}
+    for tgt, val in values.items():
+        groups.setdefault(val, []).append(tgt)
+    if len(groups) == 1:
+        return []
+
+    sized = sorted(groups.items(), key=lambda kv: len(kv[1]), reverse=True)
+    top_size = len(sized[0][1])
+    majority_is_unique = sum(1 for _, tgts in sized if len(tgts) == top_size) == 1
+
+    odd: list[str] = []
+    if majority_is_unique:
+        majority_targets = set(sized[0][1])
+        odd = sorted(t for t in values if t not in majority_targets)
+
+    header = f"  {stream_name} divergence"
+    if odd:
+        header += f" (odd one out: {', '.join(odd)})"
+    header += ":"
+    lines = [header]
+    # Deterministic order: sort groups by their sorted target list.
+    for val, tgts in sorted(groups.items(), key=lambda kv: sorted(kv[1])):
+        label = ",".join(sorted(tgts))
+        lines.append(f"    {label}: {val!r}")
+    return lines
+
+
 def _compare_outputs(
-    py_result: subprocess.CompletedProcess | None,
-    go_result: subprocess.CompletedProcess | None,
+    results: dict[str, subprocess.CompletedProcess | None],
 ) -> list[str]:
-    """Compare normalized stdout/stderr between two targets. Returns warnings."""
-    warnings = []
-    if py_result is None or go_result is None:
+    """N-way comparison of normalized stdout/stderr across all targets.
+
+    `results` maps target name -> CompletedProcess (or None for a target that
+    produced no result). Targets with no result are excluded. If fewer than two
+    targets produced comparable output, returns [] (nothing to compare). On
+    divergence, returns a labeled diff identifying the odd one(s) out.
+    """
+    warnings: list[str] = []
+    present = {t: r for t, r in results.items() if r is not None}
+    if len(present) < 2:
         return warnings
 
-    py_stdout = _normalize_temp_paths(_normalize(py_result.stdout))
-    go_stdout = _normalize_temp_paths(_normalize(go_result.stdout))
-    if py_stdout != go_stdout:
-        warnings.append("  stdout divergence:")
-        warnings.append(f"    python: {py_stdout!r}")
-        warnings.append(f"    go:     {go_stdout!r}")
+    stdout_vals = {
+        t: _normalize_temp_paths(_normalize(r.stdout)) for t, r in present.items()
+    }
+    warnings.extend(_stream_divergence("stdout", stdout_vals))
 
-    py_stderr = _normalize_temp_paths(_normalize(py_result.stderr))
-    go_stderr = _normalize_temp_paths(_normalize(go_result.stderr))
-    if py_stderr != go_stderr:
-        warnings.append("  stderr divergence:")
-        warnings.append(f"    python: {py_stderr!r}")
-        warnings.append(f"    go:     {go_stderr!r}")
+    stderr_vals = {
+        t: _normalize_temp_paths(_normalize(r.stderr)) for t, r in present.items()
+    }
+    warnings.extend(_stream_divergence("stderr", stderr_vals))
 
     return warnings
 
 
-def _run_both_mode(cases: list[tuple[str, dict]], verbose: bool) -> int:
-    """Run all cases against both python and go, comparing results.
+@dataclass
+class ParityReport:
+    """Aggregate outcome of an N-way parity run."""
 
-    Returns exit code (0 = no parity failures, 1 = parity failures exist).
+    passed: int = 0
+    parity_failures: int = 0
+    output_divergences: int = 0
+    consistent_failures: int = 0
+    parity_failure_details: list[tuple[str, str]] = field(default_factory=list)
+    divergence_details: list[tuple[str, list[str]]] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        return self.passed + self.parity_failures + self.consistent_failures
+
+    @property
+    def exit_code(self) -> int:
+        return 0 if self.parity_failures == 0 else 1
+
+
+def _applicable_targets(case: dict, target_names: list[str]) -> list[str]:
+    """Targets a case runs on: intersection of registered and declared targets.
+
+    A case's `targets` key (if present) restricts it to those implementations;
+    absent means all. Registration order is preserved.
     """
-    passed = 0
-    parity_failures = 0
-    output_divergences = 0
-    consistent_failures = 0
-    parity_failure_details: list[tuple[str, str]] = []
-    divergence_details: list[tuple[str, list[str]]] = []
+    declared = case.get("targets")
+    if declared is None:
+        return list(target_names)
+    declared_set = set(declared)
+    return [t for t in target_names if t in declared_set]
+
+
+def _run_parity_mode(
+    cases: list[tuple[str, dict]], target_names: list[str], verbose: bool
+) -> ParityReport:
+    """Run all cases against every applicable registered target and assert parity.
+
+    For each case, runs the intersection of registered and case-declared targets
+    and asserts their outputs are byte-identical. A case applicable to fewer than
+    two targets is skipped (nothing to compare). Classification per case:
+
+    - all targets pass their own assertions -> counted as passed; outputs are then
+      compared N-way and any divergence is reported as a (non-fatal) warning.
+    - all targets fail -> a consistent failure (not a parity break).
+    - some pass and some fail -> a parity failure (fatal: sets a nonzero exit).
+    """
+    report = ParityReport()
 
     for filename, case in cases:
         name = case["name"]
         label = f"{filename}: {name}"
 
-        # Cross-target parity comparison only applies to cases both targets run.
-        targets = case.get("targets")
-        if targets is not None and set(targets) != {"python", "go"}:
+        applicable = _applicable_targets(case, target_names)
+        if len(applicable) < 2:
+            # Fewer than two targets run this case; parity is undefined.
             continue
 
         if verbose:
             print(f"  running: {label} ...", end=" ", flush=True)
 
-        py_ok, py_errors, py_result = _run_case(case, "python")
-        go_ok, go_errors, go_result = _run_case(case, "go")
+        outcomes = {t: _run_case(case, t) for t in applicable}
+        oks = {t: outcomes[t][0] for t in applicable}
+        results = {t: outcomes[t][2] for t in applicable}
 
-        if py_ok and go_ok:
-            # Both pass -- check output divergence
-            passed += 1
-            div_warnings = _compare_outputs(py_result, go_result)
+        if all(oks.values()):
+            # All targets pass -- check output divergence.
+            report.passed += 1
+            div_warnings = _compare_outputs(results)
             if div_warnings:
-                output_divergences += 1
-                divergence_details.append((label, div_warnings))
+                report.output_divergences += 1
+                report.divergence_details.append((label, div_warnings))
                 if verbose:
                     print("PASS (output divergence)")
             else:
                 if verbose:
                     print("PASS")
-        elif not py_ok and not go_ok:
-            # Both fail -- consistent
-            consistent_failures += 1
+        elif not any(oks.values()):
+            # All targets fail -- consistent.
+            report.consistent_failures += 1
             extra = ""
-            if (
-                py_result is not None
-                and go_result is not None
-                and py_result.returncode != go_result.returncode
-            ):
-                extra = (
-                    f" (exit codes differ: python={py_result.returncode},"
-                    f" go={go_result.returncode})"
-                )
+            codes = {
+                t: (results[t].returncode if results[t] is not None else None)
+                for t in applicable
+            }
+            if len(set(codes.values())) > 1:
+                joined = ", ".join(f"{t}={codes[t]}" for t in applicable)
+                extra = f" (exit codes differ: {joined})"
             if verbose:
                 print(f"CONSISTENT FAIL{extra}")
         else:
-            # Parity failure -- one passes, one fails
-            parity_failures += 1
-            py_status = "PASS" if py_ok else "FAIL"
-            go_status = "PASS" if go_ok else "FAIL"
-            detail = f"python={py_status}, go={go_status}"
-            parity_failure_details.append((label, detail))
+            # Parity failure -- some targets pass, some fail.
+            report.parity_failures += 1
+            detail = ", ".join(
+                f"{t}={'PASS' if oks[t] else 'FAIL'}" for t in applicable
+            )
+            report.parity_failure_details.append((label, detail))
             if verbose:
                 print(f"PARITY FAIL ({detail})")
 
     # Print parity failures
-    if parity_failure_details:
+    if report.parity_failure_details:
         print()
         print("PARITY FAILURES:")
         print("=" * 60)
-        for label, detail in parity_failure_details:
+        for label, detail in report.parity_failure_details:
             print(f"\n{label}")
             print(f"  {detail}")
         print()
 
     # Print output divergence warnings
-    if divergence_details:
+    if report.divergence_details:
         print()
         print("OUTPUT DIVERGENCE WARNINGS:")
         print("=" * 60)
-        for label, warnings in divergence_details:
+        for label, warnings in report.divergence_details:
             print(f"\n{label}")
             for w in warnings:
                 print(w)
@@ -512,13 +647,12 @@ def _run_both_mode(cases: list[tuple[str, dict]], verbose: bool) -> int:
     _cleanup_harness()
 
     # Summary
-    total = passed + parity_failures + consistent_failures
     print(
-        f"{passed}/{total} passed, {parity_failures} parity failures,"
-        f" {output_divergences} output divergence warnings"
+        f"{report.passed}/{report.total} passed, {report.parity_failures} parity failures,"
+        f" {report.output_divergences} output divergence warnings"
     )
 
-    return 0 if parity_failures == 0 else 1
+    return report
 
 
 def _run_single_mode(cases: list[tuple[str, dict]], target: str, verbose: bool) -> int:
@@ -577,13 +711,13 @@ def main() -> None:
     parser.add_argument(
         "--target",
         default=None,
-        choices=["python", "go"],
+        choices=list(TARGETS),
         help="Which implementation to test",
     )
     parser.add_argument(
         "--both",
         action="store_true",
-        help="Test both python and go, comparing results for parity",
+        help="Test all registered targets, comparing results for parity",
     )
     parser.add_argument(
         "--filter",
@@ -617,7 +751,8 @@ def main() -> None:
             sys.exit(1)
 
     if args.both:
-        exit_code = _run_both_mode(cases, args.verbose)
+        report = _run_parity_mode(cases, list(TARGETS), args.verbose)
+        exit_code = report.exit_code
     else:
         exit_code = _run_single_mode(cases, args.target, args.verbose)
 
