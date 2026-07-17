@@ -23,7 +23,6 @@ import contextlib
 import decimal
 import keyword
 import fnmatch
-import importlib.metadata
 import inspect
 import io
 import json
@@ -2634,12 +2633,7 @@ class App:
     _deprecated: dict[str, DeprecatedCommand] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        # Auto-detect version from package metadata if not provided
-        if self.version is None:
-            try:
-                self.version = importlib.metadata.version(self.name)
-            except importlib.metadata.PackageNotFoundError:
-                self.version = "unknown"
+        _require_non_empty_str(self.version, "version", "App")
         _require_non_empty_str(self.help, "help", "App")
         # Check for duplicate and reserved global flag names
         seen: set[str] = set()
