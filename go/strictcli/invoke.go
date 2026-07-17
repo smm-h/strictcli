@@ -61,6 +61,11 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 
 	cmd := route.cmd
 
+	// Record test-coverage hit (command-level only).
+	if a.testCoverage {
+		a.recordCoverage(commandPath)
+	}
+
 	// Handle passthrough commands
 	if cmd.Passthrough {
 		var args []string

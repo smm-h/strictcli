@@ -326,6 +326,13 @@ type App struct {
 	// resolution -- read live via os.LookupEnv at access time.
 	handshakeEnvs  map[string]string // env var -> help
 	handshakeOrder []string          // env var names in declaration order
+
+	// Test-coverage instrumentation. When enabled, every Test() and Call()
+	// invocation records the resolved command path to per-process shard files
+	// so a check can verify that every command in the surface has been exercised.
+	testCoverage     bool
+	coverageShardFmt string // ".strictcli/coverage/<pid>-{n}.jsonl"
+	coverageCounter  int
 }
 
 // --- Option types ---
@@ -435,6 +442,17 @@ func WithChecks(path string) AppOption {
 func WithChecksEmbed(data []byte) AppOption {
 	return func(a *App) {
 		a.checksEmbed = data
+	}
+}
+
+// WithTestCoverage enables CLI test-coverage instrumentation. Every Test() and
+// Call() invocation records the resolved command path to per-process shard files
+// (.strictcli/coverage/<pid>-<n>.jsonl). A built-in cli-test-coverage check
+// (auto-registered via the provider mechanism) merges shards and hard-FAILs
+// listing every command with zero coverage.
+func WithTestCoverage() AppOption {
+	return func(a *App) {
+		a.testCoverage = true
 	}
 }
 
@@ -1309,6 +1327,14 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 			}
 		}
 	}
+	// Test-coverage instrumentation: register built-in provider.
+	if a.testCoverage {
+		a.coverageShardFmt = fmt.Sprintf(".strictcli/coverage/%d-%%d.jsonl", os.Getpid())
+		if err := os.MkdirAll(".strictcli/coverage", 0o755); err != nil {
+			panic(fmt.Sprintf("test-coverage: cannot create .strictcli/coverage/: %s", err))
+		}
+		a.RegisterCheckProvider(a.testCoverageProvider)
+	}
 	return a
 }
 
@@ -1920,6 +1946,11 @@ func (a *App) Test(argv []string) Result {
 		return Result{Stderr: stderr, ExitCode: 1}
 	}
 
+	// Record test-coverage hit (command-level only).
+	if a.testCoverage && pr.cmdPath != "" {
+		a.recordCoverage(pr.cmdPath)
+	}
+
 	// Capture stdout/stderr from handler
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
@@ -1984,6 +2015,7 @@ func (a *App) Test(argv []string) Result {
 // parseResult holds the output of doParse.
 type parseResult struct {
 	cmd             *Command
+	cmdPath         string // dot-separated command path (e.g. "infra.deploy")
 	kwargs          map[string]interface{}
 	globalKwargs    map[string]interface{}
 	sources         map[string]string // flag param name -> source label
@@ -2239,6 +2271,9 @@ func (a *App) doParse(argv []string) parseResult {
 	cmdRest := route.rest
 	path := route.path
 
+	// Build dotted command path for coverage and other instrumentation
+	resolvedCmdPath := strings.Join(append(path, cmd.Name), ".")
+
 	// Check command-level --help anywhere in remaining tokens
 	if tokensContainHelp(cmdRest) {
 		prefix := ""
@@ -2249,7 +2284,7 @@ func (a *App) doParse(argv []string) parseResult {
 	}
 	// Passthrough: skip parsing, forward raw args
 	if cmd.Passthrough {
-		return parseResult{cmd: cmd, passthroughArgs: cmdRest, globalKwargs: globalValues}
+		return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, passthroughArgs: cmdRest, globalKwargs: globalValues}
 	}
 
 	// Config subcommand exemption: config edit, config path, config set
@@ -2312,7 +2347,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 		cmdSources[k] = v
 	}
-	return parseResult{cmd: cmd, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources}
+	return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources}
 }
 
 // tokensContainHelp checks if --help or -h appears in tokens before any "--"
