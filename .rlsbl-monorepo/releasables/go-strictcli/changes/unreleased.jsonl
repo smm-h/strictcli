@@ -2,3 +2,4 @@
 {"id":"18c319a42c8f34485821a2d4f06e4735a1e70f37d1334d9e","commits":["2e9ae64d9142cebf7e33fbd7e5daaab9e8763110"],"user_facing":false,"packages":["go-strictcli"]}
 {"id":"18c31cb077b7d9bdb5abfcf262c949ab8f76168c91383eba","commits":["3e5d756a28cf54296a98b72af572c86fc6f138e5"],"user_facing":true,"description":"**Canonical float in choice errors.** Invalid `--flag` choice error messages now render the attempted float value in canonical SCF form (e.g. `1e-7` not `1e-07`), matching Python.","type":"fix","packages":["go-strictcli"]}
 {"id":"18c31d09c1448451c6fb7cad67004ac98b06445d3587336e","commits":["9ad7556810a4b89d6bdb93f550750372152d3bcb"],"user_facing":false,"packages":["go-strictcli"]}
+{"id":"18c31d26e32173370a027bf96c5e4a77b95e85dcb5a8a904","commits":["18f9772d379a55d328c3fcc7b780431ffefcbea4"],"user_facing":false,"packages":["go-strictcli"]}
