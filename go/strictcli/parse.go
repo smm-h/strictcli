@@ -140,14 +140,14 @@ func resolveAtPrefix(flagName, raw string, stdinConsumedBy **string) (string, st
 	}
 	if raw == "@-" {
 		if *stdinConsumedBy != nil {
-			return "", fmt.Sprintf("--%s: stdin (@-) can only be used once per invocation", flagName)
+			return "", errAtPrefixStdinOnce(flagName)
 		}
 		data, err := io.ReadAll(io.LimitReader(os.Stdin, int64(atPrefixMaxSize+1)))
 		if err != nil {
-			return "", fmt.Sprintf("--%s: cannot read stdin", flagName)
+			return "", errAtPrefixCannotReadStdin(flagName)
 		}
 		if len(data) > atPrefixMaxSize {
-			return "", fmt.Sprintf("--%s: file exceeds 1 MB limit", flagName)
+			return "", errAtPrefixFileTooLarge(flagName)
 		}
 		consumed := flagName
 		*stdinConsumedBy = &consumed
@@ -158,19 +158,19 @@ func resolveAtPrefix(flagName, raw string, stdinConsumedBy **string) (string, st
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", fmt.Sprintf("--%s: file not found: %s", flagName, path)
+			return "", errAtPrefixFileNotFound(flagName, path)
 		}
-		return "", fmt.Sprintf("--%s: cannot read file: %s", flagName, path)
+		return "", errAtPrefixCannotReadFile(flagName, path)
 	}
 	if info.IsDir() {
-		return "", fmt.Sprintf("--%s: cannot read file: %s", flagName, path)
+		return "", errAtPrefixCannotReadFile(flagName, path)
 	}
 	if info.Size() > int64(atPrefixMaxSize) {
-		return "", fmt.Sprintf("--%s: file exceeds 1 MB limit", flagName)
+		return "", errAtPrefixFileTooLarge(flagName)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Sprintf("--%s: cannot read file: %s", flagName, path)
+		return "", errAtPrefixCannotReadFile(flagName, path)
 	}
 	return strings.TrimRight(string(data), " \t\n\r"), ""
 }
@@ -227,7 +227,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			}
 			if f.Unique {
 				if dup := findDuplicate(cliSet[f.Name].([]interface{})); dup != nil {
-					return fmt.Sprintf("--%s: duplicate value '%s'", f.Name, formatValueForError(dup))
+					return errFlagDuplicateValue(f.Name, formatValueForError(dup))
 				}
 			}
 		} else {
@@ -262,15 +262,15 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 			if f, ok := longLookup[flagPart]; ok {
 				if f.Type == TypeBool {
-					return nil, nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
+					return nil, nil, nil, errBoolFlagNoValue(flagPart)
 				}
 				if errStr := parseFlagRawValue(f, valuePart, cliSet, stdinConsumedBy, storeValue); errStr != "" {
 					return nil, nil, nil, errStr
 				}
 			} else if _, ok := negationLookup[flagPart]; ok {
-				return nil, nil, nil, fmt.Sprintf("flag '%s' is a boolean negation and does not take a value", flagPart)
+				return nil, nil, nil, errBoolNegationNoValue(flagPart)
 			} else {
-				return nil, nil, nil, fmt.Sprintf("unknown flag '%s'", flagPart)
+				return nil, nil, nil, errUnknownFlag(flagPart)
 			}
 			i++
 			continue
@@ -287,14 +287,14 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		if strings.HasPrefix(tok, "--") {
 			f, ok := longLookup[tok]
 			if !ok {
-				return nil, nil, nil, fmt.Sprintf("unknown flag '%s'", tok)
+				return nil, nil, nil, errUnknownFlag(tok)
 			}
 			if f.Type == TypeBool {
 				cliSet[f.Name] = true
 				i++
 			} else {
 				if i+1 >= len(tokens) {
-					return nil, nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
+					return nil, nil, nil, errFlagRequiresValue(tok)
 				}
 				raw := tokens[i+1]
 				if errStr := parseFlagRawValue(f, raw, cliSet, stdinConsumedBy, storeValue); errStr != "" {
@@ -313,7 +313,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					i++
 				} else {
 					if i+1 >= len(tokens) {
-						return nil, nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
+						return nil, nil, nil, errFlagRequiresValue(tok)
 					}
 					raw := tokens[i+1]
 					if errStr := parseFlagRawValue(f, raw, cliSet, stdinConsumedBy, storeValue); errStr != "" {
@@ -353,7 +353,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		if IsDictType(f.Type) {
 			entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
 			if errStr != "" {
-				return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+				return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
 			}
 			cliSet[f.Name] = entries
 			envNames[f.Name] = true
@@ -361,7 +361,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 		if IsListType(f.Type) {
 			if f.EnvSeparator == "" {
-				return nil, nil, nil, fmt.Sprintf("--%s: list flag with env requires env_separator", f.Name)
+				return nil, nil, nil, errListFlagEnvRequiresSeparator(f.Name)
 			}
 			parts := splitEscaped(envVal, f.EnvSeparator[0])
 			elemType := ItemType(f.Type)
@@ -369,16 +369,13 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			for _, element := range parts {
 				val, errStr := coerceToScalar(f.Name, element, elemType, nil)
 				if errStr != "" {
-					return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+					return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
 				}
 				coercedList = append(coercedList, val)
 			}
 			if f.Unique {
 				if dup := findDuplicate(coercedList); dup != nil {
-					return nil, nil, nil, fmt.Sprintf(
-						"--%s: duplicate value '%s' (from env var '%s')",
-						f.Name, formatValueForError(dup), f.Env,
-					)
+					return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
 				}
 			}
 			cliSet[f.Name] = coercedList
@@ -389,10 +386,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		case TypeBool:
 			boolVal, err := parseBoolStrict(envVal)
 			if err != nil {
-				return nil, nil, nil, fmt.Sprintf(
-					"invalid boolean value '%s' for env var '%s' (flag '--%s')",
-					envVal, f.Env, f.Name,
-				)
+				return nil, nil, nil, errInvalidBoolEnvValue(envVal, f.Env, f.Name)
 			}
 			cliSet[f.Name] = boolVal
 		case TypeInt:
@@ -402,29 +396,20 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				for _, element := range parts {
 					intVal, err := parseIntStrict(element)
 					if err != nil {
-						return nil, nil, nil, fmt.Sprintf(
-							"--%s: %s (from env var '%s')",
-							f.Name, err.Error(), f.Env,
-						)
+						return nil, nil, nil, errFlagErrFromEnvVar(f.Name, err.Error(), f.Env)
 					}
 					coercedList = append(coercedList, intVal)
 				}
 				if f.Unique {
 					if dup := findDuplicate(coercedList); dup != nil {
-						return nil, nil, nil, fmt.Sprintf(
-							"--%s: duplicate value '%s' (from env var '%s')",
-							f.Name, formatValueForError(dup), f.Env,
-						)
+						return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
 					}
 				}
 				cliSet[f.Name] = coercedList
 			} else {
 				intVal, err := parseIntStrict(envVal)
 				if err != nil {
-					return nil, nil, nil, fmt.Sprintf(
-						"--%s: %s (from env var '%s')",
-						f.Name, err.Error(), f.Env,
-					)
+					return nil, nil, nil, errFlagErrFromEnvVar(f.Name, err.Error(), f.Env)
 				}
 				if f.Repeatable {
 					cliSet[f.Name] = []interface{}{intVal}
@@ -439,23 +424,20 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				for _, element := range parts {
 					floatVal, errStr := parseFloatStrict(f.Name, element)
 					if errStr != "" {
-						return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+						return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
 					}
 					coercedList = append(coercedList, floatVal)
 				}
 				if f.Unique {
 					if dup := findDuplicate(coercedList); dup != nil {
-						return nil, nil, nil, fmt.Sprintf(
-							"--%s: duplicate value '%s' (from env var '%s')",
-							f.Name, formatValueForError(dup), f.Env,
-						)
+						return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
 					}
 				}
 				cliSet[f.Name] = coercedList
 			} else {
 				floatVal, errStr := parseFloatStrict(f.Name, envVal)
 				if errStr != "" {
-					return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+					return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
 				}
 				if f.Repeatable {
 					cliSet[f.Name] = []interface{}{floatVal}
@@ -476,10 +458,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				}
 				if f.Unique {
 					if dup := findDuplicate(coercedList); dup != nil {
-						return nil, nil, nil, fmt.Sprintf(
-							"--%s: duplicate value '%s' (from env var '%s')",
-							f.Name, formatValueForError(dup), f.Env,
-						)
+						return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
 					}
 				}
 				cliSet[f.Name] = coercedList
@@ -520,29 +499,26 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				if effectiveMode == "error" {
 					coerced, errStr := coerceConfigValue(configVal, f)
 					if errStr != "" {
-						return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+						return nil, nil, nil, errConfigValueError(f.Name, errStr)
 					}
 					if !valuesEqualForConflict(existing, coerced, f) {
 						existingSource := "cli"
 						if envNames[f.Name] {
 							existingSource = "env"
 						}
-						return nil, nil, nil, fmt.Sprintf(
-							"flag '%s' set in both %s and config; remove one",
-							f.Name, existingSource,
-						)
+						return nil, nil, nil, errFlagSetInBothAndConfig(f.Name, existingSource)
 					}
 				}
 				continue // cli-wins, or error mode with matching values
 			}
 			coerced, errStr := coerceConfigValue(configVal, f)
 			if errStr != "" {
-				return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+				return nil, nil, nil, errConfigValueError(f.Name, errStr)
 			}
 			if f.Unique {
 				if arr, ok := coerced.([]interface{}); ok {
 					if dup := findDuplicate(arr); dup != nil {
-						return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
+						return nil, nil, nil, errConfigValueDuplicate(f.Name, formatValueForError(dup))
 					}
 				}
 			}
@@ -579,12 +555,10 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			}
 			coerced, errStr := coerceConfigValue(configVal, f)
 			if errStr != "" {
-				return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+				return nil, nil, nil, errConfigValueError(f.Name, errStr)
 			}
 			if !valuesEqualForConflict(existing, coerced, f) {
-				return nil, nil, nil, fmt.Sprintf(
-					"flag '%s' set in both cli and config; remove one", f.Name,
-				)
+				return nil, nil, nil, errFlagSetInBothCliAndConfig(f.Name)
 			}
 		}
 	}
@@ -677,14 +651,14 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 			}
 		}
 		if len(setFlags) > 1 {
-			return nil, nil, nil, fmt.Sprintf("%s are mutually exclusive", strings.Join(setFlags, " and "))
+			return nil, nil, nil, errMutuallyExclusive(strings.Join(setFlags, " and "))
 		}
 		if len(setFlags) == 0 {
 			names := make([]string, len(mg.Flags))
 			for j, f := range mg.Flags {
 				names[j] = "--" + f.Name
 			}
-			return nil, nil, nil, fmt.Sprintf("one of %s is required", strings.Join(names, ", "))
+			return nil, nil, nil, errOneOfRequired(strings.Join(names, ", "))
 		}
 	}
 
@@ -704,10 +678,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 						if d.Value {
 							explicitNeg = "no-"
 						}
-						return nil, nil, nil, fmt.Sprintf(
-							"flag '--%s' implies '--%s%s', but '--%s%s' was explicitly provided",
-							d.Flag, neg, d.Implies, explicitNeg, d.Implies,
-						)
+						return nil, nil, nil, errImpliesConflict(d.Flag, neg, d.Implies, explicitNeg)
 					}
 				} else {
 					// Target not set -- inject the implied value
@@ -736,12 +707,12 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 				for j, flagName := range d.Flags {
 					names[j] = "--" + flagName
 				}
-				return nil, nil, nil, fmt.Sprintf("flags %s must be used together", strings.Join(names, ", "))
+				return nil, nil, nil, errFlagsMustBeUsedTogether(strings.Join(names, ", "))
 			}
 		case Requires:
 			if store.isPresentForDeps(d.Flag) {
 				if !store.isPresentForDeps(d.DependsOn) {
-					return nil, nil, nil, fmt.Sprintf("flag '--%s' requires '--%s'", d.Flag, d.DependsOn)
+					return nil, nil, nil, errFlagRequiresFlag(d.Flag, d.DependsOn)
 				}
 			}
 		}
@@ -799,12 +770,12 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 			}
 			for _, v := range vals {
 				if err := f.Validate(v); err != nil {
-					return nil, nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
+					return nil, nil, nil, errFlagValueError(f.Name, err.Error())
 				}
 			}
 		} else {
 			if err := f.Validate(val); err != nil {
-				return nil, nil, nil, fmt.Sprintf("--%s: %s", f.Name, err.Error())
+				return nil, nil, nil, errFlagValueError(f.Name, err.Error())
 			}
 		}
 	}
@@ -819,7 +790,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 			remaining := positionals[posIdx:]
 			if len(remaining) == 0 {
 				if a.Required {
-					return nil, nil, nil, fmt.Sprintf("missing required argument '%s'", a.Name)
+					return nil, nil, nil, errMissingRequiredArgument(a.Name)
 				}
 				// Optional variadic with no values: empty list
 				argValues[a.Name] = []interface{}{}
@@ -843,7 +814,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 			argValues[a.Name] = coerced
 			posIdx++
 		} else if a.Required {
-			return nil, nil, nil, fmt.Sprintf("missing required argument '%s'", a.Name)
+			return nil, nil, nil, errMissingRequiredArgument(a.Name)
 		} else if a.hasDefault {
 			argValues[a.Name] = a.Default
 		} else {
@@ -852,7 +823,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 		}
 	}
 	if posIdx < len(positionals) {
-		return nil, nil, nil, fmt.Sprintf("unexpected argument '%s'", positionals[posIdx])
+		return nil, nil, nil, errUnexpectedArgument(positionals[posIdx])
 	}
 
 	// Validate arg choices (after type coercion)
@@ -912,9 +883,9 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 
 // validateChoices checks a resolved flag or arg value against its choices
 // list, returning an error message or "" if valid. isArg selects the message
-// prefix ("argument 'name':" instead of "--name:"); the two format strings
-// are kept as full literals so conformance/check_error_parity.py can extract
-// them. A nil val is exempt from validation: nil only arises from
+// prefix ("argument 'name':" instead of "--name:"); the two message templates
+// live in errors.go so conformance/check_error_parity.py can extract them.
+// A nil val is exempt from validation: nil only arises from
 // Default(nil)/ArgDefault(nil) or an unset mutex flag, all meaning "not
 // passed" -- a CLI-supplied value is never nil.
 func validateChoices(name string, val interface{}, repeatable bool, choices []interface{}, isArg bool) string {
@@ -926,15 +897,9 @@ func validateChoices(name string, val interface{}, repeatable bool, choices []in
 			return ""
 		}
 		if isArg {
-			return fmt.Sprintf(
-				"argument '%s': invalid value '%v', must be one of: %s",
-				name, formatValueForError(v), formatChoices(choices),
-			)
+			return errArgInvalidChoice(name, formatValueForError(v), formatChoices(choices))
 		}
-		return fmt.Sprintf(
-			"--%s: invalid value '%v', must be one of: %s",
-			name, formatValueForError(v), formatChoices(choices),
-		)
+		return errFlagInvalidChoice(name, formatValueForError(v), formatChoices(choices))
 	}
 	if repeatable {
 		vals, ok := val.([]interface{})

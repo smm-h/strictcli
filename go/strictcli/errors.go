@@ -447,6 +447,34 @@ func errCommandImpliesTargetNotBool(name string, flagName string) string {
 }
 
 // ---------------------------------------------------------------------------
+// strictcli.go — validateScalarType (parse-time)
+// ---------------------------------------------------------------------------
+
+func errExpectedStrGot(typeDesc string) string {
+	return fmt.Sprintf("expected str, got %s", typeDesc)
+}
+
+func errExpectedIntGot(typeDesc string) string {
+	return fmt.Sprintf("expected int, got %s", typeDesc)
+}
+
+func errExpectedFloatGot(typeDesc string) string {
+	return fmt.Sprintf("expected float, got %s", typeDesc)
+}
+
+func errExpectedBoolGot(typeDesc string) string {
+	return fmt.Sprintf("expected bool, got %s", typeDesc)
+}
+
+// ---------------------------------------------------------------------------
+// strictcli.go — doParse hermetic mode (parse-time)
+// ---------------------------------------------------------------------------
+
+const errHermeticConfigMutuallyExclusive = "--hermetic and --config are mutually exclusive"
+
+const errHermeticWithConfigCommands = "--hermetic cannot be used with config commands"
+
+// ---------------------------------------------------------------------------
 // parse.go — strict parsing
 // ---------------------------------------------------------------------------
 
@@ -468,6 +496,171 @@ func errNaNNotAllowed() error {
 
 func errInfNotAllowed() error {
 	return fmt.Errorf("Inf is not allowed")
+}
+
+// ---------------------------------------------------------------------------
+// parse.go — resolveAtPrefix @-prefix resolution (parse-time)
+// ---------------------------------------------------------------------------
+
+func errAtPrefixStdinOnce(flagName string) string {
+	return fmt.Sprintf("--%s: stdin (@-) can only be used once per invocation", flagName)
+}
+
+func errAtPrefixCannotReadStdin(flagName string) string {
+	return fmt.Sprintf("--%s: cannot read stdin", flagName)
+}
+
+func errAtPrefixFileTooLarge(flagName string) string {
+	return fmt.Sprintf("--%s: file exceeds 1 MB limit", flagName)
+}
+
+func errAtPrefixFileNotFound(flagName string, path string) string {
+	return fmt.Sprintf("--%s: file not found: %s", flagName, path)
+}
+
+func errAtPrefixCannotReadFile(flagName string, path string) string {
+	return fmt.Sprintf("--%s: cannot read file: %s", flagName, path)
+}
+
+// ---------------------------------------------------------------------------
+// parse.go / strictcli.go — flag token parsing (parse-time)
+// (parseCommand and extractGlobalFlags share these templates)
+// ---------------------------------------------------------------------------
+
+func errBoolFlagNoValue(flagPart string) string {
+	return fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
+}
+
+func errBoolNegationNoValue(flagPart string) string {
+	return fmt.Sprintf("flag '%s' is a boolean negation and does not take a value", flagPart)
+}
+
+func errUnknownFlag(tok string) string {
+	return fmt.Sprintf("unknown flag '%s'", tok)
+}
+
+func errFlagRequiresValue(tok string) string {
+	return fmt.Sprintf("flag '%s' requires a value", tok)
+}
+
+func errFlagDuplicateValue(flagName string, value string) string {
+	return fmt.Sprintf("--%s: duplicate value '%s'", flagName, value)
+}
+
+// ---------------------------------------------------------------------------
+// parse.go / strictcli.go — env var resolution (parse-time)
+// (parseCommand and extractGlobalFlags share these templates)
+// ---------------------------------------------------------------------------
+
+func errWrappedFromEnvVar(errStr string, envVar string) string {
+	return fmt.Sprintf("%s (from env var '%s')", errStr, envVar)
+}
+
+func errListFlagEnvRequiresSeparator(flagName string) string {
+	return fmt.Sprintf("--%s: list flag with env requires env_separator", flagName)
+}
+
+func errFlagDuplicateValueFromEnv(flagName string, value string, envVar string) string {
+	return fmt.Sprintf(
+		"--%s: duplicate value '%s' (from env var '%s')",
+		flagName, value, envVar,
+	)
+}
+
+func errInvalidBoolEnvValue(envVal string, envVar string, flagName string) string {
+	return fmt.Sprintf(
+		"invalid boolean value '%s' for env var '%s' (flag '--%s')",
+		envVal, envVar, flagName,
+	)
+}
+
+func errFlagErrFromEnvVar(flagName string, errStr string, envVar string) string {
+	return fmt.Sprintf(
+		"--%s: %s (from env var '%s')",
+		flagName, errStr, envVar,
+	)
+}
+
+// ---------------------------------------------------------------------------
+// parse.go / strictcli.go — config value resolution (parse-time)
+// (parseCommand and extractGlobalFlags share these templates)
+// ---------------------------------------------------------------------------
+
+func errConfigValueError(flagName string, errStr string) string {
+	return fmt.Sprintf("--%s: config value error: %s", flagName, errStr)
+}
+
+func errFlagSetInBothAndConfig(flagName string, existingSource string) string {
+	return fmt.Sprintf(
+		"flag '%s' set in both %s and config; remove one",
+		flagName, existingSource,
+	)
+}
+
+func errConfigValueDuplicate(flagName string, value string) string {
+	return fmt.Sprintf("--%s: config value error: duplicate value '%s'", flagName, value)
+}
+
+func errFlagSetInBothCliAndConfig(flagName string) string {
+	return fmt.Sprintf("flag '%s' set in both cli and config; remove one", flagName)
+}
+
+// ---------------------------------------------------------------------------
+// parse.go — validateAndBuildKwargs (parse-time)
+// (mutex, dependencies, custom validation, positional args)
+// ---------------------------------------------------------------------------
+
+func errMutuallyExclusive(setFlags string) string {
+	return fmt.Sprintf("%s are mutually exclusive", setFlags)
+}
+
+func errOneOfRequired(names string) string {
+	return fmt.Sprintf("one of %s is required", names)
+}
+
+func errImpliesConflict(flag string, neg string, target string, explicitNeg string) string {
+	return fmt.Sprintf(
+		"flag '--%s' implies '--%s%s', but '--%s%s' was explicitly provided",
+		flag, neg, target, explicitNeg, target,
+	)
+}
+
+func errFlagsMustBeUsedTogether(names string) string {
+	return fmt.Sprintf("flags %s must be used together", names)
+}
+
+func errFlagRequiresFlag(flag string, dependsOn string) string {
+	return fmt.Sprintf("flag '--%s' requires '--%s'", flag, dependsOn)
+}
+
+func errFlagValueError(flagName string, msg string) string {
+	return fmt.Sprintf("--%s: %s", flagName, msg)
+}
+
+func errMissingRequiredArgument(name string) string {
+	return fmt.Sprintf("missing required argument '%s'", name)
+}
+
+func errUnexpectedArgument(value string) string {
+	return fmt.Sprintf("unexpected argument '%s'", value)
+}
+
+// ---------------------------------------------------------------------------
+// parse.go — validateChoices (parse-time)
+// ---------------------------------------------------------------------------
+
+func errArgInvalidChoice(name string, value string, choices string) string {
+	return fmt.Sprintf(
+		"argument '%s': invalid value '%v', must be one of: %s",
+		name, value, choices,
+	)
+}
+
+func errFlagInvalidChoice(name string, value string, choices string) string {
+	return fmt.Sprintf(
+		"--%s: invalid value '%v', must be one of: %s",
+		name, value, choices,
+	)
 }
 
 // ---------------------------------------------------------------------------

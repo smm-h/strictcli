@@ -1204,11 +1204,11 @@ func validateScalarType(v interface{}, t FlagType) string {
 	switch t {
 	case TypeStr:
 		if _, ok := v.(string); !ok {
-			return fmt.Sprintf("expected str, got %s", describeGoType(v))
+			return errExpectedStrGot(describeGoType(v))
 		}
 	case TypeInt:
 		if _, ok := v.(int); !ok {
-			return fmt.Sprintf("expected int, got %s", describeGoType(v))
+			return errExpectedIntGot(describeGoType(v))
 		}
 	case TypeFloat:
 		if _, ok := v.(float64); ok {
@@ -1217,10 +1217,10 @@ func validateScalarType(v interface{}, t FlagType) string {
 		if _, ok := v.(int); ok {
 			return "" // int is acceptable for float
 		}
-		return fmt.Sprintf("expected float, got %s", describeGoType(v))
+		return errExpectedFloatGot(describeGoType(v))
 	case TypeBool:
 		if _, ok := v.(bool); !ok {
-			return fmt.Sprintf("expected bool, got %s", describeGoType(v))
+			return errExpectedBoolGot(describeGoType(v))
 		}
 	}
 	return ""
@@ -2106,7 +2106,7 @@ func (a *App) preScanReservedFlags(argv []string) preScanResult {
 			}
 			val := tok[len("--config="):]
 			if val == "" {
-				result.err = "flag '--config' requires a value"
+				result.err = errFlagRequiresValue("--config")
 				return result
 			}
 			result.configPath = val
@@ -2122,7 +2122,7 @@ func (a *App) preScanReservedFlags(argv []string) preScanResult {
 				return result
 			}
 			if i+1 >= len(argv) {
-				result.err = "flag '--config' requires a value"
+				result.err = errFlagRequiresValue("--config")
 				return result
 			}
 			result.configPath = argv[i+1]
@@ -2204,7 +2204,7 @@ func (a *App) doParse(argv []string) parseResult {
 
 	// --hermetic + --config mutual exclusion
 	if preScan.hermetic && preScan.configPath != "" {
-		return parseResult{parseErr: "--hermetic and --config are mutually exclusive"}
+		return parseResult{parseErr: errHermeticConfigMutuallyExclusive}
 	}
 
 	// Load config data once at parse time.
@@ -2288,7 +2288,7 @@ func (a *App) doParse(argv []string) parseResult {
 
 	// --hermetic + config subcommand = hard error
 	if preScan.hermetic && isConfigSubcommand {
-		return parseResult{parseErr: "--hermetic cannot be used with config commands"}
+		return parseResult{parseErr: errHermeticWithConfigCommands}
 	}
 
 	if configLoadErr != "" {
@@ -2396,7 +2396,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 			}
 			if f.Unique {
 				if dup := findDuplicate(globalValues[f.Name].([]interface{})); dup != nil {
-					return fmt.Sprintf("--%s: duplicate value '%s'", f.Name, formatValueForError(dup))
+					return errFlagDuplicateValue(f.Name, formatValueForError(dup))
 				}
 			}
 		} else {
@@ -2426,7 +2426,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 			valuePart := tok[eqPos+1:]
 			if f, ok := longLookup[flagPart]; ok {
 				if f.Type == TypeBool {
-					return nil, nil, nil, fmt.Sprintf("flag '%s' is a boolean flag and does not take a value", flagPart)
+					return nil, nil, nil, errBoolFlagNoValue(flagPart)
 				}
 				if errStr := parseFlagRawValue(f, valuePart, globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
 					return nil, nil, nil, errStr
@@ -2452,7 +2452,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 				i++
 			} else {
 				if i+1 >= len(argv) {
-					return nil, nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
+					return nil, nil, nil, errFlagRequiresValue(tok)
 				}
 				if errStr := parseFlagRawValue(f, argv[i+1], globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
 					return nil, nil, nil, errStr
@@ -2469,7 +2469,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 				i++
 			} else {
 				if i+1 >= len(argv) {
-					return nil, nil, nil, fmt.Sprintf("flag '%s' requires a value", tok)
+					return nil, nil, nil, errFlagRequiresValue(tok)
 				}
 				if errStr := parseFlagRawValue(f, argv[i+1], globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
 					return nil, nil, nil, errStr
@@ -2505,7 +2505,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 					if IsDictType(f.Type) {
 						entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
 						if errStr != "" {
-							return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+							return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
 						}
 						globalValues[f.Name] = entries
 						globalSources[flagParamName(f.Name)] = "env"
@@ -2513,7 +2513,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 					}
 					if IsListType(f.Type) {
 						if f.EnvSeparator == "" {
-							return nil, nil, nil, fmt.Sprintf("--%s: list flag with env requires env_separator", f.Name)
+							return nil, nil, nil, errListFlagEnvRequiresSeparator(f.Name)
 						}
 						parts := splitEscaped(envVal, f.EnvSeparator[0])
 						elemType := ItemType(f.Type)
@@ -2521,16 +2521,13 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 						for _, element := range parts {
 							val, errStr := coerceToScalar(f.Name, element, elemType, nil)
 							if errStr != "" {
-								return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+								return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
 							}
 							coercedList = append(coercedList, val)
 						}
 						if f.Unique {
 							if dup := findDuplicate(coercedList); dup != nil {
-								return nil, nil, nil, fmt.Sprintf(
-									"--%s: duplicate value '%s' (from env var '%s')",
-									f.Name, formatValueForError(dup), f.Env,
-								)
+								return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
 							}
 						}
 						globalValues[f.Name] = coercedList
@@ -2541,10 +2538,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 					case TypeBool:
 						boolVal, err := parseBoolStrict(envVal)
 						if err != nil {
-							return nil, nil, nil, fmt.Sprintf(
-								"invalid boolean value '%s' for env var '%s' (flag '--%s')",
-								envVal, f.Env, f.Name,
-							)
+							return nil, nil, nil, errInvalidBoolEnvValue(envVal, f.Env, f.Name)
 						}
 						globalValues[f.Name] = boolVal
 					case TypeInt:
@@ -2554,29 +2548,20 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 							for _, element := range parts {
 								intVal, err := parseIntStrict(element)
 								if err != nil {
-									return nil, nil, nil, fmt.Sprintf(
-										"--%s: %s (from env var '%s')",
-										f.Name, err.Error(), f.Env,
-									)
+									return nil, nil, nil, errFlagErrFromEnvVar(f.Name, err.Error(), f.Env)
 								}
 								coercedList = append(coercedList, intVal)
 							}
 							if f.Unique {
 								if dup := findDuplicate(coercedList); dup != nil {
-									return nil, nil, nil, fmt.Sprintf(
-										"--%s: duplicate value '%s' (from env var '%s')",
-										f.Name, formatValueForError(dup), f.Env,
-									)
+									return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
 								}
 							}
 							globalValues[f.Name] = coercedList
 						} else {
 							intVal, err := parseIntStrict(envVal)
 							if err != nil {
-								return nil, nil, nil, fmt.Sprintf(
-									"--%s: %s (from env var '%s')",
-									f.Name, err.Error(), f.Env,
-								)
+								return nil, nil, nil, errFlagErrFromEnvVar(f.Name, err.Error(), f.Env)
 							}
 							if f.Repeatable {
 								globalValues[f.Name] = []interface{}{intVal}
@@ -2591,23 +2576,20 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 							for _, element := range parts {
 								floatVal, errStr := parseFloatStrict(f.Name, element)
 								if errStr != "" {
-									return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+									return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
 								}
 								coercedList = append(coercedList, floatVal)
 							}
 							if f.Unique {
 								if dup := findDuplicate(coercedList); dup != nil {
-									return nil, nil, nil, fmt.Sprintf(
-										"--%s: duplicate value '%s' (from env var '%s')",
-										f.Name, formatValueForError(dup), f.Env,
-									)
+									return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
 								}
 							}
 							globalValues[f.Name] = coercedList
 						} else {
 							floatVal, errStr := parseFloatStrict(f.Name, envVal)
 							if errStr != "" {
-								return nil, nil, nil, fmt.Sprintf("%s (from env var '%s')", errStr, f.Env)
+								return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
 							}
 							if f.Repeatable {
 								globalValues[f.Name] = []interface{}{floatVal}
@@ -2628,10 +2610,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 							}
 							if f.Unique {
 								if dup := findDuplicate(coercedList); dup != nil {
-									return nil, nil, nil, fmt.Sprintf(
-										"--%s: duplicate value '%s' (from env var '%s')",
-										f.Name, formatValueForError(dup), f.Env,
-									)
+									return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
 								}
 							}
 							globalValues[f.Name] = coercedList
@@ -2674,26 +2653,23 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 					if effectiveMode == "error" {
 						coerced, errStr := coerceConfigValue(configVal, f)
 						if errStr != "" {
-							return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+							return nil, nil, nil, errConfigValueError(f.Name, errStr)
 						}
 						if !valuesEqualForConflict(existing, coerced, f) {
 							existingSource := globalSources[param]
-							return nil, nil, nil, fmt.Sprintf(
-								"flag '%s' set in both %s and config; remove one",
-								f.Name, existingSource,
-							)
+							return nil, nil, nil, errFlagSetInBothAndConfig(f.Name, existingSource)
 						}
 					}
 					continue // cli-wins, or error mode with matching values
 				}
 				coerced, errStr := coerceConfigValue(configVal, f)
 				if errStr != "" {
-					return nil, nil, nil, fmt.Sprintf("--%s: config value error: %s", f.Name, errStr)
+					return nil, nil, nil, errConfigValueError(f.Name, errStr)
 				}
 				if f.Unique {
 					if arr, ok := coerced.([]interface{}); ok {
 						if dup := findDuplicate(arr); dup != nil {
-							return nil, nil, nil, fmt.Sprintf("--%s: config value error: duplicate value '%s'", f.Name, formatValueForError(dup))
+							return nil, nil, nil, errConfigValueDuplicate(f.Name, formatValueForError(dup))
 						}
 					}
 				}
