@@ -108,7 +108,7 @@ Both implementations must pass all conformance tests before release.
 
 ```
 strictcli/
-  python/          Python implementation (PyPI + npm)
+  python/          Python implementation (PyPI)
   go/              Go implementation
   conformance/     Cross-language conformance tests
 ```

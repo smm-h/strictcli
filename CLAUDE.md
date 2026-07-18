@@ -8,7 +8,7 @@ This is an rlsbl monorepo (`.rlsbl-monorepo/workspace.toml`). Each sub-project h
 
 | Directory | What | Version file | Targets | Tests |
 |-----------|------|-------------|---------|-------|
-| `python/` | Python implementation (PyPI + npm) | `pyproject.toml` | pypi, npm | `uv run pytest` in `python/` |
+| `python/` | Python implementation (PyPI) | `pyproject.toml` | pypi | `uv run pytest` in `python/` |
 | `go/` | Go implementation | `VERSION` | go | `go test ./... -race` in `go/` |
 | `conformance/` | Cross-language conformance suite | n/a | plain | `python conformance/run.py --target python` / `--target go` |
 
