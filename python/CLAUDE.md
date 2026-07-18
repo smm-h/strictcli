@@ -16,5 +16,5 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 - No tokens or secrets in command-line arguments (use env vars or config files)
 - All file writes to shared state should be atomic (write to tmp, then rename)
 - External calls (APIs, CLI tools) must have timeouts and graceful fallbacks
-- Use `npm link` (npm) or `uv pip install -e .` (Python) for local development
+- Use `uv pip install -e .` for local development
 - CI runs smoke tests on every push; manual testing for UI/UX changes
