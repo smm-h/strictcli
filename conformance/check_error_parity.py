@@ -29,12 +29,6 @@ from pathlib import Path
 CONFORMANCE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CONFORMANCE_DIR.parent
 PY_SOURCE = PROJECT_ROOT / "python" / "strictcli" / "__init__.py"
-GO_STRICTCLI = PROJECT_ROOT / "go" / "strictcli" / "strictcli.go"
-GO_CHECK = PROJECT_ROOT / "go" / "strictcli" / "check.go"
-GO_CHECK_RUNNER = PROJECT_ROOT / "go" / "strictcli" / "check_runner.go"
-GO_CHECK_PUBLIC = PROJECT_ROOT / "go" / "strictcli" / "check_public.go"
-GO_CHECK_PROVIDER = PROJECT_ROOT / "go" / "strictcli" / "check_provider.go"
-GO_TAGDSL = PROJECT_ROOT / "go" / "strictcli" / "tagdsl.go"
 GO_ERRORS = PROJECT_ROOT / "go" / "strictcli" / "errors.go"
 CASES_DIR = CONFORMANCE_DIR / "cases"
 
@@ -725,129 +719,57 @@ def extract_python_errors(source: str) -> list[tuple[str, str]]:
 # 2. Extract error patterns from Go source
 # ---------------------------------------------------------------------------
 
-def extract_go_errors(
-    strictcli_src: str,
-    check_src: str,
-    check_runner_src: str,
-    check_public_src: str,
-    check_provider_src: str,
-    tagdsl_src: str,
-    errors_src: str = "",
-) -> list[tuple[str, str]]:
+def extract_go_errors(errors_src: str) -> list[tuple[str, str]]:
     """Extract (category, format_string) pairs from Go source.
 
-    Categories: 'registration' for panic(), 'parse' for error string returns.
+    All Go user-facing error templates are centralized in errors.go; it is
+    the single extraction source.  errors.go contains fmt.Sprintf("...") and
+    fmt.Errorf("...") patterns that were extracted from other source files,
+    plus const string literals.  Templates are grouped into sections
+    delimited by dashed header comments.  A section header containing
+    "(parse-time)" marks every template in that section as a parse-time
+    error; all other sections hold registration-time templates.
     """
     results: list[tuple[str, str]] = []
 
-    # --- Registration errors from strictcli.go (panics) ---
-
-    # panic(fmt.Sprintf("...", args)) -- allow whitespace/newlines before the quote
-    panic_sprintf = re.compile(
-        r'panic\(fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
+    # fmt.Sprintf("...") -- error format functions
+    errors_sprintf = re.compile(
+        r'fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
     )
-    for m in panic_sprintf.finditer(strictcli_src):
-        results.append(("registration", m.group(1)))
-
-    # panic("...")
-    panic_plain = re.compile(
-        r'panic\("((?:[^"\\]|\\.)*)"\)',
-    )
-    for m in panic_plain.finditer(strictcli_src):
-        results.append(("registration", m.group(1)))
-
-    # --- Registration errors from strictcli.go (violations append pattern) ---
-    # violations = append(violations, fmt.Sprintf("...", args))
-    violations_sprintf = re.compile(
-        r'append\(violations,\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
-    )
-    for m in violations_sprintf.finditer(strictcli_src):
-        results.append(("registration", m.group(1)))
-
-    # NOTE: parse.go templates, the parse-time templates formerly inlined in
-    # strictcli.go (parseCommand/extractGlobalFlags/doParse), and the templates
-    # formerly inlined in config.go (coercion helpers), routing.go
-    # (resolveCommand), and invoke.go (invoke/coerceInvokeDict) are fully
-    # centralized in errors.go; the per-file extraction passes for them are
-    # gone. The errors.go pass below picks up their signatures, using
-    # "(parse-time)" section-header markers to keep their parse category.
-
-    # --- Registration errors from check.go (fmt.Errorf for TOML validation) ---
+    # fmt.Errorf("...") -- error-returning builders
     errorf_pat = re.compile(
         r'fmt\.Errorf\(\s*"((?:[^"\\]|\\.)*)"',
     )
-    for m in errorf_pat.finditer(check_src):
-        results.append(("registration", m.group(1)))
-
-    # --- Reporter-minting panics from check.go ---
-    for m in panic_plain.finditer(check_src):
-        results.append(("registration", m.group(1)))
-    for m in panic_sprintf.finditer(check_src):
-        results.append(("registration", m.group(1)))
-
-    # --- Registration errors from check_runner.go (fmt.Errorf for cycle detection) ---
-    for m in errorf_pat.finditer(check_runner_src):
-        results.append(("registration", m.group(1)))
-
-    # --- Reporter/materialization panics from check_provider.go ---
-    for m in panic_plain.finditer(check_provider_src):
-        results.append(("registration", m.group(1)))
-    for m in panic_sprintf.finditer(check_provider_src):
-        results.append(("registration", m.group(1)))
-
-    # --- Registration errors from check_public.go (fmt.Errorf for public API) ---
-    for m in errorf_pat.finditer(check_public_src):
-        # Skip pure format-string wrappers like fmt.Errorf("%s", errMsg)
-        if m.group(1) == "%s":
-            continue
-        results.append(("registration", m.group(1)))
-
-    # --- Registration errors from tagdsl.go (fmt.Errorf for tag expression parsing) ---
-    for m in errorf_pat.finditer(tagdsl_src):
-        results.append(("registration", m.group(1)))
-
-    # --- Centralized error templates from errors.go ---
-    # errors.go contains fmt.Sprintf("...") and fmt.Errorf("...") patterns
-    # that were extracted from other source files, plus const string literals.
-    # Templates are grouped into sections delimited by dashed header comments.
-    # A section header containing "(parse-time)" marks every template in that
-    # section as a parse-time error; all other sections hold registration-time
-    # templates.
-    if errors_src:
-        # fmt.Sprintf("...") -- error format functions
-        errors_sprintf = re.compile(
-            r'fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
+    # const errXxx = "..." -- plain string constants
+    const_err_pat = re.compile(
+        r'^const\s+err\w+\s*=\s*"((?:[^"\\]|\\.)*)"',
+        re.MULTILINE,
+    )
+    # Section header: dashed line, one-plus comment lines, dashed line.
+    section_header_pat = re.compile(
+        r'// -{10,}\n((?:// .*\n)+?)// -{10,}\n',
+    )
+    # Split errors.go into (category, body) segments. Content before the
+    # first header (package clause, imports) has no templates but is
+    # scanned as registration for uniformity.
+    segments: list[tuple[str, str]] = []
+    prev_end = 0
+    prev_category = "registration"
+    for hm in section_header_pat.finditer(errors_src):
+        segments.append((prev_category, errors_src[prev_end:hm.start()]))
+        header = hm.group(1)
+        prev_category = (
+            "parse" if "(parse-time)" in header else "registration"
         )
-        # const errXxx = "..." -- plain string constants
-        const_err_pat = re.compile(
-            r'^const\s+err\w+\s*=\s*"((?:[^"\\]|\\.)*)"',
-            re.MULTILINE,
-        )
-        # Section header: dashed line, one-plus comment lines, dashed line.
-        section_header_pat = re.compile(
-            r'// -{10,}\n((?:// .*\n)+?)// -{10,}\n',
-        )
-        # Split errors.go into (category, body) segments. Content before the
-        # first header (package clause, imports) has no templates but is
-        # scanned as registration for uniformity.
-        segments: list[tuple[str, str]] = []
-        prev_end = 0
-        prev_category = "registration"
-        for hm in section_header_pat.finditer(errors_src):
-            segments.append((prev_category, errors_src[prev_end:hm.start()]))
-            header = hm.group(1)
-            prev_category = (
-                "parse" if "(parse-time)" in header else "registration"
-            )
-            prev_end = hm.end()
-        segments.append((prev_category, errors_src[prev_end:]))
-        for category, body in segments:
-            for m in errors_sprintf.finditer(body):
-                results.append((category, m.group(1)))
-            for m in errorf_pat.finditer(body):
-                results.append((category, m.group(1)))
-            for m in const_err_pat.finditer(body):
-                results.append((category, m.group(1)))
+        prev_end = hm.end()
+    segments.append((prev_category, errors_src[prev_end:]))
+    for category, body in segments:
+        for m in errors_sprintf.finditer(body):
+            results.append((category, m.group(1)))
+        for m in errorf_pat.finditer(body):
+            results.append((category, m.group(1)))
+        for m in const_err_pat.finditer(body):
+            results.append((category, m.group(1)))
 
     return results
 
@@ -1087,23 +1009,11 @@ def diagnose_new_target(
 
 def main() -> int:
     py_source = PY_SOURCE.read_text()
-    go_strictcli_source = GO_STRICTCLI.read_text()
-    go_check_source = GO_CHECK.read_text()
-    go_check_runner_source = GO_CHECK_RUNNER.read_text()
-    go_check_public_source = GO_CHECK_PUBLIC.read_text()
-    go_check_provider_source = GO_CHECK_PROVIDER.read_text()
-    go_tagdsl_source = GO_TAGDSL.read_text()
     go_errors_source = GO_ERRORS.read_text()
 
     # Extract raw error patterns
     py_raw = extract_python_errors(py_source)
-    go_raw = extract_go_errors(
-        go_strictcli_source,
-        go_check_source, go_check_runner_source,
-        go_check_public_source, go_check_provider_source,
-        go_tagdsl_source,
-        go_errors_source,
-    )
+    go_raw = extract_go_errors(go_errors_source)
 
     # Normalize to signatures
     py_items = [(cat, raw, normalize_python(raw)) for cat, raw in py_raw]
