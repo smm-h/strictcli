@@ -1,7 +1,6 @@
 package strictcli
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -61,7 +60,7 @@ func (a *App) resolveCommand(rest []string) routeResult {
 		// Check deprecated commands
 		if msg, ok := currentDeprecated[token]; ok {
 			return routeResult{
-				err:  fmt.Sprintf("command '%s' is deprecated: %s", token, msg),
+				err:  errCommandDeprecated(token, msg),
 				path: path, rest: rest,
 			}
 		}
@@ -70,13 +69,13 @@ func (a *App) resolveCommand(rest []string) routeResult {
 		if len(path) > 0 {
 			prefix := strings.Join(append([]string{a.Name}, path...), " ")
 			return routeResult{
-				err:           fmt.Sprintf("unknown command '%s' in '%s'", token, strings.Join(path, " ")),
+				err:           errUnknownCommandInGroup(token, strings.Join(path, " ")),
 				commandPrefix: prefix,
 				path:          path, rest: rest,
 			}
 		}
 		return routeResult{
-			err:  fmt.Sprintf("unknown command '%s'", token),
+			err:  errUnknownCommand(token),
 			path: path, rest: rest,
 		}
 	}
@@ -85,5 +84,5 @@ func (a *App) resolveCommand(rest []string) routeResult {
 	if lastGroup != nil {
 		return routeResult{lastGroup: lastGroup, path: path, rest: rest, helpAtGroup: true}
 	}
-	return routeResult{err: "no command specified", path: path, rest: rest}
+	return routeResult{err: errNoCommandSpecified, path: path, rest: rest}
 }

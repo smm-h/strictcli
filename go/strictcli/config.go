@@ -450,7 +450,7 @@ func coerceConfigScalarLong(value interface{}, flagType FlagType) (interface{}, 
 		if b, ok := value.(bool); ok {
 			return b, ""
 		}
-		return nil, fmt.Sprintf("expected boolean, got %s", typeName(value))
+		return nil, errConfigExpectedBooleanGot(typeName(value))
 	case TypeInt:
 		// TOML integers decode as int64; JSON numbers decode as float64
 		if val, ok := value.(int64); ok {
@@ -461,9 +461,9 @@ func coerceConfigScalarLong(value interface{}, flagType FlagType) (interface{}, 
 			if float64(intVal) == fv {
 				return intVal, ""
 			}
-			return nil, "expected integer, got float"
+			return nil, errConfigExpectedIntegerGotFloat
 		}
-		return nil, fmt.Sprintf("expected integer, got %s", typeName(value))
+		return nil, errConfigExpectedIntegerGot(typeName(value))
 	case TypeFloat:
 		// TOML integers decode as int64; JSON numbers decode as float64
 		if val, ok := value.(int64); ok {
@@ -472,14 +472,14 @@ func coerceConfigScalarLong(value interface{}, flagType FlagType) (interface{}, 
 		if fv, ok := value.(float64); ok {
 			return fv, ""
 		}
-		return nil, fmt.Sprintf("expected float, got %s", typeName(value))
+		return nil, errExpectedFloatGot(typeName(value))
 	case TypeStr:
 		if s, ok := value.(string); ok {
 			return s, ""
 		}
-		return nil, fmt.Sprintf("expected string, got %s", typeName(value))
+		return nil, errConfigExpectedStringGot(typeName(value))
 	}
-	return nil, fmt.Sprintf("unsupported flag type %d", flagType)
+	return nil, errConfigUnsupportedFlagType(flagType)
 }
 
 // coerceConfigScalarShort uses short type names for the config field validation path.
@@ -489,7 +489,7 @@ func coerceConfigScalarShort(value interface{}, flagType FlagType) (interface{},
 		if b, ok := value.(bool); ok {
 			return b, ""
 		}
-		return nil, fmt.Sprintf("expected bool, got %s", typeName(value))
+		return nil, errExpectedBoolGot(typeName(value))
 	case TypeInt:
 		// TOML integers decode as int64; JSON numbers decode as float64
 		if val, ok := value.(int64); ok {
@@ -500,9 +500,9 @@ func coerceConfigScalarShort(value interface{}, flagType FlagType) (interface{},
 			if float64(intVal) == fv {
 				return intVal, ""
 			}
-			return nil, "expected int, got float"
+			return nil, errConfigExpectedIntGotFloat
 		}
-		return nil, fmt.Sprintf("expected int, got %s", typeName(value))
+		return nil, errExpectedIntGot(typeName(value))
 	case TypeFloat:
 		// TOML integers decode as int64; JSON numbers decode as float64
 		if val, ok := value.(int64); ok {
@@ -511,14 +511,14 @@ func coerceConfigScalarShort(value interface{}, flagType FlagType) (interface{},
 		if fv, ok := value.(float64); ok {
 			return fv, ""
 		}
-		return nil, fmt.Sprintf("expected float, got %s", typeName(value))
+		return nil, errExpectedFloatGot(typeName(value))
 	case TypeStr:
 		if s, ok := value.(string); ok {
 			return s, ""
 		}
-		return nil, fmt.Sprintf("expected str, got %s", typeName(value))
+		return nil, errExpectedStrGot(typeName(value))
 	}
-	return nil, fmt.Sprintf("unsupported flag type %d", flagType)
+	return nil, errConfigUnsupportedFlagType(flagType)
 }
 
 // coerceConfigValue coerces a JSON-decoded value to the flag's type.
@@ -529,14 +529,14 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 	if IsDictType(f.Type) {
 		m, ok := value.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Sprintf("expected object for dict flag, got %s", typeName(value))
+			return nil, errConfigExpectedObjectForDictFlag(typeName(value))
 		}
 		valType := ItemType(f.Type)
 		result := make(map[string]interface{}, len(m))
 		for k, v := range m {
 			coerced, errStr := coerceConfigScalar(v, valType, false)
 			if errStr != "" {
-				return nil, fmt.Sprintf("key %q: expected %s, got %s", k, flagTypeName[valType], typeName(v))
+				return nil, errConfigDictKeyTypeMismatch(k, flagTypeName[valType], typeName(v))
 			}
 			result[k] = coerced
 		}
@@ -546,14 +546,14 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 	if IsListType(f.Type) {
 		arr, ok := value.([]interface{})
 		if !ok {
-			return nil, fmt.Sprintf("expected array for list flag, got %s", typeName(value))
+			return nil, errConfigExpectedArrayForListFlag(typeName(value))
 		}
 		elemType := ItemType(f.Type)
 		result := make([]interface{}, len(arr))
 		for i, elem := range arr {
 			coerced, errStr := coerceConfigScalar(elem, elemType, false)
 			if errStr != "" {
-				return nil, fmt.Sprintf("element %d: expected %s, got %s", i, flagTypeName[elemType], typeName(elem))
+				return nil, errConfigElementTypeMismatch(i, flagTypeName[elemType], typeName(elem))
 			}
 			result[i] = coerced
 		}
@@ -561,20 +561,20 @@ func coerceConfigValue(value interface{}, f *Flag) (interface{}, string) {
 	}
 	if arr, ok := value.([]interface{}); ok {
 		if !f.Repeatable {
-			return nil, "expected scalar, got array"
+			return nil, errConfigExpectedScalarGotArray
 		}
 		result := make([]interface{}, len(arr))
 		for i, elem := range arr {
 			coerced, errStr := coerceConfigScalar(elem, f.Type, false)
 			if errStr != "" {
-				return nil, fmt.Sprintf("element %d: expected %s, got %s", i, flagTypeName[f.Type], typeName(elem))
+				return nil, errConfigElementTypeMismatch(i, flagTypeName[f.Type], typeName(elem))
 			}
 			result[i] = coerced
 		}
 		return result, ""
 	}
 	if f.Repeatable {
-		return nil, fmt.Sprintf("expected array for repeatable flag, got %s", typeName(value))
+		return nil, errConfigExpectedArrayForRepeatableFlag(typeName(value))
 	}
 	return coerceConfigScalar(value, f.Type, false)
 }

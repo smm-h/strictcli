@@ -724,6 +724,105 @@ func errConfigFieldDefaultMismatch(name string, value interface{}, typeName stri
 }
 
 // ---------------------------------------------------------------------------
+// config.go — coerceConfigScalarLong (long type names)
+// (the float branch reuses errExpectedFloatGot from the validateScalarType
+// section above)
+// ---------------------------------------------------------------------------
+
+func errConfigExpectedBooleanGot(typeDesc string) string {
+	return fmt.Sprintf("expected boolean, got %s", typeDesc)
+}
+
+const errConfigExpectedIntegerGotFloat = "expected integer, got float"
+
+func errConfigExpectedIntegerGot(typeDesc string) string {
+	return fmt.Sprintf("expected integer, got %s", typeDesc)
+}
+
+func errConfigExpectedStringGot(typeDesc string) string {
+	return fmt.Sprintf("expected string, got %s", typeDesc)
+}
+
+func errConfigUnsupportedFlagType(t FlagType) string {
+	return fmt.Sprintf("unsupported flag type %d", t)
+}
+
+// ---------------------------------------------------------------------------
+// config.go — coerceConfigScalarShort (short type names)
+// (the bool/int/float/str branches reuse errExpectedBoolGot, errExpectedIntGot,
+// errExpectedFloatGot, and errExpectedStrGot from the validateScalarType
+// section above; the unsupported-type branch reuses errConfigUnsupportedFlagType)
+// ---------------------------------------------------------------------------
+
+const errConfigExpectedIntGotFloat = "expected int, got float"
+
+// ---------------------------------------------------------------------------
+// config.go — coerceConfigValue (compound config value coercion)
+// ---------------------------------------------------------------------------
+
+func errConfigExpectedObjectForDictFlag(typeDesc string) string {
+	return fmt.Sprintf("expected object for dict flag, got %s", typeDesc)
+}
+
+func errConfigDictKeyTypeMismatch(k string, wantType string, gotType string) string {
+	return fmt.Sprintf("key %q: expected %s, got %s", k, wantType, gotType)
+}
+
+func errConfigExpectedArrayForListFlag(typeDesc string) string {
+	return fmt.Sprintf("expected array for list flag, got %s", typeDesc)
+}
+
+func errConfigElementTypeMismatch(i int, wantType string, gotType string) string {
+	return fmt.Sprintf("element %d: expected %s, got %s", i, wantType, gotType)
+}
+
+const errConfigExpectedScalarGotArray = "expected scalar, got array"
+
+func errConfigExpectedArrayForRepeatableFlag(typeDesc string) string {
+	return fmt.Sprintf("expected array for repeatable flag, got %s", typeDesc)
+}
+
+// ---------------------------------------------------------------------------
+// routing.go — resolveCommand (parse-time)
+// ---------------------------------------------------------------------------
+
+func errCommandDeprecated(token string, msg string) string {
+	return fmt.Sprintf("command '%s' is deprecated: %s", token, msg)
+}
+
+func errUnknownCommandInGroup(token string, groupPath string) string {
+	return fmt.Sprintf("unknown command '%s' in '%s'", token, groupPath)
+}
+
+func errUnknownCommand(token string) string {
+	return fmt.Sprintf("unknown command '%s'", token)
+}
+
+const errNoCommandSpecified = "no command specified"
+
+// ---------------------------------------------------------------------------
+// invoke.go — invoke (parse-time)
+// ---------------------------------------------------------------------------
+
+const errPassthroughArgsNotStringSlice = "passthrough command: _args must be []string"
+
+func errUnknownParameterForPassthroughCommand(key string, commandPath string) string {
+	return fmt.Sprintf("unknown parameter %q for passthrough command %q", key, commandPath)
+}
+
+func errUnknownParameterForCommand(paramName string, commandPath string) string {
+	return fmt.Sprintf("unknown parameter %q for command %q", paramName, commandPath)
+}
+
+// ---------------------------------------------------------------------------
+// invoke.go — coerceInvokeDict
+// ---------------------------------------------------------------------------
+
+func errDictFlagExpectedMapType(name string, value interface{}) string {
+	return fmt.Sprintf("dict flag %q: expected map type, got %T", name, value)
+}
+
+// ---------------------------------------------------------------------------
 // check.go — reporter methods
 // ---------------------------------------------------------------------------
 

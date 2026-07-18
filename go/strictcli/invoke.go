@@ -73,7 +73,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			if typedArgs, ok := rawArgs.([]string); ok {
 				args = typedArgs
 			} else {
-				return invokeResult{exitCode: 1, err: "passthrough command: _args must be []string"}
+				return invokeResult{exitCode: 1, err: errPassthroughArgsNotStringSlice}
 			}
 		}
 
@@ -89,7 +89,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 				continue
 			}
 			if !globalParamNames[key] {
-				return invokeResult{exitCode: 1, err: fmt.Sprintf("unknown parameter %q for passthrough command %q", key, commandPath)}
+				return invokeResult{exitCode: 1, err: errUnknownParameterForPassthroughCommand(key, commandPath)}
 			}
 		}
 
@@ -164,7 +164,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 
 		return invokeResult{
 			exitCode: 1,
-			err:      fmt.Sprintf("unknown parameter %q for command %q", paramName, commandPath),
+			err:      errUnknownParameterForCommand(paramName, commandPath),
 		}
 	}
 
@@ -311,7 +311,7 @@ func coerceInvokeDict(f *Flag, value interface{}) (interface{}, string) {
 		}
 		return result, ""
 	default:
-		return nil, fmt.Sprintf("dict flag %q: expected map type, got %T", f.Name, value)
+		return nil, errDictFlagExpectedMapType(f.Name, value)
 	}
 }
 
