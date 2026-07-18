@@ -2,7 +2,7 @@
 
 A strict CLI framework — declare everything, infer nothing.
 
-strictcli has two first-class implementations kept in behavioral lockstep by a shared conformance test suite:
+strictcli has multiple first-class implementations kept in behavioral lockstep by a shared conformance test suite:
 
 | Implementation | Install | Docs |
 |---------------|---------|------|
@@ -17,7 +17,7 @@ Most CLI frameworks infer behavior from type hints, function signatures, or nami
 - **Mandatory help text.** Every flag, arg, command, and group must have help text.
 - **Handler signature validation.** Parameter names must match declared flags and args exactly.
 - **Registration-time errors.** Misconfigurations fail loud and early, not at parse time.
-- **Zero dependencies.** Both implementations use only their language's standard library.
+- **One dependency per implementation.** Each implementation uses its language's standard library plus a single TOML library: Python depends on [tomlkit](https://pypi.org/project/tomlkit/), Go depends on [go-toml-edit](https://github.com/smm-h/go-toml-edit).
 
 ## Quick taste
 
@@ -30,8 +30,8 @@ app = strictcli.App("greet", version="1.0.0", help="A greeting app")
 
 @app.command("hello", help="Say hello")
 @strictcli.flag("name", type=str, help="Who to greet")
-@strictcli.flag("loud", type=bool, help="Shout it")
-def hello(name, loud):
+@strictcli.flag("loud", type=bool, default=False, help="Shout it")
+def hello(ctx, name, loud):
     msg = f"Hello, {name}!"
     print(msg.upper() if loud else msg)
 
@@ -43,13 +43,18 @@ app.run()
 ```go
 package main
 
-import "github.com/smm-h/strictcli/go/strictcli"
+import (
+    "fmt"
+    "strings"
+
+    "github.com/smm-h/strictcli/go/strictcli"
+)
 
 func main() {
     app := strictcli.NewApp("greet", "1.0.0", "A greeting app")
 
     app.Command("hello", "Say hello",
-        func(args map[string]interface{}) int {
+        func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
             name := args["name"].(string)
             loud := args["loud"].(bool)
             msg := "Hello, " + name + "!"
@@ -57,11 +62,11 @@ func main() {
                 msg = strings.ToUpper(msg)
             }
             fmt.Println(msg)
-            return 0
+            return strictcli.Exit(0)
         },
         strictcli.WithFlags(
             strictcli.StringFlag("name", "Who to greet"),
-            strictcli.BoolFlag("loud", "Shout it"),
+            strictcli.BoolFlag("loud", "Shout it", strictcli.Default(false)),
         ),
     )
 
@@ -88,21 +93,27 @@ func main() {
 - Auto-generated help at every level (app, group, command)
 - Built-in `--version` / `-v` support
 - Auto-version detection from package metadata (Python only)
-- JSON config file support — reads `~/.config/{name}/config.json`, auto-registers `config show/set/path/edit` subcommands. Precedence: CLI > env > config > default.
+- Config file support (JSON or TOML) — reads `~/.config/{name}/config.json` (or `.toml`), auto-registers `config show/set/path/edit/init` subcommands. Precedence: CLI > env > config > default.
+- `--hermetic` — reserved global flag that skips config loading and env var resolution entirely, so values come only from the CLI and declared defaults
+- Infrastructure env vars — declared location roots (resolved at construction, usable in defaults via `RelativeToRoot`) and handshake vars (cross-tool protocol signals, read live)
+- Value provenance — every resolved flag reports its source (`cli`/`env`/`config`/`default`/`implied`/`infra`) via the handler context
+- Programmatic invocation — `app.call()` / `app.Call()` runs a command in-process with typed kwargs, bypassing CLI parsing; failures surface as `InvokeError`
+- Check system — first-class check/validation framework with a TOML manifest, tag DSL, and DAG-ordered execution
+- MCP server mode — expose commands as tools over the Model Context Protocol
 - `--dump-schema` — auto-injected flag that writes `.strictcli/schema.json` describing the full CLI structure
 - `--help` / `-h` recognized anywhere in argv
 - In-process testing via `app.test()` / `app.Test()`
 
 ## Conformance
 
-The `conformance/` directory contains a cross-language test suite that verifies both implementations produce identical output for identical inputs. It includes:
+The `conformance/` directory contains a cross-language test suite that verifies all implementations produce identical output for identical inputs. It includes:
 
-- 24 JSON test case files covering every feature
+- 57 JSON test case files covering every feature
 - API surface verification (`check_api_surface.py`)
 - Error message parity checks (`check_error_parity.py`)
 - Pairwise combination testing and fuzzing
 
-Both implementations must pass all conformance tests before release.
+All implementations must pass all conformance tests before release.
 
 ## Project structure
 
