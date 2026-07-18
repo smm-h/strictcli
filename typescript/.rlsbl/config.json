@@ -1,0 +1,16 @@
+{
+  "targets": [
+    "npm"
+  ],
+  "publish_mode": "ci",
+  "push_timeout": 300,
+  "pipelines": {
+    "npm": {
+      "type": "npm",
+      "target": "npm",
+      "local": false,
+      "provenance": true
+    }
+  },
+  "coverage_unit": "commit"
+}
