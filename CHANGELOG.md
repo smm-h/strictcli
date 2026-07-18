@@ -471,26 +471,15 @@ config set now validates keys against registered flags and coerces string values
 
 # go-strictcli
 
+## 0.24.0
+
+errors.go centralization, CLI test-coverage instrumentation, notes channel
+
+### Features
+
+- [go-strictcli] **New feature.** `WithTestCoverage()` enables CLI test-coverage instrumentation. Every `Test()` and `Call()` invocation records the resolved command path. A built-in `cli-test-coverage` check merges per-process shard files and hard-FAILs listing uncovered commands.
+
 ## 0.23.0
-
-Breaking: ctx-first handler signatures, Outcome return type, Get[T]/GetOpt[T] accessors, registration trio collapsed, notes channel, float canon, errors centralized, comment-preserving config writes
-
-<details>
-<summary>Context</summary>
-
-Coordinated contract redesign across Python and Go implementations.
-
-Migration recipe:
-- Handler signatures: ctx is now the first parameter (was map[string]interface{})
-- Handlers return Outcome instead of error
-- Get[T]/GetOpt[T] typed accessors replace raw map access
-- Registration trio (Flag/Arg/Command) collapsed into unified API
-- Notes channel for non-error diagnostic output
-- Float canonicalization aligns cross-language behavior
-- All errors centralized in errors.go
-- Config writes preserve TOML comments via round-trip parsing
-
-</details>
 
 ### Breaking
 
