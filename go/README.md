@@ -28,25 +28,27 @@ func main() {
     app := strictcli.NewApp("greet", "1.0.0", "A greeting app")
 
     app.Command("hello", "Say hello",
-        func(args map[string]interface{}) int {
-            name := args["name"].(string)
-            loud := args["loud"].(bool)
+        func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+            name := strictcli.Get[string](kwargs, "name")
+            loud := strictcli.Get[bool](kwargs, "loud")
             msg := fmt.Sprintf("Hello, %s!", name)
             if loud {
                 msg = strings.ToUpper(msg)
             }
-            fmt.Println(msg)
-            return 0
+            ctx.Info(msg)
+            return strictcli.Exit(0)
         },
         strictcli.WithFlags(
             strictcli.StringFlag("name", "Who to greet"),
-            strictcli.BoolFlag("loud", "Shout it"),
+            strictcli.BoolFlag("loud", "Shout it", strictcli.Default(false)),
         ),
     )
 
     app.Run()
 }
 ```
+
+Name, version, and help are all required `NewApp` arguments.
 
 ```
 $ greet hello --name World
@@ -59,8 +61,8 @@ $ greet hello --help
 greet hello -- Say hello
 
 Flags:
-  --name <str>              Who to greet
-  --loud, --no-loud         Shout it [default: false]
+  --name <str>         Who to greet [required]
+  --loud, --no-loud    Shout it [default: false]
 ```
 
 ## Features
@@ -74,9 +76,9 @@ db := app.Group("db", "Database operations")
 schema := db.Group("schema", "Schema management")
 
 schema.Command("migrate", "Run migrations",
-    func(args map[string]interface{}) int {
-        fmt.Println("migrating")
-        return 0
+    func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+        ctx.Info("migrating")
+        return strictcli.Exit(0)
     },
 )
 ```
@@ -94,7 +96,7 @@ strictcli.IntFlag("port", "Port number"),
 strictcli.FloatFlag("threshold", "Score threshold"),
 ```
 
-Bool flags default to `false`, support `--flag` / `--no-flag` negation (disable with `NegatableOpt(false)`). Float parsing rejects NaN and Inf.
+Bool flags support `--flag` / `--no-flag` negation (disable with `NegatableOpt(false)`) and have no implicit default: without `Default(...)` they are required and must be passed explicitly as `--flag` or `--no-flag`. Float parsing rejects NaN and Inf.
 
 ### Compound types
 
@@ -102,10 +104,10 @@ Bool flags default to `false`, support `--flag` / `--no-flag` negation (disable 
 
 ```go
 strictcli.ListFlag(strictcli.TypeStr, "tags", "Tags to apply", strictcli.Unique(true)),
-strictcli.DictFlag(strictcli.TypeStr, "env", "Environment variables"),
+strictcli.DictFlag(strictcli.TypeStr, "env", "Environment variables", strictcli.Unique(false)),
 ```
 
-List flags accept `--tags a --tags b`. Dict flags accept `--env KEY=VALUE` pairs or JSON objects.
+List flags accept `--tags a --tags b`. Dict flags accept `--env KEY=VALUE` pairs or JSON objects. Both are always repeatable and therefore require an explicit `Unique(true)` or `Unique(false)`.
 
 ### Positional arguments
 
@@ -211,7 +213,7 @@ Bypass all parsing -- handler gets raw args plus global flag values.
 
 ```go
 app.Passthrough("run", "Run a script",
-    func(name string, args []string, globals map[string]interface{}) int {
+    func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
         // args contains everything after the command name
         return 0
     },
@@ -299,16 +301,16 @@ First-class check/validation framework with double-entry security. Enabled via `
 ```go
 app := strictcli.NewApp("myapp", "1.0.0", "My app", strictcli.WithChecks("checks.toml"))
 
-app.RegisterCheck("lint", func(ctx strictcli.CheckContext) strictcli.CheckResult {
-    return strictcli.CheckResult{Status: "pass", Message: "All good"}
+app.RegisterErrorCheck("lint", func(ctx strictcli.CheckContext, r *strictcli.ErrorReporter) strictcli.CheckOutcome {
+    return r.Passed("All good")
 })
 ```
 
-Checks are declared in TOML and registered in code -- both must agree. Auto-registers a `check` command with tag DSL filtering (`--tag "release & !slow"`), JSON output, and dependency resolution.
+Checks are declared in TOML and registered in code -- both must agree. Registration form matches the declared severity: `RegisterErrorCheck` for `severity = "error"` checks (reporter has `Error` and `Warn`), `RegisterWarnCheck` for `severity = "warn"` checks (reporter structurally lacks `Error`). A `CheckOutcome` is minted only via reporter methods: `Passed(message)`, `Skipped(reason)`, or `Found(message)` after accumulating problems with `r.Error(text)` / `r.Warn(text)`; `r.Note(text)` records verdict-inert informational notes. Auto-registers a `check` command with tag DSL filtering (`--tag "release & !slow"`), JSON output, and dependency resolution.
 
 ### Context
 
-`Context` provides structured output methods for command handlers: `Info(msg)` (stdout), `Warn(msg)` (stderr), `Debug(msg)` (stdout), `Error(msg)` (stderr), `Emit(data)` (JSON to stdout, single use). Created internally by the framework and available to struct handlers via `RegisterHandler`.
+`Context` is constructed by the framework for every dispatch and passed as the first argument to every handler. It provides structured output methods -- `Info(msg)` (stdout), `Warn(msg)` (stderr), `Debug(msg)` (stdout), `Error(msg)` (stderr) -- plus provenance: `Source(name)` returns where a flag's value came from (`"cli"`, `"env"`, `"config"`, `"default"`, `"implied"`, or `"infra"`), and `InfraValue(envVar)` reads a declared infrastructure env var.
 
 ### Tool export
 
@@ -331,48 +333,42 @@ tools := app.AsTools()
 
 ## Handlers
 
-### Map handlers
-
-The default handler type receives `map[string]interface{}` with flag names (hyphens converted to underscores) as keys:
+Every command handler has the ctx-first signature:
 
 ```go
-func handler(args map[string]interface{}) int {
-    name := args["name"].(string)
-    count := args["count"].(int)
-    return 0
-}
+func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome
 ```
 
-### DataHandler
+`kwargs` holds the parsed flag and arg values, keyed by parameter name (hyphens converted to underscores: `--dry-run` becomes `dry_run`). `ctx` provides structured output and provenance (see Context above).
 
-Returns structured data alongside an exit code:
+### Outcome
+
+`Outcome` is an opaque, branded return type. It is constructed ONLY via two functions:
 
 ```go
-app.DataCommand("status", "Show status",
-    func(args map[string]interface{}) strictcli.HandlerResult {
-        return strictcli.HandlerResult{
-            ExitCode: 0,
-            Data:     map[string]interface{}{"status": "ok"},
-        }
-    },
-)
+return strictcli.Exit(0)                                          // exit code, no data
+return strictcli.ExitData(0, map[string]interface{}{"ok": true})  // exit code + structured data
 ```
 
-### RegisterHandler (struct handlers)
+When data is present, the framework JSON-marshals it to stdout as one compact line and makes it available programmatically via `Test` (in `Result.Data`) and `Call`. Data emission is possible only through `ExitData` -- there is no other channel.
 
-Type-safe handlers using Go structs. Flags map to struct fields automatically:
+### Typed kwargs accessors
+
+`Get[T]` and `GetOpt[T]` replace raw type assertions on `kwargs`:
 
 ```go
-type DeployArgs struct {
-    Region  string `cli:"region"`
-    Force   bool   `cli:"force"`
-    Timeout int    `cli:"timeout"`
-}
+name := strictcli.Get[string](kwargs, "name")      // panics if absent, nil, or wrong type
+port, ok := strictcli.GetOpt[int](kwargs, "port")  // (zero, false) when the value is nil (not provided)
+```
 
-app.RegisterHandler("deploy", "Deploy the app", func(args DeployArgs) int {
-    fmt.Printf("Deploying to %s\n", args.Region)
-    return 0
-})
+`Get` treats a nil value as an error (nil means "not provided"); use `GetOpt` for optional flags without defaults.
+
+### Passthrough handlers
+
+Passthrough commands bypass parsing and use a distinct signature returning a plain exit code:
+
+```go
+func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int
 ```
 
 ## Testing
@@ -389,6 +385,8 @@ if !strings.Contains(result.Stdout, "HELLO, WORLD!") {
     t.Fatalf("unexpected output: %q", result.Stdout)
 }
 ```
+
+`Result` carries `Stdout`, `Stderr`, `ExitCode`, and `Data` (the structured value from an `ExitData` outcome, `nil` otherwise).
 
 ## API reference
 
@@ -455,17 +453,18 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | Method | Description |
 |--------|-------------|
 | `app.Command(name, help, handler, opts...)` | Register a command |
-| `app.DataCommand(name, help, handler, opts...)` | Register a data command |
 | `app.Passthrough(name, help, handler, opts...)` | Register a passthrough command |
 | `app.Group(name, help)` | Create a command group |
 | `app.GlobalFlag(flag)` | Register a global flag |
 | `app.Deprecated(name, message)` | Register a deprecated command |
 | `app.Run()` | Parse `os.Args` and execute |
 | `app.Test(argv)` | Run in-process, return `Result` |
+| `app.Call(commandPath, kwargs)` | Invoke a command programmatically; returns data (ExitData) or exit code |
 | `app.AsTools()` | Export commands as `Tool` descriptors |
 | `app.ServeMCP()` | Run MCP server on stdin/stdout |
 | `app.ConfigField(name, opts...)` | Declare a typed config field |
-| `app.RegisterCheck(name, fn)` | Register a check handler |
+| `app.RegisterErrorCheck(name, fn)` | Register an error-severity check handler |
+| `app.RegisterWarnCheck(name, fn)` | Register a warn-severity check handler |
 | `app.SetCheckContext(factory)` | Set the check context factory |
 
 ### Core types
@@ -482,19 +481,20 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `CoRequired` | Flags that must appear together |
 | `Requires` | One flag depends on another |
 | `Implies` | Auto-set a bool flag from another |
-| `Result` | Return type of `app.Test()` |
+| `Result` | Return type of `app.Test()` (Stdout, Stderr, ExitCode, Data) |
 | `Tool` | LLM tool descriptor |
-| `Context` | Structured output (Info/Warn/Error/Emit) |
-| `CheckResult` | Check execution result |
+| `Outcome` | Branded handler return type (via `Exit` / `ExitData` only) |
+| `Context` | Structured output and provenance (Info/Warn/Debug/Error/Source/InfraValue) |
+| `CheckOutcome` | Check result, minted only via reporter methods |
+| `ErrorReporter` / `WarnReporter` | Problem accumulators passed to check handlers |
 | `CheckContext` | Interface for check context |
 | `ConfigField` | Typed config file field |
-| `HandlerResult` | Return type for DataHandler |
 
 ## Design principles
 
 - **Help is mandatory.** Every command, flag, and argument must have help text. Missing help panics at registration time.
 - **Four types only.** `str`, `bool`, `int`, `float` -- plus compound `list` and `dict`. No magic type coercion.
-- **Handler signatures use `map[string]interface{}`** with flag names as keys (hyphens become underscores).
+- **One handler contract.** `func(ctx *Context, kwargs map[string]interface{}) Outcome`, with kwargs keyed by parameter name (hyphens become underscores) and exit codes/data flowing only through `Exit` / `ExitData`.
 - **Registration-time errors.** Misconfigurations panic loud and early, not at parse time.
 - **Minimal dependencies.** One dependency ([go-toml-edit](https://github.com/smm-h/go-toml-edit)) for TOML support.
 
