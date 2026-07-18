@@ -80,20 +80,16 @@ jobs:
     strategy:
       matrix:
         # engines.node: >= 22
-        node-version: [20, 22, 24]
+        node-version: [22, 24]
     steps:
     - uses: actions/checkout@v6
     - uses: actions/setup-node@v6
       with:
         node-version: ${{ matrix.node-version }}
-    - name: Install dependencies
-      run: |
-        if [ -f package-lock.json ]; then
-          npm ci
-        else
-          npm install
-        fi
-    - run: npm test --if-present
+    - run: npm ci
+    - run: npm run build
+    - run: npm run lint
+    - run: npm test
     - run: npm audit --audit-level=moderate || true
     defaults:
       run:
@@ -113,6 +109,14 @@ jobs:
       with:
         go-version: '1.25'
         cache-dependency-path: go/go.sum
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 22
+    - name: Build TypeScript implementation
+      working-directory: typescript
+      run: |
+        npm ci
+        npm run build
     - name: Install strictcli and conformance tool
       working-directory: .
       run: |
