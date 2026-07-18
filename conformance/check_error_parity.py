@@ -547,6 +547,10 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "python": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
         "go": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
     },
+    'test-coverage: cannot create .strictcli/coverage/: *': {
+        "python": "excluded:Python uses os.makedirs which raises OSError, not a formatted message",
+        "go": "excluded:Go-specific formatted error for coverage shard directory creation failure",
+    },
 }
 
 

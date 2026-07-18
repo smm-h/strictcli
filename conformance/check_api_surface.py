@@ -540,6 +540,7 @@ KNOWN_OPTION_FUNCS: set[str] = {
     "RelativeToRoot",
     # ConfigFieldOption constructors (from describe_go, not matched by old regex)
     "ConfigFieldDefault", "ConfigFieldHelp", "ConfigFieldType",
+    "WithTestCoverage",
 }
 
 
