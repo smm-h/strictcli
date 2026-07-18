@@ -2,9 +2,15 @@
 
 # Changelog
 
-## 0.30.0
+## 0.30.1
 
-CLI test-coverage instrumentation, notes channel
+Fix coverage shard directory creation in test contexts
+
+### Fixes
+
+- [strictcli] **Bug fix.** Coverage shard directory is now created on-demand in `_record_coverage`, fixing crashes when `app.test()` runs in a different working directory than where the App was constructed.
+
+## 0.30.0
 
 ### Features
 
