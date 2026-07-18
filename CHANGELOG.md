@@ -885,3 +885,9 @@ WithConfigFormat("toml") now correctly parses TOML config files (previously alwa
 - [go-strictcli] **Global flag parsing fix.** `extractGlobalFlags` now correctly stops at the first non-flag token.
 - [go-strictcli] **Global flag collision check.** Group commands now detect flag name collisions with global flags.
 - [go-strictcli] **Choices nil slice fix.** `Choices()` no longer panics when called with no arguments.
+
+# ts-strictcli
+
+## Unreleased
+
+- No user-facing changes.
