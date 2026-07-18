@@ -2843,6 +2843,7 @@ class App:
         if self._coverage_shard_path is None:
             return
         path = self._coverage_shard_path.format(n=self._coverage_shard_counter)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"command": cmd_path}) + "\n")
 
