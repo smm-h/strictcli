@@ -299,6 +299,11 @@ class TestMcpToolsCall:
         assert parsed == {"migrated": True, "dry_run": True}
 
     def test_call_unknown_tool(self):
+        """Unknown tools surface as tool-result errors (isError), not -32602.
+
+        Matches Go: the name is passed to Call, whose invocation error
+        becomes error content in the result.
+        """
         app = _build_app()
 
         @app.command("cmd", help="a command")
@@ -309,8 +314,12 @@ class TestMcpToolsCall:
             "jsonrpc": "2.0", "id": 15, "method": "tools/call",
             "params": {"name": "nonexistent", "arguments": {}},
         })
-        assert resp["error"]["code"] == -32602
-        assert "unknown tool" in resp["error"]["message"]
+        assert "error" not in resp
+        assert resp["result"]["isError"] is True
+        content = resp["result"]["content"]
+        assert len(content) == 1
+        assert content[0]["type"] == "text"
+        assert content[0]["text"] == "unknown command 'nonexistent'"
 
     def test_call_missing_required_flag(self):
         app = _build_app()
@@ -342,6 +351,35 @@ class TestMcpToolsCall:
             "params": {"arguments": {}},
         })
         assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == "missing required parameter: name"
+
+    def test_call_non_string_name(self):
+        app = _build_app()
+
+        @app.command("cmd", help="a command")
+        def cmd(ctx):
+            pass
+
+        resp = _send_one(app, {
+            "jsonrpc": "2.0", "id": 19, "method": "tools/call",
+            "params": {"name": 42, "arguments": {}},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == "parameter 'name' must be a string"
+
+    def test_call_non_object_arguments(self):
+        app = _build_app()
+
+        @app.command("cmd", help="a command")
+        def cmd(ctx):
+            pass
+
+        resp = _send_one(app, {
+            "jsonrpc": "2.0", "id": 20, "method": "tools/call",
+            "params": {"name": "cmd", "arguments": ["not", "an", "object"]},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == "parameter 'arguments' must be an object"
 
     def test_call_no_arguments_key(self):
         """When 'arguments' is omitted, defaults to empty dict."""

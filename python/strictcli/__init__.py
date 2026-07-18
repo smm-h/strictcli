@@ -7717,26 +7717,27 @@ def _mcp_handle_tools_list(
 
 def _mcp_handle_tools_call(
     app: App,
-    commands: dict[str, tuple[Command, str]],
     req_id: object,
     params: dict,
 ) -> dict:
     """Handle the MCP 'tools/call' request."""
-    tool_name = params.get("name")
+    if "name" not in params:
+        return _mcp_jsonrpc_error(
+            req_id, -32602, "missing required parameter: name",
+        )
+    tool_name = params["name"]
     if not isinstance(tool_name, str):
         return _mcp_jsonrpc_error(
-            req_id, -32602, "missing or invalid 'name' in params",
+            req_id, -32602, "parameter 'name' must be a string",
         )
 
-    if tool_name not in commands:
-        return _mcp_jsonrpc_error(
-            req_id, -32602, f"unknown tool: {tool_name}",
-        )
-
+    # Unknown tools are NOT a -32602 protocol error: like Go, the name is
+    # passed to app.call(), whose invocation error surfaces as tool-result
+    # error content (isError) below.
     arguments = params.get("arguments", {})
     if not isinstance(arguments, dict):
         return _mcp_jsonrpc_error(
-            req_id, -32602, "'arguments' must be an object",
+            req_id, -32602, "parameter 'arguments' must be an object",
         )
 
     try:
@@ -7794,7 +7795,7 @@ def _run_mcp_server(
             app, commands, req_id,
         ),
         "tools/call": lambda req_id, params: _mcp_handle_tools_call(
-            app, commands, req_id, params,
+            app, req_id, params,
         ),
     }
 
