@@ -1,7 +1,6 @@
 {
   "targets": [
-    "pypi",
-    "npm"
+    "pypi"
   ],
   "publish_mode": "ci",
   "push_timeout": 300,
@@ -10,12 +9,6 @@
       "type": "pypi",
       "target": "pypi",
       "local": false
-    },
-    "npm": {
-      "type": "npm",
-      "target": "npm",
-      "local": false,
-      "provenance": true
     }
   },
   "coverage_unit": "commit"
