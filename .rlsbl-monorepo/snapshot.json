@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-07-18T22:40:03Z",
-  "package_count": 3,
+  "generated_at": "2026-07-18T23:03:07Z",
+  "package_count": 4,
   "packages": {
     "strictcli": {
       "path": "python",
@@ -32,6 +32,20 @@
       "releasable_flag": true,
       "test_only": false
     },
+    "ts-strictcli": {
+      "path": "typescript",
+      "targets": [
+        "npm"
+      ],
+      "version": "0.31.0",
+      "description": null,
+      "deps": [],
+      "rdeps": [],
+      "library": false,
+      "dev_only": false,
+      "releasable_flag": true,
+      "test_only": false
+    },
     "conformance": {
       "path": "conformance",
       "targets": [
@@ -52,17 +66,20 @@
   "graph": {
     "leaf_nodes": [
       "go-strictcli",
-      "strictcli"
+      "strictcli",
+      "ts-strictcli"
     ],
     "root_nodes": [
       "conformance",
-      "go-strictcli"
+      "go-strictcli",
+      "ts-strictcli"
     ],
     "max_depth": 1,
     "topological_order": [
       "go-strictcli",
       "strictcli",
-      "conformance"
+      "conformance",
+      "ts-strictcli"
     ]
   }
 }
