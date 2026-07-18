@@ -1,11 +1,9 @@
 {
   "version": 1,
   "files": {
-    ".github/workflows/ci-pypi.yml": "6bde3f6dd33979636f6a8f51721f85519c4d2b6106cb9c9fa78e540df26471c4",
-    ".npmignore": "7c0eea9785c0318aeb39bf8b670ce8384f4a5b812fde69ce23d7d018057325a3",
-    ".github/workflows/publish.yml": "20db711b8a7745c3ab41814b827e946d60e937e82ee3984e86f39567717199b1",
-    ".gitignore": "c0582f9b1c640f9f9a8acbbe02cd19fff50e66cc595f25e129b7cc9b6cd357db",
-    ".rlsbl/lint/python.toml": "9cfbcef2e010d5fad243437bf2fd8df54a1fae70ee0762f9d11da70fe207501c",
-    ".rlsbl/lint/npm.toml": "baa36014e65923d8cc5c8b83c77fa651da79351627570476402da66840027645"
+    ".github/workflows/ci.yml": "bfcdec1fcd8ff944f7ba7eb114ab091d0c5158f499ed4632945c2c4ca2d868df",
+    ".github/workflows/publish.yml": "9bc0b409f8c5c2a3c5795a3e7c66095b9479c1a03fb41250ff0461e1221b54f2",
+    ".gitignore": "a102f466628d2d28aea6b2157c1b406b1911d788b596b5b84f4952f121539d42",
+    ".rlsbl/lint/python.toml": "9cfbcef2e010d5fad243437bf2fd8df54a1fae70ee0762f9d11da70fe207501c"
   }
 }
