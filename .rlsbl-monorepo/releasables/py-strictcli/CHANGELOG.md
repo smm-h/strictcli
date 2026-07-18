@@ -2,24 +2,15 @@
 
 # Changelog
 
+## 0.30.0
+
+CLI test-coverage instrumentation, notes channel
+
+### Features
+
+- [strictcli] **New feature.** `App(test_coverage=True)` enables CLI test-coverage instrumentation. Every `test()` and `call()` invocation records the resolved command path. A built-in `cli-test-coverage` check merges per-process shard files and hard-FAILs listing uncovered commands.
+
 ## 0.29.0
-
-Breaking: ctx-first handler signatures, Outcome return type, required version, tomlkit config writes, float canon, notes channel, 7 parity fixes
-
-<details>
-<summary>Context</summary>
-
-Coordinated contract redesign across Python and Go implementations.
-
-Migration recipe:
-- Handler signatures: ctx is now the first parameter (was kwargs-only)
-- Handlers return Outcome instead of int exit codes
-- version= is now required on App() -- use version=importlib.metadata.version("pkg")
-- Config writes use tomlkit for comment-preserving round-trips
-- Float canonicalization aligns cross-language behavior
-- Notes channel for non-error diagnostic output
-
-</details>
 
 ### Breaking
 
