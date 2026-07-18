@@ -1,20 +1,26 @@
-# strictcli
+# strictcli (Python)
+
+Python implementation of strictcli. Published to PyPI. Part of the strictcli
+rlsbl monorepo as releasable `py-strictcli`.
+
+## Development
+
+- `uv sync` then `uv run pytest` from this directory. Always use `uv`, never pip.
+- Run the conformance suite after changes: `cd ../conformance && python run.py --target python`.
+- CI (`ci-router.yml` at the repo root) runs the full pytest suite on every push touching `python/**`.
 
 ## Release workflow
 
-This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration.
+Releases go through [rlsbl](https://github.com/smm-h/rlsbl) monorepo releases.
 
-- Update CHANGELOG.md with a `## X.Y.Z` entry describing changes
-- Run `rlsbl release [patch|minor|major]` to bump version and create a GitHub Release
-- CI handles publishing automatically via the publish workflow
-- Never publish manually — always use `rlsbl release`
-- Configure Trusted Publishing on pypi.org for automated PyPI releases
-- Use `rlsbl release --dry-run` to preview a release without making changes
+- CHANGELOG.md is generated from JSONL changelog entries — never edit it by hand.
+  Add entries with `rlsbl changelog add` from inside `python/` after each commit
+  (they land in `.rlsbl-monorepo/releasables/py-strictcli/changes/unreleased.jsonl`).
+- To release: from the repo root, run `rlsbl monorepo release init`, edit the
+  scaffolded release file (bump type, description, and context live in the file),
+  then run `rlsbl monorepo release run --no-allow-dirty --watch --yes`.
+- Never publish or push manually — CI publishes to PyPI via Trusted Publishing.
 
 ## Conventions
 
-- No tokens or secrets in command-line arguments (use env vars or config files)
-- All file writes to shared state should be atomic (write to tmp, then rename)
-- External calls (APIs, CLI tools) must have timeouts and graceful fallbacks
-- Use `uv pip install -e .` for local development
-- CI runs smoke tests on every push; manual testing for UI/UX changes
+- No tokens or secrets in command-line arguments (use env vars or config files).
