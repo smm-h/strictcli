@@ -1,0 +1,41 @@
+{
+	"name": "strictcli",
+	"version": "0.31.0",
+	"private": true,
+	"type": "module",
+	"description": "TS-native strict CLI framework - declare everything, infer nothing",
+	"engines": {
+		"node": ">=22"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/smm-h/strictcli.git",
+		"directory": "typescript"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "npm run build && tsc -p tsconfig.test.json && node --test \"dist-test/tests/**/*.test.js\"",
+		"lint": "biome check .",
+		"prepack": "npm run build"
+	},
+	"dependencies": {
+		"smol-toml": "^1.7.0",
+		"toml-eslint-parser": "^1.0.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.4",
+		"@types/node": "^22.20.1",
+		"typescript": "^7.0.2"
+	}
+}
