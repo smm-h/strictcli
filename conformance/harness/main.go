@@ -72,6 +72,9 @@ func main() {
 	if v, ok := appDef["checks_toml"]; ok {
 		appOpts = append(appOpts, strictcli.WithChecksEmbed([]byte(v.(string))))
 	}
+	if v, ok := appDef["test_coverage"]; ok && v.(bool) {
+		appOpts = append(appOpts, strictcli.WithTestCoverage())
+	}
 
 	app := strictcli.NewApp(
 		appDef["name"].(string),
@@ -212,7 +215,8 @@ func main() {
 
 	_, hasToml := appDef["checks_toml"]
 	_, hasProviders := appDef["providers"]
-	if hasToml || hasProviders {
+	_, hasTestCoverage := appDef["test_coverage"]
+	if hasToml || hasProviders || hasTestCoverage {
 		app.SetCheckContext(func() strictcli.CheckContext {
 			return &testCheckCtx{}
 		})
@@ -226,6 +230,19 @@ func main() {
 		}
 		if configPath != "" {
 			os.WriteFile(configPath, []byte(v.(string)), 0o644)
+		}
+	}
+
+	// Pre-test argv lists: run app.Test() for each before the main app.Run().
+	// Used by test_coverage conformance cases to generate shard files before
+	// the check command runs.
+	if v, ok := appDef["pre_test"]; ok {
+		for _, item := range v.([]interface{}) {
+			var argv []string
+			for _, arg := range item.([]interface{}) {
+				argv = append(argv, arg.(string))
+			}
+			app.Test(argv)
 		}
 	}
 

@@ -1,0 +1,56 @@
+[
+  {
+    "name": "test-coverage: partial coverage fails naming uncovered commands",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "test_coverage": true,
+      "commands": [
+        {"name": "deploy", "help": "deploy the app", "flags": [], "handler_prints": "deployed"},
+        {"name": "status", "help": "show status", "flags": [], "handler_prints": "ok"},
+        {"name": "build", "help": "build the app", "flags": [], "handler_prints": "built"}
+      ],
+      "pre_test": [
+        ["deploy"]
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": [
+        "FAIL",
+        "cli-test-coverage",
+        "no test coverage for command: build",
+        "no test coverage for command: status"
+      ]
+    }
+  },
+  {
+    "name": "test-coverage: full coverage passes",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "test_coverage": true,
+      "commands": [
+        {"name": "deploy", "help": "deploy the app", "flags": [], "handler_prints": "deployed"},
+        {"name": "status", "help": "show status", "flags": [], "handler_prints": "ok"},
+        {"name": "build", "help": "build the app", "flags": [], "handler_prints": "built"}
+      ],
+      "pre_test": [
+        ["deploy"],
+        ["status"],
+        ["build"]
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "PASS",
+        "cli-test-coverage"
+      ]
+    }
+  }
+]

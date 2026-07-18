@@ -618,7 +618,8 @@ def generate(app_def: dict) -> str:
     """
     has_toml = bool(app_def.get("checks_toml"))
     has_providers = bool(app_def.get("providers"))
-    has_checks = has_toml or has_providers
+    has_test_coverage = bool(app_def.get("test_coverage"))
+    has_checks = has_toml or has_providers or has_test_coverage
 
     lines = []
     lines.append("import sys")
@@ -668,6 +669,8 @@ def generate(app_def: dict) -> str:
         app_parts.append(f"handshake_env={app_def['handshake_env']!r}")
     if has_toml:
         app_parts.append("checks_path=_checks_path")
+    if app_def.get("test_coverage", False):
+        app_parts.append("test_coverage=True")
     if global_flags:
         gf_exprs = [_emit_flag(gf) for gf in global_flags]
         app_parts.append(f"flags=[{', '.join(gf_exprs)}]")
@@ -795,6 +798,13 @@ def generate(app_def: dict) -> str:
         lines.append(f"    # Write late config content")
         lines.append(f"    with open({app_def['config_path']!r}, 'w') as _lcf:")
         lines.append(f"        _lcf.write({late_content!r})")
+        lines.append("")
+
+    # Pre-test argv lists: run app.test() for each before app.run().
+    # Used by test_coverage conformance cases to generate shard files.
+    for pre_argv in app_def.get("pre_test", []):
+        lines.append(f"    app.test({pre_argv!r})")
+    if app_def.get("pre_test"):
         lines.append("")
 
     lines.append("    app.run()")

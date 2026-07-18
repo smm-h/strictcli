@@ -516,7 +516,8 @@ def generate(app_def: dict) -> str:
     """
     has_toml = bool(app_def.get("checks_toml"))
     has_providers = bool(app_def.get("providers"))
-    has_checks = has_toml or has_providers
+    has_test_coverage = bool(app_def.get("test_coverage"))
+    has_checks = has_toml or has_providers or has_test_coverage
 
     # Detect whether any command emits structured data (handler_returns of
     # kind data/exit_data) -- those require encoding/json to build the value.
@@ -601,6 +602,8 @@ def generate(app_def: dict) -> str:
         app_opts.append(f'strictcli.WithHandshakeEnv("{env_var}", "{hlp}")')
     if has_toml:
         app_opts.append('strictcli.WithChecks(checksPath)')
+    if app_def.get("test_coverage", False):
+        app_opts.append("strictcli.WithTestCoverage()")
     opts_str = ""
     if app_opts:
         opts_str = ", " + ", ".join(app_opts)
@@ -749,6 +752,14 @@ def generate(app_def: dict) -> str:
             escaped = late_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
             lines.append(f'\tos.WriteFile("{config_path}", []byte("{escaped}"), 0o644)')
             lines.append("")
+
+    # Pre-test argv lists: run app.Test() for each before app.Run().
+    # Used by test_coverage conformance cases to generate shard files.
+    for pre_argv in app_def.get("pre_test", []):
+        go_argv = ", ".join(f'"{a}"' for a in pre_argv)
+        lines.append(f"\tapp.Test([]string{{{go_argv}}})")
+    if app_def.get("pre_test"):
+        lines.append("")
 
     lines.append("\tapp.Run()")
     lines.append("}")

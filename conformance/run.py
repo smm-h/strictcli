@@ -322,10 +322,14 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
 
     # --dump-schema needs the target's project marker file (go.mod / pyproject.toml)
     # in the CWD to determine project_id. Create a temp dir with the right file.
+    # test_coverage needs a writable temp dir for .strictcli/coverage/ shard files.
     proj_dir = None
     if "--dump-schema" in case_argv:
         proj_dir = tempfile.mkdtemp(prefix="strictcli_proj_")
         descriptor.write_project_file(proj_dir, app_def["name"])
+        run_cwd = proj_dir
+    elif app_def.get("test_coverage", False):
+        proj_dir = tempfile.mkdtemp(prefix="strictcli_cov_")
         run_cwd = proj_dir
     else:
         run_cwd = str(CONFORMANCE_DIR)
