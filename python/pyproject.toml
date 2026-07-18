@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "strictcli"
-version = "0.30.1"
+version = "0.31.0"
 description = "A strict CLI framework for Python"
 readme = "README.md"
 license = "MIT"
