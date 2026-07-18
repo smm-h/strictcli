@@ -277,7 +277,48 @@ outcome_contract.json).
 
 ## Baseline (filled by task 0.3)
 
-(Placeholder -- to be filled by task 0.3.)
+Recorded 2026-07-19, all green.
+
+### Conformance gate (`uv run conformance check --tag pre-release`, 7 checks)
+
+| Check | Status |
+|-------|--------|
+| api-surface | PASS |
+| conformance-go | PASS |
+| conformance-python | PASS |
+| error-parity | PASS |
+| float-fuzz | PASS |
+| schema-parity | PASS |
+| conformance-parity | PASS |
+
+### Unit suites
+
+- Python (`cd python && uv run pytest -q`): 3120 passed, 0 failed (1.88s).
+- Go (`cd go && go test ./...`): `ok github.com/smm-h/strictcli/go/strictcli` (0.538s), all packages pass.
+
+### Conformance case counts (`conformance/run.py`)
+
+- `--target python`: 543/543 passed, 0 failed.
+- `--target go`: 542/542 passed, 0 failed.
+
+### Pre-push exemption fact (rlsbl source, verified)
+
+The `prepush-changelog-coverage` check attributes pushed commits to workspace
+projects by file path/watch-glob matching, then skips non-releasable projects
+entirely:
+
+- `rlsbl/checks/prepush.py:64-66` (explicit-releasable mode) and `:85-87`
+  (implicit mode): `if not project_is_releasable(proj): continue` -- affected
+  projects that are not releasable require no changelog coverage.
+- `rlsbl/workspace_types.py:246-247`: `project_is_releasable` returns `False`
+  when the project has `dev_node = true`. Hence commits touching only
+  `conformance/` (a dev_node) are exempt from pre-push changelog coverage.
+- `rlsbl/git_util.py:81-110` (`filter_commits_for_releasable`) and `:228-240`
+  (`affected_projects`): commits whose changed files match no project's path
+  prefix or watch globs are attributed to no releasable, so commits touching
+  only repo-root files (docs/, README.md, CLAUDE.md, workflows, this spec)
+  require no changelog entry. If a push touches no project at all, the check
+  passes with "no affected projects" (`rlsbl/checks/prepush.py:51-52`).
 
 ## Decision ledger (agents append at phase boundaries)
 
