@@ -35,9 +35,6 @@ GO_CHECK_RUNNER = PROJECT_ROOT / "go" / "strictcli" / "check_runner.go"
 GO_CHECK_PUBLIC = PROJECT_ROOT / "go" / "strictcli" / "check_public.go"
 GO_CHECK_PROVIDER = PROJECT_ROOT / "go" / "strictcli" / "check_provider.go"
 GO_TAGDSL = PROJECT_ROOT / "go" / "strictcli" / "tagdsl.go"
-GO_CONFIG = PROJECT_ROOT / "go" / "strictcli" / "config.go"
-GO_ROUTING = PROJECT_ROOT / "go" / "strictcli" / "routing.go"
-GO_INVOKE = PROJECT_ROOT / "go" / "strictcli" / "invoke.go"
 GO_ERRORS = PROJECT_ROOT / "go" / "strictcli" / "errors.go"
 CASES_DIR = CONFORMANCE_DIR / "cases"
 
@@ -735,9 +732,6 @@ def extract_go_errors(
     check_public_src: str,
     check_provider_src: str,
     tagdsl_src: str,
-    config_src: str,
-    routing_src: str,
-    invoke_src: str,
     errors_src: str = "",
 ) -> list[tuple[str, str]]:
     """Extract (category, format_string) pairs from Go source.
@@ -746,7 +740,7 @@ def extract_go_errors(
     """
     results: list[tuple[str, str]] = []
 
-    # --- Registration errors from strictcli.go and config.go (panics) ---
+    # --- Registration errors from strictcli.go (panics) ---
 
     # panic(fmt.Sprintf("...", args)) -- allow whitespace/newlines before the quote
     panic_sprintf = re.compile(
@@ -754,16 +748,12 @@ def extract_go_errors(
     )
     for m in panic_sprintf.finditer(strictcli_src):
         results.append(("registration", m.group(1)))
-    for m in panic_sprintf.finditer(config_src):
-        results.append(("registration", m.group(1)))
 
     # panic("...")
     panic_plain = re.compile(
         r'panic\("((?:[^"\\]|\\.)*)"\)',
     )
     for m in panic_plain.finditer(strictcli_src):
-        results.append(("registration", m.group(1)))
-    for m in panic_plain.finditer(config_src):
         results.append(("registration", m.group(1)))
 
     # --- Registration errors from strictcli.go (violations append pattern) ---
@@ -774,16 +764,13 @@ def extract_go_errors(
     for m in violations_sprintf.finditer(strictcli_src):
         results.append(("registration", m.group(1)))
 
-    # NOTE: parse.go templates and the parse-time templates formerly inlined in
-    # strictcli.go (parseCommand/extractGlobalFlags/doParse) are fully
+    # NOTE: parse.go templates, the parse-time templates formerly inlined in
+    # strictcli.go (parseCommand/extractGlobalFlags/doParse), and the templates
+    # formerly inlined in config.go (coercion helpers), routing.go
+    # (resolveCommand), and invoke.go (invoke/coerceInvokeDict) are fully
     # centralized in errors.go; the per-file extraction passes for them are
     # gone. The errors.go pass below picks up their signatures, using
     # "(parse-time)" section-header markers to keep their parse category.
-
-    # return nil, fmt.Sprintf("...", args) -- config.go/invoke.go coercion helpers
-    parse_sprintf_2 = re.compile(
-        r'return\s+nil,\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
-    )
 
     # --- Registration errors from check.go (fmt.Errorf for TOML validation) ---
     errorf_pat = re.compile(
@@ -817,51 +804,6 @@ def extract_go_errors(
 
     # --- Registration errors from tagdsl.go (fmt.Errorf for tag expression parsing) ---
     for m in errorf_pat.finditer(tagdsl_src):
-        results.append(("registration", m.group(1)))
-
-    # --- Config value coercion errors from config.go (fmt.Sprintf in return) ---
-    # return nil, fmt.Sprintf("...", args) -- coerceConfigValue
-    for m in parse_sprintf_2.finditer(config_src):
-        results.append(("registration", m.group(1)))
-
-    # --- Config value coercion errors from config.go (plain string in return) ---
-    # return nil, "..." -- coerceConfigValue/coerceConfigScalar
-    config_plain_err = re.compile(
-        r'return\s+nil,\s*"((?:[^"\\]|\\.)*)"',
-    )
-    for m in config_plain_err.finditer(config_src):
-        fmt_str = m.group(1)
-        # Skip provenance source labels like `return nil, "default"` --
-        # (value, source) tuple returns, not error messages. Real error
-        # messages always contain a space.
-        if " " not in fmt_str:
-            continue
-        results.append(("registration", fmt_str))
-
-    # --- Parse errors from routing.go (struct literal err field) ---
-    # err: fmt.Sprintf("...", args) and err: "..."
-    struct_err_sprintf = re.compile(
-        r'err:\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
-    )
-    struct_err_plain = re.compile(
-        r'err:\s*"((?:[^"\\]|\\.)*)"',
-    )
-    for m in struct_err_sprintf.finditer(routing_src):
-        results.append(("parse", m.group(1)))
-    for m in struct_err_plain.finditer(routing_src):
-        results.append(("parse", m.group(1)))
-
-    # --- Parse errors from invoke.go (struct literal err field and returns) ---
-    for m in struct_err_sprintf.finditer(invoke_src):
-        results.append(("parse", m.group(1)))
-    for m in struct_err_plain.finditer(invoke_src):
-        fmt_str = m.group(1)
-        # Skip partial strings that are continued with + concatenation
-        if fmt_str.endswith(": "):
-            continue
-        results.append(("parse", fmt_str))
-    # return nil, fmt.Sprintf("...", args) -- coerceInvokeDict
-    for m in parse_sprintf_2.finditer(invoke_src):
         results.append(("registration", m.group(1)))
 
     # --- Centralized error templates from errors.go ---
@@ -1151,9 +1093,6 @@ def main() -> int:
     go_check_public_source = GO_CHECK_PUBLIC.read_text()
     go_check_provider_source = GO_CHECK_PROVIDER.read_text()
     go_tagdsl_source = GO_TAGDSL.read_text()
-    go_config_source = GO_CONFIG.read_text()
-    go_routing_source = GO_ROUTING.read_text()
-    go_invoke_source = GO_INVOKE.read_text()
     go_errors_source = GO_ERRORS.read_text()
 
     # Extract raw error patterns
@@ -1163,8 +1102,6 @@ def main() -> int:
         go_check_source, go_check_runner_source,
         go_check_public_source, go_check_provider_source,
         go_tagdsl_source,
-        go_config_source, go_routing_source,
-        go_invoke_source,
         go_errors_source,
     )
 
