@@ -285,6 +285,14 @@ func errCheckSeverityMismatch(name string, severity string, used string, want st
 // errInvalidTagName is reused from the tag validation section above.
 
 // ---------------------------------------------------------------------------
+// strictcli.go — validateConfigFieldBindings
+// ---------------------------------------------------------------------------
+
+func errCommandConfigFieldsUnknownField(cmdName string, field string) string {
+	return fmt.Sprintf("command %q: config_fields references unknown config field %q", cmdName, field)
+}
+
+// ---------------------------------------------------------------------------
 // strictcli.go — checkFlagConfigFieldDefault
 // ---------------------------------------------------------------------------
 

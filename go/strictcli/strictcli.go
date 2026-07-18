@@ -1439,7 +1439,7 @@ func (a *App) validateConfigFieldBindings() string {
 		cmd := a.commands[name]
 		for _, field := range cmd.configFields {
 			if a.configFields == nil || a.configFields[field] == nil {
-				violations = append(violations, fmt.Sprintf("command %q: config_fields references unknown config field %q", cmd.Name, field))
+				violations = append(violations, errCommandConfigFieldsUnknownField(cmd.Name, field))
 			}
 		}
 	}
@@ -1450,7 +1450,7 @@ func (a *App) validateConfigFieldBindings() string {
 			cmd := g.Commands[name]
 			for _, field := range cmd.configFields {
 				if a.configFields == nil || a.configFields[field] == nil {
-					violations = append(violations, fmt.Sprintf("command %q: config_fields references unknown config field %q", cmd.Name, field))
+					violations = append(violations, errCommandConfigFieldsUnknownField(cmd.Name, field))
 				}
 			}
 		}
