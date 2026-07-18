@@ -15,6 +15,7 @@ jobs:
     outputs:
       strictcli: ${{ steps.changes.outputs.strictcli }}
       go-strictcli: ${{ steps.changes.outputs.go-strictcli }}
+      ts-strictcli: ${{ steps.changes.outputs.ts-strictcli }}
       conformance: ${{ steps.changes.outputs.conformance }}
     steps:
     - uses: actions/checkout@v6
@@ -27,10 +28,12 @@ jobs:
             - 'python/**'
             - 'LICENSE'
           go-strictcli: 'go/**'
+          ts-strictcli: 'typescript/**'
           conformance:
             - 'conformance/**'
             - 'python/**'
             - 'go/**'
+            - 'typescript/**'
   strictcli-ci-test:
     runs-on: ubuntu-latest
     strategy:
@@ -72,6 +75,33 @@ jobs:
     needs:
     - detect
     if: needs.detect.outputs.go-strictcli == 'true'
+  ts-strictcli-ci-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # engines.node: >= 22
+        node-version: [20, 22, 24]
+    steps:
+    - uses: actions/checkout@v6
+    - uses: actions/setup-node@v6
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Install dependencies
+      run: |
+        if [ -f package-lock.json ]; then
+          npm ci
+        else
+          npm install
+        fi
+    - run: npm test --if-present
+    - run: npm audit --audit-level=moderate || true
+    defaults:
+      run:
+        working-directory: typescript
+    name: ts-strictcli-ci / test
+    needs:
+    - detect
+    if: needs.detect.outputs.ts-strictcli == 'true'
   conformance-ci-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15

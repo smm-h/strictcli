@@ -53,8 +53,11 @@ jobs:
           "go-strictcli@v"*)
             regex='^(go\-strictcli\-ci) / '
             ;;
+          "ts-strictcli@v"*)
+            regex='^(ts\-strictcli\-ci) / '
+            ;;
           *)
-            echo "::error::Publish gate: ref '$tag_ref' matches no project tag prefix (known prefixes: py-strictcli@v, go-strictcli@v)."
+            echo "::error::Publish gate: ref '$tag_ref' matches no project tag prefix (known prefixes: py-strictcli@v, go-strictcli@v, ts-strictcli@v)."
             echo "To retry a release publish, dispatch this workflow at the tag ref: gh workflow run publish.yml --ref <tag>"
             exit 1
             ;;
@@ -226,3 +229,52 @@ jobs:
     defaults:
       run:
         working-directory: python
+  ts-strictcli-npm:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.tag || github.event.release.tag_name }}
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+        registry-url: https://registry.npmjs.org
+    - name: Install gitleaks
+      run: |
+        GITLEAKS_VERSION=8.24.3
+        curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz -C /usr/local/bin gitleaks
+    - name: Scan source for secrets
+      run: |
+        gitleaks dir .
+    - name: Check if already published
+      id: check-npm
+      run: |
+        PKG_NAME=$(node -p "require('./package.json').name")
+        PKG_VERSION=$(node -p "require('./package.json').version")
+        if npm view "${PKG_NAME}@${PKG_VERSION}" version 2>/dev/null; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          echo "Already published: ${PKG_NAME}@${PKG_VERSION}"
+        fi
+    - name: Determine dist-tag
+      id: dist-tag
+      run: |
+        PKG_VERSION=$(node -p "require('./package.json').version")
+        if echo "$PKG_VERSION" | grep -q '-'; then
+          PREID=$(echo "$PKG_VERSION" | sed 's/[^-]*-//' | sed 's/\.[^.]*$//')
+          echo "tag=--tag $PREID" >> "$GITHUB_OUTPUT"
+        else
+          echo "tag=" >> "$GITHUB_OUTPUT"
+        fi
+    - run: npm publish --provenance --access public ${{ 
+        steps.dist-tag.outputs.tag }}
+      if: steps.check-npm.outputs.skip != 'true'
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write
+    if: startsWith(inputs.tag || github.ref_name, 'ts-strictcli@v')
+    defaults:
+      run:
+        working-directory: typescript
