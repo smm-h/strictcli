@@ -18,6 +18,14 @@ jobs:
         with:
           go-version: '1.25'
           cache-dependency-path: go/go.sum
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Build TypeScript implementation
+        working-directory: typescript
+        run: |
+          npm ci
+          npm run build
       - name: Install strictcli and conformance tool
         working-directory: .
         run: |
