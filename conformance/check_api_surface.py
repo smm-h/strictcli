@@ -211,6 +211,7 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     "config_fields_def",
     "handler_returns",
     "default_relative_to_root",
+    "pre_test",
 }
 
 # Shared name mappings (applied to any entity that uses them).
@@ -364,6 +365,7 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "app.infra_root": "infraRootDecls",
                 "app.handshake_env": "handshakeEnvs",
                 "app.tag_contracts": "tagContracts",
+                "app.test_coverage": "testCoverage",
             },
             schema_python_runtime={
                 "app.tag_contracts": "_tag_contracts (set in __post_init__, not a dataclass field)",
