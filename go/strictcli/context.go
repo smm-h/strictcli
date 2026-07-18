@@ -66,7 +66,7 @@ func (c *Context) InfraValue(envVar string) (string, bool) {
 			return os.LookupEnv(envVar)
 		}
 	}
-	panic(fmt.Sprintf("InfraValue: %q is not a declared infra root or handshake env var", envVar))
+	panic(errInfraValueUndeclared(envVar))
 }
 
 // Info writes an informational message to stdout.
@@ -105,7 +105,7 @@ func (c *Context) Source(name string) string {
 	if s, ok := c.sources[name]; ok {
 		return s
 	}
-	panic(fmt.Sprintf("no source info for flag %q", name))
+	panic(errNoSourceInfo(name))
 }
 
 // reservedGlobalFlagNames are names that cannot be used for user-defined global flags

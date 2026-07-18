@@ -3,7 +3,6 @@ package strictcli
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"os"
 	"sort"
 	"path/filepath"
@@ -355,7 +354,7 @@ func buildSchemaDefaults() map[string]interface{} {
 func readProjectID() (string, error) {
 	f, err := os.Open("go.mod")
 	if err != nil {
-		return "", fmt.Errorf("Cannot determine project_id: go.mod not found")
+		return "", errCannotDetermineProjectIDNoGoMod()
 	}
 	defer f.Close()
 
@@ -367,9 +366,9 @@ func readProjectID() (string, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("Cannot determine project_id: error reading go.mod: %w", err)
+		return "", errCannotDetermineProjectIDReadError(err)
 	}
-	return "", fmt.Errorf("Cannot determine project_id: no module directive in go.mod")
+	return "", errCannotDetermineProjectIDNoModule()
 }
 
 // dumpSchemaCore builds the full schema map, excluding project_id.
@@ -606,10 +605,7 @@ func checkSchemaProjectID(filePath string, newProjectID string) error {
 		return nil
 	}
 	if existingIDStr != newProjectID {
-		return fmt.Errorf(
-			"Schema mismatch: existing schema belongs to project '%s', not '%s'. Run from the correct project directory.",
-			existingIDStr, newProjectID,
-		)
+		return errSchemaMismatch(existingIDStr, newProjectID)
 	}
 	return nil
 }

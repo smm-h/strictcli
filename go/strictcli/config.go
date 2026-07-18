@@ -172,17 +172,17 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 
 	// Validate name format
 	if !configFieldNameRe.MatchString(name) {
-		panic(fmt.Sprintf("ConfigField name %q is invalid: must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)* (lowercase, dots for sections)", name))
+		panic(errConfigFieldNameInvalid(name))
 	}
 
 	// Names starting with _ are reserved for framework fields
 	if strings.HasPrefix(name, "_") {
-		panic(fmt.Sprintf("config field name %q is reserved: names starting with underscore are reserved for framework fields", name))
+		panic(errConfigFieldNameReserved(name))
 	}
 
 	// Validate help is non-empty
 	if strings.TrimSpace(cf.Help) == "" {
-		panic(fmt.Sprintf("config field %q: help text is required", name))
+		panic(errConfigFieldHelpRequired(name))
 	}
 
 	// Validate type
@@ -190,7 +190,7 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 	case TypeStr, TypeBool, TypeInt, TypeFloat:
 		// ok
 	default:
-		panic(fmt.Sprintf("ConfigField.type must be str, bool, int, or float, got %d", cf.Type))
+		panic(errConfigFieldTypeBad(cf.Type))
 	}
 
 	// Validate default matches type
@@ -203,11 +203,11 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 		a.configFields = make(map[string]*ConfigField)
 	}
 	if _, ok := a.configFields[name]; ok {
-		panic(fmt.Sprintf("duplicate config field name %q", name))
+		panic(errDuplicateConfigField(name))
 	}
 	if a.frameworkFields != nil {
 		if _, ok := a.frameworkFields[name]; ok {
-			panic(fmt.Sprintf("config field name %q conflicts with framework field", name))
+			panic(errConfigFieldConflictsFramework(name))
 		}
 	}
 
@@ -250,33 +250,33 @@ func (a *App) collidingConfigFields() map[string]*ConfigField {
 // Framework fields use underscore-prefixed names and are not exposed to users.
 func (a *App) registerFrameworkField(name string, fieldType FlagType, help string) {
 	if !strings.HasPrefix(name, "_") {
-		panic(fmt.Sprintf("framework field name %q must start with underscore", name))
+		panic(errFrameworkFieldMustStartUnderscore(name))
 	}
 
 	if !configFieldNameRe.MatchString(name) {
-		panic(fmt.Sprintf("framework field %q: invalid name, must match [a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)* (lowercase, dots for sections)", name))
+		panic(errFrameworkFieldNameInvalid(name))
 	}
 
 	if strings.TrimSpace(help) == "" {
-		panic(fmt.Sprintf("framework field %q: help text is required", name))
+		panic(errFrameworkFieldHelpRequired(name))
 	}
 
 	switch fieldType {
 	case TypeStr, TypeBool, TypeInt, TypeFloat:
 		// ok
 	default:
-		panic(fmt.Sprintf("ConfigField.type must be str, bool, int, or float, got %d", fieldType))
+		panic(errConfigFieldTypeBad(fieldType))
 	}
 
 	if a.frameworkFields == nil {
 		a.frameworkFields = make(map[string]*ConfigField)
 	}
 	if _, ok := a.frameworkFields[name]; ok {
-		panic(fmt.Sprintf("duplicate framework field name %q", name))
+		panic(errDuplicateFrameworkField(name))
 	}
 	if a.configFields != nil {
 		if _, ok := a.configFields[name]; ok {
-			panic(fmt.Sprintf("framework field name %q conflicts with user config field", name))
+			panic(errFrameworkFieldConflictsUser(name))
 		}
 	}
 
@@ -296,19 +296,19 @@ func validateConfigFieldDefault(name string, fieldType FlagType, value interface
 	switch fieldType {
 	case TypeStr:
 		if _, ok := value.(string); !ok {
-			panic(fmt.Sprintf("ConfigField %q: default value %v does not match type %s", name, value, "str"))
+			panic(errConfigFieldDefaultMismatch(name, value, "str"))
 		}
 	case TypeBool:
 		if _, ok := value.(bool); !ok {
-			panic(fmt.Sprintf("ConfigField %q: default value %v does not match type %s", name, value, "bool"))
+			panic(errConfigFieldDefaultMismatch(name, value, "bool"))
 		}
 	case TypeInt:
 		if _, ok := value.(int); !ok {
-			panic(fmt.Sprintf("ConfigField %q: default value %v does not match type %s", name, value, "int"))
+			panic(errConfigFieldDefaultMismatch(name, value, "int"))
 		}
 	case TypeFloat:
 		if _, ok := value.(float64); !ok {
-			panic(fmt.Sprintf("ConfigField %q: default value %v does not match type %s", name, value, "float"))
+			panic(errConfigFieldDefaultMismatch(name, value, "float"))
 		}
 	}
 }

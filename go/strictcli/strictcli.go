@@ -74,7 +74,7 @@ func ListOf(itemType FlagType) FlagType {
 	case TypeStr, TypeInt, TypeFloat:
 		return listBit | itemType
 	default:
-		panic(fmt.Sprintf("ListOf: item type must be str, int, or float, got %d", itemType))
+		panic(errListOfBadItemType(itemType))
 	}
 }
 
@@ -85,7 +85,7 @@ func DictOf(valueType FlagType) FlagType {
 	case TypeStr, TypeInt, TypeFloat:
 		return listBit | dictBit | valueType
 	default:
-		panic(fmt.Sprintf("DictOf: value type must be str, int, or float, got %d", valueType))
+		panic(errDictOfBadValueType(valueType))
 	}
 }
 
@@ -384,7 +384,7 @@ func WithNoDefaultConfigPath() AppOption {
 func WithConfigConflictMode(mode string) AppOption {
 	return func(a *App) {
 		if mode != "cli-wins" && mode != "error" {
-			panic(fmt.Sprintf("WithConfigConflictMode: mode must be \"cli-wins\" or \"error\", got %q", mode))
+			panic(errWithConfigConflictModeBadMode(mode))
 		}
 		a.configConflictMode = mode
 	}
@@ -408,13 +408,13 @@ func WithInfraRoot(envVar, defaultPath string) AppOption {
 func WithHandshakeEnv(envVar, help string) AppOption {
 	return func(a *App) {
 		if strings.TrimSpace(help) == "" {
-			panic(fmt.Sprintf("handshake env var %q: help must be a non-empty string", envVar))
+			panic(errHandshakeEnvVarEmptyHelp(envVar))
 		}
 		if a.handshakeEnvs == nil {
 			a.handshakeEnvs = make(map[string]string)
 		}
 		if _, dup := a.handshakeEnvs[envVar]; dup {
-			panic(fmt.Sprintf("duplicate handshake env var %q", envVar))
+			panic(errDuplicateHandshakeEnvVar(envVar))
 		}
 		a.handshakeEnvs[envVar] = help
 		a.handshakeOrder = append(a.handshakeOrder, envVar)
@@ -521,7 +521,7 @@ func Unique(b bool) FlagOption {
 func ConflictMode(mode string) FlagOption {
 	return func(f *Flag) {
 		if mode != "cli-wins" && mode != "error" {
-			panic(fmt.Sprintf("ConflictMode: mode must be \"cli-wins\" or \"error\", got %q", mode))
+			panic(errConflictModeBadMode(mode))
 		}
 		f.ConflictMode = mode
 		f.hasConflictMode = true
@@ -668,7 +668,7 @@ func WithTags(tags ...string) CmdOption {
 		seen := make(map[string]bool)
 		for _, t := range tags {
 			if !identifierRe.MatchString(t) {
-				panic(fmt.Sprintf("invalid tag name %q: must match [a-z][a-z0-9-]*", t))
+				panic(errInvalidTagName(t))
 			}
 			if !seen[t] {
 				c.tags = append(c.tags, t)
@@ -687,7 +687,7 @@ func validateAndDedup(tags []string) []string {
 	result := make([]string, 0, len(tags))
 	for _, t := range tags {
 		if !identifierRe.MatchString(t) {
-			panic(fmt.Sprintf("invalid tag name %q: must match [a-z][a-z0-9-]*", t))
+			panic(errInvalidTagName(t))
 		}
 		if !seen[t] {
 			result = append(result, t)
@@ -826,7 +826,7 @@ func DictFlag(valueType FlagType, name, help string, opts ...FlagOption) Flag {
 // NewArg creates a positional argument.
 func NewArg(name, help string, opts ...ArgOption) Arg {
 	if strings.TrimSpace(help) == "" {
-		panic("Arg.help must be a non-empty string")
+		panic(errArgHelpEmpty)
 	}
 	a := Arg{
 		Name:     name,
@@ -838,12 +838,12 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 		opt(&a)
 	}
 	if a.Required && a.hasDefault {
-		panic("required arg cannot have a default")
+		panic(errRequiredArgCannotHaveDefault)
 	}
 	// Validate type: scalar types always allowed; list types only on variadic args
 	if IsListType(a.Type) {
 		if !a.IsVariadic {
-			panic(fmt.Sprintf("Arg %q: list type requires variadic=true", a.Name))
+			panic(errArgListTypeRequiresVariadic(a.Name))
 		}
 		// Item type must be scalar
 		item := ItemType(a.Type)
@@ -851,42 +851,42 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 		case TypeStr, TypeInt, TypeFloat:
 			// ok
 		default:
-			panic(fmt.Sprintf("Arg %q: list item type must be str, int, or float", a.Name))
+			panic(errArgListItemTypeBad(a.Name))
 		}
 	} else if IsDictType(a.Type) {
-		panic(fmt.Sprintf("Arg %q: dict type is not supported on positional arguments", a.Name))
+		panic(errArgDictTypeNotSupported(a.Name))
 	} else {
 		switch a.Type {
 		case TypeStr, TypeBool, TypeInt, TypeFloat:
 			// ok
 		default:
-			panic(fmt.Sprintf("Arg.type must be str, bool, int, or float, got %d", a.Type))
+			panic(errArgTypeBad(a.Type))
 		}
 	}
 	// Validate choices
 	if a.Choices != nil {
 		if IsListType(a.Type) {
-			panic(fmt.Sprintf("Arg %q: choices is incompatible with list type", a.Name))
+			panic(errArgChoicesIncompatibleListType(a.Name))
 		}
 		if a.Type == TypeBool {
-			panic(fmt.Sprintf("Arg %q: choices is incompatible with type=bool", a.Name))
+			panic(errArgChoicesIncompatibleBool(a.Name))
 		}
 		if len(a.Choices) == 0 {
-			panic(fmt.Sprintf("Arg %q: choices must be a non-empty list", a.Name))
+			panic(errArgChoicesEmpty(a.Name))
 		}
 		for _, c := range a.Choices {
 			switch a.Type {
 			case TypeStr:
 				if _, ok := c.(string); !ok {
-					panic(fmt.Sprintf("Arg %q: choice %v is not of type str", a.Name, c))
+					panic(errArgChoiceTypeMismatch(a.Name, c, "str"))
 				}
 			case TypeInt:
 				if _, ok := c.(int); !ok {
-					panic(fmt.Sprintf("Arg %q: choice %v is not of type int", a.Name, c))
+					panic(errArgChoiceTypeMismatch(a.Name, c, "int"))
 				}
 			case TypeFloat:
 				if _, ok := c.(float64); !ok {
-					panic(fmt.Sprintf("Arg %q: choice %v is not of type float", a.Name, c))
+					panic(errArgChoiceTypeMismatch(a.Name, c, "float"))
 				}
 			}
 		}
@@ -895,10 +895,10 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 	if a.hasDefault && a.Default != nil && IsListType(a.Type) {
 		slice, ok := a.Default.([]interface{})
 		if !ok {
-			panic(fmt.Sprintf("Arg %q: list arg default must be a list", a.Name))
+			panic(errArgListDefaultMustBeList(a.Name))
 		}
 		if len(slice) == 0 {
-			panic(fmt.Sprintf("Arg %q: explicit empty default is redundant for list args, omit the default", a.Name))
+			panic(errArgExplicitEmptyDefaultRedundantList(a.Name))
 		}
 		elemType := ItemType(a.Type)
 		typeName := map[FlagType]string{TypeStr: "str", TypeInt: "int", TypeFloat: "float"}[elemType]
@@ -919,7 +919,7 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 				}
 			}
 			if !valid {
-				panic(fmt.Sprintf("Arg %q: default element %d is not of type %s", a.Name, i, typeName))
+				panic(errArgDefaultElementTypeMismatch(a.Name, i, typeName))
 			}
 		}
 	} else if a.hasDefault && a.Default != nil {
@@ -935,7 +935,7 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 				default:
 					gotType = fmt.Sprintf("%T", a.Default)
 				}
-				panic(fmt.Sprintf("Arg %q: type=str requires a str default, got '%s'", a.Name, gotType))
+				panic(errArgStrDefaultTypeMismatch(a.Name, gotType))
 			}
 		case TypeInt:
 			if _, ok := a.Default.(int); !ok {
@@ -948,7 +948,7 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 				default:
 					gotType = fmt.Sprintf("%T", a.Default)
 				}
-				panic(fmt.Sprintf("Arg %q: type=int requires an int default, got '%s'", a.Name, gotType))
+				panic(errArgIntDefaultTypeMismatch(a.Name, gotType))
 			}
 		case TypeFloat:
 			if _, ok := a.Default.(float64); !ok {
@@ -963,7 +963,7 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 				default:
 					gotType = fmt.Sprintf("%T", a.Default)
 				}
-				panic(fmt.Sprintf("Arg %q: type=float requires a float default, got '%s'", a.Name, gotType))
+				panic(errArgFloatDefaultTypeMismatch(a.Name, gotType))
 			}
 		case TypeBool:
 			if _, ok := a.Default.(bool); !ok {
@@ -976,7 +976,7 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 				default:
 					gotType = fmt.Sprintf("%T", a.Default)
 				}
-				panic(fmt.Sprintf("Arg %q: type=bool requires a bool default, got '%s'", a.Name, gotType))
+				panic(errArgBoolDefaultTypeMismatch(a.Name, gotType))
 			}
 		}
 	}
@@ -994,7 +994,7 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 			for i, c := range a.Choices {
 				choiceParts[i] = fmt.Sprintf("'%v'", c)
 			}
-			panic(fmt.Sprintf("Arg %q: default '%v' is not in choices [%s]", a.Name, a.Default, strings.Join(choiceParts, ", ")))
+			panic(errArgDefaultNotInChoices(a.Name, a.Default, strings.Join(choiceParts, ", ")))
 		}
 	}
 	return a
@@ -1003,67 +1003,67 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 // validateFlagConfig panics on invalid flag configuration (programmer error).
 func validateFlagConfig(f *Flag) {
 	if strings.TrimSpace(f.Help) == "" {
-		panic(fmt.Sprintf("Flag.help must be a non-empty string"))
+		panic(errFlagHelpEmpty)
 	}
 	if f.Name == "force" {
-		panic(fmt.Sprintf("flag 'force' is a reserved name; use a qualified name like 'force-overwrite' or 'force-delete'"))
+		panic(errFlagForceReserved)
 	}
 	if strings.HasPrefix(f.Name, "no-") {
-		panic(fmt.Sprintf("flag '%s': names starting with 'no-' are reserved for the negation system; use a positive name instead", f.Name))
+		panic(errFlagNoPrefixReserved(f.Name))
 	}
 	if f.Repeatable && f.Type == TypeBool {
-		panic(fmt.Sprintf("Flag %q: repeatable is incompatible with type=bool", f.Name))
+		panic(errFlagRepeatableIncompatibleBool(f.Name))
 	}
 	// Compound types: choices not supported
 	if IsCompoundType(f.Type) && f.Choices != nil {
-		panic(fmt.Sprintf("Flag %q: choices is incompatible with compound types (list/dict)", f.Name))
+		panic(errFlagChoicesIncompatibleCompound(f.Name))
 	}
 	// Unique requires repeatable; repeatable requires explicit unique
 	if f.Repeatable && !f.hasUnique {
-		panic(fmt.Sprintf("Flag %q: repeatable requires explicit unique (unique=True or unique=False)", f.Name))
+		panic(errFlagRepeatableRequiresExplicitUnique(f.Name))
 	}
 	if f.hasUnique && !f.Repeatable {
-		panic(fmt.Sprintf("Flag %q: unique requires repeatable=True", f.Name))
+		panic(errFlagUniqueRequiresRepeatable(f.Name))
 	}
 	// Dict flags: env_separator for dicts means JSON parse from env (env_separator not used
 	// for splitting). For list types, env_separator works as before.
 	// EnvSeparator validations
 	if f.EnvSeparator != "" && !f.Repeatable {
-		panic(fmt.Sprintf("Flag %q: env_separator requires repeatable=True", f.Name))
+		panic(errFlagEnvSeparatorRequiresRepeatable(f.Name))
 	}
 	if f.EnvSeparator != "" && f.Env == "" {
-		panic(fmt.Sprintf("Flag %q: env_separator requires env", f.Name))
+		panic(errFlagEnvSeparatorRequiresEnv(f.Name))
 	}
 	if f.Repeatable && f.Env != "" && f.EnvSeparator == "" && !IsDictType(f.Type) {
-		panic(fmt.Sprintf("Flag %q: repeatable flag with env requires env_separator", f.Name))
+		panic(errFlagRepeatableEnvRequiresSeparator(f.Name))
 	}
 	if f.EnvSeparator != "" && len(f.EnvSeparator) != 1 {
-		panic(fmt.Sprintf("Flag %q: env_separator must be a single character", f.Name))
+		panic(errFlagEnvSeparatorSingleChar(f.Name))
 	}
 	if f.EnvSeparator == "\\" {
-		panic(fmt.Sprintf("Flag %q: env_separator cannot be a backslash", f.Name))
+		panic(errFlagEnvSeparatorBackslash(f.Name))
 	}
 	if f.Choices != nil {
 		if f.Type == TypeBool {
-			panic(fmt.Sprintf("Flag %q: choices is incompatible with type=bool", f.Name))
+			panic(errFlagChoicesIncompatibleBool(f.Name))
 		}
 		if len(f.Choices) == 0 {
-			panic(fmt.Sprintf("Flag %q: choices must be a non-empty list", f.Name))
+			panic(errFlagChoicesEmpty(f.Name))
 		}
 		// Validate each choice matches the flag type
 		for _, c := range f.Choices {
 			switch f.Type {
 			case TypeStr:
 				if _, ok := c.(string); !ok {
-					panic(fmt.Sprintf("Flag %q: choice %v is not of type str", f.Name, c))
+					panic(errFlagChoiceTypeMismatch(f.Name, c, "str"))
 				}
 			case TypeInt:
 				if _, ok := c.(int); !ok {
-					panic(fmt.Sprintf("Flag %q: choice %v is not of type int", f.Name, c))
+					panic(errFlagChoiceTypeMismatch(f.Name, c, "int"))
 				}
 			case TypeFloat:
 				if _, ok := c.(float64); !ok {
-					panic(fmt.Sprintf("Flag %q: choice %v is not of type float", f.Name, c))
+					panic(errFlagChoiceTypeMismatch(f.Name, c, "float"))
 				}
 			}
 		}
@@ -1081,7 +1081,7 @@ func validateFlagConfig(f *Flag) {
 				default:
 					gotType = fmt.Sprintf("%T", f.Default)
 				}
-				panic(fmt.Sprintf("Flag %q: type=int requires an int default, got '%s'", f.Name, gotType))
+				panic(errFlagIntDefaultTypeMismatch(f.Name, gotType))
 			}
 		}
 	}
@@ -1100,7 +1100,7 @@ func validateFlagConfig(f *Flag) {
 				default:
 					gotType = fmt.Sprintf("%T", f.Default)
 				}
-				panic(fmt.Sprintf("Flag %q: type=float requires a float default, got '%s'", f.Name, gotType))
+				panic(errFlagFloatDefaultTypeMismatch(f.Name, gotType))
 			}
 		}
 	}
@@ -1108,30 +1108,30 @@ func validateFlagConfig(f *Flag) {
 	if IsDictType(f.Type) && f.hasDefault && f.Default != nil {
 		m, ok := f.Default.(map[string]interface{})
 		if !ok {
-			panic(fmt.Sprintf("Flag %q: dict flag default must be a map[string]interface{}", f.Name))
+			panic(errFlagDictDefaultMustBeMap(f.Name))
 		}
 		if len(m) == 0 {
-			panic(fmt.Sprintf("Flag %q: explicit empty default is redundant for dict flags, omit the default", f.Name))
+			panic(errFlagExplicitEmptyDefaultRedundantDict(f.Name))
 		}
 		valType := ItemType(f.Type)
 		for k, v := range m {
 			if errStr := validateScalarType(v, valType); errStr != "" {
-				panic(fmt.Sprintf("Flag %q: default value for key %q: %s", f.Name, k, errStr))
+				panic(errFlagDefaultValueForKey(f.Name, k, errStr))
 			}
 		}
 	} else if IsListType(f.Type) && f.hasDefault && f.Default != nil {
 		// List flag defaults: must be []interface{} with correct item types
 		slice, ok := f.Default.([]interface{})
 		if !ok {
-			panic(fmt.Sprintf("Flag %q: list flag default must be a []interface{}", f.Name))
+			panic(errFlagListDefaultMustBeSlice(f.Name))
 		}
 		if len(slice) == 0 {
-			panic(fmt.Sprintf("Flag %q: explicit empty default is redundant for list flags, omit the default", f.Name))
+			panic(errFlagExplicitEmptyDefaultRedundantList(f.Name))
 		}
 		elemType := ItemType(f.Type)
 		for i, elem := range slice {
 			if errStr := validateScalarType(elem, elemType); errStr != "" {
-				panic(fmt.Sprintf("Flag %q: default element %d: %s", f.Name, i, errStr))
+				panic(errFlagDefaultElementError(f.Name, i, errStr))
 			}
 			// Auto-coerce int to float64 for float list defaults
 			if elemType == TypeFloat {
@@ -1144,26 +1144,26 @@ func validateFlagConfig(f *Flag) {
 		// Validate repeatable scalar flag defaults
 		slice, ok := f.Default.([]interface{})
 		if !ok {
-			panic(fmt.Sprintf("Flag %q: repeatable flag default must be a list", f.Name))
+			panic(errFlagRepeatableDefaultMustBeList(f.Name))
 		}
 		if len(slice) == 0 {
-			panic(fmt.Sprintf("Flag %q: explicit empty default is redundant for repeatable flags, omit the default", f.Name))
+			panic(errFlagExplicitEmptyDefaultRedundantRepeatable(f.Name))
 		}
 		for i, elem := range slice {
 			switch f.Type {
 			case TypeStr:
 				if _, ok := elem.(string); !ok {
-					panic(fmt.Sprintf("Flag %q: default element %d is not of type str", f.Name, i))
+					panic(errFlagDefaultElementTypeMismatch(f.Name, i, "str"))
 				}
 			case TypeInt:
 				if _, ok := elem.(int); !ok {
-					panic(fmt.Sprintf("Flag %q: default element %d is not of type int", f.Name, i))
+					panic(errFlagDefaultElementTypeMismatch(f.Name, i, "int"))
 				}
 			case TypeFloat:
 				if intVal, ok := elem.(int); ok {
 					slice[i] = float64(intVal)
 				} else if _, ok := elem.(float64); !ok {
-					panic(fmt.Sprintf("Flag %q: default element %d is not of type float", f.Name, i))
+					panic(errFlagDefaultElementTypeMismatch(f.Name, i, "float"))
 				}
 			}
 		}
@@ -1193,7 +1193,7 @@ func validateFlagConfig(f *Flag) {
 			for i, c := range f.Choices {
 				choiceParts[i] = fmt.Sprintf("'%v'", c)
 			}
-			panic(fmt.Sprintf("Flag %q: default '%v' is not in choices [%s]", f.Name, f.Default, strings.Join(choiceParts, ", ")))
+			panic(errFlagDefaultNotInChoices(f.Name, f.Default, strings.Join(choiceParts, ", ")))
 		}
 	}
 }
@@ -1231,7 +1231,7 @@ func validateScalarType(v interface{}, t FlagType) string {
 // NewApp creates a new CLI application.
 func NewApp(name, version, help string, opts ...AppOption) *App {
 	if strings.TrimSpace(help) == "" {
-		panic("App.help must be a non-empty string")
+		panic(errAppHelpEmpty)
 	}
 	a := &App{
 		Name:          name,
@@ -1254,7 +1254,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	a.infraRootFromEnv = make(map[string]bool)
 	for _, decl := range a.infraRootDecls {
 		if _, dup := a.infraRoots[decl.envVar]; dup {
-			panic(fmt.Sprintf("duplicate infra root env var %q", decl.envVar))
+			panic(errDuplicateInfraRootEnvVar(decl.envVar))
 		}
 		if val, ok := os.LookupEnv(decl.envVar); ok {
 			a.infraRoots[decl.envVar] = expandTilde(val)
@@ -1268,7 +1268,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	// Handshake env vars must not collide with declared roots.
 	for _, ev := range a.handshakeOrder {
 		if _, isRoot := a.infraRoots[ev]; isRoot {
-			panic(fmt.Sprintf("handshake env var %q is already declared as an infra root", ev))
+			panic(errHandshakeIsAlreadyInfraRoot(ev))
 		}
 	}
 	// Resolve the config-path marker (if any) now that roots exist.
@@ -1293,18 +1293,18 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	}
 	// Enable check system when WithChecks(path) or WithChecksEmbed(data) was provided
 	if a.checksPath != "" && len(a.checksEmbed) > 0 {
-		panic("cannot use both WithChecks and WithChecksEmbed")
+		panic(errCannotUseBothChecksAndEmbed)
 	}
 	if a.checksPath != "" {
 		if _, err := os.Stat(a.checksPath); err != nil {
-			panic(fmt.Sprintf("checks_path does not exist: %s", a.checksPath))
+			panic(errChecksPathNotExist(a.checksPath))
 		}
 		appName, defs, order, err := loadChecksToml(a.checksPath)
 		if err != nil {
 			panic(err.Error())
 		}
 		if appName != a.Name {
-			panic(fmt.Sprintf("checks.toml: app %q does not match app name %q", appName, a.Name))
+			panic(errChecksTomlAppMismatch(appName, a.Name))
 		}
 		a.enableChecks()
 		for _, name := range order {
@@ -1318,7 +1318,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 			panic(err.Error())
 		}
 		if appName != a.Name {
-			panic(fmt.Sprintf("checks.toml: app %q does not match app name %q", appName, a.Name))
+			panic(errChecksTomlAppMismatch(appName, a.Name))
 		}
 		a.enableChecks()
 		for _, name := range order {
@@ -1331,7 +1331,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	if a.testCoverage {
 		a.coverageShardFmt = fmt.Sprintf(".strictcli/coverage/%d-%%d.jsonl", os.Getpid())
 		if err := os.MkdirAll(".strictcli/coverage", 0o755); err != nil {
-			panic(fmt.Sprintf("test-coverage: cannot create .strictcli/coverage/: %s", err))
+			panic(errTestCoverageCannotCreateDir(err))
 		}
 		a.RegisterCheckProvider(a.testCoverageProvider)
 	}
@@ -1373,24 +1373,21 @@ func (a *App) RegisterWarnCheck(name string, fn func(CheckContext, *WarnReporter
 // on a severity="warn" definition is a hard error.
 func (a *App) registerCheckImpl(name, form string, run func(CheckContext) CheckOutcome) {
 	if !a.checksEnabled {
-		panic(fmt.Sprintf("cannot register check %q: checks not enabled", name))
+		panic(errCannotRegisterCheckNotEnabled(name))
 	}
 	def, ok := a.checkDefs[name]
 	if !ok {
-		panic(fmt.Sprintf("cannot register check %q: not declared in checks.toml", name))
+		panic(errCannotRegisterCheckNotDeclared(name))
 	}
 	if def.impl != nil {
-		panic(fmt.Sprintf("check %q: duplicate registration", name))
+		panic(errCheckDuplicateRegistration(name))
 	}
 	if def.severity != form {
 		used, want := "RegisterErrorCheck", "RegisterWarnCheck"
 		if form == "warn" {
 			used, want = "RegisterWarnCheck", "RegisterErrorCheck"
 		}
-		panic(fmt.Sprintf(
-			"check %q: declared severity %q in checks.toml but registered via %s; use %s",
-			name, def.severity, used, want,
-		))
+		panic(errCheckSeverityMismatch(name, def.severity, used, want))
 	}
 	def.impl = run
 	def.implForm = form
@@ -1405,7 +1402,7 @@ func (a *App) SetCheckContext(factory func() CheckContext) {
 // with the given name. Validated at Run/Test time.
 func (a *App) TagContract(tag, requiresFlag string) {
 	if !identifierRe.MatchString(tag) {
-		panic(fmt.Sprintf("invalid tag name %q: must match [a-z][a-z0-9-]*", tag))
+		panic(errInvalidTagName(tag))
 	}
 	if a.tagContracts == nil {
 		a.tagContracts = make(map[string]string)
@@ -1551,10 +1548,7 @@ func checkFlagConfigFieldDefault(flagName string, flagDefault interface{}, cf *C
 	flagHasDefault := flagDefault != nil
 	cfHasDefault := cf.HasDefault && cf.Default != nil
 	if flagHasDefault && cfHasDefault && !reflect.DeepEqual(flagDefault, cf.Default) {
-		panic(fmt.Sprintf(
-			"config field %q collides with flag %q but their defaults disagree (%v vs %v); remove one default or make them equal",
-			cf.Name, flagName, cf.Default, flagDefault,
-		))
+		panic(errConfigFieldFlagDefaultDisagree(cf.Name, flagName, cf.Default, flagDefault))
 	}
 }
 
@@ -1593,7 +1587,7 @@ func expandTilde(p string) string {
 func resolveInfraRootPath(ref InfraRootPath, roots map[string]string) (string, error) {
 	root, ok := roots[ref.envVar]
 	if !ok {
-		return "", fmt.Errorf("RelativeToRoot references undeclared infra root %q; declare it as an infra root", ref.envVar)
+		return "", errRelativeToRootUndeclared(ref.envVar)
 	}
 	return filepath.Join(append([]string{root}, ref.parts...)...), nil
 }
@@ -1610,7 +1604,7 @@ func (a *App) resolveInfraPath(ref InfraRootPath) (string, error) {
 func (a *App) validateFlagInfraMarker(f *Flag) {
 	if ref, ok := f.Default.(InfraRootPath); ok {
 		if _, declared := a.infraRoots[ref.envVar]; !declared {
-			panic(fmt.Sprintf("flag %q: RelativeToRoot references undeclared infra root %q; declare it as an infra root", f.Name, ref.envVar))
+			panic(errFlagRelativeToRootUndeclared(f.Name, ref.envVar))
 		}
 	}
 }
@@ -1651,7 +1645,7 @@ func (a *App) Command(name, help string, handler func(ctx *Context, kwargs map[s
 // Accepts CmdOptions for validation purposes (e.g., to detect invalid passthrough+flags).
 func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ...CmdOption) {
 	if strings.TrimSpace(help) == "" {
-		panic(fmt.Sprintf("command %q: missing help text", name))
+		panic(errCommandMissingHelp(name))
 	}
 	cmd := &Command{
 		Name:               name,
@@ -1677,7 +1671,7 @@ func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ..
 		if len(cmd.mutex) > 0 {
 			parts = append(parts, "mutex groups")
 		}
-		panic(fmt.Sprintf("command %q: passthrough commands cannot have %s", name, strings.Join(parts, ", ")))
+		panic(errCommandPassthroughCannotHave(name, strings.Join(parts, ", ")))
 	}
 	cmd.tags = mergeTags(nil, cmd.tags)
 	a.commands[name] = cmd
@@ -1688,15 +1682,15 @@ func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ..
 func (a *App) GlobalFlag(f Flag) {
 	// Check reserved names
 	if reservedGlobalFlagNames[f.Name] {
-		panic(fmt.Sprintf("global flag name %q is reserved", f.Name))
+		panic(errGlobalFlagNameReserved(f.Name))
 	}
 	if f.Short != "" && reservedGlobalFlagNames[f.Short] {
-		panic(fmt.Sprintf("global short flag %q is reserved", f.Short))
+		panic(errGlobalShortFlagReserved(f.Short))
 	}
 	// Check for collisions with existing global flags
 	for _, gf := range a.globalFlags {
 		if gf.Name == f.Name {
-			panic(fmt.Sprintf("duplicate global flag name %q", f.Name))
+			panic(errDuplicateGlobalFlag(f.Name))
 		}
 	}
 	a.validateFlagInfraMarker(&f)
@@ -1706,7 +1700,7 @@ func (a *App) GlobalFlag(f Flag) {
 // Group creates and registers a command group.
 func (a *App) Group(name, help string, tags ...string) *Group {
 	if strings.TrimSpace(help) == "" {
-		panic("Group.help must be a non-empty string")
+		panic(errGroupHelpEmpty)
 	}
 	validTags := validateAndDedup(tags)
 	grp := &Group{
@@ -1729,13 +1723,13 @@ func (a *App) Group(name, help string, tags ...string) *Group {
 // Group creates and registers a child subgroup.
 func (g *Group) Group(name, help string, tags ...string) *Group {
 	if strings.TrimSpace(help) == "" {
-		panic("Group.help must be a non-empty string")
+		panic(errGroupHelpEmpty)
 	}
 	if _, ok := g.Commands[name]; ok {
-		panic(fmt.Sprintf("group %q collides with an existing command", name))
+		panic(errGroupCollidesWithCommand(name))
 	}
 	if _, ok := g.Groups[name]; ok {
-		panic(fmt.Sprintf("group %q is already registered", name))
+		panic(errGroupAlreadyRegistered(name))
 	}
 	validTags := validateAndDedup(tags)
 	accumulated := mergeTags(g.accumulatedTags, validTags)
@@ -1759,7 +1753,7 @@ func (g *Group) Group(name, help string, tags ...string) *Group {
 // Command registers a command within a group.
 func (g *Group) Command(name, help string, handler func(ctx *Context, kwargs map[string]interface{}) Outcome, opts ...CmdOption) {
 	if _, ok := g.Groups[name]; ok {
-		panic(fmt.Sprintf("command %q collides with an existing group", name))
+		panic(errCommandCollidesWithGroup(name))
 	}
 	cmd := buildAndValidateCommand(name, help, handler, g.envPrefix, g.globalFlags, g.accumulatedTags, opts)
 	if g.app != nil {
@@ -1774,19 +1768,19 @@ func (g *Group) Command(name, help string, handler func(ctx *Context, kwargs map
 // Invoking a deprecated command prints the message to stderr and exits 1.
 func (a *App) Deprecated(name, message string) {
 	if strings.TrimSpace(name) == "" {
-		panic("deprecated command name must be a non-empty string")
+		panic(errDeprecatedNameEmpty)
 	}
 	if strings.TrimSpace(message) == "" {
-		panic(fmt.Sprintf("deprecated command %q: message must not be empty", name))
+		panic(errDeprecatedMessageEmpty(name))
 	}
 	if _, ok := a.commands[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q collides with an existing command", name))
+		panic(errDeprecatedCollidesCommand(name))
 	}
 	if _, ok := a.groups[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q collides with an existing group", name))
+		panic(errDeprecatedCollidesGroup(name))
 	}
 	if _, ok := a.deprecatedMap[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q is already registered", name))
+		panic(errDeprecatedAlreadyRegistered(name))
 	}
 	a.deprecated = append(a.deprecated, deprecatedCmd{Name: name, Message: message})
 	a.deprecatedMap[name] = message
@@ -1796,19 +1790,19 @@ func (a *App) Deprecated(name, message string) {
 // Invoking a deprecated subcommand prints the message to stderr and exits 1.
 func (g *Group) Deprecated(name, message string) {
 	if strings.TrimSpace(name) == "" {
-		panic("deprecated command name must be a non-empty string")
+		panic(errDeprecatedNameEmpty)
 	}
 	if strings.TrimSpace(message) == "" {
-		panic(fmt.Sprintf("deprecated command %q: message must not be empty", name))
+		panic(errDeprecatedMessageEmpty(name))
 	}
 	if _, ok := g.Commands[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q collides with an existing command", name))
+		panic(errDeprecatedCollidesCommand(name))
 	}
 	if _, ok := g.Groups[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q collides with an existing group", name))
+		panic(errDeprecatedCollidesGroup(name))
 	}
 	if _, ok := g.deprecatedMap[name]; ok {
-		panic(fmt.Sprintf("deprecated command %q is already registered", name))
+		panic(errDeprecatedAlreadyRegistered(name))
 	}
 	g.deprecated = append(g.deprecated, deprecatedCmd{Name: name, Message: message})
 	g.deprecatedMap[name] = message
@@ -2747,7 +2741,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 // buildAndValidateCommand creates and validates a Command.
 func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwargs map[string]interface{}) Outcome, envPrefix string, globalFlags []Flag, inheritedTags []string, opts []CmdOption) *Command {
 	if strings.TrimSpace(help) == "" {
-		panic(fmt.Sprintf("command %q: missing help text", name))
+		panic(errCommandMissingHelp(name))
 	}
 
 	cmd := &Command{
@@ -2775,7 +2769,7 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 			if len(cmd.mutex) > 0 {
 				parts = append(parts, "mutex groups")
 			}
-			panic(fmt.Sprintf("command %q: passthrough commands cannot have %s", name, strings.Join(parts, ", ")))
+			panic(errCommandPassthroughCannotHave(name, strings.Join(parts, ", ")))
 		}
 		cmd.tags = mergeTags(inheritedTags, cmd.tags)
 		return cmd
@@ -2792,11 +2786,11 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	mutexFlagNames := make(map[string]bool)
 	for _, mg := range cmd.mutex {
 		if len(mg.Flags) < 2 {
-			panic(fmt.Sprintf("command %q: mutex group must have at least 2 flags, got %d", name, len(mg.Flags)))
+			panic(errCommandMutexMinFlags(name, len(mg.Flags)))
 		}
 		for _, f := range mg.Flags {
 			if mutexFlagNames[f.Name] {
-				panic(fmt.Sprintf("command %q: flag %q appears in multiple mutex groups", name, f.Name))
+				panic(errCommandFlagInMultipleMutex(name, f.Name))
 			}
 			mutexFlagNames[f.Name] = true
 		}
@@ -2811,10 +2805,10 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	seenFlags := make(map[string]bool)
 	for _, f := range allFlags {
 		if globalFlagSet[f.Name] {
-			panic(fmt.Sprintf("command %q: flag %q collides with a global flag", name, f.Name))
+			panic(errCommandFlagCollidesGlobal(name, f.Name))
 		}
 		if seenFlags[f.Name] {
-			panic(fmt.Sprintf("command %q: duplicate flag name %q", name, f.Name))
+			panic(errCommandDuplicateFlag(name, f.Name))
 		}
 		seenFlags[f.Name] = true
 	}
@@ -2823,7 +2817,7 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	seenArgs := make(map[string]bool)
 	for _, a := range cmd.args {
 		if seenArgs[a.Name] {
-			panic(fmt.Sprintf("command %q: duplicate arg name %q", name, a.Name))
+			panic(errCommandDuplicateArg(name, a.Name))
 		}
 		seenArgs[a.Name] = true
 	}
@@ -2836,18 +2830,18 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		}
 	}
 	if variadicCount > 1 {
-		panic(fmt.Sprintf("command %q: at most one variadic arg is allowed", name))
+		panic(errCommandAtMostOneVariadic(name))
 	}
 	for i, a := range cmd.args {
 		if a.IsVariadic && i != len(cmd.args)-1 {
-			panic(fmt.Sprintf("command %q: variadic arg %q must be the last arg", name, a.Name))
+			panic(errCommandVariadicMustBeLast(name, a.Name))
 		}
 	}
 
 	// Validate flag help
 	for _, f := range allFlags {
 		if strings.TrimSpace(f.Help) == "" {
-			panic(fmt.Sprintf("command %q: flag %q missing help text", name, f.Name))
+			panic(errCommandFlagMissingHelp(name, f.Name))
 		}
 	}
 
@@ -2857,10 +2851,7 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		for _, f := range allFlags {
 			if f.Env != "" && f.Prefixed {
 				if !strings.HasPrefix(f.Env, expectedPrefix) {
-					panic(fmt.Sprintf(
-						"command %q: env var %q for flag %q must start with %q (or set prefixed=false)",
-						name, f.Env, f.Name, expectedPrefix,
-					))
+					panic(errCommandEnvVarPrefix(name, f.Env, f.Name, expectedPrefix))
 				}
 			}
 		}
@@ -2871,37 +2862,37 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		switch d := dep.(type) {
 		case CoRequired:
 			if len(d.Flags) < 2 {
-				panic(fmt.Sprintf("command %q: CoRequired must have at least 2 flags, got %d", name, len(d.Flags)))
+				panic(errCommandCoRequiredMinFlags(name, len(d.Flags)))
 			}
 			seen := make(map[string]bool)
 			for _, flagName := range d.Flags {
 				if !seenFlags[flagName] {
-					panic(fmt.Sprintf("command %q: CoRequired references unknown flag %q", name, flagName))
+					panic(errCommandCoRequiredUnknownFlag(name, flagName))
 				}
 				if seen[flagName] {
-					panic(fmt.Sprintf("command %q: CoRequired has duplicate flag %q", name, flagName))
+					panic(errCommandCoRequiredDuplicate(name, flagName))
 				}
 				seen[flagName] = true
 			}
 		case Requires:
 			if d.Flag == d.DependsOn {
-				panic(fmt.Sprintf("command %q: Requires flag and depends_on cannot be the same (%q)", name, d.Flag))
+				panic(errCommandRequiresSameFlag(name, d.Flag))
 			}
 			if !seenFlags[d.Flag] {
-				panic(fmt.Sprintf("command %q: Requires references unknown flag %q", name, d.Flag))
+				panic(errCommandRequiresUnknownFlag(name, d.Flag))
 			}
 			if !seenFlags[d.DependsOn] {
-				panic(fmt.Sprintf("command %q: Requires references unknown flag %q", name, d.DependsOn))
+				panic(errCommandRequiresUnknownFlag(name, d.DependsOn))
 			}
 		case Implies:
 			if d.Flag == d.Implies {
-				panic(fmt.Sprintf("command %q: Implies flag and implies cannot be the same (%q)", name, d.Flag))
+				panic(errCommandImpliesSameFlag(name, d.Flag))
 			}
 			if !seenFlags[d.Flag] {
-				panic(fmt.Sprintf("command %q: Implies references unknown flag %q", name, d.Flag))
+				panic(errCommandImpliesUnknownFlag(name, d.Flag))
 			}
 			if !seenFlags[d.Implies] {
-				panic(fmt.Sprintf("command %q: Implies references unknown flag %q", name, d.Implies))
+				panic(errCommandImpliesUnknownFlag(name, d.Implies))
 			}
 			// Both flags must be BoolFlag
 			var triggerType, targetType FlagType
@@ -2914,10 +2905,10 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 				}
 			}
 			if triggerType != TypeBool {
-				panic(fmt.Sprintf("command %q: Implies trigger flag %q must be a bool flag", name, d.Flag))
+				panic(errCommandImpliesTriggerNotBool(name, d.Flag))
 			}
 			if targetType != TypeBool {
-				panic(fmt.Sprintf("command %q: Implies target flag %q must be a bool flag", name, d.Implies))
+				panic(errCommandImpliesTargetNotBool(name, d.Implies))
 			}
 		}
 	}

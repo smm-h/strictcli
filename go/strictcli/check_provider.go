@@ -1,7 +1,6 @@
 package strictcli
 
 import (
-	"fmt"
 	"os"
 	"sort"
 )
@@ -136,10 +135,7 @@ func (a *App) materializeCheckProviders() {
 			if spec.meta.Severity != spec.implForm {
 				used := checkSpecCtorName(spec.implForm)
 				want := checkSpecCtorName(spec.meta.Severity)
-				panic(fmt.Sprintf(
-					"check %q: declared severity %q but registered via %s; use %s",
-					spec.meta.Name, spec.meta.Severity, used, want,
-				))
+				panic(errCheckProviderSeverityMismatch(spec.meta.Name, spec.meta.Severity, used, want))
 			}
 			def := &checkDef{
 				name:         spec.meta.Name,

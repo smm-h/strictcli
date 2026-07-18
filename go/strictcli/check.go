@@ -73,7 +73,7 @@ type reporterCore struct {
 // verdict-inert: they surface only under --verbose and in JSON output.
 func (r *reporterCore) Note(text string) {
 	if strings.TrimSpace(text) == "" {
-		panic("note text must be a non-empty string")
+		panic(errNoteTextEmpty)
 	}
 	r.notes = append(r.notes, text)
 }
@@ -86,7 +86,7 @@ func (r *reporterCore) Note(text string) {
 // check_error_parity.py, which scans these panics.
 func (r *reporterCore) Warn(text string) {
 	if strings.TrimSpace(text) == "" {
-		panic("problem text must be a non-empty string")
+		panic(errProblemTextEmpty)
 	}
 	r.problems = append(r.problems, checkProblem{text: text, severity: "warn"})
 }
@@ -95,10 +95,10 @@ func (r *reporterCore) Warn(text string) {
 // accumulated (an impl that found problems cannot claim it passed -- use Found).
 func (r *reporterCore) Passed(message string) CheckOutcome {
 	if strings.TrimSpace(message) == "" {
-		panic("outcome message must be a non-empty string")
+		panic(errOutcomeMessageEmpty)
 	}
 	if len(r.problems) > 0 {
-		panic("problems were reported; a check that found problems cannot pass -- use found instead")
+		panic(errPassedWithProblems)
 	}
 	return CheckOutcome{minted: true, kind: "passed", message: message, notes: append([]string(nil), r.notes...)}
 }
@@ -107,10 +107,10 @@ func (r *reporterCore) Passed(message string) CheckOutcome {
 // accumulated.
 func (r *reporterCore) Skipped(reason string) CheckOutcome {
 	if strings.TrimSpace(reason) == "" {
-		panic("skip reason must be a non-empty string")
+		panic(errSkipReasonEmpty)
 	}
 	if len(r.problems) > 0 {
-		panic("problems were reported; a check that found problems cannot skip")
+		panic(errSkippedWithProblems)
 	}
 	return CheckOutcome{minted: true, kind: "skipped", message: reason, notes: append([]string(nil), r.notes...)}
 }
@@ -120,10 +120,10 @@ func (r *reporterCore) Skipped(reason string) CheckOutcome {
 // so explicitly with Passed).
 func (r *reporterCore) Found(message string) CheckOutcome {
 	if strings.TrimSpace(message) == "" {
-		panic("outcome message must be a non-empty string")
+		panic(errOutcomeMessageEmpty)
 	}
 	if len(r.problems) == 0 {
-		panic("no problems were reported; nothing found means pass -- use passed instead")
+		panic(errFoundNoProblems)
 	}
 	return CheckOutcome{
 		minted:   true,
@@ -152,7 +152,7 @@ type ErrorReporter struct {
 // exists only on ErrorReporter -- see the WarnReporter doc comment.
 func (r *ErrorReporter) Error(text string) {
 	if strings.TrimSpace(text) == "" {
-		panic("problem text must be a non-empty string")
+		panic(errProblemTextEmpty)
 	}
 	r.problems = append(r.problems, checkProblem{text: text, severity: "error"})
 }
@@ -174,7 +174,7 @@ func deriveStatus(o CheckOutcome) string {
 		}
 		return "warn"
 	default:
-		panic(fmt.Sprintf("unknown check outcome kind %q", o.kind))
+		panic(errUnknownCheckOutcomeKind(o.kind))
 	}
 }
 
@@ -228,7 +228,7 @@ func (a *App) addCheckDef(def *checkDef) error {
 		a.checkDefs = make(map[string]*checkDef)
 	}
 	if _, exists := a.checkDefs[def.name]; exists {
-		return fmt.Errorf("duplicate check definition %q", def.name)
+		return errDuplicateCheckDef(def.name)
 	}
 	a.checkDefs[def.name] = def
 	a.checkOrder = append(a.checkOrder, def.name)
@@ -257,24 +257,24 @@ func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error
 	// Unmarshal into a generic map for strict validation
 	var raw map[string]interface{}
 	if err := tomledit.Unmarshal(data, &raw); err != nil {
-		return "", nil, nil, fmt.Errorf("checks.toml: %s", err)
+		return "", nil, nil, errChecksTomlParse(err)
 	}
 
 	// Validate top-level keys: only "app" and "checks" are allowed
 	for key := range raw {
 		if key != "checks" && key != "app" {
-			return "", nil, nil, fmt.Errorf("checks.toml: unknown top-level key %q", key)
+			return "", nil, nil, errChecksTomlUnknownTopLevelKey(key)
 		}
 	}
 
 	// Validate required "app" field
 	appRaw, ok := raw["app"]
 	if !ok {
-		return "", nil, nil, fmt.Errorf("checks.toml: missing required top-level key \"app\"")
+		return "", nil, nil, errChecksTomlMissingApp()
 	}
 	appName, ok := appRaw.(string)
 	if !ok || appName == "" {
-		return "", nil, nil, fmt.Errorf("checks.toml: \"app\" must be a non-empty string")
+		return "", nil, nil, errChecksTomlAppNotString()
 	}
 
 	// Handle missing [checks] section gracefully — a file with just app = "x" is valid
@@ -285,7 +285,7 @@ func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error
 
 	checksMap, ok := checksRaw.(map[string]interface{})
 	if !ok {
-		return "", nil, nil, fmt.Errorf("checks.toml: [checks] must be a table")
+		return "", nil, nil, errChecksTomlChecksMustBeTable()
 	}
 
 	result := make(map[string]*checkDef, len(checksMap))
@@ -302,18 +302,18 @@ func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error
 
 		// Validate check name
 		if !identifierRe.MatchString(name) {
-			return "", nil, nil, fmt.Errorf("checks.toml: invalid check name %q (must match [a-z][a-z0-9-]*)", name)
+			return "", nil, nil, errChecksTomlInvalidCheckName(name)
 		}
 
 		fields, ok := val.(map[string]interface{})
 		if !ok {
-			return "", nil, nil, fmt.Errorf("checks.toml: check %q must be a table", name)
+			return "", nil, nil, errChecksTomlCheckMustBeTable(name)
 		}
 
 		// Reject unknown fields
 		for field := range fields {
 			if !knownCheckFields[field] {
-				return "", nil, nil, fmt.Errorf("checks.toml: check %q: unknown field %q", name, field)
+				return "", nil, nil, errChecksTomlUnknownField(name, field)
 			}
 		}
 
@@ -353,7 +353,7 @@ func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error
 		if scopeRaw, ok := fields["scope"]; ok {
 			scopeStr, ok := scopeRaw.(string)
 			if !ok {
-				return "", nil, nil, fmt.Errorf("checks.toml: check %q: \"scope\" must be a string, got %s", name, tomlTypeName(scopeRaw))
+				return "", nil, nil, errChecksTomlScopeMustBeString(name, scopeRaw)
 			}
 			def.scope = scopeStr
 		}
@@ -366,7 +366,7 @@ func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error
 		def := result[name]
 		for _, dep := range def.dependsOn {
 			if _, ok := result[dep]; !ok {
-				return "", nil, nil, fmt.Errorf("checks.toml: check %q: depends_on references unknown check %q", name, dep)
+				return "", nil, nil, errChecksTomlDependsOnUnknown(name, dep)
 			}
 		}
 	}
@@ -378,17 +378,17 @@ func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error
 func parseCheckTags(name string, fields map[string]interface{}, def *checkDef) error {
 	raw, ok := fields["tags"]
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: missing required field %q", name, "tags")
+		return errChecksTomlMissingField(name, "tags")
 	}
 	arr, ok := raw.([]interface{})
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: \"tags\" must be a list of strings", name)
+		return errChecksTomlTagsMustBeStrings(name)
 	}
 	tags := make([]string, len(arr))
 	for i, v := range arr {
 		s, ok := v.(string)
 		if !ok || strings.TrimSpace(s) == "" {
-			return fmt.Errorf("checks.toml: check %q: \"tags\" entries must be non-empty strings", name)
+			return errChecksTomlTagsEntriesMustBeStrings(name)
 		}
 		tags[i] = s
 	}
@@ -400,11 +400,11 @@ func parseCheckTags(name string, fields map[string]interface{}, def *checkDef) e
 func parseCheckSeverity(name string, fields map[string]interface{}, def *checkDef) error {
 	raw, ok := fields["severity"]
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: missing required field %q", name, "severity")
+		return errChecksTomlMissingField(name, "severity")
 	}
 	s, ok := raw.(string)
 	if !ok || (s != "error" && s != "warn") {
-		return fmt.Errorf("checks.toml: check %q: \"severity\" must be \"error\" or \"warn\", got %q", name, raw)
+		return errChecksTomlSeverityInvalid(name, raw)
 	}
 	def.severity = s
 	return nil
@@ -414,11 +414,11 @@ func parseCheckSeverity(name string, fields map[string]interface{}, def *checkDe
 func parseCheckBool(name string, fields map[string]interface{}, field string, target *bool) error {
 	raw, ok := fields[field]
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: missing required field %q", name, field)
+		return errChecksTomlMissingField(name, field)
 	}
 	b, ok := raw.(bool)
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: %q must be a boolean, got %s", name, field, tomlTypeName(raw))
+		return errChecksTomlBoolFieldInvalid(name, field, raw)
 	}
 	*target = b
 	return nil
@@ -428,17 +428,17 @@ func parseCheckBool(name string, fields map[string]interface{}, field string, ta
 func parseCheckDependsOn(name string, fields map[string]interface{}, def *checkDef) error {
 	raw, ok := fields["depends_on"]
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: missing required field %q", name, "depends_on")
+		return errChecksTomlMissingField(name, "depends_on")
 	}
 	arr, ok := raw.([]interface{})
 	if !ok {
-		return fmt.Errorf("checks.toml: check %q: \"depends_on\" must be a list of strings", name)
+		return errChecksTomlDependsOnMustBeStrings(name)
 	}
 	deps := make([]string, len(arr))
 	for i, v := range arr {
 		s, ok := v.(string)
 		if !ok {
-			return fmt.Errorf("checks.toml: check %q: \"depends_on\" entries must be strings", name)
+			return errChecksTomlDependsOnEntriesMustBeStrings(name)
 		}
 		deps[i] = s
 	}

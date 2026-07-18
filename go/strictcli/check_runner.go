@@ -53,7 +53,7 @@ func resolveCheckOrder(checkDefs map[string]*checkDef, selected map[string]bool)
 		}
 		if visited[name] {
 			// Build cycle path for error message
-			return fmt.Errorf("check dependency cycle detected involving %q", name)
+			return errCheckDependencyCycleInvolving(name)
 		}
 		visited[name] = true
 		def := checkDefs[name]
@@ -126,9 +126,9 @@ func resolveCheckOrder(checkDefs map[string]*checkDef, selected map[string]bool)
 		// Find the cycle for a helpful error message
 		cyclePath := findCycle(checkDefs, expanded, inDegree)
 		if cyclePath != "" {
-			return nil, fmt.Errorf("check dependency cycle: %s", cyclePath)
+			return nil, errCheckDependencyCycle(cyclePath)
 		}
-		return nil, fmt.Errorf("check dependency cycle detected")
+		return nil, errCheckDependencyCycleDetected()
 	}
 
 	return order, nil
@@ -275,7 +275,7 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 		durationMs := time.Since(start).Milliseconds()
 		// Belt-and-braces: an impl must return a reporter-minted outcome.
 		if !o.minted {
-			panic(fmt.Sprintf("check %q returned an outcome not minted by its reporter; use reporter methods (Passed/Skipped/Found)", name))
+			panic(errCheckOutcomeNotMinted(name))
 		}
 		r := CheckRunResult{Name: name, Outcome: o, DurationMs: durationMs}
 		results = append(results, r)
@@ -332,7 +332,7 @@ func filterChecks(checkDefs map[string]*checkDef, tagExpr string, nameGlob strin
 		for name := range checkDefs {
 			matched, err := path.Match(nameGlob, name)
 			if err != nil {
-				return nil, fmt.Errorf("invalid glob pattern %q: %s", nameGlob, err)
+				return nil, errInvalidGlobPattern(nameGlob, err)
 			}
 			if matched {
 				globMatches[name] = true

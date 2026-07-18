@@ -29,7 +29,7 @@ type RunChecksOptions struct {
 // e.g. "would run: <name> (impure)").
 func (a *App) RunChecks(ctx CheckContext, opts RunChecksOptions) ([]CheckRunResult, []string, int, error) {
 	if !a.checksEnabled {
-		return nil, nil, 0, fmt.Errorf("checks are not enabled on this App")
+		return nil, nil, 0, errChecksNotEnabled()
 	}
 
 	// Materialize provider-sourced checks before any registry read.

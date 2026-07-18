@@ -1,7 +1,6 @@
 package strictcli
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -135,7 +134,7 @@ func tagdslTokenize(expr string) ([]tagToken, error) {
 				}
 				tokens = append(tokens, tagToken{typ: tagTokenIdent, val: expr[start:i], pos: start})
 			} else {
-				return nil, fmt.Errorf("tag expression: unexpected character %q at position %d", string(ch), i)
+				return nil, errTagExprUnexpectedChar(string(ch), i)
 			}
 		}
 	}
@@ -152,7 +151,7 @@ type tagdslParser struct {
 // Precedence (tightest first): NOT, AND, XOR, OR, DIFF.
 func tagdslParse(tokens []tagToken) (tagNode, error) {
 	if len(tokens) == 0 {
-		return nil, fmt.Errorf("tag expression: empty expression")
+		return nil, errTagExprEmpty()
 	}
 	p := &tagdslParser{tokens: tokens, pos: 0}
 	node, err := p.parseDiff()
@@ -161,7 +160,7 @@ func tagdslParse(tokens []tagToken) (tagNode, error) {
 	}
 	if p.pos < len(p.tokens) {
 		tok := p.tokens[p.pos]
-		return nil, fmt.Errorf("tag expression: unexpected token %q at position %d", tok.val, tok.pos)
+		return nil, errTagExprUnexpectedToken(tok.val, tok.pos)
 	}
 	return node, nil
 }
@@ -288,7 +287,7 @@ func (p *tagdslParser) parsePrimary() (tagNode, error) {
 			last := p.tokens[len(p.tokens)-1]
 			lastPos = last.pos + len(last.val)
 		}
-		return nil, fmt.Errorf("tag expression: unexpected end of expression at position %d", lastPos)
+		return nil, errTagExprUnexpectedEnd(lastPos)
 	}
 
 	switch tok.typ {
@@ -303,12 +302,12 @@ func (p *tagdslParser) parsePrimary() (tagNode, error) {
 		}
 		closing := p.peek()
 		if closing == nil || closing.typ != tagTokenRParen {
-			return nil, fmt.Errorf("tag expression: expected \")\" at position %d", p.endPos())
+			return nil, errTagExprExpectedRParen(p.endPos())
 		}
 		p.advance()
 		return node, nil
 	default:
-		return nil, fmt.Errorf("tag expression: unexpected token %q at position %d", tok.val, tok.pos)
+		return nil, errTagExprUnexpectedToken(tok.val, tok.pos)
 	}
 }
 
@@ -330,14 +329,14 @@ func tagdslEvaluate(node tagNode, tags map[string]bool) bool {
 func matchTagExpr(expr string, tags map[string]bool) (bool, error) {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
-		return false, fmt.Errorf("tag expression: empty expression")
+		return false, errTagExprEmpty()
 	}
 	tokens, err := tagdslTokenize(expr)
 	if err != nil {
 		return false, err
 	}
 	if len(tokens) == 0 {
-		return false, fmt.Errorf("tag expression: empty expression")
+		return false, errTagExprEmpty()
 	}
 	node, err := tagdslParse(tokens)
 	if err != nil {

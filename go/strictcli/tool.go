@@ -119,10 +119,10 @@ func (a *App) JsonSchema(commandPath string) map[string]interface{} {
 	segments := strings.Split(commandPath, ".")
 	route := a.resolveCommand(segments)
 	if route.err != "" {
-		panic(fmt.Sprintf("JsonSchema: %s", route.err))
+		panic(errJsonSchemaRouteError(route.err))
 	}
 	if route.cmd == nil {
-		panic(fmt.Sprintf("JsonSchema: '%s' is a group, not a command", commandPath))
+		panic(errJsonSchemaIsGroup(commandPath))
 	}
 	return buildJSONSchema(route.cmd)
 }

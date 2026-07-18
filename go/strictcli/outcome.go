@@ -1,7 +1,5 @@
 package strictcli
 
-import "fmt"
-
 // Outcome is the opaque, branded result of a command handler. It is constructed
 // only via Exit or ExitData and carries an exit code plus, optionally, structured
 // data. When data is present, the framework JSON-prints it to stdout as one
@@ -33,15 +31,15 @@ func ExitData(code int, data interface{}) Outcome {
 func Get[T any](kwargs map[string]interface{}, name string) T {
 	v, ok := kwargs[name]
 	if !ok {
-		panic(fmt.Sprintf("strictcli.Get: no such key %q", name))
+		panic(errGetNoSuchKey(name))
 	}
 	if v == nil {
-		panic(fmt.Sprintf("strictcli.Get: key %q is nil (not provided); use GetOpt for optional values", name))
+		panic(errGetKeyNil(name))
 	}
 	t, ok := v.(T)
 	if !ok {
 		var zero T
-		panic(fmt.Sprintf("strictcli.Get: key %q has dynamic type %T, want %T", name, v, zero))
+		panic(errGetTypeMismatch(name, v, zero))
 	}
 	return t
 }
@@ -54,7 +52,7 @@ func Get[T any](kwargs map[string]interface{}, name string) T {
 func GetOpt[T any](kwargs map[string]interface{}, name string) (T, bool) {
 	v, ok := kwargs[name]
 	if !ok {
-		panic(fmt.Sprintf("strictcli.GetOpt: no such key %q", name))
+		panic(errGetOptNoSuchKey(name))
 	}
 	if v == nil {
 		var zero T
@@ -63,7 +61,7 @@ func GetOpt[T any](kwargs map[string]interface{}, name string) (T, bool) {
 	t, ok := v.(T)
 	if !ok {
 		var zero T
-		panic(fmt.Sprintf("strictcli.GetOpt: key %q has dynamic type %T, want %T", name, v, zero))
+		panic(errGetOptTypeMismatch(name, v, zero))
 	}
 	return t, true
 }

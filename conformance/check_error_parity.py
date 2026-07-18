@@ -39,6 +39,7 @@ GO_TAGDSL = PROJECT_ROOT / "go" / "strictcli" / "tagdsl.go"
 GO_CONFIG = PROJECT_ROOT / "go" / "strictcli" / "config.go"
 GO_ROUTING = PROJECT_ROOT / "go" / "strictcli" / "routing.go"
 GO_INVOKE = PROJECT_ROOT / "go" / "strictcli" / "invoke.go"
+GO_ERRORS = PROJECT_ROOT / "go" / "strictcli" / "errors.go"
 CASES_DIR = CONFORMANCE_DIR / "cases"
 
 # ---------------------------------------------------------------------------
@@ -497,6 +498,58 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "python": "excluded:Python handshake_env is a dict keyed by env var; duplicates are impossible by construction",
     },
 
+    # -- Go schema.go errors (go.mod project_id, schema mismatch) --
+    'Cannot determine project_id: go.mod not found': {
+        "python": "excluded:Go schema uses go.mod for project_id; Python uses pyproject.toml/setup.py",
+    },
+    'Cannot determine project_id: error reading go.mod: %w': {
+        "python": "excluded:Go schema uses go.mod for project_id; Python uses pyproject.toml/setup.py",
+    },
+    'Cannot determine project_id: no module directive in go.mod': {
+        "python": "excluded:Go schema uses go.mod for project_id; Python uses pyproject.toml/setup.py",
+    },
+    "Schema mismatch: existing schema belongs to project *, not *. Run from the correct project directory.": {
+        "python": "excluded:Go schema project_id validation; Python equivalent validates differently",
+    },
+
+    # -- Go outcome.go errors (typed generics Get/GetOpt) --
+    'strictcli.Get: no such key *': {
+        "python": "excluded:Go typed generic helper; Python uses kwargs[key] directly",
+    },
+    'strictcli.Get: key * is nil (not provided); use GetOpt for optional values': {
+        "python": "excluded:Go typed generic helper; Python uses kwargs[key] directly",
+    },
+    'strictcli.Get: key * has dynamic type *, want *': {
+        "python": "excluded:Go typed generic helper; Python is dynamically typed",
+    },
+    'strictcli.GetOpt: no such key *': {
+        "python": "excluded:Go typed generic helper; Python uses kwargs.get(key) directly",
+    },
+    'strictcli.GetOpt: key * has dynamic type *, want *': {
+        "python": "excluded:Go typed generic helper; Python is dynamically typed",
+    },
+
+    # -- Go context.go errors (InfraValue, Source) --
+    'InfraValue: * is not a declared infra root or handshake env var': {
+        "python": "excluded:Go Context.InfraValue panic; Python equivalent raises KeyError natively",
+    },
+    'no source info for flag *': {
+        "python": "excluded:Go Context.Source panic; Python equivalent raises KeyError natively",
+    },
+
+    # -- Go tool.go errors (JsonSchema) --
+    'JsonSchema: *': {
+        "python": "excluded:Go App.JsonSchema method panic; Python equivalent is json_schema() with different error",
+    },
+    "JsonSchema: * is a group, not a command": {
+        "python": "excluded:Go App.JsonSchema method panic; Python equivalent is json_schema() with different error",
+    },
+
+    # -- Go check_runner.go errors (outcome not minted) --
+    'check * returned an outcome not minted by its reporter; use reporter methods (Passed/Skipped/Found)': {
+        "python": "excluded:Go runtime assertion for reporter-minted outcomes; Python uses type checking",
+    },
+
     # =======================================================================
     # Dead code: present in both implementations but unreachable at runtime.
     # Excluded from coverage checks (no conformance test can trigger them).
@@ -687,6 +740,7 @@ def extract_go_errors(
     config_src: str,
     routing_src: str,
     invoke_src: str,
+    errors_src: str = "",
 ) -> list[tuple[str, str]]:
     """Extract (category, format_string) pairs from Go source.
 
@@ -869,6 +923,27 @@ def extract_go_errors(
     # return nil, fmt.Sprintf("...", args) -- coerceInvokeDict
     for m in parse_sprintf_2.finditer(invoke_src):
         results.append(("registration", m.group(1)))
+
+    # --- Centralized error templates from errors.go ---
+    # errors.go contains fmt.Sprintf("...") and fmt.Errorf("...") patterns
+    # that were extracted from other source files, plus const string literals.
+    if errors_src:
+        # fmt.Sprintf("...") -- registration error format functions
+        errors_sprintf = re.compile(
+            r'fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
+        )
+        for m in errors_sprintf.finditer(errors_src):
+            results.append(("registration", m.group(1)))
+        # fmt.Errorf("...") -- registration error format functions
+        for m in errorf_pat.finditer(errors_src):
+            results.append(("registration", m.group(1)))
+        # const errXxx = "..." -- plain string constants
+        const_err_pat = re.compile(
+            r'^const\s+err\w+\s*=\s*"((?:[^"\\]|\\.)*)"',
+            re.MULTILINE,
+        )
+        for m in const_err_pat.finditer(errors_src):
+            results.append(("registration", m.group(1)))
 
     return results
 
@@ -1118,6 +1193,7 @@ def main() -> int:
     go_config_source = GO_CONFIG.read_text()
     go_routing_source = GO_ROUTING.read_text()
     go_invoke_source = GO_INVOKE.read_text()
+    go_errors_source = GO_ERRORS.read_text()
 
     # Extract raw error patterns
     py_raw = extract_python_errors(py_source)
@@ -1128,6 +1204,7 @@ def main() -> int:
         go_tagdsl_source,
         go_config_source, go_routing_source,
         go_invoke_source,
+        go_errors_source,
     )
 
     # Normalize to signatures

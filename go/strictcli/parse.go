@@ -979,7 +979,7 @@ func parseBoolStrict(s string) (bool, error) {
 	case "0", "false", "no":
 		return false, nil
 	default:
-		return false, fmt.Errorf("expected boolean, got '%s'", s)
+		return false, errExpectedBoolean(s)
 	}
 }
 
@@ -988,7 +988,7 @@ func parseBoolStrict(s string) (bool, error) {
 func parseIntStrict(s string) (int, error) {
 	intVal, err := strconv.Atoi(s)
 	if err != nil {
-		return 0, fmt.Errorf("expected integer, got '%s'", s)
+		return 0, errExpectedInteger(s)
 	}
 	return intVal, nil
 }
@@ -997,17 +997,17 @@ func parseIntStrict(s string) (int, error) {
 // rejects leading/trailing whitespace, NaN, and +/-Inf.
 func parseFloatStrictValue(s string) (float64, error) {
 	if s != strings.TrimSpace(s) {
-		return 0, fmt.Errorf("expected float, got '%s'", s)
+		return 0, errExpectedFloat(s)
 	}
 	floatVal, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return 0, fmt.Errorf("expected float, got '%s'", s)
+		return 0, errExpectedFloat(s)
 	}
 	if math.IsNaN(floatVal) {
-		return 0, fmt.Errorf("NaN is not allowed")
+		return 0, errNaNNotAllowed()
 	}
 	if math.IsInf(floatVal, 0) {
-		return 0, fmt.Errorf("Inf is not allowed")
+		return 0, errInfNotAllowed()
 	}
 	return floatVal, nil
 }
