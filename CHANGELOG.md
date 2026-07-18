@@ -462,9 +462,15 @@ config set now validates keys against registered flags and coerces string values
 
 # go-strictcli
 
-## 0.24.0
+## 0.24.1
 
-errors.go centralization, CLI test-coverage instrumentation, notes channel
+Fix coverage shard directory creation in test contexts
+
+### Fixes
+
+- [go-strictcli] **Bug fix.** Coverage shard directory is now created on-demand in `recordCoverage`, fixing silent data loss when `Test()` runs in a different working directory than where the App was constructed.
+
+## 0.24.0
 
 ### Features
 
