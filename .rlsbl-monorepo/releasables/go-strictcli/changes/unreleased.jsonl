@@ -3,3 +3,4 @@
 {"id":"18c382e4170cdd0d26974fd7ab4443ae944118da98367716","commits":["df956917b0b60ef35c4975bcfeab3f9c770b0662"],"user_facing":false,"packages":["go-strictcli"]}
 {"id":"18c3831ea38c5b8c4b9377731fe4489789c1eb439a3d5f16","commits":["90d806aa588db60cbc86ec7e93b1ac0f6a114f1d"],"user_facing":false,"packages":["go-strictcli"]}
 {"id":"18c3840cfd9a2927abfc67fcefa24eb1b54bee02e4155bcd","commits":["79cb5fd150342bff61d3cf4f00cb60dc4204434a"],"user_facing":false,"packages":["go-strictcli"]}
+{"id":"18c3842459c783f99c08a57abdc84307bf88ed4c0834719c","commits":["6049e006af6749fc1576082404ff0c506eaa0d16"],"user_facing":true,"description":"**README corrected.** Removed documentation for deleted APIs (Emit, DataCommand, RegisterHandler, typed-globals) and documented the current Outcome handler contract.","type":"fix","packages":["go-strictcli"]}
