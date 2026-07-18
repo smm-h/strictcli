@@ -1,9 +1,9 @@
 {
   "_hash_version": 3,
   "en/gen-index.md": {
-    "content": "c50b88b1b524e70056426394e032212dd1beab8d508492ccc0393a6e0f733240",
-    "description": "0fe85bc1c50c6e79fef3bcc1bc69f0a928b6fc68ea9ec907a1e39cf0079f7ca2",
-    "seed_hash": "0fe85bc1c50c6e79fef3bcc1bc69f0a928b6fc68ea9ec907a1e39cf0079f7ca2"
+    "content": "43236aeb4bb8a35ce7046bf29b5f76d5c2ef5592a672032ceed69f3ea29d9e6f",
+    "description": "f409e1d41cc175307cc90f54465b5f19777d9e16996e7ee64c992a6621da39d4",
+    "seed_hash": "f409e1d41cc175307cc90f54465b5f19777d9e16996e7ee64c992a6621da39d4"
   },
   "en/go-strictcli.md": {
     "content": "fdeec4c30ea7f755da9bceec5ec9a00f75acd02d258a2d78d5281cd669b32e19",
@@ -14,5 +14,10 @@
     "content": "6f1b6e55f543e1bfc7464a15348000471faada959c6686d2ed797541d3d806f7",
     "description": "47746dd5f86a6256c008a6e1565794914724be5772d654d4d71438cb4e314c64",
     "source_docstring": "869d760f17632ede6f9b09aa15d41ddd3e3626fd1471d84ece919e2402507969"
+  },
+  "en/typescript-src-index.md": {
+    "content": "4354af8de8f0ca341a89d2197f52534f7d1a5f1dfe0080a63b769cbc55409849",
+    "description": "004426b4619a405a2cca311179a4a6d8ff43900a4af1384be5367639b3d29178",
+    "seed_hash": "004426b4619a405a2cca311179a4a6d8ff43900a4af1384be5367639b3d29178"
   }
 }
