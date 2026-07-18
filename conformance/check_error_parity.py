@@ -30,7 +30,6 @@ CONFORMANCE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CONFORMANCE_DIR.parent
 PY_SOURCE = PROJECT_ROOT / "python" / "strictcli" / "__init__.py"
 GO_STRICTCLI = PROJECT_ROOT / "go" / "strictcli" / "strictcli.go"
-GO_PARSE = PROJECT_ROOT / "go" / "strictcli" / "parse.go"
 GO_CHECK = PROJECT_ROOT / "go" / "strictcli" / "check.go"
 GO_CHECK_RUNNER = PROJECT_ROOT / "go" / "strictcli" / "check_runner.go"
 GO_CHECK_PUBLIC = PROJECT_ROOT / "go" / "strictcli" / "check_public.go"
@@ -731,7 +730,6 @@ def extract_python_errors(source: str) -> list[tuple[str, str]]:
 
 def extract_go_errors(
     strictcli_src: str,
-    parse_src: str,
     check_src: str,
     check_runner_src: str,
     check_public_src: str,
@@ -776,48 +774,16 @@ def extract_go_errors(
     for m in violations_sprintf.finditer(strictcli_src):
         results.append(("registration", m.group(1)))
 
-    # --- Parse errors from parse.go ---
-    # return nil, ..., fmt.Sprintf("...", args) with two or more leading
-    # nils. Arity-agnostic: parse helpers have grown extra return values
-    # over time (e.g., provenance sources added a fourth return), so match
-    # any run of two-plus nils rather than a fixed arity.
-    parse_sprintf_3 = re.compile(
-        r'return\s+(?:nil,\s*){2,}fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
-    )
-    for m in parse_sprintf_3.finditer(parse_src):
-        results.append(("parse", m.group(1)))
+    # NOTE: parse.go templates and the parse-time templates formerly inlined in
+    # strictcli.go (parseCommand/extractGlobalFlags/doParse) are fully
+    # centralized in errors.go; the per-file extraction passes for them are
+    # gone. The errors.go pass below picks up their signatures, using
+    # "(parse-time)" section-header markers to keep their parse category.
 
-    # return "", fmt.Sprintf("...", args) -- resolveAtPrefix helper
-    parse_sprintf_str_err = re.compile(
-        r'return\s+"",\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
-    )
-    for m in parse_sprintf_str_err.finditer(parse_src):
-        results.append(("parse", m.group(1)))
-
-    # --- Parse errors from strictcli.go (extractGlobalFlags and doParse) ---
-    for m in parse_sprintf_3.finditer(strictcli_src):
-        results.append(("parse", m.group(1)))
-
-    # parseErr: fmt.Sprintf("...", args)
-    parse_err_sprintf = re.compile(
-        r'parseErr:\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
-    )
-    for m in parse_err_sprintf.finditer(strictcli_src):
-        results.append(("parse", m.group(1)))
-
-    # parseErr: "..." -- plain string literals (e.g., hermetic mode errors)
-    parse_err_plain = re.compile(
-        r'parseErr:\s*"((?:[^"\\]|\\.)*)"',
-    )
-    for m in parse_err_plain.finditer(strictcli_src):
-        results.append(("parse", m.group(1)))
-
-    # return nil, fmt.Sprintf("...", args) -- parseGlobalFlagValue
+    # return nil, fmt.Sprintf("...", args) -- config.go/invoke.go coercion helpers
     parse_sprintf_2 = re.compile(
         r'return\s+nil,\s*fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
     )
-    for m in parse_sprintf_2.finditer(strictcli_src):
-        results.append(("parse", m.group(1)))
 
     # --- Registration errors from check.go (fmt.Errorf for TOML validation) ---
     errorf_pat = re.compile(
@@ -852,32 +818,6 @@ def extract_go_errors(
     # --- Registration errors from tagdsl.go (fmt.Errorf for tag expression parsing) ---
     for m in errorf_pat.finditer(tagdsl_src):
         results.append(("registration", m.group(1)))
-
-    # --- Single-return parse errors from parse.go (storeValue helper) ---
-    # return fmt.Sprintf("...", args) -- storeValue duplicate detection
-    parse_sprintf_1 = re.compile(
-        r'return\s+fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
-    )
-    for m in parse_sprintf_1.finditer(parse_src):
-        fmt_str = m.group(1)
-        # Skip formatValueForError's fallback (not an error message)
-        if fmt_str == "%v":
-            continue
-        results.append(("parse", fmt_str))
-
-    # --- Single-return parse errors from strictcli.go (storeValue in extractGlobalFlags) ---
-    for m in parse_sprintf_1.finditer(strictcli_src):
-        fmt_str = m.group(1)
-        if fmt_str == "%v":
-            continue
-        # Skip registration errors (already captured by panic patterns)
-        if fmt_str.startswith("checks declared"):
-            continue
-        # Skip tag contract error -- Python equivalent uses return (not raise),
-        # so it's also not extracted. Parity is maintained by conformance cases.
-        if 'tag %q requires flag' in fmt_str:
-            continue
-        results.append(("parse", fmt_str))
 
     # --- Config value coercion errors from config.go (fmt.Sprintf in return) ---
     # return nil, fmt.Sprintf("...", args) -- coerceConfigValue
@@ -927,23 +867,45 @@ def extract_go_errors(
     # --- Centralized error templates from errors.go ---
     # errors.go contains fmt.Sprintf("...") and fmt.Errorf("...") patterns
     # that were extracted from other source files, plus const string literals.
+    # Templates are grouped into sections delimited by dashed header comments.
+    # A section header containing "(parse-time)" marks every template in that
+    # section as a parse-time error; all other sections hold registration-time
+    # templates.
     if errors_src:
-        # fmt.Sprintf("...") -- registration error format functions
+        # fmt.Sprintf("...") -- error format functions
         errors_sprintf = re.compile(
             r'fmt\.Sprintf\(\s*"((?:[^"\\]|\\.)*)"',
         )
-        for m in errors_sprintf.finditer(errors_src):
-            results.append(("registration", m.group(1)))
-        # fmt.Errorf("...") -- registration error format functions
-        for m in errorf_pat.finditer(errors_src):
-            results.append(("registration", m.group(1)))
         # const errXxx = "..." -- plain string constants
         const_err_pat = re.compile(
             r'^const\s+err\w+\s*=\s*"((?:[^"\\]|\\.)*)"',
             re.MULTILINE,
         )
-        for m in const_err_pat.finditer(errors_src):
-            results.append(("registration", m.group(1)))
+        # Section header: dashed line, one-plus comment lines, dashed line.
+        section_header_pat = re.compile(
+            r'// -{10,}\n((?:// .*\n)+?)// -{10,}\n',
+        )
+        # Split errors.go into (category, body) segments. Content before the
+        # first header (package clause, imports) has no templates but is
+        # scanned as registration for uniformity.
+        segments: list[tuple[str, str]] = []
+        prev_end = 0
+        prev_category = "registration"
+        for hm in section_header_pat.finditer(errors_src):
+            segments.append((prev_category, errors_src[prev_end:hm.start()]))
+            header = hm.group(1)
+            prev_category = (
+                "parse" if "(parse-time)" in header else "registration"
+            )
+            prev_end = hm.end()
+        segments.append((prev_category, errors_src[prev_end:]))
+        for category, body in segments:
+            for m in errors_sprintf.finditer(body):
+                results.append((category, m.group(1)))
+            for m in errorf_pat.finditer(body):
+                results.append((category, m.group(1)))
+            for m in const_err_pat.finditer(body):
+                results.append((category, m.group(1)))
 
     return results
 
@@ -1184,7 +1146,6 @@ def diagnose_new_target(
 def main() -> int:
     py_source = PY_SOURCE.read_text()
     go_strictcli_source = GO_STRICTCLI.read_text()
-    go_parse_source = GO_PARSE.read_text()
     go_check_source = GO_CHECK.read_text()
     go_check_runner_source = GO_CHECK_RUNNER.read_text()
     go_check_public_source = GO_CHECK_PUBLIC.read_text()
@@ -1198,7 +1159,7 @@ def main() -> int:
     # Extract raw error patterns
     py_raw = extract_python_errors(py_source)
     go_raw = extract_go_errors(
-        go_strictcli_source, go_parse_source,
+        go_strictcli_source,
         go_check_source, go_check_runner_source,
         go_check_public_source, go_check_provider_source,
         go_tagdsl_source,
