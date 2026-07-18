@@ -1,6 +1,6 @@
 ---
 title: API Reference
-description: "API reference index covering 3 modules"
+description: "API reference index covering 2 modules"
 generated: true
 seeded: true
 nav_group: "API Reference"
@@ -13,4 +13,3 @@ order: 90
 
 - [go/strictcli](go-strictcli.html)
 - [python.strictcli](python-strictcli.html)
-- [typescript/src/index](typescript-src-index.html)
