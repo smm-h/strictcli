@@ -7,7 +7,7 @@
       "help": "test app",
       "config": true,
       "config_format": "toml",
-      "config_content": "whole = 1.0\nhalf = 0.5\nhundred = 100.0\nfix15 = 1000000000000000.0\nbig16 = 10000000000000000.0\nbig20 = 100000000000000000000.0\ntop21 = 1000000000000000000000.0\nsmall4 = 0.0001\nsmall5 = 0.00001\ntiny7 = 0.0000001\ntwop53 = 9007199254740992.0",
+      "config_content": "whole = 1.0\nneg = -1.0\nhalf = 0.5\nnegzero = -0.0\nhundred = 100.0\nfix15 = 1000000000000000.0\nbig16 = 10000000000000000.0\nbig20 = 100000000000000000000.0\ntop21 = 1000000000000000000000.0\nsmall4 = 0.0001\nsmall5 = 0.00001\ntiny7 = 0.0000001\ntenth = 0.1\ntwop53 = 9007199254740992.0\ne300 = 1.5e300",
       "commands": [
         {
           "name": "run",
@@ -15,7 +15,9 @@
           "handler_prints": "ok",
           "flags": [
             {"name": "whole", "help": "v", "type": "float", "default": 0.0},
+            {"name": "neg", "help": "v", "type": "float", "default": 0.0},
             {"name": "half", "help": "v", "type": "float", "default": 0.0},
+            {"name": "negzero", "help": "v", "type": "float", "default": 0.0},
             {"name": "hundred", "help": "v", "type": "float", "default": 0.0},
             {"name": "fix15", "help": "v", "type": "float", "default": 0.0},
             {"name": "big16", "help": "v", "type": "float", "default": 0.0},
@@ -24,7 +26,9 @@
             {"name": "small4", "help": "v", "type": "float", "default": 0.0},
             {"name": "small5", "help": "v", "type": "float", "default": 0.0},
             {"name": "tiny7", "help": "v", "type": "float", "default": 0.0},
-            {"name": "twop53", "help": "v", "type": "float", "default": 0.0}
+            {"name": "tenth", "help": "v", "type": "float", "default": 0.0},
+            {"name": "twop53", "help": "v", "type": "float", "default": 0.0},
+            {"name": "e300", "help": "v", "type": "float", "default": 0.0}
           ]
         }
       ]
@@ -34,7 +38,9 @@
       "exit_code": 0,
       "stdout_contains": [
         "whole = 1.0  (source: config)",
+        "neg = -1.0  (source: config)",
         "half = 0.5  (source: config)",
+        "negzero = -0.0  (source: config)",
         "hundred = 100.0  (source: config)",
         "fix15 = 1000000000000000.0  (source: config)",
         "big16 = 10000000000000000.0  (source: config)",
@@ -43,13 +49,17 @@
         "small4 = 0.0001  (source: config)",
         "small5 = 0.00001  (source: config)",
         "tiny7 = 1e-7  (source: config)",
-        "twop53 = 9007199254740992.0  (source: config)"
+        "tenth = 0.1  (source: config)",
+        "twop53 = 9007199254740992.0  (source: config)",
+        "e300 = 1.5e+300  (source: config)"
       ],
       "stdout_not_contains": [
         "big16 = 1e+16",
         "big20 = 1e+20",
         "small5 = 1e-05",
-        "tiny7 = 1e-07"
+        "tiny7 = 1e-07",
+        "negzero = 0.0  ",
+        "e300 = 1.5e300"
       ]
     }
   },
@@ -67,13 +77,17 @@
           "flags": [
             {"name": "whole", "help": "v", "type": "float", "default": 1.0},
             {"name": "neg", "help": "v", "type": "float", "default": -1.0},
+            {"name": "half", "help": "v", "type": "float", "default": 0.5},
             {"name": "negzero", "help": "v", "type": "float", "default": -0.0},
             {"name": "hundred", "help": "v", "type": "float", "default": 100.0},
+            {"name": "fix15", "help": "v", "type": "float", "default": 1e15},
             {"name": "big16", "help": "v", "type": "float", "default": 1e16},
             {"name": "big20", "help": "v", "type": "float", "default": 1e20},
             {"name": "top21", "help": "v", "type": "float", "default": 1e21},
+            {"name": "small4", "help": "v", "type": "float", "default": 1e-4},
             {"name": "small5", "help": "v", "type": "float", "default": 1e-5},
             {"name": "tiny7", "help": "v", "type": "float", "default": 1e-7},
+            {"name": "tenth", "help": "v", "type": "float", "default": 0.1},
             {"name": "e300", "help": "v", "type": "float", "default": 1.5e300},
             {"name": "twop53", "help": "v", "type": "float", "default": 9007199254740992.0}
           ]
@@ -86,20 +100,27 @@
       "stdout_contains": [
         "default: 1.0",
         "default: -1.0",
+        "default: 0.5",
         "default: -0.0",
         "default: 100.0",
+        "default: 1000000000000000.0",
         "default: 10000000000000000.0",
         "default: 100000000000000000000.0",
         "default: 1e+21",
+        "default: 0.0001",
         "default: 0.00001",
         "default: 1e-7",
+        "default: 0.1",
         "default: 1.5e+300",
         "default: 9007199254740992.0"
       ],
       "stdout_not_contains": [
+        "default: 1e+15",
         "default: 1e+16",
+        "default: 1e-04",
         "default: 1e-05",
-        "default: 1e-07"
+        "default: 1e-07",
+        "default: 1.5e300"
       ]
     }
   },
@@ -123,11 +144,7 @@
     "argv": ["cmd", "--rate", "1e16"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": [
-        "invalid value '10000000000000000.0'",
-        "must be one of: 1.5, 2.5"
-      ],
-      "stderr_not_contains": "invalid value '1e+16'"
+      "stderr_equals": "error: --rate: invalid value '10000000000000000.0', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -150,11 +167,145 @@
     "argv": ["cmd", "--rate", "1e-7"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": [
-        "invalid value '1e-7'",
-        "must be one of: 1.5, 2.5"
-      ],
-      "stderr_not_contains": "invalid value '1e-07'"
+      "stderr_equals": "error: --rate: invalid value '1e-7', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "float format: choices error echoes whole one canonically (1e0 -> 1.0)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--rate", "1e0"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --rate: invalid value '1.0', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "float format: choices error echoes negative zero canonically (-0.0)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--rate", "-0.0"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --rate: invalid value '-0.0', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "float format: choices error echoes 1e15 in fixed form",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--rate", "1e15"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --rate: invalid value '1000000000000000.0', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "float format: choices error echoes 1e21 in scientific form",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--rate", "1e21"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --rate: invalid value '1e+21', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "float format: choices error echoes 1e-5 in fixed form",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--rate", "1e-5"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --rate: invalid value '0.00001', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "float format: choices error echoes 1.5e300 in scientific form",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "--rate", "1.5e300"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --rate: invalid value '1.5e+300', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
     }
   },
   {
