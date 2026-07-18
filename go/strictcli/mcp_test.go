@@ -368,6 +368,85 @@ func TestMCPToolsCallMissingName(t *testing.T) {
 	if errObj["code"] != float64(mcpErrInvalidParams) {
 		t.Errorf("expected error code %d, got %v", mcpErrInvalidParams, errObj["code"])
 	}
+	if errObj["message"] != "missing required parameter: name" {
+		t.Errorf("expected message %q, got %v", "missing required parameter: name", errObj["message"])
+	}
+}
+
+func TestMCPToolsCallNonStringName(t *testing.T) {
+	app := mcpTestApp()
+	resp, err := sendMCPRequest(app, "tools/call", 7, map[string]interface{}{
+		"name":      42,
+		"arguments": map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("tools/call error: %v", err)
+	}
+
+	if resp["error"] == nil {
+		t.Fatal("expected error for non-string name parameter")
+	}
+	errObj := resp["error"].(map[string]interface{})
+	if errObj["code"] != float64(mcpErrInvalidParams) {
+		t.Errorf("expected error code %d, got %v", mcpErrInvalidParams, errObj["code"])
+	}
+	if errObj["message"] != "parameter 'name' must be a string" {
+		t.Errorf("expected message %q, got %v", "parameter 'name' must be a string", errObj["message"])
+	}
+}
+
+func TestMCPToolsCallNonObjectArguments(t *testing.T) {
+	app := mcpTestApp()
+	resp, err := sendMCPRequest(app, "tools/call", 7, map[string]interface{}{
+		"name":      "status",
+		"arguments": []interface{}{"not", "an", "object"},
+	})
+	if err != nil {
+		t.Fatalf("tools/call error: %v", err)
+	}
+
+	if resp["error"] == nil {
+		t.Fatal("expected error for non-object arguments parameter")
+	}
+	errObj := resp["error"].(map[string]interface{})
+	if errObj["code"] != float64(mcpErrInvalidParams) {
+		t.Errorf("expected error code %d, got %v", mcpErrInvalidParams, errObj["code"])
+	}
+	if errObj["message"] != "parameter 'arguments' must be an object" {
+		t.Errorf("expected message %q, got %v", "parameter 'arguments' must be an object", errObj["message"])
+	}
+}
+
+func TestMCPToolsCallUnknownTool(t *testing.T) {
+	// Unknown tools are NOT a -32602 protocol error: the name is passed to
+	// Call, whose invocation error surfaces as tool-result error content.
+	app := mcpTestApp()
+	resp, err := sendMCPRequest(app, "tools/call", 7, map[string]interface{}{
+		"name":      "nonexistent",
+		"arguments": map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("tools/call error: %v", err)
+	}
+
+	if resp["error"] != nil {
+		t.Fatalf("expected no protocol error for unknown tool, got: %v", resp["error"])
+	}
+	result := resp["result"].(map[string]interface{})
+	if result["isError"] != true {
+		t.Error("expected isError=true for unknown tool")
+	}
+	content := result["content"].([]interface{})
+	if len(content) != 1 {
+		t.Fatalf("expected 1 content item, got %d", len(content))
+	}
+	item := content[0].(map[string]interface{})
+	if item["type"] != "text" {
+		t.Errorf("expected content type 'text', got %v", item["type"])
+	}
+	if item["text"] != "unknown command 'nonexistent'" {
+		t.Errorf("expected text %q, got %v", "unknown command 'nonexistent'", item["text"])
+	}
 }
 
 func TestMCPToolsCallNoArguments(t *testing.T) {
