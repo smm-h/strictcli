@@ -31,25 +31,39 @@ cd conformance && python run.py --target python && python run.py --target go
 
 ### Python (`python/strictcli/__init__.py`)
 
-Single-file, zero-dependency implementation (~2040 lines). Key internal stages:
+Single-file implementation (~7840 lines, tomlkit dependency). Key internal stages:
 
 1. **Registration** — `@flag`/`@arg` decorators attach metadata to handlers; `@app.command()` triggers `_build_and_validate_command()` which merges tags, validates signatures, checks constraints.
 2. **Global flag parsing** — `_parse_global_flags()` extracts app-level flags before and after the command token.
 3. **Command routing** — first non-flag token selects the command or group.
 4. **Command parsing** — `_parse_command()` resolves flags, args, env vars, defaults, mutex, choices, and custom validation.
-5. **Execution** — handler called with kwargs; return value becomes exit code.
+5. **Execution** — handler called with ctx-first signature (`ctx, **kwargs`) returning `Outcome`; legacy `**kwargs` returning int/None is also supported.
 
 ### Go (`go/strictcli/`)
 
-Split across five files (~2680 non-test lines), zero dependencies (stdlib only):
+Split across 19 non-test files (~10040 lines), one dependency (go-toml-edit):
 
 - `strictcli.go` — types, constructors (functional options pattern), registration, orchestration.
 - `parse.go` — two-phase flag/arg parsing, env resolution, validation.
 - `help.go` — help text formatting at app/group/command levels.
 - `config.go` — JSON config file loading, `config show/set/path/edit` subcommands.
 - `schema.go` — `--dump-schema` implementation, writes `.strictcli/schema.json`.
+- `context.go` — `Context` type providing structured output (Info/Warn/Debug) and provenance for handlers.
+- `outcome.go` — `Outcome` return type for handlers (`Exit(code)`, `ExitData(code, data)`).
+- `invoke.go` — handler invocation and ctx-first signature support.
+- `routing.go` — command routing and group traversal.
+- `check.go` — check registration, `CheckResult` with notes, `CheckOutcome` types.
+- `check_cmd.go` — auto-registered `check` command with tag DSL, glob, JSON output.
+- `check_runner.go` — DAG-ordered check execution with timing (`DurationMs`).
+- `check_provider.go` — `CheckProvider` interface for external check sources.
+- `check_public.go` — public API surface for check system.
+- `coverage.go` — test coverage tracking for check system.
+- `float.go` — float parsing with NaN/Inf rejection.
+- `tagdsl.go` — tag DSL parser (NOT/AND/XOR/OR/DIFF operators).
+- `mcp.go` — MCP (Model Context Protocol) server integration.
+- `tool.go` — tool registration for MCP.
 
-Handlers receive `map[string]interface{}` (flag names with hyphens converted to underscores as keys).
+Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface{}) Outcome`. The `Context` provides structured output and provenance; `Outcome` is the branded return type replacing raw exit codes.
 
 ### Conformance (`conformance/`)
 
@@ -82,7 +96,6 @@ When adding a feature to one implementation, add it to both and add conformance 
 - `type=float` / `FloatFlag(...)` — float type support. NaN and Inf are rejected at parse time.
 - JSON config file support — `App(config=True)` (Python) / `WithConfig()` (Go). Reads `~/.config/{name}/config.json`. Precedence: CLI > env > config > default. Auto-registers `config show/set/path/edit` subcommands.
 - `--dump-schema` — auto-injected flag on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups).
-- Auto-version (Python only) — `App(name="x", help="...")` without an explicit `version` auto-detects from `importlib.metadata`.
 - `--help` / `-h` is recognized anywhere in argv, not just at token boundaries.
 - `Default(nil)` fix (Go only) — flags with `Default(nil)` display `[optional]` in help instead of `[default: <nil>]`.
 - Check system — first-class check/validation framework with double-entry security. See below.
@@ -97,7 +110,7 @@ Enabled via `WithChecks(path)` (Go) / `checks_path=` (Python), pointing to a TOM
 
 **Tag DSL**: `--tag` accepts a set-operation expression. Operators by precedence (tightest first): `!` (NOT), `&` (AND), `^` (XOR), `|` (OR), `-` (DIFF). Parentheses for grouping. Example: `--tag "(release | changelog) & !slow"`.
 
-**CheckResult**: `status` (pass/fail/warn/skip), `message` (str), `details` (list of str). Warn causes nonzero exit unless `--ignore-warnings`.
+**CheckResult**: `status` (pass/fail/warn/skip), `message` (str), `details` (list of str), `notes` (informational messages recorded via `Note()`, verdict-inert). Warn causes nonzero exit unless `--ignore-warnings`. `CheckRunResult` wraps `CheckOutcome` with `DurationMs` (wall-clock timing in integer milliseconds).
 
 **CheckContext**: protocol/interface with single required field `ProjectRoot() string` / `project_root: Path`. Tool sets a factory via `app.set_check_context(factory)` / `app.SetCheckContext(factory)`.
 
