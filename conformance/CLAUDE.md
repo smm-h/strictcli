@@ -1,20 +1,20 @@
 # conformance
 
-## Release workflow
+Cross-language conformance suite for strictcli (Python and Go implementations).
 
-This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration.
+## Development
 
-- Update CHANGELOG.md with a `## X.Y.Z` entry describing changes
-- Run `rlsbl release [patch|minor|major]` to bump version and create a GitHub Release
-- CI handles publishing automatically via the publish workflow
-- Never publish manually — always use `rlsbl release`
-- {{publishSetup}}
-- Use `rlsbl release --dry-run` to preview a release without making changes
+- Run the suite from this directory: `python run.py --target python` and
+  `python run.py --target go` (requires both implementations).
+- API surface parity: `python check_api_surface.py`. Error message parity:
+  `python check_error_parity.py`.
+- CI (`ci-router.yml` at the repo root) runs the conformance checks on every
+  push touching `conformance/**`, `python/**`, or `go/**`.
 
-## Conventions
+## Release status: dev_node
 
-- No tokens or secrets in command-line arguments (use env vars or config files)
-- All file writes to shared state should be atomic (write to tmp, then rename)
-- External calls (APIs, CLI tools) must have timeouts and graceful fallbacks
-- Use `npm link` (npm) or `uv pip install -e .` (Python) for local development
-- CI runs smoke tests on every push; manual testing for UI/UX changes
+This project is marked `dev_node = true` in the monorepo's `workspace.toml`.
+It is never released independently, has no changelog (no JSONL entries, no
+CHANGELOG.md), and `rlsbl release run` / `rlsbl changelog add` are hard errors
+here. It exists solely as test infrastructure at the edge of the dependency
+graph.
