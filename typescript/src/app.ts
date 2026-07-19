@@ -99,6 +99,7 @@ import {
 } from "./infra.js";
 import { interpretHandlerReturn, jsonCompact } from "./outcome.js";
 import { doParse, flagParamName, formatParseErrorOutput } from "./parse.js";
+import { dumpSchemaCore, writeSchema } from "./schema.js";
 
 // --- Public surface ---
 
@@ -218,6 +219,18 @@ export interface App {
 		context: CheckContext,
 		opts?: RunChecksOptions,
 	): Promise<RunChecksResult>;
+	/**
+	 * Returns the app's full schema as a dict, excluding project_id.
+	 *
+	 * This is the public, CWD-free accessor for the schema (Go DumpSchemaDict
+	 * / Python dump_schema_dict). Unlike --dump-schema (which writes
+	 * .strictcli/schema.json and derives project_id from package.json in the
+	 * current working directory), this method reads only the in-memory App,
+	 * performs no filesystem or CWD access, and cannot fail. The returned
+	 * dict is equivalent to the written schema file with the project_id field
+	 * removed. Integer values are bigint; float values are number.
+	 */
+	dumpSchemaDict(): Record<string, unknown>;
 	/**
 	 * Runs the CLI: parses argv (default process.argv.slice(2)), awaits the
 	 * handler, prints outcome data as one compact JSON line, and sets
@@ -797,6 +810,10 @@ export class AppImpl implements App {
 		return checkCommands(this.commands) ?? checkGroups(this.groups);
 	}
 
+	dumpSchemaDict(): Record<string, unknown> {
+		return dumpSchemaCore(this);
+	}
+
 	async run(argv?: readonly string[]): Promise<void> {
 		const tokens = argv ?? process.argv.slice(2);
 		const r = await this.dispatch(
@@ -894,12 +911,17 @@ export class AppImpl implements App {
 			case "version":
 				out.write(`${outcome.text}\n`);
 				return { exitCode: 0, hasData: false, data: undefined };
-			case "dump-schema":
-				// Loud hard error until the schema subphase lands -- never a
-				// silent no-op.
-				throw new Error(
-					"internal: --dump-schema is not implemented yet (schema subphase)",
-				);
+			case "dump-schema": {
+				let path: string;
+				try {
+					path = writeSchema(this);
+				} catch (e) {
+					err.write(`error: ${(e as Error).message}\n`);
+					return { exitCode: 1, hasData: false, data: undefined };
+				}
+				out.write(`${path}\n`);
+				return { exitCode: 0, hasData: false, data: undefined };
+			}
 			case "mcp":
 				if (mode === "test") {
 					// Python's in-process test surface (the divergence ground truth).

@@ -1299,16 +1299,22 @@ export function errChecksNotEnabled(): string {
 // schema.go
 // ---------------------------------------------------------------------------
 
-export function errCannotDetermineProjectIDNoGoMod(): string {
-	return "Cannot determine project_id: go.mod not found";
+// The three project_id templates mirror Go's decomposition (not found / read
+// error / no identifying directive) with the TS ecosystem project file:
+// package.json "name" is the analog of Go's go.mod module path and Python's
+// pyproject.toml [project].name. Each language names its own file here (the
+// parity checker excludes these as language-specific).
+
+export function errCannotDetermineProjectIDNoPackageJson(): string {
+	return "Cannot determine project_id: package.json not found";
 }
 
 export function errCannotDetermineProjectIDReadError(errStr: string): string {
-	return `Cannot determine project_id: error reading go.mod: ${errStr}`;
+	return `Cannot determine project_id: error reading package.json: ${errStr}`;
 }
 
-export function errCannotDetermineProjectIDNoModule(): string {
-	return "Cannot determine project_id: no module directive in go.mod";
+export function errCannotDetermineProjectIDNoName(): string {
+	return "Cannot determine project_id: no name field in package.json";
 }
 
 export function errSchemaMismatch(existingID: string, newID: string): string {
