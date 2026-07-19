@@ -95,7 +95,7 @@ test("flagSet and mutexGroup hold keyed flag maps", () => {
 
 test("defineCommand validates help, tags, and flag-map keys", () => {
 	assert.throws(() => defineCommand("x", { help: " ", handler: () => 0 }), {
-		message: "Command.help must be a non-empty string",
+		message: 'command "x": missing help text',
 	});
 	assert.throws(
 		() => defineCommand("x", { help: "h", tags: ["Bad"], handler: () => 0 }),
@@ -138,30 +138,26 @@ test("passthrough and deprecated carriers", () => {
 });
 
 // --- Type-level: per-carrier option typing ---
+// Each case is wrapped in a never-invoked closure: the runtime validators now
+// also reject these shapes, and only the compile error is under test here.
 
-// @ts-expect-error int flags take bigint defaults, not number
-flag("count", t.int, { help: "h", default: 5 });
-
-// @ts-expect-error list defaults are element arrays, not scalars
-flag("tag", t.list(t.str), { help: "h", default: "x" });
-
-// @ts-expect-error choices are incompatible with bool flags
-flag("verbose", t.bool, { help: "h", default: false, choices: [true] });
-
-// @ts-expect-error negatable is only meaningful for bool flags
-flag("target", t.str, { help: "h", negatable: false });
-
-// @ts-expect-error unique requires a list carrier
-flag("target", t.str, { help: "h", unique: true });
-
-// @ts-expect-error dict flags cannot use envSeparator (env vars are JSON)
-flag("meta", t.dict(t.int), { help: "h", envSeparator: "," });
-
-// @ts-expect-error dict carriers are not allowed on args
-arg("values", t.dict(t.int), { help: "h" });
-
-// @ts-expect-error list args are expressed as scalar carrier + variadic: true
-arg("values", t.list(t.float), { help: "h" });
-
-// @ts-expect-error choices elements must match the carrier's value type
-flag("level", t.int, { help: "h", choices: [1, 2] });
+void [
+	// @ts-expect-error int flags take bigint defaults, not number
+	() => flag("count", t.int, { help: "h", default: 5 }),
+	// @ts-expect-error list defaults are element arrays, not scalars
+	() => flag("tag", t.list(t.str), { help: "h", default: "x" }),
+	// @ts-expect-error choices are incompatible with bool flags
+	() => flag("verbose", t.bool, { help: "h", default: false, choices: [true] }),
+	// @ts-expect-error negatable is only meaningful for bool flags
+	() => flag("target", t.str, { help: "h", negatable: false }),
+	// @ts-expect-error unique requires a list carrier
+	() => flag("target", t.str, { help: "h", unique: true }),
+	// @ts-expect-error dict flags cannot use envSeparator (env vars are JSON)
+	() => flag("meta", t.dict(t.int), { help: "h", envSeparator: "," }),
+	// @ts-expect-error dict carriers are not allowed on args
+	() => arg("values", t.dict(t.int), { help: "h" }),
+	// @ts-expect-error list args are expressed as scalar carrier + variadic: true
+	() => arg("values", t.list(t.float), { help: "h" }),
+	// @ts-expect-error choices elements must match the carrier's value type
+	() => flag("level", t.int, { help: "h", choices: [1, 2] }),
+];

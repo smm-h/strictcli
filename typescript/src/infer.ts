@@ -78,8 +78,44 @@ export type InferHandlerArgs<
 		OptionalArgKeys<A>
 >;
 
-/** Handler-args type of a command carrier produced by defineCommand. */
-export type InferHandler<C extends AnyCommand> = InferHandlerArgs<
-	C["flags"],
-	C["args"]
->;
+// The [U] extends [never] guard keeps the empty case at `unknown` (identity
+// under intersection); the naked distribution would collapse it to `never`.
+type UnionToIntersection<U> = [U] extends [never]
+	? unknown
+	: (U extends unknown ? (x: U) => void : never) extends (x: infer I) => void
+		? I
+		: never;
+
+/**
+ * Args contributed by an array of flag-carrying descriptors (flag sets or
+ * mutex groups): each descriptor's flag map is inferred independently, then
+ * all are intersected.
+ */
+type FlagCarrierArgs<T extends readonly { readonly flags: FlagMap }[]> =
+	UnionToIntersection<
+		T[number] extends { readonly flags: infer FM extends FlagMap }
+			? InferHandlerArgs<FM, readonly []>
+			: never
+	>;
+
+/**
+ * The complete args object a handler receives: direct flags, positional args,
+ * plus every flag contributed by flag sets and mutex groups. The empty case
+ * short-circuits to InferHandlerArgs so the type stays identical (not merely
+ * mutually assignable) to the plain flags/args inference.
+ */
+export type HandlerArgs<
+	F extends FlagMap,
+	A extends readonly AnyArg[],
+	FS extends readonly { readonly flags: FlagMap }[],
+	M extends readonly { readonly flags: FlagMap }[],
+> = [FS, M] extends [readonly [], readonly []]
+	? InferHandlerArgs<F, A>
+	: Prettify<InferHandlerArgs<F, A> & FlagCarrierArgs<FS> & FlagCarrierArgs<M>>;
+
+/**
+ * Handler-args type of a command carrier produced by defineCommand. Derived
+ * from the stored handler's parameter type so flag-set and mutex flags are
+ * included.
+ */
+export type InferHandler<C extends AnyCommand> = Parameters<C["handler"]>[0];

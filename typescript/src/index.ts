@@ -1,10 +1,15 @@
 /** strictcli - TS-native strict CLI framework. Implementation lands module by module. */
 export const VERSION = "0.31.0";
 
+export type { App, AppSpec, Group, GroupSpec } from "./app.js";
+export { createApp } from "./app.js";
+export { ParseError, RegistrationError } from "./errors.js";
 export type {
 	AnyArg,
 	AnyCommand,
 	AnyFlag,
+	AnyFlagSet,
+	AnyMutexGroup,
 	ArgDef,
 	ArgOpts,
 	CommandDef,
@@ -38,7 +43,7 @@ export {
 	passthrough,
 	requires,
 } from "./factories.js";
-export type { InferHandler, InferHandlerArgs } from "./infer.js";
+export type { HandlerArgs, InferHandler, InferHandlerArgs } from "./infer.js";
 export type {
 	Carrier,
 	Context,
