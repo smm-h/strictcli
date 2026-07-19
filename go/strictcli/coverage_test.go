@@ -2,6 +2,7 @@ package strictcli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,6 +104,13 @@ func TestCoverageRecording_TestCreatesShard(t *testing.T) {
 	covered := readCoveredCommands(t)
 	if !covered["deploy"] {
 		t.Fatal("deploy not in coverage data")
+	}
+
+	// One shard per process, named "<pid>.jsonl" (no shard counter suffix).
+	shards, _ := filepath.Glob(filepath.Join(".strictcli", "coverage", "*.jsonl"))
+	want := fmt.Sprintf("%d.jsonl", os.Getpid())
+	if len(shards) != 1 || filepath.Base(shards[0]) != want {
+		t.Fatalf("expected single shard %q, got %v", want, shards)
 	}
 }
 

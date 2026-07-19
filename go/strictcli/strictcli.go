@@ -331,10 +331,9 @@ type App struct {
 	// invocation records the resolved command path to per-process shard files
 	// so a check can verify that every command in the surface has been exercised.
 	testCoverage         bool
-	coverageShardFmt     string // "<root>/.strictcli/coverage/<pid>-%d.jsonl"
+	coverageShardPath    string // "<root>/.strictcli/coverage/<pid>.jsonl"
 	coverageDir          string // "<root>/.strictcli/coverage" (construction-anchored)
 	coverageManifestPath string // "<root>/.strictcli/test-coverage.json" (construction-anchored)
-	coverageCounter      int
 }
 
 // --- Option types ---
@@ -1341,7 +1340,7 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		}
 		a.coverageDir = filepath.Join(root, ".strictcli", "coverage")
 		a.coverageManifestPath = filepath.Join(root, ".strictcli", "test-coverage.json")
-		a.coverageShardFmt = filepath.Join(a.coverageDir, fmt.Sprintf("%d-%%d.jsonl", os.Getpid()))
+		a.coverageShardPath = filepath.Join(a.coverageDir, fmt.Sprintf("%d.jsonl", os.Getpid()))
 		if err := os.MkdirAll(a.coverageDir, 0o755); err != nil {
 			panic(errTestCoverageCannotCreateDir(err))
 		}

@@ -12,13 +12,15 @@ import (
 )
 
 // recordCoverage appends a coverage record for the resolved command path.
-// Each Test() or Call() invocation writes one JSONL line to a per-process
-// shard file. The shard counter increments per-write for uniqueness.
+// Each Test() or Call() invocation appends one JSONL line to the process's
+// shard file (named "<pid>.jsonl"). Uniqueness across concurrent writers comes
+// from the PID and O_APPEND; one shard per process is sufficient, so there is
+// no per-write shard counter.
 func (a *App) recordCoverage(cmdPath string) {
-	if !a.testCoverage || a.coverageShardFmt == "" {
+	if !a.testCoverage || a.coverageShardPath == "" {
 		return
 	}
-	path := fmt.Sprintf(a.coverageShardFmt, a.coverageCounter)
+	path := a.coverageShardPath
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}
