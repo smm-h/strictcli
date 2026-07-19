@@ -39,7 +39,10 @@ export {
 export type { ConfigFieldSpec } from "./config.js";
 export type { InfraAccess, Writer } from "./context.js";
 export { Context } from "./context.js";
-export { InvokeError, ParseError, RegistrationError } from "./errors.js";
+// ParseError and RegistrationError stay internal (sibling parity: Python's
+// __all__ and Go both export only InvokeError -- registration failures are
+// Go panics / Python ValueError, parse failures print to stderr and exit 1).
+export { InvokeError } from "./errors.js";
 export type {
 	AnyArg,
 	AnyCommand,

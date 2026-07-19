@@ -22,14 +22,8 @@ import {
 	JsonLoadFailure,
 	parseJsonConfig,
 } from "../src/config.js";
-import {
-	type App,
-	createApp,
-	defineCommand,
-	flag,
-	RegistrationError,
-	t,
-} from "../src/index.js";
+import { RegistrationError } from "../src/errors.js";
+import { type App, createApp, defineCommand, flag, t } from "../src/index.js";
 
 // --- Environment scaffolding -------------------------------------------
 

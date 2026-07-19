@@ -254,6 +254,17 @@ store (SourcedStore) mapping resolved flag names to their source labels
 (`cli`/`env`/`config`/`default`/`implied`/`infra`), with the source-filtered
 presence queries used by mutex and dependency evaluation.
 
+Layout addition (subphase 5.6): `describe.ts` holds the dev-only public-surface
+self-dump: a hand-maintained SURFACE registry (single source of truth for the
+exported API, shape-aligned with conformance/describe_go/main.go's JSON output)
+plus `describeSurface()`/`describeSurfaceJson()` and a bin-style main guard
+(`node dist/describe.js`). It is deliberately NOT exported through index.ts
+(dev tooling, not public API). tests/describe.test.ts enforces registry
+accuracy in both directions: compile-time keyof equality assertions plus
+runtime typeof/prototype/Object.keys checks (forward), and a parse of
+src/index.ts asserting the registry universe EQUALS the index export set
+(reverse). No other module diverged from the planned layout.
+
 Layout addition (subphase 5.1): `infra.ts` holds the infrastructure env-var
 machinery: the branded `relativeToRoot()` marker (`InfraRootPath`), tilde
 expansion, marker resolution against the eagerly-resolved roots map,
@@ -340,3 +351,11 @@ entirely:
 The conversation-level decision ledger is authoritative. This section carries durable
 design constants only -- append entries here at phase boundaries when a decision must
 survive beyond session memory.
+
+- 2026-07-19 (subphase 5.6): `ParseError` and `RegistrationError` stay internal --
+  removed from index.ts exports (they had drifted into the public surface alongside
+  `InvokeError`). Sibling parity is the argument: Python's `__all__` and Go export
+  only `InvokeError`; registration failures are Go panics / Python ValueError, and
+  parse failures print to stderr and exit 1, so neither sibling exposes an error
+  class for them. The classes remain in src/errors.ts; tests import them by module
+  path. `InvokeError` stays public in all three implementations.

@@ -19,11 +19,11 @@ import {
 	mintSkip,
 	parseChecksToml,
 } from "../src/checks/framework.js";
+import { RegistrationError } from "../src/errors.js";
 import {
 	type App,
 	createApp,
 	ErrorReporter,
-	RegistrationError,
 	WarnReporter,
 } from "../src/index.js";
 
