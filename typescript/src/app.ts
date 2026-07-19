@@ -97,9 +97,12 @@ import {
 	resolveInfraRootPath,
 	validateFlagInfraMarker,
 } from "./infra.js";
+import { invokeApp } from "./invoke.js";
+import { type McpIO, serveMcp } from "./mcp.js";
 import { interpretHandlerReturn, jsonCompact } from "./outcome.js";
 import { doParse, flagParamName, formatParseErrorOutput } from "./parse.js";
 import { dumpSchemaCore, writeSchema } from "./schema.js";
+import { asToolsForApp, jsonSchemaForApp, type Tool } from "./tool.js";
 
 // --- Public surface ---
 
@@ -231,6 +234,36 @@ export interface App {
 	 * removed. Integer values are bigint; float values are number.
 	 */
 	dumpSchemaDict(): Record<string, unknown>;
+	/**
+	 * Invokes a command programmatically with pre-typed kwargs, bypassing CLI
+	 * parsing, env var resolution, config loading, and stdin handling.
+	 * commandPath is dot-separated ("deploy", "dns.zone.create"); kwargs keys
+	 * use underscored parameter names. Passthrough commands take the raw
+	 * argument list under the "_args" key. Returns the handler's structured
+	 * data when present, undefined for a bare void return, else the exit
+	 * code. Throws InvokeError on invocation failures (unknown command,
+	 * missing required flags, mutex violations, dependency errors).
+	 */
+	call(commandPath: string, kwargs?: Record<string, unknown>): Promise<unknown>;
+	/**
+	 * Produces a JSON Schema parameters object for a command's flags and
+	 * positional args. Throws InvokeError if the path is invalid or resolves
+	 * to a group.
+	 */
+	jsonSchema(commandPath: string): Record<string, unknown>;
+	/**
+	 * Exports non-hidden, non-interactive leaf commands as Tool descriptors,
+	 * one per eligible command plus a trailing router tool. Each tool's
+	 * execute wraps call().
+	 */
+	asTools(): Tool[];
+	/**
+	 * Runs a JSON-RPC 2.0 MCP server, reading one JSON object per line from
+	 * input (default process.stdin) and writing one per line to output
+	 * (default process.stdout), until EOF. Also reachable via the reserved
+	 * --mcp global flag on run().
+	 */
+	serveMcp(io?: McpIO): Promise<void>;
 	/**
 	 * Runs the CLI: parses argv (default process.argv.slice(2)), awaits the
 	 * handler, prints outcome data as one compact JSON line, and sets
@@ -814,6 +847,25 @@ export class AppImpl implements App {
 		return dumpSchemaCore(this);
 	}
 
+	call(
+		commandPath: string,
+		kwargs: Record<string, unknown> = {},
+	): Promise<unknown> {
+		return invokeApp(this, commandPath, kwargs);
+	}
+
+	jsonSchema(commandPath: string): Record<string, unknown> {
+		return jsonSchemaForApp(this, commandPath);
+	}
+
+	asTools(): Tool[] {
+		return asToolsForApp(this);
+	}
+
+	serveMcp(io: McpIO = {}): Promise<void> {
+		return serveMcp(this, io);
+	}
+
 	async run(argv?: readonly string[]): Promise<void> {
 		const tokens = argv ?? process.argv.slice(2);
 		const r = await this.dispatch(
@@ -928,9 +980,10 @@ export class AppImpl implements App {
 					err.write("error: --mcp requires interactive stdin/stdout\n");
 					return { exitCode: 1, hasData: false, data: undefined };
 				}
-				throw new Error(
-					"internal: --mcp is not implemented yet (mcp subphase)",
-				);
+				// Run mode: serve MCP over stdin and this dispatch's stdout until
+				// EOF, then exit 0 (Python: serve_mcp() then sys.exit(0)).
+				await serveMcp(this, { output: out });
+				return { exitCode: 0, hasData: false, data: undefined };
 			case "parse-error":
 				err.write(
 					formatParseErrorOutput(this, outcome.message, outcome.commandPrefix),

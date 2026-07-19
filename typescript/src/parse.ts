@@ -346,8 +346,9 @@ interface DefaultedValue {
  * through the declared infra roots and reports source "infra"
  * (distinguishable from a plain default); hermetic mode never suppresses it
  * (roots were resolved at construction, with no argv dependency).
+ * Exported for invoke.ts (programmatic invocation applies global defaults).
  */
-function applyFlagDefault(
+export function applyFlagDefault(
 	f: AnyFlag,
 	mutexFlagNames: ReadonlySet<string> | null,
 	prefix: string,
@@ -588,9 +589,10 @@ export function parseCommand(
 /**
  * Second half of command parsing: mutex enforcement, implies resolution,
  * dependency checks, defaults, choices, custom validation, positional-arg
- * resolution, and kwargs assembly, all on sourced values.
+ * resolution, and kwargs assembly, all on sourced values. Exported for
+ * invoke.ts, which feeds it a store populated from pre-typed kwargs.
  */
-function validateAndBuildKwargs(
+export function validateAndBuildKwargs(
 	cmd: RegisteredCommand,
 	args: readonly AnyArg[],
 	store: SourcedStore,

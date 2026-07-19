@@ -27,7 +27,11 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // The checks subphase adds 1 more with no errors.go body:
 // errCheckOutcomeDirectConstruction (Python _CheckOutcome.__post_init__ mint
 // guard; Go seals the outcome structurally with unexported fields).
-const EXPECTED_TEMPLATE_COUNT = 236;
+// The invoke/tool/MCP subphase adds 2 more with no errors.go body:
+// errCallPathIsGroup (Python call() group-path message; Go inlines "no
+// command resolved from path" in invoke.go) and errRouterCommandMustBeString
+// (inline InvokeError literal in Go makeRouterTool / Python router execute).
+const EXPECTED_TEMPLATE_COUNT = 238;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

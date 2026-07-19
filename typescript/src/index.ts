@@ -39,7 +39,7 @@ export {
 export type { ConfigFieldSpec } from "./config.js";
 export type { InfraAccess, Writer } from "./context.js";
 export { Context } from "./context.js";
-export { ParseError, RegistrationError } from "./errors.js";
+export { InvokeError, ParseError, RegistrationError } from "./errors.js";
 export type {
 	AnyArg,
 	AnyCommand,
@@ -82,8 +82,10 @@ export {
 export type { HandlerArgs, InferHandler, InferHandlerArgs } from "./infer.js";
 export type { InfraRootPath } from "./infra.js";
 export { relativeToRoot } from "./infra.js";
+export type { McpIO } from "./mcp.js";
 export type { Outcome } from "./outcome.js";
 export { outcome } from "./outcome.js";
+export type { Tool } from "./tool.js";
 export type {
 	Carrier,
 	DictSchema,

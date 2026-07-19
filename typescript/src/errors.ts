@@ -33,6 +33,18 @@ export class ParseError extends Error {
 }
 
 /**
+ * Thrown by app.call() / app.jsonSchema() when programmatic invocation fails
+ * (unknown command, missing required flags, mutex violations, dependency
+ * errors). Mirrors Go's InvokeError (invoke.go) and Python's InvokeError.
+ */
+export class InvokeError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "InvokeError";
+	}
+}
+
+/**
  * Go strconv.Quote: wrap in double quotes, escape backslash and double quote,
  * use the standard named escapes for ASCII control characters, and \xNN for
  * the rest of the control range. Code points above 0x7f pass through -- Go
@@ -1091,6 +1103,15 @@ export function errUnknownParameterForCommand(
 	return `unknown parameter ${q(paramName)} for command ${q(commandPath)}`;
 }
 
+/**
+ * Python divergence (the ground truth for call()): a path that resolves to a
+ * group raises "'path' is a group, not a command" (Go says "no command
+ * resolved from path: <path>"; no conformance case distinguishes them).
+ */
+export function errCallPathIsGroup(commandPath: string): string {
+	return `'${commandPath}' is a group, not a command`;
+}
+
 // ---------------------------------------------------------------------------
 // invoke.go — coerceInvokeDict
 // ---------------------------------------------------------------------------
@@ -1410,6 +1431,10 @@ export function errJsonSchemaRouteError(errMsg: string): string {
 
 export function errJsonSchemaIsGroup(commandPath: string): string {
 	return `JsonSchema: '${commandPath}' is a group, not a command`;
+}
+
+export function errRouterCommandMustBeString(): string {
+	return "command must be a string";
 }
 
 // ---------------------------------------------------------------------------
