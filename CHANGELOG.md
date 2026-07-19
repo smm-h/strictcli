@@ -502,16 +502,22 @@ config set now validates keys against registered flags and coerces string values
 
 # go-strictcli
 
-## 0.25.0
+## 0.25.1
 
-Deterministic cli-test-coverage verdict from the committed manifest; chdir-safe coverage recording
+cli-test-coverage skips instead of failing when run outside the app's own dev tree
 
 <details>
 <summary>Context</summary>
 
-The cli-test-coverage check previously derived its verdict solely from local per-process shard files, so any machine that had not run the suite failed with 'no coverage data' regardless of repo state. The check now derives its verdict from the committed .strictcli/test-coverage.json manifest (union with any local shards), making it deterministic across machines. Coverage recording and the check are also anchored to the app's construction-time directory, so tests that chdir still record into the repo and a check evaluated from a foreign cwd reads the app's own state.
+An installed app that runs its checks from a foreign project's directory anchored cli-test-coverage to that foreign cwd, which has no coverage manifest or shard files, so the check failed listing the app's entire command surface as uncovered. The check now applies subject-matter gating: when the anchored coverage root contains neither a manifest nor any shard files, it reports a visible skip naming the anchored path. When either exists, behavior is unchanged.
 
 </details>
+
+### Fixes
+
+- [go-strictcli] The `cli-test-coverage` check no longer fails when an installed app runs its checks outside its own development tree (e.g. from a consumer project's directory); it now reports a visible skip when no coverage manifest or shard files exist at the anchored root.
+
+## 0.25.0
 
 ### Fixes
 
