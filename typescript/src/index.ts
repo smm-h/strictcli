@@ -1,8 +1,41 @@
 /** strictcli - TS-native strict CLI framework. Implementation lands module by module. */
 export const VERSION = "0.31.0";
 
-export type { App, AppSpec, Group, GroupSpec, Result } from "./app.js";
+export type {
+	App,
+	AppSpec,
+	Group,
+	GroupSpec,
+	Result,
+	RunChecksOptions,
+	RunChecksResult,
+} from "./app.js";
 export { createApp } from "./app.js";
+export {
+	formatCheckResults,
+	formatCheckResultsJSON,
+} from "./checks/cmd.js";
+export type {
+	CheckContext,
+	CheckOutcome,
+	CheckProblem,
+	CheckSeverity,
+	CheckStatus,
+} from "./checks/framework.js";
+export {
+	CheckRunResult,
+	ErrorReporter,
+	WarnReporter,
+} from "./checks/framework.js";
+export type {
+	ErrorCheckSpecInit,
+	WarnCheckSpecInit,
+} from "./checks/provider.js";
+export {
+	CheckSpec,
+	errorCheckSpec,
+	warnCheckSpec,
+} from "./checks/provider.js";
 export type { ConfigFieldSpec } from "./config.js";
 export type { InfraAccess, Writer } from "./context.js";
 export { Context } from "./context.js";

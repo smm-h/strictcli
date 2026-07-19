@@ -1135,6 +1135,19 @@ export function errFoundNoProblems(): string {
 }
 
 // ---------------------------------------------------------------------------
+// checks/framework.ts — outcome mint guard (Python _CheckOutcome.__post_init__)
+//
+// Go seals CheckOutcome structurally (unexported fields); Python guards the
+// constructor with a module-private mint token and raises TypeError. TS uses
+// the token approach, so it needs Python's guard message (with the class name
+// unprefixed, matching the public TS surface).
+// ---------------------------------------------------------------------------
+
+export function errCheckOutcomeDirectConstruction(): string {
+	return "CheckOutcome cannot be constructed directly; obtain one from a reporter (passed/skipped/found)";
+}
+
+// ---------------------------------------------------------------------------
 // check.go — deriveStatus
 // ---------------------------------------------------------------------------
 

@@ -12,7 +12,34 @@
  * (group/command/deprecated collision checks), exactly like Python and Go.
  */
 
+import { readFileSync, statSync } from "node:fs";
 import { format } from "node:util";
+import { enableChecks } from "./checks/cmd.js";
+import { initTestCoverage, recordCoverage } from "./checks/coverage.js";
+import {
+	addCheckDef,
+	type CheckContext,
+	type CheckDef,
+	type CheckOutcome,
+	type CheckRunResult,
+	type ChecksState,
+	ErrorReporter,
+	newChecksState,
+	parseChecksToml,
+	registerCheckImpl,
+	validateCheckRegistrations,
+	WarnReporter,
+} from "./checks/framework.js";
+import {
+	type CheckSpec,
+	materializeCheckProviders,
+	resetCheckProviderCache,
+} from "./checks/provider.js";
+import {
+	filterChecks,
+	resolveCheckOrder,
+	runOrderedChecks,
+} from "./checks/runner.js";
 import {
 	type ConfigFieldRt,
 	type ConfigFieldSpec,
@@ -26,6 +53,10 @@ import {
 	errAppConfigConflictModeBad,
 	errAppConfigFormatBad,
 	errAppHelpEmpty,
+	errCannotUseBothChecksAndEmbed,
+	errChecksNotEnabled,
+	errChecksPathNotExist,
+	errChecksTomlAppMismatch,
 	errCommandCollidesWithGroup,
 	errCommandConfigFieldsUnknownField,
 	errCommandEnvVarPrefix,
@@ -89,10 +120,11 @@ export interface AppSpec {
 	readonly infraRoot?: Readonly<Record<string, string>>;
 	/** Handshake env vars: env var name -> help text (read live, never captured). */
 	readonly handshakeEnv?: Readonly<Record<string, string>>;
-	// Check-system fields: typed but inert until the checks subphase.
+	/** Enables the check system with a path to checks.toml (must exist). */
 	readonly checksPath?: string;
+	/** Enables the check system with inline checks.toml text. */
 	readonly checksEmbed?: string;
-	// Typed but inert until the coverage subphase.
+	/** Enables CLI test-coverage instrumentation (shards + built-in check). */
 	readonly testCoverage?: boolean;
 }
 
@@ -137,6 +169,56 @@ export interface App {
 	/** Declare that any command tagged with `tag` must have the named flag. */
 	tagContract(tag: string, requiresFlag: string): void;
 	/**
+	 * Registers an error-severity check implementation for a check declared
+	 * with severity = "error" in checks.toml. The impl receives an
+	 * ErrorReporter (which can mint both error- and warn-severity problems)
+	 * and must return a CheckOutcome obtained from that reporter.
+	 */
+	errorCheck(
+		name: string,
+		fn: (
+			ctx: CheckContext,
+			reporter: ErrorReporter,
+		) => CheckOutcome | Promise<CheckOutcome>,
+	): void;
+	/**
+	 * Registers a warn-severity check implementation for a check declared
+	 * with severity = "warn" in checks.toml. The impl receives a
+	 * WarnReporter, which structurally lacks error-minting: a warn check
+	 * cannot produce an error-severity problem, so it can never cascade.
+	 */
+	warnCheck(
+		name: string,
+		fn: (
+			ctx: CheckContext,
+			reporter: WarnReporter,
+		) => CheckOutcome | Promise<CheckOutcome>,
+	): void;
+	/** Sets the factory that builds the CheckContext handed to check impls. */
+	setCheckContext(factory: () => CheckContext): void;
+	/**
+	 * Registers a provider that supplies check specs at materialization time
+	 * (lazy, memoized per cwd). Registering a provider enables the check
+	 * system, so a TOML-less app gains a working `check` command.
+	 */
+	registerCheckProvider(provider: () => readonly CheckSpec[] | undefined): void;
+	/**
+	 * Drops provider-sourced definitions and clears the materialization memo
+	 * so the next registry read re-runs all providers. Intended for tests and
+	 * long-lived singletons; does NOT unregister the providers themselves.
+	 */
+	resetCheckProviderCache(): void;
+	/**
+	 * Runs checks programmatically with filtering and dependency resolution.
+	 * Returns the executed results, the ordered names left unexecuted by the
+	 * purity partition (empty unless pureOnly), and the exit code (0 for all
+	 * pass, or all warn with ignoreWarnings; 1 otherwise).
+	 */
+	runChecks(
+		context: CheckContext,
+		opts?: RunChecksOptions,
+	): Promise<RunChecksResult>;
+	/**
 	 * Runs the CLI: parses argv (default process.argv.slice(2)), awaits the
 	 * handler, prints outcome data as one compact JSON line, and sets
 	 * process.exitCode (never calls process.exit, so stdout drains safely).
@@ -144,6 +226,28 @@ export interface App {
 	run(argv?: readonly string[]): Promise<void>;
 	/** Runs the CLI in-process, capturing stdout/stderr/exit code (and data). */
 	test(argv: readonly string[]): Promise<Result>;
+}
+
+/** Options for App.runChecks (Go RunChecksOptions / Python run_checks kwargs). */
+export interface RunChecksOptions {
+	readonly tagExpr?: string;
+	readonly nameGlob?: string;
+	readonly runAll?: boolean;
+	readonly ignoreWarnings?: boolean;
+	/**
+	 * Purity partition: only checks that are declared pure AND do not need
+	 * network access execute; every other selected check is returned in
+	 * impureListed without being run and without contributing to the exit
+	 * code. Off by default.
+	 */
+	readonly pureOnly?: boolean;
+}
+
+/** Result of App.runChecks. */
+export interface RunChecksResult {
+	readonly results: readonly CheckRunResult[];
+	readonly impureListed: readonly string[];
+	readonly exitCode: number;
 }
 
 export function createApp(spec: AppSpec): App {
@@ -387,10 +491,16 @@ export class AppImpl implements App {
 	configData: Record<string, unknown> | undefined;
 	/** Config parse error captured at parse time (config show reports it). */
 	configParseErr: string | undefined;
-	// Check-related fields: stored but inert until later subphases.
+	// Check-system state (checks/ modules own the behavior).
 	readonly checksPath: string | undefined;
 	readonly checksEmbed: string | undefined;
+	readonly checks: ChecksState = newChecksState();
+	// Test-coverage instrumentation state (checks/coverage.ts).
 	readonly testCoverage: boolean;
+	/** Shard path template with a "{n}" slot; set when testCoverage is on. */
+	coverageShardPath: string | undefined;
+	/** Shard counter slotted into the template (constant, sibling parity). */
+	readonly coverageCounter: number = 0;
 
 	constructor(spec: AppSpec) {
 		requireNonEmpty(spec.version, "App.version");
@@ -489,6 +599,43 @@ export class AppImpl implements App {
 		this.checksPath = spec.checksPath;
 		this.checksEmbed = spec.checksEmbed;
 		this.testCoverage = spec.testCoverage ?? false;
+
+		// Enable the check system when checksPath or checksEmbed was provided.
+		if (this.checksPath !== undefined && this.checksEmbed !== undefined) {
+			throw new RegistrationError(errCannotUseBothChecksAndEmbed());
+		}
+		if (this.checksPath !== undefined) {
+			let isFile = false;
+			try {
+				isFile = statSync(this.checksPath).isFile();
+			} catch {
+				isFile = false;
+			}
+			if (!isFile) {
+				throw new RegistrationError(errChecksPathNotExist(this.checksPath));
+			}
+			this.loadChecks(readFileSync(this.checksPath, "utf8"));
+		} else if (this.checksEmbed !== undefined) {
+			this.loadChecks(this.checksEmbed);
+		}
+
+		// Test-coverage instrumentation: shard template, eager directory
+		// creation, and the built-in cli-test-coverage provider.
+		if (this.testCoverage) {
+			initTestCoverage(this);
+		}
+	}
+
+	/** Parses checks TOML text, verifies the app name, and enables checks. */
+	private loadChecks(text: string): void {
+		const { appName, defs, order } = parseChecksToml(text);
+		if (appName !== this.name) {
+			throw new RegistrationError(errChecksTomlAppMismatch(appName, this.name));
+		}
+		enableChecks(this);
+		for (const name of order) {
+			addCheckDef(this.checks, defs.get(name) as CheckDef);
+		}
 	}
 
 	configField<Out>(name: string, spec: ConfigFieldSpec<Out>): void {
@@ -525,6 +672,82 @@ export class AppImpl implements App {
 			throw new RegistrationError(errInvalidTagName(tag));
 		}
 		this.tagContracts.set(tag, requiresFlag);
+	}
+
+	errorCheck(
+		name: string,
+		fn: (
+			ctx: CheckContext,
+			reporter: ErrorReporter,
+		) => CheckOutcome | Promise<CheckOutcome>,
+	): void {
+		registerCheckImpl(this.checks, name, "error", (ctx) =>
+			fn(ctx, new ErrorReporter()),
+		);
+	}
+
+	warnCheck(
+		name: string,
+		fn: (
+			ctx: CheckContext,
+			reporter: WarnReporter,
+		) => CheckOutcome | Promise<CheckOutcome>,
+	): void {
+		registerCheckImpl(this.checks, name, "warn", (ctx) =>
+			fn(ctx, new WarnReporter()),
+		);
+	}
+
+	setCheckContext(factory: () => CheckContext): void {
+		this.checks.contextFactory = factory;
+	}
+
+	registerCheckProvider(
+		provider: () => readonly CheckSpec[] | undefined,
+	): void {
+		if (typeof provider !== "function") {
+			throw new RegistrationError("check provider must be callable");
+		}
+		enableChecks(this);
+		this.checks.providers.push(provider);
+		// Registering a new provider invalidates any prior materialization.
+		this.checks.providerMaterializedCwd = undefined;
+	}
+
+	resetCheckProviderCache(): void {
+		resetCheckProviderCache(this.checks);
+	}
+
+	async runChecks(
+		context: CheckContext,
+		opts: RunChecksOptions = {},
+	): Promise<RunChecksResult> {
+		if (!this.checks.enabled) {
+			throw new Error(errChecksNotEnabled());
+		}
+		// Materialize provider-sourced checks before any registry read.
+		materializeCheckProviders(this.checks);
+		const regErr = validateCheckRegistrations(this.checks);
+		if (regErr !== undefined) {
+			throw new Error(regErr);
+		}
+		const selected = filterChecks(
+			this.checks.defs,
+			opts.tagExpr,
+			opts.nameGlob,
+			opts.runAll ?? false,
+		);
+		if (selected.size === 0) {
+			return { results: [], impureListed: [], exitCode: 0 };
+		}
+		const order = resolveCheckOrder(this.checks.defs, selected);
+		return runOrderedChecks(
+			this.checks.defs,
+			order,
+			context,
+			opts.ignoreWarnings ?? false,
+			opts.pureOnly ?? false,
+		);
 	}
 
 	/**
@@ -640,6 +863,11 @@ export class AppImpl implements App {
 		err: Writer,
 		mode: "run" | "test",
 	): Promise<DispatchResult> {
+		const checkErr = validateCheckRegistrations(this.checks);
+		if (checkErr !== undefined) {
+			err.write(`error: ${checkErr}\n`);
+			return { exitCode: 1, hasData: false, data: undefined };
+		}
 		const tagErr = this.validateTagContracts();
 		if (tagErr !== undefined) {
 			err.write(`error: ${tagErr}\n`);
@@ -687,6 +915,10 @@ export class AppImpl implements App {
 				);
 				return { exitCode: 1, hasData: false, data: undefined };
 			case "passthrough": {
+				// Record test-coverage hit (command-level only, test mode only).
+				if (mode === "test" && this.testCoverage) {
+					recordCoverage(this, outcome.cmdPath);
+				}
 				const ctx = new Context(out, err, {}, this.infraAccess());
 				const def = outcome.cmd.def as PassthroughDef<string>;
 				const result = await def.handler(
@@ -700,6 +932,10 @@ export class AppImpl implements App {
 				return this.emitInterpreted(result, out);
 			}
 			case "command": {
+				// Record test-coverage hit (command-level only, test mode only).
+				if (mode === "test" && this.testCoverage) {
+					recordCoverage(this, outcome.cmdPath);
+				}
 				const ctx = new Context(out, err, outcome.sources, this.infraAccess());
 				const def = outcome.cmd.def as AnyCommand;
 				const result = await def.handler(outcome.kwargs as never, ctx);

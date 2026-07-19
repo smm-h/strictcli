@@ -24,7 +24,10 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // siblings' TOML parsers are 1.0-native), plus errAppConfigFormatBad and
 // errAppConfigConflictModeBad (inline f-strings in Python App.__post_init__ /
 // inline panics in Go option constructors).
-const EXPECTED_TEMPLATE_COUNT = 235;
+// The checks subphase adds 1 more with no errors.go body:
+// errCheckOutcomeDirectConstruction (Python _CheckOutcome.__post_init__ mint
+// guard; Go seals the outcome structurally with unexported fields).
+const EXPECTED_TEMPLATE_COUNT = 236;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,
