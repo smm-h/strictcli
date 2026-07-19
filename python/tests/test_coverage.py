@@ -175,15 +175,35 @@ class TestCoverageCheck:
         cov_result = next(r for r in results if r.name == "cli-test-coverage")
         assert cov_result.status == "pass"
 
-    def test_empty_coverage_fails_naming_all(self, tmp_path):
-        """No shards and no manifest -> deterministic FAIL naming every command.
+    def test_zero_coverage_state_skips(self, tmp_path):
+        """No shards and no manifest -> SKIP with a subject-matter reason.
 
-        The verdict is derived from committed state (manifest union shards), so an
-        empty everything state fails by listing every uncovered command rather than
-        the old machine-dependent "no coverage data" error.
+        Subject-matter gating: when the anchored coverage root holds NEITHER a
+        committed manifest NOR any shard files, this is not the app's own
+        development tree (e.g. an installed app running its checks from a foreign
+        project's cwd). The check reports a visible SKIP naming the anchored path
+        rather than failing with the whole command surface listed as uncovered.
         """
         app = _make_app(tmp_path)
         # Don't run any test() or call() -- no shards, no manifest
+
+        results, _, code = app.run_checks(
+            SimpleCtx(project_root=tmp_path),
+            run_all=True,
+        )
+        cov_result = next(r for r in results if r.name == "cli-test-coverage")
+        assert cov_result.status == "skip"
+        assert "development tree" in cov_result.message
+        # Reason names the anchored .strictcli path, not the foreign cwd.
+        assert str(tmp_path / ".strictcli") in cov_result.message
+
+    def test_empty_manifest_file_present_fails_listing_all(self, tmp_path):
+        """An empty-manifest file present means "coverage configured but empty"
+        -> FAIL listing every command, NOT a skip. The skip class only triggers
+        when NEITHER a manifest NOR any shards exist."""
+        app = _make_app(tmp_path)
+        manifest_path = tmp_path / ".strictcli" / "test-coverage.json"
+        manifest_path.write_text("[]\n")
 
         results, _, code = app.run_checks(
             SimpleCtx(project_root=tmp_path),

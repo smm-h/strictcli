@@ -2905,6 +2905,27 @@ class App:
             coverage_dir = self._coverage_dir
             manifest_path = self._coverage_manifest_path
 
+            # Subject-matter gating (the sanctioned skip class, mirroring
+            # project-type gating): when the anchored coverage root holds NEITHER
+            # a committed manifest NOR any shard files, this is not the app's own
+            # development tree -- e.g. an installed app running its checks from a
+            # foreign project's cwd, where the construction-anchored root points
+            # at a directory with no coverage state. Report a visible SKIP instead
+            # of failing with the app's entire command surface listed as
+            # uncovered. When EITHER exists, behavior is unchanged: a partial
+            # manifest still fails honestly, and an empty-manifest file present
+            # still means "coverage configured but empty" = fail listing all.
+            manifest_exists = bool(manifest_path) and os.path.isfile(manifest_path)
+            shards_exist = bool(coverage_dir) and os.path.isdir(coverage_dir) and any(
+                fname.endswith(".jsonl") for fname in os.listdir(coverage_dir)
+            )
+            if not manifest_exists and not shards_exist:
+                anchor = os.path.dirname(manifest_path) if manifest_path else coverage_dir
+                return reporter.skipped(
+                    f"no coverage state at {anchor} -- cli-test-coverage applies "
+                    "to the app's own development tree"
+                )
+
             covered: set[str] = set()
 
             # Seed from the committed manifest -- this is what makes the verdict
