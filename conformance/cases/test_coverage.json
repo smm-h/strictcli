@@ -75,5 +75,28 @@
         "cli-test-coverage"
       ]
     }
+  },
+  {
+    "name": "test-coverage: zero coverage state skips (foreign cwd, no manifest, no shards)",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "test_coverage": true,
+      "commands": [
+        {"name": "deploy", "help": "deploy the app", "flags": [], "handler_prints": "deployed"},
+        {"name": "status", "help": "show status", "flags": [], "handler_prints": "ok"},
+        {"name": "build", "help": "build the app", "flags": [], "handler_prints": "built"}
+      ]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "SKIP",
+        "cli-test-coverage",
+        "development tree"
+      ]
+    }
   }
 ]
