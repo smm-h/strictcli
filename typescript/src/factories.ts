@@ -215,7 +215,8 @@ export function flagOpts(f: AnyFlag): FlagOptsView {
 	return f.opts as FlagOptsView;
 }
 
-function schemaKind(schema: Schema): "scalar" | "list" | "dict" {
+/** Structural kind of a schema string (also used by env.ts/parse-side modules). */
+export function schemaKind(schema: Schema): "scalar" | "list" | "dict" {
 	if (schema.startsWith("list[")) {
 		return "list";
 	}
@@ -226,7 +227,7 @@ function schemaKind(schema: Schema): "scalar" | "list" | "dict" {
 }
 
 /** Element schema of a carrier: the item/value schema for compounds, the schema itself for scalars. */
-function elemSchemaOf(carrier: Carrier<unknown, Schema>): ScalarSchema {
+export function elemSchemaOf(carrier: Carrier<unknown, Schema>): ScalarSchema {
 	return (carrier.elem?.schema ?? carrier.schema) as ScalarSchema;
 }
 

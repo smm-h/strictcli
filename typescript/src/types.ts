@@ -4,6 +4,12 @@
  * spike (see ts-port-spec.md, "Type-machinery reference").
  */
 
+import {
+	parseBoolStrict,
+	parseFloatStrictValue,
+	parseIntStrict,
+} from "./values.js";
+
 // --- Schema string unions (closed set of ten) ---
 
 export type ScalarSchema = "str" | "bool" | "int" | "float";
@@ -54,16 +60,14 @@ function compoundParse(): never {
 }
 
 export const t = {
-	// Scalar parse bodies are the verified-spike placeholders. values.ts (later
-	// subphase) supplies strict parity parsing: int strictness (no whitespace,
-	// 64-bit signed bounds), float NaN/Inf rejection, bool env-string rules.
+	// Scalar parse bodies are the strict parity parsers from values.ts: int
+	// strictness (no whitespace, 64-bit signed bounds), float NaN/Inf
+	// rejection, bool env-string rules. They throw ParseError with the bare
+	// (context-free) sibling messages; callers add flag/arg context.
 	str: mkScalar<string, "str">("str", (raw) => raw),
-	bool: mkScalar<boolean, "bool">(
-		"bool",
-		(raw) => raw === "true" || raw === "1" || raw === "yes",
-	),
-	int: mkScalar<bigint, "int">("int", (raw) => BigInt(raw)),
-	float: mkScalar<number, "float">("float", (raw) => Number(raw)),
+	bool: mkScalar<boolean, "bool">("bool", parseBoolStrict),
+	int: mkScalar<bigint, "int">("int", parseIntStrict),
+	float: mkScalar<number, "float">("float", parseFloatStrictValue),
 	// ONE generic each: output type and schema string both derive from the
 	// element carrier's type parameters, so they cannot drift.
 	list<Out, S extends ElemSchema>(
