@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-18T23:03:07Z",
+  "generated_at": "2026-07-19T20:36:57Z",
   "package_count": 4,
   "packages": {
     "strictcli": {
@@ -23,7 +23,7 @@
       "targets": [
         "go"
       ],
-      "version": "0.24.1",
+      "version": "0.25.0",
       "description": null,
       "deps": [],
       "rdeps": [],
