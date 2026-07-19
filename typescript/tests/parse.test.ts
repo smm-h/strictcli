@@ -179,8 +179,9 @@ async function withEnv<T>(
 function fakeConfig(data: Record<string, unknown>): ConfigProvider {
 	return {
 		load: () => ({ data }),
-		// Tests supply pre-typed values; Phase 5 adds real coercion.
+		// Tests supply pre-typed values; config.ts owns real coercion.
 		coerce: (_f, v) => v,
+		validateFields: () => undefined,
 	};
 }
 

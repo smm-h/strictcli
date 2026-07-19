@@ -3,6 +3,7 @@ export const VERSION = "0.31.0";
 
 export type { App, AppSpec, Group, GroupSpec, Result } from "./app.js";
 export { createApp } from "./app.js";
+export type { ConfigFieldSpec } from "./config.js";
 export type { InfraAccess, Writer } from "./context.js";
 export { Context } from "./context.js";
 export { ParseError, RegistrationError } from "./errors.js";

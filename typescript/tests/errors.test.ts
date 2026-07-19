@@ -19,7 +19,12 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // _interpret_handler_return; inexpressible in Go), errOutcomeExitCodeNotInteger
 // (TS-only factory guard), and errCommandFlagRelativeToRootUndeclared (Python
 // _build_and_validate_command; Go validates markers with no command context).
-const EXPECTED_TEMPLATE_COUNT = 226;
+// The config subphase adds 9 more with no errors.go body: 5 TOML-1.0
+// acceptance-gate templates and 2 splice-verification templates (TS-only; the
+// siblings' TOML parsers are 1.0-native), plus errAppConfigFormatBad and
+// errAppConfigConflictModeBad (inline f-strings in Python App.__post_init__ /
+// inline panics in Go option constructors).
+const EXPECTED_TEMPLATE_COUNT = 235;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

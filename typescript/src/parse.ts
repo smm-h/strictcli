@@ -83,6 +83,16 @@ export interface ConfigProvider {
 	load(runtimePathOverride: string | undefined): ConfigLoadResult;
 	/** Coerces a raw config value to f's type; throws Error with the bare message. */
 	coerce(f: AnyFlag, value: unknown): unknown;
+	/**
+	 * Step-2.5 config-field validation (Python _validate_config_fields):
+	 * required bound fields must exist with the declared type, and every config
+	 * key must be known. Returns an error message, or undefined when all pass
+	 * (always undefined when the app declares no config fields).
+	 */
+	validateFields(
+		cmdConfigFields: readonly string[],
+		data: Readonly<Record<string, unknown>>,
+	): string | undefined;
 }
 
 export const emptyConfigProvider: ConfigProvider = {
@@ -90,6 +100,7 @@ export const emptyConfigProvider: ConfigProvider = {
 	coerce: () => {
 		throw new Error("internal: no config provider installed");
 	},
+	validateFields: () => undefined,
 };
 
 /** Resolved per-parse config state threaded through the flag-resolution passes. */
@@ -1214,11 +1225,11 @@ export function doParse(
 		};
 	}
 
-	// Config loading (Phase-5 seam). Hermetic skips it entirely.
+	// Config loading (config.ts provider). Hermetic skips it entirely.
+	const provider = deps?.config ?? emptyConfigProvider;
 	let cfg: ConfigContext | null = null;
 	let configLoadErr: string | undefined;
 	if (app.configEnabled && !pre.hermetic) {
-		const provider = deps?.config ?? emptyConfigProvider;
 		const loaded = provider.load(pre.configPath);
 		if (loaded.parseErr !== undefined && loaded.parseErr !== "") {
 			configLoadErr = loaded.parseErr;
@@ -1298,9 +1309,9 @@ export function doParse(
 		return { kind: "help", target: { level: "command", cmd, path } };
 	}
 
-	// Config subcommand exemption (self-lock prevention): edit/path/set work
-	// on broken configs; the full exemption behavior lands in Phase 5 with
-	// the auto-registered config group.
+	// Config subcommand exemption (self-lock prevention): the config
+	// subcommands (edit/path/set/show) work on broken configs. The provider
+	// stashed configLoadErr on the app at load time for `config show`.
 	const isConfigSubcommand = path.length > 0 && path[0] === "config";
 	if (pre.hermetic && isConfigSubcommand) {
 		return { kind: "parse-error", message: errHermeticWithConfigCommands() };
@@ -1308,8 +1319,15 @@ export function doParse(
 	if (configLoadErr !== undefined && !isConfigSubcommand) {
 		return { kind: "parse-error", message: configLoadErr };
 	}
-	// Phase-5 seam: stash configLoadErr for `config show`, and validate
-	// declared config fields for non-config subcommands.
+
+	// Step 2.5 (Python): validate declared config fields, exempting config
+	// subcommands. Hermetic mode skips config semantics entirely (cfg is null).
+	if (cfg !== null && !isConfigSubcommand) {
+		const fieldErr = provider.validateFields(cmd.configFields, cfg.data ?? {});
+		if (fieldErr !== undefined) {
+			return { kind: "parse-error", message: fieldErr };
+		}
+	}
 
 	// Passthrough: skip all flag/arg parsing, forward raw args
 	if (cmd.kind === "passthrough") {

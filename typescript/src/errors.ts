@@ -921,7 +921,7 @@ export function errConfigFieldHelpRequired(name: string): string {
 	return `config field ${q(name)}: help text is required`;
 }
 
-export function errConfigFieldTypeBad(t: number): string {
+export function errConfigFieldTypeBad(t: number | string): string {
 	return `ConfigField.type must be str, bool, int, or float, got ${t}`;
 }
 
@@ -1019,7 +1019,9 @@ export function errConfigDictKeyTypeMismatch(
 	wantType: string,
 	gotType: string,
 ): string {
-	return `key ${q(k)}: expected ${wantType}, got ${gotType}`;
+	// Divergence: Go spells the key %q (double quotes), Python '{k}' (single).
+	// Python is the divergence ground truth.
+	return `key '${k}': expected ${wantType}, got ${gotType}`;
 }
 
 export function errConfigExpectedArrayForListFlag(typeDesc: string): string {
@@ -1389,4 +1391,66 @@ export function errJsonSchemaRouteError(errMsg: string): string {
 
 export function errJsonSchemaIsGroup(commandPath: string): string {
 	return `JsonSchema: '${commandPath}' is a group, not a command`;
+}
+
+// ---------------------------------------------------------------------------
+// toml.ts — TOML 1.0 acceptance gate (TS-only; parse-time)
+//
+// No Go/Python counterpart: the siblings' TOML parsers (go-toml-edit, tomllib)
+// are TOML-1.0-native and reject 1.1-only constructs with their own parser
+// errors. The TS stack parses with smol-toml (which accepts TOML 1.1), so an
+// explicit gate rejects the six 1.1-only constructs pinned in ts-port-spec.md.
+// ---------------------------------------------------------------------------
+
+export function errTomlBasicStringEscape(esc: string): string {
+	return `invalid escape sequence '\\${esc}' in basic string (TOML 1.1 construct; strictcli requires TOML 1.0)`;
+}
+
+export function errTomlInlineTableNewline(): string {
+	return "newline inside inline table (TOML 1.1 construct; strictcli requires TOML 1.0)";
+}
+
+export function errTomlInlineTableTrailingComma(): string {
+	return "trailing comma in inline table (TOML 1.1 construct; strictcli requires TOML 1.0)";
+}
+
+export function errTomlTimeMissingSeconds(): string {
+	return "time without seconds (TOML 1.1 construct; strictcli requires TOML 1.0)";
+}
+
+export function errTomlDatetimeMissingSeconds(): string {
+	return "datetime without seconds (TOML 1.1 construct; strictcli requires TOML 1.0)";
+}
+
+// ---------------------------------------------------------------------------
+// toml.ts — single-key splicer verification (TS-only)
+//
+// The comment/order-preserving `config set` splicer re-parses both file
+// versions and asserts that only the target key changed. A verification
+// failure is an internal invariant violation, never expected in normal use.
+// ---------------------------------------------------------------------------
+
+export function errTomlSpliceVerifyFailed(key: string): string {
+	return `internal: TOML splice verification failed: keys other than "${key}" changed`;
+}
+
+export function errTomlSpliceKeyNotFound(key: string): string {
+	return `internal: TOML splice: key "${key}" not found in document`;
+}
+
+// ---------------------------------------------------------------------------
+// app.ts — config option validation (Python App.__post_init__ spelling)
+//
+// Go spells these via WithConfigFormat/WithConfigConflictMode panics (see the
+// option-constructor section above); Python raises ValueError with the App.*
+// spelling. Python is the divergence ground truth for registration errors, so
+// the app-level checks use these templates. Slots take pre-formatted reprs.
+// ---------------------------------------------------------------------------
+
+export function errAppConfigFormatBad(gotRepr: string): string {
+	return `App.config_format must be "json" or "toml", got ${gotRepr}`;
+}
+
+export function errAppConfigConflictModeBad(gotRepr: string): string {
+	return `App.config_conflict_mode must be "cli-wins" or "error", got ${gotRepr}`;
 }

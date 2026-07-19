@@ -13,10 +13,21 @@
  */
 
 import { format } from "node:util";
+import {
+	type ConfigFieldRt,
+	type ConfigFieldSpec,
+	checkFlagConfigFieldDefault,
+	makeConfigProvider,
+	registerConfigField,
+	registerConfigGroup,
+} from "./config.js";
 import { Context, type InfraAccess, type Writer } from "./context.js";
 import {
+	errAppConfigConflictModeBad,
+	errAppConfigFormatBad,
 	errAppHelpEmpty,
 	errCommandCollidesWithGroup,
+	errCommandConfigFieldsUnknownField,
 	errCommandEnvVarPrefix,
 	errCommandFlagCollidesGlobal,
 	errDeprecatedAlreadyRegistered,
@@ -43,16 +54,20 @@ import {
 	type FlagMap,
 	flagOpts,
 	type PassthroughDef,
+	pyRepr,
 	validateAndDedupTags,
 } from "./factories.js";
 import { formatAppHelp, formatCommandHelp, formatGroupHelp } from "./help.js";
 import {
 	buildInfraAccess,
 	expandTilde,
+	type InfraRootPath,
+	isInfraRootPath,
+	resolveInfraRootPath,
 	validateFlagInfraMarker,
 } from "./infra.js";
 import { interpretHandlerReturn, jsonCompact } from "./outcome.js";
-import { doParse, formatParseErrorOutput } from "./parse.js";
+import { doParse, flagParamName, formatParseErrorOutput } from "./parse.js";
 
 // --- Public surface ---
 
@@ -63,9 +78,10 @@ export interface AppSpec {
 	readonly envPrefix?: string;
 	/** Global flags, keyed by the underscore form of each flag's name. */
 	readonly flags?: FlagMap;
-	// Config-related fields: typed but inert until the config subphase.
+	// Config subsystem (config.ts).
 	readonly config?: boolean;
-	readonly configPath?: string;
+	/** Explicit config file path; a relativeToRoot() marker resolves eagerly. */
+	readonly configPath?: string | InfraRootPath;
 	readonly configFormat?: "json" | "toml";
 	readonly configConflictMode?: ConflictMode;
 	readonly noDefaultConfigPath?: boolean;
@@ -112,6 +128,12 @@ export interface App {
 	command(def: AnyCommand | PassthroughDef<string>): void;
 	group(name: string, spec: GroupSpec): Group;
 	deprecate(def: DeprecatedDef<string>): void;
+	/**
+	 * Declares a typed config file field. Fields with no default are required
+	 * (the config system errors when they are missing from the config file);
+	 * fields with a default are optional. Dots in the name form TOML sections.
+	 */
+	configField<Out>(name: string, spec: ConfigFieldSpec<Out>): void;
 	/** Declare that any command tagged with `tag` must have the named flag. */
 	tagContract(tag: string, requiresFlag: string): void;
 	/**
@@ -152,6 +174,8 @@ export interface RegisteredCommand {
 	/** Own tags merged with inherited group tags, deduplicated and sorted. */
 	readonly tags: readonly string[];
 	readonly hidden: boolean;
+	/** Bound config field names (empty for passthrough commands). */
+	readonly configFields: readonly string[];
 }
 
 /** Merges two tag lists, deduplicates, and sorts (Go mergeTags). */
@@ -188,6 +212,7 @@ function registerCommand(
 			flags: [],
 			tags: mergeTags(inheritedTags, def.tags),
 			hidden: def.hidden,
+			configFields: [],
 		});
 		return;
 	}
@@ -196,6 +221,15 @@ function registerCommand(
 		throw new RegistrationError(
 			"command() requires a command or passthrough carrier",
 		);
+	}
+	// Config-field bindings must reference declared fields (Python validates
+	// them first in _build_and_validate_command).
+	for (const cfName of def.configFields) {
+		if (!app.configFields.has(cfName)) {
+			throw new RegistrationError(
+				errCommandConfigFieldsUnknownField(def.name, cfName),
+			);
+		}
 	}
 	for (const f of def.allFlags) {
 		if (app.globalFlagNames.has(f.name)) {
@@ -222,6 +256,15 @@ function registerCommand(
 	for (const f of def.allFlags) {
 		validateFlagInfraMarker(f, app.infraRoots, def.name);
 	}
+	// A command flag colliding with a config field (validation-only
+	// coexistence) must have an agreeing default. Config fields registered
+	// after this command are checked from the configField() side instead.
+	for (const f of def.allFlags) {
+		const cf = app.configFields.get(flagParamName(f.name));
+		if (cf !== undefined) {
+			checkFlagConfigFieldDefault(f.name, flagOpts(f).default, cf);
+		}
+	}
 	into.set(def.name, {
 		kind: "command",
 		name: def.name,
@@ -230,6 +273,7 @@ function registerCommand(
 		flags: def.allFlags,
 		tags: mergeTags(inheritedTags, def.tags),
 		hidden: def.hidden,
+		configFields: def.configFields,
 	});
 }
 
@@ -328,12 +372,22 @@ export class AppImpl implements App {
 	readonly infraRootFromEnv = new Map<string, boolean>();
 	readonly infraRootDefaults = new Map<string, string>();
 	readonly handshakeEnvs = new Map<string, string>();
-	// Config- and check-related fields: stored but inert until later subphases.
+	// Config subsystem state (config.ts owns the behavior).
 	readonly configEnabled: boolean;
-	readonly configPath: string | undefined;
+	/** Explicit config path override, marker-resolved at construction. */
+	readonly configPathOverride: string | undefined;
 	readonly configFormat: "json" | "toml";
 	readonly configConflictMode: ConflictMode;
 	readonly noDefaultConfigPath: boolean;
+	/** Declared config fields, in declaration order. */
+	readonly configFields = new Map<string, ConfigFieldRt>();
+	/** Framework-owned config fields (underscore-prefixed, key-recognition only). */
+	readonly frameworkFields = new Map<string, ConfigFieldRt>();
+	/** Config data loaded at parse time (the config subcommands read it). */
+	configData: Record<string, unknown> | undefined;
+	/** Config parse error captured at parse time (config show reports it). */
+	configParseErr: string | undefined;
+	// Check-related fields: stored but inert until later subphases.
 	readonly checksPath: string | undefined;
 	readonly checksEmbed: string | undefined;
 	readonly testCoverage: boolean;
@@ -390,6 +444,20 @@ export class AppImpl implements App {
 			}
 			this.handshakeEnvs.set(envVar, helpText);
 		}
+		// Resolve the config-path marker (if any) now that the roots exist
+		// (Python __post_init__ order: before global-flag marker validation).
+		if (spec.configPath !== undefined && isInfraRootPath(spec.configPath)) {
+			try {
+				this.configPathOverride = resolveInfraRootPath(
+					spec.configPath,
+					this.infraRoots,
+				);
+			} catch (e) {
+				throw new RegistrationError((e as Error).message);
+			}
+		} else {
+			this.configPathOverride = spec.configPath;
+		}
 		// Validate global-flag default markers now that the roots are resolved
 		// (mirroring Python __post_init__; registerCommand covers command flags).
 		for (const f of globals) {
@@ -397,13 +465,34 @@ export class AppImpl implements App {
 		}
 
 		this.configEnabled = spec.config ?? false;
-		this.configPath = spec.configPath;
 		this.configFormat = spec.configFormat ?? "json";
 		this.configConflictMode = spec.configConflictMode ?? "cli-wins";
 		this.noDefaultConfigPath = spec.noDefaultConfigPath ?? false;
+		// Runtime validation for untyped callers (Python App.__post_init__).
+		if (this.configFormat !== "json" && this.configFormat !== "toml") {
+			throw new RegistrationError(
+				errAppConfigFormatBad(pyRepr(this.configFormat)),
+			);
+		}
+		if (
+			this.configConflictMode !== "cli-wins" &&
+			this.configConflictMode !== "error"
+		) {
+			throw new RegistrationError(
+				errAppConfigConflictModeBad(pyRepr(this.configConflictMode)),
+			);
+		}
+		// Register the config subcommand group (config data loads at parse time).
+		if (this.configEnabled) {
+			registerConfigGroup(this);
+		}
 		this.checksPath = spec.checksPath;
 		this.checksEmbed = spec.checksEmbed;
 		this.testCoverage = spec.testCoverage ?? false;
+	}
+
+	configField<Out>(name: string, spec: ConfigFieldSpec<Out>): void {
+		registerConfigField(this, name, spec as ConfigFieldSpec);
 	}
 
 	command(def: AnyCommand | PassthroughDef<string>): void {
@@ -557,7 +646,7 @@ export class AppImpl implements App {
 			return { exitCode: 1, hasData: false, data: undefined };
 		}
 
-		const outcome = doParse(this, argv);
+		const outcome = doParse(this, argv, { config: makeConfigProvider(this) });
 		switch (outcome.kind) {
 			case "help": {
 				const target = outcome.target;
