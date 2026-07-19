@@ -205,26 +205,59 @@ func TestCoverageCheck_FullCoveragePasses(t *testing.T) {
 	}
 }
 
-func TestCoverageCheck_EmptyIsHardError(t *testing.T) {
+func TestCoverageCheck_ZeroStateSkips(t *testing.T) {
 	app := makeTestCoverageApp(t)
-	// No test() or call() -- no shards
+	constructionDir, _ := os.Getwd()
+	// No Test()/Call() -- no shards, and no committed manifest.
 
 	results, _, _, _ := app.RunChecks(
 		&testCheckCtx{root: "."},
 		RunChecksOptions{RunAll: true},
 	)
-	var cov *CheckRunResult
-	for i := range results {
-		if results[i].Name == "cli-test-coverage" {
-			cov = &results[i]
-			break
-		}
+	cov := findCoverageResult(t, results)
+	if cov.Status() != "skip" {
+		t.Fatalf("expected skip, got %s; msg=%s", cov.Status(), cov.Outcome.message)
 	}
-	if cov == nil {
-		t.Fatal("cli-test-coverage check not found")
+	if !strings.Contains(cov.Outcome.message, "development tree") {
+		t.Fatalf("skip reason should mention the app's development tree, got %q", cov.Outcome.message)
 	}
+	// Reason names the anchored .strictcli path.
+	if !strings.Contains(cov.Outcome.message, filepath.Join(constructionDir, ".strictcli")) {
+		t.Fatalf("skip reason should name the anchored path, got %q", cov.Outcome.message)
+	}
+}
+
+func TestCoverageCheck_EmptyManifestPresentFailsListingAll(t *testing.T) {
+	app := makeTestCoverageApp(t)
+	// An empty-manifest file present means "coverage configured but empty" ->
+	// FAIL listing all, NOT a skip. The skip class triggers only when NEITHER a
+	// manifest NOR any shards exist.
+	if err := os.WriteFile(".strictcli/test-coverage.json", []byte("[]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, _, _, _ := app.RunChecks(
+		&testCheckCtx{root: "."},
+		RunChecksOptions{RunAll: true},
+	)
+	cov := findCoverageResult(t, results)
 	if cov.Status() != "fail" {
 		t.Fatalf("expected fail, got %s", cov.Status())
+	}
+	foundStatus, foundBuild, foundDeploy := false, false, false
+	for _, p := range cov.Outcome.problems {
+		if strings.Contains(p.text, "status") {
+			foundStatus = true
+		}
+		if strings.Contains(p.text, "build") {
+			foundBuild = true
+		}
+		if strings.Contains(p.text, "deploy") {
+			foundDeploy = true
+		}
+	}
+	if !foundStatus || !foundBuild || !foundDeploy {
+		t.Fatalf("expected all commands listed uncovered, problems: %+v", cov.Outcome.problems)
 	}
 }
 

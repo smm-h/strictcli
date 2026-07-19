@@ -80,6 +80,37 @@ func (a *App) testCoverageProvider() []CheckSpec {
 		coverageDir := a.coverageDir
 		manifestPath := a.coverageManifestPath
 
+		// Subject-matter gating (the sanctioned skip class, mirroring project-type
+		// gating): when the anchored coverage root holds NEITHER a committed
+		// manifest NOR any shard files, this is not the app's own development tree
+		// -- e.g. an installed app running its checks from a foreign project's cwd,
+		// where the construction-anchored root points at a directory with no
+		// coverage state. Report a visible SKIP instead of failing with the app's
+		// entire command surface listed as uncovered. When EITHER exists, behavior
+		// is unchanged: a partial manifest still fails honestly, and an
+		// empty-manifest file present still means "coverage configured but empty"
+		// = fail listing all.
+		manifestExists := false
+		if manifestPath != "" {
+			if info, err := os.Stat(manifestPath); err == nil && !info.IsDir() {
+				manifestExists = true
+			}
+		}
+		shardsExist := false
+		if entries, err := os.ReadDir(coverageDir); err == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".jsonl") {
+					shardsExist = true
+					break
+				}
+			}
+		}
+		if !manifestExists && !shardsExist {
+			return reporter.Skipped(fmt.Sprintf(
+				"no coverage state at %s -- cli-test-coverage applies to the app's own development tree",
+				filepath.Dir(manifestPath)))
+		}
+
 		covered := make(map[string]bool)
 
 		// Seed from the committed manifest -- this is what makes the verdict
