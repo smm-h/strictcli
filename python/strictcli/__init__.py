@@ -2801,7 +2801,6 @@ class App:
         # Test-coverage instrumentation. When enabled, every test() and call()
         # invocation records which command was dispatched so a check can verify
         # that every command in the app's surface has been exercised.
-        self._coverage_shard_counter: int = 0
         self._coverage_shard_path: str | None = None
         self._coverage_dir: str | None = None
         self._coverage_manifest_path: str | None = None
@@ -2819,7 +2818,7 @@ class App:
             )
             self._coverage_shard_path = os.path.join(
                 self._coverage_dir,
-                f"{os.getpid()}-{{n}}.jsonl",
+                f"{os.getpid()}.jsonl",
             )
             os.makedirs(self._coverage_dir, exist_ok=True)
             self.register_check_provider(self._test_coverage_provider)
@@ -2847,14 +2846,14 @@ class App:
     def _record_coverage(self, cmd_path: str) -> None:
         """Append a coverage record for the resolved command path.
 
-        Each test() or call() invocation writes one JSONL line to a per-process
-        shard file. The shard counter increments on each write to keep files
-        small and unique (handles pytest-xdist where multiple workers share a
-        PID namespace within the coverage directory).
+        Each test() or call() invocation appends one JSONL line to the
+        process's shard file (named "<pid>.jsonl"). Uniqueness across concurrent
+        writers comes from the PID and O_APPEND; one shard per process is
+        sufficient, so there is no per-write shard counter.
         """
         if self._coverage_shard_path is None:
             return
-        path = self._coverage_shard_path.format(n=self._coverage_shard_counter)
+        path = self._coverage_shard_path
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"command": cmd_path}) + "\n")

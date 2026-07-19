@@ -84,6 +84,9 @@ class TestCoverageRecording:
         shards = list(coverage_dir.glob("*.jsonl"))
         assert len(shards) >= 1
 
+        # One shard per process, named "<pid>.jsonl" (no shard counter suffix).
+        assert shards[0].name == f"{os.getpid()}.jsonl"
+
         entries = []
         for shard in shards:
             for line in shard.read_text().strip().splitlines():
