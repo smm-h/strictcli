@@ -225,6 +225,7 @@ typescript/
     env.ts
     parse.ts
     routing.ts
+    sources.ts
     help.ts
     context.ts
     outcome.ts
@@ -246,6 +247,11 @@ typescript/
       tagdsl.ts
   tests/   # mirrors src/
 ```
+
+Layout addition (subphase 4.5): `sources.ts` holds the per-parse provenance
+store (SourcedStore) mapping resolved flag names to their source labels
+(`cli`/`env`/`config`/`default`/`implied`/`infra`), with the source-filtered
+presence queries used by mutex and dependency evaluation.
 
 ## Curated example set for end-to-end byte-parity demos
 
