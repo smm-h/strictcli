@@ -90,19 +90,12 @@ export const t = {
 	},
 };
 
-// --- Handler result contract (placeholders wired up by later subphases) ---
+// --- Handler result contract ---
 
-// Phantom brand; outcome.ts (later subphase) provides the constructor and the
-// runtime brand so invoke.ts can hard-error on any other return value.
-declare const OutcomeBrand: unique symbol;
+import type { Outcome } from "./outcome.js";
 
-/** Branded marker for structured handler outcomes (see outcome.ts, later subphase). */
-export interface Outcome {
-	readonly [OutcomeBrand]: true;
-}
-
-/** Placeholder until context.ts lands (later subphase). */
-export type Context = unknown;
+export type { Context } from "./context.js";
+export type { Outcome } from "./outcome.js";
 
 /** Strict result contract: a handler returns a number, undefined, or outcome(...). */
 export type HandlerResult = number | undefined | Outcome;

@@ -13,8 +13,12 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // (conformance/check_error_parity.py run against go/strictcli/errors.go):
 // extract_go_errors yields 222 raw templates (200 func bodies + 22 consts),
 // deduplicating to 219 unique normalized signatures. errors.ts exports one
-// template function per raw Go template, hence exactly 222.
-const EXPECTED_TEMPLATE_COUNT = 222;
+// template function per raw Go template, hence 222, plus 3 templates with no
+// errors.go body: errTagContractViolation (inline fmt.Sprintf in strictcli.go
+// / Python _validate_tag_contracts), errHandlerReturnInvalid (Python
+// _interpret_handler_return; inexpressible in Go), and
+// errOutcomeExitCodeNotInteger (TS-only factory guard).
+const EXPECTED_TEMPLATE_COUNT = 225;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

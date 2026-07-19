@@ -425,6 +425,14 @@ export function errCheckSeverityMismatch(
 
 // errInvalidTagName is reused from the tag validation section above.
 
+export function errTagContractViolation(
+	cmdName: string,
+	tag: string,
+	requiredFlag: string,
+): string {
+	return `command ${q(cmdName)}: tag ${q(tag)} requires flag "--${requiredFlag}"`;
+}
+
 // ---------------------------------------------------------------------------
 // strictcli.go — validateConfigFieldBindings
 // ---------------------------------------------------------------------------
@@ -1317,8 +1325,19 @@ export function errNoSourceInfo(name: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// outcome.go
+// outcome.go / Python _interpret_handler_return
 // ---------------------------------------------------------------------------
+
+// Python's template with the permitted types renamed to the TS contract
+// (number | undefined | outcome(...)); the conformance oracle pins only the
+// "command handler must return" prefix (outcome_contract.json, bad-return).
+export function errHandlerReturnInvalid(got: string): string {
+	return `command handler must return number (exit code), undefined (exit 0), or strictcli.outcome(...); got ${got}`;
+}
+
+export function errOutcomeExitCodeNotInteger(got: string): string {
+	return `strictcli.outcome: exit_code must be an integer number; got ${got}`;
+}
 
 export function errGetNoSuchKey(name: string): string {
 	return `strictcli.Get: no such key ${q(name)}`;

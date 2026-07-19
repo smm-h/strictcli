@@ -9,6 +9,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { AppImpl, AppSpec } from "../src/app.js";
+import { Context } from "../src/context.js";
 import type {
 	AnyCommand,
 	PassthroughArgs,
@@ -40,6 +41,12 @@ import {
 } from "../src/parse.js";
 
 // --- Mini-runner seam ---
+
+/** Ctx whose streams go nowhere; mini-runner handlers print via `out`. */
+function discardCtx(): Context {
+	const discard = { write: () => {} };
+	return new Context(discard, discard, {}, null);
+}
 
 interface RunResult {
 	readonly kind: ParseOutcome["kind"];
@@ -93,12 +100,12 @@ async function run(
 				args: outcome.args,
 				globals: outcome.globalKwargs,
 			};
-			const result = await def.handler(args, undefined);
+			const result = await def.handler(args, discardCtx());
 			return done(out.join("\n"), "", typeof result === "number" ? result : 0);
 		}
 		case "command": {
 			const def = outcome.cmd.def as AnyCommand;
-			const result = await def.handler(outcome.kwargs as never, undefined);
+			const result = await def.handler(outcome.kwargs as never, discardCtx());
 			return done(out.join("\n"), "", typeof result === "number" ? result : 0);
 		}
 	}

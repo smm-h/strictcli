@@ -14,6 +14,8 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { format } from "node:util";
+import { Context, type Writer } from "./context.js";
 import {
 	errAppHelpEmpty,
 	errCommandCollidesWithGroup,
@@ -32,6 +34,7 @@ import {
 	errHandshakeEnvVarEmptyHelp,
 	errHandshakeIsAlreadyInfraRoot,
 	errInvalidTagName,
+	errTagContractViolation,
 	RegistrationError,
 } from "./errors.js";
 import {
@@ -44,6 +47,9 @@ import {
 	type PassthroughDef,
 	validateAndDedupTags,
 } from "./factories.js";
+import { formatAppHelp, formatCommandHelp, formatGroupHelp } from "./help.js";
+import { interpretHandlerReturn, jsonCompact } from "./outcome.js";
+import { doParse, formatParseErrorOutput } from "./parse.js";
 
 // --- Public surface ---
 
@@ -87,6 +93,15 @@ export interface Group {
 	deprecate(def: DeprecatedDef<string>): void;
 }
 
+/** Returned by app.test(): captured output, exit code, and outcome data. */
+export interface Result {
+	readonly stdout: string;
+	readonly stderr: string;
+	readonly exitCode: number;
+	/** Structured outcome data; absent when the handler emitted none. */
+	readonly data?: unknown;
+}
+
 export interface App {
 	readonly name: string;
 	readonly version: string;
@@ -96,6 +111,14 @@ export interface App {
 	deprecate(def: DeprecatedDef<string>): void;
 	/** Declare that any command tagged with `tag` must have the named flag. */
 	tagContract(tag: string, requiresFlag: string): void;
+	/**
+	 * Runs the CLI: parses argv (default process.argv.slice(2)), awaits the
+	 * handler, prints outcome data as one compact JSON line, and sets
+	 * process.exitCode (never calls process.exit, so stdout drains safely).
+	 */
+	run(argv?: readonly string[]): Promise<void>;
+	/** Runs the CLI in-process, capturing stdout/stderr/exit code (and data). */
+	test(argv: readonly string[]): Promise<Result>;
 }
 
 export function createApp(spec: AppSpec): App {
@@ -414,4 +437,200 @@ export class AppImpl implements App {
 		}
 		this.tagContracts.set(tag, requiresFlag);
 	}
+
+	/**
+	 * Checks every registered command (recursively through groups) against the
+	 * declared tag contracts. Returns the first violation message, or
+	 * undefined (Python returns the first; Go joins all -- no conformance case
+	 * distinguishes them, and Python is the divergence ground truth).
+	 */
+	validateTagContracts(): string | undefined {
+		if (this.tagContracts.size === 0) {
+			return undefined;
+		}
+		const globalNames = this.globalFlagNames;
+		const checkCommands = (
+			commands: ReadonlyMap<string, RegisteredCommand>,
+		): string | undefined => {
+			for (const cmd of commands.values()) {
+				if (cmd.kind === "passthrough") {
+					continue;
+				}
+				for (const tag of cmd.tags) {
+					const requiredFlag = this.tagContracts.get(tag);
+					if (requiredFlag === undefined) {
+						continue;
+					}
+					const has =
+						cmd.flags.some((f) => f.name === requiredFlag) ||
+						globalNames.has(requiredFlag);
+					if (!has) {
+						return errTagContractViolation(cmd.name, tag, requiredFlag);
+					}
+				}
+			}
+			return undefined;
+		};
+		const checkGroups = (
+			groups: ReadonlyMap<string, GroupImpl>,
+		): string | undefined => {
+			for (const group of groups.values()) {
+				const err = checkCommands(group.commands) ?? checkGroups(group.groups);
+				if (err !== undefined) {
+					return err;
+				}
+			}
+			return undefined;
+		};
+		return checkCommands(this.commands) ?? checkGroups(this.groups);
+	}
+
+	async run(argv?: readonly string[]): Promise<void> {
+		const tokens = argv ?? process.argv.slice(2);
+		const r = await this.dispatch(
+			tokens,
+			process.stdout,
+			process.stderr,
+			"run",
+		);
+		process.exitCode = r.exitCode;
+	}
+
+	async test(argv: readonly string[]): Promise<Result> {
+		// Unbounded string buffers, mirroring Go's io.Copy drain and Python's
+		// StringIO. Dispatch (ctx, help, errors, data) writes straight into
+		// them; console.* is rerouted during the window so handlers that
+		// bypass ctx are captured too (the Python redirect_stdout analog).
+		// Patching process.stdout.write itself is NOT safe here: the node:test
+		// runner multiplexes its reporter protocol over process.stdout, so an
+		// async handler that yields would interleave runner frames into the
+		// capture.
+		const stdoutChunks: string[] = [];
+		const stderrChunks: string[] = [];
+		const out: Writer = { write: (s) => stdoutChunks.push(s) };
+		const err: Writer = { write: (s) => stderrChunks.push(s) };
+		const consolePatch =
+			(w: Writer) =>
+			(...args: unknown[]): void => {
+				w.write(`${format(...args)}\n`);
+			};
+		const saved = {
+			log: console.log,
+			info: console.info,
+			debug: console.debug,
+			warn: console.warn,
+			error: console.error,
+		};
+		console.log = consolePatch(out);
+		console.info = consolePatch(out);
+		console.debug = consolePatch(out);
+		console.warn = consolePatch(err);
+		console.error = consolePatch(err);
+		let r: DispatchResult;
+		try {
+			r = await this.dispatch(argv, out, err, "test");
+		} finally {
+			console.log = saved.log;
+			console.info = saved.info;
+			console.debug = saved.debug;
+			console.warn = saved.warn;
+			console.error = saved.error;
+		}
+		return {
+			stdout: stdoutChunks.join(""),
+			stderr: stderrChunks.join(""),
+			exitCode: r.exitCode,
+			...(r.hasData ? { data: r.data } : {}),
+		};
+	}
+
+	/** Shared run/test dispatch: parse, render, execute, interpret. */
+	private async dispatch(
+		argv: readonly string[],
+		out: Writer,
+		err: Writer,
+		mode: "run" | "test",
+	): Promise<DispatchResult> {
+		const tagErr = this.validateTagContracts();
+		if (tagErr !== undefined) {
+			err.write(`error: ${tagErr}\n`);
+			return { exitCode: 1, hasData: false, data: undefined };
+		}
+
+		const outcome = doParse(this, argv);
+		switch (outcome.kind) {
+			case "help": {
+				const target = outcome.target;
+				let text: string;
+				if (target.level === "app") {
+					text = formatAppHelp(this);
+				} else if (target.level === "group") {
+					text = formatGroupHelp(this, target.group, target.path);
+				} else {
+					const prefix =
+						target.path.length > 0 ? `${target.path.join(" ")} ` : "";
+					text = formatCommandHelp(this, target.cmd, prefix);
+				}
+				out.write(`${text}\n`);
+				return { exitCode: 0, hasData: false, data: undefined };
+			}
+			case "version":
+				out.write(`${outcome.text}\n`);
+				return { exitCode: 0, hasData: false, data: undefined };
+			case "dump-schema":
+				// Loud hard error until the schema subphase lands -- never a
+				// silent no-op.
+				throw new Error(
+					"internal: --dump-schema is not implemented yet (schema subphase)",
+				);
+			case "mcp":
+				if (mode === "test") {
+					// Python's in-process test surface (the divergence ground truth).
+					err.write("error: --mcp requires interactive stdin/stdout\n");
+					return { exitCode: 1, hasData: false, data: undefined };
+				}
+				throw new Error(
+					"internal: --mcp is not implemented yet (mcp subphase)",
+				);
+			case "parse-error":
+				err.write(
+					formatParseErrorOutput(this, outcome.message, outcome.commandPrefix),
+				);
+				return { exitCode: 1, hasData: false, data: undefined };
+			case "passthrough": {
+				const ctx = new Context(out, err, {}, null);
+				const def = outcome.cmd.def as PassthroughDef<string>;
+				const result = await def.handler(
+					{
+						name: outcome.cmd.name,
+						args: outcome.args,
+						globals: outcome.globalKwargs,
+					},
+					ctx,
+				);
+				return this.emitInterpreted(result, out);
+			}
+			case "command": {
+				const ctx = new Context(out, err, outcome.sources, null);
+				const def = outcome.cmd.def as AnyCommand;
+				const result = await def.handler(outcome.kwargs as never, ctx);
+				return this.emitInterpreted(result, out);
+			}
+		}
+	}
+
+	/** Interprets a handler return and prints the data line when present. */
+	private emitInterpreted(result: unknown, out: Writer): DispatchResult {
+		const interpreted = interpretHandlerReturn(result);
+		if (interpreted.hasData) {
+			out.write(`${jsonCompact(interpreted.data)}\n`);
+		}
+		return interpreted;
+	}
+}
+
+interface DispatchResult {
+	readonly exitCode: number;
+	readonly hasData: boolean;
+	readonly data: unknown;
 }

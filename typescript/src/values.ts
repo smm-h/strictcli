@@ -242,7 +242,7 @@ export function formatDictForDisplay(m: ReadonlyMap<string, unknown>): string {
 
 // --- Choices ---
 
-function formatChoices(choices: readonly unknown[]): string {
+export function formatChoices(choices: readonly unknown[]): string {
 	return choices.map(formatValueForError).join(", ");
 }
 
