@@ -2803,13 +2803,25 @@ class App:
         # that every command in the app's surface has been exercised.
         self._coverage_shard_counter: int = 0
         self._coverage_shard_path: str | None = None
+        self._coverage_dir: str | None = None
+        self._coverage_manifest_path: str | None = None
         self._last_resolved_path: list[str] = []
         if self.test_coverage:
+            # Anchor the coverage root to the cwd AT CONSTRUCTION TIME. Both the
+            # recorder and the check provider use these absolute paths so that
+            # tests which chdir still record into the repo, and a check evaluated
+            # from a foreign cwd reads the app's own repo state.
+            self._coverage_dir = os.path.abspath(
+                os.path.join(".strictcli", "coverage")
+            )
+            self._coverage_manifest_path = os.path.abspath(
+                os.path.join(".strictcli", "test-coverage.json")
+            )
             self._coverage_shard_path = os.path.join(
-                ".strictcli", "coverage",
+                self._coverage_dir,
                 f"{os.getpid()}-{{n}}.jsonl",
             )
-            os.makedirs(os.path.join(".strictcli", "coverage"), exist_ok=True)
+            os.makedirs(self._coverage_dir, exist_ok=True)
             self.register_check_provider(self._test_coverage_provider)
 
     def _validate_flag_infra_marker(self, f: Flag) -> None:
@@ -2868,18 +2880,46 @@ class App:
     def _test_coverage_provider(self) -> list[CheckSpec]:
         """Built-in check provider for cli-test-coverage.
 
-        Registered automatically when test_coverage=True. Merges per-process
-        shard files into the canonical manifest, compares against the schema's
-        command surface (minus deprecated), and hard-FAILs listing every command
-        with zero coverage.
+        Registered automatically when test_coverage=True. The verdict is derived
+        from committed state: the covered set is the union of the committed
+        manifest (.strictcli/test-coverage.json) and any per-process shard files
+        merged from .strictcli/coverage/. Every live registered command path
+        (minus the injected check command) must be present in that union to pass;
+        otherwise the check fails naming each uncovered command.
+
+        Because the verdict reads the committed manifest, it is deterministic on
+        every machine -- a machine that never ran the suite (no local shards)
+        still gets a stable verdict from the committed manifest alone. Both the
+        coverage dir and the manifest path are anchored to the App's
+        construction-time cwd, so the check evaluated from a foreign cwd reads
+        the app's own repo state.
+
+        The manifest is rewritten as the monotonic union of its prior contents
+        and the freshly merged shards, but ONLY when that content actually
+        changes -- a pure check must not dirty a byte-identical file. Accepted
+        staleness: deleting a test leaves its command covered in the manifest
+        until the manifest is deliberately regenerated (e.g. by removing it and
+        re-running the suite), because the union never removes a command.
         """
         def impl(ctx: CheckContext, reporter: "ErrorReporter") -> "_CheckOutcome":
-            coverage_dir = os.path.join(".strictcli", "coverage")
-            manifest_path = os.path.join(".strictcli", "test-coverage.json")
+            coverage_dir = self._coverage_dir
+            manifest_path = self._coverage_manifest_path
 
-            # Merge shards
             covered: set[str] = set()
-            if os.path.isdir(coverage_dir):
+
+            # Seed from the committed manifest -- this is what makes the verdict
+            # deterministic on machines that never ran the suite.
+            if manifest_path and os.path.isfile(manifest_path):
+                try:
+                    with open(manifest_path, encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, list):
+                        covered.update(c for c in data if isinstance(c, str))
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            # Merge shards (optional freshness input)
+            if coverage_dir and os.path.isdir(coverage_dir):
                 for fname in os.listdir(coverage_dir):
                     if not fname.endswith(".jsonl"):
                         continue
@@ -2893,17 +2933,22 @@ class App:
                             if "command" in entry:
                                 covered.add(entry["command"])
 
-            if not covered:
-                reporter.error("stale or empty manifest")
-                return reporter.found(
-                    "no coverage data: .strictcli/coverage/ contains no shard files"
-                )
-
-            # Write canonical manifest
-            manifest = sorted(covered)
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, indent=2)
-                f.write("\n")
+            # Rewrite the manifest as the monotonic union, but only when the
+            # content actually changes (keeps a pure check from dirtying a
+            # byte-identical file).
+            if manifest_path and covered:
+                new_content = json.dumps(sorted(covered), indent=2) + "\n"
+                existing: str | None = None
+                if os.path.isfile(manifest_path):
+                    try:
+                        with open(manifest_path, encoding="utf-8") as f:
+                            existing = f.read()
+                    except OSError:
+                        existing = None
+                if existing != new_content:
+                    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+                    with open(manifest_path, "w", encoding="utf-8") as f:
+                        f.write(new_content)
 
             # Compare against command surface (exclude the framework-injected
             # check command -- it is not a user command)
