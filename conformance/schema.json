@@ -154,6 +154,11 @@
           },
           "description": "List of argv lists to run via app.test() before the main app.run(). Used by test_coverage cases to generate shard files."
         },
+        "coverage_manifest": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Committed coverage manifest to seed at run_cwd/.strictcli/test-coverage.json before the app runs. Used by test_coverage cases to exercise the deterministic manifest-union verdict on the empty-shard path (no pre_test)."
+        },
         "tag_contracts": {
           "type": "object",
           "additionalProperties": {

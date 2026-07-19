@@ -331,6 +331,21 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     elif app_def.get("test_coverage", False):
         proj_dir = tempfile.mkdtemp(prefix="strictcli_cov_")
         run_cwd = proj_dir
+        # Seed a committed coverage manifest so the check can be exercised on the
+        # empty-shard path (the app is construction-anchored to run_cwd, so it
+        # reads run_cwd/.strictcli/test-coverage.json). Target-agnostic: the same
+        # seeded file is read by both the Python and Go apps.
+        seed_manifest = app_def.get("coverage_manifest")
+        if seed_manifest is not None:
+            strictcli_dir = os.path.join(proj_dir, ".strictcli")
+            os.makedirs(strictcli_dir, exist_ok=True)
+            with open(
+                os.path.join(strictcli_dir, "test-coverage.json"),
+                "w",
+                encoding="utf-8",
+            ) as mf:
+                json.dump(seed_manifest, mf, indent=2)
+                mf.write("\n")
     else:
         run_cwd = str(CONFORMANCE_DIR)
 

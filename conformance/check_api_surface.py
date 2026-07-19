@@ -212,6 +212,7 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     "handler_returns",
     "default_relative_to_root",
     "pre_test",
+    "coverage_manifest",
 }
 
 # Shared name mappings (applied to any entity that uses them).

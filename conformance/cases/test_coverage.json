@@ -52,5 +52,28 @@
         "cli-test-coverage"
       ]
     }
+  },
+  {
+    "name": "test-coverage: committed manifest yields deterministic pass with no shards",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "test_coverage": true,
+      "commands": [
+        {"name": "deploy", "help": "deploy the app", "flags": [], "handler_prints": "deployed"},
+        {"name": "status", "help": "show status", "flags": [], "handler_prints": "ok"},
+        {"name": "build", "help": "build the app", "flags": [], "handler_prints": "built"}
+      ],
+      "coverage_manifest": ["build", "deploy", "status"]
+    },
+    "argv": ["check", "--all"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "PASS",
+        "cli-test-coverage"
+      ]
+    }
   }
 ]
