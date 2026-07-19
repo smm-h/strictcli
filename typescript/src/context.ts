@@ -2,12 +2,9 @@
  * Structured output context for command handlers, mirroring Go's Context
  * (context.go) with Python's Context as the divergence ground truth. Always
  * injected as the second argument to every handler ((args, ctx) signature).
- *
- * Infra wiring note: the InfraAccess view exists and infraValue() implements
- * the full sibling lookup, but app.ts passes null until the infra subphase
- * (Phase 5) wires the declared roots/handshakes through -- until then every
- * infraValue() call throws the not-declared error, matching an app with no
- * declarations.
+ * app.ts builds the InfraAccess view (infra.ts buildInfraAccess) per
+ * dispatch; it is null when the app declares no roots or handshakes, so
+ * every infraValue() call throws the not-declared error.
  */
 
 import { errInfraValueUndeclared, errNoSourceInfo } from "./errors.js";

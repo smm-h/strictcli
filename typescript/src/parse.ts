@@ -44,6 +44,7 @@ import {
 	flagOpts,
 	schemaKind,
 } from "./factories.js";
+import { isInfraRootPath, resolveInfraRootPath } from "./infra.js";
 import { resolveCommand } from "./routing.js";
 import { SourcedStore, type SourceLabel } from "./sources.js";
 import {
@@ -330,16 +331,16 @@ interface DefaultedValue {
 /**
  * Resolves the value of a flag that was not provided by CLI, env, or config.
  * Throws ParseError when the flag is required. prefix is "" for command flags
- * and "global " for global flags.
- *
- * Infra seam: RelativeToRoot flag defaults (resolved through app.infraRoots,
- * source label "infra") land with the infra subphase; until the marker type
- * exists, every declared default resolves with source "default".
+ * and "global " for global flags. A relativeToRoot() marker default resolves
+ * through the declared infra roots and reports source "infra"
+ * (distinguishable from a plain default); hermetic mode never suppresses it
+ * (roots were resolved at construction, with no argv dependency).
  */
 function applyFlagDefault(
 	f: AnyFlag,
 	mutexFlagNames: ReadonlySet<string> | null,
 	prefix: string,
+	infraRoots: ReadonlyMap<string, string>,
 ): DefaultedValue {
 	const o = flagOpts(f);
 	const kind = schemaKind(f.schema);
@@ -358,6 +359,17 @@ function applyFlagDefault(
 		};
 	}
 	if (o.default !== undefined && o.default !== null) {
+		if (isInfraRootPath(o.default)) {
+			// Should be unreachable: markers are validated at registration.
+			try {
+				return {
+					value: resolveInfraRootPath(o.default, infraRoots),
+					source: "infra",
+				};
+			} catch (e) {
+				throw new ParseError(`${prefix}${(e as Error).message}`);
+			}
+		}
 		return { value: o.default, source: "default" };
 	}
 	if (o.default === null) {
@@ -404,6 +416,7 @@ export function parseCommand(
 	cfg: ConfigContext | null,
 	tracker: StdinTracker,
 	hermetic: boolean,
+	infraRoots: ReadonlyMap<string, string>,
 ): ParsedCommand {
 	if (cmd.def.kind !== "command") {
 		throw new Error(
@@ -557,6 +570,7 @@ export function parseCommand(
 		store,
 		positionals,
 		globalFlagNames,
+		infraRoots,
 	);
 }
 
@@ -571,6 +585,7 @@ function validateAndBuildKwargs(
 	store: SourcedStore,
 	positionals: readonly string[],
 	globalFlagNames: ReadonlySet<string>,
+	infraRoots: ReadonlyMap<string, string>,
 ): ParsedCommand {
 	if (cmd.def.kind !== "command") {
 		throw new Error("internal: passthrough commands are not parsed");
@@ -646,7 +661,12 @@ function validateAndBuildKwargs(
 		if (store.has(f.name)) {
 			continue;
 		}
-		const { value, source } = applyFlagDefault(f, mutexFlagNames, "");
+		const { value, source } = applyFlagDefault(
+			f,
+			mutexFlagNames,
+			"",
+			infraRoots,
+		);
 		store.set(f.name, value, source);
 	}
 
@@ -922,7 +942,12 @@ export function extractGlobalFlags(
 		if (cliSet.has(f.name)) {
 			continue;
 		}
-		const { value, source } = applyFlagDefault(f, null, "global ");
+		const { value, source } = applyFlagDefault(
+			f,
+			null,
+			"global ",
+			app.infraRoots,
+		);
 		cliSet.set(f.name, value);
 		sources[flagParamName(f.name)] = source;
 	}
@@ -1306,6 +1331,7 @@ export function doParse(
 			cfg,
 			tracker,
 			pre.hermetic,
+			app.infraRoots,
 		);
 	} catch (e) {
 		return parseErrorOutcome(e, [app.name, ...path, cmd.name].join(" "));

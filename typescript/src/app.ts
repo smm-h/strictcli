@@ -12,10 +12,8 @@
  * (group/command/deprecated collision checks), exactly like Python and Go.
  */
 
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { format } from "node:util";
-import { Context, type Writer } from "./context.js";
+import { Context, type InfraAccess, type Writer } from "./context.js";
 import {
 	errAppHelpEmpty,
 	errCommandCollidesWithGroup,
@@ -48,6 +46,11 @@ import {
 	validateAndDedupTags,
 } from "./factories.js";
 import { formatAppHelp, formatCommandHelp, formatGroupHelp } from "./help.js";
+import {
+	buildInfraAccess,
+	expandTilde,
+	validateFlagInfraMarker,
+} from "./infra.js";
 import { interpretHandlerReturn, jsonCompact } from "./outcome.js";
 import { doParse, formatParseErrorOutput } from "./parse.js";
 
@@ -159,17 +162,6 @@ function mergeTags(
 	return [...new Set([...a, ...b])].sort();
 }
 
-/** Expands a leading ~ (as ~ or ~/...) to the user's home directory. */
-function expandTilde(p: string): string {
-	if (p === "~") {
-		return homedir();
-	}
-	if (p.startsWith("~/")) {
-		return join(homedir(), p.slice(2));
-	}
-	return p;
-}
-
 function requireNonEmpty(value: unknown, label: string): void {
 	if (typeof value !== "string" || value.trim() === "") {
 		throw new RegistrationError(`${label} must be a non-empty string`);
@@ -226,6 +218,9 @@ function registerCommand(
 				);
 			}
 		}
+	}
+	for (const f of def.allFlags) {
+		validateFlagInfraMarker(f, app.infraRoots, def.name);
 	}
 	into.set(def.name, {
 		kind: "command",
@@ -394,6 +389,11 @@ export class AppImpl implements App {
 				throw new RegistrationError(errHandshakeIsAlreadyInfraRoot(envVar));
 			}
 			this.handshakeEnvs.set(envVar, helpText);
+		}
+		// Validate global-flag default markers now that the roots are resolved
+		// (mirroring Python __post_init__; registerCommand covers command flags).
+		for (const f of globals) {
+			validateFlagInfraMarker(f, this.infraRoots);
 		}
 
 		this.configEnabled = spec.config ?? false;
@@ -598,7 +598,7 @@ export class AppImpl implements App {
 				);
 				return { exitCode: 1, hasData: false, data: undefined };
 			case "passthrough": {
-				const ctx = new Context(out, err, {}, null);
+				const ctx = new Context(out, err, {}, this.infraAccess());
 				const def = outcome.cmd.def as PassthroughDef<string>;
 				const result = await def.handler(
 					{
@@ -611,12 +611,17 @@ export class AppImpl implements App {
 				return this.emitInterpreted(result, out);
 			}
 			case "command": {
-				const ctx = new Context(out, err, outcome.sources, null);
+				const ctx = new Context(out, err, outcome.sources, this.infraAccess());
 				const def = outcome.cmd.def as AnyCommand;
 				const result = await def.handler(outcome.kwargs as never, ctx);
 				return this.emitInterpreted(result, out);
 			}
 		}
+	}
+
+	/** Snapshots infra data for a Context (Go infraAccess): null when none declared. */
+	private infraAccess(): InfraAccess | null {
+		return buildInfraAccess(this.infraRoots, this.handshakeEnvs);
 	}
 
 	/** Interprets a handler return and prints the data line when present. */

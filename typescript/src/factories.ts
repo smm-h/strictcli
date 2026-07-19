@@ -61,6 +61,7 @@ import {
 	RegistrationError,
 } from "./errors.js";
 import type { HandlerArgs } from "./infer.js";
+import { type InfraRootPath, isInfraRootPath } from "./infra.js";
 import type {
 	Carrier,
 	Context,
@@ -99,6 +100,10 @@ export function pyRepr(v: unknown): string {
 
 /** strictcli type name of a runtime value (str/bool/int/float vocabulary). */
 export function pyTypeName(v: unknown): string {
+	if (isInfraRootPath(v)) {
+		// Python type(...).__name__ of the marker class.
+		return "RelativeToRoot";
+	}
 	switch (typeof v) {
 		case "string":
 			return "str";
@@ -149,9 +154,11 @@ export type FlagOpts<Out, S extends Schema> = {
 	readonly validate?: (value: ElementOf<Out>) => void;
 	/**
 	 * `null` declares an explicitly-optional scalar flag (the Go `Default(nil)`
-	 * / conformance `"default": null` shape). Absent default = required.
+	 * / conformance `"default": null` shape). Absent default = required. A
+	 * relativeToRoot() marker resolves through a declared infra root when
+	 * defaults are applied at parse time (source label "infra").
 	 */
-	readonly default?: Out | null;
+	readonly default?: Out | null | InfraRootPath;
 	readonly negatable?: S extends "bool" ? boolean : never;
 	readonly choices?: S extends "bool" | DictSchema
 		? never

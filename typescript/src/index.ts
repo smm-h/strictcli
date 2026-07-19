@@ -46,6 +46,8 @@ export {
 	requires,
 } from "./factories.js";
 export type { HandlerArgs, InferHandler, InferHandlerArgs } from "./infer.js";
+export type { InfraRootPath } from "./infra.js";
+export { relativeToRoot } from "./infra.js";
 export type { Outcome } from "./outcome.js";
 export { outcome } from "./outcome.js";
 export type {

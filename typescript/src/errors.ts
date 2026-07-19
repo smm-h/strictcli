@@ -476,6 +476,18 @@ export function errFlagRelativeToRootUndeclared(
 	return `flag ${q(flagName)}: RelativeToRoot references undeclared infra root ${q(envVar)}; declare it as an infra root`;
 }
 
+// The command-scoped variant mirrors Python's _build_and_validate_command
+// message (the divergence ground truth). Go has no command-context marker
+// validation -- it validates per-flag -- so this template has no errors.go
+// counterpart (see check_error_parity.py, "InfraEnv structural" exclusions).
+export function errCommandFlagRelativeToRootUndeclared(
+	cmdName: string,
+	flagName: string,
+	envVar: string,
+): string {
+	return `command ${q(cmdName)}: flag ${q(flagName)}: RelativeToRoot references undeclared infra root ${q(envVar)}; declare it as an infra root`;
+}
+
 // ---------------------------------------------------------------------------
 // strictcli.go — command registration
 // ---------------------------------------------------------------------------

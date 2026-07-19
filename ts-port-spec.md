@@ -226,6 +226,7 @@ typescript/
     parse.ts
     routing.ts
     sources.ts
+    infra.ts
     help.ts
     context.ts
     outcome.ts
@@ -252,6 +253,14 @@ Layout addition (subphase 4.5): `sources.ts` holds the per-parse provenance
 store (SourcedStore) mapping resolved flag names to their source labels
 (`cli`/`env`/`config`/`default`/`implied`/`infra`), with the source-filtered
 presence queries used by mutex and dependency evaluation.
+
+Layout addition (subphase 5.1): `infra.ts` holds the infrastructure env-var
+machinery: the branded `relativeToRoot()` marker (`InfraRootPath`), tilde
+expansion, marker resolution against the eagerly-resolved roots map,
+registration-time marker validation (flag-scoped and command-scoped
+messages), and the `buildInfraAccess` snapshot consumed by `Context`.
+Root resolution itself stays in `app.ts` (the Go NewApp shape); handshake
+vars are read live in `context.ts`.
 
 ## Curated example set for end-to-end byte-parity demos
 
