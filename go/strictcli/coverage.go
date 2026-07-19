@@ -2,6 +2,7 @@ package strictcli
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -55,13 +56,46 @@ func (a *App) collectAllCommandPaths() map[string]bool {
 
 // testCoverageProvider is the built-in check provider for cli-test-coverage.
 // Auto-registered when WithTestCoverage() is used.
+//
+// The verdict is derived from committed state: the covered set is the union of
+// the committed manifest (.strictcli/test-coverage.json) and any per-process
+// shard files merged from .strictcli/coverage/. Every live registered command
+// path (minus the injected check command) must be present in that union to
+// pass; otherwise the check fails naming each uncovered command.
+//
+// Because the verdict reads the committed manifest, it is deterministic on every
+// machine -- a machine that never ran the suite (no local shards) still gets a
+// stable verdict from the committed manifest alone. Both the coverage dir and
+// the manifest path are anchored to the App's construction-time cwd, so the
+// check evaluated from a foreign cwd reads the app's own repo state.
+//
+// The manifest is rewritten as the monotonic union of its prior contents and
+// the freshly merged shards, but ONLY when that content actually changes -- a
+// pure check must not dirty a byte-identical file. Accepted staleness: deleting
+// a test leaves its command covered in the manifest until the manifest is
+// deliberately regenerated (e.g. by removing it and re-running the suite),
+// because the union never removes a command.
 func (a *App) testCoverageProvider() []CheckSpec {
 	impl := func(ctx CheckContext, reporter *ErrorReporter) CheckOutcome {
-		coverageDir := ".strictcli/coverage"
-		manifestPath := ".strictcli/test-coverage.json"
+		coverageDir := a.coverageDir
+		manifestPath := a.coverageManifestPath
 
-		// Merge shards
 		covered := make(map[string]bool)
+
+		// Seed from the committed manifest -- this is what makes the verdict
+		// deterministic on machines that never ran the suite.
+		if manifestPath != "" {
+			if raw, err := os.ReadFile(manifestPath); err == nil {
+				var manifestCmds []string
+				if err := json.Unmarshal(raw, &manifestCmds); err == nil {
+					for _, cmd := range manifestCmds {
+						covered[cmd] = true
+					}
+				}
+			}
+		}
+
+		// Merge shards (optional freshness input)
 		entries, err := os.ReadDir(coverageDir)
 		if err == nil {
 			for _, entry := range entries {
@@ -91,19 +125,23 @@ func (a *App) testCoverageProvider() []CheckSpec {
 			}
 		}
 
-		if len(covered) == 0 {
-			reporter.Error("stale or empty manifest")
-			return reporter.Found("no coverage data: .strictcli/coverage/ contains no shard files")
+		// Rewrite the manifest as the monotonic union, but only when the content
+		// actually changes (keeps a pure check from dirtying a byte-identical
+		// file).
+		if manifestPath != "" && len(covered) > 0 {
+			manifest := make([]string, 0, len(covered))
+			for cmd := range covered {
+				manifest = append(manifest, cmd)
+			}
+			sort.Strings(manifest)
+			data, _ := json.MarshalIndent(manifest, "", "  ")
+			newContent := append(data, '\n')
+			existing, _ := os.ReadFile(manifestPath)
+			if !bytes.Equal(existing, newContent) {
+				os.MkdirAll(filepath.Dir(manifestPath), 0o755)
+				os.WriteFile(manifestPath, newContent, 0o644)
+			}
 		}
-
-		// Write canonical manifest
-		manifest := make([]string, 0, len(covered))
-		for cmd := range covered {
-			manifest = append(manifest, cmd)
-		}
-		sort.Strings(manifest)
-		data, _ := json.MarshalIndent(manifest, "", "  ")
-		os.WriteFile(manifestPath, append(data, '\n'), 0o644)
 
 		// Compare against command surface (exclude the framework-injected
 		// check command -- it is not a user command)

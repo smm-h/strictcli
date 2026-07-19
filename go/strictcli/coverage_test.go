@@ -283,6 +283,107 @@ func TestCoverageCheck_GroupedPasses(t *testing.T) {
 	}
 }
 
+func findCoverageResult(t *testing.T, results []CheckRunResult) *CheckRunResult {
+	t.Helper()
+	for i := range results {
+		if results[i].Name == "cli-test-coverage" {
+			return &results[i]
+		}
+	}
+	t.Fatal("cli-test-coverage check not found")
+	return nil
+}
+
+func TestCoverageRecording_AnchoredToConstructionCwd(t *testing.T) {
+	app := makeTestCoverageApp(t) // constructs with cwd == its temp dir
+	constructionDir, _ := os.Getwd()
+	defer os.Chdir(constructionDir)
+
+	other := t.TempDir()
+	if err := os.Chdir(other); err != nil {
+		t.Fatal(err)
+	}
+
+	app.Test([]string{"deploy"})
+
+	shards, _ := filepath.Glob(filepath.Join(constructionDir, ".strictcli", "coverage", "*.jsonl"))
+	if len(shards) == 0 {
+		t.Fatal("shard must land under the construction cwd")
+	}
+	foreign, _ := filepath.Glob(filepath.Join(other, ".strictcli", "coverage", "*.jsonl"))
+	if len(foreign) != 0 {
+		t.Fatalf("must not record into the chdir'd cwd: %v", foreign)
+	}
+}
+
+func TestCoverageCheck_ManifestOnlyDeterministicPass(t *testing.T) {
+	app := makeTestCoverageApp(t)
+	// No Test()/Call() -- no shards. Write a complete committed manifest.
+	data, _ := json.MarshalIndent([]string{"build", "deploy", "status"}, "", "  ")
+	if err := os.WriteFile(".strictcli/test-coverage.json", append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, _, _, _ := app.RunChecks(&testCheckCtx{root: "."}, RunChecksOptions{RunAll: true})
+	cov := findCoverageResult(t, results)
+	if cov.Status() != "pass" {
+		t.Fatalf("expected pass from committed manifest alone, got %s; msg=%s", cov.Status(), cov.Outcome.message)
+	}
+}
+
+func TestCoverageCheck_ManifestUnionMonotonic(t *testing.T) {
+	app := makeTestCoverageApp(t)
+	data, _ := json.MarshalIndent([]string{"build", "deploy", "status"}, "", "  ")
+	os.WriteFile(".strictcli/test-coverage.json", append(data, '\n'), 0o644)
+	// This run records only one command.
+	app.Test([]string{"deploy"})
+
+	app.RunChecks(&testCheckCtx{root: "."}, RunChecksOptions{RunAll: true})
+
+	raw, err := os.ReadFile(".strictcli/test-coverage.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest []string
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	got := make(map[string]bool)
+	for _, c := range manifest {
+		got[c] = true
+	}
+	for _, want := range []string{"build", "deploy", "status"} {
+		if !got[want] {
+			t.Fatalf("union not monotonic: %q missing from %v", want, manifest)
+		}
+	}
+}
+
+func TestCoverageCheck_ManifestNotRewrittenWhenUnchanged(t *testing.T) {
+	app := makeTestCoverageApp(t)
+	app.Test([]string{"deploy"})
+	app.Test([]string{"status"})
+	app.Test([]string{"build"})
+	app.RunChecks(&testCheckCtx{root: "."}, RunChecksOptions{RunAll: true})
+
+	content1, _ := os.ReadFile(".strictcli/test-coverage.json")
+	info1, err := os.Stat(".strictcli/test-coverage.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app.RunChecks(&testCheckCtx{root: "."}, RunChecksOptions{RunAll: true})
+
+	content2, _ := os.ReadFile(".strictcli/test-coverage.json")
+	info2, _ := os.Stat(".strictcli/test-coverage.json")
+	if string(content1) != string(content2) {
+		t.Fatal("manifest content changed on identical re-run")
+	}
+	if !info1.ModTime().Equal(info2.ModTime()) {
+		t.Fatal("pure check rewrote a byte-identical manifest")
+	}
+}
+
 func TestCoverageDisabled_NoShardsCreated(t *testing.T) {
 	origDir, _ := os.Getwd()
 	dir := t.TempDir()

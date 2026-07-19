@@ -330,9 +330,11 @@ type App struct {
 	// Test-coverage instrumentation. When enabled, every Test() and Call()
 	// invocation records the resolved command path to per-process shard files
 	// so a check can verify that every command in the surface has been exercised.
-	testCoverage     bool
-	coverageShardFmt string // ".strictcli/coverage/<pid>-{n}.jsonl"
-	coverageCounter  int
+	testCoverage         bool
+	coverageShardFmt     string // "<root>/.strictcli/coverage/<pid>-%d.jsonl"
+	coverageDir          string // "<root>/.strictcli/coverage" (construction-anchored)
+	coverageManifestPath string // "<root>/.strictcli/test-coverage.json" (construction-anchored)
+	coverageCounter      int
 }
 
 // --- Option types ---
@@ -1329,8 +1331,18 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 	}
 	// Test-coverage instrumentation: register built-in provider.
 	if a.testCoverage {
-		a.coverageShardFmt = fmt.Sprintf(".strictcli/coverage/%d-%%d.jsonl", os.Getpid())
-		if err := os.MkdirAll(".strictcli/coverage", 0o755); err != nil {
+		// Anchor the coverage root to the cwd AT CONSTRUCTION TIME. Both the
+		// recorder and the check provider use these absolute paths so that tests
+		// which chdir still record into the repo, and a check evaluated from a
+		// foreign cwd reads the app's own repo state.
+		root, err := os.Getwd()
+		if err != nil {
+			panic(errTestCoverageCannotCreateDir(err))
+		}
+		a.coverageDir = filepath.Join(root, ".strictcli", "coverage")
+		a.coverageManifestPath = filepath.Join(root, ".strictcli", "test-coverage.json")
+		a.coverageShardFmt = filepath.Join(a.coverageDir, fmt.Sprintf("%d-%%d.jsonl", os.Getpid()))
+		if err := os.MkdirAll(a.coverageDir, 0o755); err != nil {
 			panic(errTestCoverageCannotCreateDir(err))
 		}
 		a.RegisterCheckProvider(a.testCoverageProvider)
