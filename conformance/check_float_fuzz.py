@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Cross-language float differential fuzz.
 
-Draws a fixed committed sample of doubles, formats each with BOTH the Python and
-Go canonical float formatters (SCF), and asserts byte-for-byte agreement plus
-round-trip identity.
+Draws a fixed committed sample of doubles, formats each with the Python, Go,
+and TypeScript canonical float formatters (SCF), and asserts three-way
+byte-for-byte agreement plus round-trip identity.
 
 The Python formatter runs in-process. The Go formatter runs in exactly ONE
 process: a package-internal `go test` stdin->file filter
 (``TestFloatFuzzFilter`` in ``go/strictcli/float_fuzz_filter_test.go``) reads
 the whole batch of hex bit patterns on stdin and writes canonical strings to a
-temp file. No per-value process spawning.
+temp file. The TypeScript formatter also runs in exactly ONE process: a batch
+stdin->stdout filter (``typescript/tests/float_fuzz_filter.ts``, compiled by
+``tsc -p tsconfig.test.json``) reads the same batch on stdin and writes
+canonical strings to stdout. No per-value process spawning anywhere.
 
 Exit 0 on full agreement; exit 1 (printing the offending uint64 hex patterns)
 otherwise.
@@ -29,6 +32,8 @@ import strictcli
 
 CONFORMANCE_DIR = Path(__file__).resolve().parent
 GO_DIR = CONFORMANCE_DIR.parent / "go"
+TS_DIR = CONFORMANCE_DIR.parent / "typescript"
+TS_FILTER = TS_DIR / "dist-test" / "tests" / "float_fuzz_filter.js"
 
 # Fixed committed seed and sample size for the differential fuzz. Deterministic
 # so failures are reproducible and CI is stable.
@@ -103,6 +108,51 @@ def _go_format(bit_patterns: list[int]) -> list[str]:
     return lines
 
 
+def _ts_format(bit_patterns: list[int]) -> list[str]:
+    """Format every bit pattern via the TS formatter in a single Node process.
+
+    The TS side is a plain stdin->stdout batch filter
+    (``typescript/tests/float_fuzz_filter.ts``). It is compiled once
+    (``tsc -p tsconfig.test.json`` -> ``dist-test/``) and then run once,
+    feeding the whole batch on stdin -- a single formatting process, no
+    per-value spawning. Node stdout is clean (no test-runner noise), so the
+    canonical strings come straight back on stdout.
+    """
+    stdin_text = "".join(f"{b:016x}\n" for b in bit_patterns)
+
+    build = subprocess.run(
+        ["npx", "tsc", "-p", "tsconfig.test.json"],
+        cwd=str(TS_DIR),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if build.returncode != 0:
+        raise RuntimeError(
+            f"tsc -p tsconfig.test.json failed:\n{build.stdout}\n{build.stderr}"
+        )
+
+    run = subprocess.run(
+        ["node", str(TS_FILTER)],
+        input=stdin_text,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if run.returncode != 0:
+        raise RuntimeError(
+            "ts fuzz filter failed:\n"
+            f"stdout:\n{run.stdout}\nstderr:\n{run.stderr}"
+        )
+    lines = run.stdout.splitlines()
+
+    if len(lines) != len(bit_patterns):
+        raise RuntimeError(
+            f"typescript produced {len(lines)} lines for {len(bit_patterns)} inputs"
+        )
+    return lines
+
+
 def _base_env() -> dict[str, str]:
     import os
 
@@ -113,14 +163,16 @@ def main() -> int:
     bit_patterns = _sample_bits()
     py = [strictcli._format_float_canonical(_from_bits(b)) for b in bit_patterns]
     go = _go_format(bit_patterns)
+    ts = _ts_format(bit_patterns)
 
     mismatches: list[str] = []
-    for bits, ps, gs in zip(bit_patterns, py, go):
+    for bits, ps, gs, ts_s in zip(bit_patterns, py, go, ts):
         x = _from_bits(bits)
-        # 1. Byte-equality between the two implementations.
-        if ps != gs:
+        # 1. Byte-equality across all three implementations.
+        if not (ps == gs == ts_s):
             mismatches.append(
-                f"  bits={bits:016x} python={ps!r} go={gs!r} (byte mismatch)"
+                f"  bits={bits:016x} python={ps!r} go={gs!r} "
+                f"typescript={ts_s!r} (byte mismatch)"
             )
             continue
         # 2. Round-trip: the shared canonical string must parse back to the
@@ -142,7 +194,8 @@ def main() -> int:
 
     print(
         f"float differential fuzz passed: {len(bit_patterns)} doubles agree "
-        f"byte-for-byte and round-trip (seed={FIXED_SEED:#x})."
+        f"byte-for-byte across python/go/typescript and round-trip "
+        f"(seed={FIXED_SEED:#x})."
     )
     return 0
 
