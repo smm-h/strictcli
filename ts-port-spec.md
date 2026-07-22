@@ -359,3 +359,32 @@ survive beyond session memory.
   parse failures print to stderr and exit 1, so neither sibling exposes an error
   class for them. The classes remain in src/errors.ts; tests import them by module
   path. `InvokeError` stays public in all three implementations.
+- 2026-07-22 (task 6.1): TS conformance harness (`conformance/harness_ts/main.js`)
+  import mechanism and build step. The harness is plain Node ESM JavaScript (no
+  tsconfig, no npm install, no build of its own) that imports the built dist by
+  direct relative path (`../../typescript/dist/index.js`, plus `float.js` for
+  canonical float rendering and `errors.js` for the catalog messages it replays).
+  Rationale: relative-path ESM imports bypass the package `exports` map (needed for
+  the non-public float/errors modules), need zero install in `conformance/`, and the
+  dist's own bare specifiers (smol-toml) resolve through `typescript/node_modules`
+  via Node's walk-up because the imported files live under `typescript/`. The only
+  prerequisite is `cd typescript && npm run build`; run.py invokes
+  `node conformance/harness_ts/main.js <argv...>` with `CONFORMANCE_APP_DEF` set.
+  Vocabulary notes: (a) case defs with scalar type + `repeatable: true` map to
+  list carriers (in TS, list carriers ARE the repeatable flags; bool + repeatable
+  keeps the scalar carrier so the framework mints its incompatibility error);
+  (b) two framework guards that the TS factory API makes inexpressible from JSON
+  are replayed in the harness with the framework's own errors.ts catalog builders:
+  passthrough-with-flags/args/flag-sets/mutex (`errCommandPassthroughCannotHave`)
+  and same-name duplicates inside one flag list, which a keyed FlagMap would
+  silently collapse (`errCommandDuplicateFlag` / `errDuplicateGlobalFlag`);
+  (c) check registration form (errorCheck vs warnCheck) is read back from
+  `app.checks.defs` severities after createApp parses the embedded TOML (fallback
+  to error-form for undeclared names, same as the Go harness's fallback);
+  (d) `handler_returns.kind: "bad"` returns a non-outcome (ref_python parity; Go
+  cannot express it and maps it to Exit(0)). Smoke oracle:
+  `conformance/harness_ts/smoke_test.py` compares TS vs Go harness output
+  byte-for-byte over a 99-case representative slice, accepting divergence only
+  when both outputs independently satisfy the case's own expect block (2 pinned
+  wording divergences: dict parse error and provider severity-mismatch builder
+  names, both matching Python's shape).
