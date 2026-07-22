@@ -25,9 +25,9 @@
         },
         "targets": {
           "type": "array",
-          "items": { "enum": ["python", "go"] },
+          "items": { "enum": ["python", "go", "typescript"] },
           "minItems": 1,
-          "description": "Restrict which implementations run this case. Absent means both. Used for cases that are only expressible in one language (e.g. Python's bad-return hard error, which Go's type system makes unrepresentable)."
+          "description": "Restrict which implementations run this case. Absent means all. Used for cases that are only expressible in some languages (e.g. the bad-return hard error, expressible in Python and TypeScript but unrepresentable in Go's type system)."
         },
         "app": {
           "$ref": "#/$defs/app"

@@ -35,6 +35,12 @@ PROJECT_ROOT = CONFORMANCE_DIR.parent
 HARNESS_DIR = CONFORMANCE_DIR / "harness"
 HARNESS_BINARY: str | None = None
 
+# TypeScript harness: plain Node ESM script (conformance/harness_ts/main.js)
+# that interprets the app definition at runtime. Its only build prerequisite is
+# the typescript package's dist (built once per run, cached like the Go binary).
+HARNESS_TS_DIR = CONFORMANCE_DIR / "harness_ts"
+HARNESS_TS_ENTRY: str | None = None
+
 
 def _ensure_harness() -> str:
     """Build the Go harness binary if not already built. Returns path to binary."""
@@ -57,6 +63,32 @@ def _ensure_harness() -> str:
 
     HARNESS_BINARY = binary
     return binary
+
+
+def _ensure_ts_harness() -> str:
+    """Build typescript/dist if not already built this run. Returns the harness entry path.
+
+    The harness itself (main.js) has no build step; the prerequisite is a fresh
+    typescript/dist, rebuilt once per run so engine changes are always picked up.
+    """
+    global HARNESS_TS_ENTRY
+    if HARNESS_TS_ENTRY is not None:
+        return HARNESS_TS_ENTRY
+
+    result = subprocess.run(
+        ["npm", "run", "build"],
+        cwd=str(PROJECT_ROOT / "typescript"),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"typescript dist build failed:\n{result.stdout}\n{result.stderr}"
+        )
+
+    HARNESS_TS_ENTRY = str(HARNESS_TS_DIR / "main.js")
+    return HARNESS_TS_ENTRY
 
 
 def _cleanup_harness() -> None:
@@ -259,8 +291,32 @@ def _write_go_project_file(d: str, app_name: str) -> None:
         f.write(f"module {app_name}\n\ngo 1.21\n")
 
 
+def _prepare_typescript(app_def: dict, case_argv: list[str]) -> Preparation:
+    entry = _ensure_ts_harness()  # may raise RuntimeError; caller translates it
+    # Write the app definition to a temp file for the harness to read.
+    app_def_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", prefix="strictcli_def_", delete=False
+    )
+    json.dump(app_def, app_def_file, sort_keys=True)
+    app_def_file.close()
+    return Preparation(
+        argv=["node", entry] + case_argv,
+        extra_env={"CONFORMANCE_APP_DEF": app_def_file.name},
+        cleanup_paths=[app_def_file.name],
+    )
+
+
+def _write_typescript_project_file(d: str, app_name: str) -> None:
+    with open(os.path.join(d, "package.json"), "w") as f:
+        json.dump({"name": app_name}, f)
+        f.write("\n")
+
+
 _register_target(Target("python", _prepare_python, _write_python_project_file))
 _register_target(Target("go", _prepare_go, _write_go_project_file))
+_register_target(
+    Target("typescript", _prepare_typescript, _write_typescript_project_file)
+)
 
 
 def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.CompletedProcess | None]:
