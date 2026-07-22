@@ -16,6 +16,7 @@ import {
 	errCommandDuplicateFlag,
 	errCommandPassthroughCannotHave,
 	errDuplicateGlobalFlag,
+	errFlagRepeatableRequiresExplicitUnique,
 } from "../../typescript/dist/errors.js";
 import { formatFloatCanonical } from "../../typescript/dist/float.js";
 import {
@@ -100,7 +101,11 @@ function convertScalar(typeName, v) {
 	if (v === null || v === undefined) {
 		return v;
 	}
-	if (typeName === "int") {
+	// Only JSON numbers become bigints; a mistyped value (e.g. a string
+	// default on an int flag) carries over as-is so the framework mints its
+	// own default-type registration error (the Go harness's `if float64`
+	// pattern).
+	if (typeName === "int" && typeof v === "number") {
 		return BigInt(v);
 	}
 	return v; // bool, float, str carry over as-is
@@ -127,6 +132,22 @@ function buildFlag(fd) {
 	const isDict = ftype.startsWith("dict[");
 	const repeatable = fd.repeatable === true;
 	const elemType = elemTypeOf(ftype);
+
+	// Scalar repeatable-without-unique is inexpressible through the TS
+	// factory API (the list carrier that a repeatable scalar maps to defaults
+	// unique like Python's list[T] does), so the framework's guard is
+	// replayed here with its own catalog message. bool + repeatable is
+	// excluded: the framework's bool-incompatibility error fires first,
+	// matching the sibling validation order.
+	if (
+		repeatable &&
+		!isList &&
+		!isDict &&
+		ftype !== "bool" &&
+		!("unique" in fd)
+	) {
+		throw new Error(errFlagRepeatableRequiresExplicitUnique(name));
+	}
 
 	// Carrier: list/dict types map directly; a repeatable scalar becomes a
 	// list carrier (in TS, list carriers ARE the repeatable flags -- scalar
