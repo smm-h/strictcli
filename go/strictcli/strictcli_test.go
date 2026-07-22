@@ -3010,6 +3010,39 @@ func TestConfigShow(t *testing.T) {
 	}
 }
 
+// TestConfigShowCoercesConfigValuesToFlagType pins cross-language parity for
+// `config show --plain`: a JSON config value for an int flag must display as
+// an integer ("count = 42"), not as the raw float64 that encoding/json
+// produces ("count = 42.0"). Python and TypeScript both display "42".
+func TestConfigShowCoercesConfigValuesToFlagType(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{
+		"count": float64(42),
+		"rate":  3.14,
+	})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithFlags(
+		IntFlag("count", "a count", Default(0)),
+		FloatFlag("rate", "a rate", Default(0.0)),
+	))
+
+	r := app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "count = 42  (source: config)") {
+		t.Fatalf("expected 'count = 42  (source: config)' in output, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "rate = 3.14  (source: config)") {
+		t.Fatalf("expected 'rate = 3.14  (source: config)' in output, got %q", r.Stdout)
+	}
+}
+
 func TestConfigXDGHome(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldVal, hadOld := os.LookupEnv("XDG_CONFIG_HOME")

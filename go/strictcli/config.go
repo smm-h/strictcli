@@ -760,6 +760,14 @@ func resolveFlagShowSource(f *Flag, configData map[string]interface{}) (interfac
 	// Check config
 	param := flagParamName(f.Name)
 	if v, ok := configData[param]; ok {
+		// Coerce to the flag's declared type so display matches runtime
+		// behavior (encoding/json yields float64 for every number; an int
+		// flag's value must display as "42", not "42.0" -- Python and
+		// TypeScript both display the integer form). If coercion fails,
+		// display the raw value (the parse-time error path reports it).
+		if coerced, errStr := coerceConfigValue(v, f); errStr == "" {
+			return coerced, "config"
+		}
 		return v, "config"
 	}
 	// Default
