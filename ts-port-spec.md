@@ -412,3 +412,20 @@ survive beyond session memory.
   that stops diverging is reported as a stale acknowledgment (double-entry).
   Final counts: python 551/551, go 550/550 (bad-return case is
   python+typescript only), typescript 551/551, --both 551/551.
+- 2026-07-22 (task 6.6): schema parity, float fuzz, and capture tooling are
+  three-way. `check_schema_parity.py` runs --dump-schema on python/go/
+  typescript (TS: `node conformance/harness_ts/main.js --dump-schema` in a
+  temp project dir seeded with package.json) and asserts all-identical N-way
+  with odd-one-out reporting; before comparison it canonicalizes the one
+  documented representational delta -- repeatable-scalar flags: Python/Go emit
+  `{type: "T", repeatable: true, default: []}`, TS declares the same flag as a
+  list carrier and emits `{type: "list[T]"}` (schema.ts doc block; task 6.1
+  vocabulary note (a)) -- every target is rewritten to the list-carrier
+  spelling. `check_float_fuzz.py` gains a TS leg: a batch stdin->stdout filter
+  (`typescript/tests/float_fuzz_filter.ts`, compiled by tsconfig.test.json,
+  deliberately not `.test.ts` so `npm test` never runs it) formats the whole
+  seeded batch in ONE Node process; the check asserts three-way byte equality
+  plus round-trip over the 2000 doubles. `capture_outputs.py` target choices
+  now come from run.py's TARGETS registry (python/go/typescript). All three
+  green: schema parity 3/3 apps identical across targets; float fuzz 2000/2000
+  agree; capture 551 cases captured per target.
