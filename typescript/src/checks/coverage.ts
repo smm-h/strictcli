@@ -1,23 +1,23 @@
 /**
  * CLI test-coverage instrumentation: per-process shard files recording which
  * commands app.test() exercised, plus the built-in cli-test-coverage check
- * provider that merges shards into the canonical manifest and compares the
- * result against the app's full command surface.
+ * provider that merges the committed manifest and shard files into the
+ * covered set and compares it against the app's full command surface.
  *
  * Parity sources: go/strictcli/coverage.go with Python _record_coverage /
- * _collect_all_command_paths / _test_coverage_provider (~2801-2934) as the
- * divergence ground truth.
+ * _collect_all_command_paths / _test_coverage_provider as the divergence
+ * ground truth.
  */
 
 import {
 	appendFileSync,
-	existsSync,
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { AppImpl, GroupImpl } from "../app.js";
 import {
 	errTestCoverageCannotCreateDir,
@@ -26,19 +26,22 @@ import {
 import type { CheckSpec } from "./provider.js";
 import { errorCheckSpec } from "./provider.js";
 
-const COVERAGE_DIR = join(".strictcli", "coverage");
-const MANIFEST_PATH = join(".strictcli", "test-coverage.json");
-
 /**
- * Enables test-coverage instrumentation on an app: computes the per-process
- * shard path template, creates the shard directory eagerly (a failure here
- * is a hard construction error), and registers the built-in
- * cli-test-coverage provider.
+ * Enables test-coverage instrumentation on an app. Anchors the coverage root
+ * to the cwd AT CONSTRUCTION TIME (both the recorder and the check provider
+ * use these absolute paths, so tests which chdir still record into the repo
+ * and a check evaluated from a foreign cwd reads the app's own repo state),
+ * creates the shard directory eagerly (a failure here is a hard construction
+ * error), and registers the built-in cli-test-coverage provider.
  */
 export function initTestCoverage(app: AppImpl): void {
-	app.coverageShardPath = join(COVERAGE_DIR, `${process.pid}-{n}.jsonl`);
+	app.coverageDir = resolve(join(".strictcli", "coverage"));
+	app.coverageManifestPath = resolve(join(".strictcli", "test-coverage.json"));
+	// One shard per process (append semantics); uniqueness across concurrent
+	// writers comes from the PID, so there is no per-write shard counter.
+	app.coverageShardPath = join(app.coverageDir, `${process.pid}.jsonl`);
 	try {
-		mkdirSync(COVERAGE_DIR, { recursive: true });
+		mkdirSync(app.coverageDir, { recursive: true });
 	} catch (e) {
 		throw new RegistrationError(
 			errTestCoverageCannotCreateDir((e as Error).message),
@@ -48,19 +51,18 @@ export function initTestCoverage(app: AppImpl): void {
 }
 
 /**
- * Appends a coverage record for the resolved command path. Each test()
- * invocation writes one JSONL line to a per-process shard file.
+ * Appends a coverage record for the resolved command path. Each test() or
+ * call() invocation appends one JSONL line to the per-process shard file.
  */
 export function recordCoverage(app: AppImpl, cmdPath: string): void {
 	if (!app.testCoverage || app.coverageShardPath === undefined) {
 		return;
 	}
-	const path = app.coverageShardPath.replace(
-		"{n}",
-		String(app.coverageCounter),
+	mkdirSync(dirname(app.coverageShardPath), { recursive: true });
+	appendFileSync(
+		app.coverageShardPath,
+		`${JSON.stringify({ command: cmdPath })}\n`,
 	);
-	mkdirSync(dirname(path), { recursive: true });
-	appendFileSync(path, `${JSON.stringify({ command: cmdPath })}\n`);
 }
 
 /**
@@ -86,11 +88,43 @@ export function collectAllCommandPaths(app: AppImpl): Set<string> {
 	return paths;
 }
 
+/** True when the path exists and is a regular file. */
+function isFile(path: string): boolean {
+	try {
+		return statSync(path).isFile();
+	} catch {
+		return false;
+	}
+}
+
+/** Names of shard files (*.jsonl) in the coverage dir, or [] if unreadable. */
+function shardNames(coverageDir: string): string[] {
+	try {
+		return readdirSync(coverageDir).filter((f) => f.endsWith(".jsonl"));
+	} catch {
+		return [];
+	}
+}
+
 /**
  * The built-in check provider for cli-test-coverage, auto-registered when
- * the app enables testCoverage. Merges per-process shard files into the
- * canonical sorted manifest and hard-FAILs listing every command with zero
- * coverage (excluding the framework-injected check command).
+ * the app enables testCoverage. The verdict is derived from committed state:
+ * the covered set is the union of the committed manifest
+ * (.strictcli/test-coverage.json) and any per-process shard files merged from
+ * .strictcli/coverage/. Every live registered command path (minus the
+ * injected check command) must be present in that union to pass; otherwise
+ * the check fails naming each uncovered command.
+ *
+ * Because the verdict reads the committed manifest, it is deterministic on
+ * every machine -- a machine that never ran the suite (no local shards) still
+ * gets a stable verdict from the committed manifest alone.
+ *
+ * The manifest is rewritten as the monotonic union of its prior contents and
+ * the freshly merged shards, but ONLY when that content actually changes -- a
+ * pure check must not dirty a byte-identical file. Accepted staleness:
+ * deleting a test leaves its command covered in the manifest until the
+ * manifest is deliberately regenerated, because the union never removes a
+ * command.
  */
 export function testCoverageProvider(app: AppImpl): () => CheckSpec[] {
 	return () => [
@@ -102,38 +136,82 @@ export function testCoverageProvider(app: AppImpl): () => CheckSpec[] {
 			needsNetwork: false,
 			dependsOn: [],
 			impl: (_ctx, reporter) => {
-				// Merge shards.
+				const coverageDir = app.coverageDir ?? "";
+				const manifestPath = app.coverageManifestPath ?? "";
+
+				// Subject-matter gating (the sanctioned skip class, mirroring
+				// project-type gating): when the anchored coverage root holds
+				// NEITHER a committed manifest NOR any shard files, this is not
+				// the app's own development tree -- e.g. an installed app running
+				// its checks from a foreign project's cwd. Report a visible SKIP
+				// instead of failing with the app's entire command surface listed
+				// as uncovered. When EITHER exists, behavior is unchanged: a
+				// partial manifest still fails honestly, and an empty-manifest
+				// file present still means "coverage configured but empty" = fail
+				// listing all.
+				const manifestExists = manifestPath !== "" && isFile(manifestPath);
+				const shards = coverageDir !== "" ? shardNames(coverageDir) : [];
+				if (!manifestExists && shards.length === 0) {
+					const anchor =
+						manifestPath !== "" ? dirname(manifestPath) : coverageDir;
+					return reporter.skipped(
+						`no coverage state at ${anchor} -- cli-test-coverage applies to the app's own development tree`,
+					);
+				}
+
 				const covered = new Set<string>();
-				if (existsSync(COVERAGE_DIR)) {
-					for (const fname of readdirSync(COVERAGE_DIR)) {
-						if (!fname.endsWith(".jsonl")) {
+
+				// Seed from the committed manifest -- this is what makes the
+				// verdict deterministic on machines that never ran the suite.
+				if (manifestExists) {
+					try {
+						const data: unknown = JSON.parse(
+							readFileSync(manifestPath, "utf8"),
+						);
+						if (Array.isArray(data)) {
+							for (const c of data) {
+								if (typeof c === "string") {
+									covered.add(c);
+								}
+							}
+						}
+					} catch {
+						// Unreadable/invalid manifest contributes nothing.
+					}
+				}
+
+				// Merge shards (optional freshness input).
+				for (const fname of shards) {
+					const content = readFileSync(join(coverageDir, fname), "utf8");
+					for (const rawLine of content.split("\n")) {
+						const line = rawLine.trim();
+						if (line === "") {
 							continue;
 						}
-						const content = readFileSync(join(COVERAGE_DIR, fname), "utf8");
-						for (const rawLine of content.split("\n")) {
-							const line = rawLine.trim();
-							if (line === "") {
-								continue;
-							}
-							const entry = JSON.parse(line) as Record<string, unknown>;
-							if (typeof entry.command === "string") {
-								covered.add(entry.command);
-							}
+						const entry = JSON.parse(line) as Record<string, unknown>;
+						if (typeof entry.command === "string") {
+							covered.add(entry.command);
 						}
 					}
 				}
 
-				if (covered.size === 0) {
-					reporter.error("stale or empty manifest");
-					return reporter.found(
-						"no coverage data: .strictcli/coverage/ contains no shard files",
-					);
+				// Rewrite the manifest as the monotonic union, but only when the
+				// content actually changes (keeps a pure check from dirtying a
+				// byte-identical file).
+				if (manifestPath !== "" && covered.size > 0) {
+					const manifest = [...covered].sort();
+					const newContent = `${JSON.stringify(manifest, null, 2)}\n`;
+					let existing: string | undefined;
+					try {
+						existing = readFileSync(manifestPath, "utf8");
+					} catch {
+						existing = undefined;
+					}
+					if (existing !== newContent) {
+						mkdirSync(dirname(manifestPath), { recursive: true });
+						writeFileSync(manifestPath, newContent);
+					}
 				}
-
-				// Write the canonical manifest (sorted, 2-space indent, trailing
-				// newline).
-				const manifest = [...covered].sort();
-				writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
 
 				// Compare against the command surface (exclude the
 				// framework-injected check command -- it is not a user command).

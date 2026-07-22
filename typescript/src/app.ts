@@ -541,12 +541,17 @@ export class AppImpl implements App {
 	readonly checksPath: string | undefined;
 	readonly checksEmbed: string | undefined;
 	readonly checks: ChecksState = newChecksState();
-	// Test-coverage instrumentation state (checks/coverage.ts).
+	// Test-coverage instrumentation state (checks/coverage.ts). All three
+	// paths are absolute, anchored to the cwd at construction time (sibling
+	// parity: tests which chdir still record into the repo, and a check
+	// evaluated from a foreign cwd reads the app's own repo state).
 	readonly testCoverage: boolean;
-	/** Shard path template with a "{n}" slot; set when testCoverage is on. */
+	/** Absolute shard-file path (<coverageDir>/<pid>.jsonl, append semantics). */
 	coverageShardPath: string | undefined;
-	/** Shard counter slotted into the template (constant, sibling parity). */
-	readonly coverageCounter: number = 0;
+	/** Absolute .strictcli/coverage/ directory. */
+	coverageDir: string | undefined;
+	/** Absolute .strictcli/test-coverage.json manifest path. */
+	coverageManifestPath: string | undefined;
 
 	constructor(spec: AppSpec) {
 		requireNonEmpty(spec.version, "App.version");

@@ -3,13 +3,21 @@
  * canonical manifest, and the built-in cli-test-coverage provider check.
  *
  * Each test chdirs into a fresh temp directory because the shard dir
- * (.strictcli/coverage/) and manifest are cwd-relative, mirroring the
- * siblings. Expectations derive from conformance/cases/test_coverage.json
- * and go/strictcli/coverage.go / Python _test_coverage_provider.
+ * (.strictcli/coverage/) and manifest are anchored to the cwd at app
+ * construction time, mirroring the siblings. Expectations derive from
+ * conformance/cases/test_coverage.json and go/strictcli/coverage.go /
+ * Python _test_coverage_provider.
  */
 
 import { strict as assert } from "node:assert";
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -66,7 +74,8 @@ test("testCoverage creates the shard dir eagerly and shards on test()", async ()
 		const shards = readdirSync(join(".strictcli", "coverage"));
 		assert.equal(shards.length, 1);
 		const shard = shards[0] as string;
-		assert.match(shard, new RegExp(`^${process.pid}-\\d+\\.jsonl$`));
+		// One shard per process, named <pid>.jsonl (sibling parity: no counter).
+		assert.equal(shard, `${process.pid}.jsonl`);
 		assert.equal(
 			readFileSync(join(".strictcli", "coverage", shard), "utf8"),
 			'{"command":"deploy"}\n{"command":"deploy"}\n',
@@ -110,25 +119,94 @@ test("full coverage passes and writes the canonical sorted manifest", async () =
 	});
 });
 
-test("no shard data fails with the stale-manifest problem", async () => {
-	await inTempDir(async () => {
+test("zero coverage state skips (no manifest, no shards)", async () => {
+	await inTempDir(async (dir) => {
 		const app = coverageApp();
 		// Run the check via the programmatic API so no shard is written first.
 		const { results, exitCode } = await app.runChecks(CTX, {
 			nameGlob: "cli-test-coverage",
 		});
-		assert.equal(exitCode, 1);
+		assert.equal(exitCode, 0);
 		const r = results[0];
 		assert.ok(r !== undefined);
-		assert.equal(r.status, "fail");
+		assert.equal(r.status, "skip");
 		assert.equal(
 			r.message,
-			"no coverage data: .strictcli/coverage/ contains no shard files",
+			`no coverage state at ${join(dir, ".strictcli")} -- cli-test-coverage` +
+				" applies to the app's own development tree",
 		);
-		assert.deepEqual(
-			r.problems.map((p) => ({ ...p })),
-			[{ severity: "error", text: "stale or empty manifest" }],
+	});
+});
+
+test("committed manifest yields a deterministic pass with no shards", async () => {
+	await inTempDir(async () => {
+		mkdirSync(".strictcli", { recursive: true });
+		writeFileSync(
+			join(".strictcli", "test-coverage.json"),
+			'[\n  "build",\n  "deploy",\n  "status"\n]\n',
 		);
+		const app = coverageApp();
+		const { results, exitCode } = await app.runChecks(CTX, {
+			nameGlob: "cli-test-coverage",
+		});
+		assert.equal(exitCode, 0);
+		const r = results[0];
+		assert.ok(r !== undefined);
+		assert.equal(r.status, "pass");
+		assert.equal(r.message, "all 3 commands have test coverage");
+		// Byte-identical union: a pure check must not dirty the manifest.
+		assert.equal(
+			readFileSync(join(".strictcli", "test-coverage.json"), "utf8"),
+			'[\n  "build",\n  "deploy",\n  "status"\n]\n',
+		);
+	});
+});
+
+test("partial manifest fails honestly and rewrites the monotonic union", async () => {
+	await inTempDir(async () => {
+		mkdirSync(".strictcli", { recursive: true });
+		writeFileSync(
+			join(".strictcli", "test-coverage.json"),
+			'[\n  "deploy"\n]\n',
+		);
+		const app = coverageApp();
+		await app.test(["status"]);
+		const result = await app.test(["check", "--all"]);
+		assert.equal(result.exitCode, 1);
+		assert.equal(
+			result.stdout,
+			"FAIL  cli-test-coverage    1 command(s) with zero test coverage\n" +
+				"        [error] no test coverage for command: build\n",
+		);
+		// Manifest is the union of its prior contents and the merged shards
+		// (test() also records "check" itself when running check --all).
+		assert.equal(
+			readFileSync(join(".strictcli", "test-coverage.json"), "utf8"),
+			'[\n  "check",\n  "deploy",\n  "status"\n]\n',
+		);
+	});
+});
+
+test("coverage paths are anchored to the construction-time cwd", async () => {
+	await inTempDir(async (dir) => {
+		const app = coverageApp();
+		const foreign = mkdtempSync(join(tmpdir(), "strictcli-foreign-"));
+		process.chdir(foreign);
+		try {
+			// Recording from a foreign cwd still shards into the app's own tree.
+			await app.test(["deploy"]);
+			await app.test(["status"]);
+			await app.test(["build"]);
+			assert.equal(readdirSync(join(dir, ".strictcli", "coverage")).length, 1);
+			assert.deepEqual(readdirSync(foreign), []);
+			// The check evaluated from the foreign cwd reads the app's state.
+			const result = await app.test(["check", "--all"]);
+			assert.equal(result.exitCode, 0);
+			assert.match(result.stdout, /all 3 commands have test coverage/);
+			assert.ok(existsSync(join(dir, ".strictcli", "test-coverage.json")));
+		} finally {
+			process.chdir(dir);
+		}
 	});
 });
 
@@ -184,9 +262,8 @@ test("shards merge across multiple files in the coverage dir", async () => {
 		const app = coverageApp();
 		await app.test(["deploy"]);
 		// Simulate a second process shard by writing another file directly.
-		const { writeFileSync } = await import("node:fs");
 		writeFileSync(
-			join(".strictcli", "coverage", "99999-0.jsonl"),
+			join(".strictcli", "coverage", "99999.jsonl"),
 			'{"command":"status"}\n{"command":"build"}\n',
 		);
 		const result = await app.test(["check", "--all"]);
