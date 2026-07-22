@@ -7,7 +7,8 @@ and optionally updates the JSON test files to use exact matching where appropria
 Usage:
     python conformance/capture_outputs.py --target python
     python conformance/capture_outputs.py --target python --update
-    python conformance/capture_outputs.py --target python --target go --compare
+    python conformance/capture_outputs.py --target python --compare-with go
+    python conformance/capture_outputs.py --target typescript --compare-with go
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from run import (
     _normalize,
     _run_case,
     CASES_DIR,
+    TARGETS,
 )
 
 
@@ -252,7 +254,7 @@ def main() -> None:
     parser.add_argument(
         "--target",
         required=True,
-        choices=["python", "go"],
+        choices=list(TARGETS),
         help="Target implementation to capture from",
     )
     parser.add_argument(
@@ -267,7 +269,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--compare-with",
-        choices=["python", "go"],
+        choices=list(TARGETS),
         help="Also run against this target and compare outputs",
     )
     parser.add_argument(
