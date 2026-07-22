@@ -87,8 +87,8 @@
     }
   },
   {
-    "name": "outcome: bad handler return is a hard error (Python-only; Go's type system forbids it)",
-    "targets": ["python"],
+    "name": "outcome: bad handler return is a hard error (Python and TypeScript; Go's type system forbids it)",
+    "targets": ["python", "typescript"],
     "app": {
       "name": "outcomeapp",
       "version": "1.0.0",
