@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Schema parity check for strictcli conformance.
 
-Defines a rich app (covering all feature combinations), generates both
-Python and Go implementations, runs --dump-schema on each, and compares
-the resulting JSON schemas structurally. Any difference is a parity gap.
+Defines a rich app (covering all feature combinations), runs --dump-schema on
+every registered target (Python, Go, TypeScript), and compares the resulting
+JSON schemas structurally N-way. All targets must produce identical schemas;
+any difference is a parity gap, reported with the odd one(s) out.
 
-Exit 0 if schemas are identical, exit 1 with a diff report otherwise.
+Exit 0 if all schemas are identical, exit 1 with a diff report otherwise.
 """
 
 from __future__ import annotations
@@ -26,6 +27,11 @@ CONFORMANCE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CONFORMANCE_DIR.parent
 GO_PKG_DIR = PROJECT_ROOT / "go"
 HARNESS_DIR = CONFORMANCE_DIR / "harness"
+TS_DIR = PROJECT_ROOT / "typescript"
+HARNESS_TS_ENTRY = CONFORMANCE_DIR / "harness_ts" / "main.js"
+
+# Registration order is also the reporting order for N-way comparison.
+TARGET_NAMES = ["python", "go", "typescript"]
 
 # ---------------------------------------------------------------------------
 # App definitions -- each exercises a different feature surface
@@ -481,6 +487,10 @@ def _make_project_dir(target: str, app_name: str) -> str:
     elif target == "python":
         with open(os.path.join(d, "pyproject.toml"), "w") as f:
             f.write(f'[project]\nname = "{app_name}"\n')
+    elif target == "typescript":
+        with open(os.path.join(d, "package.json"), "w") as f:
+            json.dump({"name": app_name}, f)
+            f.write("\n")
     return d
 
 
@@ -513,8 +523,28 @@ def _build_harness() -> str:
     return binary
 
 
+def _build_ts_harness() -> str:
+    """Build typescript/dist (the TS harness's only prerequisite). Returns the
+    harness entry path (conformance/harness_ts/main.js, plain Node ESM)."""
+    result = subprocess.run(
+        ["npm", "run", "build"],
+        cwd=str(TS_DIR),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"typescript dist build failed:\n{result.stdout}\n{result.stderr}"
+        )
+    return str(HARNESS_TS_ENTRY)
+
+
 def _run_dump_schema(
-    app_def: dict, target: str, harness_binary: str | None = None,
+    app_def: dict,
+    target: str,
+    harness_binary: str | None = None,
+    ts_entry: str | None = None,
 ) -> dict:
     """Run --dump-schema for a given target and return the parsed schema JSON.
 
@@ -564,6 +594,29 @@ def _run_dump_schema(
                 )
             finally:
                 os.unlink(def_path)
+
+        elif target == "typescript":
+            assert ts_entry is not None
+            # Write app definition to a temp file for the harness
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", prefix="strictcli_schema_def_",
+                delete=False,
+            ) as f:
+                json.dump(app_def, f, sort_keys=True)
+                def_path = f.name
+            try:
+                env = os.environ.copy()
+                env["CONFORMANCE_APP_DEF"] = def_path
+                result = subprocess.run(
+                    ["node", ts_entry, "--dump-schema"],
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    cwd=proj_dir,
+                    timeout=10,
+                )
+            finally:
+                os.unlink(def_path)
         else:
             raise ValueError(f"unsupported target: {target}")
 
@@ -601,71 +654,155 @@ def _run_dump_schema(
 
 
 def _diff_schemas(
-    py_schema: object,
-    go_schema: object,
+    schema_a: object,
+    schema_b: object,
+    label_a: str = "python",
+    label_b: str = "go",
     path: str = "$",
 ) -> list[str]:
     """Recursively compare two JSON-like objects. Returns list of difference descriptions."""
     diffs: list[str] = []
 
-    if type(py_schema) != type(go_schema):
-        # Special case: Python None vs Go null (both map to JSON null)
-        if py_schema is None and go_schema is None:
+    if type(schema_a) != type(schema_b):
+        # Special case: both null
+        if schema_a is None and schema_b is None:
             return diffs
         # Special case: int vs float (JSON numbers)
-        if isinstance(py_schema, (int, float)) and isinstance(go_schema, (int, float)):
-            if float(py_schema) != float(go_schema):
-                diffs.append(f"{path}: value mismatch: python={py_schema!r} go={go_schema!r}")
+        if isinstance(schema_a, (int, float)) and isinstance(schema_b, (int, float)):
+            if float(schema_a) != float(schema_b):
+                diffs.append(
+                    f"{path}: value mismatch: {label_a}={schema_a!r} {label_b}={schema_b!r}"
+                )
             return diffs
         diffs.append(
-            f"{path}: type mismatch: python={type(py_schema).__name__}({py_schema!r}) "
-            f"go={type(go_schema).__name__}({go_schema!r})"
+            f"{path}: type mismatch: {label_a}={type(schema_a).__name__}({schema_a!r}) "
+            f"{label_b}={type(schema_b).__name__}({schema_b!r})"
         )
         return diffs
 
-    if isinstance(py_schema, dict):
-        py_keys = set(py_schema.keys())
-        go_keys = set(go_schema.keys())
+    if isinstance(schema_a, dict):
+        a_keys = set(schema_a.keys())
+        b_keys = set(schema_b.keys())
 
-        only_py = py_keys - go_keys
-        only_go = go_keys - py_keys
-
-        for k in sorted(only_py):
-            diffs.append(f"{path}.{k}: present in Python only (value={py_schema[k]!r})")
-        for k in sorted(only_go):
-            diffs.append(f"{path}.{k}: present in Go only (value={go_schema[k]!r})")
-
-        for k in sorted(py_keys & go_keys):
-            diffs.extend(_diff_schemas(py_schema[k], go_schema[k], f"{path}.{k}"))
-
-    elif isinstance(py_schema, list):
-        if len(py_schema) != len(go_schema):
+        for k in sorted(a_keys - b_keys):
             diffs.append(
-                f"{path}: list length mismatch: python={len(py_schema)} go={len(go_schema)}"
+                f"{path}.{k}: present in {label_a} only (value={schema_a[k]!r})"
             )
-            # Compare up to the shorter length
-            for i in range(min(len(py_schema), len(go_schema))):
-                diffs.extend(_diff_schemas(py_schema[i], go_schema[i], f"{path}[{i}]"))
-        else:
-            for i in range(len(py_schema)):
-                diffs.extend(_diff_schemas(py_schema[i], go_schema[i], f"{path}[{i}]"))
+        for k in sorted(b_keys - a_keys):
+            diffs.append(
+                f"{path}.{k}: present in {label_b} only (value={schema_b[k]!r})"
+            )
+
+        for k in sorted(a_keys & b_keys):
+            diffs.extend(
+                _diff_schemas(schema_a[k], schema_b[k], label_a, label_b, f"{path}.{k}")
+            )
+
+    elif isinstance(schema_a, list):
+        if len(schema_a) != len(schema_b):
+            diffs.append(
+                f"{path}: list length mismatch: {label_a}={len(schema_a)} "
+                f"{label_b}={len(schema_b)}"
+            )
+        for i in range(min(len(schema_a), len(schema_b))):
+            diffs.extend(
+                _diff_schemas(
+                    schema_a[i], schema_b[i], label_a, label_b, f"{path}[{i}]"
+                )
+            )
 
     else:
-        if py_schema != go_schema:
-            diffs.append(f"{path}: value mismatch: python={py_schema!r} go={go_schema!r}")
+        if schema_a != schema_b:
+            diffs.append(
+                f"{path}: value mismatch: {label_a}={schema_a!r} {label_b}={schema_b!r}"
+            )
 
     return diffs
+
+
+_SCALAR_LIST_CARRIERS = {"str", "int", "float"}
+
+
+def _canonicalize_repeatable(node: object) -> None:
+    """Rewrite repeatable-scalar flags to their list-carrier spelling, in place.
+
+    Documented TS model constant (typescript/src/schema.ts doc block;
+    ts-port-spec.md task 6.1 vocabulary note (a)): in TS, list carriers ARE the
+    repeatable flags, so a scalar flag with repeatable=true is declared as
+    list[T] and the schema emits {type: "list[T]"} with no "repeatable" key and
+    no empty-list default. Python and Go emit {type: "T", repeatable: true,
+    default: []}. Both spellings describe the identical flag; canonicalize every
+    target to the list-carrier form so the N-way comparison sees one shape.
+    """
+    if isinstance(node, dict):
+        if (
+            node.get("repeatable") is True
+            and node.get("type") in _SCALAR_LIST_CARRIERS
+        ):
+            node["type"] = f"list[{node['type']}]"
+            del node["repeatable"]
+            if node.get("default") == []:
+                del node["default"]
+        for v in node.values():
+            _canonicalize_repeatable(v)
+    elif isinstance(node, list):
+        for v in node:
+            _canonicalize_repeatable(v)
 
 
 def _normalize_schema(schema: dict) -> dict:
     """Normalize a schema for comparison.
 
     - Remove project_id (depends on project file, always different between targets).
-    - Sort lists of flags/args by name for stable comparison (order may differ).
+    - Canonicalize repeatable-scalar flags to the list-carrier spelling.
     """
-    schema = dict(schema)
+    schema = json.loads(json.dumps(schema))  # deep copy
     schema.pop("project_id", None)
+    _canonicalize_repeatable(schema)
     return schema
+
+
+def _compare_schemas_nway(schemas: dict[str, dict]) -> list[str]:
+    """All-identical assertion across N normalized schemas.
+
+    Returns [] when every target's schema is identical. Otherwise groups the
+    targets by identical schema content; when a unique largest group exists it
+    is the majority and every other target is reported as the odd one out,
+    diffed against the majority. With no unique majority (e.g. an even split),
+    every other target is diffed against the first registered target.
+    """
+    keys = {t: json.dumps(s, sort_keys=True) for t, s in schemas.items()}
+    groups: dict[str, list[str]] = {}
+    for t in schemas:  # preserves registration order within groups
+        groups.setdefault(keys[t], []).append(t)
+    if len(groups) == 1:
+        return []
+
+    diffs: list[str] = []
+    sizes = sorted((len(ts) for ts in groups.values()), reverse=True)
+    majority_is_unique = len(sizes) == 1 or sizes[0] > sizes[1]
+
+    if majority_is_unique:
+        majority = max(groups.values(), key=len)
+        odd = [t for t in schemas if t not in majority]
+        diffs.append(
+            f"odd one out: {', '.join(odd)} "
+            f"(majority: {', '.join(majority)})"
+        )
+        base_label = f"majority({','.join(majority)})"
+        base = schemas[majority[0]]
+    else:
+        ordered = list(schemas)
+        base_label = ordered[0]
+        base = schemas[base_label]
+        odd = [t for t in ordered[1:] if keys[t] != keys[base_label]]
+        diffs.append(
+            f"no majority; diffing against {base_label}: {', '.join(odd)} differ"
+        )
+
+    for t in odd:
+        diffs.extend(_diff_schemas(base, schemas[t], base_label, t))
+    return diffs
 
 
 # ---------------------------------------------------------------------------
@@ -681,6 +818,13 @@ def main() -> int:
         print(f"FAILED: {e}", file=sys.stderr)
         return 1
 
+    print("Building TypeScript dist...", flush=True)
+    try:
+        ts_entry = _build_ts_harness()
+    except RuntimeError as e:
+        print(f"FAILED: {e}", file=sys.stderr)
+        return 1
+
     app_defs = [
         ("rich app", RICH_APP),
         ("minimal app", MINIMAL_APP),
@@ -692,32 +836,28 @@ def main() -> int:
     for label, app_def in app_defs:
         print(f"Testing {label}...", flush=True)
 
-        # Run Python
-        try:
-            py_schema = _run_dump_schema(app_def, "python")
-        except RuntimeError as e:
-            print(f"  Python FAILED: {e}", file=sys.stderr)
-            all_diffs.append((label, [f"Python failed: {e}"]))
+        schemas: dict[str, dict] = {}
+        failed = False
+        for target in TARGET_NAMES:
+            try:
+                raw = _run_dump_schema(
+                    app_def, target, harness_binary=harness, ts_entry=ts_entry
+                )
+            except RuntimeError as e:
+                print(f"  {target} FAILED: {e}", file=sys.stderr)
+                all_diffs.append((label, [f"{target} failed: {e}"]))
+                failed = True
+                break
+            schemas[target] = _normalize_schema(raw)
+        if failed:
             continue
 
-        # Run Go
-        try:
-            go_schema = _run_dump_schema(app_def, "go", harness)
-        except RuntimeError as e:
-            print(f"  Go FAILED: {e}", file=sys.stderr)
-            all_diffs.append((label, [f"Go failed: {e}"]))
-            continue
-
-        # Normalize and compare
-        py_norm = _normalize_schema(py_schema)
-        go_norm = _normalize_schema(go_schema)
-
-        diffs = _diff_schemas(py_norm, go_norm)
+        diffs = _compare_schemas_nway(schemas)
         if diffs:
             all_diffs.append((label, diffs))
             print(f"  {len(diffs)} difference(s) found")
         else:
-            print(f"  PASS (schemas identical)")
+            print(f"  PASS (schemas identical across {', '.join(TARGET_NAMES)})")
 
     # Cleanup harness
     harness_path = HARNESS_DIR / "harness"
