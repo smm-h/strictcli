@@ -388,3 +388,27 @@ survive beyond session memory.
   when both outputs independently satisfy the case's own expect block (2 pinned
   wording divergences: dict parse error and provider severity-mismatch builder
   names, both matching Python's shape).
+- 2026-07-22 (task 6.3): three-way parity green. `run.py --both` now runs
+  python/go/typescript N-way with 0 parity failures and 0 output divergence
+  warnings. Two of the seven divergences the first full run surfaced were
+  genuine Go bugs, fixed on the Go side (behavior changes, red-green tested):
+  (1) the dict missing-equals message said "expected key=value" while Go in
+  fact also accepts JSON objects -- now "expected key=value or JSON" matching
+  Python/TS (the compound_types case pins the exact message via stderr_equals);
+  (2) `config show --plain` displayed an int flag's JSON config value as
+  "42.0" because `resolveFlagShowSource` skipped type coercion (encoding/json
+  yields float64) -- it now coerces via `coerceConfigValue`, matching runtime
+  resolution and Python/TS display. The dict-message fix drops the smoke
+  oracle's accepted wording divergences from 2 to 1 (provider builder names
+  remain). The five remaining divergences are intrinsically language-specific
+  (TOML/JSON parser prose plus Go's column-after-offending-byte convention,
+  Python's uncaught-TypeError traceback for bad handler returns, and the
+  language-idiomatic check-spec builder names). For these, cases now carry an
+  `acknowledged_divergence` block (schema.json + run.py): per-stream target
+  lists with a mandatory reason; acknowledged targets are excluded from that
+  stream's byte-identity comparison while the case's own expect block still
+  runs on every target, unacknowledged targets are still compared, at least
+  one applicable target must remain as baseline, and a declared divergence
+  that stops diverging is reported as a stale acknowledgment (double-entry).
+  Final counts: python 551/551, go 550/550 (bad-return case is
+  python+typescript only), typescript 551/551, --both 551/551.
