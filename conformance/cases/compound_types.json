@@ -162,7 +162,7 @@
     "argv": ["cmd", "--header", "no-equals-here"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "expected key=value"
+      "stderr_equals": "error: --header: expected key=value or JSON, got 'no-equals-here'\ntry 'myapp cmd --help'"
     }
   },
   {

@@ -126,6 +126,88 @@ def test_compare_fewer_than_two_present_is_noop():
     assert run._compare_outputs({"python": _proc(stdout="x"), "go": None}) == []
 
 
+# --- Acknowledged divergence --------------------------------------------------
+
+
+def _ack(streams: dict[str, list[str]]):
+    return {"reason": "test reason", "streams": streams}
+
+
+def test_acknowledged_target_excluded_from_stream_comparison():
+    # go's stderr genuinely differs but is acknowledged; python & ts still match.
+    results = {
+        "python": _proc(stderr="shared error"),
+        "go": _proc(stderr="go-specific error"),
+        "ts": _proc(stderr="shared error"),
+    }
+    assert run._compare_outputs(results, _ack({"stderr": ["go"]})) == []
+
+
+def test_acknowledgment_is_per_stream_not_global():
+    # go acknowledged on stderr only; its stdout divergence still warns.
+    results = {
+        "python": _proc(stdout="hello", stderr="shared"),
+        "go": _proc(stdout="HELLO", stderr="go-specific"),
+        "ts": _proc(stdout="hello", stderr="shared"),
+    }
+    warnings = run._compare_outputs(results, _ack({"stderr": ["go"]}))
+    text = "\n".join(warnings)
+    assert "stdout divergence (odd one out: go):" in text
+    assert "stderr" not in text
+
+
+def test_unacknowledged_targets_still_compared():
+    # go acknowledged, but python & ts diverge from each other -> warn.
+    results = {
+        "python": _proc(stderr="py error"),
+        "go": _proc(stderr="go error"),
+        "ts": _proc(stderr="ts error"),
+    }
+    warnings = run._compare_outputs(results, _ack({"stderr": ["go"]}))
+    text = "\n".join(warnings)
+    assert "stderr divergence" in text
+    assert "py error" in text and "ts error" in text
+    assert "go error" not in text
+
+
+def test_stale_acknowledgment_is_reported():
+    # Acknowledged target's output matches every other target -> stale.
+    results = {
+        "python": _proc(stderr="same"),
+        "go": _proc(stderr="same"),
+        "ts": _proc(stderr="same"),
+    }
+    warnings = run._compare_outputs(results, _ack({"stderr": ["go"]}))
+    text = "\n".join(warnings)
+    assert "stale acknowledged divergence" in text
+    assert "'go'" in text
+
+
+def test_validate_acknowledgment_rejects_inapplicable_target():
+    case = {
+        "name": "x",
+        "targets": ["python", "go"],
+        "acknowledged_divergence": _ack({"stderr": ["ts"]}),
+    }
+    errors = run._validate_acknowledged_divergence(case, ["python", "go"])
+    assert len(errors) == 1
+    assert "not applicable" in errors[0]
+
+
+def test_validate_acknowledgment_requires_a_baseline_target():
+    case = {
+        "name": "x",
+        "acknowledged_divergence": _ack({"stderr": ["python", "go"]}),
+    }
+    errors = run._validate_acknowledged_divergence(case, ["python", "go"])
+    assert len(errors) == 1
+    assert "baseline" in errors[0]
+
+
+def test_validate_acknowledgment_absent_is_noop():
+    assert run._validate_acknowledged_divergence({"name": "x"}, ["python", "go"]) == []
+
+
 # --- Target scoping ----------------------------------------------------------
 
 

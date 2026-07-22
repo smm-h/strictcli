@@ -29,6 +29,36 @@
           "minItems": 1,
           "description": "Restrict which implementations run this case. Absent means all. Used for cases that are only expressible in some languages (e.g. the bad-return hard error, expressible in Python and TypeScript but unrepresentable in Go's type system)."
         },
+        "acknowledged_divergence": {
+          "type": "object",
+          "required": ["reason", "streams"],
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Why the acknowledged targets' output is intentionally language-specific (parser prose, tracebacks, idiomatic API names). Mandatory audit trail."
+            },
+            "streams": {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "stdout": {
+                  "type": "array",
+                  "items": { "enum": ["python", "go", "typescript"] },
+                  "minItems": 1
+                },
+                "stderr": {
+                  "type": "array",
+                  "items": { "enum": ["python", "go", "typescript"] },
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          "description": "Declares targets whose output on a stream intentionally differs from the rest. The N-way parity runner excludes them from that stream's byte-identity comparison; each target's own expect block still runs unchanged. Double-entry: if an acknowledged target's output does not actually differ, the runner reports a stale-acknowledgment divergence warning. At least one applicable target per stream must remain unacknowledged as the comparison baseline."
+        },
         "app": {
           "$ref": "#/$defs/app"
         },

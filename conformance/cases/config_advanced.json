@@ -57,9 +57,8 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "count = 42",
-        "(source: config)",
-        "rate = 3.14",
+        "count = 42  (source: config)",
+        "rate = 3.14  (source: config)",
         "debug ="
       ]
     }

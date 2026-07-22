@@ -89,6 +89,10 @@
   {
     "name": "outcome: bad handler return is a hard error (Python and TypeScript; Go's type system forbids it)",
     "targets": ["python", "typescript"],
+    "acknowledged_divergence": {
+      "reason": "Python surfaces the bad return as an uncaught TypeError traceback (host paths, line numbers, Python type names: int/None/list); TypeScript prints the framework's one-line error with JS type names (number/undefined/Array). Both assert the shared 'command handler must return' contract via stderr_contains.",
+      "streams": {"stderr": ["python"]}
+    },
     "app": {
       "name": "outcomeapp",
       "version": "1.0.0",

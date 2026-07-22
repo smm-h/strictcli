@@ -97,6 +97,10 @@
   },
   {
     "name": "providers: severity mismatch is a hard error",
+    "acknowledged_divergence": {
+      "reason": "The remediation half of the message names the language-idiomatic builder: NewErrorCheckSpec/NewWarnCheckSpec (Go), error_check_spec/warn_check_spec (Python), errorCheckSpec/warnCheckSpec (TypeScript). Pinned as an intentional wording divergence in ts-port-spec.md.",
+      "streams": {"stderr": ["go", "typescript"]}
+    },
     "app": {
       "name": "testapp",
       "version": "1.0.0",

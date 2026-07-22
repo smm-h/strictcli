@@ -569,8 +569,39 @@ def _stream_divergence(stream_name: str, values: dict[str, str]) -> list[str]:
     return lines
 
 
+def _validate_acknowledged_divergence(
+    case: dict, applicable: list[str]
+) -> list[str]:
+    """Validate a case's acknowledged_divergence block against its applicable targets.
+
+    Rules (beyond the JSON schema): every acknowledged target must be
+    applicable to the case, and at least one applicable target per stream must
+    remain unacknowledged to serve as the comparison baseline.
+    """
+    ack = case.get("acknowledged_divergence")
+    if ack is None:
+        return []
+    errors: list[str] = []
+    for stream, targets in ack["streams"].items():
+        unknown = sorted(set(targets) - set(applicable))
+        if unknown:
+            errors.append(
+                f"acknowledged_divergence.streams.{stream}: target(s) "
+                f"{', '.join(unknown)} not applicable to this case"
+            )
+        remaining = [t for t in applicable if t not in targets]
+        if not remaining:
+            errors.append(
+                f"acknowledged_divergence.streams.{stream}: every applicable "
+                f"target is acknowledged; at least one must remain as the "
+                f"comparison baseline"
+            )
+    return errors
+
+
 def _compare_outputs(
     results: dict[str, subprocess.CompletedProcess | None],
+    acknowledged: dict | None = None,
 ) -> list[str]:
     """N-way comparison of normalized stdout/stderr across all targets.
 
@@ -578,21 +609,35 @@ def _compare_outputs(
     produced no result). Targets with no result are excluded. If fewer than two
     targets produced comparable output, returns [] (nothing to compare). On
     divergence, returns a labeled diff identifying the odd one(s) out.
+
+    `acknowledged` is the case's optional acknowledged_divergence block: targets
+    listed under a stream are excluded from that stream's byte-identity
+    comparison because their output is intentionally language-specific (parser
+    prose, tracebacks, idiomatic API names). Double-entry: an acknowledged
+    target whose output does NOT actually differ from every other target is a
+    stale acknowledgment and is reported as a divergence warning.
     """
     warnings: list[str] = []
     present = {t: r for t, r in results.items() if r is not None}
     if len(present) < 2:
         return warnings
 
-    stdout_vals = {
-        t: _normalize_temp_paths(_normalize(r.stdout)) for t, r in present.items()
-    }
-    warnings.extend(_stream_divergence("stdout", stdout_vals))
-
-    stderr_vals = {
-        t: _normalize_temp_paths(_normalize(r.stderr)) for t, r in present.items()
-    }
-    warnings.extend(_stream_divergence("stderr", stderr_vals))
+    ack_streams = acknowledged["streams"] if acknowledged else {}
+    for stream_name, attr in (("stdout", "stdout"), ("stderr", "stderr")):
+        vals = {
+            t: _normalize_temp_paths(_normalize(getattr(r, attr)))
+            for t, r in present.items()
+        }
+        ack = [t for t in ack_streams.get(stream_name, []) if t in vals]
+        base_vals = {t: v for t, v in vals.items() if t not in ack}
+        warnings.extend(_stream_divergence(stream_name, base_vals))
+        for t in ack:
+            others = [v for ot, v in vals.items() if ot != t]
+            if others and all(vals[t] == v for v in others):
+                warnings.append(
+                    f"  {stream_name}: stale acknowledged divergence: {t!r} "
+                    f"output is identical to every other target"
+                )
 
     return warnings
 
@@ -655,6 +700,13 @@ def _run_parity_mode(
             # Fewer than two targets run this case; parity is undefined.
             continue
 
+        ack_errors = _validate_acknowledged_divergence(case, applicable)
+        if ack_errors:
+            print(f"invalid acknowledged_divergence in {label}:", file=sys.stderr)
+            for e in ack_errors:
+                print(f"  {e}", file=sys.stderr)
+            sys.exit(1)
+
         if verbose:
             print(f"  running: {label} ...", end=" ", flush=True)
 
@@ -665,7 +717,9 @@ def _run_parity_mode(
         if all(oks.values()):
             # All targets pass -- check output divergence.
             report.passed += 1
-            div_warnings = _compare_outputs(results)
+            div_warnings = _compare_outputs(
+                results, case.get("acknowledged_divergence")
+            )
             if div_warnings:
                 report.output_divergences += 1
                 report.divergence_details.append((label, div_warnings))
