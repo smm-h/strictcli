@@ -1210,7 +1210,7 @@ func parseDictValue(flagName, raw string, valueType FlagType) (map[string]interf
 	// key=value format: split on first '='
 	eqIdx := strings.Index(raw, "=")
 	if eqIdx < 0 {
-		return nil, fmt.Sprintf("--%s: expected key=value, got '%s'", flagName, raw)
+		return nil, fmt.Sprintf("--%s: expected key=value or JSON, got '%s'", flagName, raw)
 	}
 	key := raw[:eqIdx]
 	valStr := raw[eqIdx+1:]

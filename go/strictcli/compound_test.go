@@ -419,8 +419,11 @@ func TestDictFlagMissingEquals(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "expected key=value") {
-		t.Fatalf("expected key=value error, got: %s", r.Stderr)
+	// Exact wording is pinned for cross-language parity: Python and TypeScript
+	// emit the same message (Go also accepts a JSON object for dict flags).
+	want := "error: --header: expected key=value or JSON, got 'no-equals-here'"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("expected %q in stderr, got: %s", want, r.Stderr)
 	}
 }
 
