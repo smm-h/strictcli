@@ -938,4 +938,6 @@ WithConfigFormat("toml") now correctly parses TOML config files (previously alwa
 
 ## Unreleased
 
-- No user-facing changes.
+### Features
+
+- [ts-strictcli] **Native TypeScript implementation.** strictcli on npm is now a native TypeScript implementation (ESM, Node >= 22) with full static handler-arg inference from flag declarations, behavioral byte-parity with the sibling implementations enforced by the cross-language conformance suite.
