@@ -177,6 +177,9 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      # Full install (including devDependencies): npm publish triggers prepack
+      # -> npm run build -> tsc, which needs typescript and @types/node.
+      - run: npm ci
       - name: Install gitleaks
         run: |
           GITLEAKS_VERSION=8.24.3
