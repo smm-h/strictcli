@@ -161,6 +161,18 @@
       "needs_network": false,
       "depends_on": []
     },
+    "conformance-typescript": {
+      "tags": [
+        "pre-release",
+        "conformance",
+        "typescript"
+      ],
+      "severity": "error",
+      "fast": false,
+      "pure": false,
+      "needs_network": false,
+      "depends_on": []
+    },
     "conformance-parity": {
       "tags": [
         "pre-release",
@@ -173,7 +185,8 @@
       "needs_network": false,
       "depends_on": [
         "conformance-python",
-        "conformance-go"
+        "conformance-go",
+        "conformance-typescript"
       ]
     },
     "schema-parity": {

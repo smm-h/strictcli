@@ -75,6 +75,11 @@ def check_conformance_go(ctx, reporter):
     return _run_script(reporter, "run.py", "--target", "go")
 
 
+@app.error_check("conformance-typescript")
+def check_conformance_typescript(ctx, reporter):
+    return _run_script(reporter, "run.py", "--target", "typescript")
+
+
 @app.error_check("conformance-parity")
 def check_conformance_parity(ctx, reporter):
     return _run_script(reporter, "run.py", "--both")

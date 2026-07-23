@@ -32,13 +32,21 @@ pure = false
 needs_network = false
 depends_on = []
 
+[checks.conformance-typescript]
+tags = ["pre-release", "conformance", "typescript"]
+severity = "error"
+fast = false
+pure = false
+needs_network = false
+depends_on = []
+
 [checks.conformance-parity]
 tags = ["pre-release", "conformance", "parity"]
 severity = "error"
 fast = false
 pure = false
 needs_network = false
-depends_on = ["conformance-python", "conformance-go"]
+depends_on = ["conformance-python", "conformance-go", "conformance-typescript"]
 
 [checks.schema-parity]
 tags = ["pre-release", "conformance", "parity"]
