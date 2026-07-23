@@ -21,8 +21,158 @@
       "path": "python-strictcli.md",
       "title": "python.strictcli",
       "type": "doc"
+    },
+    {
+      "path": "typescript-src-app.md",
+      "title": "typescript/src/app",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-atprefix.md",
+      "title": "typescript/src/atprefix",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-checks-cmd.md",
+      "title": "typescript/src/checks/cmd",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-checks-coverage.md",
+      "title": "typescript/src/checks/coverage",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-checks-framework.md",
+      "title": "typescript/src/checks/framework",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-checks-provider.md",
+      "title": "typescript/src/checks/provider",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-checks-runner.md",
+      "title": "typescript/src/checks/runner",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-checks-tagdsl.md",
+      "title": "typescript/src/checks/tagdsl",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-config.md",
+      "title": "typescript/src/config",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-context.md",
+      "title": "typescript/src/context",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-describe.md",
+      "title": "typescript/src/describe",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-env.md",
+      "title": "typescript/src/env",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-errors.md",
+      "title": "typescript/src/errors",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-factories.md",
+      "title": "typescript/src/factories",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-float.md",
+      "title": "typescript/src/float",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-help.md",
+      "title": "typescript/src/help",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-index.md",
+      "title": "typescript/src/index",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-infer.md",
+      "title": "typescript/src/infer",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-infra.md",
+      "title": "typescript/src/infra",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-invoke.md",
+      "title": "typescript/src/invoke",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-mcp.md",
+      "title": "typescript/src/mcp",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-outcome.md",
+      "title": "typescript/src/outcome",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-parse.md",
+      "title": "typescript/src/parse",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-routing.md",
+      "title": "typescript/src/routing",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-schema.md",
+      "title": "typescript/src/schema",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-sources.md",
+      "title": "typescript/src/sources",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-toml.md",
+      "title": "typescript/src/toml",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-tool.md",
+      "title": "typescript/src/tool",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-types.md",
+      "title": "typescript/src/types",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-values.md",
+      "title": "typescript/src/values",
+      "type": "doc"
     }
   ],
   "posts": [],
-  "last_gen": "2026-07-18T22:59:40.126035+00:00"
+  "last_gen": "2026-07-23T09:53:19.156560+00:00"
 }
