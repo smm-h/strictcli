@@ -24,5 +24,32 @@
       "companion_tags": [],
       "github_release_deleted": true
     }
+  },
+  {
+    "version": "0.31.0",
+    "tag": "ts-strictcli@v0.31.0",
+    "timestamp": "2026-07-23T12:32:21+0200",
+    "verdict": "cleared",
+    "reason": "at least one registry confirms unpublished, none confirms published",
+    "evidence": [
+      {
+        "source": "registry_probe",
+        "target": "npm",
+        "kind": "unpublished",
+        "message": "strictcli@0.31.0 not found on npm"
+      }
+    ],
+    "operator_context": {
+      "is_latest": true,
+      "revert_shas": [
+        "e6504d6d858166dea14a04524413ebd9a97b1dbf",
+        "d9418a3920c69f7dfddc4343476774dfe6b41d41",
+        "781413ccdc224ead81d3ebcb6e3087aa9fb9f3b1",
+        "de0c5a78f8a26b83d899ac8f88182835bffaea95",
+        "d53753d6636508f78573ac0564df22019a36324d"
+      ],
+      "companion_tags": [],
+      "github_release_deleted": true
+    }
   }
 ]
