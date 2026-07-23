@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Error parity check for strictcli conformance.
 
-Extracts error message patterns from N implementations (currently Python and
-Go), normalizes them to a common signature form, and verifies:
+Extracts error message patterns from N implementations (currently Python,
+Go, and TypeScript), normalizes them to a common signature form, and
+verifies:
   1. Every signature extracted from any implementation is accounted for in all
      others (present or excluded with rationale).
   2. Every parse-time error signature is covered by at least one conformance
@@ -30,13 +31,14 @@ CONFORMANCE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CONFORMANCE_DIR.parent
 PY_SOURCE = PROJECT_ROOT / "python" / "strictcli" / "__init__.py"
 GO_ERRORS = PROJECT_ROOT / "go" / "strictcli" / "errors.go"
+TS_ERRORS = PROJECT_ROOT / "typescript" / "src" / "errors.ts"
 CASES_DIR = CONFORMANCE_DIR / "cases"
 
 # ---------------------------------------------------------------------------
 # Implementation registry
 # ---------------------------------------------------------------------------
 
-IMPLEMENTATIONS = ("python", "go")
+IMPLEMENTATIONS = ("python", "go", "typescript")
 
 # ---------------------------------------------------------------------------
 # Unified signature status manifest
@@ -61,12 +63,15 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Handler signature validation (Python only) --
     'command *: handler missing parameter * for flag *': {
         "go": "excluded:Go uses map[string]interface{} kwargs, no handler signature validation",
+        "typescript": "excluded:TS handlers take a single kwargs object like Go; no handler signature validation",
     },
     'command *: handler missing parameter * for arg *': {
         "go": "excluded:Go uses map[string]interface{} kwargs, no handler signature validation",
+        "typescript": "excluded:TS handlers take a single kwargs object like Go; no handler signature validation",
     },
     'command *: handler has extra parameter * not matching any flag or arg': {
         "go": "excluded:Go uses map[string]interface{} kwargs, no handler signature validation",
+        "typescript": "excluded:TS handlers take a single kwargs object like Go; no handler signature validation",
     },
 
     # -- Python default type validation --
@@ -77,6 +82,7 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Python internal float errors --
     'invalid literal for float(): *': {
         "go": "excluded:Python internal ValueError from _strict_float, surfaces as 'expected float'",
+        "typescript": "excluded:Python internal ValueError from _strict_float; TS float parsing surfaces 'expected float' directly",
     },
     'NaN is not allowed': {
         "go": "excluded:Python internal ValueError from _strict_float, wrapped with flag prefix at call site",
@@ -88,11 +94,13 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Python generic _require_non_empty_str --
     '*.* must be a non-empty string': {
         "go": "excluded:Python uses generic _require_non_empty_str; Go has entity-specific messages",
+        "typescript": "excluded:Python generic dotted template; TS parameterizes the label and mirrors Go's entity-specific templates",
     },
 
     # -- SkipCheck (Python-only scope adapter) --
     'SkipCheck.reason must be a non-empty string': {
         "go": "excluded:Python-only scope-adapter skip directive; Go has no scope adapter",
+        "typescript": "excluded:Python-only scope-adapter skip directive; TS matches Go: no scope adapter",
     },
 
     # -- Check provider validation (Python dynamic, Go static) --
@@ -109,6 +117,7 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Python f-string vs Go fmt.Sprintf bracket differences --
     'Flag *: default * is not in choices *': {
         "go": "excluded:Python f-string normalizes without brackets; Go counterpart is 'Flag *: default * is not in choices [*]'",
+        "typescript": "excluded:TS mirrors Go's bracketed rendering 'Flag *: default * is not in choices [*]'",
     },
 
     # -- Python Implies value type validation --
@@ -119,6 +128,7 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Python tag DSL --
     'tag expression: unknown AST node *': {
         "go": "excluded:Python uses tuple-based AST with string dispatch; Go uses typed interfaces",
+        "typescript": "excluded:Python tuple-based AST with string dispatch; TS uses typed AST node objects",
     },
 
     # -- Python config format validation --
@@ -129,6 +139,7 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Python field name vs Go option function name --
     'cannot use both checks_path and checks_embed': {
         "go": "excluded:Go uses option function names (WithChecks/WithChecksEmbed); Python uses field names (checks_path/checks_embed)",
+        "typescript": "excluded:TS emits Go's option spelling ('cannot use both WithChecks and WithChecksEmbed')",
     },
     'App.config_conflict_mode must be "cli-wins" or "error", got *': {
         "go": "excluded:Go counterpart is 'WithConfigConflictMode: mode must be ...' (option function name)",
@@ -140,6 +151,7 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Python unique bool validation --
     'Flag *: unique must be True or False': {
         "go": "excluded:Go uses typed bool field for Unique; no runtime type check needed",
+        "typescript": "excluded:TS unique is a typed boolean option; no runtime type check needed",
     },
 
     # -- Python repeatable default element validation --
@@ -150,43 +162,55 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Compound type structural differences --
     '*: dict key type must be str, got *': {
         "go": "excluded:Python generic {context}: pattern; Go uses DictOf typed constructor",
+        "typescript": "excluded:Python type-DSL parser {context}: pattern; TS uses typed schema constructors (dictOf)",
     },
     '*: dict type requires type arguments (e.g., dict[str, int]), got bare dict': {
         "go": "excluded:Python generic {context}: pattern; Go uses DictOf typed constructor",
+        "typescript": "excluded:Python type-DSL parser {context}: pattern; TS uses typed schema constructors (dictOf)",
     },
     '*: dict type takes exactly two type arguments, got *': {
         "go": "excluded:Python generic {context}: pattern; Go uses DictOf typed constructor",
+        "typescript": "excluded:Python type-DSL parser {context}: pattern; TS uses typed schema constructors (dictOf)",
     },
     '*: dict value type must be str, int, or float, got *': {
         "go": "excluded:Python generic {context}: pattern; Go uses DictOf typed constructor",
+        "typescript": "excluded:Python type-DSL parser {context}: pattern; TS uses typed schema constructors (dictOf)",
     },
     '*: list item type must be str, int, or float, got *': {
         "go": "excluded:Python generic {context}: pattern; Go uses ListOf typed constructor",
+        "typescript": "excluded:Python type-DSL parser {context}: pattern; TS uses typed schema constructors (listOf)",
     },
     '*: list type requires an item type (e.g., list[int]), got bare list': {
         "go": "excluded:Python generic {context}: pattern; Go uses ListOf typed constructor",
+        "typescript": "excluded:Python type-DSL parser {context}: pattern; TS uses typed schema constructors (listOf)",
     },
     '*: list type takes exactly one type argument, got *': {
         "go": "excluded:Python generic {context}: pattern; Go uses ListOf typed constructor",
+        "typescript": "excluded:Python type-DSL parser {context}: pattern; TS uses typed schema constructors (listOf)",
     },
     '*: type must be str, bool, int, float, list[T], or dict[str, T], got *': {
         "go": "excluded:Python generic {context}: pattern; Go uses separate typed constructors",
+        "typescript": "excluded:Python type-DSL parser {context}: pattern; TS uses typed schema constructors",
     },
 
     # -- Python compound type validation (Flag context) --
     'Flag *: * is not of type float': {
         "go": "excluded:Python generic {context} pattern; Go uses typed constructors with separate messages",
+        "typescript": "excluded:Python generic {context} element validation; TS uses a parameterized type-name template",
     },
     'Flag *: * is not of type int': {
         "go": "excluded:Python generic {context} pattern; Go uses typed constructors with separate messages",
+        "typescript": "excluded:Python generic {context} element validation; TS uses a parameterized type-name template",
     },
     'Flag *: * is not of type str': {
         "go": "excluded:Python generic {context} pattern; Go uses typed constructors with separate messages",
+        "typescript": "excluded:Python generic {context} element validation; TS uses a parameterized type-name template",
     },
 
     # -- Dict/list parse-time messages (Python JSON-based) --
     '--*: JSON key must be a string, got *': {
         "go": "excluded:Python dict flag JSON parsing; Go handles via typed coercion in parse.go",
+        "typescript": "excluded:JSON.parse object keys are always strings; the non-string-key branch is unreachable in TS",
     },
     '--*: JSON value for key * must be a number, got *': {
         "go": "excluded:Python dict flag JSON value validation; Go handles via typed coercion",
@@ -231,21 +255,25 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     },
     'Arg *: default * is not in choices *': {
         "go": "excluded:Python f-string normalizes without brackets; Go counterpart uses [%s]",
+        "typescript": "excluded:TS mirrors Go's bracketed rendering 'Arg *: default * is not in choices [*]'",
     },
     'Arg *: dict type is not supported on args': {
         "go": "excluded:Go uses 'positional arguments' wording instead of 'args'",
     },
     'Arg *: list item type must be str, int, or float, got *': {
         "go": "excluded:Python includes 'got' clause; Go omits it",
+        "typescript": "excluded:TS catalog carries the Go-wording template (no 'got' clause); typed schemas make the branch unreachable",
     },
     'Arg *: list type on args requires variadic=True': {
         "go": "excluded:Go uses lowercase variadic=true; Python uses variadic=True",
     },
     'Arg *: list type requires an item type (e.g., list[int]), got bare list': {
         "go": "excluded:Python includes full example; Go has different wording",
+        "typescript": "excluded:Python type-DSL parsing; a bare list type is inexpressible with TS typed schemas",
     },
     'Arg *: list type takes exactly one type argument, got *': {
         "go": "excluded:Python generic pattern; Go has different wording",
+        "typescript": "excluded:Python type-DSL parsing; wrong type-argument counts are inexpressible with TS typed schemas",
     },
 
     # -- Flag compound type Python-only messages --
@@ -254,6 +282,7 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     },
     'Flag *: dict flag default must be a dict': {
         "go": "excluded:Python uses 'dict'; Go uses 'map[string]interface{}'",
+        "typescript": "excluded:TS uses 'dict flag default must be a Map' (language-idiomatic, like Go's map[string]interface{})",
     },
     'Flag *: dict type cannot be combined with choices': {
         "go": "excluded:Go uses 'choices is incompatible with compound types (list/dict)'",
@@ -269,6 +298,7 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     },
     'Flag.type must be str, bool, int, float, list[T], or dict[str, T], got *': {
         "go": "excluded:Go uses typed constructors (ListOf/DictOf); no runtime type check needed",
+        "typescript": "excluded:TS flag factories take typed schema strings; invalid types are compile-time errors",
     },
 
     # -- Typed arg parse-time messages --
@@ -282,21 +312,27 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Required-bool prefix structural difference --
     "flag '--*' is required": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
     "flag '--*' must be passed as --*": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
     "flag '--*' must be passed as --* or --no-*": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
     "global flag '--*' is required": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
     "global flag '--*' must be passed as --*": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
     "global flag '--*' must be passed as --* or --no-*": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
+        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
 
     # -- InfraEnv structural / extraction asymmetries --
@@ -491,12 +527,15 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Go schema.go errors (go.mod project_id, schema mismatch) --
     'Cannot determine project_id: go.mod not found': {
         "python": "excluded:Go schema uses go.mod for project_id; Python uses pyproject.toml/setup.py",
+        "typescript": "excluded:TS schema uses package.json for project_id (each language names its own project file)",
     },
     'Cannot determine project_id: error reading go.mod: %w': {
         "python": "excluded:Go schema uses go.mod for project_id; Python uses pyproject.toml/setup.py",
+        "typescript": "excluded:TS schema uses package.json for project_id (each language names its own project file)",
     },
     'Cannot determine project_id: no module directive in go.mod': {
         "python": "excluded:Go schema uses go.mod for project_id; Python uses pyproject.toml/setup.py",
+        "typescript": "excluded:TS schema uses package.json for project_id (each language names its own project file)",
     },
     "Schema mismatch: existing schema belongs to project *, not *. Run from the correct project directory.": {
         "python": "excluded:Go schema project_id validation; Python equivalent validates differently",
@@ -547,6 +586,7 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     'command *: flag * missing help text': {
         "python": "dead_code:Flag constructors validate help before command-level check can fire",
         "go": "dead_code:Flag constructors validate help before command-level check can fire",
+        "typescript": "dead_code:Flag constructors validate help before command-level check can fire",
     },
 
     # =======================================================================
@@ -557,42 +597,136 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     '--*: config value error: *': {
         "python": "coverage_deferred:Needs config file fixture support in conformance framework",
         "go": "coverage_deferred:Needs config file fixture support in conformance framework",
+        "typescript": "coverage_deferred:Needs config file fixture support in conformance framework",
     },
     '--*: config value error: duplicate value *': {
         "python": "coverage_deferred:Needs config file fixture support in conformance framework",
         "go": "coverage_deferred:Needs config file fixture support in conformance framework",
+        "typescript": "coverage_deferred:Needs config file fixture support in conformance framework",
     },
     "flag '--*' implies '--**', but '--**' was explicitly provided": {
         "python": "coverage_deferred:Needs Implies dependency test case in conformance framework",
         "go": "coverage_deferred:Needs Implies dependency test case in conformance framework",
+        "typescript": "coverage_deferred:Needs Implies dependency test case in conformance framework",
     },
     '--*: cannot read stdin': {
         "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
         "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "typescript": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
     },
     '--*: stdin (@-) can only be used once per invocation': {
         "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
         "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "typescript": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
     },
     '--*: file exceeds 1 MB limit': {
         "python": "coverage_deferred:Requires a >1MB fixture file, impractical for conformance suite",
         "go": "coverage_deferred:Requires a >1MB fixture file, impractical for conformance suite",
+        "typescript": "coverage_deferred:Requires a >1MB fixture file, impractical for conformance suite",
     },
     '--*: cannot read file: *': {
         "python": "coverage_deferred:Requires a file with restricted permissions, platform-dependent",
         "go": "coverage_deferred:Requires a file with restricted permissions, platform-dependent",
+        "typescript": "coverage_deferred:Requires a file with restricted permissions, platform-dependent",
     },
     'unknown parameter * for command *': {
         "python": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
         "go": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
+        "typescript": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
     },
     'unknown parameter * for passthrough command *': {
         "python": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
         "go": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
+        "typescript": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
     },
     'test-coverage: cannot create .strictcli/coverage/: *': {
         "python": "excluded:Python uses os.makedirs which raises OSError, not a formatted message",
         "go": "excluded:Go-specific formatted error for coverage shard directory creation failure",
+    },
+
+    # =======================================================================
+    # TypeScript-present, Python/Go-excluded
+    # =======================================================================
+
+    # -- TS invoke group-path message (Python wording, errors.ts documents it) --
+    '* is a group, not a command': {
+        "python": "excluded:Python raises InvokeError with the same text; InvokeError raises are not extracted (only _ParseError/ValueError)",
+        "go": "excluded:Go inlines 'no command resolved from path' in invoke.go; no conformance case distinguishes them",
+    },
+
+    # -- TS schema project_id (package.json; language-specific project files) --
+    'Cannot determine project_id: package.json not found': {
+        "python": "excluded:Python uses pyproject.toml/setup.py for project_id",
+        "go": "excluded:Go uses go.mod for project_id",
+    },
+    'Cannot determine project_id: error reading package.json: *': {
+        "python": "excluded:Python uses pyproject.toml/setup.py for project_id",
+        "go": "excluded:Go uses go.mod for project_id",
+    },
+    'Cannot determine project_id: no name field in package.json': {
+        "python": "excluded:Python uses pyproject.toml/setup.py for project_id",
+        "go": "excluded:Go uses go.mod for project_id",
+    },
+
+    # -- TS CheckOutcome mint guard (token approach, errors.ts documents it) --
+    'CheckOutcome cannot be constructed directly; obtain one from a reporter (passed/skipped/found)': {
+        "python": "excluded:Python _CheckOutcome.__post_init__ mint guard raises TypeError; TypeError raises are not extracted",
+        "go": "excluded:Go seals CheckOutcome structurally (unexported fields); no runtime guard message",
+    },
+
+    # -- Tag contract violation (inline in both siblings, centralized in TS) --
+    'command *: tag * requires flag "--*"': {
+        "python": "excluded:Python builds the violation string inline in _validate_tag_contracts (returned, not raised)",
+        "go": "excluded:Go template is an inline fmt.Sprintf in strictcli.go checkCommandTagContract, not in errors.go",
+    },
+
+    # -- TS handler return contract (Python template with TS type names) --
+    'command handler must return number (exit code), undefined (exit 0), or strictcli.outcome(...); got *': {
+        "python": "excluded:Python counterpart is a TypeError with int/None wording; TypeError raises are not extracted",
+        "go": "excluded:Go handlers return the typed Outcome; a non-outcome return is inexpressible",
+    },
+    'strictcli.outcome: exit_code must be an integer number; got *': {
+        "python": "excluded:Python outcome() relies on the int annotation; no runtime exit_code check",
+        "go": "excluded:Go Exit(code int) is statically typed",
+    },
+
+    # -- Router tool command validation (inline in Go, absent in Python) --
+    'command must be a string': {
+        "python": "excluded:Python router execute relies on the JSON schema contract; no runtime string check",
+        "go": "excluded:Go counterpart is an inline InvokeError literal in tool.go makeRouterTool, not in errors.go",
+    },
+
+    # -- TS TOML 1.0 acceptance gate (smol-toml accepts 1.1; siblings' parsers
+    #    are TOML-1.0-native and reject 1.1 constructs with their own errors) --
+    "invalid escape sequence '\\*' in basic string (TOML 1.1 construct; strictcli requires TOML 1.0)": {
+        "python": "excluded:TS-only TOML 1.0 acceptance gate; Python tomllib rejects 1.1 constructs with its own parser errors",
+        "go": "excluded:TS-only TOML 1.0 acceptance gate; go-toml-edit rejects 1.1 constructs with its own parser errors",
+    },
+    'newline inside inline table (TOML 1.1 construct; strictcli requires TOML 1.0)': {
+        "python": "excluded:TS-only TOML 1.0 acceptance gate; Python tomllib rejects 1.1 constructs with its own parser errors",
+        "go": "excluded:TS-only TOML 1.0 acceptance gate; go-toml-edit rejects 1.1 constructs with its own parser errors",
+    },
+    'trailing comma in inline table (TOML 1.1 construct; strictcli requires TOML 1.0)': {
+        "python": "excluded:TS-only TOML 1.0 acceptance gate; Python tomllib rejects 1.1 constructs with its own parser errors",
+        "go": "excluded:TS-only TOML 1.0 acceptance gate; go-toml-edit rejects 1.1 constructs with its own parser errors",
+    },
+    'time without seconds (TOML 1.1 construct; strictcli requires TOML 1.0)': {
+        "python": "excluded:TS-only TOML 1.0 acceptance gate; Python tomllib rejects 1.1 constructs with its own parser errors",
+        "go": "excluded:TS-only TOML 1.0 acceptance gate; go-toml-edit rejects 1.1 constructs with its own parser errors",
+    },
+    'datetime without seconds (TOML 1.1 construct; strictcli requires TOML 1.0)': {
+        "python": "excluded:TS-only TOML 1.0 acceptance gate; Python tomllib rejects 1.1 constructs with its own parser errors",
+        "go": "excluded:TS-only TOML 1.0 acceptance gate; go-toml-edit rejects 1.1 constructs with its own parser errors",
+    },
+
+    # -- TS config set splicer invariants (comment-preserving single-key edit) --
+    'internal: TOML splice verification failed: keys other than * changed': {
+        "python": "excluded:TS-only config set splicer invariant; Python edits TOML in place via tomlkit",
+        "go": "excluded:TS-only config set splicer invariant; Go edits TOML in place via go-toml-edit",
+    },
+    'internal: TOML splice: key * not found in document': {
+        "python": "excluded:TS-only config set splicer invariant; Python edits TOML in place via tomlkit",
+        "go": "excluded:TS-only config set splicer invariant; Go edits TOML in place via go-toml-edit",
     },
 }
 
@@ -775,6 +909,58 @@ def extract_go_errors(errors_src: str) -> list[tuple[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# 2b. Extract error patterns from TypeScript source
+# ---------------------------------------------------------------------------
+
+def extract_typescript_errors(errors_src: str) -> list[tuple[str, str]]:
+    """Extract (category, format_string) pairs from TypeScript source.
+
+    All TS user-facing error templates are centralized in errors.ts, which
+    mirrors errors.go one-to-one: the same dashed section headers group the
+    templates, and a header containing "(parse-time)" marks every template in
+    that section as a parse-time error.  Each named errXxx function returns a
+    single template literal (or plain string literal); we extract the literal
+    from each return statement.
+
+    Content before the first section header (the error classes and the q()
+    quoting helper) contains no error templates and is skipped entirely.
+    """
+    results: list[tuple[str, str]] = []
+
+    # return `...`; / return "..."; / return '...';
+    ret_backtick = re.compile(r'return\s+`((?:[^`\\]|\\.)*)`')
+    ret_dq = re.compile(r'return\s+"((?:[^"\\]|\\.)*)"')
+    ret_sq = re.compile(r"return\s+'((?:[^'\\]|\\.)*)'")
+    # Section header: dashed line, one-plus comment lines, dashed line.
+    # Same shape as errors.go (the headers were carried over verbatim).
+    section_header_pat = re.compile(
+        r'// -{10,}\n((?:// .*\n)+?)// -{10,}\n',
+    )
+
+    segments: list[tuple[str, str]] = []
+    prev_end: int | None = None
+    prev_category = "registration"
+    for hm in section_header_pat.finditer(errors_src):
+        if prev_end is not None:
+            segments.append((prev_category, errors_src[prev_end:hm.start()]))
+        # else: skip the pre-header preamble (classes + q() helper)
+        header = hm.group(1)
+        prev_category = (
+            "parse" if "(parse-time)" in header else "registration"
+        )
+        prev_end = hm.end()
+    if prev_end is not None:
+        segments.append((prev_category, errors_src[prev_end:]))
+
+    for category, body in segments:
+        for pat in (ret_backtick, ret_dq, ret_sq):
+            for m in pat.finditer(body):
+                results.append((category, m.group(1)))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # 3. Normalize to common signatures
 # ---------------------------------------------------------------------------
 
@@ -813,6 +999,35 @@ def normalize_go(fmt_str: str) -> str:
     sig = re.sub(r"%[sdvqT]", "*", sig)
     # Normalize surrounding quotes on placeholders: '*' -> *
     sig = re.sub(r"'(\*)'", r"\1", sig)
+    return sig
+
+
+def normalize_typescript(fmt_str: str) -> str:
+    """Normalize a TypeScript template literal to a signature.
+
+    First unescapes JS string escapes (\\\\ -> \\, \\` -> `, \\n -> newline,
+    etc.).  Then replaces ${...} interpolations with *.  Interpolations that
+    call q() (Go strconv.Quote semantics, the %q analog) are treated like *
+    rather than "*", matching normalize_go's handling of %q.
+    Then normalizes quoted placeholders: '*' and "*" become * (both quote
+    styles, matching normalize_python -- TS registration templates quote
+    names with literal double quotes where Python uses !r).
+    """
+    # Unescape JS string literal escape sequences
+    out: list[str] = []
+    i = 0
+    while i < len(fmt_str):
+        if fmt_str[i] == "\\" and i + 1 < len(fmt_str):
+            nxt = fmt_str[i + 1]
+            out.append({"n": "\n", "t": "\t"}.get(nxt, nxt))
+            i += 2
+        else:
+            out.append(fmt_str[i])
+            i += 1
+    sig = "".join(out)
+    sig = re.sub(r"\$\{[^}]*\}", "*", sig)
+    # Normalize surrounding quotes on placeholders: '*' and "*" -> *
+    sig = re.sub(r"""['"](\*)['"]""", r"\1", sig)
     return sig
 
 
@@ -1010,21 +1225,26 @@ def diagnose_new_target(
 def main() -> int:
     py_source = PY_SOURCE.read_text()
     go_errors_source = GO_ERRORS.read_text()
+    ts_errors_source = TS_ERRORS.read_text()
 
     # Extract raw error patterns
     py_raw = extract_python_errors(py_source)
     go_raw = extract_go_errors(go_errors_source)
+    ts_raw = extract_typescript_errors(ts_errors_source)
 
     # Normalize to signatures
     py_items = [(cat, raw, normalize_python(raw)) for cat, raw in py_raw]
     go_items = [(cat, raw, normalize_go(raw)) for cat, raw in go_raw]
+    ts_items = [(cat, raw, normalize_typescript(raw)) for cat, raw in ts_raw]
 
     py_sigs = deduplicate_signatures(py_items)
     go_sigs = deduplicate_signatures(go_items)
+    ts_sigs = deduplicate_signatures(ts_items)
 
     impl_sigs: dict[str, dict[str, list[tuple[str, str]]]] = {
         "python": py_sigs,
         "go": go_sigs,
+        "typescript": ts_sigs,
     }
 
     all_errors: list[str] = []
