@@ -436,3 +436,25 @@ survive beyond session memory.
   Root docs now describe three first-class implementations, and the
   conformance gate stands at 8 checks (conformance-typescript added alongside
   the original seven). This spec is a historical record from here on.
+- 2026-07-23 (post-release verification -- CORRECTION to the entry above):
+  0.31.0 did NOT reach npm. The git/GitHub side of the release completed (tag
+  `ts-strictcli@v0.31.0` at e6504d6, GitHub Release marked Latest), but the
+  registry side failed and the wrapper era is NOT yet deprecated: the npm
+  registry still reports `latest: 0.30.1`, `strictcli@0.31.0` is 404, and
+  `strictcli@0.30.1` carries no deprecation notice. Two publish attempts
+  failed on 2026-07-23: (1) run 29996436255 on eba5576 -- publish gate
+  refused because the paths-filtered CI job never ran on the
+  releasable-metadata-only release commit (release undone; the retry rode a
+  project-path-touching commit to satisfy the gate); (2) run 29998226184 on
+  e6504d6 -- gate passed, but the `ts-strictcli-npm` job failed:
+  `npm publish` triggers `prepack` -> `npm run build` -> `tsc`, and the
+  generated publish job has no `npm ci` step, so devDependencies
+  (typescript, @types/node) are absent and tsc dies with
+  `error TS2688: Cannot find type definition file for 'node'`. Local state
+  is green (build clean, 593/593 tests, conformance pre-release gate 8/8) --
+  the failure is purely the publish workflow's missing dependency install.
+  Recovery requires a fix to the generated publish workflow (add `npm ci`
+  before publish in the npm job) reaching the ref the publish job checks
+  out, then re-publishing 0.31.0 and deprecating `strictcli@<=0.30.1` per
+  the approved notice. Until then, `npm install strictcli` still delivers
+  the 0.30.1 wrapper, and the root README's npm install row is premature.
