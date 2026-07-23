@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """Differential argv fuzzer for strictcli conformance.
 
-Generates random argv sequences and runs them against both Python and Go
-implementations of the same app definition. Divergences (different exit codes,
-or different stdout when both exit 0) are recorded and minimized.
+Generates random argv sequences and runs them against every registered
+implementation (Python, Go, TypeScript) of the same app definition, then
+compares their results N-way. A divergence is any disagreement in exit code, or
+in stdout when all implementations exit 0; the odd-one-out is identified by
+majority. Divergences are recorded and minimized.
+
+Execution reuses run.py's target machinery: the Python reference script is
+generated via ref_python codegen, while Go and TypeScript run through the same
+runtime harnesses run.py uses (the `conformance/harness` binary and
+`conformance/harness_ts/main.js`, both reading the app definition from the
+CONFORMANCE_APP_DEF env var). Harnesses are built once per run.
 
 Usage:
     python conformance/fuzz.py --iterations 1000
@@ -13,23 +21,24 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import os
 import random
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
-from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-CONFORMANCE_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = CONFORMANCE_DIR.parent
-GO_PKG_DIR = PROJECT_ROOT / "go"
+# Reuse run.py's target descriptors, harness build/cleanup, and N-way
+# divergence reporting rather than duplicating any of it here.
+from run import (
+    CONFORMANCE_DIR,
+    TARGETS,
+    _cleanup_harness,
+    _ensure_harness,
+    _ensure_ts_harness,
+    _normalize,
+    _normalize_temp_paths,
+    _stream_divergence,
+)
 
 # ---------------------------------------------------------------------------
 # App definitions
@@ -127,152 +136,77 @@ APP_DEFS: list[tuple[str, dict]] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Code generation (reused from run.py infrastructure)
-# ---------------------------------------------------------------------------
-
-
-def _generate_python_script(app_def: dict) -> str:
-    from ref_python import generate
-    return generate(app_def)
-
-
-def _generate_go_source(app_def: dict) -> str:
-    from ref_go import generate
-    return generate(app_def)
-
-
-# ---------------------------------------------------------------------------
-# Go binary cache (keyed by app-def hash)
-# ---------------------------------------------------------------------------
-
-_GO_BUILD_CACHE: dict[str, str] = {}
-
-
-def _build_go_binary(app_def: dict) -> str:
-    cache_key = hashlib.sha256(
-        json.dumps(app_def, sort_keys=True).encode()
-    ).hexdigest()[:16]
-
-    if cache_key in _GO_BUILD_CACHE:
-        return _GO_BUILD_CACHE[cache_key]
-
-    source = _generate_go_source(app_def)
-    build_dir = tempfile.mkdtemp(prefix="strictcli_fuzz_go_", dir=str(CONFORMANCE_DIR))
-    main_go = os.path.join(build_dir, "main.go")
-    go_mod = os.path.join(build_dir, "go.mod")
-    binary = os.path.join(build_dir, "app")
-
-    with open(main_go, "w") as f:
-        f.write(source)
-
-    go_mod_content = (
-        "module conformance_test\n\n"
-        "go 1.23\n\n"
-        "require github.com/smm-h/strictcli/go v0.0.0\n\n"
-        f"replace github.com/smm-h/strictcli/go => {GO_PKG_DIR}\n"
-    )
-    with open(go_mod, "w") as f:
-        f.write(go_mod_content)
-
-    result = subprocess.run(
-        ["go", "build", "-o", binary, "."],
-        cwd=build_dir,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"go build failed:\n{result.stderr}\n\n--- main.go ---\n{source}")
-
-    _GO_BUILD_CACHE[cache_key] = binary
-    return binary
-
-
-def _cleanup_go_cache() -> None:
-    for binary_path in _GO_BUILD_CACHE.values():
-        build_dir = os.path.dirname(binary_path)
-        shutil.rmtree(build_dir, ignore_errors=True)
-    _GO_BUILD_CACHE.clear()
-
-
-# ---------------------------------------------------------------------------
-# Run helpers
+# Execution (through run.py's runtime-harness target machinery)
 # ---------------------------------------------------------------------------
 
 TIMEOUT = 5
 
+# Result of running one target: (exit_code, stdout, stderr). Exit code -1 means
+# the run timed out.
+RunResult = tuple[int, str, str]
 
-def _normalize(s: str) -> str:
-    return "\n".join(line.rstrip() for line in s.rstrip("\n").split("\n"))
 
+def _run(target: str, app_def: dict, argv: list[str]) -> RunResult:
+    """Run one implementation of `app_def` with `argv`. Returns (exit, out, err).
 
-def _run_python(app_def: dict, argv: list[str]) -> tuple[int, str, str]:
-    """Run the Python implementation. Returns (exit_code, stdout, stderr).
-
-    Exit code -1 means timeout.
+    Uses run.py's target descriptor to prepare the command (Python: ref_python
+    codegen; Go/TypeScript: the runtime harness reading CONFORMANCE_APP_DEF).
     """
-    script = _generate_python_script(app_def)
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py", dir=str(CONFORMANCE_DIR), delete=False
-    ) as f:
-        f.write(script)
-        script_path = f.name
+    prep = TARGETS[target].prepare(app_def, argv)
+    env = os.environ.copy()
+    env.update(prep.extra_env)
     try:
         result = subprocess.run(
-            [sys.executable, script_path] + argv,
+            prep.argv,
             capture_output=True,
             text=True,
+            env=env,
+            cwd=str(CONFORMANCE_DIR),
             timeout=TIMEOUT,
         )
         return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
         return -1, "", "TIMEOUT"
     finally:
-        os.unlink(script_path)
-
-
-def _run_go(binary: str, argv: list[str]) -> tuple[int, str, str]:
-    """Run the Go implementation. Returns (exit_code, stdout, stderr)."""
-    try:
-        result = subprocess.run(
-            [binary] + argv,
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT,
-        )
-        return result.returncode, result.stdout, result.stderr
-    except subprocess.TimeoutExpired:
-        return -1, "", "TIMEOUT"
+        for path in prep.cleanup_paths:
+            if path is not None and os.path.exists(path):
+                os.unlink(path)
 
 
 # ---------------------------------------------------------------------------
-# Divergence detection
+# Divergence detection (N-way, odd-one-out by majority)
 # ---------------------------------------------------------------------------
 
 
-def _check_divergence(
-    py_exit: int, py_stdout: str, py_stderr: str,
-    go_exit: int, go_stdout: str, go_stderr: str,
-) -> str | None:
-    """Return a description of the divergence, or None if outputs agree."""
-    if py_exit != go_exit:
-        return (
-            f"exit code: python={py_exit} go={go_exit}\n"
-            f"  py stdout: {py_stdout.rstrip()!r}\n"
-            f"  py stderr: {py_stderr.rstrip()!r}\n"
-            f"  go stdout: {go_stdout.rstrip()!r}\n"
-            f"  go stderr: {go_stderr.rstrip()!r}"
+def _check_divergence(results: dict[str, RunResult]) -> str | None:
+    """Return a description of the N-way divergence, or None if all agree.
+
+    Compares exit codes across all targets; when every target exits 0, also
+    compares normalized stdout. Uses run.py's _stream_divergence to identify the
+    odd one(s) out by majority. A trailing per-target detail block aids
+    reproduction.
+    """
+    exit_lines = _stream_divergence(
+        "exit_code", {t: str(r[0]) for t, r in results.items()}
+    )
+    stdout_lines: list[str] = []
+    if all(r[0] == 0 for r in results.values()):
+        stdout_lines = _stream_divergence(
+            "stdout",
+            {t: _normalize_temp_paths(_normalize(r[1])) for t, r in results.items()},
         )
-    if py_exit == 0 and go_exit == 0:
-        py_norm = _normalize(py_stdout)
-        go_norm = _normalize(go_stdout)
-        if py_norm != go_norm:
-            return (
-                f"stdout mismatch (both exit 0):\n"
-                f"  python: {py_norm!r}\n"
-                f"  go:     {go_norm!r}"
-            )
-    return None
+    if not exit_lines and not stdout_lines:
+        return None
+
+    lines = exit_lines + stdout_lines
+    lines.append("  per-target detail:")
+    for t in sorted(results):
+        exit_code, stdout, stderr = results[t]
+        lines.append(
+            f"    {t}: exit={exit_code} "
+            f"stdout={stdout.rstrip()!r} stderr={stderr.rstrip()!r}"
+        )
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -476,8 +410,8 @@ def _gen_argv_complex(rng: random.Random) -> list[str]:
 
 def _minimize(
     app_def: dict,
-    go_binary: str,
     argv: list[str],
+    target_names: list[str],
 ) -> list[str]:
     """Remove tokens one at a time, keeping the smallest argv that still diverges."""
     best = list(argv)
@@ -487,9 +421,8 @@ def _minimize(
         changed = False
         for i in range(len(best)):
             candidate = best[:i] + best[i + 1:]
-            py_exit, py_stdout, py_stderr = _run_python(app_def, candidate)
-            go_exit, go_stdout, go_stderr = _run_go(go_binary, candidate)
-            if _check_divergence(py_exit, py_stdout, py_stderr, go_exit, go_stdout, go_stderr):
+            results = {t: _run(t, app_def, candidate) for t in target_names}
+            if _check_divergence(results):
                 best = candidate
                 changed = True
                 break  # restart from beginning with shorter list
@@ -511,11 +444,14 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
 
     rng = random.Random(seed)
 
-    # Pre-build Go binaries for both app definitions
-    go_binaries: dict[str, str] = {}
-    for label, app_def in APP_DEFS:
-        print(f"Building Go binary for '{label}' app...", flush=True)
-        go_binaries[label] = _build_go_binary(app_def)
+    target_names = list(TARGETS)
+    print(f"Targets: {', '.join(target_names)}")
+
+    # Build the runtime harnesses once for the whole run (Python needs none).
+    print("Building Go harness...", flush=True)
+    _ensure_harness()
+    print("Building TypeScript dist...", flush=True)
+    _ensure_ts_harness()
     print()
 
     divergences: list[dict] = []
@@ -526,25 +462,20 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
 
     total = 0
     for label, app_def in APP_DEFS:
-        go_binary = go_binaries[label]
         gen = generators[label]
         print(f"--- Fuzzing '{label}' app ({iterations} iterations) ---")
 
         for i in range(1, iterations + 1):
             argv = gen(rng)
-            py_exit, py_stdout, py_stderr = _run_python(app_def, argv)
-            go_exit, go_stdout, go_stderr = _run_go(go_binary, argv)
+            results = {t: _run(t, app_def, argv) for t in target_names}
 
-            desc = _check_divergence(py_exit, py_stdout, py_stderr, go_exit, go_stdout, go_stderr)
+            desc = _check_divergence(results)
             if desc is not None:
                 # Minimize
-                minimal = _minimize(app_def, go_binary, argv)
+                minimal = _minimize(app_def, argv, target_names)
                 # Re-run minimal to get fresh description
-                py2_exit, py2_stdout, py2_stderr = _run_python(app_def, minimal)
-                go2_exit, go2_stdout, go2_stderr = _run_go(go_binary, minimal)
-                min_desc = _check_divergence(
-                    py2_exit, py2_stdout, py2_stderr, go2_exit, go2_stdout, go2_stderr
-                ) or desc
+                min_results = {t: _run(t, app_def, minimal) for t in target_names}
+                min_desc = _check_divergence(min_results) or desc
 
                 record = {
                     "app": label,
@@ -592,7 +523,7 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
     else:
         print("No divergences found.")
 
-    _cleanup_go_cache()
+    _cleanup_harness()
     return divergences
 
 
