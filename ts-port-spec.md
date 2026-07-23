@@ -458,3 +458,17 @@ survive beyond session memory.
   out, then re-publishing 0.31.0 and deprecating `strictcli@<=0.30.1` per
   the approved notice. Until then, `npm install strictcli` still delivers
   the 0.30.1 wrapper, and the root README's npm install row is premature.
+- 2026-07-23 (closure): 0.31.0 is now shipped to npm -- the THIRD publish
+  attempt succeeded (published 2026-07-23T10:36:17Z) after `npm ci` was added
+  to the generated npm publish job. The two failed attempts each exposed a
+  structural gap in the release tooling, and both are filed as generic
+  handoff todos with rlsbl: (1) the paths-filter/publish-gate deadlock on
+  releasable-metadata-only release commits, and (2) the npm publish job
+  running `npm publish` without installing devDependencies, which breaks any
+  package whose `prepack` builds. Registry state verified directly:
+  `npm view strictcli` reports `latest: 0.31.0`; `strictcli@0.31.0` carries
+  no deprecation; `strictcli@<=0.30.1` (the wrapper era) is deprecated with
+  the approved notice pointing Python users to PyPI. The root README's npm
+  install row (`npm install strictcli`) is now accurate. This closes the
+  port: the earlier "final status" entry stands with this correction chain
+  appended, and the spec is a historical record from here on.
