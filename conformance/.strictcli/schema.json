@@ -212,6 +212,17 @@
       "pure": false,
       "needs_network": false,
       "depends_on": []
+    },
+    "schema-freshness": {
+      "tags": [
+        "pre-release",
+        "fast"
+      ],
+      "severity": "error",
+      "fast": true,
+      "pure": true,
+      "needs_network": false,
+      "depends_on": []
     }
   }
 }
