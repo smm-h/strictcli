@@ -6,8 +6,9 @@ the strictcli rlsbl monorepo as releasable `ts-strictcli`.
 ## Development
 
 - `npm ci` then `npm run build`, `npm test`, and `npm run lint` from this directory.
-- `package.json` has `"private": true` as a guard against accidental publishes;
-  it stays until the release preflight for the first TypeScript release (0.31.0).
+- `package.json` has no `"private"` flag — the package publishes to npm as
+  `strictcli`. Publishing is gated by CI (the publish gate in `ci-router.yml`),
+  not by a package.json guard; never run `npm publish` manually.
 - Run the conformance suite after changes: `cd ../conformance && python run.py --target typescript`.
 - CI (`ci-router.yml` at the repo root) runs build, lint, and tests on Node 22 and 24
   on every push touching `typescript/**`.
