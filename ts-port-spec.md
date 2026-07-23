@@ -429,3 +429,10 @@ survive beyond session memory.
   now come from run.py's TARGETS registry (python/go/typescript). All three
   green: schema parity 3/3 apps identical across targets; float fuzz 2000/2000
   agree; capture 551 cases captured per target.
+- 2026-07-23 (final status): phases 0-7 executed to completion. The TypeScript
+  implementation shipped as npm package `strictcli` 0.31.0 (releasable
+  `ts-strictcli`, tag `ts-strictcli@v0.31.0`), and the prior occupant of the
+  npm name was deprecated per the approved notice (`strictcli@<=0.30.1`).
+  Root docs now describe three first-class implementations, and the
+  conformance gate stands at 8 checks (conformance-typescript added alongside
+  the original seven). This spec is a historical record from here on.
