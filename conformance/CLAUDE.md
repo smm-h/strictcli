@@ -8,6 +8,11 @@ Cross-language conformance suite for strictcli (Python and Go implementations).
   `python run.py --target go` (requires both implementations).
 - API surface parity: `python check_api_surface.py`. Error message parity:
   `python check_error_parity.py`.
+- Differential argv fuzzing: `python fuzz.py --iterations N [--seed S]`. It
+  generates random argv, runs it against all three implementations (Python via
+  `ref_python.py` codegen, Go and TypeScript via the `run.py` runtime harnesses),
+  and reports any N-way divergence with the odd one out identified by majority.
+  The old `ref_go.py` codegen path it once used has been deleted.
 - CI (`ci-router.yml` at the repo root) runs the conformance checks on every
   push touching `conformance/**`, `python/**`, or `go/**`.
 
