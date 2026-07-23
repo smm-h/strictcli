@@ -8,6 +8,7 @@ strictcli has multiple first-class implementations kept in behavioral lockstep b
 |---------------|---------|------|
 | **Python** | `pip install strictcli` | [python/README.md](python/README.md) |
 | **Go** | `go get github.com/smm-h/strictcli/go/strictcli` | [go/](go/) |
+| **TypeScript** | `npm install strictcli` | [typescript/README.md](typescript/README.md) |
 
 ## Philosophy
 
@@ -17,7 +18,7 @@ Most CLI frameworks infer behavior from type hints, function signatures, or nami
 - **Mandatory help text.** Every flag, arg, command, and group must have help text.
 - **Handler signature validation.** Parameter names must match declared flags and args exactly.
 - **Registration-time errors.** Misconfigurations fail loud and early, not at parse time.
-- **One dependency per implementation.** Each implementation uses its language's standard library plus a single TOML library: Python depends on [tomlkit](https://pypi.org/project/tomlkit/), Go depends on [go-toml-edit](https://github.com/smm-h/go-toml-edit).
+- **Minimal dependencies.** Each implementation uses its language's standard library plus TOML support: Python depends on [tomlkit](https://pypi.org/project/tomlkit/), Go depends on [go-toml-edit](https://github.com/smm-h/go-toml-edit), TypeScript depends on [smol-toml](https://www.npmjs.com/package/smol-toml) and [toml-eslint-parser](https://www.npmjs.com/package/toml-eslint-parser).
 
 ## Quick taste
 
@@ -74,6 +75,34 @@ func main() {
 }
 ```
 
+### TypeScript
+
+```ts
+import { command, createApp, flag, t } from "strictcli";
+
+const hello = command("hello", {
+    help: "Say hello",
+    flags: [
+        flag("name", t.str, { help: "Who to greet", required: true }),
+        flag("loud", t.bool, { help: "Shout it", default: false }),
+    ],
+    handler: (args) => {
+        // Inferred: args.name is string, args.loud is boolean
+        const msg = `Hello, ${args.name}!`;
+        console.log(args.loud ? msg.toUpperCase() : msg);
+        return 0;
+    },
+});
+
+const app = createApp("greet", {
+    version: "1.0.0",
+    help: "A greeting app",
+    commands: [hello],
+});
+
+app.run(process.argv.slice(2));
+```
+
 ## Features
 
 - Commands and command groups (recursive nesting to arbitrary depth)
@@ -106,11 +135,12 @@ func main() {
 
 ## Conformance
 
-The `conformance/` directory contains a cross-language test suite that verifies all implementations produce identical output for identical inputs. It includes:
+The `conformance/` directory contains a cross-language test suite that verifies all implementations (Python, Go, TypeScript) produce identical output for identical inputs. It includes:
 
-- 57 JSON test case files covering every feature
+- 57 JSON test case files (551 cases) covering every feature, run against each target via `run.py --target python` / `--target go` / `--target typescript`
 - API surface verification (`check_api_surface.py`)
 - Error message parity checks (`check_error_parity.py`)
+- Schema dump parity (`check_schema_parity.py`) and float formatting fuzzing (`check_float_fuzz.py`)
 - Pairwise combination testing and fuzzing
 
 All implementations must pass all conformance tests before release.
@@ -121,6 +151,7 @@ All implementations must pass all conformance tests before release.
 strictcli/
   python/          Python implementation (PyPI)
   go/              Go implementation
+  typescript/      TypeScript implementation (npm)
   conformance/     Cross-language conformance tests
 ```
 
