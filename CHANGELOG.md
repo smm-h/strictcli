@@ -508,16 +508,23 @@ config set now validates keys against registered flags and coerces string values
 
 # go-strictcli
 
-## 0.25.1
+## 0.25.2
 
-cli-test-coverage skips instead of failing when run outside the app's own dev tree
+Dict flag parse-error message now matches the sibling implementations
 
 <details>
 <summary>Context</summary>
 
-An installed app that runs its checks from a foreign project's directory anchored cli-test-coverage to that foreign cwd, which has no coverage manifest or shard files, so the check failed listing the app's entire command surface as uncovered. The check now applies subject-matter gating: when the anchored coverage root contains neither a manifest nor any shard files, it reports a visible skip naming the anchored path. When either exists, behavior is unchanged.
+The dict flag missing-equals error now reads `--flag: expected key=value or JSON`, matching the Python and TypeScript implementations (Go has always accepted JSON object input for dict flags; the message understated it). Also, `config show --plain` now displays config-sourced values coerced to the flag's declared type, matching runtime resolution and the sibling implementations.
 
 </details>
+
+### Fixes
+
+- [go-strictcli] **Fix.** The dict flag missing-equals error now reads `--flag: expected key=value or JSON`, matching the Python and TypeScript implementations (Go has always accepted JSON object input for dict flags; the message understated it).
+- [go-strictcli] **Fix.** `config show --plain` now displays config-sourced values coerced to the flag's declared type: an int flag with `42` in a JSON config displays as `42`, not `42.0` (encoding/json parses every number as float64; display now matches runtime resolution and the Python/TypeScript implementations).
+
+## 0.25.1
 
 ### Fixes
 
