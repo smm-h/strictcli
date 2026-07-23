@@ -2,7 +2,16 @@
 
 # Changelog
 
-## Unreleased
+## 0.31.0
+
+Native TypeScript implementation
+
+<details>
+<summary>Context</summary>
+
+Versions <=0.30.1 were an npm wrapper that installed the Python package via pip. From 0.31.0, strictcli on npm is a native TypeScript implementation. Python users: install strictcli from PyPI instead.
+
+</details>
 
 ### Features
 
