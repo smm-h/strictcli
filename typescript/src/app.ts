@@ -54,6 +54,7 @@ import {
 	errAppConfigFormatBad,
 	errAppHelpEmpty,
 	errCannotUseBothChecksAndEmbed,
+	errCheckProviderMustBeCallable,
 	errChecksNotEnabled,
 	errChecksPathNotExist,
 	errChecksTomlAppMismatch,
@@ -757,7 +758,7 @@ export class AppImpl implements App {
 		provider: () => readonly CheckSpec[] | undefined,
 	): void {
 		if (typeof provider !== "function") {
-			throw new RegistrationError("check provider must be callable");
+			throw new RegistrationError(errCheckProviderMustBeCallable());
 		}
 		enableChecks(this);
 		this.checks.providers.push(provider);

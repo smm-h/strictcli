@@ -8,14 +8,28 @@
  * ground truth for divergences -- see conformance/check_error_parity.py
  * exclusions) while numeric acceptance follows Go (the stricter side).
  *
- * Message templates shared with Go's errors.go come from errors.ts; the
- * Python-only dict messages are inline (they are inline fmt strings in the
- * siblings too, not part of the Go catalog).
+ * All message templates come from the errors.ts catalog, including the
+ * Python-wording dict and positional-arg templates (their dedicated
+ * "values.ts" sections there carry the divergence notes).
  */
 
 import { resolveAtPrefix, type StdinTracker } from "./atprefix.js";
 import {
 	errArgInvalidChoice,
+	errArgumentExpectedFloat,
+	errArgumentWrapped,
+	errDictDuplicateKey,
+	errDictEmptyKey,
+	errDictEnvVarMustBeJsonObject,
+	errDictExpectedKeyValueOrJson,
+	errDictInvalidJson,
+	errDictInvalidJsonInEnvVar,
+	errDictJsonValueForKeyMustBeInteger,
+	errDictJsonValueForKeyMustBeNumber,
+	errDictJsonValueForKeyMustBeString,
+	errDictJsonValueMustBeObject,
+	errDictUnsupportedValueType,
+	errDictValueForKey,
 	errExpectedBoolean,
 	errExpectedFloat,
 	errExpectedInteger,
@@ -181,7 +195,7 @@ export function coerceArgValue(
 			try {
 				return parseIntStrict(raw);
 			} catch (e) {
-				throw new ParseError(`argument '${argName}': ${(e as Error).message}`);
+				throw new ParseError(errArgumentWrapped(argName, (e as Error).message));
 			}
 		case "float":
 			try {
@@ -189,17 +203,15 @@ export function coerceArgValue(
 			} catch (e) {
 				const msg = (e as Error).message;
 				if (NAN_INF_MESSAGES.includes(msg)) {
-					throw new ParseError(`argument '${argName}': ${msg}`);
+					throw new ParseError(errArgumentWrapped(argName, msg));
 				}
-				throw new ParseError(
-					`argument '${argName}': expected float, got '${raw}'`,
-				);
+				throw new ParseError(errArgumentExpectedFloat(argName, raw));
 			}
 		case "bool":
 			try {
 				return parseBoolStrict(raw);
 			} catch (e) {
-				throw new ParseError(`argument '${argName}': ${(e as Error).message}`);
+				throw new ParseError(errArgumentWrapped(argName, (e as Error).message));
 			}
 	}
 }
@@ -480,27 +492,37 @@ function coerceDictJsonValue(
 				return value;
 			}
 			throw new ParseError(
-				`--${flagName}: JSON value for key '${key}' must be a string, got ${jsonConfigTypename(value)}`,
+				errDictJsonValueForKeyMustBeString(
+					flagName,
+					key,
+					jsonConfigTypename(value),
+				),
 			);
 		case "int":
 			if (isTaggedNumber(value) && value.isInt) {
 				return BigInt(value.source);
 			}
 			throw new ParseError(
-				`--${flagName}: JSON value for key '${key}' must be an integer, got ${jsonConfigTypename(value)}`,
+				errDictJsonValueForKeyMustBeInteger(
+					flagName,
+					key,
+					jsonConfigTypename(value),
+				),
 			);
 		case "float":
 			if (isTaggedNumber(value)) {
 				return value.num;
 			}
 			throw new ParseError(
-				`--${flagName}: JSON value for key '${key}' must be a number, got ${jsonConfigTypename(value)}`,
+				errDictJsonValueForKeyMustBeNumber(
+					flagName,
+					key,
+					jsonConfigTypename(value),
+				),
 			);
 		default:
 			// Unreachable: dict value schemas exclude bool at the type level.
-			throw new ParseError(
-				`--${flagName}: unsupported value type ${valueSchema}`,
-			);
+			throw new ParseError(errDictUnsupportedValueType(flagName, valueSchema));
 	}
 }
 
@@ -521,13 +543,11 @@ export function parseDictValue(
 		try {
 			parsed = parseJsonTagged(raw);
 		} catch (e) {
-			throw new ParseError(
-				`--${flagName}: invalid JSON: ${(e as Error).message}`,
-			);
+			throw new ParseError(errDictInvalidJson(flagName, (e as Error).message));
 		}
 		if (!isJsonObject(parsed)) {
 			throw new ParseError(
-				`--${flagName}: JSON value must be an object, got ${jsonNativeTypename(parsed)}`,
+				errDictJsonValueMustBeObject(flagName, jsonNativeTypename(parsed)),
 			);
 		}
 		const result = new Map<string, unknown>();
@@ -538,14 +558,12 @@ export function parseDictValue(
 	}
 	const eqIdx = raw.indexOf("=");
 	if (eqIdx < 0) {
-		throw new ParseError(
-			`--${flagName}: expected key=value or JSON, got '${raw}'`,
-		);
+		throw new ParseError(errDictExpectedKeyValueOrJson(flagName, raw));
 	}
 	const key = raw.slice(0, eqIdx);
 	const valStr = raw.slice(eqIdx + 1);
 	if (key === "") {
-		throw new ParseError(`--${flagName}: empty key in '${raw}'`);
+		throw new ParseError(errDictEmptyKey(flagName, raw));
 	}
 	let coerced: string | bigint | number;
 	switch (valueSchema) {
@@ -554,7 +572,7 @@ export function parseDictValue(
 				coerced = parseIntStrict(valStr);
 			} catch (e) {
 				throw new ParseError(
-					`--${flagName}: value for key '${key}': ${(e as Error).message}`,
+					errDictValueForKey(flagName, key, (e as Error).message),
 				);
 			}
 			break;
@@ -582,7 +600,7 @@ export function storeDictEntries(
 ): void {
 	for (const [k, v] of entries) {
 		if (target.has(k)) {
-			throw new ParseError(`--${flagName}: duplicate key '${k}'`);
+			throw new ParseError(errDictDuplicateKey(flagName, k));
 		}
 		target.set(k, v);
 	}
@@ -604,12 +622,16 @@ export function parseDictEnvValue(
 		parsed = parseJsonTagged(envVal);
 	} catch (e) {
 		throw new ParseError(
-			`--${flagName}: invalid JSON in env var '${envVar}': ${(e as Error).message}`,
+			errDictInvalidJsonInEnvVar(flagName, envVar, (e as Error).message),
 		);
 	}
 	if (!isJsonObject(parsed)) {
 		throw new ParseError(
-			`--${flagName}: env var '${envVar}' must be a JSON object, got ${jsonNativeTypename(parsed)}`,
+			errDictEnvVarMustBeJsonObject(
+				flagName,
+				envVar,
+				jsonNativeTypename(parsed),
+			),
 		);
 	}
 	const result = new Map<string, unknown>();

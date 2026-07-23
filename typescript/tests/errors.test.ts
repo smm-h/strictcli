@@ -31,7 +31,12 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // errCallPathIsGroup (Python call() group-path message; Go inlines "no
 // command resolved from path" in invoke.go) and errRouterCommandMustBeString
 // (inline InvokeError literal in Go makeRouterTool / Python router execute).
-const EXPECTED_TEMPLATE_COUNT = 238;
+// The error-parity task (6.4) centralizes 26 formerly-inline Python-wording
+// templates with no errors.go body (Go's counterparts are inline or use
+// different wording): 12 dict-flag parse templates + 2 positional-arg
+// wrappers (values.ts), 9 registration templates (factories.ts), and 3
+// check-provider materialization guards (app.ts / checks/provider.ts).
+const EXPECTED_TEMPLATE_COUNT = 264;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

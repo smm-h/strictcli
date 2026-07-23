@@ -372,6 +372,57 @@ export function errFlagDefaultNotInChoices(
 }
 
 // ---------------------------------------------------------------------------
+// factories.ts — Python-wording registration templates
+//
+// Python is the divergence ground truth for these registration errors; the
+// TS factories emit Python's wording (with Go-style double-quoted names).
+// Go's counterparts use different wording or typed constructors -- see the
+// go exclusions for these signatures in check_error_parity.py.
+// ---------------------------------------------------------------------------
+
+export function errFlagDictCannotCombineRepeatable(name: string): string {
+	return `Flag "${name}": dict type cannot be combined with repeatable=True`;
+}
+
+export function errFlagDictCannotCombineUnique(name: string): string {
+	return `Flag "${name}": dict type cannot be combined with unique`;
+}
+
+export function errFlagDictCannotCombineChoices(name: string): string {
+	return `Flag "${name}": dict type cannot be combined with choices`;
+}
+
+export function errFlagConflictModeBad(name: string, gotRepr: string): string {
+	return `Flag "${name}": conflict_mode must be "cli-wins" or "error", got ${gotRepr}`;
+}
+
+export function errFlagDictCannotUseEnvSeparator(name: string): string {
+	return `Flag "${name}": dict type cannot use env_separator (env vars are parsed as JSON)`;
+}
+
+export function errFlagDictDefaultKeyMustBeString(
+	name: string,
+	keyRepr: string,
+): string {
+	return `Flag "${name}": dict default key ${keyRepr} must be a string`;
+}
+
+export function errArgDictTypeNotSupportedOnArgs(name: string): string {
+	return `Arg "${name}": dict type is not supported on args`;
+}
+
+export function errArgListTypeOnArgsRequiresVariadicTrue(name: string): string {
+	return `Arg "${name}": list type on args requires variadic=True`;
+}
+
+export function errCommandImpliesValueMustBeBool(
+	cmdName: string,
+	typeName: string,
+): string {
+	return `command "${cmdName}": Implies value must be a bool, got '${typeName}'`;
+}
+
+// ---------------------------------------------------------------------------
 // strictcli.go — NewApp
 // ---------------------------------------------------------------------------
 
@@ -918,6 +969,114 @@ export function errFlagInvalidChoice(
 }
 
 // ---------------------------------------------------------------------------
+// values.ts — typed value parsing (parse-time)
+//
+// Python-wording positional-arg error wrappers (Python's generic
+// "argument '<name>': ..." prefix); Go produces typed errors at the parse
+// level with a different prefix -- see the go exclusions in
+// check_error_parity.py.
+// ---------------------------------------------------------------------------
+
+export function errArgumentWrapped(argName: string, msg: string): string {
+	return `argument '${argName}': ${msg}`;
+}
+
+export function errArgumentExpectedFloat(argName: string, raw: string): string {
+	return `argument '${argName}': expected float, got '${raw}'`;
+}
+
+// ---------------------------------------------------------------------------
+// values.ts — dict flag parsing (parse-time)
+//
+// Python-wording templates (Python is the divergence ground truth for dict
+// flag parsing; Go coerces dict values with different inline messages in
+// parse.go -- check_error_parity.py carries the go exclusions for these
+// signatures). Type-description slots take pre-formatted names from the
+// jsonConfigTypename / jsonNativeTypename vocabularies in values.ts.
+// ---------------------------------------------------------------------------
+
+export function errDictJsonValueForKeyMustBeString(
+	flagName: string,
+	key: string,
+	typeDesc: string,
+): string {
+	return `--${flagName}: JSON value for key '${key}' must be a string, got ${typeDesc}`;
+}
+
+export function errDictJsonValueForKeyMustBeInteger(
+	flagName: string,
+	key: string,
+	typeDesc: string,
+): string {
+	return `--${flagName}: JSON value for key '${key}' must be an integer, got ${typeDesc}`;
+}
+
+export function errDictJsonValueForKeyMustBeNumber(
+	flagName: string,
+	key: string,
+	typeDesc: string,
+): string {
+	return `--${flagName}: JSON value for key '${key}' must be a number, got ${typeDesc}`;
+}
+
+export function errDictUnsupportedValueType(
+	flagName: string,
+	valueSchema: string,
+): string {
+	return `--${flagName}: unsupported value type ${valueSchema}`;
+}
+
+export function errDictInvalidJson(flagName: string, errStr: string): string {
+	return `--${flagName}: invalid JSON: ${errStr}`;
+}
+
+export function errDictJsonValueMustBeObject(
+	flagName: string,
+	typeDesc: string,
+): string {
+	return `--${flagName}: JSON value must be an object, got ${typeDesc}`;
+}
+
+export function errDictExpectedKeyValueOrJson(
+	flagName: string,
+	raw: string,
+): string {
+	return `--${flagName}: expected key=value or JSON, got '${raw}'`;
+}
+
+export function errDictEmptyKey(flagName: string, raw: string): string {
+	return `--${flagName}: empty key in '${raw}'`;
+}
+
+export function errDictValueForKey(
+	flagName: string,
+	key: string,
+	errStr: string,
+): string {
+	return `--${flagName}: value for key '${key}': ${errStr}`;
+}
+
+export function errDictDuplicateKey(flagName: string, key: string): string {
+	return `--${flagName}: duplicate key '${key}'`;
+}
+
+export function errDictInvalidJsonInEnvVar(
+	flagName: string,
+	envVar: string,
+	errStr: string,
+): string {
+	return `--${flagName}: invalid JSON in env var '${envVar}': ${errStr}`;
+}
+
+export function errDictEnvVarMustBeJsonObject(
+	flagName: string,
+	envVar: string,
+	typeDesc: string,
+): string {
+	return `--${flagName}: env var '${envVar}' must be a JSON object, got ${typeDesc}`;
+}
+
+// ---------------------------------------------------------------------------
 // config.go — ConfigField registration
 // ---------------------------------------------------------------------------
 
@@ -1306,6 +1465,27 @@ export function errCheckProviderSeverityMismatch(
 	want: string,
 ): string {
 	return `check ${q(name)}: declared severity ${q(severity)} but registered via ${used}; use ${want}`;
+}
+
+// ---------------------------------------------------------------------------
+// checks/provider.ts — provider materialization guards (Python-wording)
+//
+// Python register_check_provider / _materialize_check_providers is the
+// divergence ground truth for these runtime guards; Go's provider surface is
+// statically typed and needs none of them -- see the go exclusions in
+// check_error_parity.py.
+// ---------------------------------------------------------------------------
+
+export function errCheckProviderMustBeCallable(): string {
+	return "check provider must be callable";
+}
+
+export function errCheckProviderMustReturnList(typeDesc: string): string {
+	return `check provider must return a list of CheckSpec, got ${typeDesc}`;
+}
+
+export function errCheckProviderNonCheckSpec(valueRepr: string): string {
+	return `check provider returned a non-CheckSpec value: ${valueRepr}`;
 }
 
 // ---------------------------------------------------------------------------

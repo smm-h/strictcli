@@ -22,7 +22,11 @@
  * divergence ground truth for the runtime guards.
  */
 
-import { errCheckProviderSeverityMismatch } from "../errors.js";
+import {
+	errCheckProviderMustReturnList,
+	errCheckProviderNonCheckSpec,
+	errCheckProviderSeverityMismatch,
+} from "../errors.js";
 import { pyRepr, pyTypeName } from "../factories.js";
 import {
 	addCheckDef,
@@ -202,15 +206,11 @@ export function materializeCheckProviders(state: ChecksState): void {
 	for (const provider of state.providers) {
 		const result = provider() ?? [];
 		if (!Array.isArray(result)) {
-			throw new Error(
-				`check provider must return a list of CheckSpec, got ${pyTypeName(result)}`,
-			);
+			throw new Error(errCheckProviderMustReturnList(pyTypeName(result)));
 		}
 		for (const spec of result) {
 			if (!(spec instanceof CheckSpec)) {
-				throw new Error(
-					`check provider returned a non-CheckSpec value: ${pyRepr(spec)}`,
-				);
+				throw new Error(errCheckProviderNonCheckSpec(pyRepr(spec)));
 			}
 			if (spec.severity !== spec.implForm) {
 				throw new Error(

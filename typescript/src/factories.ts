@@ -16,9 +16,11 @@ import {
 	errArgChoicesEmpty,
 	errArgChoicesIncompatibleBool,
 	errArgChoiceTypeMismatch,
+	errArgDictTypeNotSupportedOnArgs,
 	errArgFloatDefaultTypeMismatch,
 	errArgHelpEmpty,
 	errArgIntDefaultTypeMismatch,
+	errArgListTypeOnArgsRequiresVariadicTrue,
 	errArgStrDefaultTypeMismatch,
 	errCommandAtMostOneVariadic,
 	errCommandCoRequiredDuplicate,
@@ -31,6 +33,7 @@ import {
 	errCommandImpliesTargetNotBool,
 	errCommandImpliesTriggerNotBool,
 	errCommandImpliesUnknownFlag,
+	errCommandImpliesValueMustBeBool,
 	errCommandMissingHelp,
 	errCommandMutexMinFlags,
 	errCommandRequiresSameFlag,
@@ -41,7 +44,13 @@ import {
 	errFlagChoicesEmpty,
 	errFlagChoicesIncompatibleBool,
 	errFlagChoiceTypeMismatch,
+	errFlagConflictModeBad,
 	errFlagDefaultElementTypeMismatch,
+	errFlagDictCannotCombineChoices,
+	errFlagDictCannotCombineRepeatable,
+	errFlagDictCannotCombineUnique,
+	errFlagDictCannotUseEnvSeparator,
+	errFlagDictDefaultKeyMustBeString,
 	errFlagEnvSeparatorBackslash,
 	errFlagEnvSeparatorRequiresEnv,
 	errFlagEnvSeparatorRequiresRepeatable,
@@ -259,19 +268,13 @@ function validateFlagConfig(
 	const elem = elemSchemaOf(carrier);
 	if (kind === "dict") {
 		if (o.repeatable !== undefined) {
-			throw new RegistrationError(
-				`Flag "${name}": dict type cannot be combined with repeatable=True`,
-			);
+			throw new RegistrationError(errFlagDictCannotCombineRepeatable(name));
 		}
 		if (o.unique !== undefined) {
-			throw new RegistrationError(
-				`Flag "${name}": dict type cannot be combined with unique`,
-			);
+			throw new RegistrationError(errFlagDictCannotCombineUnique(name));
 		}
 		if (o.choices !== undefined) {
-			throw new RegistrationError(
-				`Flag "${name}": dict type cannot be combined with choices`,
-			);
+			throw new RegistrationError(errFlagDictCannotCombineChoices(name));
 		}
 	}
 	if (kind === "scalar" && o.repeatable !== undefined) {
@@ -293,14 +296,12 @@ function validateFlagConfig(
 		o.conflictMode !== "error"
 	) {
 		throw new RegistrationError(
-			`Flag "${name}": conflict_mode must be "cli-wins" or "error", got ${pyRepr(o.conflictMode)}`,
+			errFlagConflictModeBad(name, pyRepr(o.conflictMode)),
 		);
 	}
 	if (kind === "dict") {
 		if (o.envSeparator !== undefined) {
-			throw new RegistrationError(
-				`Flag "${name}": dict type cannot use env_separator (env vars are parsed as JSON)`,
-			);
+			throw new RegistrationError(errFlagDictCannotUseEnvSeparator(name));
 		}
 	} else {
 		if (o.envSeparator !== undefined && kind !== "list") {
@@ -353,7 +354,7 @@ function validateFlagConfig(
 		for (const [k, v] of dflt as Map<unknown, unknown>) {
 			if (typeof k !== "string") {
 				throw new RegistrationError(
-					`Flag "${name}": dict default key ${pyRepr(k)} must be a string`,
+					errFlagDictDefaultKeyMustBeString(name, pyRepr(k)),
 				);
 			}
 			if (!matchesScalar(elem, v)) {
@@ -512,14 +513,12 @@ export function arg<
 	}
 	const kind = schemaKind(carrier.schema);
 	if (kind === "dict") {
-		throw new RegistrationError(
-			`Arg "${name}": dict type is not supported on args`,
-		);
+		throw new RegistrationError(errArgDictTypeNotSupportedOnArgs(name));
 	}
 	if (kind === "list") {
 		if (o.variadic !== true) {
 			throw new RegistrationError(
-				`Arg "${name}": list type on args requires variadic=True`,
+				errArgListTypeOnArgsRequiresVariadicTrue(name),
 			);
 		}
 		// TS-only: variadic args are declared with the ELEMENT carrier plus
@@ -918,7 +917,7 @@ export function defineCommand<
 				}
 				if (typeof dep.value !== "boolean") {
 					throw new RegistrationError(
-						`command "${name}": Implies value must be a bool, got '${pyTypeName(dep.value)}'`,
+						errCommandImpliesValueMustBeBool(name, pyTypeName(dep.value)),
 					);
 				}
 				break;
