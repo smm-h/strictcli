@@ -727,7 +727,7 @@ def _canonicalize_repeatable(node: object) -> None:
     """Rewrite repeatable-scalar flags to their list-carrier spelling, in place.
 
     Documented TS model constant (typescript/src/schema.ts doc block;
-    ts-port-spec.md task 6.1 vocabulary note (a)): in TS, list carriers ARE the
+    docs/history/_ts-port-spec.md task 6.1 vocabulary note (a)): in TS, list carriers ARE the
     repeatable flags, so a scalar flag with repeatable=true is declared as
     list[T] and the schema emits {type: "list[T]"} with no "repeatable" key and
     no empty-list default. Python and Go emit {type: "T", repeatable: true,
