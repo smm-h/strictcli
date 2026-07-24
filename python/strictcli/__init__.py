@@ -1341,6 +1341,10 @@ def _strict_int(s: str) -> int:
     """
     if s != s.strip():
         raise ValueError(f"expected integer, got '{s}'")
+    # Python's int() accepts PEP 515 underscore digit separators ('1_000');
+    # Go's strconv and the TypeScript parser reject them. Reject to match canon.
+    if "_" in s:
+        raise ValueError(f"expected integer, got '{s}'")
     try:
         n = int(s)
     except ValueError:

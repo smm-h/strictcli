@@ -126,6 +126,23 @@ def test_int_arg_rejects_float_string():
     assert "expected integer" in r.stderr
 
 
+def test_int_arg_rejects_underscore_separators():
+    """Int arg rejects '1_000' (PEP 515 digit separators), matching Go/TypeScript."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd",
+        help="a command",
+        args=[strictcli.Arg(name="count", help="a count", type=int)],
+    )
+    def cmd(ctx, count):
+        pass
+
+    r = app.test(["cmd", "1_000"])
+    assert r.exit_code == 1
+    assert "argument 'count': expected integer, got '1_000'" in r.stderr
+
+
 def test_int_arg_negative():
     """Int arg handles negative values (after -- separator)."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")

@@ -88,6 +88,31 @@ def test_int_flag_bad_env_value(monkeypatch):
     assert "'abc'" in r.stderr
 
 
+def test_int_flag_reject_underscore_separators():
+    """'1_000' (PEP 515 digit separators) is rejected to match Go/TypeScript."""
+    app = _make_app_with_int_flag()
+    r = app.test(["cmd", "--port", "1_000"])
+    assert r.exit_code == 1
+    assert "expected integer" in r.stderr
+    assert "'1_000'" in r.stderr
+
+
+def test_int_flag_reject_underscore_env_value(monkeypatch):
+    """Underscore-separated int env var is rejected."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag("port", type=int, help="the port", default=80, env="MYAPP_PORT")
+    def cmd(ctx, port):
+        print(f"port={port}")
+
+    monkeypatch.setenv("MYAPP_PORT", "1_000")
+    r = app.test(["cmd"])
+    assert r.exit_code == 1
+    assert "expected integer" in r.stderr
+    assert "'1_000'" in r.stderr
+
+
 def test_int_flag_required():
     """Int flag with no default and omitted -> exit 1, stderr says required."""
     app = _make_app_with_int_flag()
