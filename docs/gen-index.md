@@ -1,6 +1,6 @@
 ---
 title: API Reference
-description: "API reference index covering 2 modules"
+description: "API reference index covering 32 modules"
 generated: true
 seeded: true
 nav_group: "API Reference"
@@ -13,3 +13,33 @@ order: 90
 
 - [go/strictcli](go-strictcli.html)
 - [python.strictcli](python-strictcli.html)
+- [typescript/src/app](typescript-src-app.html)
+- [typescript/src/atprefix](typescript-src-atprefix.html)
+- [typescript/src/checks/cmd](typescript-src-checks-cmd.html)
+- [typescript/src/checks/coverage](typescript-src-checks-coverage.html)
+- [typescript/src/checks/framework](typescript-src-checks-framework.html)
+- [typescript/src/checks/provider](typescript-src-checks-provider.html)
+- [typescript/src/checks/runner](typescript-src-checks-runner.html)
+- [typescript/src/checks/tagdsl](typescript-src-checks-tagdsl.html)
+- [typescript/src/config](typescript-src-config.html)
+- [typescript/src/context](typescript-src-context.html)
+- [typescript/src/describe](typescript-src-describe.html)
+- [typescript/src/env](typescript-src-env.html)
+- [typescript/src/errors](typescript-src-errors.html)
+- [typescript/src/factories](typescript-src-factories.html)
+- [typescript/src/float](typescript-src-float.html)
+- [typescript/src/help](typescript-src-help.html)
+- [typescript/src/index](typescript-src-index.html)
+- [typescript/src/infer](typescript-src-infer.html)
+- [typescript/src/infra](typescript-src-infra.html)
+- [typescript/src/invoke](typescript-src-invoke.html)
+- [typescript/src/mcp](typescript-src-mcp.html)
+- [typescript/src/outcome](typescript-src-outcome.html)
+- [typescript/src/parse](typescript-src-parse.html)
+- [typescript/src/routing](typescript-src-routing.html)
+- [typescript/src/schema](typescript-src-schema.html)
+- [typescript/src/sources](typescript-src-sources.html)
+- [typescript/src/toml](typescript-src-toml.html)
+- [typescript/src/tool](typescript-src-tool.html)
+- [typescript/src/types](typescript-src-types.html)
+- [typescript/src/values](typescript-src-values.html)
