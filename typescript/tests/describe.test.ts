@@ -24,7 +24,7 @@ import {
 } from "../src/describe.js";
 import * as api from "../src/index.js";
 
-// --- Compile-time machinery (see ts-port-spec.md, "Equals type-assertion technique") ---
+// --- Compile-time machinery (see docs/history/_ts-port-spec.md, "Equals type-assertion technique") ---
 
 type Equals<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2

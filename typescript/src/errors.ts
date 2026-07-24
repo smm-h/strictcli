@@ -1623,7 +1623,7 @@ export function errRouterCommandMustBeString(): string {
 // No Go/Python counterpart: the siblings' TOML parsers (go-toml-edit, tomllib)
 // are TOML-1.0-native and reject 1.1-only constructs with their own parser
 // errors. The TS stack parses with smol-toml (which accepts TOML 1.1), so an
-// explicit gate rejects the six 1.1-only constructs pinned in ts-port-spec.md.
+// explicit gate rejects the six 1.1-only constructs pinned in docs/history/_ts-port-spec.md.
 // ---------------------------------------------------------------------------
 
 export function errTomlBasicStringEscape(esc: string): string {

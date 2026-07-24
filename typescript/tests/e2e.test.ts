@@ -1,5 +1,5 @@
 /**
- * End-to-end byte-parity tests: the 12 curated scenarios from ts-port-spec.md
+ * End-to-end byte-parity tests: the 12 curated scenarios from docs/history/_ts-port-spec.md
  * ("Curated example set for end-to-end byte-parity demos"), each run through
  * app.test() and asserted byte-identical to ground truth.
  *

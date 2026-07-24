@@ -7,7 +7,7 @@
  * Python tomllib) are TOML-1.0-native. Every parse therefore first validates
  * the raw text with toml-eslint-parser in "1.0" mode -- a full spec-compliant
  * TOML 1.0 parser -- which reliably rejects the six 1.1-only constructs
- * pinned in ts-port-spec.md (backslash-e / backslash-x escapes in basic
+ * pinned in docs/history/_ts-port-spec.md (backslash-e / backslash-x escapes in basic
  * strings, newlines and trailing commas in inline tables, times and datetimes
  * without seconds). When the 1.0 parse fails but a 1.1 parse succeeds, the
  * failure is classified into the specific gate error; otherwise the document

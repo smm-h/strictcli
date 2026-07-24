@@ -1,7 +1,7 @@
 /**
  * Type foundation: nominally-branded carriers pairing a phantom output type
  * with a literal schema string. Productionizes Solution 10 from the verified
- * spike (see ts-port-spec.md, "Type-machinery reference").
+ * spike (see docs/history/_ts-port-spec.md, "Type-machinery reference").
  */
 
 import {

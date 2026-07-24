@@ -4,7 +4,7 @@ import type { Carrier, DictSchema, Schema } from "../src/index.js";
 import { flag, t } from "../src/index.js";
 
 // Exact type equality via the conditional-generic-signature trick (see
-// ts-port-spec.md, "Equals type-assertion technique").
+// docs/history/_ts-port-spec.md, "Equals type-assertion technique").
 type Equals<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
 		? true

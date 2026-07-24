@@ -1,6 +1,6 @@
 /**
  * toml.ts tests: the TOML 1.0 acceptance gate (the six 1.1-only constructs
- * from ts-port-spec.md), strict value parsing (bigint ints), and the
+ * from docs/history/_ts-port-spec.md), strict value parsing (bigint ints), and the
  * comment-preserving single-key splicer (set/delete byte-exactness).
  *
  * GROUND TRUTH: the splicer expectations for the commented document were

@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { formatFloatCanonical } from "../src/float.js";
 
-// The 15-value SCF battery from ts-port-spec.md.
+// The 15-value SCF battery from docs/history/_ts-port-spec.md.
 const battery: readonly [number, string][] = [
 	[1.0, "1.0"],
 	[-1.0, "-1.0"],
@@ -21,7 +21,7 @@ const battery: readonly [number, string][] = [
 	[1.5e300, "1.5e+300"],
 ];
 
-test("SCF battery from ts-port-spec.md", () => {
+test("SCF battery from docs/history/_ts-port-spec.md", () => {
 	for (const [input, expected] of battery) {
 		assert.equal(formatFloatCanonical(input), expected, `input ${input}`);
 	}
