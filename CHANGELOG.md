@@ -2,16 +2,16 @@
 
 # py-strictcli
 
+## 0.32.2
+
+Strict parsing: reject underscore separators in ints and overflow-to-infinity floats
+
+### Fixes
+
+- [strictcli] **Fix.** Integer values with underscore separators (`1_000`) are now rejected, matching the strict-parsing rules of the other implementations.
+- [strictcli] **Fix.** Float values that overflow to infinity (`1e999`) are now rejected, matching the no-Inf strict-parsing rule of the other implementations.
+
 ## 0.32.1
-
-cli-test-coverage skips instead of failing when run outside the app's own dev tree
-
-<details>
-<summary>Context</summary>
-
-An installed app that runs its checks from a foreign project's directory anchored cli-test-coverage to that foreign cwd, which has no coverage manifest or shard files, so the check failed listing the app's entire command surface as uncovered. The check now applies subject-matter gating: when the anchored coverage root contains neither a manifest nor any shard files, it reports a visible skip naming the anchored path. When either exists, behavior is unchanged.
-
-</details>
 
 ### Fixes
 
