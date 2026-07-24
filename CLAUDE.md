@@ -116,6 +116,15 @@ JSON test cases in `cases/` (57 files) define app structure + argv + expected ou
 
 Cases may carry an `acknowledged_divergence` block for intrinsically language-specific output (per-stream target lists with a mandatory reason); acknowledged targets are excluded from byte-identity comparison while the case's own expect block still runs everywhere, and stale acknowledgments are reported. The `check` gate (`uv run conformance check --tag pre-release` from `conformance/`) runs 9 checks: api-surface, error-parity, conformance-python, conformance-go, conformance-typescript, conformance-parity, schema-parity, schema-freshness, float-fuzz.
 
+## TypeScript port — durable facts
+
+The TypeScript implementation shipped as npm `strictcli` 0.31.0. These are the agent-facing constants that must not drift; the full historical design record and decision ledger live in `docs/history/_ts-port-spec.md` (the underscore prefix keeps it out of the published docs site — selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md` as a page).
+
+- **Naming registry.** Conformance target `typescript`; conformance check `conformance-typescript`; rlsbl releasable and workspace project `ts-strictcli`; npm package `strictcli`; directory `typescript/`.
+- **TOML acceptance gate.** The TS parse layer MUST reject the six TOML-1.1-only constructs (parity with the stricter Python/Go TOML): backslash-`e` escapes and backslash-`x` hex escapes in basic strings; newlines and trailing commas inside inline tables; times without seconds and datetimes without seconds.
+- **TOML stack.** `smol-toml` (with `integersAsBigInt` so TOML integers round-trip as `bigint`) for parsing; a `toml-eslint-parser`-based single-key splicer for comment-preserving, byte-exact `config set` edits.
+- **SCF float canon.** One canonical decimal form for floats, byte-identical across Python/Go/TS; the exhaustive bit-pattern → expected-string vectors are committed at `conformance/float_vectors.json` and enforced by the `float-fuzz` check.
+
 ## Cross-language parity rules
 
 All implementations must:
