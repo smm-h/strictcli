@@ -2,16 +2,15 @@
 
 # Changelog
 
+## 0.25.3
+
+App-level help now lists global flags
+
+### Fixes
+
+- [go-strictcli] **Fix.** App-level `--help` now lists global flags in a Global flags: section, matching the other implementations (command-level help already did).
+
 ## 0.25.2
-
-Dict flag parse-error message now matches the sibling implementations
-
-<details>
-<summary>Context</summary>
-
-The dict flag missing-equals error now reads `--flag: expected key=value or JSON`, matching the Python and TypeScript implementations (Go has always accepted JSON object input for dict flags; the message understated it). Also, `config show --plain` now displays config-sourced values coerced to the flag's declared type, matching runtime resolution and the sibling implementations.
-
-</details>
 
 ### Fixes
 
