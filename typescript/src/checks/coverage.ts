@@ -1,8 +1,8 @@
 /**
  * CLI test-coverage instrumentation: per-process shard files recording which
- * commands app.test() exercised, plus the built-in cli-test-coverage check
- * provider that merges the committed manifest and shard files into the
- * covered set and compares it against the app's full command surface.
+ * commands app.test() exercised, plus the built-in cli-test-coverage
+ * provider. The provider merges the committed manifest and shard files into
+ * the covered set and compares it against the app's full command surface.
  *
  * Parity sources: go/strictcli/coverage.go with Python _record_coverage /
  * _collect_all_command_paths / _test_coverage_provider as the divergence

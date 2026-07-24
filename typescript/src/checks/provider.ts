@@ -1,7 +1,7 @@
 /**
- * Check providers: the TOML-less way to add checks. A provider is a function
- * that returns a list of fully-formed check SPECS (metadata plus a
- * ceiling-typed impl). Providers run lazily at the first registry read
+ * Check providers: the TOML-less way to add checks, where a provider returns
+ * a list of fully-formed check specs (metadata plus a ceiling-typed impl).
+ * Providers run lazily at the first registry read
  * (materialization), memoized per cwd, and their specs go through the same
  * single add-path as TOML-declared checks.
  *

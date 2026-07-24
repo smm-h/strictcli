@@ -1,7 +1,8 @@
 /**
- * Tag DSL: set-operation expressions over check tags. Operators by precedence
- * (tightest first): ! (NOT), & (AND), ^ (XOR), | (OR), - (DIFF). Parentheses
- * group. Error positions are byte offsets into the expression string.
+ * Tag DSL: set-operation expressions over check tags, with operators by
+ * precedence (tightest first) NOT, AND, XOR, OR, and DIFF, plus parentheses
+ * to group. The operator symbols are ! (NOT), & (AND), ^ (XOR), | (OR),
+ * and - (DIFF). Error positions are byte offsets into the expression string.
  *
  * Parity sources: go/strictcli/tagdsl.go and Python _tagdsl_* (~6661-6834).
  * Errors are thrown as plain Error (the Python ValueError analog at run

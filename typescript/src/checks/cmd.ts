@@ -1,5 +1,6 @@
 /**
- * The auto-registered `check` command plus the human/JSON result formatters.
+ * The auto-registered `check` command plus the human-readable and JSON result
+ * formatters, dispatching the list, help, no-match, dry-run, and run modes.
  *
  * Parity sources: go/strictcli/check_cmd.go and check_public.go (formatters)
  * with Python _register_check_command / _check_list_mode /

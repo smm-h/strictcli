@@ -1,7 +1,8 @@
 /**
  * Check runner: filtering (tag DSL + name glob), DAG-ordered execution with
- * dependency pull-in, cycle detection, dependency-failure cascade-skips, the
- * purity partition, and integer-millisecond wall-clock timing.
+ * dependency pull-in, cycle detection, and dependency-failure cascade-skips.
+ * It also handles the purity partition and integer-millisecond wall-clock
+ * timing.
  *
  * Parity sources: go/strictcli/check_runner.go with Python _filter_checks /
  * _resolve_check_order / _find_cycle / _run_checks (~6841-7085) as the
