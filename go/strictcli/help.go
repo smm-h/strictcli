@@ -74,6 +74,31 @@ func formatAppHelp(app *App) string {
 		}
 	}
 
+	// Global flags section. App-level help renders name + short + help only
+	// (no type spec, no metadata), mirroring Python's _format_app_help and the
+	// TypeScript formatAppHelp. This is intentionally simpler than the
+	// command-level Global flags section, which uses buildFlagSpec/buildFlagMeta.
+	if len(app.globalFlags) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Global flags:")
+		specs := make([]string, len(app.globalFlags))
+		maxSpec := 0
+		for i, f := range app.globalFlags {
+			spec := "--" + f.Name
+			if f.Short != "" {
+				spec += ", -" + f.Short
+			}
+			specs[i] = spec
+			if len(spec) > maxSpec {
+				maxSpec = len(spec)
+			}
+		}
+		for i, f := range app.globalFlags {
+			padding := maxSpec - len(specs[i]) + 4
+			lines = append(lines, fmt.Sprintf("  %s%s%s", specs[i], strings.Repeat(" ", padding), f.Help))
+		}
+	}
+
 	if len(app.infraRootOrder) > 0 || len(app.handshakeOrder) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Infrastructure:")
