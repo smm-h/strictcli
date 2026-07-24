@@ -7,6 +7,10 @@
     {
       "path": "go/strictcli/",
       "language": "go"
+    },
+    {
+      "path": "typescript/src/",
+      "language": "typescript"
     }
   ],
   "base_url": "https://strictcli.smmh.dev",
