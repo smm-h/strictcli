@@ -390,5 +390,40 @@
       "exit_code": 1,
       "stderr_contains": "NaN is not allowed (from env var 'MYAPP_RATE')"
     }
+  },
+  {
+    "name": "float: reject overflow to infinity",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--rate",
+      "1e999"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "expected float",
+        "'1e999'"
+      ],
+      "stderr_equals": "error: --rate: expected float, got '1e999'\ntry 'myapp cmd --help'"
+    }
   }
 ]

@@ -329,5 +329,67 @@
       "exit_code": 0,
       "stdout_equals": "offset=-5"
     }
+  },
+  {
+    "name": "typed args: int arg with underscore separators rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "count",
+              "help": "a count",
+              "type": "int"
+            }
+          ],
+          "handler_prints": "count={count}"
+        }
+      ]
+    },
+    "argv": ["cmd", "1_000"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "expected integer",
+        "'1_000'"
+      ],
+      "stderr_equals": "error: argument 'count': expected integer, got '1_000'\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "typed args: float arg overflow to infinity rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "args": [
+            {
+              "name": "rate",
+              "help": "a rate",
+              "type": "float"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": ["cmd", "1e999"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "expected float",
+        "'1e999'"
+      ],
+      "stderr_equals": "error: argument 'rate': expected float, got '1e999'\ntry 'myapp cmd --help'"
+    }
   }
 ]

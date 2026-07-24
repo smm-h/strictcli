@@ -1060,5 +1060,40 @@
       "exit_code": 0,
       "stdout_equals": "name=  hello  "
     }
+  },
+  {
+    "name": "boundary: int with underscore separators rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--port",
+      "1_000"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "expected integer",
+        "'1_000'"
+      ],
+      "stderr_equals": "error: --port: expected integer, got '1_000'\ntry 'myapp cmd --help'"
+    }
   }
 ]
