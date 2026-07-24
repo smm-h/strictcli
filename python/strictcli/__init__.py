@@ -1367,7 +1367,13 @@ def _strict_float(s: str) -> float:
         raise ValueError("NaN is not allowed")
     if low in ("inf", "-inf", "+inf", "infinity", "-infinity", "+infinity"):
         raise ValueError("Inf is not allowed")
-    return float(s)
+    result = float(s)
+    # A finite literal that overflows to +/-inf ('1e999') is a parse failure,
+    # not an Inf literal. Go and TypeScript reject it as an invalid float; use
+    # the generic "expected float" path (not "Inf is not allowed") to match.
+    if math.isinf(result):
+        raise ValueError(f"invalid literal for float(): {s!r}")
+    return result
 
 
 def _float_parse_error(

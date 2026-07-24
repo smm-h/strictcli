@@ -228,6 +228,23 @@ def test_float_arg_rejects_inf():
     assert "Inf is not allowed" in r.stderr
 
 
+def test_float_arg_rejects_overflow_to_infinity():
+    """Float arg rejects '1e999' (overflows to inf), using the generic parse error."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd",
+        help="a command",
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+    )
+    def cmd(ctx, ratio):
+        pass
+
+    r = app.test(["cmd", "1e999"])
+    assert r.exit_code == 1
+    assert "argument 'ratio': expected float, got '1e999'" in r.stderr
+
+
 def test_float_arg_integer_string():
     """Float arg accepts integer string (coerces to float)."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")

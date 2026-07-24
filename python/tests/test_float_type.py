@@ -158,6 +158,42 @@ def test_float_flag_reject_negative_inf():
     assert "Inf is not allowed" in r.stderr
 
 
+def test_float_flag_reject_overflow_to_infinity():
+    """'1e999' overflows to inf and is rejected via the generic parse error."""
+    app = _make_app_with_float_flag()
+    r = app.test(["cmd", "--rate", "1e999"])
+    assert r.exit_code == 1
+    assert "expected float" in r.stderr
+    assert "'1e999'" in r.stderr
+    # Overflow uses the generic message, not the literal-Inf rejection.
+    assert "Inf is not allowed" not in r.stderr
+
+
+def test_float_flag_reject_negative_overflow_to_infinity():
+    """'-1e999' overflows to -inf and is rejected via the generic parse error."""
+    app = _make_app_with_float_flag()
+    r = app.test(["cmd", "--rate", "-1e999"])
+    assert r.exit_code == 1
+    assert "expected float" in r.stderr
+    assert "'-1e999'" in r.stderr
+
+
+def test_float_flag_reject_overflow_env_value(monkeypatch):
+    """Overflowing float env var is rejected with the env suffix."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
+
+    @app.command("cmd", help="a command")
+    @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
+    def cmd(ctx, rate):
+        print(f"rate={rate}")
+
+    monkeypatch.setenv("MYAPP_RATE", "1e999")
+    r = app.test(["cmd"])
+    assert r.exit_code == 1
+    assert "expected float" in r.stderr
+    assert "(from env var 'MYAPP_RATE')" in r.stderr
+
+
 def test_float_flag_reject_whitespace():
     """Whitespace-padded values are rejected."""
     app = _make_app_with_float_flag()
