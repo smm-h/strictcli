@@ -157,6 +157,48 @@
     }
   },
   {
+    "name": "global_flags: global flags shown in app help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "verbose",
+          "type": "bool",
+          "help": "enable verbose output",
+          "default": false
+        },
+        {
+          "name": "settings",
+          "type": "str",
+          "help": "settings directory",
+          "default": "/etc/myapp"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run something",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "Global flags:",
+        "--verbose",
+        "--settings",
+        "enable verbose output"
+      ],
+      "stdout_equals": "myapp v1.0.0 -- test app\n\nCommands:\n  run    run something\n\nGlobal flags:\n  --verbose     enable verbose output\n  --settings    settings directory\n\nUse 'myapp <command> --help' for more information."
+    }
+  },
+  {
     "name": "global_flags: global flag shown in command help",
     "app": {
       "name": "myapp",
