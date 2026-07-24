@@ -1,5 +1,7 @@
 /**
- * Registration and validation: createApp plus the App/Group internals.
+ * Registration and validation: createApp plus the App and Group classes
+ * storing commands, groups, deprecated entries, and global flags in insertion
+ * order.
  *
  * The runtime classes (AppImpl/GroupImpl) are internal -- index.ts exports
  * only createApp and the App/Group interfaces. Later modules (parse, routing,

@@ -1,8 +1,8 @@
 /**
- * Handler outcome: the branded structured-result type and the strict
- * interpretation of handler return values. Mirrors Python's Outcome /
- * outcome() / _interpret_handler_return (the divergence ground truth; Go's
- * type system makes bad returns inexpressible).
+ * Handler outcome: the branded structured-result type plus the strict
+ * interpretation of handler return values, mirroring the Python Outcome
+ * semantics. Python's Outcome/outcome()/_interpret_handler_return is the
+ * divergence ground truth; Go's type system makes bad returns inexpressible.
  *
  * Data JSON serialization lives here too: one compact line, BigInt values as
  * bare integer tokens (JSON.stringify cannot emit those, hence the custom

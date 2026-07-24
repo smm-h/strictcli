@@ -1,4 +1,9 @@
-/** strictcli - TS-native strict CLI framework. Implementation lands module by module. */
+/**
+ * strictcli public API surface: the TS-native strict CLI entry point
+ * re-exporting createApp, the carrier namespace `t`, outcome, and the public
+ * types.
+ */
+
 export const VERSION = "0.31.0";
 
 export type {

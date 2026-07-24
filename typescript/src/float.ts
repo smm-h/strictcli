@@ -1,8 +1,9 @@
 /**
- * Strictcli canonical float form (SCF), shared byte-for-byte with the Python
- * and Go implementations (go/strictcli/float.go formatFloatCanonical, Python
- * _format_float_canonical). The committed cross-language vectors
- * (conformance/float_vectors.json) pin the output.
+ * Strictcli canonical float form (SCF), the shortest-round-trip float
+ * formatting shared byte-for-byte with the Python and Go implementations. It
+ * is pinned by the committed conformance/float_vectors.json and matches
+ * go/strictcli/float.go formatFloatCanonical and Python
+ * _format_float_canonical exactly.
  *
  * Rules:
  *  1. Digit source is the shortest decimal string that round-trips to the
@@ -23,6 +24,7 @@
  *  6. The trailing ".0" is only ever added in the fixed branch, never in the
  *     scientific branch.
  */
+
 export function formatFloatCanonical(v: number): string {
 	if (!Number.isFinite(v)) {
 		// NaN/Inf are rejected at parse time everywhere; reaching here is a bug.

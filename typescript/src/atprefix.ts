@@ -1,9 +1,9 @@
 /**
  * @-prefix resolution for string flag values, mirroring Go resolveAtPrefix
- * (parse.go) and Python _resolve_at_prefix: "@path" reads a file, "@-" reads
- * stdin (once per invocation), "@@literal" strips the leading "@". Content is
- * trimmed of trailing space/tab/CR/LF only (never other whitespace), and
- * capped at 1 MB.
+ * (parse.go) and Python _resolve_at_prefix across the three supported @-forms.
+ * "@path" reads a file, "@-" reads stdin (once per invocation), and
+ * "@@literal" strips the leading "@". Content is trimmed of trailing
+ * space/tab/CR/LF only (never other whitespace), and capped at 1 MB.
  */
 
 import { readFileSync, readSync, type Stats, statSync } from "node:fs";

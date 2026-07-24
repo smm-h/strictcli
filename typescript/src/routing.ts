@@ -1,7 +1,7 @@
 /**
- * Command routing: first non-flag token selects a command or group; groups
- * are traversed to arbitrary depth. Mirrors Go resolveCommand (routing.go)
- * with Python _resolve_command as the divergence ground truth: after a group
+ * Command routing: first non-flag token selects a command or group, and
+ * groups are traversed to arbitrary depth, mirroring Go resolveCommand in
+ * routing.go. Python _resolve_command is the divergence ground truth: after a group
  * token is consumed, a leading --help/-h in the remaining tokens requests
  * group help regardless of what follows (Python checks segments[0]; Go
  * additionally requires it to be the only remaining token).

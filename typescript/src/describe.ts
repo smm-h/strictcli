@@ -1,7 +1,8 @@
 /**
  * describe.ts -- dev-only self-dump of the TS public API surface, shape-
- * aligned with conformance/describe_go/main.go's output (schema_version,
- * package, structs, option_constructors, functions, methods, constants).
+ * aligned with the conformance/describe_go/main.go reference dumper's output.
+ * Sections cover schema_version, package, structs, option_constructors,
+ * functions, methods, and constants.
  * TypeScript has no runtime type info, so instead of reflection the surface
  * is a hand-maintained registry (SURFACE below) whose accuracy is enforced
  * by tests/describe.test.ts in both directions: every listed name must exist

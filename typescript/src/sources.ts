@@ -1,8 +1,8 @@
 /**
  * Per-parse provenance store, mirroring Go's sourcedStore (parse.go) and
- * Python's _SourcedStore. Every resolved flag value carries a source label;
- * mutex and dependency checks are source-filtered so defaulted values never
- * trigger violations.
+ * Python's _SourcedStore, where every resolved flag value carries a source
+ * label. Mutex and dependency checks are source-filtered so defaulted values
+ * never trigger violations.
  *
  * Label strings are the cross-language provenance vocabulary and must match
  * the siblings byte-for-byte (ctx.source() and `config show` expose them).

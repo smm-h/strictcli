@@ -1,6 +1,7 @@
 /**
  * Schema dump (--dump-schema): builds the machine-readable schema dict and
- * writes .strictcli/schema.json. Parity sources: go/strictcli/schema.go (all)
+ * writes .strictcli/schema.json describing every command, group, flag, and
+ * arg. Parity sources: go/strictcli/schema.go (all)
  * and Python _serialize_flag/_dump_schema_core/_write_schema. Key order and
  * omission rules follow Python (the divergence ground truth); Go sorts JSON
  * map keys on marshal, so it pins content, not order.

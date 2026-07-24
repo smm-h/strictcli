@@ -1,7 +1,8 @@
 /**
- * Declaration factories: flag/arg descriptors, dependency descriptors, and
- * command carriers. `const` type parameters preserve literal names and exact
- * option object types without `as const` at call sites.
+ * Declaration factories: flag and arg descriptors, dependency descriptors,
+ * and command carriers, all built through `const`-typed option objects. The
+ * `const` type parameters preserve literal names and exact option-object
+ * types without `as const` at call sites.
  *
  * Validation runs at construction time, mirroring the siblings (Go
  * validateFlagConfig / Python Flag.__post_init__ run when the flag value is

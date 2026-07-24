@@ -1,7 +1,7 @@
 /**
  * Config subsystem: file loading (JSON + TOML), value coercion, config
- * fields, the --config/XDG path model, and the five auto-registered
- * `config` subcommands (show/set/path/edit/init).
+ * fields, the --config/XDG path model, and five auto-registered `config`
+ * subcommands. The subcommands are show, set, path, edit, and init.
  *
  * Parity sources: go/strictcli/config.go and the Python config sections;
  * where they diverge, Python is the ground truth (per the port convention),

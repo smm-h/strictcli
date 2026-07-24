@@ -1,7 +1,8 @@
 /**
  * Tool export: descriptors for exposing CLI commands to tool-using LLM
- * agents. Mirrors Go tool.go (buildJSONSchema/AsTools/JsonSchema) with
- * Python _build_json_schema/as_tools as the divergence ground truth.
+ * agents, mirroring Go tool.go and Python _build_json_schema/as_tools. Python
+ * is the divergence ground truth; the Go entry points are
+ * buildJSONSchema/AsTools/JsonSchema.
  *
  * The JSON Schema builder maps the four scalar types to JSON Schema type
  * strings (str -> string, bool -> boolean, int -> integer, float -> number);

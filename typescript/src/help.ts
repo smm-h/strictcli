@@ -1,8 +1,8 @@
 /**
  * Help rendering at app/group/command levels, byte-identical to the siblings
- * (Go help.go, Python _format_app_help/_format_group_help/_format_command_help)
- * and pinned by conformance/cases/help.json (plus the help expectations
- * scattered across the other case files).
+ * (Go help.go and Python's _format_app_help/_format_group_help family). The
+ * output is pinned by conformance/cases/help.json plus the help expectations
+ * scattered across the other case files.
  *
  * Sibling divergences resolved here:
  * - App-level "Global flags:" section: Python renders it (name/short + help,

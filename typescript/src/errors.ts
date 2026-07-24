@@ -1,6 +1,7 @@
 /**
- * errors.ts centralizes every user-facing error/panic message template used
- * across the strictcli package. It mirrors go/strictcli/errors.go one-to-one:
+ * errors.ts centralizes every user-facing error and panic message template
+ * used across the strictcli package, mirroring go/strictcli/errors.go
+ * one-to-one. That mirror means the
  * same section grouping (headers keep the Go source-file labels for catalog
  * traceability -- conformance/check_error_parity.py extracts the Go catalog
  * from those sections), same "(parse-time)" section markers, and byte-identical

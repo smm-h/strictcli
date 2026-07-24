@@ -1,7 +1,7 @@
 /**
  * Programmatic invocation: app.call(commandPath, kwargs) runs a command
- * in-process with pre-typed values, bypassing CLI parsing, env var
- * resolution, config loading, and stdin handling. Mirrors Go invoke.go with
+ * in-process with pre-typed values, bypassing CLI parsing and env resolution.
+ * It also skips config loading and stdin handling. Mirrors Go invoke.go with
  * Python _invoke/call as the divergence ground truth where the two differ
  * (group-path message, undefined-return value).
  *

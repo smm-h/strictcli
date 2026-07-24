@@ -1,6 +1,7 @@
 /**
  * TOML parsing and comment-preserving single-key editing for the config
- * subsystem.
+ * subsystem, gating input on TOML 1.0 and splicing edits byte-exactly at one
+ * key.
  *
  * Parsing strategy (the TOML 1.0 acceptance gate): smol-toml is the value
  * parser but accepts TOML 1.1, while the siblings' parsers (go-toml-edit,

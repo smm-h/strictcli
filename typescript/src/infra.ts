@@ -1,8 +1,8 @@
 /**
  * Infrastructure env vars: location roots, handshake signals, and the
- * RelativeToRoot path marker. Mirrors Go WithInfraRoot/WithHandshakeEnv/
- * RelativeToRoot (strictcli.go) with Python's infra_root/handshake_env as the
- * divergence ground truth.
+ * RelativeToRoot path marker, the three declared-infrastructure primitives.
+ * Mirrors Go WithInfraRoot/WithHandshakeEnv/RelativeToRoot (strictcli.go)
+ * with Python's infra_root/handshake_env as the divergence ground truth.
  *
  * Roots are resolved EAGERLY at app construction: the env var's value if set,
  * else the declared default, with a leading ~ expanded. Resolution has no
