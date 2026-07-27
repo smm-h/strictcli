@@ -2,16 +2,15 @@
 
 # py-strictcli
 
+## 0.34.0
+
+Add is_hermetic() to the check-side ConnectionEnvReader
+
+### Features
+
+- [strictcli] **Hermetic detection in checks.** `ConnectionEnvReader` now exposes `is_hermetic()`, letting a check distinguish `--hermetic` suppression from an unset connection env (both surface as `connection_env_value` present=False) and honor hermetic even when the env is absent.
+
 ## 0.33.0
-
-Connection env vars: a hermetic-suppressed, app-level env primitive for connection URLs
-
-<details>
-<summary>Context</summary>
-
-Adds a third infra-env kind alongside infra roots and handshake vars. A connection env (e.g. a database DSN) is declared once at app level, read lazily with no default, and suppressed under --hermetic so connection-dependent behavior (including checks) skips visibly. Flags bind to it by reference and check functions can read it through the check context.
-
-</details>
 
 ### Features
 
