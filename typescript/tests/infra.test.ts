@@ -100,10 +100,12 @@ test("infra: resolveInfraRootPath joins parts and rejects undeclared roots", () 
 });
 
 test("infra: buildInfraAccess snapshots roots and handshake names, null when empty", () => {
-	assert.equal(buildInfraAccess(new Map(), new Map()), null);
+	assert.equal(buildInfraAccess(new Map(), new Map(), new Map(), false), null);
 	const access = buildInfraAccess(
 		new Map([["ROOT", "/r"]]),
 		new Map([["HS", "help text"]]),
+		new Map(),
+		false,
 	);
 	assert.notEqual(access, null);
 	assert.deepEqual([...(access?.roots ?? new Map())], [["ROOT", "/r"]]);
@@ -347,7 +349,7 @@ test("infra: infraValue on an undeclared var throws the sibling message", async 
 	const r = await app.test(["show"]);
 	assert.equal(
 		r.stdout,
-		'InfraValue: "OTHER" is not a declared infra root or handshake env var\n',
+		'InfraValue: "OTHER" is not a declared infra root, handshake, or connection env var\n',
 	);
 });
 

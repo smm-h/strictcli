@@ -272,7 +272,11 @@ function resolveEnvForFlags(
 		if (cliSet.has(f.name)) {
 			continue;
 		}
-		const envVar = flagOpts(f).env;
+		// A connection-URL binding uses the declared connection env as the flag's
+		// env source (registration enforces they are not both set). This loop is
+		// only reached when !hermetic, so connection envs are hermetic-suppressed.
+		const o = flagOpts(f);
+		const envVar = o.env ?? o.connectionEnv;
 		if (envVar === undefined) {
 			continue;
 		}
@@ -1149,6 +1153,7 @@ export type ParseOutcome =
 			readonly kwargs: Record<string, unknown>;
 			readonly globalKwargs: Record<string, unknown>;
 			readonly sources: Record<string, string>;
+			readonly hermetic: boolean;
 	  }
 	| {
 			readonly kind: "passthrough";
@@ -1156,6 +1161,7 @@ export type ParseOutcome =
 			readonly cmdPath: string;
 			readonly args: readonly string[];
 			readonly globalKwargs: Record<string, unknown>;
+			readonly hermetic: boolean;
 	  };
 
 export interface DoParseDeps {
@@ -1339,6 +1345,7 @@ export function doParse(
 			cmdPath,
 			args: cmdRest,
 			globalKwargs: globals.values,
+			hermetic: pre.hermetic,
 		};
 	}
 
@@ -1375,7 +1382,15 @@ export function doParse(
 		sources[k] = v;
 	}
 
-	return { kind: "command", cmd, cmdPath, kwargs, globalKwargs, sources };
+	return {
+		kind: "command",
+		cmd,
+		cmdPath,
+		kwargs,
+		globalKwargs,
+		sources,
+		hermetic: pre.hermetic,
+	};
 }
 
 // --- Parse-error surface ---

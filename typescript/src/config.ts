@@ -1528,7 +1528,11 @@ function configShowHandler(
 			}
 			result[cfName] = entry;
 		}
-		if (app.infraRoots.size > 0 || app.handshakeEnvs.size > 0) {
+		if (
+			app.infraRoots.size > 0 ||
+			app.handshakeEnvs.size > 0 ||
+			app.connectionEnvs.size > 0
+		) {
 			const infra: Record<string, unknown> = Object.create(null);
 			for (const [ev, resolved] of app.infraRoots) {
 				infra[ev] = {
@@ -1541,6 +1545,18 @@ function configShowHandler(
 				const live = process.env[ev];
 				const entry: Record<string, unknown> = {
 					kind: "handshake",
+					set: live !== undefined,
+					help: helpText,
+				};
+				if (live !== undefined) {
+					entry.value = live;
+				}
+				infra[ev] = entry;
+			}
+			for (const [ev, helpText] of app.connectionEnvs) {
+				const live = process.env[ev];
+				const entry: Record<string, unknown> = {
+					kind: "connection",
 					set: live !== undefined,
 					help: helpText,
 				};
@@ -1592,7 +1608,11 @@ function configShowHandler(
 			);
 		}
 	}
-	if (app.infraRoots.size > 0 || app.handshakeEnvs.size > 0) {
+	if (
+		app.infraRoots.size > 0 ||
+		app.handshakeEnvs.size > 0 ||
+		app.connectionEnvs.size > 0
+	) {
 		ctx.info("");
 		ctx.info("Infrastructure:");
 		for (const [ev, resolved] of app.infraRoots) {
@@ -1605,6 +1625,14 @@ function configShowHandler(
 				ctx.info(`  ${ev} (handshake) = ${live}  (set)  -- ${helpText}`);
 			} else {
 				ctx.info(`  ${ev} (handshake) = <unset>  -- ${helpText}`);
+			}
+		}
+		for (const [ev, helpText] of app.connectionEnvs) {
+			const live = process.env[ev];
+			if (live !== undefined) {
+				ctx.info(`  ${ev} (connection) = ${live}  (set)  -- ${helpText}`);
+			} else {
+				ctx.info(`  ${ev} (connection) = <unset>  -- ${helpText}`);
 			}
 		}
 	}

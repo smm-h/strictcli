@@ -176,6 +176,15 @@ export type FlagOpts<Out, S extends Schema> = {
 	readonly envSeparator?: S extends ListSchema ? string : never;
 	readonly repeatable?: S extends ListSchema ? true : never;
 	readonly unique?: S extends ListSchema ? boolean : never;
+	/**
+	 * Marks a connection-URL (URL-class) flag. A URL-class flag MUST bind to a
+	 * declared connection env (connectionEnv), enforced at registration. The
+	 * binding is hermetic-suppressed, lazily read, no default; the CLI token
+	 * wins over the env (source "cli" vs "env").
+	 */
+	readonly connectionUrl?: boolean;
+	/** The declared connection env (createApp connectionEnv) this flag binds to. */
+	readonly connectionEnv?: string;
 };
 
 export interface FlagDef<
@@ -225,6 +234,10 @@ export interface FlagOptsView {
 	readonly envSeparator?: string;
 	readonly repeatable?: boolean;
 	readonly unique?: boolean;
+	/** Marks a connection-URL (URL-class) flag; must bind to a connection env. */
+	readonly connectionUrl?: boolean;
+	/** The declared connection env (createApp connectionEnv) this flag binds to. */
+	readonly connectionEnv?: string;
 }
 
 /** Widened options of a flag descriptor, for runtime validation and parsing. */

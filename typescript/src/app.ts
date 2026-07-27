@@ -64,11 +64,18 @@ import {
 	errCommandConfigFieldsUnknownField,
 	errCommandEnvVarPrefix,
 	errCommandFlagCollidesGlobal,
+	errConnectionEnvIsAlreadyHandshake,
+	errConnectionEnvIsAlreadyInfraRoot,
+	errConnectionEnvVarEmptyHelp,
+	errConnectionEnvWithoutURLFlag,
+	errConnectionEnvWithPerFlagEnv,
+	errConnectionURLFlagUnbound,
 	errDeprecatedAlreadyRegistered,
 	errDeprecatedCollidesCommand,
 	errDeprecatedCollidesGroup,
 	errDeprecatedMessageEmpty,
 	errDeprecatedNameEmpty,
+	errFlagConnectionEnvUndeclared,
 	errGlobalFlagNameReserved,
 	errGlobalShortFlagReserved,
 	errGroupAlreadyRegistered,
@@ -127,6 +134,13 @@ export interface AppSpec {
 	readonly infraRoot?: Readonly<Record<string, string>>;
 	/** Handshake env vars: env var name -> help text (read live, never captured). */
 	readonly handshakeEnv?: Readonly<Record<string, string>>;
+	/**
+	 * Connection env vars: env var name -> help text. Behavioral "reach outside
+	 * the process" signals (e.g. a database/service URL). Read live, no default,
+	 * and hermetic-SUPPRESSED: under --hermetic they resolve as absent. Flags
+	 * bind to them via a flag's connectionUrl/connectionEnv options.
+	 */
+	readonly connectionEnv?: Readonly<Record<string, string>>;
 	/** Enables the check system with a path to checks.toml (must exist). */
 	readonly checksPath?: string;
 	/** Enables the check system with inline checks.toml text. */
@@ -346,6 +360,41 @@ function requireNonEmpty(value: unknown, label: string): void {
 }
 
 /**
+ * Enforces the connection-URL binding rules at registration time (mechanical
+ * enforcement, not review): a URL-class flag must bind to a declared connection
+ * env, the binding cannot be combined with a per-flag env, and the referenced
+ * connection env must be declared. Mirrors Go validateFlagConnection / Python
+ * _validate_connection_binding. The binding drives env resolution via
+ * parse.ts's env loop (which reads connectionEnv when env is unset), so there
+ * is no mutation of the immutable flag descriptor here.
+ */
+function validateFlagConnection(
+	f: AnyFlag,
+	connectionEnvs: ReadonlyMap<string, string>,
+): void {
+	const o = flagOpts(f);
+	const connEnv = o.connectionEnv;
+	const isUrl = o.connectionUrl === true;
+	if (!isUrl && connEnv === undefined) {
+		return;
+	}
+	if (connEnv !== undefined && o.env !== undefined && o.env !== connEnv) {
+		throw new RegistrationError(errConnectionEnvWithPerFlagEnv(f.name));
+	}
+	if (isUrl && connEnv === undefined) {
+		throw new RegistrationError(errConnectionURLFlagUnbound(f.name));
+	}
+	if (connEnv !== undefined && !isUrl) {
+		throw new RegistrationError(errConnectionEnvWithoutURLFlag(f.name));
+	}
+	if (connEnv !== undefined && !connectionEnvs.has(connEnv)) {
+		throw new RegistrationError(
+			errFlagConnectionEnvUndeclared(f.name, connEnv),
+		);
+	}
+}
+
+/**
  * Shared registration path for command/passthrough carriers. Runs the
  * app-context checks the carrier factories cannot: global-flag collisions and
  * env-prefix conformance.
@@ -408,6 +457,7 @@ function registerCommand(
 	}
 	for (const f of def.allFlags) {
 		validateFlagInfraMarker(f, app.infraRoots, def.name);
+		validateFlagConnection(f, app.connectionEnvs);
 	}
 	// A command flag colliding with a config field (validation-only
 	// coexistence) must have an agreeing default. Config fields registered
@@ -525,6 +575,8 @@ export class AppImpl implements App {
 	readonly infraRootFromEnv = new Map<string, boolean>();
 	readonly infraRootDefaults = new Map<string, string>();
 	readonly handshakeEnvs = new Map<string, string>();
+	// Connection env vars: behavioral, hermetic-suppressed, no default.
+	readonly connectionEnvs = new Map<string, string>();
 	// Config subsystem state (config.ts owns the behavior).
 	readonly configEnabled: boolean;
 	/** Explicit config path override, marker-resolved at construction. */
@@ -608,6 +660,18 @@ export class AppImpl implements App {
 			}
 			this.handshakeEnvs.set(envVar, helpText);
 		}
+		for (const [envVar, helpText] of Object.entries(spec.connectionEnv ?? {})) {
+			if (typeof helpText !== "string" || helpText.trim() === "") {
+				throw new RegistrationError(errConnectionEnvVarEmptyHelp(envVar));
+			}
+			if (this.infraRoots.has(envVar)) {
+				throw new RegistrationError(errConnectionEnvIsAlreadyInfraRoot(envVar));
+			}
+			if (this.handshakeEnvs.has(envVar)) {
+				throw new RegistrationError(errConnectionEnvIsAlreadyHandshake(envVar));
+			}
+			this.connectionEnvs.set(envVar, helpText);
+		}
 		// Resolve the config-path marker (if any) now that the roots exist
 		// (Python __post_init__ order: before global-flag marker validation).
 		if (spec.configPath !== undefined && isInfraRootPath(spec.configPath)) {
@@ -626,6 +690,7 @@ export class AppImpl implements App {
 		// (mirroring Python __post_init__; registerCommand covers command flags).
 		for (const f of globals) {
 			validateFlagInfraMarker(f, this.infraRoots);
+			validateFlagConnection(f, this.connectionEnvs);
 		}
 
 		this.configEnabled = spec.config ?? false;
@@ -1002,7 +1067,12 @@ export class AppImpl implements App {
 				if (mode === "test" && this.testCoverage) {
 					recordCoverage(this, outcome.cmdPath);
 				}
-				const ctx = new Context(out, err, {}, this.infraAccess());
+				const ctx = new Context(
+					out,
+					err,
+					{},
+					this.infraAccess(outcome.hermetic),
+				);
 				const def = outcome.cmd.def as PassthroughDef<string>;
 				const result = await def.handler(
 					{
@@ -1019,7 +1089,12 @@ export class AppImpl implements App {
 				if (mode === "test" && this.testCoverage) {
 					recordCoverage(this, outcome.cmdPath);
 				}
-				const ctx = new Context(out, err, outcome.sources, this.infraAccess());
+				const ctx = new Context(
+					out,
+					err,
+					outcome.sources,
+					this.infraAccess(outcome.hermetic),
+				);
 				const def = outcome.cmd.def as AnyCommand;
 				const result = await def.handler(outcome.kwargs as never, ctx);
 				return this.emitInterpreted(result, out);
@@ -1028,8 +1103,13 @@ export class AppImpl implements App {
 	}
 
 	/** Snapshots infra data for a Context (Go infraAccess): null when none declared. */
-	private infraAccess(): InfraAccess | null {
-		return buildInfraAccess(this.infraRoots, this.handshakeEnvs);
+	private infraAccess(hermetic = false): InfraAccess | null {
+		return buildInfraAccess(
+			this.infraRoots,
+			this.handshakeEnvs,
+			this.connectionEnvs,
+			hermetic,
+		);
 	}
 
 	/** Interprets a handler return and prints the data line when present. */

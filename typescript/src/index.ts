@@ -42,7 +42,11 @@ export {
 	warnCheckSpec,
 } from "./checks/provider.js";
 export type { ConfigFieldSpec } from "./config.js";
-export type { InfraAccess, Writer } from "./context.js";
+export type {
+	ConnectionEnvReader,
+	InfraAccess,
+	Writer,
+} from "./context.js";
 export { Context } from "./context.js";
 // ParseError and RegistrationError stay internal (sibling parity: Python's
 // __all__ and Go both export only InvokeError -- registration failures are

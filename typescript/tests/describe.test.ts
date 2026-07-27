@@ -270,6 +270,7 @@ const typeWitness: Record<TypeName, unknown> = {
 		witnessType<api.CommandSpec<api.FlagMap, readonly api.AnyArg[]>>(),
 	ConfigFieldSpec: witnessType<api.ConfigFieldSpec>(),
 	ConflictMode: witnessType<api.ConflictMode>(),
+	ConnectionEnvReader: witnessType<api.ConnectionEnvReader>(),
 	Dependency: witnessType<api.Dependency>(),
 	DeprecatedDef: witnessType<api.DeprecatedDef<string>>(),
 	DictSchema: witnessType<api.DictSchema>(),

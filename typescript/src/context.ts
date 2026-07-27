@@ -7,7 +7,11 @@
  * every infraValue() call throws the not-declared error.
  */
 
-import { errInfraValueUndeclared, errNoSourceInfo } from "./errors.js";
+import {
+	errConnectionValueUndeclared,
+	errInfraValueUndeclared,
+	errNoSourceInfo,
+} from "./errors.js";
 
 /** Minimal sink for output streams (process.stdout/stderr or test captures). */
 export interface Writer {
@@ -16,11 +20,28 @@ export interface Writer {
 
 /**
  * A Context's view of infrastructure env vars: root values resolved eagerly
- * at app construction, plus the set of declared handshake vars (read live).
+ * at app construction, the set of declared handshake vars (read live), and the
+ * set of declared connection vars (read live, but suppressed under --hermetic).
  */
 export interface InfraAccess {
 	readonly roots: ReadonlyMap<string, string>;
 	readonly handshakes: ReadonlySet<string>;
+	readonly connections: ReadonlySet<string>;
+	readonly hermetic: boolean;
+}
+
+/**
+ * OPTIONAL capability a check context may expose: the value of a declared
+ * connection env, read live -- EXCEPT under --hermetic, where it resolves as
+ * absent [undefined, false] so a check can skip visibly instead of connecting.
+ * The check command wraps the tool-supplied check context in a value that
+ * satisfies this interface, backed by the app's declared connection envs and
+ * the invocation's hermetic state.
+ */
+export interface ConnectionEnvReader {
+	connectionEnvValue(
+		envVar: string,
+	): [value: string | undefined, present: boolean];
 }
 
 export class Context {
@@ -97,7 +118,34 @@ export class Context {
 				const live = process.env[envVar];
 				return live !== undefined ? [live, true] : [undefined, false];
 			}
+			if (this.infra.connections.has(envVar)) {
+				if (this.infra.hermetic) {
+					return [undefined, false];
+				}
+				const live = process.env[envVar];
+				return live !== undefined ? [live, true] : [undefined, false];
+			}
 		}
 		throw new Error(errInfraValueUndeclared(envVar));
+	}
+
+	/**
+	 * Returns the value of a declared connection env as [value, present], read
+	 * LIVE -- EXCEPT under --hermetic, where it resolves as absent
+	 * [undefined, false]. Throws when envVar is not a declared connection env.
+	 * This is the handler-side accessor for the connection-URL kind; see also
+	 * infraValue, which resolves all three kinds.
+	 */
+	connectionEnvValue(
+		envVar: string,
+	): [value: string | undefined, present: boolean] {
+		if (this.infra !== null && this.infra.connections.has(envVar)) {
+			if (this.infra.hermetic) {
+				return [undefined, false];
+			}
+			const live = process.env[envVar];
+			return live !== undefined ? [live, true] : [undefined, false];
+		}
+		throw new Error(errConnectionValueUndeclared(envVar));
 	}
 }

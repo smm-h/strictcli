@@ -139,15 +139,27 @@ export function validateFlagInfraMarker(
 
 /**
  * Snapshots an app's infra data for a Context (Go infraAccess): resolved root
- * values plus the set of declared handshake vars. Null when nothing is
+ * values, the set of declared handshake vars, and the set of declared
+ * connection vars (suppressed when hermetic is true). Null when nothing is
  * declared, so ctx.infraValue() throws the not-declared error for everything.
  */
 export function buildInfraAccess(
 	roots: ReadonlyMap<string, string>,
 	handshakeEnvs: ReadonlyMap<string, string>,
+	connectionEnvs: ReadonlyMap<string, string>,
+	hermetic: boolean,
 ): InfraAccess | null {
-	if (roots.size === 0 && handshakeEnvs.size === 0) {
+	if (
+		roots.size === 0 &&
+		handshakeEnvs.size === 0 &&
+		connectionEnvs.size === 0
+	) {
 		return null;
 	}
-	return { roots: new Map(roots), handshakes: new Set(handshakeEnvs.keys()) };
+	return {
+		roots: new Map(roots),
+		handshakes: new Set(handshakeEnvs.keys()),
+		connections: new Set(connectionEnvs.keys()),
+		hermetic,
+	};
 }

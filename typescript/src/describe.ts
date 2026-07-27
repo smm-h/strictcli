@@ -103,11 +103,15 @@ export const SURFACE = {
 			members: ["name", "description", "parameters", "execute"],
 		},
 		{ name: "ConfigFieldSpec", members: ["type", "help", "default"] },
-		{ name: "InfraAccess", members: ["roots", "handshakes"] },
+		{
+			name: "InfraAccess",
+			members: ["roots", "handshakes", "connections", "hermetic"],
+		},
 		{ name: "Writer", members: ["write"] },
 		{ name: "InfraRootPath", members: ["envVar", "parts"] },
 		{ name: "McpIO", members: ["input", "output"] },
 		{ name: "CheckContext", members: ["projectRoot"] },
+		{ name: "ConnectionEnvReader", members: ["connectionEnvValue"] },
 		{ name: "CheckProblem", members: ["severity", "text"] },
 		{
 			name: "CheckOutcome",
@@ -150,6 +154,8 @@ export const SURFACE = {
 			option_keys: [
 				"choices",
 				"conflictMode",
+				"connectionEnv",
+				"connectionUrl",
 				"default",
 				"env",
 				"envSeparator",
@@ -166,6 +172,8 @@ export const SURFACE = {
 			per_carrier: {
 				bool: [
 					"conflictMode",
+					"connectionEnv",
+					"connectionUrl",
 					"default",
 					"env",
 					"help",
@@ -177,6 +185,8 @@ export const SURFACE = {
 				scalar: [
 					"choices",
 					"conflictMode",
+					"connectionEnv",
+					"connectionUrl",
 					"default",
 					"env",
 					"help",
@@ -187,6 +197,8 @@ export const SURFACE = {
 				list: [
 					"choices",
 					"conflictMode",
+					"connectionEnv",
+					"connectionUrl",
 					"default",
 					"env",
 					"envSeparator",
@@ -199,6 +211,8 @@ export const SURFACE = {
 				],
 				dict: [
 					"conflictMode",
+					"connectionEnv",
+					"connectionUrl",
 					"default",
 					"env",
 					"help",
@@ -245,6 +259,7 @@ export const SURFACE = {
 				"configConflictMode",
 				"configFormat",
 				"configPath",
+				"connectionEnv",
 				"envPrefix",
 				"flags",
 				"handshakeEnv",
@@ -342,6 +357,7 @@ export const SURFACE = {
 		{ receiver: "Context", name: "error" },
 		{ receiver: "Context", name: "source" },
 		{ receiver: "Context", name: "infraValue" },
+		{ receiver: "Context", name: "connectionEnvValue" },
 		{ receiver: "ErrorReporter", name: "note" },
 		{ receiver: "ErrorReporter", name: "warn" },
 		{ receiver: "ErrorReporter", name: "error" },
@@ -392,6 +408,7 @@ export const SURFACE = {
 		"CommandSpec",
 		"ConfigFieldSpec",
 		"ConflictMode",
+		"ConnectionEnvReader",
 		"Dependency",
 		"DeprecatedDef",
 		"DictSchema",

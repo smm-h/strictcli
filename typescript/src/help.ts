@@ -91,7 +91,11 @@ export function formatAppHelp(app: AppImpl): string {
 		lines.push("", "Global flags:", ...twoColumn(rows));
 	}
 
-	if (app.infraRoots.size > 0 || app.handshakeEnvs.size > 0) {
+	if (
+		app.infraRoots.size > 0 ||
+		app.handshakeEnvs.size > 0 ||
+		app.connectionEnvs.size > 0
+	) {
 		lines.push(
 			"",
 			"Infrastructure:",
@@ -107,6 +111,13 @@ export function formatAppHelp(app: AppImpl): string {
 			),
 			...[...app.handshakeEnvs.entries()].map(
 				([ev, helpText]) => [ev, helpText] as const,
+			),
+			...[...app.connectionEnvs.entries()].map(
+				([ev, helpText]) =>
+					[
+						ev,
+						`connection URL, suppressed by --hermetic (${helpText})`,
+					] as const,
 			),
 		];
 		lines.push(...twoColumn(rows));

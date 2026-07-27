@@ -52,7 +52,7 @@ test("context: infraValue throws not-declared without infra wiring", () => {
 	const ctx = new Context(out.writer, out.writer, {}, null);
 	assert.throws(() => ctx.infraValue("MYTOOL_ROOT"), {
 		message:
-			'InfraValue: "MYTOOL_ROOT" is not a declared infra root or handshake env var',
+			'InfraValue: "MYTOOL_ROOT" is not a declared infra root, handshake, or connection env var',
 	});
 });
 
@@ -65,6 +65,8 @@ test("context: infraValue resolves declared roots and live handshakes", () => {
 		{
 			roots: new Map([["MYTOOL_ROOT", "/resolved/root"]]),
 			handshakes: new Set(["MYTOOL_HANDSHAKE"]),
+			connections: new Set<string>(),
+			hermetic: false,
 		},
 	);
 	assert.deepEqual(ctx.infraValue("MYTOOL_ROOT"), ["/resolved/root", true]);
@@ -79,6 +81,6 @@ test("context: infraValue resolves declared roots and live handshakes", () => {
 	}
 	assert.throws(() => ctx.infraValue("OTHER"), {
 		message:
-			'InfraValue: "OTHER" is not a declared infra root or handshake env var',
+			'InfraValue: "OTHER" is not a declared infra root, handshake, or connection env var',
 	});
 });

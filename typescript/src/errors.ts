@@ -120,6 +120,37 @@ export function errDuplicateHandshakeEnvVar(envVar: string): string {
 	return `duplicate handshake env var ${q(envVar)}`;
 }
 
+export function errConnectionEnvVarEmptyHelp(envVar: string): string {
+	return `connection env var ${q(envVar)}: help must be a non-empty string`;
+}
+
+export function errConnectionEnvIsAlreadyInfraRoot(ev: string): string {
+	return `connection env var ${q(ev)} is already declared as an infra root`;
+}
+
+export function errConnectionEnvIsAlreadyHandshake(ev: string): string {
+	return `connection env var ${q(ev)} is already declared as a handshake env var`;
+}
+
+export function errConnectionURLFlagUnbound(flagName: string): string {
+	return `flag ${q(flagName)}: connection-URL flag must bind to a declared connection env`;
+}
+
+export function errConnectionEnvWithoutURLFlag(flagName: string): string {
+	return `flag ${q(flagName)}: connection env binding requires the flag to be marked as a connection-URL flag`;
+}
+
+export function errConnectionEnvWithPerFlagEnv(flagName: string): string {
+	return `flag ${q(flagName)}: a connection-URL binding cannot be combined with a per-flag env var`;
+}
+
+export function errFlagConnectionEnvUndeclared(
+	flagName: string,
+	envVar: string,
+): string {
+	return `flag ${q(flagName)}: connection-URL flag binds to undeclared connection env ${q(envVar)}; declare it as a connection env`;
+}
+
 export function errConflictModeBadMode(mode: string): string {
 	return `ConflictMode: mode must be "cli-wins" or "error", got ${q(mode)}`;
 }
@@ -1552,7 +1583,11 @@ export function errTagExprExpectedRParen(pos: number): string {
 // ---------------------------------------------------------------------------
 
 export function errInfraValueUndeclared(envVar: string): string {
-	return `InfraValue: ${q(envVar)} is not a declared infra root or handshake env var`;
+	return `InfraValue: ${q(envVar)} is not a declared infra root, handshake, or connection env var`;
+}
+
+export function errConnectionValueUndeclared(envVar: string): string {
+	return `ConnectionEnvValue: ${q(envVar)} is not a declared connection env var`;
 }
 
 export function errNoSourceInfo(name: string): string {

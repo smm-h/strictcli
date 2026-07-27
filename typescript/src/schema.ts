@@ -498,7 +498,11 @@ export function dumpSchemaCore(app: AppImpl): Record<string, unknown> {
 	// root values are intentionally EXCLUDED -- the schema must be
 	// machine-stable (not machine-specific). Only the declared env var and
 	// default path (both stable declarations) are emitted for roots.
-	if (app.infraRootDefaults.size > 0 || app.handshakeEnvs.size > 0) {
+	if (
+		app.infraRootDefaults.size > 0 ||
+		app.handshakeEnvs.size > 0 ||
+		app.connectionEnvs.size > 0
+	) {
 		const infra: Record<string, unknown> = {};
 		if (app.infraRootDefaults.size > 0) {
 			infra.roots = [...app.infraRootDefaults].map(([envVar, dflt]) => ({
@@ -508,6 +512,12 @@ export function dumpSchemaCore(app: AppImpl): Record<string, unknown> {
 		}
 		if (app.handshakeEnvs.size > 0) {
 			infra.handshakes = [...app.handshakeEnvs].map(([envVar, helpText]) => ({
+				env_var: envVar,
+				help: helpText,
+			}));
+		}
+		if (app.connectionEnvs.size > 0) {
+			infra.connections = [...app.connectionEnvs].map(([envVar, helpText]) => ({
 				env_var: envVar,
 				help: helpText,
 			}));

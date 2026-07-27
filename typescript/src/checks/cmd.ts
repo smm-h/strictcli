@@ -24,6 +24,7 @@ import {
 import { formatCommandHelp } from "../help.js";
 import { t } from "../types.js";
 import type {
+	CheckContext,
 	CheckDef,
 	CheckRunResult,
 	CheckStatus,
@@ -116,6 +117,36 @@ function registerCheckCommand(app: AppImpl): void {
 	});
 }
 
+/**
+ * Augments a tool-supplied check context with connection-env access
+ * (ConnectionEnvReader), backed by the framework Context which carries the
+ * app's declared connection envs and the invocation's hermetic state. When no
+ * connection envs are declared, the base context is returned unchanged so the
+ * common case is unaffected. Mirrors Go wrapCheckContext / Python
+ * _wrap_check_context.
+ */
+function wrapCheckContext(
+	app: AppImpl,
+	base: CheckContext,
+	ctx: Context,
+): CheckContext {
+	if (app.connectionEnvs.size === 0) {
+		return base;
+	}
+	const reader = (
+		envVar: string,
+	): [value: string | undefined, present: boolean] =>
+		ctx.connectionEnvValue(envVar);
+	return new Proxy(base as CheckContext & object, {
+		get(target, prop, receiver): unknown {
+			if (prop === "connectionEnvValue") {
+				return reader;
+			}
+			return Reflect.get(target, prop, receiver);
+		},
+	});
+}
+
 async function checkHandler(
 	app: AppImpl,
 	kwargs: Record<string, unknown>,
@@ -172,7 +203,7 @@ async function checkHandler(
 		);
 		return 1;
 	}
-	const context = app.checks.contextFactory();
+	const context = wrapCheckContext(app, app.checks.contextFactory(), ctx);
 	// The check command executes all selected checks; the purity partition is
 	// an API-only mode (runChecks pureOnly), so nothing is ever listed here.
 	const { results, exitCode } = await runOrderedChecks(

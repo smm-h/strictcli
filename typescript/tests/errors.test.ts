@@ -36,7 +36,7 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // different wording): 12 dict-flag parse templates + 2 positional-arg
 // wrappers (values.ts), 9 registration templates (factories.ts), and 3
 // check-provider materialization guards (app.ts / checks/provider.ts).
-const EXPECTED_TEMPLATE_COUNT = 264;
+const EXPECTED_TEMPLATE_COUNT = 272;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,
