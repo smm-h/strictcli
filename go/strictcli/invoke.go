@@ -107,7 +107,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 				globalKwargs[paramName] = val
 			}
 		}
-		ctx := newContext(io.Discard, io.Discard, nil, a.infraAccess())
+		ctx := newContext(io.Discard, io.Discard, nil, a.infraAccess(false))
 		code := cmd.PassthroughHandler(ctx, cmd.Name, args, globalKwargs)
 		return invokeResult{exitCode: code}
 	}
@@ -237,7 +237,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 
 	// Context is constructed unconditionally. For invoke, stdout/stderr are
 	// discarded -- structured data flows back through the Outcome, not stdout.
-	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess())
+	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess(false))
 
 	// Call the handler
 	outcome := cmd.Handler(ctx, validatedKwargs)

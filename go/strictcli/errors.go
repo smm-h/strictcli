@@ -52,19 +52,19 @@ func errConnectionEnvIsAlreadyHandshake(ev string) string {
 }
 
 func errConnectionURLFlagUnbound(flagName string) string {
-	return fmt.Sprintf("flag %q: connection-URL flag must bind to a declared connection env; use ConnectionURLFlag(envVar)", flagName)
+	return fmt.Sprintf("flag %q: connection-URL flag must bind to a declared connection env", flagName)
 }
 
 func errConnectionEnvWithoutURLFlag(flagName string) string {
-	return fmt.Sprintf("flag %q: ConnectionEnv is set but the flag is not marked as a connection-URL flag; use ConnectionURLFlag(envVar)", flagName)
+	return fmt.Sprintf("flag %q: connection env binding requires the flag to be marked as a connection-URL flag", flagName)
 }
 
 func errConnectionEnvWithPerFlagEnv(flagName string) string {
-	return fmt.Sprintf("flag %q: a connection-URL binding cannot be combined with a per-flag Env; the connection env is the flag's env source", flagName)
+	return fmt.Sprintf("flag %q: a connection-URL binding cannot be combined with a per-flag env var", flagName)
 }
 
 func errFlagConnectionEnvUndeclared(flagName string, envVar string) string {
-	return fmt.Sprintf("flag %q: ConnectionURLFlag references undeclared connection env %q; declare it with WithConnectionEnv", flagName, envVar)
+	return fmt.Sprintf("flag %q: connection-URL flag binds to undeclared connection env %q; declare it as a connection env", flagName, envVar)
 }
 
 func errConnectionValueUndeclared(envVar string) string {

@@ -845,8 +845,8 @@ func (a *App) registerConfigGroup() {
 				}
 				result[name] = cfEntry
 			}
-			// Infrastructure section (roots + handshakes)
-			if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 {
+			// Infrastructure section (roots + handshakes + connections)
+			if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 || len(a.connectionOrder) > 0 {
 				infra := make(map[string]interface{})
 				for _, ev := range a.infraRootOrder {
 					src := "default"
@@ -865,6 +865,18 @@ func (a *App) registerConfigGroup() {
 						"kind": "handshake",
 						"set":  isSet,
 						"help": a.handshakeEnvs[ev],
+					}
+					if isSet {
+						entry["value"] = val
+					}
+					infra[ev] = entry
+				}
+				for _, ev := range a.connectionOrder {
+					val, isSet := os.LookupEnv(ev)
+					entry := map[string]interface{}{
+						"kind": "connection",
+						"set":  isSet,
+						"help": a.connectionEnvs[ev],
 					}
 					if isSet {
 						entry["value"] = val
@@ -926,8 +938,8 @@ func (a *App) registerConfigGroup() {
 					name, flagTypeName[cf.Type], reqStr, formatConfigValue(value), source, cf.Help)
 			}
 		}
-		// Infrastructure section (roots + handshakes)
-		if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 {
+		// Infrastructure section (roots + handshakes + connections)
+		if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 || len(a.connectionOrder) > 0 {
 			fmt.Println()
 			fmt.Println("Infrastructure:")
 			for _, ev := range a.infraRootOrder {
@@ -943,6 +955,14 @@ func (a *App) registerConfigGroup() {
 					fmt.Printf("  %s (handshake) = %s  (set)  -- %s\n", ev, val, a.handshakeEnvs[ev])
 				} else {
 					fmt.Printf("  %s (handshake) = <unset>  -- %s\n", ev, a.handshakeEnvs[ev])
+				}
+			}
+			for _, ev := range a.connectionOrder {
+				val, isSet := os.LookupEnv(ev)
+				if isSet {
+					fmt.Printf("  %s (connection) = %s  (set)  -- %s\n", ev, val, a.connectionEnvs[ev])
+				} else {
+					fmt.Printf("  %s (connection) = <unset>  -- %s\n", ev, a.connectionEnvs[ev])
 				}
 			}
 		}
