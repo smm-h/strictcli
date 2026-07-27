@@ -254,7 +254,12 @@ export async function invokeApp(
 		discard,
 		discard,
 		sources,
-		buildInfraAccess(app.infraRoots, app.handshakeEnvs),
+		buildInfraAccess(
+			app.infraRoots,
+			app.handshakeEnvs,
+			app.connectionEnvs,
+			false,
+		),
 	);
 	const result = await def.handler(validated as never, ctx);
 	return interpretForCall(result);
@@ -310,7 +315,12 @@ async function invokePassthrough(
 		discard,
 		discard,
 		{},
-		buildInfraAccess(app.infraRoots, app.handshakeEnvs),
+		buildInfraAccess(
+			app.infraRoots,
+			app.handshakeEnvs,
+			app.connectionEnvs,
+			false,
+		),
 	);
 	const def = cmd.def as PassthroughDef<string>;
 	const result = await def.handler({ name: cmd.name, args, globals }, ctx);
