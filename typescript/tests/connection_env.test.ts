@@ -193,11 +193,17 @@ depends_on = []
 `,
 	});
 	app.errorCheck("db-reachable", (ctx, r) => {
-		const [dsn, present] = (
-			ctx as unknown as ConnectionEnvReader
-		).connectionEnvValue("DATABASE_URL");
+		const reader = ctx as unknown as ConnectionEnvReader;
+		r.note(`hermetic=${reader.isHermetic()}`);
+		const [dsn, present] = reader.connectionEnvValue("DATABASE_URL");
 		if (!present) {
-			return r.skipped("DATABASE_URL absent (hermetic or unset)");
+			// Distinguish hermetic suppression from a plainly-unset env: a
+			// consumer layering config fallbacks below the env must honor
+			// hermetic (skip) rather than fall through and connect.
+			if (reader.isHermetic()) {
+				return r.skipped("DATABASE_URL suppressed by --hermetic");
+			}
+			return r.skipped("DATABASE_URL unset");
 		}
 		r.note(`dsn=${dsn}`);
 		return r.passed("connection env visible");
@@ -212,14 +218,54 @@ test("connection: check reads the connection env", async () => {
 		const r = await connCheckApp().test(["check", "--tag", "db", "--verbose"]);
 		assert.ok(r.stdout.includes("dsn=postgres://check/db"), r.stdout);
 		assert.ok(r.stdout.includes("PASS"), r.stdout);
+		// A non-hermetic invocation reports isHermetic()===false to the check.
+		assert.ok(r.stdout.includes("hermetic=false"), r.stdout);
 	});
 });
 
 test("connection: check skips under hermetic", async () => {
 	await withEnv({ DATABASE_URL: "postgres://check/db" }, async () => {
-		const r = await connCheckApp().test(["--hermetic", "check", "--tag", "db"]);
+		const r = await connCheckApp().test([
+			"--hermetic",
+			"check",
+			"--tag",
+			"db",
+			"--verbose",
+		]);
 		assert.ok(r.stdout.includes("SKIP"), r.stdout);
 		assert.ok(!r.stdout.includes("dsn="), r.stdout);
+		// The check SEES hermetic (isHermetic()===true) and skips for that reason.
+		assert.ok(r.stdout.includes("hermetic=true"), r.stdout);
+		assert.ok(r.stdout.includes("suppressed by --hermetic"), r.stdout);
+	});
+});
+
+// Documents the exact gap isHermetic() closes: under --hermetic with the env var
+// UNSET, connectionEnvValue returns present=false (indistinguishable from a
+// plain unset), yet isHermetic() returns true -- so a check layering config
+// fallbacks can honor hermetic instead of connecting via a config URL.
+test("connection: check sees hermetic even when env is unset (conflation case)", async () => {
+	await withEnv({ DATABASE_URL: undefined }, async () => {
+		const r = await connCheckApp().test([
+			"--hermetic",
+			"check",
+			"--tag",
+			"db",
+			"--verbose",
+		]);
+		assert.ok(r.stdout.includes("hermetic=true"), r.stdout);
+		assert.ok(r.stdout.includes("suppressed by --hermetic"), r.stdout);
+		assert.ok(!r.stdout.includes("DATABASE_URL unset"), r.stdout);
+	});
+});
+
+// Counterpart: env unset and NOT hermetic -> isHermetic()===false, so a consumer
+// is free to consult a config fallback (here reported as the plain-unset skip).
+test("connection: env unset without hermetic reports isHermetic()===false", async () => {
+	await withEnv({ DATABASE_URL: undefined }, async () => {
+		const r = await connCheckApp().test(["check", "--tag", "db", "--verbose"]);
+		assert.ok(r.stdout.includes("hermetic=false"), r.stdout);
+		assert.ok(r.stdout.includes("DATABASE_URL unset"), r.stdout);
 	});
 });
 

@@ -141,6 +141,9 @@ export type _McpIO = Assert<Equals<keyof api.McpIO & string, Listed<"McpIO">>>;
 export type _CheckContext = Assert<
 	Equals<keyof api.CheckContext & string, Listed<"CheckContext">>
 >;
+export type _ConnectionEnvReader = Assert<
+	Equals<keyof api.ConnectionEnvReader & string, Listed<"ConnectionEnvReader">>
+>;
 export type _CheckProblem = Assert<
 	Equals<keyof api.CheckProblem & string, Listed<"CheckProblem">>
 >;

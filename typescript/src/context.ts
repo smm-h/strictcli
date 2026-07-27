@@ -37,11 +37,25 @@ export interface InfraAccess {
  * The check command wraps the tool-supplied check context in a value that
  * satisfies this interface, backed by the app's declared connection envs and
  * the invocation's hermetic state.
+ *
+ * `isHermetic()` reports whether the invocation ran under --hermetic. It exists
+ * so a check can DISTINGUISH the two cases that `connectionEnvValue`'s
+ * `present === false` otherwise conflates: "--hermetic suppressed the connection
+ * env" vs "the env var is simply unset". A check that layers config fallbacks
+ * below the env must honor hermetic even when the env is unset -- otherwise it
+ * falls through to a config URL and connects, violating the hermetic guarantee:
+ *
+ *     const [dsn, present] = r.connectionEnvValue("DATABASE_URL");
+ *     if (!present) {
+ *       if (r.isHermetic()) return rep.skipped("hermetic: connection suppressed");
+ *       // env unset but not hermetic -- config fallback is allowed here
+ *     }
  */
 export interface ConnectionEnvReader {
 	connectionEnvValue(
 		envVar: string,
 	): [value: string | undefined, present: boolean];
+	isHermetic(): boolean;
 }
 
 export class Context {
@@ -148,4 +162,19 @@ export class Context {
 		}
 		throw new Error(errConnectionValueUndeclared(envVar));
 	}
+}
+
+/**
+ * Package-internal accessor (NOT re-exported from index.ts, so not part of the
+ * public API): reports whether a framework Context ran under --hermetic. Used by
+ * the check-side ConnectionEnvReader wrapper so a check can distinguish
+ * "--hermetic suppressed the connection env" from "env var simply unset".
+ * Mirrors Go's wrapper reading frameworkCtx.infra directly and Python's
+ * _last_hermetic; the cast reaches the private infra snapshot without widening
+ * the handler-side Context surface.
+ */
+export function contextIsHermetic(ctx: Context): boolean {
+	return (
+		(ctx as unknown as { infra: InfraAccess | null }).infra?.hermetic ?? false
+	);
 }

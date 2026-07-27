@@ -111,7 +111,10 @@ export const SURFACE = {
 		{ name: "InfraRootPath", members: ["envVar", "parts"] },
 		{ name: "McpIO", members: ["input", "output"] },
 		{ name: "CheckContext", members: ["projectRoot"] },
-		{ name: "ConnectionEnvReader", members: ["connectionEnvValue"] },
+		{
+			name: "ConnectionEnvReader",
+			members: ["connectionEnvValue", "isHermetic"],
+		},
 		{ name: "CheckProblem", members: ["severity", "text"] },
 		{
 			name: "CheckOutcome",

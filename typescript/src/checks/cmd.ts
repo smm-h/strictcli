@@ -14,7 +14,7 @@
  */
 
 import type { AppImpl } from "../app.js";
-import type { Context } from "../context.js";
+import { type Context, contextIsHermetic } from "../context.js";
 import {
 	type AnyCommand,
 	type AnyFlag,
@@ -137,10 +137,17 @@ function wrapCheckContext(
 		envVar: string,
 	): [value: string | undefined, present: boolean] =>
 		ctx.connectionEnvValue(envVar);
+	// Capture the invocation's hermetic state so a check can tell "--hermetic
+	// suppressed the connection env" from "env var simply unset". Mirrors Go's
+	// wrapper reading frameworkCtx.infra and Python's _last_hermetic.
+	const hermetic = contextIsHermetic(ctx);
 	return new Proxy(base as CheckContext & object, {
 		get(target, prop, receiver): unknown {
 			if (prop === "connectionEnvValue") {
 				return reader;
+			}
+			if (prop === "isHermetic") {
+				return (): boolean => hermetic;
 			}
 			return Reflect.get(target, prop, receiver);
 		},
