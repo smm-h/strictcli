@@ -124,7 +124,7 @@ app.run(process.argv.slice(2));
 - Auto-version detection from package metadata (Python only)
 - Config file support (JSON or TOML) — reads `~/.config/{name}/config.json` (or `.toml`), auto-registers `config show/set/path/edit/init` subcommands. Precedence: CLI > env > config > default.
 - `--hermetic` — reserved global flag that skips config loading and env var resolution entirely, so values come only from the CLI and declared defaults
-- Infrastructure env vars — declared location roots (resolved at construction, usable in defaults via `RelativeToRoot`) and handshake vars (cross-tool protocol signals, read live)
+- Infrastructure env vars — declared location roots (resolved at construction, usable in defaults via `RelativeToRoot`), handshake vars (cross-tool protocol signals, read live), and connection vars (behavioral URLs like a database DSN: read live, no default, and hermetic-suppressed so `--hermetic` resolves them absent; flags bind to a declared connection env, and checks can read it via the check context)
 - Value provenance — every resolved flag reports its source (`cli`/`env`/`config`/`default`/`implied`/`infra`) via the handler context
 - Programmatic invocation — `app.call()` / `app.Call()` runs a command in-process with typed kwargs, bypassing CLI parsing; failures surface as `InvokeError`
 - Check system — first-class check/validation framework with a TOML manifest, tag DSL, and DAG-ordered execution
