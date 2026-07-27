@@ -2,6 +2,7 @@ package strictcli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -207,9 +208,16 @@ func newConnCheckApp(t *testing.T) *App {
 		if !ok {
 			return rep.Skipped("no connection reader")
 		}
+		rep.Note(fmt.Sprintf("hermetic=%v", r.IsHermetic()))
 		dsn, present := r.ConnectionEnvValue("DATABASE_URL")
 		if !present {
-			return rep.Skipped("DATABASE_URL absent (hermetic or unset)")
+			// Distinguish hermetic suppression from a plainly-unset env: a
+			// consumer layering config fallbacks below the env must honor
+			// hermetic (skip) rather than fall through and connect.
+			if r.IsHermetic() {
+				return rep.Skipped("DATABASE_URL suppressed by --hermetic")
+			}
+			return rep.Skipped("DATABASE_URL unset")
 		}
 		rep.Note("dsn=" + dsn)
 		return rep.Passed("connection env visible")
@@ -229,18 +237,66 @@ func TestConnectionEnv_CheckSideAccess(t *testing.T) {
 	if !strings.Contains(r.Stdout, "PASS") {
 		t.Fatalf("expected PASS: %q", r.Stdout)
 	}
+	// A non-hermetic invocation must report IsHermetic()==false to the check.
+	if !strings.Contains(r.Stdout, "hermetic=false") {
+		t.Fatalf("check did not see IsHermetic()==false: %q", r.Stdout)
+	}
 }
 
 func TestConnectionEnv_CheckSideHermeticSkips(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://check/db")
 	defer os.Unsetenv("DATABASE_URL")
 	app := newConnCheckApp(t)
-	r := app.Test([]string{"--hermetic", "check", "--tag", "db"})
+	r := app.Test([]string{"--hermetic", "check", "--tag", "db", "--verbose"})
 	if !strings.Contains(r.Stdout, "SKIP") {
 		t.Fatalf("expected SKIP under hermetic: %q (stderr=%q)", r.Stdout, r.Stderr)
 	}
 	if strings.Contains(r.Stdout, "dsn=") {
 		t.Fatalf("hermetic must hide the connection value: %q", r.Stdout)
+	}
+	// The check must SEE hermetic (IsHermetic()==true) and skip for that reason.
+	if !strings.Contains(r.Stdout, "hermetic=true") {
+		t.Fatalf("check did not see IsHermetic()==true: %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "suppressed by --hermetic") {
+		t.Fatalf("expected hermetic-specific skip reason: %q", r.Stdout)
+	}
+}
+
+// TestConnectionEnv_CheckSideHermeticConflation documents the exact gap
+// IsHermetic closes. Under --hermetic with the env var UNSET, ConnectionEnvValue
+// returns present=false (indistinguishable from a plain unset), yet IsHermetic()
+// returns true -- so a check that layers config fallbacks can honor hermetic
+// instead of falling through to a config URL and connecting.
+func TestConnectionEnv_CheckSideHermeticConflation(t *testing.T) {
+	os.Unsetenv("DATABASE_URL") // env UNSET
+	app := newConnCheckApp(t)
+	r := app.Test([]string{"--hermetic", "check", "--tag", "db", "--verbose"})
+	// present=false (env unset) AND hermetic=true: the skip must attribute to
+	// hermetic, not to "unset".
+	if !strings.Contains(r.Stdout, "hermetic=true") {
+		t.Fatalf("env-unset+hermetic must still report IsHermetic()==true: %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "suppressed by --hermetic") {
+		t.Fatalf("env-unset+hermetic must skip for the hermetic reason, not unset: %q", r.Stdout)
+	}
+	if strings.Contains(r.Stdout, "DATABASE_URL unset") {
+		t.Fatalf("env-unset+hermetic must not be reported as a plain unset: %q", r.Stdout)
+	}
+}
+
+// TestConnectionEnv_CheckSideUnsetNotHermetic is the counterpart: env unset and
+// NOT hermetic -> IsHermetic()==false, so a consumer would be free to consult a
+// config fallback (here the check simply reports the plain-unset skip).
+func TestConnectionEnv_CheckSideUnsetNotHermetic(t *testing.T) {
+	os.Unsetenv("DATABASE_URL") // env UNSET, no --hermetic
+	app := newConnCheckApp(t)
+	r := app.Test([]string{"check", "--tag", "db", "--verbose"})
+	if !strings.Contains(r.Stdout, "hermetic=false") {
+		t.Fatalf("env-unset+non-hermetic must report IsHermetic()==false: %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "DATABASE_URL unset") {
+		t.Fatalf("env-unset+non-hermetic must skip as plain unset: %q", r.Stdout)
 	}
 }
 

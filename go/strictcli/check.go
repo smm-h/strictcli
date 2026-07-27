@@ -27,8 +27,24 @@ type CheckContext interface {
 //	    dsn, present := r.ConnectionEnvValue("DATABASE_URL")
 //	    ...
 //	}
+//
+// IsHermetic reports whether the invocation ran under --hermetic. It exists so a
+// check can DISTINGUISH the two cases that ConnectionEnvValue's present=false
+// otherwise conflates: "--hermetic suppressed the connection env" vs "the env
+// var is simply unset". A check that layers config fallbacks below the env must
+// honor hermetic even when the env is unset -- otherwise it falls through to a
+// config URL and connects, violating the hermetic guarantee. The pattern is:
+//
+//	dsn, present := r.ConnectionEnvValue("DATABASE_URL")
+//	if !present {
+//	    if r.IsHermetic() {
+//	        return rep.Skipped("hermetic: connection suppressed")
+//	    }
+//	    // env unset but not hermetic -- config fallback is allowed here
+//	}
 type ConnectionEnvReader interface {
 	ConnectionEnvValue(envVar string) (value string, present bool)
+	IsHermetic() bool
 }
 
 // checkContextWithConn wraps a tool-supplied CheckContext, delegating
@@ -50,6 +66,13 @@ func (w checkContextWithConn) ConnectionEnvValue(envVar string) (string, bool) {
 		return os.LookupEnv(envVar)
 	}
 	panic(errConnectionValueUndeclared(envVar))
+}
+
+// IsHermetic implements ConnectionEnvReader: reports whether the invocation ran
+// under --hermetic. Mirrors the hermetic flag captured on the framework infra
+// snapshot; false when no infra is present.
+func (w checkContextWithConn) IsHermetic() bool {
+	return w.infra != nil && w.infra.hermetic
 }
 
 // checkProblem is a single minted finding: text plus severity. It is
