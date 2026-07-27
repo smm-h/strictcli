@@ -526,7 +526,7 @@ func dumpSchemaCore(app *App) map[string]interface{} {
 	// declared. Resolved root values are intentionally EXCLUDED -- the schema
 	// must be machine-stable (not machine-specific). Only the declared env var
 	// and default path (both stable declarations) are emitted for roots.
-	if len(app.infraRootOrder) > 0 || len(app.handshakeOrder) > 0 {
+	if len(app.infraRootOrder) > 0 || len(app.handshakeOrder) > 0 || len(app.connectionOrder) > 0 {
 		infra := make(map[string]interface{})
 		if len(app.infraRootOrder) > 0 {
 			roots := make([]interface{}, 0, len(app.infraRootOrder))
@@ -554,6 +554,16 @@ func dumpSchemaCore(app *App) map[string]interface{} {
 				})
 			}
 			infra["handshakes"] = handshakes
+		}
+		if len(app.connectionOrder) > 0 {
+			connections := make([]interface{}, 0, len(app.connectionOrder))
+			for _, ev := range app.connectionOrder {
+				connections = append(connections, map[string]interface{}{
+					"env_var": ev,
+					"help":    app.connectionEnvs[ev],
+				})
+			}
+			infra["connections"] = connections
 		}
 		schema["infra"] = infra
 	}

@@ -18,11 +18,14 @@ type Context struct {
 }
 
 // infraAccess carries a Context's view of infrastructure env vars: resolved root
-// values (captured at construction) and the set of declared handshake env vars
-// (read live at access time).
+// values (captured at construction), the set of declared handshake env vars
+// (read live at access time), and the set of declared connection env vars (read
+// live, but suppressed under --hermetic).
 type infraAccess struct {
-	roots      map[string]string // env var -> resolved path
-	handshakes map[string]bool   // env var -> declared
+	roots       map[string]string // env var -> resolved path
+	handshakes  map[string]bool   // env var -> declared
+	connections map[string]bool   // env var -> declared (connection URL kind)
+	hermetic    bool              // when true, connection env vars resolve as absent
 }
 
 // newContext creates a new Context with the given writers and provenance sources.
@@ -55,7 +58,12 @@ func newContext(stdout, stderr io.Writer, sources map[string]string, infra *infr
 // at call time (handshakes are set by the invoking process and carry no
 // construction-time value), returning (value, isSet).
 //
-// Panics if envVar is neither a declared root nor a declared handshake var --
+// For a declared connection env (WithConnectionEnv), it reads the environment
+// LIVE at call time and returns (value, isSet) -- EXCEPT under --hermetic, where
+// it resolves as absent ("", false) so connection-dependent behavior skips
+// visibly instead of connecting.
+//
+// Panics if envVar is not a declared root, handshake, or connection var --
 // declare everything.
 func (c *Context) InfraValue(envVar string) (string, bool) {
 	if c.infra != nil {
@@ -65,8 +73,29 @@ func (c *Context) InfraValue(envVar string) (string, bool) {
 		if c.infra.handshakes[envVar] {
 			return os.LookupEnv(envVar)
 		}
+		if c.infra.connections[envVar] {
+			if c.infra.hermetic {
+				return "", false
+			}
+			return os.LookupEnv(envVar)
+		}
 	}
 	panic(errInfraValueUndeclared(envVar))
+}
+
+// ConnectionEnvValue returns the value of a declared connection env
+// (WithConnectionEnv), read LIVE at call time -- EXCEPT under --hermetic, where
+// it resolves as absent ("", false). Panics if envVar is not a declared
+// connection env. This is the check-side and handler-side accessor for the
+// connection-URL kind; see also InfraValue, which resolves all three kinds.
+func (c *Context) ConnectionEnvValue(envVar string) (string, bool) {
+	if c.infra != nil && c.infra.connections[envVar] {
+		if c.infra.hermetic {
+			return "", false
+		}
+		return os.LookupEnv(envVar)
+	}
+	panic(errConnectionValueUndeclared(envVar))
 }
 
 // Info writes an informational message to stdout.

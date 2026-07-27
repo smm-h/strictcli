@@ -99,7 +99,7 @@ func formatAppHelp(app *App) string {
 		}
 	}
 
-	if len(app.infraRootOrder) > 0 || len(app.handshakeOrder) > 0 {
+	if len(app.infraRootOrder) > 0 || len(app.handshakeOrder) > 0 || len(app.connectionOrder) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Infrastructure:")
 		lines = append(lines, "  (location/handshake env vars; not suppressed by --hermetic)")
@@ -110,6 +110,11 @@ func formatAppHelp(app *App) string {
 			}
 		}
 		for _, ev := range app.handshakeOrder {
+			if len(ev) > maxLen {
+				maxLen = len(ev)
+			}
+		}
+		for _, ev := range app.connectionOrder {
 			if len(ev) > maxLen {
 				maxLen = len(ev)
 			}
@@ -128,6 +133,10 @@ func formatAppHelp(app *App) string {
 		for _, ev := range app.handshakeOrder {
 			padding := maxLen - len(ev) + 4
 			lines = append(lines, fmt.Sprintf("  %s%s%s", ev, strings.Repeat(" ", padding), app.handshakeEnvs[ev]))
+		}
+		for _, ev := range app.connectionOrder {
+			padding := maxLen - len(ev) + 4
+			lines = append(lines, fmt.Sprintf("  %s%sconnection URL, suppressed by --hermetic (%s)", ev, strings.Repeat(" ", padding), app.connectionEnvs[ev]))
 		}
 	}
 

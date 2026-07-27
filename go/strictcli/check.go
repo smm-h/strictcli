@@ -15,6 +15,43 @@ type CheckContext interface {
 	ProjectRoot() string
 }
 
+// ConnectionEnvReader is an OPTIONAL capability a CheckContext may expose: the
+// value of a declared connection env (WithConnectionEnv), read live -- EXCEPT
+// under --hermetic, where it resolves as absent ("", false) so a check can skip
+// visibly instead of connecting. The check command wraps the tool-supplied
+// CheckContext in a value that satisfies this interface, backed by the app's
+// declared connection envs and the invocation's hermetic state. Checks that need
+// a connection URL type-assert the context to this interface:
+//
+//	if r, ok := ctx.(strictcli.ConnectionEnvReader); ok {
+//	    dsn, present := r.ConnectionEnvValue("DATABASE_URL")
+//	    ...
+//	}
+type ConnectionEnvReader interface {
+	ConnectionEnvValue(envVar string) (value string, present bool)
+}
+
+// checkContextWithConn wraps a tool-supplied CheckContext, delegating
+// ProjectRoot while adding connection-env access backed by the framework's
+// infraAccess snapshot. It is what the check command hands to check functions so
+// they can read declared connection envs (hermetic-suppressed) without the tool
+// having to implement anything beyond ProjectRoot.
+type checkContextWithConn struct {
+	CheckContext
+	infra *infraAccess
+}
+
+// ConnectionEnvValue implements ConnectionEnvReader.
+func (w checkContextWithConn) ConnectionEnvValue(envVar string) (string, bool) {
+	if w.infra != nil && w.infra.connections[envVar] {
+		if w.infra.hermetic {
+			return "", false
+		}
+		return os.LookupEnv(envVar)
+	}
+	panic(errConnectionValueUndeclared(envVar))
+}
+
 // checkProblem is a single minted finding: text plus severity. It is
 // unexported and has no public constructor -- problems are minted only via
 // reporter methods (Warn/Error).

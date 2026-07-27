@@ -35,6 +35,42 @@ func errDuplicateHandshakeEnvVar(envVar string) string {
 	return fmt.Sprintf("duplicate handshake env var %q", envVar)
 }
 
+func errConnectionEnvVarEmptyHelp(envVar string) string {
+	return fmt.Sprintf("connection env var %q: help must be a non-empty string", envVar)
+}
+
+func errDuplicateConnectionEnvVar(envVar string) string {
+	return fmt.Sprintf("duplicate connection env var %q", envVar)
+}
+
+func errConnectionEnvIsAlreadyInfraRoot(ev string) string {
+	return fmt.Sprintf("connection env var %q is already declared as an infra root", ev)
+}
+
+func errConnectionEnvIsAlreadyHandshake(ev string) string {
+	return fmt.Sprintf("connection env var %q is already declared as a handshake env var", ev)
+}
+
+func errConnectionURLFlagUnbound(flagName string) string {
+	return fmt.Sprintf("flag %q: connection-URL flag must bind to a declared connection env; use ConnectionURLFlag(envVar)", flagName)
+}
+
+func errConnectionEnvWithoutURLFlag(flagName string) string {
+	return fmt.Sprintf("flag %q: ConnectionEnv is set but the flag is not marked as a connection-URL flag; use ConnectionURLFlag(envVar)", flagName)
+}
+
+func errConnectionEnvWithPerFlagEnv(flagName string) string {
+	return fmt.Sprintf("flag %q: a connection-URL binding cannot be combined with a per-flag Env; the connection env is the flag's env source", flagName)
+}
+
+func errFlagConnectionEnvUndeclared(flagName string, envVar string) string {
+	return fmt.Sprintf("flag %q: ConnectionURLFlag references undeclared connection env %q; declare it with WithConnectionEnv", flagName, envVar)
+}
+
+func errConnectionValueUndeclared(envVar string) string {
+	return fmt.Sprintf("ConnectionEnvValue: %q is not a declared connection env var", envVar)
+}
+
 func errConflictModeBadMode(mode string) string {
 	return fmt.Sprintf("ConflictMode: mode must be \"cli-wins\" or \"error\", got %q", mode)
 }
@@ -1031,7 +1067,7 @@ func errTagExprExpectedRParen(pos int) error {
 // ---------------------------------------------------------------------------
 
 func errInfraValueUndeclared(envVar string) string {
-	return fmt.Sprintf("InfraValue: %q is not a declared infra root or handshake env var", envVar)
+	return fmt.Sprintf("InfraValue: %q is not a declared infra root, handshake, or connection env var", envVar)
 }
 
 func errNoSourceInfo(name string) string {

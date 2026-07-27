@@ -105,6 +105,17 @@ type Flag struct {
 	Unique       bool
 	EnvSeparator string
 
+	// ConnectionURL marks this flag as a connection-URL (URL-class) flag: a flag
+	// whose value is a connection URL (e.g. a database DSN). A URL-class flag MUST
+	// bind to a declared connection env (ConnectionEnv), enforced at registration.
+	ConnectionURL bool
+	// ConnectionEnv is the name of the app-level connection env (declared via
+	// WithConnectionEnv) that this flag binds to. Binding is hermetic-suppressed,
+	// lazily read, and has no default; the CLI token still wins over the env
+	// (source "cli" vs "env"). Only valid on URL-class flags; the referenced
+	// connection env must be declared.
+	ConnectionEnv string
+
 	// ConflictMode is the per-flag override of the app config conflict mode.
 	// Empty string (with hasConflictMode false) means "inherit the app default".
 	// When set, must be "cli-wins" or "error". Applies to flags only:
@@ -327,6 +338,15 @@ type App struct {
 	handshakeEnvs  map[string]string // env var -> help
 	handshakeOrder []string          // env var names in declaration order
 
+	// Connection env vars: behavioral "reach outside the process" signals such
+	// as a database/service URL. Declared once at app level (name + help), read
+	// lazily, with NO default. Unlike roots and handshakes, connection envs are
+	// hermetic-SUPPRESSED: under --hermetic they resolve as absent so that
+	// connection-dependent behavior (including checks) skips visibly instead of
+	// connecting. Flags bind to a declared connection env by reference.
+	connectionEnvs  map[string]string // env var -> help
+	connectionOrder []string          // env var names in declaration order
+
 	// Test-coverage instrumentation. When enabled, every Test() and Call()
 	// invocation records the resolved command path to per-process shard files
 	// so a check can verify that every command in the surface has been exercised.
@@ -419,6 +439,30 @@ func WithHandshakeEnv(envVar, help string) AppOption {
 		}
 		a.handshakeEnvs[envVar] = help
 		a.handshakeOrder = append(a.handshakeOrder, envVar)
+	}
+}
+
+// WithConnectionEnv declares a connection env var: a behavioral "reach outside
+// the process" signal such as a database or service connection URL. It is
+// declared once at app level (name + help) and surfaced in --help and the
+// schema dump alongside the other infrastructure env vars. Unlike roots and
+// handshakes it is hermetic-SUPPRESSED: under --hermetic it resolves as absent.
+// It has no default and is read lazily. Flags bind to it by reference via
+// ConnectionURLFlag. A connection env must not collide with a declared root or
+// handshake var, and duplicate declarations are a hard error.
+func WithConnectionEnv(envVar, help string) AppOption {
+	return func(a *App) {
+		if strings.TrimSpace(help) == "" {
+			panic(errConnectionEnvVarEmptyHelp(envVar))
+		}
+		if a.connectionEnvs == nil {
+			a.connectionEnvs = make(map[string]string)
+		}
+		if _, dup := a.connectionEnvs[envVar]; dup {
+			panic(errDuplicateConnectionEnvVar(envVar))
+		}
+		a.connectionEnvs[envVar] = help
+		a.connectionOrder = append(a.connectionOrder, envVar)
 	}
 }
 
@@ -526,6 +570,19 @@ func ConflictMode(mode string) FlagOption {
 		}
 		f.ConflictMode = mode
 		f.hasConflictMode = true
+	}
+}
+
+// ConnectionURLFlag marks a flag as a connection-URL (URL-class) flag bound to
+// the declared connection env named envVar (see WithConnectionEnv). The value
+// resolves from the CLI token if present, else from the connection env (lazily,
+// hermetic-suppressed), with no default. Binding to an env that was not declared
+// via WithConnectionEnv is a registration-time hard error, as is marking a flag
+// URL-class without a binding.
+func ConnectionURLFlag(envVar string) FlagOption {
+	return func(f *Flag) {
+		f.ConnectionURL = true
+		f.ConnectionEnv = envVar
 	}
 }
 
@@ -1272,6 +1329,15 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 			panic(errHandshakeIsAlreadyInfraRoot(ev))
 		}
 	}
+	// Connection env vars must not collide with declared roots or handshakes.
+	for _, ev := range a.connectionOrder {
+		if _, isRoot := a.infraRoots[ev]; isRoot {
+			panic(errConnectionEnvIsAlreadyInfraRoot(ev))
+		}
+		if _, isHandshake := a.handshakeEnvs[ev]; isHandshake {
+			panic(errConnectionEnvIsAlreadyHandshake(ev))
+		}
+	}
 	// Resolve the config-path marker (if any) now that roots exist.
 	if a.configPathRef != nil {
 		resolved, err := a.resolveInfraPath(*a.configPathRef)
@@ -1620,17 +1686,53 @@ func (a *App) validateFlagInfraMarker(f *Flag) {
 	}
 }
 
+// validateFlagConnection enforces the connection-URL binding rules at
+// registration time (mechanical enforcement, not review). A URL-class flag must
+// bind to a declared connection env; the binding drives env resolution by
+// reusing the per-flag Env channel. Called at registration so a misbound flag is
+// a construction-time hard error.
+func (a *App) validateFlagConnection(f *Flag) {
+	if !f.ConnectionURL && f.ConnectionEnv == "" {
+		return
+	}
+	// A connection binding may not be combined with a per-flag Env: the
+	// connection env IS the flag's env source.
+	if f.ConnectionEnv != "" && f.Env != "" && f.Env != f.ConnectionEnv {
+		panic(errConnectionEnvWithPerFlagEnv(f.Name))
+	}
+	// URL-class flag with no binding: the exact bug class the framework refuses.
+	if f.ConnectionURL && f.ConnectionEnv == "" {
+		panic(errConnectionURLFlagUnbound(f.Name))
+	}
+	// A binding without the URL-class marker is inconsistent; require both.
+	if f.ConnectionEnv != "" && !f.ConnectionURL {
+		panic(errConnectionEnvWithoutURLFlag(f.Name))
+	}
+	// The referenced connection env must be declared at app level.
+	if _, declared := a.connectionEnvs[f.ConnectionEnv]; !declared {
+		panic(errFlagConnectionEnvUndeclared(f.Name, f.ConnectionEnv))
+	}
+	// Bind: the connection env is the flag's env source, so all downstream env
+	// resolution (cli>env precedence, --hermetic suppression, source labeling)
+	// works unchanged.
+	f.Env = f.ConnectionEnv
+}
+
 // validateCmdInfraMarkers validates every flag on a command at registration.
+// cmd.flags already contains flag-set and mutex flags (merged at build time).
 func (a *App) validateCmdInfraMarkers(cmd *Command) {
 	for i := range cmd.flags {
 		a.validateFlagInfraMarker(&cmd.flags[i])
+		a.validateFlagConnection(&cmd.flags[i])
 	}
 }
 
 // infraAccess snapshots the app's infra data for a Context: resolved roots
-// (captured value) plus the set of declared handshake env vars (read live).
-func (a *App) infraAccess() *infraAccess {
-	if len(a.infraRoots) == 0 && len(a.handshakeEnvs) == 0 {
+// (captured value), the set of declared handshake env vars (read live), and the
+// set of declared connection env vars (read live, but suppressed when hermetic
+// is true so connection-dependent behavior skips visibly).
+func (a *App) infraAccess(hermetic bool) *infraAccess {
+	if len(a.infraRoots) == 0 && len(a.handshakeEnvs) == 0 && len(a.connectionEnvs) == 0 {
 		return nil
 	}
 	roots := make(map[string]string, len(a.infraRoots))
@@ -1641,7 +1743,11 @@ func (a *App) infraAccess() *infraAccess {
 	for k := range a.handshakeEnvs {
 		handshakes[k] = true
 	}
-	return &infraAccess{roots: roots, handshakes: handshakes}
+	connections := make(map[string]bool, len(a.connectionEnvs))
+	for k := range a.connectionEnvs {
+		connections[k] = true
+	}
+	return &infraAccess{roots: roots, handshakes: handshakes, connections: connections, hermetic: hermetic}
 }
 
 func (a *App) Command(name, help string, handler func(ctx *Context, kwargs map[string]interface{}) Outcome, opts ...CmdOption) {
@@ -1705,6 +1811,7 @@ func (a *App) GlobalFlag(f Flag) {
 		}
 	}
 	a.validateFlagInfraMarker(&f)
+	a.validateFlagConnection(&f)
 	a.globalFlags = append(a.globalFlags, f)
 }
 
@@ -1893,12 +2000,12 @@ func (a *App) Run() {
 	}
 
 	if pr.cmd.Passthrough {
-		ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess())
+		ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic))
 		code := pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		os.Exit(code)
 	}
 
-	ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess())
+	ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic))
 	outcome := pr.cmd.Handler(ctx, pr.kwargs)
 	if outcome.data != nil {
 		data, err := json.Marshal(outcome.data)
@@ -1977,7 +2084,7 @@ func (a *App) Test(argv []string) Result {
 
 	// Context is constructed unconditionally for every dispatch, writing to the
 	// capture pipes.
-	ctx := newContext(stdoutW, stderrW, pr.sources, a.infraAccess())
+	ctx := newContext(stdoutW, stderrW, pr.sources, a.infraAccess(pr.hermetic))
 
 	var exitCode int
 	var resultData interface{}
@@ -2031,6 +2138,7 @@ type parseResult struct {
 	commandPrefix   string
 	dumpSchema      bool
 	serveMCP        bool
+	hermetic        bool // --hermetic active for this invocation
 }
 
 // preScanResult holds the results of the position-aware pre-scan for
@@ -2289,7 +2397,7 @@ func (a *App) doParse(argv []string) parseResult {
 	}
 	// Passthrough: skip parsing, forward raw args
 	if cmd.Passthrough {
-		return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, passthroughArgs: cmdRest, globalKwargs: globalValues}
+		return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, passthroughArgs: cmdRest, globalKwargs: globalValues, hermetic: preScan.hermetic}
 	}
 
 	// Config subcommand exemption: config edit, config path, config set
@@ -2352,7 +2460,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 		cmdSources[k] = v
 	}
-	return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources}
+	return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources, hermetic: preScan.hermetic}
 }
 
 // tokensContainHelp checks if --help or -h appears in tokens before any "--"

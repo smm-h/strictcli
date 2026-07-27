@@ -25,7 +25,7 @@ func (a *App) enableChecks() {
 // registerCheckCommand registers the auto-generated "check" command.
 // Called from enableChecks when the check system is turned on.
 func (a *App) registerCheckCommand() {
-	a.Command("check", "Run project checks registered via the check framework and report results", func(_ *Context, args map[string]interface{}) Outcome {
+	a.Command("check", "Run project checks registered via the check framework and report results", func(ctx *Context, args map[string]interface{}) Outcome {
 		// Materialize provider-sourced checks before any registry read (covers
 		// the --list, --dry-run, and execution branches below).
 		a.materializeCheckProviders()
@@ -48,7 +48,7 @@ func (a *App) registerCheckCommand() {
 		}
 
 		if runAll || tagExpr != "" || nameGlob != "" {
-			return Exit(a.checkRun(runAll, tagExpr, nameGlob, jsonOut, ignoreWarnings, verbose))
+			return Exit(a.checkRun(ctx, runAll, tagExpr, nameGlob, jsonOut, ignoreWarnings, verbose))
 		}
 
 		// No flags: show help
@@ -67,6 +67,21 @@ func (a *App) registerCheckCommand() {
 			BoolFlag("dry-run", "Show which checks would run based on current filters without executing them", Default(false)),
 		),
 	)
+}
+
+// wrapCheckContext augments a tool-supplied CheckContext with connection-env
+// access derived from the framework *Context's infra snapshot. When the app
+// declares no connection envs, the base context is returned unchanged so the
+// common case is unaffected.
+func (a *App) wrapCheckContext(base CheckContext, frameworkCtx *Context) CheckContext {
+	if len(a.connectionEnvs) == 0 {
+		return base
+	}
+	var infra *infraAccess
+	if frameworkCtx != nil {
+		infra = frameworkCtx.infra
+	}
+	return checkContextWithConn{CheckContext: base, infra: infra}
 }
 
 // checkList implements the --list mode.
@@ -168,14 +183,18 @@ func (a *App) checkDryRun(runAll bool, tagExpr, nameGlob string) int {
 	return 0
 }
 
-// checkRun executes checks and formats output.
-func (a *App) checkRun(runAll bool, tagExpr, nameGlob string, jsonOut, ignoreWarnings, verbose bool) int {
+// checkRun executes checks and formats output. The framework *Context (which
+// carries the invocation's infra snapshot, including declared connection envs
+// and the hermetic flag) is no longer discarded: the tool-supplied CheckContext
+// is wrapped so check functions can read declared connection envs via the
+// ConnectionEnvReader capability (hermetic-suppressed).
+func (a *App) checkRun(frameworkCtx *Context, runAll bool, tagExpr, nameGlob string, jsonOut, ignoreWarnings, verbose bool) int {
 	if a.checkContextFactory == nil {
 		fmt.Fprintln(os.Stderr, "error: no check context factory set (call SetCheckContext before running checks)")
 		return 1
 	}
 
-	ctx := a.checkContextFactory()
+	ctx := a.wrapCheckContext(a.checkContextFactory(), frameworkCtx)
 	// The check command executes all selected checks; the purity partition is an
 	// API-only mode (RunChecksOptions.PureOnly) consumed programmatically, so no
 	// checks are ever left in the impure listing here.
