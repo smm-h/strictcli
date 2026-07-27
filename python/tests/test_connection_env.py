@@ -178,9 +178,15 @@ def _make_conn_check_app(tmp_path):
 
     @app.error_check("db-reachable")
     def db_reachable(ctx, reporter):
+        reporter.note(f"hermetic={ctx.is_hermetic()}")
         dsn, present = ctx.connection_env_value("DATABASE_URL")
         if not present:
-            return reporter.skipped("DATABASE_URL absent (hermetic or unset)")
+            # Distinguish hermetic suppression from a plainly-unset env: a
+            # consumer layering config fallbacks below the env must honor
+            # hermetic (skip) rather than fall through and connect.
+            if ctx.is_hermetic():
+                return reporter.skipped("DATABASE_URL suppressed by --hermetic")
+            return reporter.skipped("DATABASE_URL unset")
         reporter.note(f"dsn={dsn}")
         return reporter.passed("connection env visible")
 
@@ -194,14 +200,42 @@ def test_connection_env_check_side_access(tmp_path, monkeypatch):
     r = app.test(["check", "--tag", "db", "--verbose"])
     assert "dsn=postgres://check/db" in r.stdout
     assert "PASS" in r.stdout
+    # A non-hermetic invocation reports is_hermetic()==False to the check.
+    assert "hermetic=False" in r.stdout
 
 
 def test_connection_env_check_side_hermetic_skips(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgres://check/db")
     app = _make_conn_check_app(tmp_path)
-    r = app.test(["--hermetic", "check", "--tag", "db"])
+    r = app.test(["--hermetic", "check", "--tag", "db", "--verbose"])
     assert "SKIP" in r.stdout
     assert "dsn=" not in r.stdout
+    # The check SEES hermetic (is_hermetic()==True) and skips for that reason.
+    assert "hermetic=True" in r.stdout
+    assert "suppressed by --hermetic" in r.stdout
+
+
+def test_connection_env_check_side_hermetic_conflation(tmp_path, monkeypatch):
+    """Documents the exact gap is_hermetic() closes: under --hermetic with the
+    env var UNSET, connection_env_value returns present=False (indistinguishable
+    from a plain unset), yet is_hermetic() returns True -- so a check layering
+    config fallbacks can honor hermetic instead of connecting via a config URL."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)  # env UNSET
+    app = _make_conn_check_app(tmp_path)
+    r = app.test(["--hermetic", "check", "--tag", "db", "--verbose"])
+    assert "hermetic=True" in r.stdout
+    assert "suppressed by --hermetic" in r.stdout
+    assert "DATABASE_URL unset" not in r.stdout
+
+
+def test_connection_env_check_side_unset_not_hermetic(tmp_path, monkeypatch):
+    """Counterpart: env unset and NOT hermetic -> is_hermetic()==False, so a
+    consumer is free to consult a config fallback (here reported as plain unset)."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)  # env UNSET, no --hermetic
+    app = _make_conn_check_app(tmp_path)
+    r = app.test(["check", "--tag", "db", "--verbose"])
+    assert "hermetic=False" in r.stdout
+    assert "DATABASE_URL unset" in r.stdout
 
 
 # --- Registration-time enforcement ---

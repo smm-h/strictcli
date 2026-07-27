@@ -2651,9 +2651,26 @@ class ConnectionEnvReader(Protocol):
     instead of connecting. The check command wraps the tool-supplied check
     context in a value that satisfies this protocol, backed by the app's declared
     connection envs and the invocation's hermetic state. Checks that need a
-    connection URL call ``ctx.connection_env_value("DATABASE_URL")``."""
+    connection URL call ``ctx.connection_env_value("DATABASE_URL")``.
+
+    ``is_hermetic()`` reports whether the invocation ran under --hermetic. It
+    exists so a check can DISTINGUISH the two cases that
+    ``connection_env_value``'s ``present=False`` otherwise conflates:
+    "--hermetic suppressed the connection env" vs "the env var is simply unset".
+    A check that layers config fallbacks below the env must honor hermetic even
+    when the env is unset -- otherwise it falls through to a config URL and
+    connects, violating the hermetic guarantee::
+
+        dsn, present = ctx.connection_env_value("DATABASE_URL")
+        if not present:
+            if ctx.is_hermetic():
+                return reporter.skipped("hermetic: connection suppressed")
+            # env unset but not hermetic -- config fallback is allowed here
+    """
 
     def connection_env_value(self, env_var: str) -> "tuple[str | None, bool]": ...
+
+    def is_hermetic(self) -> bool: ...
 
 
 class _CheckContextWithConn:
@@ -2678,6 +2695,11 @@ class _CheckContextWithConn:
                 return os.environ[env_var], True
             return None, False
         raise KeyError(f'"{env_var}" is not a declared connection env var')
+
+    def is_hermetic(self) -> bool:
+        """Report whether the invocation ran under --hermetic. Mirrors the
+        hermetic flag captured when the wrapper was built."""
+        return self._hermetic
 
 
 @dataclass
