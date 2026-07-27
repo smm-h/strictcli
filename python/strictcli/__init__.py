@@ -8,7 +8,7 @@ __all__ = [
     "App", "Flag", "Arg", "FlagSet", "MutexGroup", "CoRequired", "Requires",
     "Implies", "Passthrough", "DeprecatedCommand", "Result", "InvokeError",
     "flag", "arg",
-    "CheckContext", "CheckRunResult",
+    "CheckContext", "ConnectionEnvReader", "CheckRunResult",
     "ErrorReporter", "WarnReporter", "SkipCheck",
     "CheckSpec", "error_check_spec", "warn_check_spec",
     "format_check_results", "format_check_results_json",
@@ -97,6 +97,33 @@ def _resolve_infra_root_path(ref: RelativeToRoot, roots: dict[str, str]) -> str:
             f"declare it as an infra root"
         )
     return os.path.join(root, *ref.parts)
+
+
+def _validate_connection_binding(f: "Flag", connection_env_names) -> None:
+    """Enforce the connection-URL binding rules at registration time (mechanical
+    enforcement, not review). A URL-class flag must bind to a declared connection
+    env; the binding drives env resolution by reusing the per-flag env channel
+    (connection_env is folded into env)."""
+    if not f.connection_url and f.connection_env is None:
+        return
+    if f.connection_env is not None and f.env is not None and f.env != f.connection_env:
+        raise ValueError(
+            f'flag "{f.name}": a connection-URL binding cannot be combined with a per-flag env var'
+        )
+    if f.connection_url and f.connection_env is None:
+        raise ValueError(
+            f'flag "{f.name}": connection-URL flag must bind to a declared connection env'
+        )
+    if f.connection_env is not None and not f.connection_url:
+        raise ValueError(
+            f'flag "{f.name}": connection env binding requires the flag to be marked as a connection-URL flag'
+        )
+    if f.connection_env not in connection_env_names:
+        raise ValueError(
+            f'flag "{f.name}": connection-URL flag binds to undeclared connection env '
+            f'"{f.connection_env}"; declare it as a connection env'
+        )
+    f.env = f.connection_env
 
 
 # ---------------------------------------------------------------------------
@@ -193,13 +220,17 @@ class _SourcedStore:
 
 class _InfraAccess:
     """A Context's view of infrastructure env vars: resolved root values
-    (captured at construction) and declared handshake env vars (read live)."""
+    (captured at construction), declared handshake env vars (read live), and
+    declared connection env vars (read live, but suppressed under --hermetic)."""
 
-    __slots__ = ("roots", "handshakes")
+    __slots__ = ("roots", "handshakes", "connections", "hermetic")
 
-    def __init__(self, roots: dict[str, str], handshakes: set[str]) -> None:
+    def __init__(self, roots: dict[str, str], handshakes: set[str],
+                 connections: set[str] | None = None, hermetic: bool = False) -> None:
         self.roots = roots
         self.handshakes = handshakes
+        self.connections = connections or set()
+        self.hermetic = hermetic
 
 
 class Context:
@@ -260,7 +291,13 @@ class Context:
         LIVE at call time (handshakes are set by the invoking process and carry
         no construction-time value), returning ``(value, is_set)``.
 
-        Raises KeyError if env_var is neither a declared root nor handshake var.
+        For a declared connection env (``connection_env``), reads the environment
+        LIVE at call time and returns ``(value, is_set)`` -- EXCEPT under
+        --hermetic, where it resolves as absent ``(None, False)`` so
+        connection-dependent behavior skips visibly instead of connecting.
+
+        Raises KeyError if env_var is not a declared root, handshake, or
+        connection var.
         """
         if self._infra is not None:
             if env_var in self._infra.roots:
@@ -269,8 +306,32 @@ class Context:
                 if env_var in os.environ:
                     return os.environ[env_var], True
                 return None, False
+            if env_var in self._infra.connections:
+                if self._infra.hermetic:
+                    return None, False
+                if env_var in os.environ:
+                    return os.environ[env_var], True
+                return None, False
         raise KeyError(
-            f'"{env_var}" is not a declared infra root or handshake env var'
+            f'"{env_var}" is not a declared infra root, handshake, or connection env var'
+        )
+
+    def connection_env_value(self, env_var: str) -> tuple[str | None, bool]:
+        """Return the value of a declared connection env (``connection_env``),
+        read LIVE at call time -- EXCEPT under --hermetic, where it resolves as
+        absent ``(None, False)``. Raises KeyError if env_var is not a declared
+        connection env. This is the check-side and handler-side accessor for the
+        connection-URL kind; see also ``infra_value``, which resolves all three
+        kinds.
+        """
+        if self._infra is not None and env_var in self._infra.connections:
+            if self._infra.hermetic:
+                return None, False
+            if env_var in os.environ:
+                return os.environ[env_var], True
+            return None, False
+        raise KeyError(
+            f'"{env_var}" is not a declared connection env var'
         )
 
 
@@ -1712,6 +1773,14 @@ class Flag:
     validate: Callable | None = None
     repeatable: bool = False
     unique: object = _MISSING
+    # Connection-URL binding. connection_url marks this flag as a connection-URL
+    # (URL-class) flag; connection_env names the app-level connection env
+    # (declared via App(connection_env=...)) it binds to. A URL-class flag MUST
+    # bind to a declared connection env (enforced at registration). The binding
+    # is hermetic-suppressed, lazily read, no default; the CLI token wins over
+    # the env (source "cli" vs "env").
+    connection_url: bool = False
+    connection_env: str | None = None
     # Per-flag config conflict mode. _MISSING means "inherit the app default".
     # When set explicitly, must be "cli-wins" or "error". Applies to flags only:
     # standalone ConfigFields have no CLI/env conflict surface, and a
@@ -2171,6 +2240,7 @@ class Group:
     hidden: bool = False
     _config_fields_ref: dict[str, ConfigField] = field(default_factory=dict)
     _infra_root_names: frozenset[str] = frozenset()
+    _connection_env_names: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Group")
@@ -2196,7 +2266,8 @@ class Group:
                      _accumulated_tags=self._accumulated_tags | own_tags,
                      hidden=hidden,
                      _config_fields_ref=self._config_fields_ref,
-                     _infra_root_names=self._infra_root_names)
+                     _infra_root_names=self._infra_root_names,
+                     _connection_env_names=self._connection_env_names)
         self._groups[name] = grp
         return grp
 
@@ -2255,6 +2326,7 @@ class Group:
                 config_fields=config_fields,
                 config_fields_ref=self._config_fields_ref,
                 infra_root_names=self._infra_root_names,
+                connection_env_names=self._connection_env_names,
             )
             self.commands[name] = cmd
             return func
@@ -2572,6 +2644,42 @@ class CheckContext(Protocol):
     project_root: Path
 
 
+class ConnectionEnvReader(Protocol):
+    """OPTIONAL capability a check context may expose: the value of a declared
+    connection env (``connection_env``), read live -- EXCEPT under --hermetic,
+    where it resolves as absent ``(None, False)`` so a check can skip visibly
+    instead of connecting. The check command wraps the tool-supplied check
+    context in a value that satisfies this protocol, backed by the app's declared
+    connection envs and the invocation's hermetic state. Checks that need a
+    connection URL call ``ctx.connection_env_value("DATABASE_URL")``."""
+
+    def connection_env_value(self, env_var: str) -> "tuple[str | None, bool]": ...
+
+
+class _CheckContextWithConn:
+    """Wraps a tool-supplied check context, delegating attribute access while
+    adding connection-env access (hermetic-suppressed) so check functions can
+    read declared connection envs without the tool implementing anything beyond
+    ``project_root``."""
+
+    def __init__(self, base, connections: frozenset[str], hermetic: bool) -> None:
+        self._base = base
+        self._connections = connections
+        self._hermetic = hermetic
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+    def connection_env_value(self, env_var: str) -> "tuple[str | None, bool]":
+        if env_var in self._connections:
+            if self._hermetic:
+                return None, False
+            if env_var in os.environ:
+                return os.environ[env_var], True
+            return None, False
+        raise KeyError(f'"{env_var}" is not a declared connection env var')
+
+
 @dataclass
 class _CheckDef:
     """Internal definition of a single check loaded from TOML."""
@@ -2685,6 +2793,11 @@ class App:
     # protocol env var -> its help string.
     infra_root: dict[str, str] | None = None
     handshake_env: dict[str, str] | None = None
+    # connection_env maps a behavioral "reach outside the process" env var
+    # (e.g. a database/service URL) -> its help string. Unlike roots and
+    # handshakes it is hermetic-SUPPRESSED: under --hermetic it resolves as
+    # absent. No default, read lazily. Flags bind to it via connection_url=.
+    connection_env: dict[str, str] | None = None
     checks_path: str | Path | None = None
     checks_embed: bytes | None = None
     test_coverage: bool = False
@@ -2713,6 +2826,7 @@ class App:
         self._global_flags: list[Flag] = list(self.flags)
         self._last_global_values: dict[str, object] = {}
         self._last_sources: dict[str, str] = {}
+        self._last_hermetic: bool = False
 
         # Resolve infrastructure roots eagerly, at construction. Infra vars have
         # no argv dependency, so resolution is sound here -- and this is WHY it
@@ -2740,15 +2854,28 @@ class App:
                 raise ValueError(f'handshake env var "{ev}": help must be a non-empty string')
             if ev in self._infra_roots:
                 raise ValueError(f'handshake env var "{ev}" is already declared as an infra root')
+        # Connection env vars: behavioral, hermetic-suppressed, no default.
+        self._connection_envs: dict[str, str] = dict(self.connection_env) if self.connection_env else {}
+        self._connection_order: list[str] = list(self.connection_env.keys()) if self.connection_env else []
+        for ev in self._connection_order:
+            if not self._connection_envs[ev] or not self._connection_envs[ev].strip():
+                raise ValueError(f'connection env var "{ev}": help must be a non-empty string')
+            if ev in self._infra_roots:
+                raise ValueError(f'connection env var "{ev}" is already declared as an infra root')
+            if ev in self._handshake_envs:
+                raise ValueError(f'connection env var "{ev}" is already declared as a handshake env var')
+        self._connection_env_names: frozenset[str] = frozenset(self._connection_envs)
         # A shared frozenset of declared root names, threaded to commands/groups
         # so flag-default markers can be validated at registration time.
         self._infra_root_names: frozenset[str] = frozenset(self._infra_roots)
         # Resolve the config-path marker (if any) now that roots exist.
         if isinstance(self.config_path, RelativeToRoot):
             self.config_path = _resolve_infra_root_path(self.config_path, self._infra_roots)
-        # Validate global flag default markers against declared roots.
+        # Validate global flag default markers against declared roots and
+        # connection-URL bindings against declared connection envs.
         for f in self._global_flags:
             self._validate_flag_infra_marker(f)
+            _validate_connection_binding(f, self._connection_env_names)
 
         # Validate config_format
         if self.config_format not in ("json", "toml"):
@@ -2843,14 +2970,17 @@ class App:
                     f'root "{f.default.env_var}"; declare it as an infra root'
                 )
 
-    def _infra_access(self) -> "_InfraAccess | None":
+    def _infra_access(self, hermetic: bool = False) -> "_InfraAccess | None":
         """Snapshot infra data for a Context: resolved roots + declared handshake
-        env var names. Returns None when nothing is declared."""
-        if not self._infra_roots and not self._handshake_envs:
+        env var names + declared connection env var names. Connection envs are
+        suppressed when hermetic is True. Returns None when nothing is declared."""
+        if not self._infra_roots and not self._handshake_envs and not self._connection_envs:
             return None
         return _InfraAccess(
             roots=dict(self._infra_roots),
             handshakes=set(self._handshake_envs),
+            connections=set(self._connection_envs),
+            hermetic=hermetic,
         )
 
     def _record_coverage(self, cmd_path: str) -> None:
@@ -3293,6 +3423,14 @@ class App:
         """
         self._check_context_factory = factory
 
+    def _wrap_check_context(self, base):
+        """Augment a tool-supplied check context with connection-env access
+        (hermetic-suppressed). When no connection envs are declared, the base
+        context is returned unchanged so the common case is unaffected."""
+        if not self._connection_envs:
+            return base
+        return _CheckContextWithConn(base, self._connection_env_names, self._last_hermetic)
+
     def set_scope_adapter(self, adapter: Callable) -> None:
         """Set the scope adapter callback for scoped checks.
 
@@ -3540,7 +3678,7 @@ class App:
                     file=sys.stderr,
                 )
                 return 1
-            context = app_ref._check_context_factory()
+            context = app_ref._wrap_check_context(app_ref._check_context_factory())
             # The check command executes all selected checks; the purity
             # partition is an API-only mode (run_checks pure_only=), so nothing
             # is ever left in the impure listing here.
@@ -3627,6 +3765,7 @@ class App:
                 config_fields=config_fields,
                 config_fields_ref=self._config_fields,
                 infra_root_names=self._infra_root_names,
+                connection_env_names=self._connection_env_names,
             )
             self._commands[name] = cmd
             return func
@@ -3643,7 +3782,8 @@ class App:
                      _accumulated_tags=own_tags,
                      hidden=hidden,
                      _config_fields_ref=self._config_fields,
-                     _infra_root_names=self._infra_root_names)
+                     _infra_root_names=self._infra_root_names,
+                     _connection_env_names=self._connection_env_names)
         self._groups[name] = grp
         return grp
 
@@ -3774,8 +3914,8 @@ class App:
                     if not isinstance(cf.default, _MissingSentinel):
                         entry["default"] = cf.default
                     result[cf_name] = entry
-                # Infrastructure section (roots + handshakes)
-                if app_ref._infra_root_order or app_ref._handshake_order:
+                # Infrastructure section (roots + handshakes + connections)
+                if app_ref._infra_root_order or app_ref._handshake_order or app_ref._connection_order:
                     infra: dict = {}
                     for ev in app_ref._infra_root_order:
                         infra[ev] = {
@@ -3793,6 +3933,16 @@ class App:
                         if is_set:
                             hs_entry["value"] = os.environ[ev]
                         infra[ev] = hs_entry
+                    for ev in app_ref._connection_order:
+                        is_set = ev in os.environ
+                        conn_entry: dict = {
+                            "kind": "connection",
+                            "set": is_set,
+                            "help": app_ref._connection_envs[ev],
+                        }
+                        if is_set:
+                            conn_entry["value"] = os.environ[ev]
+                        infra[ev] = conn_entry
                     result["__infrastructure__"] = infra
                 print(json.dumps(result, indent=2, sort_keys=True))
                 return 0
@@ -3832,8 +3982,8 @@ class App:
                         f"  (source: {source})"
                         f"  -- {cf.help}"
                     )
-            # Infrastructure section (roots + handshakes)
-            if app_ref._infra_root_order or app_ref._handshake_order:
+            # Infrastructure section (roots + handshakes + connections)
+            if app_ref._infra_root_order or app_ref._handshake_order or app_ref._connection_order:
                 print()
                 print("Infrastructure:")
                 for ev in app_ref._infra_root_order:
@@ -3844,6 +3994,11 @@ class App:
                         print(f"  {ev} (handshake) = {os.environ[ev]}  (set)  -- {app_ref._handshake_envs[ev]}")
                     else:
                         print(f"  {ev} (handshake) = <unset>  -- {app_ref._handshake_envs[ev]}")
+                for ev in app_ref._connection_order:
+                    if ev in os.environ:
+                        print(f"  {ev} (connection) = {os.environ[ev]}  (set)  -- {app_ref._connection_envs[ev]}")
+                    else:
+                        print(f"  {ev} (connection) = <unset>  -- {app_ref._connection_envs[ev]}")
             return 0
 
         config_show_flags = [
@@ -4257,6 +4412,9 @@ class App:
             raise _ParseError(pre_scan["err"])
 
         is_hermetic = bool(pre_scan.get("hermetic"))
+        # Record for the dispatch ctx: connection env access is suppressed under
+        # --hermetic so connection-dependent behavior (incl. checks) skips.
+        self._last_hermetic = is_hermetic
 
         # --hermetic + --config mutual exclusion
         if is_hermetic and pre_scan.get("config_path"):
@@ -4878,7 +5036,7 @@ class App:
             sys.exit(1)
         else:
             self._last_sources = sources
-            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=sources, infra=self._infra_access())
+            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=sources, infra=self._infra_access(self._last_hermetic))
             if cmd.passthrough is not None:
                 result = cmd.passthrough.handler(ctx, cmd.name, data, self._last_global_values)
             else:
@@ -4951,7 +5109,7 @@ class App:
             self._last_sources = sources
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
                 try:
-                    ctx = Context(stdout=stdout_buf, stderr=stderr_buf, sources=sources, infra=self._infra_access())
+                    ctx = Context(stdout=stdout_buf, stderr=stderr_buf, sources=sources, infra=self._infra_access(self._last_hermetic))
                     if cmd.passthrough is not None:
                         handler_return = cmd.passthrough.handler(
                             ctx, cmd.name, data, self._last_global_values,
@@ -6060,6 +6218,7 @@ def _build_and_validate_command(
     config_fields: list[str] | None = None,
     config_fields_ref: dict[str, ConfigField] | None = None,
     infra_root_names: frozenset[str] | None = None,
+    connection_env_names: frozenset[str] | None = None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything."""
     if not help or not help.strip():
@@ -6353,6 +6512,11 @@ def _build_and_validate_command(
                 f'undeclared infra root "{f.default.env_var}"; declare it as an infra root'
             )
 
+    # Validate connection-URL bindings against declared connection envs.
+    _conn_names = connection_env_names or frozenset()
+    for f in all_flags:
+        _validate_connection_binding(f, _conn_names)
+
     return Command(
         name=name,
         help=help,
@@ -6385,6 +6549,8 @@ def flag(
     repeatable: bool = False,
     unique: object = _MISSING,
     conflict_mode: object = _MISSING,
+    connection_url: bool = False,
+    connection_env: str | None = None,
 ) -> Callable[[F], F]:
     """Module-level decorator to attach a Flag to a command handler."""
 
@@ -6404,6 +6570,8 @@ def flag(
             repeatable=repeatable,
             unique=unique,
             conflict_mode=conflict_mode,
+            connection_url=connection_url,
+            connection_env=connection_env,
         )
         if not hasattr(func, "_strictcli_flags"):
             func._strictcli_flags = []
@@ -6498,11 +6666,11 @@ def _format_app_help(app: App) -> str:
             padding = max_flag_len - len(flag_str) + 4
             lines.append(f"  {flag_str}{' ' * padding}{help_text}")
 
-    if app._infra_root_order or app._handshake_order:
+    if app._infra_root_order or app._handshake_order or app._connection_order:
         lines.append("")
         lines.append("Infrastructure:")
         lines.append("  (location/handshake env vars; not suppressed by --hermetic)")
-        all_evs = list(app._infra_root_order) + list(app._handshake_order)
+        all_evs = list(app._infra_root_order) + list(app._handshake_order) + list(app._connection_order)
         max_len = max(len(ev) for ev in all_evs)
         for ev in app._infra_root_order:
             padding = max_len - len(ev) + 4
@@ -6510,6 +6678,9 @@ def _format_app_help(app: App) -> str:
         for ev in app._handshake_order:
             padding = max_len - len(ev) + 4
             lines.append(f"  {ev}{' ' * padding}{app._handshake_envs[ev]}")
+        for ev in app._connection_order:
+            padding = max_len - len(ev) + 4
+            lines.append(f"  {ev}{' ' * padding}connection URL, suppressed by --hermetic ({app._connection_envs[ev]})")
 
     lines.append("")
     lines.append(f"Use '{app.name} <command> --help' for more information.")
@@ -7645,7 +7816,7 @@ def _dump_schema_core(app: App) -> dict:
     # root values are intentionally EXCLUDED -- the schema must be machine-stable
     # (not machine-specific). Only the declared env var and default path (both
     # stable declarations) are emitted for roots.
-    if app._infra_root_order or app._handshake_order:
+    if app._infra_root_order or app._handshake_order or app._connection_order:
         infra: dict = {}
         if app._infra_root_order:
             infra["roots"] = [
@@ -7656,6 +7827,11 @@ def _dump_schema_core(app: App) -> dict:
             infra["handshakes"] = [
                 {"env_var": ev, "help": app._handshake_envs[ev]}
                 for ev in app._handshake_order
+            ]
+        if app._connection_order:
+            infra["connections"] = [
+                {"env_var": ev, "help": app._connection_envs[ev]}
+                for ev in app._connection_order
             ]
         schema["infra"] = infra
     return schema

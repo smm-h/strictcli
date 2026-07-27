@@ -1,0 +1,269 @@
+"""Tests for the connection-env primitive: app-level declaration, lazy read,
+hermetic suppression, check-side access, registration-time enforcement, and
+precedence (cli > env)."""
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
+import strictcli
+from strictcli import App, Context
+
+
+# --- Declaration + help + schema surfacing ---
+
+
+def test_connection_env_declaration():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "Postgres connection string"})
+    assert app._connection_envs["DATABASE_URL"] == "Postgres connection string"
+    assert app._connection_order == ["DATABASE_URL"]
+
+
+def test_connection_env_help_rendering():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "Postgres connection string"})
+
+    @app.command("run", help="run it")
+    def run(ctx):
+        return 0
+
+    r = app.test(["--help"])
+    assert "Infrastructure:" in r.stdout
+    assert "DATABASE_URL" in r.stdout
+    assert "connection URL, suppressed by --hermetic (Postgres connection string)" in r.stdout
+
+
+def test_connection_env_schema_dump():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "Postgres connection string"})
+
+    @app.command("run", help="run it")
+    def run(ctx):
+        return 0
+
+    from strictcli import _dump_schema_core
+    schema = _dump_schema_core(app)
+    conns = schema["infra"]["connections"]
+    assert conns == [{"env_var": "DATABASE_URL", "help": "Postgres connection string"}]
+    json.dumps(schema)  # must marshal
+
+
+# --- Lazy read + precedence (cli > env) ---
+
+
+def _make_conn_app():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    captured = {}
+
+    @app.command("run", help="run it")
+    @strictcli.flag("dsn", help="connection string", default="",
+                    connection_url=True, connection_env="DATABASE_URL")
+    def run(ctx, dsn):
+        captured["dsn"] = dsn
+        return 0
+
+    return app, captured
+
+
+def test_connection_env_lazy_read_from_env(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://from-env/db")
+    app, captured = _make_conn_app()
+    r = app.test(["run"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["dsn"] == "postgres://from-env/db"
+    assert app._last_sources["dsn"] == "env"
+
+
+def test_connection_env_cli_beats_env(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://from-env/db")
+    app, captured = _make_conn_app()
+    r = app.test(["run", "--dsn", "postgres://from-cli/db"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["dsn"] == "postgres://from-cli/db"
+    assert app._last_sources["dsn"] == "cli"
+
+
+def test_connection_env_hermetic_suppresses_flag(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://from-env/db")
+    app, captured = _make_conn_app()
+    r = app.test(["--hermetic", "run"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["dsn"] != "postgres://from-env/db"
+    assert app._last_sources["dsn"] != "env"
+
+
+# --- Handler-side infra_value / connection_env_value ---
+
+
+def test_connection_env_infra_value_live(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://live/db")
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    captured = {}
+
+    @app.command("run", help="run it")
+    def run(ctx):
+        captured["conn"] = ctx.connection_env_value("DATABASE_URL")
+        captured["infra"] = ctx.infra_value("DATABASE_URL")
+        return 0
+
+    app.test(["run"])
+    assert captured["conn"] == ("postgres://live/db", True)
+    assert captured["infra"] == ("postgres://live/db", True)
+
+
+def test_connection_env_hermetic_suppresses_infra_value(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://live/db")
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    captured = {}
+
+    @app.command("run", help="run it")
+    def run(ctx):
+        captured["conn"] = ctx.connection_env_value("DATABASE_URL")
+        return 0
+
+    app.test(["--hermetic", "run"])
+    assert captured["conn"] == (None, False)
+
+
+def test_connection_env_undeclared_value_raises(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://live/db")
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    captured = {}
+
+    @app.command("run", help="run it")
+    def run(ctx):
+        try:
+            ctx.connection_env_value("NOPE")
+        except KeyError as e:
+            captured["err"] = str(e)
+        return 0
+
+    app.test(["run"])
+    assert "NOPE" in captured["err"]
+
+
+# --- Check-side access via ConnectionEnvReader ---
+
+CONN_CHECKS_TOML = """
+app = "myapp"
+
+[checks.db-reachable]
+tags = ["db"]
+severity = "error"
+fast = true
+pure = false
+needs_network = true
+depends_on = []
+"""
+
+
+@dataclass
+class SimpleContext:
+    project_root: Path
+
+
+def _make_conn_check_app(tmp_path):
+    toml_file = tmp_path / "checks.toml"
+    toml_file.write_text(CONN_CHECKS_TOML)
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"},
+              checks_path=str(toml_file))
+
+    @app.error_check("db-reachable")
+    def db_reachable(ctx, reporter):
+        dsn, present = ctx.connection_env_value("DATABASE_URL")
+        if not present:
+            return reporter.skipped("DATABASE_URL absent (hermetic or unset)")
+        reporter.note(f"dsn={dsn}")
+        return reporter.passed("connection env visible")
+
+    app.set_check_context(lambda: SimpleContext(project_root=tmp_path))
+    return app
+
+
+def test_connection_env_check_side_access(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://check/db")
+    app = _make_conn_check_app(tmp_path)
+    r = app.test(["check", "--tag", "db", "--verbose"])
+    assert "dsn=postgres://check/db" in r.stdout
+    assert "PASS" in r.stdout
+
+
+def test_connection_env_check_side_hermetic_skips(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://check/db")
+    app = _make_conn_check_app(tmp_path)
+    r = app.test(["--hermetic", "check", "--tag", "db"])
+    assert "SKIP" in r.stdout
+    assert "dsn=" not in r.stdout
+
+
+# --- Registration-time enforcement ---
+
+
+def test_connection_url_flag_unbound_raises():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    with pytest.raises(ValueError, match="must bind to a declared connection env"):
+        @app.command("run", help="run it")
+        @strictcli.flag("dsn", help="dsn", default=None, connection_url=True)
+        def run(ctx, dsn):
+            return 0
+
+
+def test_connection_url_flag_undeclared_binding_raises():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    with pytest.raises(ValueError, match="undeclared connection env"):
+        @app.command("run", help="run it")
+        @strictcli.flag("dsn", help="dsn", default=None,
+                        connection_url=True, connection_env="OTHER_URL")
+        def run(ctx, dsn):
+            return 0
+
+
+def test_connection_env_binding_without_url_marker_raises():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    with pytest.raises(ValueError, match="requires the flag to be marked as a connection-URL flag"):
+        @app.command("run", help="run it")
+        @strictcli.flag("dsn", help="dsn", default=None, connection_env="DATABASE_URL")
+        def run(ctx, dsn):
+            return 0
+
+
+def test_connection_env_binding_plus_per_flag_env_raises():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    with pytest.raises(ValueError, match="cannot be combined with a per-flag env var"):
+        @app.command("run", help="run it")
+        @strictcli.flag("dsn", help="dsn", default=None, env="SOMETHING_ELSE",
+                        connection_url=True, connection_env="DATABASE_URL")
+        def run(ctx, dsn):
+            return 0
+
+
+def test_connection_env_empty_help_raises():
+    with pytest.raises(ValueError, match="help must be a non-empty string"):
+        App(name="myapp", version="1.0.0", help="t",
+            connection_env={"DATABASE_URL": ""})
+
+
+def test_connection_env_collides_with_root_raises():
+    with pytest.raises(ValueError, match="already declared as an infra root"):
+        App(name="myapp", version="1.0.0", help="t",
+            infra_root={"SHARED": "/var/lib"},
+            connection_env={"SHARED": "conn"})
+
+
+def test_connection_env_collides_with_handshake_raises():
+    with pytest.raises(ValueError, match="already declared as a handshake env var"):
+        App(name="myapp", version="1.0.0", help="t",
+            handshake_env={"SHARED": "handshake"},
+            connection_env={"SHARED": "conn"})
