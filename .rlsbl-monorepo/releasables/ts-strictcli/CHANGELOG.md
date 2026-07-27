@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.32.0
+
+Connection env vars: a hermetic-suppressed, app-level env primitive for connection URLs
+
+<details>
+<summary>Context</summary>
+
+Adds a third infra-env kind alongside infra roots and handshake vars. A connection env (e.g. a database DSN) is declared once at app level via createApp connectionEnv, read lazily with no default, and suppressed under --hermetic so connection-dependent behavior (including checks) skips visibly. Flags bind to it via connectionUrl/connectionEnv and check functions can read it through the ConnectionEnvReader capability.
+
+</details>
+
+### Features
+
+- [ts-strictcli] **Connection env vars.** Declare a hermetic-suppressed connection URL (e.g. a database DSN) at app level with `createApp({ connectionEnv })`; bind flags to it with `connectionUrl`/`connectionEnv`, read it from handlers via `ctx.connectionEnvValue()`, and from checks via the `ConnectionEnvReader` capability. Under `--hermetic` it resolves absent so connection-dependent behavior skips visibly.
+
 ## 0.31.0
 
 Native TypeScript implementation
@@ -9,7 +24,7 @@ Native TypeScript implementation
 <details>
 <summary>Context</summary>
 
-Versions <=0.30.1 were an npm wrapper that installed the Python package via pip. From 0.31.0, strictcli on npm is a native TypeScript implementation. Python users: install strictcli from PyPI instead.
+Versions <=0.30.1 were an npm wrapper that installed the Python package via pip. From 0.31.0, strictcli on npm is a native TypeScript implementation. Python users: install strictcli from PyPI instead. This version begins the TypeScript era of the strictcli npm package.
 
 </details>
 
