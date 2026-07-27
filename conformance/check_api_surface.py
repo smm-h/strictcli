@@ -324,6 +324,9 @@ _SHARED_GO_TO_SCHEMA: dict[str, str] = {
     "Choices": "choices_str",
     "Type": "type",
     "ConflictMode": "conflict_mode",
+    # ConnectionEnv maps by default snake conversion; ConnectionURL needs an
+    # explicit entry (the initialism would snake to "connection_u_r_l").
+    "ConnectionURL": "connection_url",
 }
 
 _SHARED_SCHEMA_TO_PYTHON: dict[str, str] = {
@@ -345,6 +348,9 @@ _SHARED_SCHEMA_TO_GO: dict[str, str] = {
     "env_separator": "EnvSeparator",
     "type": "Type",
     "depends_on": "DependsOn",
+    # connection_env -> ConnectionEnv by default PascalCase; connection_url needs
+    # the initialism-preserving ConnectionURL.
+    "connection_url": "ConnectionURL",
 }
 
 # TS struct -> owning factory whose option_keys extend the entity's TS name
@@ -515,6 +521,7 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "app.checks_path": "checksPath",
                 "app.infra_root": "infraRootDecls",
                 "app.handshake_env": "handshakeEnvs",
+                "app.connection_env": "connectionEnvs",
                 "app.tag_contracts": "tagContracts",
                 "app.test_coverage": "testCoverage",
             },
@@ -781,6 +788,7 @@ KNOWN_OPTION_FUNCS: set[str] = {
     "WithNoDefaultConfigPath",
     "WithConfigConflictMode",
     "WithInfraRoot", "WithHandshakeEnv", "WithConfigPathRelativeToRoot",
+    "WithConnectionEnv", "ConnectionURLFlag",
     "RelativeToRoot",
     # ConfigFieldOption constructors (from describe_go, not matched by old regex)
     "ConfigFieldDefault", "ConfigFieldHelp", "ConfigFieldType",
@@ -817,6 +825,7 @@ KNOWN_TS_PUBLIC_NAMES: set[str] = {
     "AnyArg", "AnyCommand", "AnyFlag", "AnyFlagSet", "AnyMutexGroup",
     "App", "AppSpec", "ArgDef", "ArgOpts", "Carrier",
     "CheckContext", "CheckOutcome", "CheckProblem", "CheckSeverity",
+    "ConnectionEnvReader",
     "CheckStatus", "CoRequired", "CommandDef", "CommandSpec",
     "ConfigFieldSpec", "ConflictMode", "Dependency", "DeprecatedDef",
     "DictSchema", "ElemSchema", "ElementOf", "ErrorCheckSpecInit",

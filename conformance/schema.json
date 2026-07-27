@@ -147,6 +147,11 @@
           "additionalProperties": { "type": "string" },
           "description": "Handshake env vars: env var name -> help string. Read live at access time via the infra accessor."
         },
+        "connection_env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Connection env vars: env var name -> help string. Hermetic-suppressed, read live at access time, no default."
+        },
         "config_content": {
           "type": "string",
           "description": "Raw config file content to write before running the test"
@@ -485,6 +490,8 @@
           "description": "Flag default that resolves through a declared infra root (RelativeToRoot marker)."
         },
         "env": { "type": "string" },
+        "connection_url": { "type": "boolean" },
+        "connection_env": { "type": "string" },
         "prefixed": { "type": "boolean", "default": true },
         "choices_str": {
           "type": "array",

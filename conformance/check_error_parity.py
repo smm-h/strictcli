@@ -523,6 +523,10 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     'duplicate handshake env var *': {
         "python": "excluded:Python handshake_env is a dict keyed by env var; duplicates are impossible by construction",
     },
+    'duplicate connection env var *': {
+        "python": "excluded:Python connection_env is a dict keyed by env var; duplicates are impossible by construction",
+        "typescript": "excluded:TS connectionEnv is a Record keyed by env var; duplicates are impossible by construction",
+    },
 
     # -- Go schema.go errors (go.mod project_id, schema mismatch) --
     'Cannot determine project_id: go.mod not found': {
@@ -558,9 +562,12 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "python": "excluded:Go typed generic helper; Python is dynamically typed",
     },
 
-    # -- Go context.go errors (InfraValue, Source) --
-    'InfraValue: * is not a declared infra root or handshake env var': {
+    # -- Go context.go errors (InfraValue, ConnectionEnvValue, Source) --
+    'InfraValue: * is not a declared infra root, handshake, or connection env var': {
         "python": "excluded:Go Context.InfraValue panic; Python equivalent raises KeyError natively",
+    },
+    'ConnectionEnvValue: * is not a declared connection env var': {
+        "python": "excluded:Go Context.ConnectionEnvValue panic; Python equivalent raises KeyError natively",
     },
     'no source info for flag *': {
         "python": "excluded:Go Context.Source panic; Python equivalent raises KeyError natively",
