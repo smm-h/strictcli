@@ -959,16 +959,15 @@ WithConfigFormat("toml") now correctly parses TOML config files (previously alwa
 
 # ts-strictcli
 
+## 0.33.0
+
+Add isHermetic() to the check-side ConnectionEnvReader
+
+### Features
+
+- [ts-strictcli] **Hermetic detection in checks.** `ConnectionEnvReader` now exposes `isHermetic()`, letting a check distinguish `--hermetic` suppression from an unset connection env (both surface as `connectionEnvValue` present=false) and honor hermetic even when the env is absent.
+
 ## 0.32.0
-
-Connection env vars: a hermetic-suppressed, app-level env primitive for connection URLs
-
-<details>
-<summary>Context</summary>
-
-Adds a third infra-env kind alongside infra roots and handshake vars. A connection env (e.g. a database DSN) is declared once at app level via createApp connectionEnv, read lazily with no default, and suppressed under --hermetic so connection-dependent behavior (including checks) skips visibly. Flags bind to it via connectionUrl/connectionEnv and check functions can read it through the ConnectionEnvReader capability.
-
-</details>
 
 ### Features
 
