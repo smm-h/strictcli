@@ -1,0 +1,251 @@
+---
+title: Cross-Language Conformance
+description: "How the conformance test suite keeps the Python, Go, and TypeScript implementations behaviorally identical."
+nav_group: "Guides"
+nav_order: 10
+---
+
+# Cross-Language Conformance
+
+strictcli ships three independent implementations -- Python, Go, and TypeScript -- that must behave identically for the same inputs. The conformance suite is the mechanism that enforces this. It lives in `conformance/` at the repository root and is structured as a `dev_node` project: never released independently, existing solely as test infrastructure.
+
+## What the suite covers
+
+The conformance suite enforces behavioral parity through nine checks, all gated at error severity (any failure blocks a release):
+
+| Check | What it verifies |
+|-------|-----------------|
+| `api-surface` | Every public API field (flags, args, app options, etc.) exists in all three implementations and in the conformance schema, accounting for language-idiomatic name mappings |
+| `error-parity` | Error message templates in `python/strictcli/__init__.py`, `go/strictcli/errors.go`, and `typescript/src/errors.ts` produce identical user-facing messages for identical inputs |
+| `conformance-python` | All JSON test cases pass against the Python implementation |
+| `conformance-go` | All JSON test cases pass against the Go implementation |
+| `conformance-typescript` | All JSON test cases pass against the TypeScript implementation |
+| `conformance-parity` | N-way output comparison: for every case that runs on multiple targets, stdout and stderr must be byte-identical (after normalization) |
+| `schema-parity` | A rich app definition exercising all features produces identical `--dump-schema` JSON output from all three implementations |
+| `float-fuzz` | The strictcli canonical float format (SCF) produces byte-identical strings for a fixed set of double-precision bit patterns across all three implementations |
+| `schema-freshness` | The committed `.strictcli/schema.json` for the conformance tool itself matches its current in-memory schema |
+
+## Guaranteed-identical behaviors
+
+The following behaviors are tested to be byte-identical across Python, Go, and TypeScript:
+
+- **Error messages.** Every parse-time and registration-time error produces the same text. Error templates are centralized in each implementation's `errors` module and cross-checked by `check_error_parity.py`.
+- **Help text.** App-level, group-level, and command-level help output is formatted identically, including column alignment, section ordering (`Commands:`, `Deprecated:`, `Infrastructure:`), and the `Use '<app> <command> --help'` footer.
+- **Exit codes.** Every case asserts a specific exit code, and parity mode verifies all targets agree.
+- **Flag parsing.** Type coercion (str, bool, int, float), default resolution, env var resolution (including `1|true|yes` / `0|false|no` for booleans), config file loading, mutex enforcement, dependency enforcement (CoRequired, Requires, Implies), and negatable booleans (`--no-flag`).
+- **Float formatting.** The SCF canonical form is byte-shared: a fixed seed of double-precision bit patterns is formatted identically by all three implementations, verified by `check_float_fuzz.py` and the committed vectors in `conformance/float_vectors.json`.
+- **Schema output.** `--dump-schema` produces structurally identical JSON describing the full CLI structure.
+- **Provenance labels.** Source labels (`cli`, `env`, `config`, `default`, `implied`, `infra`) are identical strings across implementations.
+- **Config subsystem.** `config show`, `config set`, `config path`, `config edit`, `config init` produce identical output and behavior.
+- **Check system.** Tag DSL evaluation, DAG-ordered execution, dependency pull-in, cascade skips, and result formatting all behave identically.
+- **Hermetic mode.** `--hermetic` suppresses env and config identically; mutual exclusion with `--config` and config subcommands produces identical errors.
+
+## How testing works
+
+### JSON test cases
+
+The core of the suite is 57 JSON files in `conformance/cases/`, containing 556 individual test cases. Each case is a self-contained JSON object specifying:
+
+- `app`: a declarative app definition (commands, flags, args, groups, config, checks)
+- `argv`: the command-line arguments to pass
+- `env`: optional environment variables to set
+- `expect`: assertions on exit code, stdout, and stderr (exact match, substring, regex, negation)
+
+Every case is validated against `conformance/schema.json`, a JSON Schema that defines the full vocabulary of app definitions and expectations.
+
+### Per-target execution
+
+The test runner (`run.py`) drives each target differently:
+
+- **Python**: `ref_python.py` generates a standalone Python script from the app definition. The script imports the Python `strictcli` package and constructs the app programmatically.
+- **Go**: a persistent harness binary (`conformance/harness/`) is compiled once per run. It reads the app definition from a temp file (path passed via the `CONFORMANCE_APP_DEF` env var) and interprets it at runtime, constructing the Go app dynamically.
+- **TypeScript**: the TypeScript package is built once per run (`npm run build` in `typescript/`). The harness (`conformance/harness_ts/main.js`) is a plain Node ESM script that imports the built dist and interprets the app definition from `CONFORMANCE_APP_DEF`, the same way as Go.
+
+### Parity mode
+
+`run.py --both` runs every case against all applicable targets and compares outputs N-way. For each case:
+
+1. All applicable targets run the case independently.
+2. If all targets pass their own assertions, stdout and stderr are compared byte-for-byte (after normalizing temp paths). Any divergence is reported with the odd-one-out identified by majority vote.
+3. If some targets pass and some fail, that is a parity failure (fatal).
+4. If all targets fail, that is a consistent failure (not a parity break).
+
+### Acknowledged divergence
+
+Some outputs are intentionally language-specific (traceback formatting, type names in error messages). Cases can declare an `acknowledged_divergence` block that excludes specific targets from byte-identity comparison on specific streams while requiring a mandatory reason:
+
+```json
+{
+  "acknowledged_divergence": {
+    "reason": "Python prints a traceback; TypeScript prints a one-line error",
+    "streams": {
+      "stderr": ["python", "typescript"]
+    }
+  }
+}
+```
+
+Each target's own `expect` block still runs -- acknowledgment only exempts the cross-target byte comparison. Stale acknowledgments (where the acknowledged target's output is actually identical to every other target) are reported as warnings.
+
+### Target restrictions
+
+Cases that are only expressible in some languages use the `targets` field:
+
+```json
+{
+  "targets": ["python", "typescript"]
+}
+```
+
+This is used when a behavior is unrepresentable in a language's type system (e.g., returning an invalid type from a handler is impossible in Go but testable in Python and TypeScript).
+
+### Differential argv fuzzing
+
+`fuzz.py` generates random argv sequences and runs them against all three implementations of the same app definition, comparing results N-way. It reuses the same target harnesses as `run.py`. Divergences are identified by majority vote and minimized for debugging:
+
+```bash
+python conformance/fuzz.py --iterations 1000
+python conformance/fuzz.py --iterations 100 --seed 42
+```
+
+### Supplementary checks
+
+Beyond the JSON test cases:
+
+- `check_api_surface.py` introspects Python classes, parses Go source via an AST dumper (`conformance/describe_go/`), and runs the TypeScript `describe` self-dump to verify every API field exists in all implementations and in the conformance schema.
+- `check_error_parity.py` extracts error message patterns from all three implementations, normalizes them to a common signature form, and verifies symmetric coverage.
+- `check_schema_parity.py` runs `--dump-schema` against all targets with a rich app definition and compares the resulting JSON structurally.
+- `check_float_fuzz.py` formats a fixed set of double-precision bit patterns through all three formatters and asserts byte-for-byte agreement.
+- `generate_pairwise.py` uses allpairspy to generate combinatorial test cases covering all 2-way flag feature combinations.
+
+## Running conformance tests
+
+All commands are run from the repository root unless otherwise noted.
+
+### Single target
+
+```bash
+python conformance/run.py --target python
+python conformance/run.py --target go
+python conformance/run.py --target typescript
+```
+
+### Parity mode (all targets, cross-comparison)
+
+```bash
+python conformance/run.py --both
+```
+
+### With filtering and verbose output
+
+```bash
+python conformance/run.py --target python --filter "config" -v
+python conformance/run.py --both --filter "hermetic" -v
+```
+
+### Full check gate (all nine checks)
+
+From the `conformance/` directory:
+
+```bash
+uv run conformance check --tag pre-release
+```
+
+This runs all nine checks in dependency order: `api-surface` and `error-parity` first (fast, pure), then the per-target conformance runs, then parity and schema checks.
+
+### Individual supplementary checks
+
+```bash
+cd conformance && python check_api_surface.py
+cd conformance && python check_error_parity.py
+cd conformance && python check_schema_parity.py
+cd conformance && python check_float_fuzz.py
+```
+
+### Differential fuzzing
+
+```bash
+python conformance/fuzz.py --iterations 1000
+```
+
+## Adding a new conformance test case
+
+### 1. Choose or create a case file
+
+Cases are organized by feature area in `conformance/cases/`. Pick the file that matches your feature (e.g., `flags.json` for flag parsing, `config.json` for config subsystem, `checks.json` for the check system). Create a new file if the feature area does not exist yet.
+
+### 2. Write the case
+
+Each case is a JSON object in the file's top-level array:
+
+```json
+{
+  "name": "feature-area: descriptive name of what is being tested",
+  "app": {
+    "name": "myapp",
+    "version": "1.0.0",
+    "help": "test app",
+    "commands": [
+      {
+        "name": "greet",
+        "help": "say hello",
+        "flags": [
+          {
+            "name": "loud",
+            "help": "shout",
+            "type": "bool",
+            "default": false
+          }
+        ],
+        "handler_prints": "hello loud={loud}"
+      }
+    ]
+  },
+  "argv": ["greet", "--loud"],
+  "expect": {
+    "exit_code": 0,
+    "stdout_equals": "hello loud=true"
+  }
+}
+```
+
+Key fields in `expect`:
+
+| Field | Purpose |
+|-------|---------|
+| `exit_code` | Required. The expected process exit code. |
+| `stdout_equals` / `stderr_equals` | Exact match (after whitespace normalization). |
+| `stdout_contains` / `stderr_contains` | Substring(s) that must appear. |
+| `stdout_not_contains` / `stderr_not_contains` | Substring(s) that must not appear. |
+| `stdout_matches` / `stderr_matches` | Regex pattern(s) matched via `re.search`. |
+
+### 3. Use handler_prints for output
+
+The `handler_prints` field on a command is a template string. `{name}` is replaced with the value of the flag or arg named `name`. `{source:name}` is replaced with the provenance source label. This is how conformance tests produce deterministic, comparable output without writing actual handler code.
+
+### 4. Validate against the schema
+
+Every case is validated against `conformance/schema.json` when loaded. If your case uses a novel app definition structure, the schema may need updating first. Cases that intentionally craft invalid app definitions can set `skip_schema_validation: true`.
+
+### 5. Run and verify
+
+```bash
+# Run against all targets individually
+python conformance/run.py --target python --filter "your case name" -v
+python conformance/run.py --target go --filter "your case name" -v
+python conformance/run.py --target typescript --filter "your case name" -v
+
+# Run parity mode to verify cross-target byte identity
+python conformance/run.py --both --filter "your case name" -v
+```
+
+### 6. Handle intentional divergence
+
+If the new case has output that is legitimately language-specific, add an `acknowledged_divergence` block with a reason. At least one target per stream must remain unacknowledged to serve as the comparison baseline.
+
+## Architecture notes
+
+- The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently.
+- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`.
+- The conformance tool itself is built with strictcli (dogfooding the check system). Its checks are declared in `conformance/conformance_tool/.strictcli/checks.toml`.
+- Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, and `check_schema_parity.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.
