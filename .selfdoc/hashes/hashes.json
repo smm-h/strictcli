@@ -1,20 +1,20 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "44c9137d9addc84d8d983faea6c624b87128d6597b2e8301f91e885d952a51cf",
-    "description": "daf7a744622150d103db9ec51caf2ea78c1b846917ea8001fc1c687c194e6b10"
+    "content": "f9304377ed92bde487e7da6faca66ed8ae3e6ca0221527c0bea2320995e49519",
+    "description": "c379f44912f9efb7d2e5987c14aa95f52661e9212f0afda9e93afdfe803a79e4"
   },
   "en/conformance.md": {
-    "content": "d2e0ac830ec889fedc32d2ee680df7a0780984b7ddf843567b6795cdf6c278eb",
-    "description": "8bfdf3bc0d30cc1afa58b06ae652fc92a1cd3c419daedf57c9b4283b9d508e6f"
+    "content": "0786877b2eaad5f96fa6e625f3cc623a44d362987010f5895ace36edff7c40bc",
+    "description": "22f9577d29c3c24af4d0cbc16f0b5c3736ce7a75dafe2d7ce8c12d4073acdbbd"
   },
   "en/flag-system.md": {
-    "content": "f367f08f436f189d339acb0ca45d889cd3075e8f05e46a811b63bd656e5edaff",
-    "description": "a57e48d7a79d9581b1375547f85d189127fa15d3aab1ca1d6af5b4ffe977b222"
+    "content": "b9042a51ff599e5d3612618d9714583c54e2d6893b466c5b160e3773b2ea8a28",
+    "description": "80afb68440d5642bf6e3012bf4dc98f2cb0c6cf5a4cf8458a0b0b9d93cba1936"
   },
   "en/gen-index.md": {
     "content": "359780a8e59955de44f648dfe353b88188514ea671fc2f1241fb9728cb5dda04",
-    "description": "157591bb2cebb64b5d5aed2f98b0edfa00cdb1c34b6f71ce8323d43fc5a30f9b",
+    "description": "de421ec712350fd2336eb5ecdb2b218864da7af30526828f1b7c7f55293aa31b",
     "seed_hash": "157591bb2cebb64b5d5aed2f98b0edfa00cdb1c34b6f71ce8323d43fc5a30f9b"
   },
   "en/go-quickstart.md": {
