@@ -1,19 +1,39 @@
 {
   "_hash_version": 3,
+  "en/architecture.md": {
+    "content": "44c9137d9addc84d8d983faea6c624b87128d6597b2e8301f91e885d952a51cf",
+    "description": "daf7a744622150d103db9ec51caf2ea78c1b846917ea8001fc1c687c194e6b10"
+  },
+  "en/conformance.md": {
+    "content": "d2e0ac830ec889fedc32d2ee680df7a0780984b7ddf843567b6795cdf6c278eb",
+    "description": "8bfdf3bc0d30cc1afa58b06ae652fc92a1cd3c419daedf57c9b4283b9d508e6f"
+  },
   "en/gen-index.md": {
     "content": "359780a8e59955de44f648dfe353b88188514ea671fc2f1241fb9728cb5dda04",
     "description": "157591bb2cebb64b5d5aed2f98b0edfa00cdb1c34b6f71ce8323d43fc5a30f9b",
     "seed_hash": "157591bb2cebb64b5d5aed2f98b0edfa00cdb1c34b6f71ce8323d43fc5a30f9b"
+  },
+  "en/go-quickstart.md": {
+    "content": "2a2004fabcce9407d6d3e1414a1fe9e46120bb82304b7be9787dc87f2b4580f7",
+    "description": "1f5330a2db15a3891a82e62eb5df38bfea73e06827a61806c06907a5b14827a0"
   },
   "en/go-strictcli.md": {
     "content": "fdeec4c30ea7f755da9bceec5ec9a00f75acd02d258a2d78d5281cd669b32e19",
     "description": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3",
     "source_docstring": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
   },
+  "en/python-quickstart.md": {
+    "content": "d372361dc000a2a32233beea20f151637159d16c1eb183c0a2bcdd929209bbcb",
+    "description": "bef771817b0da77363e11a9d0f26b17cc15a37fb8d3c7b03f0868469732a279b"
+  },
   "en/python-strictcli.md": {
     "content": "6f1b6e55f543e1bfc7464a15348000471faada959c6686d2ed797541d3d806f7",
     "description": "47746dd5f86a6256c008a6e1565794914724be5772d654d4d71438cb4e314c64",
     "source_docstring": "869d760f17632ede6f9b09aa15d41ddd3e3626fd1471d84ece919e2402507969"
+  },
+  "en/typescript-quickstart.md": {
+    "content": "30462f0603984c135a2f6575d8316cc9f0067768d08ae639ebddd07078b99055",
+    "description": "8a9c6c082a39be6fb3eda34df1562b33cf1bb588efc522e978d2b8ba77d866a8"
   },
   "en/typescript-src-app.md": {
     "content": "b3a7b96dc80757525ecf75be7b79145d23b295e3225f88200eaf98dec991d7a5",
