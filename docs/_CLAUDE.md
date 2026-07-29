@@ -1,0 +1,189 @@
+---
+title: CLAUDE.md
+---
+# strictcli
+
+Strict CLI framework -- declare everything, infer nothing. Multiple first-class implementations kept in behavioral lockstep via a conformance test suite.
+
+## Monorepo structure
+
+This is an rlsbl monorepo (`.rlsbl-monorepo/workspace.toml`). Each sub-project has its own version, changelog, and release cycle.
+
+| Directory | What | Version file | Targets | Tests |
+|-----------|------|-------------|---------|-------|
+| `python/` | Python implementation (PyPI) | `pyproject.toml` | pypi | `uv run pytest` in `python/` |
+| `go/` | Go implementation | `VERSION` | go | `go test ./... -race` in `go/` |
+| `typescript/` | TypeScript implementation (npm, releasable `ts-strictcli`) | `package.json` | npm | `npm test` in `typescript/` |
+| `conformance/` | Cross-language conformance suite | n/a | plain | `python conformance/run.py --target python` / `--target go` / `--target typescript` |
+
+**Note:** `conformance/` is a `dev_node` project. It has no changelog, no user-facing changes, and does not participate in the changelog system. It is not released independently -- releases happen only as part of monorepo batch releases (`rlsbl monorepo release`) if at all.
+
+## Building and testing
+
+```bash
+# Python
+cd python && uv sync && uv run pytest
+
+# Go
+cd go && go test ./strictcli/... -race
+
+# TypeScript
+cd typescript && npm ci && npm test
+
+# Conformance (requires all implementations)
+cd conformance && python run.py --target python && python run.py --target go && python run.py --target typescript
+```
+
+## Architecture
+
+### Python (`python/strictcli/__init__.py`)
+
+Single-file implementation (~7,900 lines, tomlkit dependency). Key internal stages:
+
+1. **Registration** -- `@flag`/`@arg` decorators attach metadata to handlers; `@app.command()` triggers `_build_and_validate_command()` which merges tags, validates signatures, checks constraints.
+2. **Global flag parsing** -- `_parse_global_flags()` extracts app-level flags before and after the command token.
+3. **Command routing** -- first non-flag token selects the command or group.
+4. **Command parsing** -- `_parse_command()` resolves flags, args, env vars, defaults, mutex, choices, and custom validation.
+5. **Execution** -- handler called with ctx-first signature (`ctx, **kwargs`); the return value must be `int` (exit code), `None` (exit 0), or `strictcli.outcome(...)` -- anything else is a hard error.
+
+### Go (`go/strictcli/`)
+
+:-: list-modules path="go/strictcli/"
+
+Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface{}) Outcome`. The `Context` provides structured output, provenance, and infra access; `Outcome` is the branded return type replacing raw exit codes.
+
+### TypeScript (`typescript/src/`)
+
+:-: list-modules path="typescript/src/"
+
+### Conformance (`conformance/`)
+
+JSON test cases in `cases/` (57 files) define app structure + argv + expected output. `run.py` drives targets differently:
+
+- **Python**: generates a reference script via `ref_python.py` and executes it with the case argv.
+- **Go**: builds a single persistent harness binary (`conformance/harness/`, built once per run, cleaned up afterward) that interprets the app definition at runtime. `run.py` writes the app definition JSON to a temp file and passes its path via the `CONFORMANCE_APP_DEF` env var. There is NO per-app-hash Go binary cache.
+- **TypeScript**: runs the `harness_ts` runtime harness (`conformance/harness_ts/main.js`) -- a plain Node ESM script (no install or build of its own) that imports the built `typescript/dist` by relative path. `run.py` builds the dist once per run (`npm run build` in `typescript/`) and passes the app definition via the same `CONFORMANCE_APP_DEF` env var as Go.
+- `conformance/fuzz.py` (the differential argv fuzzer) drives all three implementations through the same runtime paths as `run.py`: Python via `ref_python.py` codegen, Go and TypeScript via the runtime harnesses above (each reading the app definition from `CONFORMANCE_APP_DEF`). It compares results N-way, identifying the odd one out by majority. The legacy `ref_go.py` Go codegen generator has been deleted.
+
+Cases may carry an `acknowledged_divergence` block for intrinsically language-specific output (per-stream target lists with a mandatory reason); acknowledged targets are excluded from byte-identity comparison while the case's own expect block still runs everywhere, and stale acknowledgments are reported. The `check` gate (`uv run conformance check --tag pre-release` from `conformance/`) runs 9 checks: api-surface, error-parity, conformance-python, conformance-go, conformance-typescript, conformance-parity, schema-parity, schema-freshness, float-fuzz.
+
+## TypeScript port -- durable facts
+
+The TypeScript implementation shipped as npm `strictcli` 0.31.0. These are the agent-facing constants that must not drift; the full historical design record and decision ledger live in `docs/history/_ts-port-spec.md` (the underscore prefix keeps it out of the published docs site -- selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md` as a page).
+
+- **Naming registry.** Conformance target `typescript`; conformance check `conformance-typescript`; rlsbl releasable and workspace project `ts-strictcli`; npm package `strictcli`; directory `typescript/`.
+- **TOML acceptance gate.** The TS parse layer MUST reject the six TOML-1.1-only constructs (parity with the stricter Python/Go TOML): backslash-`e` escapes and backslash-`x` hex escapes in basic strings; newlines and trailing commas inside inline tables; times without seconds and datetimes without seconds.
+- **TOML stack.** `smol-toml` (with `integersAsBigInt` so TOML integers round-trip as `bigint`) for parsing; a `toml-eslint-parser`-based single-key splicer for comment-preserving, byte-exact `config set` edits.
+- **SCF float canon.** One canonical decimal form for floats, byte-identical across Python/Go/TS; the exhaustive bit-pattern to expected-string vectors are committed at `conformance/float_vectors.json` and enforced by the `float-fuzz` check.
+
+## Cross-language parity rules
+
+All implementations must:
+
+- Support exactly four types: `str`, `bool`, `int`, `float`.
+- Use strict integer parsing (no leading/trailing whitespace, 64-bit signed bounds, no leading zeros in Go). Float parsing rejects NaN and Inf.
+- Accept the same boolean env var strings: `1|true|yes` / `0|false|no` (case-insensitive).
+- Produce identical error messages for identical inputs (checked by `check_error_parity.py`).
+- Export the same API surface (checked by `check_api_surface.py`).
+- Produce identical error messages for dependency violations (checked by `check_error_parity.py`).
+- Pass all conformance cases for every target before release.
+
+When adding a feature to one implementation, add it to all implementations and add conformance cases.
+
+## Key conventions
+
+- Flags with dashes (`--dry-run`) become underscore parameters (`dry_run`) in handlers.
+- `app.test(argv)` / `app.Test(argv)` runs the CLI in-process for unit tests -- never shell out.
+- Help text is mandatory on every Flag, Arg, Command, Group, and App. Missing help is a registration-time error.
+- Recursive group nesting: `group.group(name, help=...)` (Python) / `group.Group(name, help)` (Go). Arbitrary depth: App > Group > Group > ... > Command.
+- Passthrough commands bypass all parsing -- handler gets raw args plus global flag values.
+- `CoRequired(flags=[...])` declares flags that must appear together. `Requires(flag=..., depends_on=...)` declares one-way dependency. `Implies(flag=..., implies=..., value=...)` auto-sets a bool flag when a trigger is provided. All passed via `dependencies=[...]`.
+- `app.deprecate(name, message=...)` / `group.deprecate(name, message=...)` registers a retired command that prints the message to stderr and exits 1. Shown in help under a `Deprecated:` section.
+- Validation errors at registration time use panics (Go) / ValueError (Python) / a thrown error (TypeScript; the `RegistrationError` class stays internal). Parse-time errors print to stderr and exit 1 in every implementation.
+- `type=float` / `FloatFlag(...)` -- float type support. NaN and Inf are rejected at parse time.
+- Config file support -- `App(config=True)` (Python) / `WithConfig()` (Go). Format is JSON (default) or TOML (`config_format="toml"` / `WithConfigFormat("toml")`). Reads `~/.config/{name}/config.json` (or `.toml`). Precedence: CLI > env > config > default. Auto-registers `config show/set/path/edit/init` subcommands.
+- `--dump-schema` -- auto-injected flag on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups).
+- `--help` / `-h` is recognized anywhere in argv, not just at token boundaries.
+- `Default(nil)` fix (Go only) -- flags with `Default(nil)` display `[optional]` in help instead of `[default: <nil>]`.
+- Check system -- first-class check/validation framework with double-entry security. See below.
+
+### Handler result contract
+
+Every handler receives a context (Go and Python are ctx-first; TypeScript is args-first); there is no legacy no-ctx signature and no `ctx.emit` -- structured data flows back only through the return value.
+
+- **Go**: `func(ctx *Context, kwargs map[string]interface{}) Outcome`. Return `Exit(code)` (exit code, no data) or `ExitData(code, data)` (data is JSON-marshaled to stdout and captured by `Test()`/`Call()`).
+- **Python**: `def handler(ctx, **kwargs)` returning `int` (exit code), `None` (exit 0), or `strictcli.outcome(exit_code, data)`. Any other return type is a hard error. `Outcome` is branded -- it cannot be constructed directly, only via the `outcome()` factory. When `data` is not None it is JSON-printed to stdout and captured by `test()`/`call()`.
+- **TypeScript**: `handler: (args, ctx) => ...` returning a `number` (exit code), `undefined`/no return (exit 0), or `outcome(exit_code, data)`. Any other return is a hard error. `outcome()` is the only mint -- hand-forged objects are rejected.
+
+### Provenance
+
+Every resolved flag value carries a source label: `cli`, `env`, `config`, `default`, `implied` (injected by an Implies dependency), or `infra` (a `RelativeToRoot` default resolved through a declared infrastructure root).
+
+- Handler access: `ctx.Source(name)` (Go, panics if the flag is unknown) / `ctx.source(name)` (Python, raises KeyError). Both accept dashed or underscored names. Python additionally exposes `ctx.source_map()`.
+- `config show` displays each value's source.
+
+### Infrastructure env vars (infra roots + handshake)
+
+There are two kinds of declared infrastructure env vars; each is shown in help under an `Infrastructure:` section (annotated as not suppressed by `--hermetic`):
+
+- **Infra roots** -- `WithInfraRoot(envVar, defaultPath)` (Go) / `App(infra_root={env_var: default_path})` (Python). A location root: env var value if set, else the declared default (`~` expanded), resolved EAGERLY at construction time. Resolution has no argv dependency, which is why it is hermetic-immune.
+- **Handshake env vars** -- `WithHandshakeEnv(envVar, help)` (Go) / `App(handshake_env={env_var: help})` (Python). Cross-tool protocol signals set by the invoking process: no default, no eager capture, read LIVE at call time. A handshake var must not collide with a declared root.
+- **`RelativeToRoot(envVar, parts...)`** -- opaque path marker relative to a declared root. Accepted as a flag `default=` (resolved when defaults are applied at parse time; source label `infra`) and as the config path (`WithConfigPathRelativeToRoot(envVar, parts...)` in Go / `App(config_path=RelativeToRoot(...))` in Python; resolved eagerly at construction). Referencing an undeclared root is a registration-time hard error.
+- **Handler access**: `ctx.InfraValue(envVar)` (Go) / `ctx.infra_value(env_var)` (Python) returns `(value, ok)`. For roots the value is the construction-time resolution and the boolean is always true; for handshakes it is a live `os.environ` lookup and the boolean means "is set". Undeclared vars panic (Go) / raise KeyError (Python) -- declare everything.
+
+### Hermetic mode
+
+`--hermetic` is a reserved global flag on every app, intercepted by a position-aware pre-scan (alongside `--dump-schema`, `--mcp`, `--config`). Semantics:
+
+- Skips config file loading entirely (even the default XDG path) and skips env var resolution for flags. Values come only from CLI tokens, declared defaults, and infra roots.
+- Mutually exclusive with `--config` (parse error: `--hermetic and --config are mutually exclusive`).
+- Cannot be combined with the `config` subcommands (parse error: `--hermetic cannot be used with config commands`).
+- Does NOT suppress infra roots or handshake env vars -- those are resolved at construction / read live and are explicitly hermetic-immune.
+
+### Programmatic invocation
+
+`app.Call(commandPath, kwargs)` (Go) / `app.call(command_path, **kwargs)` (Python; async variant `app.acall(...)` runs the handler in a thread). Runs a command in-process with pre-typed values, bypassing CLI parsing, env var resolution, config loading, and stdin handling.
+
+- `commandPath` is dot-separated (`"deploy"`, `"dns.zone.create"`). Kwargs use underscored parameter names. Passthrough commands take a single `_args` key with the raw argument list.
+- Returns the handler's structured data when present, else the exit code (Go) / the handler's return value (Python).
+- Failures (unknown command, missing required flags, mutex violations, dependency errors) produce `InvokeError` -- returned as the error in Go, raised as an exception in Python.
+
+### Check system
+
+Enabled via `WithChecks(path)` (Go) / `checks_path=` (Python), pointing to a TOML file (source of truth, committed to repo). Checks are registered in code via `@app.check("name")` (Python) / `app.RegisterCheck("name", fn)` (Go). Declaration and registration must agree -- declared but unregistered or registered but undeclared are errors (double-entry security). The TOML file requires a top-level `app` field that must match the app name.
+
+**TOML schema**: Required top-level `app` field (must match app name). `[checks.<name>]` sections with required fields: `tags` (list of strings), `severity` ("error"/"warn"), `fast` (bool), `pure` (bool), `needs_network` (bool), `depends_on` (list of check names). Check names: `[a-z][a-z0-9-]*`. Every field must be explicit -- no defaults section. The `[checks]` section is optional -- an `app` field with no checks is a valid TOML file.
+
+**Check command**: auto-registered when checks are enabled via `WithChecks(path)` (Go) or `checks_path=` (Python). 8 flags: `--all`, `--tag <dsl>`, `--name <glob>`, `--list`, `--json`, `--ignore-warnings`, `--verbose`, `--dry-run`. No flags = show help. Hidden from help when no TOML exists.
+
+**Tag DSL**: `--tag` accepts a set-operation expression. Operators by precedence (tightest first): `!` (NOT), `&` (AND), `^` (XOR), `|` (OR), `-` (DIFF). Parentheses for grouping. Example: `--tag "(release | changelog) & !slow"`.
+
+**CheckResult**: `status` (pass/fail/warn/skip), `message` (str), `details` (list of str), `notes` (informational messages recorded via `Note()`, verdict-inert). Warn causes nonzero exit unless `--ignore-warnings`. `CheckRunResult` wraps `CheckOutcome` with `DurationMs` (wall-clock timing in integer milliseconds).
+
+**CheckContext**: protocol/interface with single required field `ProjectRoot() string` / `project_root: Path`. Tool sets a factory via `app.set_check_context(factory)` / `app.SetCheckContext(factory)`.
+
+**depends_on**: DAG resolution with cycle detection. Dependency failure skips dependents. Filtered-out dependencies are pulled back in when a selected check depends on them.
+
+**Schema integration**: `--dump-schema` includes a `checks` top-level key when checks are enabled.
+
+**Hooks**: strictcli does NOT manage `.git/hooks/`. External tools call `myapp check --tag pre-push` from their own hook scripts.
+
+## Release workflow
+
+`python/` and `go/` release independently via `rlsbl release` from their own directories. The TypeScript implementation is the releasable `ts-strictcli` and releases via `rlsbl monorepo release` from the repo root (changelog entries are added from inside `typescript/` and land in `.rlsbl-monorepo/releasables/ts-strictcli/changes/`). See sub-project CLAUDE.md files and the parent `~/Projects/CLAUDE.md` for rlsbl details.
+
+## Useful commands
+
+```bash
+# Check rlsbl status across sub-projects
+cd python && rlsbl status
+cd go && rlsbl status
+cd typescript && rlsbl status
+cd conformance && rlsbl status
+
+# API surface check
+cd conformance && python check_api_surface.py
+
+# Error message parity check
+cd conformance && python check_error_parity.py
+```

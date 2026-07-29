@@ -51,5 +51,9 @@
   },
   "assembly": {
     "repo": "smm-h/selfdoc-cache"
-  }
+  },
+  "root_files": [
+    "docs/_README.md",
+    "docs/_CLAUDE.md"
+  ]
 }
