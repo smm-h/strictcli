@@ -1750,6 +1750,7 @@ func (a *App) infraAccess(hermetic bool) *infraAccess {
 	return &infraAccess{roots: roots, handshakes: handshakes, connections: connections, hermetic: hermetic}
 }
 
+// Command registers a top-level command with the given name, help text, and handler.
 func (a *App) Command(name, help string, handler func(ctx *Context, kwargs map[string]interface{}) Outcome, opts ...CmdOption) {
 	cmd := buildAndValidateCommand(name, help, handler, a.EnvPrefix, a.globalFlags, nil, opts)
 	a.checkCmdFieldCollisions(cmd)

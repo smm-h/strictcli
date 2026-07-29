@@ -19,6 +19,7 @@ type InvokeError struct {
 	Message string
 }
 
+// Error returns the error message describing the invocation failure.
 func (e *InvokeError) Error() string {
 	return e.Message
 }
