@@ -25,7 +25,7 @@ export class RegistrationError extends Error {
 	}
 }
 
-/** Thrown for parse-time failures (printed to stderr, exit 1). */
+/** Thrown for parse-time failures (printed to stderr, process exits with code 1). Internal; not re-exported. */
 export class ParseError extends Error {
 	constructor(message: string) {
 		super(message);

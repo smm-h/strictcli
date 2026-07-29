@@ -53,6 +53,7 @@ export interface CheckContext {
 	readonly projectRoot: string;
 }
 
+/** Check severity level: "error" causes hard failures, "warn" is non-fatal unless --ignore-warnings is absent. */
 export type CheckSeverity = "error" | "warn";
 
 /** A single minted finding: text plus severity ("error" or "warn"). */
@@ -136,6 +137,7 @@ export function deriveStatus(o: CheckOutcome): CheckStatus {
 	}
 }
 
+/** Derived check verdict label: "pass", "fail", "warn", or "skip". */
 export type CheckStatus = "pass" | "fail" | "warn" | "skip";
 
 // --- Reporters ---

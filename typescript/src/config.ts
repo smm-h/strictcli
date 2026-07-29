@@ -611,9 +611,17 @@ export function coerceConfigValueForFlag(value: unknown, f: AnyFlag): unknown {
 
 // --- Config fields ---
 
+/**
+ * Declares a typed config file field. Fields with no default are required
+ * (the config system errors when they are missing); fields with a default
+ * are optional. Dots in the field name form TOML sections.
+ */
 export interface ConfigFieldSpec<Out = unknown> {
+	/** The scalar type carrier (t.str, t.bool, t.int, or t.float). */
 	readonly type: Carrier<Out, ScalarSchema>;
+	/** Help text displayed in `config show` output. */
 	readonly help: string;
+	/** Default value; omit to make the field required. */
 	readonly default?: Out;
 }
 

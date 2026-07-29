@@ -114,6 +114,7 @@ interface CheckSpecInitBase {
 	readonly scope?: string;
 }
 
+/** Initialization options for an error-severity check spec. The impl receives an ErrorReporter. */
 export interface ErrorCheckSpecInit extends CheckSpecInitBase {
 	readonly impl: (
 		ctx: CheckContext,
@@ -121,6 +122,7 @@ export interface ErrorCheckSpecInit extends CheckSpecInitBase {
 	) => CheckOutcome | Promise<CheckOutcome>;
 }
 
+/** Initialization options for a warn-severity check spec. The impl receives a WarnReporter. */
 export interface WarnCheckSpecInit extends CheckSpecInitBase {
 	readonly impl: (
 		ctx: CheckContext,

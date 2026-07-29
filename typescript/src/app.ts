@@ -116,6 +116,7 @@ import { asToolsForApp, jsonSchemaForApp, type Tool } from "./tool.js";
 
 // --- Public surface ---
 
+/** Configuration for creating a new strictcli application via createApp(). */
 export interface AppSpec {
 	readonly name: string;
 	readonly version: string;
@@ -149,19 +150,28 @@ export interface AppSpec {
 	readonly testCoverage?: boolean;
 }
 
+/** Configuration for creating a command group via app.group() or group.group(). */
 export interface GroupSpec {
 	readonly help: string;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 }
 
+/** A named container for commands and nested groups, organizing the CLI hierarchy. */
 export interface Group {
+	/** The group's registered name (used as the CLI token). */
 	readonly name: string;
+	/** Help text displayed in usage output. */
 	readonly help: string;
+	/** Tags inherited by all commands registered within this group. */
 	readonly tags: readonly string[];
+	/** When true, the group and its contents are hidden from help output. */
 	readonly hidden: boolean;
+	/** Registers a command or passthrough command within this group. */
 	command(def: AnyCommand | PassthroughDef<string>): void;
+	/** Creates and registers a nested subgroup. */
 	group(name: string, spec: GroupSpec): Group;
+	/** Registers a deprecated command name that prints a message and exits 1. */
 	deprecate(def: DeprecatedDef<string>): void;
 }
 
@@ -174,12 +184,19 @@ export interface Result {
 	readonly data?: unknown;
 }
 
+/** The top-level CLI application, created via createApp(). */
 export interface App {
+	/** The application name (used in help output, MCP server info, and schema). */
 	readonly name: string;
+	/** The application version string (displayed by --version). */
 	readonly version: string;
+	/** Top-level help text displayed in usage output. */
 	readonly help: string;
+	/** Registers a command or passthrough command at the top level. */
 	command(def: AnyCommand | PassthroughDef<string>): void;
+	/** Creates and registers a top-level command group. */
 	group(name: string, spec: GroupSpec): Group;
+	/** Registers a deprecated command name that prints a message and exits 1. */
 	deprecate(def: DeprecatedDef<string>): void;
 	/**
 	 * Declares a typed config file field. Fields with no default are required
@@ -313,6 +330,11 @@ export interface RunChecksResult {
 	readonly exitCode: number;
 }
 
+/**
+ * Creates a new strictcli application. This is the primary entry point for
+ * building a CLI: configure the app via AppSpec, register commands and groups
+ * on the returned App, then call app.run() to parse argv and dispatch.
+ */
 export function createApp(spec: AppSpec): App {
 	return new AppImpl(spec);
 }

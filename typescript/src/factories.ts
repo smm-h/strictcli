@@ -144,8 +144,10 @@ function matchesScalar(schema: ScalarSchema | ElemSchema, v: unknown): boolean {
 // --- Flags ---
 
 /** For list carriers, the element type; for scalars and dicts, the value itself. */
+/** Extracts the element type from a list output type, or returns the type itself for scalars/dicts. */
 export type ElementOf<Out> = Out extends readonly (infer E)[] ? E : Out;
 
+/** How to resolve a flag set in both CLI args and config: "cli-wins" keeps the CLI value, "error" rejects the conflict. */
 export type ConflictMode = "cli-wins" | "error";
 
 /**
@@ -187,6 +189,7 @@ export type FlagOpts<Out, S extends Schema> = {
 	readonly connectionEnv?: string;
 };
 
+/** A fully typed flag descriptor produced by the flag() factory. */
 export interface FlagDef<
 	N extends string,
 	Out,
@@ -424,6 +427,10 @@ function validateFlagConfig(
 	}
 }
 
+/**
+ * Creates a flag descriptor for use in defineCommand(). Validates the flag
+ * configuration at construction time (help text, default type, choices, etc.).
+ */
 export function flag<
 	const N extends string,
 	Out,
@@ -471,6 +478,7 @@ export type ArgOpts<Out, S extends ScalarSchema> =
 			readonly choices?: ArgChoices<Out, S>;
 	  };
 
+/** A fully typed positional argument descriptor produced by the arg() factory. */
 export interface ArgDef<
 	N extends string,
 	Out,
@@ -510,6 +518,10 @@ export interface ArgOptsView {
 	readonly choices?: readonly unknown[];
 }
 
+/**
+ * Creates a positional argument descriptor for use in defineCommand(). Args
+ * take scalar carriers only; variadic args (variadic: true) collect an array.
+ */
 export function arg<
 	const N extends string,
 	Out,
@@ -593,6 +605,7 @@ export function arg<
 
 // --- Dependency and flag-set descriptors ---
 
+/** A named group of flags that can be shared across multiple commands. */
 export interface FlagSet<N extends string, F extends FlagMap> {
 	readonly kind: "flag-set";
 	readonly name: N;
@@ -606,6 +619,7 @@ export interface AnyFlagSet {
 	readonly flags: FlagMap;
 }
 
+/** Creates a named flag set for sharing flags across commands. */
 export function flagSet<const N extends string, const F extends FlagMap>(
 	name: N,
 	flags: F,
@@ -613,6 +627,7 @@ export function flagSet<const N extends string, const F extends FlagMap>(
 	return { kind: "flag-set", name, flags };
 }
 
+/** A group of mutually exclusive flags -- at most one may be provided per invocation. */
 export interface MutexGroup<F extends FlagMap> {
 	readonly kind: "mutex-group";
 	readonly flags: F;
@@ -624,26 +639,31 @@ export interface AnyMutexGroup {
 	readonly flags: FlagMap;
 }
 
+/** Creates a mutex group: at most one of the given flags may be provided. */
 export function mutexGroup<const F extends FlagMap>(flags: F): MutexGroup<F> {
 	return { kind: "mutex-group", flags };
 }
 
+/** Constraint: the listed flags must all be provided together or all be absent. */
 export interface CoRequired {
 	readonly kind: "co-required";
 	/** Flag names (dash form), matching the sibling CoRequired shape. */
 	readonly flags: readonly string[];
 }
 
+/** Creates a co-required constraint: all listed flags must appear together. */
 export function coRequired(flags: readonly string[]): CoRequired {
 	return { kind: "co-required", flags };
 }
 
+/** Constraint: when `flag` is provided, `dependsOn` must also be provided. */
 export interface Requires {
 	readonly kind: "requires";
 	readonly flag: string;
 	readonly dependsOn: string;
 }
 
+/** Creates a one-way dependency: `flag` requires `dependsOn` to also be set. */
 export function requires(spec: {
 	readonly flag: string;
 	readonly dependsOn: string;
@@ -651,6 +671,7 @@ export function requires(spec: {
 	return { kind: "requires", flag: spec.flag, dependsOn: spec.dependsOn };
 }
 
+/** Constraint: when `flag` is provided, `implies` is automatically set to `value`. Both must be bool flags. */
 export interface Implies {
 	readonly kind: "implies";
 	readonly flag: string;
@@ -658,6 +679,7 @@ export interface Implies {
 	readonly value: boolean;
 }
 
+/** Creates an implication: when `flag` is set, auto-sets `implies` to `value`. Both must be bool flags. */
 export function implies(spec: {
 	readonly flag: string;
 	readonly implies: string;
@@ -671,6 +693,7 @@ export function implies(spec: {
 	};
 }
 
+/** Union of all inter-flag dependency constraint types. */
 export type Dependency = CoRequired | Requires | Implies;
 
 // --- Command carriers ---
@@ -680,8 +703,10 @@ export type Dependency = CoRequired | Requires | Implies;
  * come free (no dash-to-underscore type machinery). defineCommand verifies at
  * runtime that each key is the underscore form of its flag's name.
  */
+/** A keyed map of flags where the key is the underscore form of the flag name (also the handler arg key). */
 export type FlagMap = Readonly<Record<string, AnyFlag>>;
 
+/** A command handler function receiving typed args and a Context. */
 export type Handler<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
@@ -692,6 +717,7 @@ export type Handler<
 	ctx: Context,
 ) => HandlerReturn | Promise<HandlerReturn>;
 
+/** A fully validated command descriptor produced by defineCommand(). */
 export interface CommandDef<
 	N extends string,
 	F extends FlagMap,
@@ -738,6 +764,7 @@ export interface AnyCommand {
 	readonly configFields: readonly string[];
 }
 
+/** Configuration passed to defineCommand() to create a CommandDef. */
 export interface CommandSpec<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
@@ -786,6 +813,10 @@ function validateFlagMapKeys(cmdName: string, flags: FlagMap): void {
 	}
 }
 
+/**
+ * Creates a command descriptor with typed flags, args, flag sets, mutex
+ * groups, and dependencies. Validates all constraints at construction time.
+ */
 export function defineCommand<
 	const N extends string,
 	const F extends FlagMap = Record<never, never>,
@@ -960,17 +991,20 @@ export function defineCommand<
 
 // --- Passthrough and deprecated command carriers ---
 
+/** Arguments passed to a passthrough command handler: the command name, raw args, and global flag values. */
 export interface PassthroughArgs {
 	readonly name: string;
 	readonly args: readonly string[];
 	readonly globals: Readonly<Record<string, unknown>>;
 }
 
+/** Handler function for passthrough commands (receives raw args, no parsing). */
 export type PassthroughHandler = (
 	args: PassthroughArgs,
 	ctx: Context,
 ) => HandlerReturn | Promise<HandlerReturn>;
 
+/** A passthrough command descriptor produced by the passthrough() factory. */
 export interface PassthroughDef<N extends string> {
 	readonly kind: "passthrough";
 	readonly name: N;
@@ -980,6 +1014,10 @@ export interface PassthroughDef<N extends string> {
 	readonly hidden: boolean;
 }
 
+/**
+ * Creates a passthrough command that bypasses all flag/arg parsing. The
+ * handler receives the raw argument list and global flag values.
+ */
 export function passthrough<const N extends string>(
 	name: N,
 	spec: {
@@ -1003,12 +1041,14 @@ export function passthrough<const N extends string>(
 	};
 }
 
+/** A deprecated command descriptor produced by the deprecated() factory. */
 export interface DeprecatedDef<N extends string> {
 	readonly kind: "deprecated";
 	readonly name: N;
 	readonly message: string;
 }
 
+/** Creates a deprecated command entry that prints a message to stderr and exits 1 when invoked. */
 export function deprecated<const N extends string>(
 	name: N,
 	message: string,

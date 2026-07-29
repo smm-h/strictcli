@@ -68,6 +68,11 @@ type OptionalArgKeys<A extends readonly AnyArg[]> = {
 		: never]?: ArgValue<D>;
 };
 
+/**
+ * Computes the handler args type from a flag map and arg tuple. Flags with
+ * `default: null` become optional keys; args with `required: false` and no
+ * default become optional keys.
+ */
 export type InferHandlerArgs<
 	F extends FlagMap,
 	A extends readonly AnyArg[],

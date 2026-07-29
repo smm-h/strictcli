@@ -12,12 +12,15 @@ import {
 
 // --- Schema string unions (closed set of ten) ---
 
+/** The four primitive type schemas supported by strictcli flags and args. */
 export type ScalarSchema = "str" | "bool" | "int" | "float";
 /** Element schemas for list items and dict values -- bool is deliberately excluded. */
 export type ElemSchema = "str" | "int" | "float";
+/** Schema string for list-typed flags, parameterized by the element type. */
 export type ListSchema = `list[${ElemSchema}]`;
-/** Dict keys are always str. No space after the comma. */
+/** Schema string for dict-typed flags (keys are always str), parameterized by the value type. */
 export type DictSchema = `dict[str,${ElemSchema}]`;
+/** Union of all valid schema strings: scalar, list, or dict. */
 export type Schema = ScalarSchema | ListSchema | DictSchema;
 
 // --- Carrier ---
@@ -59,6 +62,16 @@ function compoundParse(): never {
 	);
 }
 
+/**
+ * Type carrier namespace. Each property (t.str, t.bool, t.int, t.float) is a
+ * scalar carrier pairing a runtime parser with a phantom output type. t.list()
+ * and t.dict() build compound carriers from a scalar element carrier.
+ *
+ * @example
+ * flag("name", t.str, { help: "User name" })
+ * flag("count", t.int, { help: "Item count" })
+ * flag("tags", t.list(t.str), { help: "Tag list", repeatable: true, unique: true })
+ */
 export const t = {
 	// Scalar parse bodies are the strict parity parsers from values.ts: int
 	// strictness (no whitespace, 64-bit signed bounds), float NaN/Inf
@@ -100,6 +113,6 @@ export type { Outcome } from "./outcome.js";
 /** Strict result contract: a handler returns a number, undefined, or outcome(...). */
 export type HandlerResult = number | undefined | Outcome;
 
-/** What a handler function may return (void covers handlers with no return statement). */
+/** What a handler function may return. Includes void to allow handlers with no explicit return statement. */
 // biome-ignore lint/suspicious/noConfusingVoidType: replacing void with undefined would reject handlers that have no return statement (their return type infers as void, which is not assignable to undefined)
 export type HandlerReturn = HandlerResult | void;

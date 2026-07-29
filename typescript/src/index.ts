@@ -4,6 +4,7 @@
  * types.
  */
 
+/** The current version of the strictcli TypeScript package. */
 export const VERSION = "0.31.0";
 
 export type {
