@@ -2618,14 +2618,17 @@ class CheckRunResult:
 
     @property
     def message(self) -> str:
+        """The outcome's human-readable message."""
         return self.outcome.message
 
     @property
     def problems(self) -> tuple[_CheckProblem, ...]:
+        """The minted problems (error and warn severity) from this check run."""
         return self.outcome.problems
 
     @property
     def notes(self) -> tuple[str, ...]:
+        """Informational notes recorded during the check run (verdict-inert)."""
         return self.outcome.notes
 
     def gated(self) -> bool:
