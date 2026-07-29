@@ -8,8 +8,28 @@
   "base_url": "https://strictcli.smmh.dev",
   "pages": [
     {
+      "path": "architecture.md",
+      "title": "Architecture and Internals",
+      "type": "doc"
+    },
+    {
+      "path": "conformance.md",
+      "title": "Cross-Language Conformance",
+      "type": "doc"
+    },
+    {
+      "path": "flag-system.md",
+      "title": "Flag System",
+      "type": "doc"
+    },
+    {
       "path": "gen-index.md",
       "title": "API Reference",
+      "type": "doc"
+    },
+    {
+      "path": "go-quickstart.md",
+      "title": "Go Quickstart",
       "type": "doc"
     },
     {
@@ -18,8 +38,18 @@
       "type": "doc"
     },
     {
+      "path": "python-quickstart.md",
+      "title": "Python Quickstart",
+      "type": "doc"
+    },
+    {
       "path": "python-strictcli.md",
       "title": "python.strictcli",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-quickstart.md",
+      "title": "TypeScript Quickstart",
       "type": "doc"
     },
     {
@@ -174,5 +204,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-07-24T07:18:58.086985+00:00"
+  "last_gen": "2026-07-29T16:12:33.673514+00:00"
 }

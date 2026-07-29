@@ -23,7 +23,11 @@ import strictcli
 
 ## Creating an App
 
-Every CLI starts with `App`. The `name`, `version`, and `help` arguments are all required. Empty help text is a hard error.
+Every CLI starts with `App`, which takes the application name, version string,
+and help text as required arguments. Empty help text is a hard error -- strictcli
+enforces self-documenting apps from the first line of code. Additional options
+like `config=True`, `env_prefix=`, and `config_format=` are passed as keyword
+arguments.
 
 ```python
 import strictcli
@@ -55,7 +59,12 @@ mytool 0.1.0
 
 ## Handler Signature
 
-Every command handler receives `ctx` as its first argument. Flag and arg values arrive as keyword arguments (dashes converted to underscores: `--dry-run` becomes `dry_run`).
+Every command handler receives `ctx` as its first argument, providing structured
+output methods and provenance introspection. Flag and arg values arrive as
+keyword arguments with dashes converted to underscores (`--dry-run` becomes
+`dry_run`). The return value must be `int` (exit code), `None` (exit 0), or
+`strictcli.outcome()` for structured data -- any other return type is a hard
+error.
 
 ```python
 @app.command("greet", help="Greet someone")
@@ -83,7 +92,10 @@ def greet(ctx, name, loud):
 
 ### Returning Structured Data
 
-Use `strictcli.outcome()` to return structured data. The data is JSON-printed to stdout and captured by `test()` and `call()`.
+Use `strictcli.outcome()` to return structured data from a command handler. The
+data is JSON-printed to stdout and captured by `test()` and `call()` for
+programmatic consumption. The `outcome()` factory is the only way to construct
+a branded `Outcome` -- hand-forging the return value is rejected at runtime.
 
 ```python
 @app.command("status", help="Show status")
@@ -98,7 +110,11 @@ $ mytool status
 
 ## Flags
 
-Flags are declared with the `@strictcli.flag()` decorator. The `name` and `help` arguments are always required. strictcli supports four scalar types: `str`, `bool`, `int`, and `float`.
+Flags are declared with the `@strictcli.flag()` decorator, which attaches flag
+metadata to the handler function before command registration. The `name` and
+`help` arguments are always required. strictcli supports four scalar types:
+`str` (default), `bool`, `int`, and `float`, plus compound types `list[T]` and
+`dict[str, T]` for repeatable and key-value flags.
 
 ### String Flags
 
@@ -145,7 +161,11 @@ Float parsing rejects NaN and Inf.
 
 ### Flag Options
 
-All available `@strictcli.flag()` parameters:
+All available `@strictcli.flag()` parameters are listed below. The `name` and
+`help` parameters are always required and must be non-empty strings. The
+remaining parameters control type, defaults, choices, environment variable
+binding, short aliases, custom validation callbacks, and repeat semantics
+including uniqueness enforcement and env var splitting for repeatable flags:
 
 | Parameter | Description |
 |-----------|-------------|
@@ -172,7 +192,9 @@ Usage: `-o myfile.txt`, `-v`.
 
 ### Choices
 
-Restrict a flag to specific values:
+Restrict a flag to specific values using the `choices` parameter. Values not in
+the choices list produce a parse error listing all allowed values. All choice
+values must match the declared flag type, and bool flags cannot have choices:
 
 ```python
 @strictcli.flag("format", type=str, choices=["json", "yaml", "csv"], help="Output format")
@@ -181,7 +203,10 @@ Restrict a flag to specific values:
 
 ### Environment Variables
 
-Read flag values from the environment:
+Read flag values from the environment using the `env` parameter. Environment
+variables sit between CLI tokens and config file values in the resolution
+cascade (CLI > env > config > default), and are skipped entirely under
+`--hermetic` mode:
 
 ```python
 @strictcli.flag("token", type=str, env="MYTOOL_TOKEN", help="API token")
@@ -201,7 +226,10 @@ Precedence: CLI > env > config > default. Boolean env values accept `1|true|yes`
 
 ### Repeatable Flags
 
-A repeatable flag can appear multiple times, collecting values into a list:
+A repeatable flag can appear multiple times on the command line, collecting
+values into a list. Repeatable flags are never required and default to an empty
+list. The `unique` parameter is mandatory: set `unique=True` to reject duplicate
+values, or `unique=False` to allow them:
 
 ```python
 @app.command("process", help="Process records")
@@ -228,7 +256,10 @@ You can also use `list[T]` as the type, which is equivalent to `repeatable=True`
 
 ## Positional Arguments
 
-Use `@strictcli.arg()` to declare positional arguments. Arguments are required by default.
+Use `@strictcli.arg()` to declare positional arguments that are consumed in
+declaration order after all flags have been parsed. Arguments are required by
+default. Optional arguments use `required=False` and may declare a default
+value.
 
 ```python
 @app.command("deploy", help="Deploy to an environment")
@@ -252,7 +283,10 @@ def deploy(ctx, environment, version):
 
 ### Variadic Arguments
 
-A variadic argument collects all remaining positional values into a list:
+A variadic argument collects all remaining positional values into a list. It
+must be the last positional argument in the command's declaration, and only one
+variadic argument is allowed per command. A variadic arg with `required=True`
+(the default) requires at least one value:
 
 ```python
 @app.command("process", help="Process files")
@@ -273,7 +307,10 @@ Only one variadic argument is allowed, and it must be the last. You can also use
 
 ## Global Flags
 
-Global flags are available to all commands. Pass them via the `flags` parameter on `App`:
+Global flags are available to all commands and can appear before or after the
+command name in argv. Pass them via the `flags` parameter on `App`. Global flag
+names cannot collide with reserved framework names like `help`, `version`,
+`dump-schema`, `mcp`, `config`, or `hermetic`:
 
 ```python
 app = strictcli.App(
@@ -300,7 +337,10 @@ Reserved global flag names that cannot be used: `help`, `h`, `version`, `v`, `du
 
 ## Command Groups
 
-Groups organize commands into namespaces. Groups can nest to arbitrary depth.
+Groups organize commands into namespaces, creating a hierarchical command
+structure like `mytool dns zone list`. Groups can nest to arbitrary depth, and
+each group requires a name and help text. When a group is reached without a
+subcommand, the group's help text is displayed.
 
 ```python
 app = strictcli.App(name="mytool", version="0.1.0", help="Infrastructure tool")
@@ -339,11 +379,17 @@ $ mytool dns zone delete --name example.com
 
 ## Flag Naming Conventions
 
-strictcli enforces strict flag naming rules at registration time. Violations raise `ValueError`.
+strictcli enforces strict flag naming rules at registration time to prevent
+ambiguous flag names and protect the negation namespace. Violations raise
+`ValueError` with a descriptive message explaining what is wrong and how to fix
+it. These rules are identical across all three implementations.
 
 ### Bare `--force` is banned
 
-The flag name cannot be exactly `"force"`. Use a qualified name that describes what is being forced:
+The flag name cannot be exactly `"force"` because a generic force flag lets
+automation bypass guardrails without specifying what is being forced. Use a
+qualified name that describes the specific action being forced, making the
+intent explicit and auditable:
 
 ```python
 # This raises ValueError:
@@ -356,7 +402,10 @@ strictcli.flag("force-delete", type=bool, default=False, help="Delete without co
 
 ### `--no-*` prefix is reserved
 
-Flag names cannot start with `no-`. The `--no-` prefix is auto-generated by the negation system for bool flags:
+Flag names cannot start with `no-` because the `--no-` prefix is auto-generated
+by the negation system for boolean flags. Allowing user-defined flags in this
+namespace would create double-negation ambiguity where `--no-no-cache` becomes
+the negation form of a flag named `no-cache`:
 
 ```python
 # This raises ValueError:
@@ -369,15 +418,24 @@ strictcli.flag("cache", type=bool, default=True, help="Enable caching")
 
 ### `--dry-run` is the standard name
 
-Use `--dry-run` for dry-run flags (not `--dry`).
+Use `--dry-run` for dry-run flags (not `--dry` or any other abbreviation). This
+is a naming convention enforced across all strictcli projects to ensure
+consistent flag names that agents and users can predict without checking help
+text.
 
 ### Help text is mandatory
 
-Every flag, arg, command, group, and app must have non-empty help text. Missing help raises `ValueError` at registration time.
+Every flag, arg, command, group, and app must have non-empty help text. Missing
+or empty help raises `ValueError` at registration time with no opt-out. This
+ensures that every strictcli application is self-documenting and users always
+have access to meaningful help for every flag and command.
 
 ## Mutex Groups
 
-Declare mutually exclusive flags -- at most one may be provided:
+Declare mutually exclusive flags using `MutexGroup` via the `mutex` parameter.
+At most one flag in the group may have a value from an explicit source (CLI, env,
+or config). A mutex group must contain at least 2 flags, and flags in a mutex
+group with no default get `None` instead of being required:
 
 ```python
 @app.command("output", help="Produce output", mutex=[
@@ -392,7 +450,10 @@ def output(ctx, **kwargs):
 
 ## Dependencies
 
-Declare relationships between flags using the `dependencies` parameter:
+Declare relationships between flags using the `dependencies` parameter. Three
+dependency types are available: `Requires` (one-way dependency), `CoRequired`
+(must appear together or not at all), and `Implies` (automatically sets a target
+flag when a trigger is provided):
 
 ```python
 @app.command("deploy", help="Deploy the app", dependencies=[
@@ -419,7 +480,10 @@ def deploy(ctx, target, region, dry_run, auto_approve):
 
 ## Flag Sets
 
-Reuse the same set of flags across multiple commands:
+Reuse the same set of flags across multiple commands by grouping them into a
+named `FlagSet`. Each command that uses a flag set receives all its flags as if
+they were declared directly on the command, including type checking, env var
+binding, and constraint validation:
 
 ```python
 auth_flags = strictcli.FlagSet(name="auth", flags=[
@@ -439,7 +503,10 @@ def delete_cmd(ctx, token, region, resource_id):
 
 ## Config File Support
 
-Pass `config=True` to `App` to enable automatic config file loading and register `config show/set/path/edit/init` subcommands.
+Pass `config=True` to `App` to enable automatic config file loading from the
+XDG config directory and register five `config` subcommands (`show`, `set`,
+`path`, `edit`, `init`) for managing the configuration file. Config values
+participate in the flag resolution cascade between env vars and defaults.
 
 ```python
 app = strictcli.App(
@@ -460,7 +527,11 @@ Config files live at `~/.config/mytool/config.json` by default. Value precedence
 
 ### Config format
 
-Default format is JSON. Use TOML with `config_format="toml"`:
+Default format is JSON, which uses the standard library parser. Use TOML with
+`config_format="toml"` for human-editable configuration files with comments and
+section headers. TOML parsing is strict and rejects 6 TOML-1.1-only constructs
+(including backslash-e escapes and trailing commas in inline tables) to maintain
+byte-level parity across the Python, Go, and TypeScript implementations:
 
 ```python
 app = strictcli.App(
@@ -474,7 +545,11 @@ app = strictcli.App(
 
 ### Auto-registered config commands
 
-When config is enabled, these subcommands are registered automatically:
+When config is enabled, these five subcommands are registered automatically
+under a `config` group. They provide a complete config management interface
+without any additional code, covering display of current values with their
+provenance sources, in-place modification, path inspection, editor integration,
+and initialization of the config file with default values:
 
 - `mytool config show` -- display current config with value sources
 - `mytool config set <key> <value>` -- set a config value
@@ -484,7 +559,10 @@ When config is enabled, these subcommands are registered automatically:
 
 ### Config path override
 
-Override the config path at the CLI level with `--config <path>`, or at construction with `config_path=`:
+Override the config path at the CLI level with `--config <path>` (a reserved
+global flag), or at construction time with `config_path=`. The CLI override
+takes precedence over the construction-time path, which takes precedence over
+the default XDG location. Using `--config` with a missing file is a hard error:
 
 ```python
 app = strictcli.App(
@@ -498,7 +576,10 @@ app = strictcli.App(
 
 ### Config fields
 
-Declare typed config-only fields (not backed by CLI flags) with `config_field()`:
+Declare typed config-only fields (not backed by CLI flags) with
+`config_field()`. Config fields are validated at runtime when their bound
+commands are dispatched: required fields must be present in the config file with
+the correct type:
 
 ```python
 app.config_field("serve.port", type=int, help="Default server port", default=8080)
@@ -512,7 +593,11 @@ app.config_field("api_key", type=str, help="API key")  # required -- no default
 
 ## Schema Dump
 
-Every strictcli app automatically supports `--dump-schema`. It writes a JSON file describing the full CLI structure to `.strictcli/schema.json` and prints the path:
+Every strictcli app automatically supports `--dump-schema`, a reserved flag
+that writes a JSON file describing the full CLI structure to
+`.strictcli/schema.json` and prints the absolute path to stdout. The schema
+includes all commands, flags, args, groups, constraints, and config field
+declarations:
 
 ```
 $ mytool --dump-schema
@@ -523,7 +608,10 @@ The schema includes all commands, flags, args, groups, and their metadata. It is
 
 ## Testing
 
-Use `app.test(argv)` to run the CLI in-process and capture output:
+Use `app.test(argv)` to run the CLI in-process and capture output without
+shelling out. The `Result` object contains `stdout`, `stderr`, `exit_code`, and
+`data` (structured data from `outcome()`). This is the standard way to test
+strictcli apps:
 
 ```python
 def test_greet():
@@ -543,7 +631,10 @@ The `Result` object contains `stdout`, `stderr`, `exit_code`, and `data` (struct
 
 ### Programmatic Invocation
 
-Use `app.call(command_path, **kwargs)` to invoke a command in-process with pre-typed values, bypassing CLI parsing and env resolution:
+Use `app.call(command_path, **kwargs)` to invoke a command in-process with
+pre-typed values, bypassing CLI parsing, env var resolution, and config file
+loading. This is useful for testing, automation, and composing commands
+programmatically without constructing argv strings:
 
 ```python
 result = app.call("deploy", target="staging", region="us-west")
@@ -553,7 +644,9 @@ The `command_path` is dot-separated for nested commands: `"dns.zone.create"`. Fa
 
 ## Deprecated Commands
 
-Register retired commands that print a message and exit 1:
+Register retired commands that print a deprecation message to stderr and exit
+with code 1. Deprecated commands appear in help output under a `Deprecated:`
+section, giving users visibility into the migration path:
 
 ```python
 app.deprecate("old-deploy", message="Use 'deploy' instead. See https://example.com/migration")
@@ -563,7 +656,10 @@ Deprecated commands appear in help under a `Deprecated:` section.
 
 ## Passthrough Commands
 
-Passthrough commands bypass all flag/arg parsing and forward raw args to the handler:
+Passthrough commands bypass all flag and argument parsing and forward raw args
+directly to the handler. They are useful for wrapping external tools where the
+argument format is not known in advance. Passthrough commands cannot have flags,
+args, flag sets, or mutex groups:
 
 ```python
 @app.command("exec", help="Execute a command", passthrough=strictcli.Passthrough(
@@ -579,7 +675,10 @@ The passthrough handler receives `(ctx, name, args, globals)` where `args` is th
 
 ## Error Handling
 
-strictcli distinguishes between two kinds of errors:
+strictcli distinguishes between two kinds of errors, each handled differently.
+Registration-time errors are programmer mistakes caught at startup, while
+parse-time errors are user input mistakes caught during command-line parsing.
+Both produce specific, actionable messages:
 
 - **Registration-time errors** (`ValueError`): raised when declaring apps, commands, flags, or args with invalid configuration (missing help text, banned flag names, type mismatches). These are programmer errors caught at startup.
 - **Parse-time errors**: printed to stderr and exit 1. Include unknown flags, missing required values, type coercion failures, mutex violations, and dependency errors.

@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "Complete guide to strictcli's flag and argument system: types, defaults, boolean negation, repeatable flags, naming rules, positional arguments, and the context object."
+description: "Complete guide to strictcli's flag and argument system: types, defaults, boolean negation, repeatable flags, naming rules, and positional arguments."
 nav_group: "Guides"
 nav_order: 3
 ---
@@ -11,7 +11,11 @@ strictcli's flag system is strict by design. Every flag must have help text, eve
 
 ## Flag types
 
-strictcli supports exactly four scalar types: `str`, `bool`, `int`, and `float`. There is no implicit type inference -- every flag declares its type explicitly.
+strictcli supports exactly four scalar types: `str`, `bool`, `int`, and `float`.
+There is no implicit type inference -- every flag declares its type explicitly at
+registration time. Additionally, compound types `list[T]` and `dict[str, T]`
+are available for repeatable and key-value flags. The type determines how values
+are parsed from CLI tokens, environment variables, and config files.
 
 ```python
 @app.command("deploy", help="deploy the application")
@@ -25,7 +29,10 @@ def deploy(ctx, target, verbose, replicas, threshold):
 
 ### String flags
 
-String flags (`type=str`, the default) take a value from the next token or via `--flag=value` syntax.
+String flags (`type=str`, the default) take a value from the next token or via
+`--flag=value` syntax. They support the `@-prefix` resolution system, which
+allows reading values from files, stdin, or literal at-signs, making it easy to
+pass large values or secrets without exposing them on the command line.
 
 String flags support `@-prefix` resolution: `@path` reads the value from a file, `@-` reads from stdin (once per invocation), and `@@` is a literal `@` escape.
 
@@ -37,7 +44,11 @@ mytool deploy --target @@literal-at-sign
 
 ### Boolean flags
 
-Boolean flags (`type=bool`) do not take a value argument. `--flag` sets it to `True`; `--no-flag` sets it to `False`. The `--flag=value` form is rejected.
+Boolean flags (`type=bool`) do not take a value argument -- they are pure
+presence/absence flags. `--flag` sets the value to `True`, and the
+auto-generated `--no-flag` negation form sets it to `False`. The `--flag=value`
+syntax is rejected as a parse error because boolean flags should never accept
+an ambiguous string value.
 
 ```
 mytool deploy --verbose        # verbose=True
@@ -46,11 +57,21 @@ mytool deploy --no-verbose     # verbose=False
 
 ### Integer flags
 
-Integer flags (`type=int`) use strict parsing: no leading/trailing whitespace, no leading zeros, 64-bit signed bounds. The value comes from the next token or `--flag=value`.
+Integer flags (`type=int`) use strict parsing with no leading or trailing
+whitespace, no leading zeros (in Go), and 64-bit signed bounds. The value comes
+from the next token or `--flag=value` syntax. Negative integers like `-7` are
+supported as positional arguments because tokens starting with `-` that do not
+match any declared flag are treated as positional values rather than unknown
+flags.
 
 ### Float flags
 
-Float flags (`type=float`) also use strict parsing. NaN and Inf are rejected at parse time. All three implementations use a canonical decimal form (SCF) that produces identical output byte-for-byte.
+Float flags (`type=float`) also use strict parsing and reject NaN and Inf at
+parse time to prevent invalid numeric states from reaching handlers. All three
+implementations use the strictcli canonical float form (SCF), a
+shortest-round-trip representation that produces identical output byte-for-byte
+across Python, Go, and TypeScript. The canonical form is verified by exhaustive
+bit-pattern tests committed in the conformance suite.
 
 ## Required vs optional flags
 
@@ -74,11 +95,18 @@ For repeatable flags and dict flags, the default is always resolved to an empty 
 
 ## Boolean flag semantics
 
-Boolean flags have special behavior compared to other types.
+Boolean flags have special behavior compared to other types, including automatic
+negation form generation, required boolean semantics where callers must
+explicitly pass `--flag` or `--no-flag`, and strict env var parsing that accepts
+only a fixed set of truthy and falsy strings.
 
 ### Automatic negation (--flag / --no-flag)
 
-By default, every bool flag is negatable: strictcli auto-generates a `--no-flag` counterpart. Both forms must appear in the user's mental model.
+By default, every bool flag is negatable: strictcli auto-generates a
+`--no-flag` counterpart at registration time. Both forms appear in help output
+and both are accepted on the command line. This ensures that callers can always
+explicitly set a boolean to either true or false, which is especially important
+for flags with `Default(true)` where the caller needs a way to opt out.
 
 ```python
 @strictcli.flag("auto-commit", type=bool, default=True, help="commit after changes")
@@ -92,7 +120,11 @@ This creates both `--auto-commit` (sets True) and `--no-auto-commit` (sets False
 
 ### Required booleans
 
-A bool flag without a default is required. The user must pass either `--flag` or `--no-flag`. The error message reflects this:
+A bool flag without a default is required -- the user must pass either `--flag`
+or `--no-flag` explicitly. This is a deliberate design choice that forces
+callers to declare their intent on binary decisions rather than relying on
+implicit defaults. The error message for a missing required boolean reflects
+both accepted forms:
 
 ```
 flag '--watch' must be passed as --watch or --no-watch
@@ -102,7 +134,11 @@ This is the mechanism for forcing explicit intent on binary decisions (e.g., `--
 
 ### Non-negatable booleans
 
-Setting `negatable=False` disables the `--no-flag` form. The flag becomes a pure presence flag (True when passed, default otherwise). Non-negatable bool flags without a default produce a different error:
+Setting `negatable=False` disables the `--no-flag` form, turning the flag into
+a pure presence flag that is `True` when passed and falls through to its default
+otherwise. This is useful for flags like `--debug` where negation is not
+meaningful. Non-negatable bool flags without a default produce a different,
+simpler error message that only shows the positive form:
 
 ```
 flag '--debug' must be passed as --debug
@@ -112,14 +148,20 @@ For non-bool types (`str`, `int`, `float`), the `negatable` parameter is silentl
 
 ### Env var parsing for booleans
 
-Boolean flags accept these env var strings (case-insensitive):
+Boolean flags accept a fixed set of env var strings for parsing, validated
+case-insensitively. Any string not in this set produces a parse error with a
+message listing the accepted values. This strict parsing prevents ambiguous
+truthy/falsy interpretations that differ across languages:
 
-- True: `1`, `true`, `yes`
-- False: `0`, `false`, `no`
+- True: `1`, `true`, `yes` (3 accepted truthy strings)
+- False: `0`, `false`, `no` (3 accepted falsy strings)
 
 ## Short flags
 
-Flags can declare a single-character short form:
+Flags can declare a single-character short form that serves as an alias for the
+long flag name. Short flags follow the same parsing rules as their long
+counterparts, including type coercion, env var fallback, and config file
+resolution. Short flags are shown alongside long flags in help output.
 
 ```python
 @strictcli.flag("verbose", short="v", type=bool, default=False, help="verbose output")
@@ -129,7 +171,11 @@ This allows `-v` as an alias for `--verbose`. Short flags follow the same parsin
 
 ## Repeatable flags
 
-A flag with `repeatable=True` can be passed multiple times. Each occurrence appends to a list.
+A flag with `repeatable=True` can be passed multiple times on the command line,
+with each occurrence appending to a list. Repeatable flags are never required
+and always default to an empty list. They support uniqueness enforcement via the
+`unique` parameter and can split env var values using a declared separator
+character.
 
 ```python
 @strictcli.flag("tag", type=str, help="tags to apply", repeatable=True, unique=False)
@@ -150,7 +196,11 @@ mytool cmd --tag alpha --tag beta --tag gamma
 
 ### Compound types: list[T] and dict[str, T]
 
-Repeatable flags can also be declared via compound types:
+Repeatable flags can also be declared via compound types, which provide a more
+concise syntax. The `list[T]` form is equivalent to `type=T, repeatable=True`,
+and `dict[str, T]` creates a key-value flag where each occurrence adds a pair.
+The element type `T` must be `str`, `int`, or `float` -- boolean elements are
+not supported in compound types.
 
 ```python
 @strictcli.flag("port", type=list[int], help="ports to bind")
@@ -168,11 +218,19 @@ Each occurrence adds a key-value pair. Duplicate keys are rejected. Dict flags c
 
 ## Flag naming rules
 
-strictcli enforces naming rules at registration time (in `Flag.__post_init__`). Violations raise `ValueError` and prevent the app from starting.
+strictcli enforces naming rules at registration time (in `Flag.__post_init__`
+for Python, `validateFlagConfig` for Go and TypeScript). Violations raise
+`ValueError` in Python, panic in Go, or throw a `RegistrationError` in
+TypeScript, preventing the app from starting. These rules prevent ambiguous flag
+names and ensure the negation namespace remains uncontaminated.
 
 ### Bare --force is banned
 
-The flag name `force` is rejected outright. Use a qualified name that describes what is being forced:
+The flag name `force` is rejected outright because a generic force flag lets
+agents and automation bypass guardrails without specifying what they are forcing.
+Qualified names like `force-overwrite` or `force-delete` make the intent
+explicit and auditable. Use a qualified name that describes what is being
+forced:
 
 ```python
 # Rejected: ValueError
@@ -187,7 +245,11 @@ The error message: `flag 'force' is a reserved name; use a qualified name like '
 
 ### --no-* prefix is reserved
 
-Flag names starting with `no-` are rejected. The `--no-` prefix is auto-generated by the negation system for boolean flags; user-defined flags cannot occupy that namespace.
+Flag names starting with `no-` are rejected because the `--no-` prefix is
+auto-generated by the negation system for boolean flags. Allowing user-defined
+flags in this namespace would create ambiguity: a flag named `no-cache` would
+generate a `--no-no-cache` negation form, which is confusing. The positive name
+should be used instead, and the framework generates the negation automatically.
 
 ```python
 # Rejected: ValueError
@@ -221,7 +283,10 @@ Flag names use dashes (`--dry-run`), but handler parameters use underscores (`dr
 
 ## Choices
 
-Flags (and args) can restrict values to a fixed set:
+Flags (and args) can restrict values to a fixed set using the `choices`
+parameter. Values not in the choices list produce a parse error listing all
+allowed values. Choices are validated at registration time to ensure they match
+the flag's declared type.
 
 ```python
 @strictcli.flag("format", type=str, choices=["json", "text", "csv"], help="output format")
@@ -236,7 +301,11 @@ Rules:
 
 ## Custom validation
 
-A `validate` callback runs after type coercion:
+A `validate` callback runs after type coercion and choices validation, giving
+the flag author a way to enforce arbitrary constraints on the parsed value. The
+callback receives the coerced value and should raise `ValueError` with a
+descriptive message on failure. For repeatable flags, the callback is called
+once per element.
 
 ```python
 def positive_int(val):
@@ -250,7 +319,10 @@ The callback receives the coerced value and should raise `ValueError` with a mes
 
 ## Env var binding
 
-Flags can be bound to environment variables:
+Flags can be bound to environment variables via the `env` parameter, providing a
+fallback source for values not passed on the command line. Environment variables
+sit between CLI tokens and config file values in the resolution cascade (CLI >
+env > config > default) and are skipped entirely under `--hermetic` mode.
 
 ```python
 @strictcli.flag("token", type=str, help="API token", env="MYAPP_TOKEN")
@@ -262,7 +334,10 @@ When the app declares an `env_prefix`, flag env vars must start with that prefix
 
 ## Positional arguments
 
-Positional arguments are declared via `Arg` objects, passed to `@app.command()` or attached via the `@strictcli.arg` decorator.
+Positional arguments are declared via `Arg` objects, passed to `@app.command()`
+or attached via the `@strictcli.arg` decorator. Positional arguments are
+consumed in declaration order after all flags have been parsed, and support the
+same four scalar types as flags plus variadic collection into lists.
 
 ```python
 @app.command("greet", help="say hello")
@@ -273,7 +348,11 @@ def greet(ctx, name):
 
 ### Required vs optional args
 
-By default, positional args are required (`required=True`). Optional args use `required=False` and may declare a default:
+By default, positional args are required (`required=True`). Optional args use
+`required=False` and may declare a default value. A required arg cannot have a
+default -- this invariant is enforced at registration time to prevent ambiguous
+declarations where a supposedly required arg silently falls through to a default
+value.
 
 ```python
 @strictcli.arg("output", help="output file", required=False, default="out.txt")
@@ -283,7 +362,10 @@ A required arg cannot have a default -- this is enforced at registration.
 
 ### Variadic args
 
-A variadic arg collects all remaining positional tokens into a list:
+A variadic arg collects all remaining positional tokens into a list, and must be
+the last positional argument in the command's declaration. At most one variadic
+arg is allowed per command. A variadic arg with `required=True` (the default)
+requires at least one value to be provided.
 
 ```python
 @app.command(
@@ -305,11 +387,18 @@ A variadic arg with `required=True` (the default) requires at least one value. V
 
 ### Arg types
 
-Args support the same four types as flags: `str`, `bool`, `int`, `float`. Type coercion uses the same strict parsing.
+Args support the same four scalar types as flags: `str`, `bool`, `int`, and
+`float`. Type coercion uses the same strict parsing rules, and variadic args
+additionally support the `list[T]` compound type for typed collection. Dict
+types are not supported on positional args.
 
 ## The context object
 
-Every command handler receives a `Context` as its first argument. The context provides structured output and provenance introspection.
+Every command handler receives a `Context` as its first argument (in Go and
+Python; TypeScript uses args-first, ctx-second). The context provides structured
+output methods for writing to stdout and stderr, provenance introspection via
+`ctx.source()`, and infrastructure value access via `ctx.infra_value()`. The
+context is the primary interface between the handler and the framework.
 
 ```python
 @app.command("deploy", help="deploy the app")
@@ -332,7 +421,10 @@ def deploy(ctx, target):
 
 ### Provenance: ctx.source()
 
-`ctx.source(name)` returns where a flag's value came from. Accepts dashed or underscored names.
+`ctx.source(name)` returns where a flag's value came from as a string label,
+enabling handlers to alter behavior based on whether a value was explicitly
+provided by the user or fell through to its default. The method accepts both
+dashed names (`dry-run`) and underscored names (`dry_run`).
 
 ```python
 @app.command("cmd", help="a command")
@@ -342,7 +434,7 @@ def cmd(ctx, target):
     ctx.info(f"target={target} (from {source})")
 ```
 
-Source labels:
+The 6 source labels:
 
 | Label | Meaning |
 |-------|---------|
@@ -355,7 +447,10 @@ Source labels:
 
 ### Handler return values
 
-Handlers must return one of:
+Handlers must return one of three strictly validated types, and any other return
+type is a hard error that immediately terminates the program. This strict
+contract prevents silent bugs where a handler accidentally returns a string,
+list, or other value that the framework would not know how to interpret:
 - `int` -- exit code (0 = success)
 - `None` -- exit 0
 - `strictcli.outcome(exit_code, data)` -- structured result with optional data
@@ -364,7 +459,11 @@ Any other return type is a hard error. When `outcome()` includes `data`, it is J
 
 ## Global flags
 
-Flags can be declared at the app level, making them available to all commands:
+Flags can be declared at the app level, making them available to all commands
+in the application. Global flags are parsed before the command token during the
+global flag parsing stage, and their values are passed to every handler alongside
+the command's own flags. Global flag names cannot collide with reserved framework
+names like `help`, `version`, `dump-schema`, `mcp`, `config`, or `hermetic`.
 
 ```python
 app = strictcli.App(
@@ -382,7 +481,11 @@ Global flags are parsed before the command token and are passed to every handler
 
 ## Flag sets
 
-Reusable flag bundles avoid repetition across commands:
+Reusable flag bundles avoid repetition across commands by grouping related flags
+into a named `FlagSet` that can be attached to multiple commands. Each command
+that uses a flag set receives all its flags as if they were declared directly on
+the command, including type checking, env var binding, and constraint
+validation.
 
 ```python
 auth_flags = strictcli.FlagSet(
@@ -404,7 +507,11 @@ def status(ctx, token, region):
 
 ## Mutex groups
 
-Mutually exclusive flags are declared via `MutexGroup`:
+Mutually exclusive flags are declared via `MutexGroup`, which enforces that at
+most one flag in the group has a value from an explicit source (CLI, env, or
+config). Default and implied values do not trigger mutex violations. A mutex
+group must contain at least 2 flags, and a flag cannot appear in multiple mutex
+groups.
 
 ```python
 @app.command(
@@ -423,7 +530,10 @@ A mutex group must contain at least two flags. Flags in a mutex group with no de
 
 ## Dependencies
 
-Three dependency types control flag relationships:
+Three dependency types control relationships between flags, enforcing
+constraints that go beyond simple mutual exclusion. `CoRequired` ensures flags
+appear together, `Requires` creates one-way dependencies, and `Implies`
+automatically sets a target flag's value when a trigger flag is provided.
 
 ```python
 @app.command(
@@ -444,4 +554,9 @@ Three dependency types control flag relationships:
 
 ## Help text is mandatory
 
-Every `Flag`, `Arg`, `Command`, `Group`, and `App` must have non-empty help text. Missing or empty help is a registration-time error. This is a hard constraint with no opt-out.
+Every `Flag`, `Arg`, `Command`, `Group`, and `App` must have non-empty help
+text. Missing or empty help is a registration-time error with no opt-out and no
+way to silence the check. This is a deliberate design choice: self-documenting
+CLIs are non-negotiable, and the framework enforces this at the earliest
+possible point rather than waiting for a user to encounter an undocumented flag
+at runtime.

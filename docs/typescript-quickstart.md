@@ -11,7 +11,9 @@ strictcli is a strict CLI framework where you declare everything and infer nothi
 
 ## Installation
 
-Requires Node >= 22.
+Requires Node >= 22. The TypeScript implementation is published on npm as
+`strictcli` and ships as pure ESM with full type inference for handler arguments.
+Install it as a dependency in your project:
 
 ```bash
 npm install strictcli
@@ -19,7 +21,10 @@ npm install strictcli
 
 ## Creating an App
 
-Every CLI starts with `createApp`. The `name`, `version`, and `help` fields are all required.
+Every CLI starts with `createApp`, which takes the application name, version
+string, and help text as required fields. Empty help text is a hard error.
+Additional options like `envPrefix`, `config`, and `configFormat` are passed in
+the same options object.
 
 ```typescript
 import { createApp } from "strictcli";
@@ -33,7 +38,11 @@ const app = createApp({
 
 ## Defining Commands
 
-Commands are built with `defineCommand` and registered on the app. Every command requires a `help` string and a `handler` function.
+Commands are built with `defineCommand` and registered on the app via
+`app.command()`. Every command requires a `help` string and a `handler`
+function. The handler receives a fully typed `args` object whose shape is
+inferred from the flag and arg declarations, plus a `Context` for structured
+output.
 
 ```typescript
 import { createApp, defineCommand, t, flag } from "strictcli";
@@ -66,7 +75,10 @@ Handlers receive two arguments:
 
 ### Handler return values
 
-A handler can return:
+A handler can return one of three strictly validated types. Any other return
+type is a hard error that terminates the program. The `outcome()` factory is the
+only way to construct a branded structured result -- hand-forged objects are
+rejected at runtime:
 
 - `undefined` (or no return) -- exit code 0
 - A `number` -- used as the exit code
@@ -82,7 +94,10 @@ handler: (args) => {
 
 ## Flag Types
 
-strictcli supports four scalar types, plus list and dict compound types. Each type is represented by a carrier from the `t` namespace.
+strictcli supports four scalar types plus list and dict compound types. Each
+type is represented by a carrier from the `t` namespace that carries both a
+runtime type tag and a phantom TypeScript type, enabling full compile-time type
+inference for handler arguments without manual annotations.
 
 | Carrier | CLI syntax | TypeScript type | Notes |
 |---------|-----------|----------------|-------|
@@ -96,7 +111,10 @@ strictcli supports four scalar types, plus list and dict compound types. Each ty
 
 ### Boolean Flags
 
-Bool flags must have a `default`. They support `--no-` negation by default. Set `negatable: false` to disable negation.
+Bool flags must have an explicit `default` value (either `true` or `false`) or
+be left without a default to make them required (the user must pass `--flag` or
+`--no-flag`). They support `--no-` negation by default, which can be disabled
+by setting `negatable: false` for pure presence flags.
 
 ```typescript
 flags: {
@@ -114,7 +132,11 @@ flags: {
 
 ### String Flags
 
-A flag without a `default` is required. Provide a default to make it optional. Set `default: null` for an explicitly-optional flag (the handler key becomes `?:` in the type).
+A flag without a `default` is required -- the user must provide it on every
+invocation. Provide a default to make it optional. Setting `default: null`
+creates an explicitly-optional flag whose handler key becomes `?: string |
+undefined` in the TypeScript type, distinguishing "not provided" from "provided
+with an empty string."
 
 ```typescript
 flags: {
@@ -126,7 +148,10 @@ flags: {
 
 ### Number Flags
 
-Integers are `bigint` in TypeScript. Defaults must also be `bigint`.
+Integers are `bigint` in TypeScript to preserve 64-bit signed integer precision
+without floating-point truncation. Defaults must also be `bigint` literals
+(e.g., `3n`). Strict parsing rejects leading zeros and enforces 64-bit signed
+bounds.
 
 ```typescript
 flags: {
@@ -137,7 +162,10 @@ flags: {
 
 ### Repeatable Flags (Lists)
 
-Use `t.list(elem)` for repeatable flags. Each `--flag value` occurrence appends an element.
+Use `t.list(elem)` for repeatable flags where each `--flag value` occurrence
+appends an element to the resulting array. Repeatable flags are never required
+and default to an empty array. The element type must be `t.str`, `t.int`, or
+`t.float` -- boolean elements are not supported.
 
 ```typescript
 flags: {
@@ -150,7 +178,10 @@ Usage: `--tag alpha --tag beta` produces `["alpha", "beta"]`. Zero occurrences g
 
 ### Dict Flags
 
-Use `t.dict(elem)` for key=value pair flags. Keys are always strings.
+Use `t.dict(elem)` for key=value pair flags where each occurrence adds a new
+entry to the resulting `Map`. Keys are always strings and duplicate keys are
+rejected. Dict flags cannot be combined with `repeatable`, `unique`, `choices`,
+or `envSeparator`.
 
 ```typescript
 flags: {
@@ -162,7 +193,9 @@ Usage: `--header content-type=text/html --header accept=application/json`
 
 ### Choices
 
-Restrict a flag's values to a set of valid choices.
+Restrict a flag's values to a set of valid choices. Values not in the choices
+list produce a parse error listing all allowed values. All choice values must
+match the flag's declared type, and bool flags cannot have choices.
 
 ```typescript
 flags: {
@@ -179,7 +212,10 @@ flags: {
 
 ### Short Aliases
 
-Single-character short aliases for flags.
+Single-character short aliases for flags provide a concise alternative on the
+command line. Short flags follow the same parsing rules as their long
+counterparts, including type coercion and negation for boolean flags. They
+appear alongside long flags in help output.
 
 ```typescript
 flags: {
@@ -199,7 +235,11 @@ Usage: `-v`, `-o file.txt`
 
 ### Environment Variables
 
-Bind a flag to an environment variable. When an `envPrefix` is set on the app, flag env vars must start with that prefix.
+Bind a flag to an environment variable using the `env` option. Environment
+variables sit between CLI tokens and config file values in the resolution
+cascade (CLI > env > config > default) and are skipped entirely under
+`--hermetic` mode. When an `envPrefix` is set on the app, flag env vars must
+start with that prefix.
 
 ```typescript
 const app = createApp({
@@ -242,7 +282,10 @@ flags: {
 
 ## Positional Args
 
-Positional args use scalar carriers and are declared separately from flags.
+Positional args use scalar carriers and are declared separately from flags in
+the `args` array of a command definition. They are consumed in declaration order
+after all flags have been parsed. Each arg requires a name, type carrier, and
+help text.
 
 ```typescript
 import { arg } from "strictcli";
@@ -271,7 +314,10 @@ args: [
 
 ### Variadic Args
 
-A variadic arg collects all remaining positional tokens into an array. It must be the last arg, and uses a scalar carrier with `variadic: true`.
+A variadic arg collects all remaining positional tokens into an array. It must
+be the last arg in the command's declaration, and only one variadic arg is
+allowed per command. Use a scalar carrier with `variadic: true`. A variadic arg
+with the default required setting needs at least one value to be provided.
 
 ```typescript
 args: [
@@ -282,7 +328,10 @@ args: [
 
 ## Flag Sets
 
-`flagSet` groups reusable flags that can be shared across commands. The flags appear in the handler args alongside direct flags.
+`flagSet` groups reusable flags that can be shared across commands. The flags
+appear in the handler's `args` object alongside direct flags, fully typed. Each
+command that uses a flag set receives all its flags as if they were declared
+directly, including type checking, env var binding, and constraint validation.
 
 ```typescript
 import { flagSet } from "strictcli";
@@ -306,7 +355,11 @@ app.command(
 
 ## Mutex Groups
 
-`mutexGroup` declares flags where exactly one must be provided. Providing none or more than one is an error. Unset members are absent from the handler args.
+`mutexGroup` declares flags where at most one may have a value from an explicit
+source (CLI, env, or config). If no flag in the group has a value and no
+defaults exist, a "one of ... is required" error is produced. Unset members
+are `undefined` in the handler args, allowing the handler to branch on which
+flag was provided.
 
 ```typescript
 import { mutexGroup } from "strictcli";
@@ -333,7 +386,10 @@ app.command(
 
 ## Flag Dependencies
 
-Declare relationships between flags.
+Declare relationships between flags using dependency descriptors. Three
+dependency types are available: `requires` (one-way dependency), `coRequired`
+(must appear together or not at all), and `implies` (automatically sets a target
+flag when a trigger is provided).
 
 ```typescript
 import { requires, coRequired, implies } from "strictcli";
@@ -364,7 +420,10 @@ app.command(
 
 ## Command Groups
 
-Groups organize commands into namespaces. Groups nest to arbitrary depth.
+Groups organize commands into namespaces, creating a hierarchical command
+structure like `mytool dns zone create`. Groups nest to arbitrary depth, and
+each group requires a name and help text. When a group is reached without a
+subcommand, the group's help text is displayed.
 
 ```typescript
 const app = createApp({
@@ -403,7 +462,10 @@ Usage: `mytool dns list`, `mytool dns zone create --name example.com`
 
 ### Group tags
 
-Tags on a group are inherited by all commands in that group (merged with each command's own tags).
+Tags on a group are inherited by all commands in that group, merged with each
+command's own tags. Tag contracts (`tagContract`) can declare that any command
+with a given tag must have a specific flag, enforced across the entire command
+tree at `run()` or `test()` time.
 
 ```typescript
 const admin = app.group("admin", {
@@ -414,7 +476,9 @@ const admin = app.group("admin", {
 
 ### Deprecated Commands
 
-Register retired commands that print a message and exit 1.
+Register retired commands that print a deprecation message to stderr and exit
+with code 1. Deprecated commands appear in help output under a `Deprecated:`
+section, giving users visibility into the migration path.
 
 ```typescript
 import { deprecated } from "strictcli";
@@ -426,7 +490,10 @@ dns.deprecate(deprecated("dump", "use 'list' instead"));
 
 ## Global Flags
 
-Flags declared on the app apply to all commands. They can appear before or after the command name on the CLI.
+Flags declared on the app apply to all commands and can appear before or after
+the command name on the CLI. Global flag names cannot collide with reserved
+framework names like `help`, `version`, `dump-schema`, `mcp`, `config`, or
+`hermetic`. Global flag values are merged into each handler's `args` object.
 
 ```typescript
 const app = createApp({
@@ -450,7 +517,10 @@ Global flag values are merged into each command handler's `args`.
 
 ## Passthrough Commands
 
-Passthrough commands bypass all parsing. The handler receives raw args.
+Passthrough commands bypass all flag and argument parsing and forward raw args
+directly to the handler. They are useful for wrapping external tools where the
+argument format is not known in advance. Passthrough commands cannot have flags,
+args, flag sets, or mutex groups.
 
 ```typescript
 import { passthrough } from "strictcli";
@@ -472,7 +542,10 @@ Usage: `mytool exec ls -la /tmp` -- the handler receives `["-la", "/tmp"]` (note
 
 ## Flag Naming Conventions
 
-strictcli enforces flag naming rules at registration time.
+strictcli enforces flag naming rules at registration time. Violations throw an
+error that prevents the app from starting. These rules prevent ambiguous flag
+names, protect the negation namespace, and ensure consistent dash-to-underscore
+conversion for handler args.
 
 - **Bare `--force` is banned.** Use qualified names: `--force-overwrite`, `--force-delete`.
 - **`--no-` prefix is reserved.** Flag names cannot start with `no-`. The `--no-` prefix is auto-generated for negatable boolean flags.
@@ -488,7 +561,11 @@ flags: {
 
 ## Schema Dump
 
-Every strictcli app has a built-in `--dump-schema` flag. Running it writes the full CLI structure to `.strictcli/schema.json`.
+Every strictcli app has a built-in `--dump-schema` reserved flag. Running it
+writes a JSON file describing the full CLI structure to
+`.strictcli/schema.json` and prints the absolute path to stdout. The schema
+includes all commands, flags, args, groups, constraints, and config field
+declarations.
 
 ```bash
 mytool --dump-schema
@@ -503,7 +580,10 @@ console.log(JSON.stringify(schema, null, 2));
 
 ## Testing
 
-`app.test(argv)` runs the CLI in-process and captures stdout, stderr, exit code, and structured outcome data.
+`app.test(argv)` runs the CLI in-process and captures stdout, stderr, exit
+code, and structured outcome data without shelling out. This is the standard way
+to test strictcli apps in TypeScript. The result object is fully typed and
+includes the `data` field when the handler returns `outcome()`.
 
 ```typescript
 import { strict as assert } from "node:assert";
@@ -519,7 +599,10 @@ test("greet command outputs the name", async () => {
 
 ## Programmatic Invocation
 
-`app.call(commandPath, kwargs)` invokes a command in-process with pre-typed values, bypassing CLI parsing.
+`app.call(commandPath, kwargs)` invokes a command in-process with pre-typed
+values, bypassing CLI parsing, env var resolution, and config file loading. The
+command path uses dot-separated notation for nested commands (e.g.,
+`"dns.zone.create"`). Failures throw `InvokeError`.
 
 ```typescript
 // Dot-separated path for nested commands
@@ -530,7 +613,12 @@ Failures throw `InvokeError`.
 
 ## TypeScript Type Safety
 
-The type system infers the exact shape of the handler's `args` parameter from flag and arg declarations. No manual type annotations are needed.
+The type system infers the exact shape of the handler's `args` parameter from
+flag and arg declarations, so no manual type annotations are needed. The type
+carriers (`t.str`, `t.int`, etc.) carry phantom types that flow through the
+generic machinery in `defineCommand`, producing correct output types without
+casts. Flags from `flagSets` and `mutexGroup` entries are also merged into the
+handler args type.
 
 ```typescript
 app.command(
@@ -673,7 +761,9 @@ deploy --dump-schema
 
 ## Reserved Global Flags
 
-Every strictcli app automatically has these reserved flags (you cannot register them yourself):
+Every strictcli app automatically has these 6 reserved flags that cannot be
+overridden by user-defined global flags. Attempting to register a flag with any
+of these names produces a registration-time error:
 
 - `--help` / `-h` -- show help for the app, group, or command
 - `--version` / `-v` -- print the app version

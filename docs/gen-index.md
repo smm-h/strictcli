@@ -1,8 +1,7 @@
 ---
 title: API Reference
-description: "API reference index covering 32 modules"
+description: "API reference index for strictcli covering all Python, Go, and TypeScript modules with exported functions, types, and constants."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 0
 order: 90
