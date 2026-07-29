@@ -1,0 +1,610 @@
+---
+title: Architecture and Internals
+description: "How strictcli works internally: parsing model, registration-time validation, schema format, config system, flag negation, and error handling across all three implementations."
+nav_group: "Guides"
+nav_order: 10
+---
+
+# Architecture and Internals
+
+strictcli is a strict CLI framework implemented in Python, Go, and TypeScript,
+kept in behavioral lockstep by a shared conformance test suite. This document
+explains how the framework works internally, covering the parse pipeline, the
+registration-time validation model, the schema format, the config system, flag
+negation, and the error handling philosophy.
+
+## Implementation layout
+
+Each implementation has its own internal structure, but all follow the same
+logical architecture.
+
+- **Python** (`python/strictcli/__init__.py`): single-file implementation, one
+  external dependency (tomlkit for TOML editing).
+- **Go** (`go/strictcli/`): split across ~20 source files, one external
+  dependency (go-toml-edit for TOML editing).
+- **TypeScript** (`typescript/src/`): split across ~30 source files (pure ESM,
+  Node >= 22), two external dependencies (smol-toml for parsing,
+  toml-eslint-parser for comment-preserving edits).
+
+All three produce identical error messages, identical help output, identical
+schema JSON, and pass the same conformance test cases.
+
+## The parse pipeline
+
+Every invocation flows through the same five-stage pipeline. The stages are
+named identically in all implementations; the Go function names below appear
+alongside the Python/TypeScript equivalents where they differ.
+
+### Stage 1: reserved flag pre-scan
+
+Before any global flag or command parsing begins, a position-aware pre-scan
+examines the pre-command region of argv (everything before the first non-flag
+token or a `--` separator) for four framework-reserved flags:
+
+- `--dump-schema`: triggers schema generation and exits immediately.
+- `--mcp`: starts the MCP JSON-RPC server on stdin/stdout.
+- `--hermetic`: enables hermetic mode (suppresses env vars and config file
+  loading for the rest of the parse).
+- `--config <path>`: overrides the config file path.
+
+The pre-scan does not consume these tokens from argv for `--hermetic` and
+`--config`; instead it records their presence and builds a "cleaned argv" with
+them stripped out. `--dump-schema` and `--mcp` cause an immediate return (no
+further parsing occurs).
+
+The pre-scan also skips over known global flags (long, short, and negation
+forms) so it can correctly identify where the command name begins.
+
+**Go**: `App.preScanReservedFlags()` in `strictcli.go`.
+**Python**: `App._pre_scan_reserved_flags()` in `__init__.py`.
+**TypeScript**: `preScanReservedFlags()` in `parse.ts`.
+
+### Stage 2: global flag parsing
+
+The cleaned argv is scanned left-to-right for global flags. Global flags can
+appear before the command name. The first token that is not a recognized global
+flag (and is not `--`) is treated as the start of the command region; it and all
+subsequent tokens become "remaining tokens."
+
+Token forms recognized:
+
+- `--flag-name value` (two tokens, value consumed)
+- `--flag-name=value` (single token, `=`-split)
+- `-x value` (short form, two tokens)
+- `--no-flag-name` (boolean negation, single token)
+- `--flag-name` alone for bool flags (sets to true)
+- `--` stops global flag scanning; included in remaining tokens
+
+After CLI tokens are consumed, env vars are resolved for any global flags that
+were not set on the command line (skipped entirely under `--hermetic`). Then
+config values are resolved for any global flags not set by CLI or env (again
+skipped under `--hermetic`). Finally, defaults are applied for any global flags
+still missing a value.
+
+The result is a triple: `(global_values, global_sources, remaining_tokens)`.
+
+**Go**: `App.extractGlobalFlags()` in `strictcli.go`.
+**Python**: `App._parse_global_flags()` in `__init__.py`.
+**TypeScript**: `extractGlobalFlags()` in `parse.ts`.
+
+### Stage 3: command routing
+
+The first token of the remaining argv selects a command or group. If it matches
+a group, the router descends into that group and repeats the lookup with the
+next token. This continues to arbitrary depth: App > Group > Group > ... >
+Command.
+
+At each level the router checks, in order:
+
+1. Groups (descend if matched).
+2. Commands (return the resolved command).
+3. Deprecated commands (produce an error message with the deprecation notice).
+4. Unknown (produce an error).
+
+If a group is reached but no further tokens remain (or only `--help`), the
+group's help text is displayed.
+
+**Go**: `App.resolveCommand()` in `routing.go`.
+**Python**: `App._resolve_command()` in `__init__.py`.
+**TypeScript**: `resolveCommand()` in `routing.ts`.
+
+### Stage 4: command parsing
+
+The remaining tokens (after the command name was consumed by routing) are parsed
+against the resolved command's declared flags and positional arguments.
+
+The parser builds three lookup tables from the command's flags:
+
+- **Long lookup**: `--flag-name` to flag definition.
+- **Short lookup**: `-x` to flag definition.
+- **Negation lookup**: `--no-flag-name` to flag definition (for negatable bool
+  flags only).
+
+Global flags are also added to these tables so they can be specified after the
+command name.
+
+Tokens are consumed left-to-right:
+
+- If a token matches a long, short, or negation form, the corresponding value
+  is consumed and stored.
+- `--` stops flag parsing; all remaining tokens become positional arguments.
+- Tokens starting with `-` that do not match any known flag are treated as
+  positional arguments (allowing negative numbers like `-7`).
+- All other tokens become positional arguments.
+
+For non-bool flags, value coercion happens immediately at parse time:
+
+- **str**: stored as-is after `@`-prefix resolution (`@file` reads from file,
+  `@-` reads from stdin, `@@literal` strips the leading `@`).
+- **bool**: `--flag` sets true, `--no-flag` sets false, no raw value accepted
+  (`--flag=value` is an error).
+- **int**: strict integer parsing -- no leading/trailing whitespace, no leading
+  zeros (Go), 64-bit signed range. TypeScript uses `bigint` as its int type.
+- **float**: strict float parsing in strictcli canonical form (SCF) -- NaN and
+  Inf are rejected, the shortest round-trip representation is used.
+
+After CLI tokens are consumed, the value resolution cascade runs (each step
+skipped under `--hermetic`):
+
+1. **Env vars**: for each flag not set by CLI, check its declared env var. Bool
+   env vars accept `1|true|yes` / `0|false|no` (case-insensitive). Repeatable
+   flags split the env value by the declared env_separator. Dict flags parse the
+   env value as JSON.
+2. **Config file**: for each flag not set by CLI or env, check the loaded config
+   data. Config values are coerced to the flag's type.
+3. **Defaults**: for each flag still unset, apply the declared default. Flags
+   with no default and no value from any source produce a "missing required
+   flag" error. Repeatable flags default to an empty list; dict flags default to
+   an empty map.
+4. **InfraRootPath resolution**: if a flag's default is a `RelativeToRoot`
+   marker, it is resolved against the declared infrastructure roots at this
+   point, and its source is labeled "infra" instead of "default."
+
+After all values are resolved, constraint validation runs:
+
+- **Mutex groups**: at most one flag in each mutex group may have a value from a
+  CLI, env, or config source. Defaults and implied values do not trigger mutex
+  violations. If no flag has a value and no defaults exist, "one of ... is
+  required" errors.
+- **CoRequired**: all named flags must be present together, or none.
+- **Requires**: if flag A is present, flag B must also be present.
+- **Implies**: if flag A is present, flag B is automatically set to the implied
+  value. If the user explicitly provided a contradicting value for B, it is a
+  parse error.
+
+Finally, choices validation runs for any flag or arg with a declared set of
+allowed values.
+
+**Go**: `parseCommand()` in `parse.go`.
+**Python**: `_parse_command()` in `__init__.py`.
+**TypeScript**: `parseCommand()` in `parse.ts`.
+
+### Stage 5: dispatch
+
+The handler is called with the resolved context and the kwargs map. Each
+implementation has its own handler signature:
+
+- **Go**: `func(ctx *Context, kwargs map[string]interface{}) Outcome`
+- **Python**: `def handler(ctx, **kwargs)` returning `int`, `None`, or
+  `outcome(code, data)`
+- **TypeScript**: `(args, ctx) => number | undefined | outcome(code, data)`
+
+The return value is interpreted strictly. In Go, the handler must return an
+`Outcome` (created via `Exit(code)` or `ExitData(code, data)`). In Python, only
+`int`, `None`, or a branded `outcome(...)` are accepted; any other return type
+is a hard error. In TypeScript, the same contract applies with `number`,
+`undefined`, or a branded `outcome(...)`.
+
+When a handler returns data (via `ExitData` / `outcome(...)`), the data is
+JSON-serialized to stdout. `Test()` / `test()` captures it in the result
+object.
+
+## Source provenance
+
+Every resolved flag value carries a source label tracking where its value came
+from. The six source labels are:
+
+| Label | Meaning |
+|-------|---------|
+| `cli` | Explicitly passed on the command line |
+| `env` | From an environment variable |
+| `config` | From a config file |
+| `default` | From the flag's declared default value |
+| `implied` | Injected by an `Implies` dependency |
+| `infra` | Default resolved through a `RelativeToRoot` infrastructure root |
+
+Provenance is tracked internally by a `SourcedStore` (Go/TypeScript) or
+`_SourcedStore` (Python) that pairs each value with its source label.
+Provenance matters for constraint evaluation:
+
+- **Mutex checks** consider only `cli`, `env`, and `config` sources. A flag
+  with a `default` or `implied` source does not trigger a mutex violation.
+- **Dependency checks** (`CoRequired`, `Requires`) consider everything except
+  `default`. A flag that got its value from `implied` is considered "present"
+  for dependency purposes; a flag with only a `default` is not.
+
+Handlers access provenance via `ctx.Source(name)` (Go) / `ctx.source(name)`
+(Python) / `ctx.source(name)` (TypeScript). The name can be dashed
+(`dry-run`) or underscored (`dry_run`); both forms are accepted.
+
+## Registration-time validation
+
+strictcli enforces a large number of invariants at the moment flags, args,
+commands, and groups are constructed. This is a deliberate design: if a
+declaration is invalid, the program panics (Go), raises `ValueError` (Python),
+or throws a `RegistrationError` (TypeScript) before any parsing occurs. The
+user never sees a confusing runtime error caused by a misconfigured CLI.
+
+### Flag naming rules
+
+Enforced by `validateFlagConfig` (Go), `Flag.__post_init__` (Python),
+`validateFlagConfig` (TypeScript):
+
+- **Help text is mandatory.** Every flag must have a non-empty help string.
+- **`force` is banned.** The bare name `force` is reserved. Use a qualified
+  name like `force-overwrite` or `force-delete`.
+- **`no-` prefix is reserved.** Flag names cannot start with `no-`. This prefix
+  is auto-generated by the negation system for negatable boolean flags.
+
+### Type checking
+
+The four scalar types (`str`, `bool`, `int`, `float`) are strictly validated at
+registration time:
+
+- Default values must match the declared type. A `float` flag with an `int`
+  default is a hard error. A `str` flag with a `bool` default is a hard error.
+- Choices must all be of the declared type.
+- Compound types (`list[T]`, `dict[str,T]`) validate their element type at
+  registration: `T` must be `str`, `int`, or `float` (never `bool`).
+- Repeatable flags cannot be `bool`.
+- Repeatable flags require explicit `unique` (true or false) -- no implicit
+  default.
+- `unique` requires `repeatable`.
+- Dict flags cannot be combined with `repeatable`, `unique`, `choices`, or
+  `env_separator`.
+- `env_separator` requires `repeatable`, requires `env`, must be a single
+  character, and cannot be a backslash.
+
+### Arg validation
+
+- Help text is mandatory.
+- Required args cannot have a default.
+- Only scalar types and `list[T]` are allowed. `dict` types are not supported
+  on positional args.
+- `list[T]` requires `variadic=true`.
+- Variadic args must be last.
+- At most one variadic arg per command.
+- Duplicate arg names within a command are a hard error.
+- Choices type must match the arg's declared type.
+- Default values must match the declared type and be in the choices set (if
+  declared).
+
+### Command validation
+
+Enforced by `buildAndValidateCommand` (Go), `_build_and_validate_command`
+(Python), and the equivalent validation in `app.ts` (TypeScript):
+
+- Help text is mandatory.
+- Duplicate flag names within a command are a hard error.
+- Flags cannot collide with global flags.
+- Mutex groups must have at least 2 flags.
+- A flag cannot appear in multiple mutex groups.
+- `CoRequired` must reference at least 2 flags and all must be declared.
+- `Requires` must reference declared flags and cannot be self-referential.
+- `Implies` trigger and target must be bool flags; target must be different
+  from trigger.
+- Passthrough commands cannot have flags, args, flag sets, or mutex groups.
+
+### Global flag validation
+
+- Global flag names cannot collide with reserved framework names: `help`, `h`,
+  `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`.
+- Duplicate global flag names are a hard error.
+
+### Tag validation
+
+Tag names must match `[a-z][a-z0-9-]*`. Tag contracts (`TagContract` in Go,
+`tag_contract` in Python) declare that any command tagged with a given tag must
+have a specific flag; this is validated at `Run`/`Test` time across the entire
+command tree.
+
+## The schema format (`.strictcli/schema.json`)
+
+`--dump-schema` is a reserved flag on every app. It writes a JSON file to
+`.strictcli/schema.json` describing the entire CLI surface and prints the
+absolute path to stdout.
+
+### Top-level fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schema_version` | `int` | Always `1` |
+| `name` | `string` | App name |
+| `version` | `string` | App version |
+| `help` | `string` | App help text |
+| `project_id` | `string` | Language-specific project identifier (Go module path, Python package name, npm package name) |
+| `env_prefix` | `string?` | Env var prefix (null if not set) |
+| `config` | `bool` | Whether config file support is enabled |
+| `global_flags` | `Flag[]` | Global flag definitions |
+| `commands` | `{name: Command}` | Top-level commands |
+| `groups` | `{name: Group}` | Top-level groups |
+| `deprecated` | `{name: message}` | Deprecated command names and messages |
+| `tag_contracts` | `{tag: flag_name}` | Tag contract declarations |
+| `defaults` | `object` | Default values for omitted fields (see below) |
+| `config_fields` | `{name: ConfigFieldSchema}?` | Config field declarations (only when fields are declared) |
+| `checks` | `{name: CheckSchema}?` | Check declarations (only when checks are enabled) |
+| `infra` | `InfraSchema?` | Infrastructure env var declarations (only when roots/handshakes/connections exist) |
+
+### Defaults object
+
+The `defaults` key contains the canonical default value for every field that can
+be omitted from the schema. A consumer reconstructs omitted fields by reading
+from `defaults`. For example, if a flag has no `short` key, the consumer uses
+`defaults.flag.short` (which is `null`). This convention keeps the schema
+compact while remaining lossless.
+
+```json
+{
+  "schema_version": 1,
+  "app": {
+    "env_prefix": null,
+    "config": false,
+    "global_flags": [],
+    "commands": {},
+    "groups": {},
+    "deprecated": {},
+    "tag_contracts": {}
+  },
+  "flag": {
+    "short": null,
+    "default": null,
+    "env": null,
+    "choices": null,
+    "repeatable": false,
+    "unique": false,
+    "env_separator": null,
+    "negatable": null,
+    "hidden": false
+  },
+  "arg": {
+    "type": "str",
+    "required": true,
+    "default": null,
+    "variadic": false,
+    "choices": null
+  },
+  "command": {
+    "passthrough": false,
+    "flags": [],
+    "args": [],
+    "tags": [],
+    "constraints": [],
+    "hidden": false,
+    "interactive": false
+  },
+  "group": {
+    "commands": {},
+    "groups": {},
+    "deprecated": {},
+    "tags": [],
+    "hidden": false
+  }
+}
+```
+
+### Constraint serialization
+
+Constraints (mutex groups and dependencies) are serialized in the `constraints`
+array of each command:
+
+```json
+[
+  {"type": "mutex", "flags": ["json", "yaml"]},
+  {"type": "co_required", "flags": ["host", "port"]},
+  {"type": "requires", "flag": "port", "depends_on": "host"},
+  {"type": "implies", "flag": "verbose", "implies": "debug", "value": true}
+]
+```
+
+### InfraRootPath serialization
+
+Flag defaults that are `RelativeToRoot` markers are serialized in a
+machine-stable form that never contains resolved, machine-specific paths:
+
+```json
+{
+  "default": {
+    "relative_to_root": {
+      "env_var": "MY_ROOT",
+      "parts": ["data", "cache"]
+    }
+  }
+}
+```
+
+This shape is identical across all three implementations so schemas
+byte-compare across languages.
+
+### Schema freshness
+
+The schema file is used by external tools (rlsbl uses it during release to
+verify the CLI surface is up-to-date). A `project_id` field prevents accidental
+overwrites across projects sharing a working directory: if the existing schema
+file has a different `project_id`, the write is refused.
+
+## How WithConfig works internally
+
+Config file support is enabled via `WithConfig()` (Go), `App(config=True)`
+(Python), or `createApp({config: true})` (TypeScript). Enabling it triggers the
+following at construction time:
+
+1. **Auto-registers the `config` group** with five subcommands: `config show`,
+   `config set`, `config path`, `config edit`, `config init`.
+2. **Resolves the config file path.** Default location is the XDG config
+   directory: `~/.config/{app_name}/config.{json|toml}`. This can be overridden
+   by `WithConfigPath(path)`, `WithConfigPathRelativeToRoot(envVar, parts...)`,
+   or the runtime `--config <path>` flag.
+
+### Config loading flow
+
+Config data is loaded once per parse, at the start of the parse pipeline (after
+the pre-scan, before global flag parsing):
+
+1. Determine the path: runtime `--config` override > app-level override > XDG
+   default. If `no_default_config_path` is set and no runtime override was
+   given, no config file is loaded.
+2. Read and parse the file. JSON files use the standard library parser; TOML
+   files use the TOML library. Malformed files produce a parse error with line
+   and column information.
+3. If the file is missing: with a runtime `--config` flag, this is a hard
+   error. Without one (default XDG path), it is silently ignored (empty config
+   data).
+4. The parsed config data is a flat or nested key-value map. Nested keys use
+   dot-separated paths in TOML (e.g., `[database]` / `host = ...` becomes
+   `database.host`).
+
+### Config field declarations
+
+`App.ConfigField(name, type, help, default)` (Go) / `app.config_field(name,
+type, help, default)` (Python) declares a typed config-file-only field. Config
+fields are validated at run time when their bound commands are dispatched:
+required fields must be present with the correct type.
+
+A config field whose name matches a flag's parameter name (the underscored
+form) is a "colliding" field -- a validation-only annotation that ties the
+flag to a config-file key. Their defaults must agree. The flag's config value
+is resolved through the normal CLI > env > config > default cascade; the
+config field does not create a separate config key.
+
+### Config conflict modes
+
+The `config_conflict_mode` (app-level) and `conflict_mode` (per-flag) control
+what happens when a flag's value comes from both the config file and the CLI
+or env var:
+
+- `cli-wins` (default): the CLI or env value takes precedence. The config
+  value is silently ignored.
+- `error`: having a value from both sources is a hard error, unless the values
+  are identical (in which case no conflict exists).
+
+### Hermetic mode interaction
+
+`--hermetic` skips config file loading entirely. Config subcommands cannot be
+used with `--hermetic` (hard error). This is enforced in the pre-scan: if both
+`--hermetic` and `--config` are present, parsing fails immediately.
+
+## Flag negation system
+
+Every boolean flag in strictcli automatically generates a `--no-{name}`
+negation form. This is controlled by the `negatable` property:
+
+- For `bool` flags, `negatable` defaults to `true`. The framework automatically
+  populates the negation lookup table with `--no-{name}` pointing to the same
+  flag.
+- For non-bool flags (`str`, `int`, `float`, and compound types), `negatable`
+  is forced to `false` regardless of what the user declares.
+
+### How negation works at parse time
+
+The negation lookup is a separate table built alongside the long and short
+lookup tables. When a token like `--no-verbose` is encountered:
+
+1. Look it up in the negation table. If found, set the flag's value to `false`
+   with source `cli`.
+2. If `--no-verbose=value` is encountered, it is an error: boolean negations
+   do not take a value.
+
+### The `no-` prefix ban
+
+Flag names starting with `no-` are banned at registration time. This prevents
+ambiguity: if a flag named `no-cache` existed, `--no-no-cache` would be its
+negation form, which is confusing. The ban ensures the `--no-` prefix is
+exclusively the framework's negation mechanism.
+
+### Schema representation
+
+In the schema JSON, bool flags always include the `negatable` key (true or
+false). Non-bool flags omit it (its default is `null` in the schema defaults,
+meaning "not applicable").
+
+### Required bool flags
+
+Bool flags without a default are required: the user must explicitly pass either
+`--flag` or `--no-flag`. This is a deliberate design choice that forces
+callers to declare their intent rather than relying on implicit defaults. A
+bool flag with `Default(true)` or `Default(false)` is optional.
+
+## Error handling philosophy
+
+strictcli follows a strict, no-silent-defaults error philosophy. Every error
+condition produces a specific, actionable message. There are no warnings that
+continue execution.
+
+### Two error categories
+
+1. **Registration-time errors** (programmer errors): these indicate a bug in
+   the CLI definition. They produce a panic (Go), `ValueError` (Python), or
+   `RegistrationError` (TypeScript). The program cannot start.
+
+2. **Parse-time errors** (user errors): these indicate incorrect input. They
+   print an error message to stderr with a `try '...' --help` hint and exit
+   with code 1.
+
+### Error message parity
+
+All three implementations produce byte-identical error messages for identical
+inputs. This is enforced by the `check_error_parity.py` conformance check,
+which extracts every error template from all implementations and verifies
+they match one-to-one.
+
+Error templates are centralized in a single file per implementation:
+
+- **Go**: `errors.go` -- functions returning format strings.
+- **Python**: inline in `__init__.py` (using f-strings with the same
+  placeholders as the Go templates).
+- **TypeScript**: `errors.ts` -- functions returning format strings, mirroring
+  `errors.go` one-to-one.
+
+### No implicit defaults
+
+strictcli does not silently fill in default values for configuration that
+affects behavior. If a flag has no default, it is required -- there is no
+fallback. Bool flags without a default must be explicitly passed as `--flag` or
+`--no-flag`. Repeatable flags require explicit `unique` declaration. Env
+separator is mandatory for repeatable flags with env var support. These rules
+exist to prevent a common class of bugs where a CLI tool silently uses a
+default that the caller did not know about.
+
+### No unknown flags
+
+Any `--flag` token that does not match a declared flag is a hard error. There
+is no "ignore unknown flags" mode. This prevents silent typo bugs where
+`--quite` (typo for `--quiet`) is silently ignored.
+
+### Strict type parsing
+
+Integer parsing rejects leading whitespace, trailing whitespace, and (in Go)
+leading zeros. Float parsing rejects NaN and Inf. Bool env vars accept only
+the exact set `1|true|yes` / `0|false|no` (case-insensitive); anything else is
+an error.
+
+## Conformance testing
+
+The three implementations are kept in lockstep by a conformance test suite
+(`conformance/`). JSON test cases define an app structure, argv, and expected
+output. A runner generates the app in each language and executes it, comparing
+results.
+
+Conformance checks run as part of CI and include:
+
+- **conformance-python/go/typescript**: all JSON test cases pass in each
+  implementation.
+- **conformance-parity**: outputs are byte-identical across implementations
+  (with acknowledged divergences for language-specific output).
+- **error-parity**: every error template exists in all implementations with
+  identical format strings.
+- **api-surface**: the public API surface matches across implementations.
+- **schema-parity**: the schema JSON produced by each implementation is
+  byte-identical for the same app definition.
+- **float-fuzz**: exhaustive bit-pattern verification of the canonical float
+  format (SCF) across all implementations.
