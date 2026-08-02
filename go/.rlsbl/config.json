@@ -11,6 +11,5 @@
       "local": false,
       "artifact": "library"
     }
-  },
-  "coverage_unit": "commit"
+  }
 }
