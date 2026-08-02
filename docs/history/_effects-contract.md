@@ -11,6 +11,11 @@ from the code as it stands at the time of writing and is pinned here so implemen
 nothing left to decide. Where this document and an implementation disagree, this document wins
 until it is amended.
 
+Amended 2026-08-02 after an adversarial audit, folding in two freshly-ratified user rulings
+(`skip_if_current` is preview-annotation-only; mutating passthrough commands prompt) and the
+audit's defect list. §18 records the full provenance of every decision, ratified and authored
+alike, and is exhaustive.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -33,18 +38,20 @@ as a page.
 | **Forwarding (a carrier)** | Passing a carrier as an argument to a later `ctx.effects` call. Legal; renders the brand inline. |
 | **Extraction / branching** | Any attempt to read a concrete value out of a carrier, or to branch on it. Illegal; hard-errors and truncates the preview. |
 | **Would-do log** | Dry mode's primary stdout output: the ordered, numbered rendering of the recorded effects. |
-| **Resource token** | An opaque string naming what an effect produces. Compared by string equality only. |
+| **Resource token** | An opaque string naming what an effect produces. Declared metadata; compared by string equality only; never gates execution. |
+| **Conditional annotation** | A `skip_if_current=` declaration. Preview-only: it renders a suffix in the would-do log and has no runtime behavior whatsoever. |
 | **Grant** | A per-command, per-effect-kind authorization with a mandatory human reason. |
 | **Guard v2** | The tightened handler-signature validation that no longer exempts `**kwargs` handlers. |
 | **Declared forwarding** | The registration-time declaration that a handler deliberately accepts and forwards `**kwargs`. |
+| **Framework-internal command** | A command strictcli auto-registers itself (`check`, the five `config` subcommands). Subject to every rule in this document, plus §10.4. |
 
 Two rules govern the whole regime and override any local convenience:
 
 - **Fail closed.** If the framework cannot prove an operation is safe to preview, it stops with a
   precise error instead of guessing.
 - **Zero inference.** The framework never infers classification, never infers whether an argument
-  is a path, never canonicalizes a resource token, never evaluates user predicates. Everything is
-  declared.
+  is a path, never canonicalizes a resource token, never evaluates user predicates, and never
+  tracks whether a resource is "current". Everything is declared.
 
 ---
 
@@ -62,18 +69,60 @@ There is **no default**. A command registered without it is a registration-time 
 all three implementations. This is a breaking change for every existing consumer and is the
 headline entry of the coordinated release.
 
+**Deprecated commands are classification-exempt.** `app.deprecate(name, message=...)` /
+`group.deprecate(...)` / `(*App).Deprecated(...)` (Python `DeprecatedCommand`, Go `deprecatedCmd`,
+TS `DeprecatedDef`)
+registers a retired name that has **no handler** and executes nothing: it prints its message to
+stderr and exits 1. It therefore carries no `effect`, and passing one is a registration-time hard
+error (`errDeprecatedCommandEffect`, §12.2). Deprecated entries never prompt (§8), never reach
+dispatch, and never appear in the would-do log. They are also not command entries in
+`--dump-schema` output -- they serialize into the separate top-level `deprecated` list -- so §13's
+"`effect` is always emitted on every command entry" rule is unaffected. §14's conformance-schema
+change (§13, last paragraph) encodes the exemption explicitly.
+
 ### 1.2 Per-language spelling
 
 | Impl | Spelling |
 |------|----------|
 | Python | `effect="mutating"` keyword on `app.command(...)` / `group.command(...)` / the `Command` dataclass, sitting beside the existing `interactive` field (`python/strictcli/__init__.py`, `Command` dataclass, adjacent to `interactive: bool = False`). |
 | Go | `WithEffect(EffectMutating)` / `WithEffect(EffectReadOnly)` -- a `CmdOption`, registered in `go/strictcli/strictcli.go` alongside `WithInteractive()`. Constants `EffectReadOnly` and `EffectMutating` are exported. |
-| TypeScript | Twin factories `defineReadOnlyCommand(...)` and `defineMutatingCommand(...)` alongside the existing `defineCommand` (`typescript/src/factories.ts`). |
+| TypeScript | Twin factories `defineReadOnlyCommand(...)` and `defineMutatingCommand(...)` (`typescript/src/factories.ts`), which **replace** `defineCommand`. |
 
-`defineCommand` is **removed** from the TS public surface (`typescript/src/index.ts` re-export
-dropped, `typescript/src/describe.ts` descriptor renamed). Pre-stable projects get no
-compatibility shim; the twin factories are the only mint. The two factories differ in the
-`Context` type they narrow the handler's `ctx` parameter to (§2.4).
+`defineCommand` is **removed** from the TS surface entirely: the factory itself, its
+`typescript/src/index.ts` re-export, and its `typescript/src/describe.ts` descriptor all go.
+Pre-stable projects get no compatibility shim; the twin factories are the only mint. The two
+factories differ in the `Context` type they narrow the handler's `ctx` parameter to (§2.4), and
+in nothing else -- the options object is otherwise identical.
+
+**Passthrough commands are classified the same way, through the same scheme.** The existing
+`passthrough(...)` factory (`typescript/src/factories.ts`, producing `PassthroughDef`) is likewise
+replaced by twins:
+
+| Factory | Classification | Handler `ctx` |
+|---------|---------------|---------------|
+| `readOnlyPassthrough(...)` | `read_only` | `ReadOnlyContext` |
+| `mutatingPassthrough(...)` | `mutating` | `MutatingContext` |
+
+The naming morphology matches the command twins (the classification is spliced into the existing
+factory name; `defineCommand` -> `defineReadOnlyCommand` / `defineMutatingCommand`, `passthrough`
+-> `readOnlyPassthrough` / `mutatingPassthrough`). `PassthroughDef` gains a
+`readonly effect: "read_only" | "mutating"` member. Python and Go need no new spelling: a
+passthrough is an ordinary command registration there (`passthrough=Passthrough(...)` /
+`WithPassthrough(...)`), so it takes `effect=` / `WithEffect(...)` like everything else.
+A `mutating` passthrough prompts like any other mutating command (§8.1).
+
+**`typescript/src/describe.ts` outcome** (the dev-only API-surface dumper that
+`conformance/check_api_surface.py` reads):
+
+| Before | After |
+|--------|-------|
+| one `defineCommand` factory descriptor (`options_type: "CommandSpec"`) | two descriptors, `defineReadOnlyCommand` (`options_type: "ReadOnlyCommandSpec"`) and `defineMutatingCommand` (`options_type: "MutatingCommandSpec"`), each carrying the existing eleven `option_keys` plus `grants` and `forwarding`; the `defineCommand` descriptor is deleted, not renamed |
+| one `passthrough` factory descriptor | two descriptors, `readOnlyPassthrough` and `mutatingPassthrough`, each with the existing `option_keys` (`handler`, `help`, `hidden`, `tags`) plus `grants`; the `passthrough` descriptor is deleted |
+| `CommandDef` entity descriptor, commented "The command carrier built by defineCommand" | same entity, comment updated to "built by the twin factories", `members` gaining `effect`, `grants`, `forwarding` |
+| `PassthroughDef` entity descriptor | `members` gaining `effect` and `grants` (not `forwarding` -- a passthrough's signature is deliberately unpoliced already, §10.2) |
+
+Two spec types exist because the twins' handler signatures differ (the `ctx` narrowing of §2.4);
+everything else in `ReadOnlyCommandSpec` and `MutatingCommandSpec` is identical.
 
 ### 1.3 What classification buys
 
@@ -124,8 +173,8 @@ Per-language casing: Python and TypeScript use the names above verbatim (`ctx.ef
 
 Every method accepts, in addition to its own operation-specific arguments:
 
-- `resource=` -- optional opaque resource token (§5). Plain string.
-- `skip_if_current=` -- optional resource token; conditional-effect declaration (§5.2).
+- `resource=` -- optional opaque resource token (§5.1). Plain string, declared metadata only.
+- `skip_if_current=` -- optional resource token; preview-only conditional annotation (§5.2).
 - `grant=` -- optional grant name; must name a grant declared on the command (§6.1).
 
 Per-language spelling: Python keyword arguments; Go a trailing variadic `...EffectOption`
@@ -144,6 +193,158 @@ Compile-time narrowing is a TS-only affordance. Go cannot express it (accepted c
 Python does not attempt it. Every implementation carries the **mandatory runtime seal** (§4.4,
 §15) regardless, because plain JavaScript consumers bypass the type system entirely.
 
+The same narrowing applies to the passthrough twins: `readOnlyPassthrough` narrows to
+`ReadOnlyContext`, `mutatingPassthrough` to `MutatingContext`.
+
+### 2.5 Signatures, returns and error semantics
+
+The API is deliberately thin. The regime's value is in *recording*, not in wrapping subprocess or
+HTTP libraries: everything below is the minimum needed to describe an operation precisely enough
+to log it and to run it.
+
+#### 2.5.1 Result shapes
+
+Three shapes cover all eight methods.
+
+| Shape | Members | Produced by |
+|-------|---------|-------------|
+| `Completed` | `exit_code` (int), `stdout` (text), `stderr` (text) | `run`, and `Spawned.wait()` |
+| `Spawned` | `pid` (int), plus `wait()` returning `Completed` | `spawn` |
+| `Response` | `status` (int), `body` (bytes), `headers` (mapping, header names lower-cased) | `http` |
+| *(none)* | -- | `write`, `mkdir`, `remove`, `rename`, `chmod` |
+
+`stdout` / `stderr` are the child's output decoded as **UTF-8, strictly** (invalid UTF-8 is an
+error, §2.5.4), with a **single trailing newline removed if present**. That is the form callers
+actually want, and -- critically -- it is the form that can be forwarded straight into a later
+effect's argv (§2.5.5), which is what lets a data-flow preview work without per-mode handler code.
+
+Because `spawn` always streams (§2.5.2), the `Completed` its `wait()` yields carries the real
+`exit_code` and empty `stdout` / `stderr` -- the same shape `run` returns, populated to the extent
+a streamed child can populate it.
+
+Per-language spelling: Python frozen dataclasses `Completed` / `Spawned` / `Response`; Go structs
+of the same names with method accessors (§2.5.3); TypeScript interfaces of the same names with
+camelCased members (`exitCode`, `pid`, `status`).
+
+#### 2.5.2 Parameters
+
+The three common options of §2.3 (`resource=`, `skip_if_current=`, `grant=`) are accepted by all
+eight methods **in addition** to the operation-specific parameters below. There is no `shell=`
+parameter anywhere and no method ever accepts a shell string -- argv lists only.
+
+| Method | Operation-specific parameters |
+|--------|------------------------------|
+| `run` | `argv` (sequence of strings, required); `cwd` (path, default: inherit); `env` (mapping merged **over** the inherited environment, never replacing it; default: none); `check` (bool, default `true` -- §2.5.4); `stream` (bool, default `false`; when true the child inherits stdout/stderr and the returned `stdout` / `stderr` are empty strings) |
+| `spawn` | `argv` (required); `cwd`; `env`. Always streams (the child inherits stdio). No `check` -- there is no exit status at call time; `Spawned.wait()` carries it. |
+| `write` | `path` (required); `content` (required -- bytes, or text which is encoded UTF-8; the log's byte count is the encoded length) |
+| `mkdir` | `path` (required). Missing parents are created; an already-existing directory is not an error. |
+| `remove` | `path` (required). Removes a file, a symlink, or a directory tree **recursively**; a missing path is not an error. |
+| `rename` | `src` (required); `dst` (required) |
+| `chmod` | `path` (required); `mode` (int, required; rendered in the log as leading-zero octal, §3.2) |
+| `http` | `method` (string, required, upper-case); `url` (string, required); `body` (bytes, default none); `headers` (mapping, default none); `check` (bool, default `true` -- §2.5.4) |
+
+Per-language spelling follows §2.3: Python keyword arguments; TypeScript an optional final options
+object (`cwd`, `env`, `check`, `stream`, `body`, `headers` alongside `resource`, `skipIfCurrent`,
+`grant`); Go a trailing variadic `...EffectOption`, adding `Cwd(string)`, `Env(map[string]string)`,
+`Check(bool)`, `Stream(bool)`, `Body([]byte)` and `Header(k, v string)` to the three of §2.3.
+
+#### 2.5.3 Returns, per language and per mode
+
+Python and TypeScript return the **real result** in live mode and an `Unsettled` carrier in dry
+mode (per §4.1: every recorded mutation, and every post-mutation observe). Void methods return
+`None` / `undefined` in live mode.
+
+Go has no union type, so **every Go effect method returns a carrier type, always** -- settled in
+live mode (its extractors return real values) and unsettled in dry mode (its extractors panic with
+the truncation error, §3.3). `Completed`, `Spawned` and `Response` are therefore settleable
+carriers: non-comparable structs (the `[0]func()` field of §4.4) whose extractor methods are
+`ExitCode() int` / `Stdout() string` / `Stderr() string`, `PID() int` / `Wait() (Completed, error)`,
+and `Status() int` / `Body() []byte` / `Header(name string) string` respectively. The void methods
+return the plain payload-less `Unsettled` of §4.4, whose extractors panic in **both** modes -- it
+never carries a value, only a brand, and exists so the result of a `write` remains forwardable.
+All four Go carrier types expose the unexported `brandForm() string` the effects API reads at the
+forwarding boundary.
+
+| Method | Python / TS live | Python / TS dry | Go (always) |
+|--------|------------------|-----------------|-------------|
+| `run` (mutating) | `Completed` | `Unsettled` | `(Completed, error)` |
+| `run` (observe, pre-mutation) | `Completed` | `Completed` (it really executed) | `(Completed, error)` |
+| `run` (observe, post-mutation) | `Completed` | `Unsettled`, `«stale: ...»` brand | `(Completed, error)` |
+| `spawn` | `Spawned` | `Unsettled` | `(Spawned, error)` |
+| `write` / `mkdir` / `remove` / `rename` / `chmod` | `None` / `undefined` | `Unsettled` | `(Unsettled, error)` |
+| `http` | `Response` | `Unsettled` | `(Response, error)` |
+
+#### 2.5.4 Error semantics -- one rule
+
+**A failed operation is an error, not a value.** A `run` whose child exits nonzero, and an `http`
+whose response status is outside 200-299, fail the call: Python raises `EffectFailed`, TypeScript
+throws `EffectFailed`, Go returns a non-nil `error` as its second result. Invalid UTF-8 on a
+captured stream fails the same way. The rule is uniform across `run`, `Spawned.wait()` and `http`;
+the five void methods fail only on the underlying OS error.
+
+Passing `check=false` (Go: `Check(false)`) opts a single call out: the result is returned with its
+real `exit_code` / `status` and the handler decides. This exists because the ratified real-mode
+idempotency idiom (§5.2) branches on **allowlisted observes**, and exit codes are the most common
+predicate (`git rev-parse --verify`, `git diff --quiet`); without the opt-out that idiom would be
+unusable.
+
+Raising by default -- rather than always returning a status for the handler to test -- is the
+choice that keeps previews long: a handler that never tests a status never branches on a carrier,
+so dry mode (where nothing runs and nothing can fail) walks straight past it. Testing a status the
+handler *did* ask for is honest branching and truncates when the value is unsettled (§3.3), which
+is exactly right.
+
+In dry mode a recorded mutation never fails: nothing ran. Only pre-mutation observes, which really
+execute, can fail during a dry run, and they fail identically to live mode.
+
+Message templates: §12.8.
+
+#### 2.5.5 Forwarding a carrier into a parameter
+
+§4.3 makes forwarding legal. Concretely, a carrier (or, in live mode, a result object) may be
+passed anywhere a string-ish parameter is expected: any `argv` element, `path`, `src`, `dst`,
+`url`, or `content`. `mode`, `method`, `cwd`, `env`, `headers` and the three common options do
+**not** accept carriers -- passing one there is a call-time hard error.
+
+At that boundary the API coerces via each shape's declared **scalar projection**:
+
+| Shape | Scalar projection |
+|-------|-------------------|
+| `Completed` | `stdout` (already decoded and newline-trimmed, §2.5.1) |
+| `Response` | `body`, decoded UTF-8 strictly, one trailing newline removed |
+| `Spawned` | none -- forwarding a `Spawned` into a string position is a call-time hard error |
+| `Unsettled` (void carrier) | none in live mode (it holds nothing); its brand in dry mode |
+
+In dry mode the value is unsettled, so the brand form renders instead (§4.2) and no projection is
+taken. This is what makes the §3.2 example -- `run: gh release view «step 4 output»`, forwarding
+the carrier of an `http` effect -- one piece of handler code that is correct in both modes.
+
+Reading a *member* of a carrier is extraction, not forwarding: `result.stdout` on an `Unsettled`
+hits the poisoned accessor and truncates (§4.4). Forward the whole result object; let the API
+project it.
+
+Go types the carrier-accepting parameters as `any` (`argv []any`, `path any`, `src any`,
+`dst any`, `url any`, `content any`), accepting the natural Go type (`string`, `[]byte`) or a
+carrier and hard-erroring at call time on anything else. This is a Go-specific ceiling (§17); the
+common all-literal case reads acceptably (`[]any{"git", "tag", "v1.2.3"}`) and matches the repo's
+existing `map[string]interface{}` handler-args idiom.
+
+#### 2.5.6 Cross-language parity table
+
+| Method | Python | Go | TypeScript |
+|--------|--------|-----|-----------|
+| `run` | `ctx.effects.run(argv, *, cwd=None, env=None, check=True, stream=False, resource=None, skip_if_current=None, grant=None) -> Completed \| Unsettled` | `ctx.Effects().Run(argv []any, opts ...EffectOption) (Completed, error)` | `ctx.effects.run(argv, opts?) => Completed \| Unsettled` |
+| `spawn` | `ctx.effects.spawn(argv, *, cwd=None, env=None, ...) -> Spawned \| Unsettled` | `ctx.Effects().Spawn(argv []any, opts ...EffectOption) (Spawned, error)` | `ctx.effects.spawn(argv, opts?) => Spawned \| Unsettled` |
+| `write` | `ctx.effects.write(path, content, ...) -> None \| Unsettled` | `ctx.Effects().Write(path any, content any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.write(path, content, opts?) => void \| Unsettled` |
+| `mkdir` | `ctx.effects.mkdir(path, ...) -> None \| Unsettled` | `ctx.Effects().Mkdir(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.mkdir(path, opts?) => void \| Unsettled` |
+| `remove` | `ctx.effects.remove(path, ...) -> None \| Unsettled` | `ctx.Effects().Remove(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.remove(path, opts?) => void \| Unsettled` |
+| `rename` | `ctx.effects.rename(src, dst, ...) -> None \| Unsettled` | `ctx.Effects().Rename(src, dst any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.rename(src, dst, opts?) => void \| Unsettled` |
+| `chmod` | `ctx.effects.chmod(path, mode, ...) -> None \| Unsettled` | `ctx.Effects().Chmod(path any, mode int, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.chmod(path, mode, opts?) => void \| Unsettled` |
+| `http` | `ctx.effects.http(method, url, *, body=None, headers=None, check=True, ...) -> Response \| Unsettled` | `ctx.Effects().HTTP(method, url string, opts ...EffectOption) (Response, error)` | `ctx.effects.http(method, url, opts?) => Response \| Unsettled` |
+
+TypeScript parameter and member names camelCase (`skipIfCurrent`, `exitCode`); the options object
+carries every keyword-style parameter. Go's second result is the §2.5.4 error in every case.
+
 ---
 
 ## 3. Dry mode and the would-do log
@@ -152,17 +353,24 @@ Python does not attempt it. Every implementation carries the **mandatory runtime
 
 Dry mode is entered when the framework-owned `--dry-run` flag (§7) is present. In dry mode:
 
-- No effect is executed. Every effect is recorded in order.
+- No *application* effect is executed. Every one is recorded in order.
 - Mutating effects return `Unsettled` carriers (§4).
-- Observes issued *before* the first recorded mutation return real values.
+- Observes issued *before* the first recorded mutation execute for real and return real values.
 - Observes issued *after* the first recorded mutation return `Unsettled` carriers with the
   `«stale: ...»` brand form.
+- **Framework-blessed `CACHE_WRITE`s (§9.2) execute even in dry mode.** They are the sole
+  exception to "nothing runs": a dry run still writes its schema dump and its test-coverage
+  shards, because those are the framework's own bookkeeping and suppressing them would make
+  `--dump-schema --dry-run` and coverage-instrumented dry runs silently lossy. They are recorded
+  in the structured effect log (§14.3) with `recorded: false`, and they are never written to the
+  would-do log.
 - On successful completion the framework writes the would-do log to **stdout** and exits with
   the handler's exit code.
 
-`--dry-run` on a `read_only` command is accepted and produces a would-do log containing only
-whatever observes and (framework-blessed) cache writes occurred; in practice usually an empty
-body. It never errors.
+`--dry-run` on a `read_only` command is accepted and never errors. Its would-do log is **always
+just the header with an empty body**: a read-only command can only produce observes and
+framework-blessed cache writes, and neither is ever logged (§3.2, §9.2). The header is still
+emitted, so the output is honest about the mode the run was in.
 
 ### 3.2 The log format
 
@@ -316,6 +524,13 @@ with the truncation error. Unexported `brandForm() string` is what the effects A
 forwarding boundary. Extractor-panic ergonomics are an accepted ceiling (Go has no way to make
 extraction a compile error); do not re-litigate at implementation.
 
+`Unsettled` is Go's **void** carrier: it never carries a value, so its extractors panic in both
+modes. Go's three settleable carriers -- `Completed`, `Spawned`, `Response` (§2.5.3) -- are built
+the same way (the `[0]func()` non-comparability field, the unexported `brandForm()`), differing
+only in that their shape-specific extractors return real values when the carrier is settled and
+panic with the same truncation error when it is not. Python and TypeScript need no settleable
+variant: they return the real result object directly in live mode.
+
 **TypeScript -- branded type plus runtime Proxy seal.** The static type is a nominal brand
 (`declare const unsettledBrand: unique symbol`) so typed consumers get compile errors. The
 runtime value is a `Proxy` whose `get`, `set`, `has`, `deleteProperty`, `apply` and
@@ -329,42 +544,63 @@ Those two gaps are lint-visible only (§11) and are recorded, not fixed.
 
 ---
 
-## 5. Resource tokens and conditional effects
+## 5. Resource tokens and conditional annotations
 
 ### 5.1 Tokens
 
-A resource token is a **plain string**. The framework:
+A resource token is **declared metadata**: a plain string naming what an effect touches. The
+framework:
 
 - compares tokens by **string equality only** -- no normalization, no case folding, no path
   canonicalization, no prefix matching;
 - attaches no meaning to a token's shape; `remote:origin/main` and `gh-release:v1.2.3` are just
   strings that happen to read well;
-- never invents a token. An effect without `resource=` simply has none.
+- never invents a token. An effect without `resource=` simply has none;
+- **never acts on a token.** A token does not gate, skip, order or deduplicate anything.
 
-Declared on any effect as `resource=<token>`.
+A token's only consumers are the would-do log's conditional suffix (§5.2), the structured effect
+record's `resource` field (§14.2, hence `effects_equals` assertions), and any renderer a consumer
+builds on top of that record. Declared on any effect as `resource=<token>`.
 
-### 5.2 Conditional effects
+### 5.2 Conditional annotations (`skip_if_current`)
 
-`skip_if_current=<token>` declares "this effect is unnecessary if `<token>` is already current".
+`skip_if_current=<token>` is a **preview annotation and nothing else.**
 
-The framework maintains a per-run **current set**, initially empty:
+- **Dry mode** -- the effect is recorded like any other, and its log line carries the conditional
+  suffix `[unless resource '<token>' already current]` (§3.2). The suffix is documentation for the
+  human reading the preview: "the handler will skip this step if that resource is already
+  current".
+- **Real mode** -- the effect **executes unconditionally**. The declaration is inert.
 
-- Executing (real mode) or recording (dry mode) an effect that declares `resource=T` adds `T` to
-  the current set.
-- An effect declaring `skip_if_current=T`:
-  - **real mode** -- is skipped entirely if `T` is in the current set at the moment of the call;
-    otherwise it executes normally.
-  - **dry mode** -- is always recorded, and its log line carries the conditional suffix (§3.2).
-    Dry mode never claims to know whether the branch will be taken.
-- The current set is per-run and per-process. Nothing is persisted. Nothing crosses a spawn.
+There is **no current set**, no currency evaluation, no per-run resource tracking, and no
+framework state of any kind behind this feature. The framework never decides whether a resource is
+current; deciding that would mean evaluating a user predicate, which §0 forbids.
 
 An effect may declare both `resource=` and `skip_if_current=`, and they may name the same token
-(an idempotent self-guard).
+(a self-documenting idempotent step).
 
-The point of the mechanism is that idempotency branches move **out of handler `if` statements and
-into effect declarations**, where the preview can see them. A handler that branches on an observe
-in order to decide whether to mutate hits the truncation error (§3.3); a handler that declares
-`skip_if_current=` gets a complete, honest preview.
+**Where real-mode idempotency lives: in the handler.** The supported idiom is to branch on an
+**allowlisted observe** (§6.2):
+
+```
+head = ctx.effects.run(["git", "rev-parse", "HEAD"], check=False)   # observe: real value
+if head.exit_code == 0 and head.stdout == want:
+    return 0                                                        # already current
+ctx.effects.run(["git", "push", "origin", "main"],
+                resource="remote:origin/main",
+                skip_if_current="remote:origin/main")
+```
+
+This previews correctly because an observe issued *before* the first recorded mutation really
+executes and returns a **real value even in dry mode** (§3.1). Branching on it is branching on a
+real value, not on a carrier, so the preview walks straight through the `if` and records the
+mutation with its conditional suffix. Only observes issued *after* a mutation has been recorded
+yield carriers, and branching on those truncates (§3.3) -- correctly, because their result is
+genuinely unknowable.
+
+The declaration and the handler's guard are deliberately independent: the framework does not
+verify that they agree, and cannot. `skip_if_current=` makes the handler's intent visible in the
+preview; it does not implement it.
 
 ---
 
@@ -496,8 +732,17 @@ the framework-delivered values off the Context instead:
 
 - `verbose` -> `ctx.verbose` (or `ctx.Verbose()`); behavior unchanged (per-check notes, durations,
   the trailing count summary).
-- `dry_run` -> `ctx.dry_run` (or `ctx.DryRun()`); behavior unchanged (list which checks would run
-  without executing them).
+- `dry_run` -> `ctx.dry_run` (or `ctx.DryRun()`); the handler's own behavior is unchanged (list
+  which checks would run without executing them).
+
+`check --dry-run` is **not** behaviorally unchanged overall, though, and implementors must not
+assume it is: `--dry-run` is now the framework flag, so passing it puts the whole run in dry mode
+(§3.1). The observable difference is that after the handler's listing output, the framework emits
+the would-do log to stdout -- for `check`, which is `read_only`, that is the header line
+`DRY RUN — no changes were made. Would do:` with an **empty body** (§3.1's read-only rule; the
+check command's cache writes are `CACHE_WRITE`s and are never logged). Exit code is unchanged.
+Any conformance case or consumer test asserting `check --dry-run` stdout must be updated for the
+trailing header.
 
 The remaining six check flags (`all`, `tag`, `name`, `list`, `json`, `ignore-warnings`) are
 unaffected. The `check` command classifies as `read_only` (§9.2 covers its coverage-shard
@@ -523,9 +768,15 @@ Before dispatching a command classified `mutating`, when **all** of the followin
 - `--dry-run` was not passed;
 - `--yes` was not passed.
 
-It never fires for `read_only` commands, for passthrough commands (which are classified like any
-other command but whose args are opaque), or on the `test()` / `call()` / `_invoke` / MCP paths
+It never fires for `read_only` commands, or on the `test()` / `call()` / `_invoke` / MCP paths
 (§8.4).
+
+**Passthrough commands are not exempt.** A passthrough is classified like any other command
+(§1.2); a `mutating` passthrough prompts exactly like any other mutating command, `--yes` skips
+the prompt exactly as elsewhere, and a `read_only` passthrough never prompts. That the
+passthrough's args are opaque to the framework is a reason to confirm, not a reason to skip: the
+framework knows less about what is about to happen, not more. The prompt names the passthrough's
+dotted command path like any other.
 
 ### 8.2 The prompt
 
@@ -586,6 +837,7 @@ writes are the `CACHE_WRITE` kind. `CACHE_WRITE`:
 - has **no public method** on the effects handle and is unreachable from application code;
 - never appears in the would-do log;
 - never trips read-only enforcement;
+- **executes even in dry mode** (§3.1), carrying `recorded: false`;
 - is emitted in the structured effect log (§14.3) so conformance can assert its presence.
 
 The closed list of framework-blessed cache writes -- exactly these three, nothing else:
@@ -606,6 +858,10 @@ write. Specifically, the five auto-registered `config` subcommands classify as:
 | `config set` | `mutating` |
 | `config init` | `mutating` |
 | `config edit` | `mutating` (already `interactive=True`) |
+
+Those five, and the `check` command, are the framework-internal commands of §10.4; their
+classification only becomes enforceable once the `config` group's direct-`Command`-construction
+bypass is closed, which §10.4 requires.
 
 An app-level cache write is an ordinary `FILE_WRITE` and requires a `mutating` command. There is
 no way for an application to mint a `CACHE_WRITE`.
@@ -651,6 +907,56 @@ introspected for a var-keyword parameter. Guard v2's *enforcement* is therefore 
 parity and consumers can label forwarding wrappers uniformly; in Go and TS declaring it is
 inert beyond the schema emission. `check_api_surface.py` records this with an explicit
 `impl_exclusions` rationale rather than treating it as a divergence.
+
+### 10.4 Framework-internal handlers
+
+strictcli auto-registers six commands of its own: `check` (§7.5) and the five `config`
+subcommands (§9.2). Every one of their handlers accepts `**kwargs` today, and must keep doing so:
+handlers receive the **app's global flag values** as keyword arguments, and those flags are
+app-defined, so a framework-authored handler cannot name them. Guard v2 would reject all six.
+
+They get **no exemption**. The mechanism is declared forwarding plus a verification that only the
+framework can claim it:
+
+1. **Declared forwarding.** Each of the six commands is registered with forwarding declared and
+   the fixed reason string:
+
+   ```
+   framework-internal: absorbs app-defined global flag values
+   ```
+
+   This is ordinary `Forwarding` / `WithForwarding` / `forwarding:` (§10.2). It is emitted in the
+   schema like any other forwarding, so a consumer's audit gate sees the six sites and can
+   recognize them by that exact reason.
+
+2. **The internal marker.** `Command` gains a private field -- Python `_framework_internal: bool`,
+   Go `frameworkInternal bool`, TS `readonly frameworkInternal?: boolean` -- set **only** by
+   strictcli's own registration paths (`_register_check_command`, `_register_config_group` and
+   their Go/TS equivalents). It is not reachable from any public factory, option or spec: there is
+   no `framework_internal=` keyword, no `WithFrameworkInternal()`, no `frameworkInternal` key in
+   any options object. It is not emitted in the schema.
+
+3. **Module verification (the hardening).** At registration, when the marker is set, the framework
+   verifies the handler is defined inside strictcli's own module -- Python
+   `getattr(handler, "__module__", None) == __name__`; Go, the handler's function pointer resolves
+   into the strictcli package via `runtime.FuncForPC`; TS, the handler identity is one the
+   registering module itself created. If it is not, registration hard-errors with
+   `errFrameworkInternalHandlerForeign` (§12.9). A consumer that reaches the marker by any route
+   -- monkey-patching, prototype tampering, reflection -- therefore fails loudly at registration
+   rather than silently inheriting a framework exemption.
+
+**The `config` subcommands' validation bypass is closed in the same change.** Python's
+`_register_config_group` currently builds all five commands by calling the `Command` constructor
+directly, skipping `_build_and_validate_command` entirely -- so no signature validation, no flag
+validation, and (under this contract) no classification check would ever run on them. That bypass
+is deleted: all five go through `_build_and_validate_command` like every other command, which is
+what makes §9.2's classification table enforceable, subjects them to guard v2, and routes them
+through the marker + forwarding pair above. The Go and TypeScript equivalents are audited for the
+same shape and converged onto their own single validated registration path. The `check` command
+already routes through `_build_and_validate_command` and only needs the marker and the forwarding
+declaration -- that asymmetry between `check` and `config` is the bug being closed, and after this
+change there is exactly one registration path in each implementation, with no direct-construction
+callers left outside it.
 
 ---
 
@@ -707,6 +1013,15 @@ The structural model for a registration-time ban is the existing `force` triple:
 `validateFlagConfig` in `typescript/src/factories.ts`), and the inline `ValueError` in Python's
 `Flag.__post_init__`. Every new registration-time template below follows that shape.
 
+**Go declaration form.** A template that interpolates nothing is a **`const`**, not a function --
+matching `errors.go`'s existing style (`const errFlagForceReserved = "..."`,
+`const errArgHelpEmpty = "..."`, and the ~20 other parameterless consts already there). Only
+templates that interpolate become `func err*(...) string`. TypeScript keeps
+`export function err*(): string` even when parameterless, matching its own existing style
+(`errFlagForceReserved()`, `errArgHelpEmpty()`); the parity extractor keys on the name, which is
+identical either way. Among the templates below this affects `errConfirmNonInteractive` and
+`errConfirmDeclined` (§12.6), which are Go `const`s.
+
 ### 12.1 Reserved-name ban
 
 ```
@@ -730,6 +1045,13 @@ command "<name>": invalid effect "<v>": must be "read_only" or "mutating"
 ```
 
 `errCommandEffectInvalid(name, v)`. Registration-time.
+
+```
+deprecated command "<name>": effect classification does not apply (a deprecated command has no handler)
+```
+
+`errDeprecatedCommandEffect(name)`. Registration-time. Enforces §1.1's exemption in the one
+direction that can be enforced -- a caller passing `effect=` to `deprecate(...)` is wrong.
 
 ### 12.3 Guard v2 and forwarding
 
@@ -823,6 +1145,43 @@ command "<name>": invalid grant name '<g>': must match [a-z][a-z0-9-]*
 
 `errGrantNameInvalid(name, g)`.
 
+### 12.8 Effect failure (§2.5.4)
+
+```
+command "<name>": effects.<method> failed: <argv> exited <code>
+```
+
+`errEffectRunFailed(name, method, argv, code)`. `<argv>` is the space-joined argv; `<method>` is
+`run` or `spawn` (the latter when `Spawned.wait()` reports the failure).
+
+```
+command "<name>": effects.http failed: <METHOD> <url> returned <status>
+```
+
+`errEffectHTTPFailed(name, httpMethod, url, status)`.
+
+```
+command "<name>": effects.<method> produced output that is not valid UTF-8
+```
+
+`errEffectOutputNotUTF8(name, method)`.
+
+```
+command "<name>": effects.<method> parameter '<p>' does not accept an unsettled value
+```
+
+`errEffectParamRejectsCarrier(name, method, p)`. Call-time; raised when a carrier is passed to one
+of the parameters §2.5.5 excludes (`mode`, `method`, `cwd`, `env`, `headers`, the three common
+options), or when a `Spawned` is forwarded into a string position.
+
+### 12.9 Framework-internal handlers (§10.4)
+
+```
+command "<name>": handler is marked framework-internal but is not defined in the strictcli module
+```
+
+`errFrameworkInternalHandlerForeign(name)`. Registration-time, all three.
+
 ---
 
 ## 13. Schema fields
@@ -843,8 +1202,27 @@ command "<name>": invalid grant name '<g>': must match [a-z][a-z0-9-]*
 |-----|------|----------|
 | `proc_observe_allowlist` | array of arrays of string | omitted when empty; prefixes in declaration order |
 
+Deprecated commands do not appear here at all: they serialize into the separate top-level
+`deprecated` list (Python `schema["deprecated"]`, Go/TS equivalents), not through
+`_serialize_command`. §1.1's exemption therefore costs the dumped schema nothing.
+
 The conformance case schema (`conformance/schema.json`) mirrors these under `$defs/command` and
-`$defs/app`, with `effect` added to `$defs/command`'s `required` list.
+`$defs/app`. `effect` must **not** be added to `$defs/command`'s top-level `required` list:
+`$defs/command` already carries an `if`/`then` that reshapes deprecated entries, and a top-level
+`required` applies conjunctively with the `then`, so a top-level entry would make `effect`
+mandatory on deprecated commands too -- the opposite of §1.1. The concrete change, exactly:
+
+- add `effect` (`{"enum": ["read_only", "mutating"]}`) to `$defs/command`'s `properties`;
+- leave the top-level `required` as `["name", "help"]`;
+- add `"effect": false` to the deprecated branch's `then.properties`, alongside the existing
+  `"handler_prints": false` / `"flags": false` / ... entries, so a deprecated case declaring
+  `effect` fails validation;
+- add an `else` branch to the same `if`: `{"required": ["effect"]}`, making classification
+  mandatory for every non-deprecated command entry.
+
+The same three keys (`grants`, `forwarding`, and app-level `proc_observe_allowlist`) are added to
+`properties` as ordinary optional fields, with `grants` and `forwarding` also set `false` in the
+deprecated `then.properties`.
 
 `conformance/check_api_surface.py` gains the corresponding entity mappings on the existing
 `EntityDescriptor` for `command` and `app`: `schema_to_go` entries
@@ -897,8 +1275,14 @@ explicit-null keys are equivalent. It is an ordinary expect key: a case may comb
 ```
 
 `detail` is the same string the would-do log renders after the verb (so forwarded carriers appear
-in brand form). `bytes` is present only for `write`. `recorded` is `true` in dry mode and `false`
-when the effect actually executed.
+in brand form). `bytes` is present only for `write`. `recorded` is `true` when the effect was
+recorded instead of performed, and `false` when it actually executed -- so framework-blessed
+`CACHE_WRITE`s carry `recorded: false` even during a dry run (§3.1).
+
+Observes (§6.2) do not appear in the structured effect log at all. The `kind` and `verb` enums
+above have no observe member, and an observe recorded as a `proc_mutate`/`run` pair would be
+indistinguishable from a real mutation -- which is exactly the confusion the log exists to
+prevent. The log is what would change, in both its rendered (§3.2) and structured forms.
 
 ### 14.3 The effect-log side channel
 
@@ -975,12 +1359,30 @@ indexed by position so `forward_from` / `extract_from` can reference it.
 
 ### 14.5 Fixture app and parity checks
 
-- `RICH_APP` in `conformance/check_api_surface.py` gains a classified command set (at least one
-  `read_only`, one `mutating`, one with grants, one with declared forwarding) so the descriptor
-  comparison exercises the new fields.
+- `RICH_APP` lives in **`conformance/check_schema_parity.py`** (not `check_api_surface.py`): it is
+  an app-*definition* dict fed to every implementation so their dumped schemas can be compared.
+  Because classification is mandatory, the fixture cannot even be built without it: **every
+  command entry in `RICH_APP` gains `effect`**, and its deprecated entries deliberately do not
+  (§1.1). It additionally gains at least one command with `grants`, one with `forwarding`, and an
+  app-level `proc_observe_allowlist`, so the new keys are exercised end-to-end.
+  `check_schema_parity.py`'s comparison logic itself is unchanged -- the new keys are ordinary
+  fields (§13) -- but the fixture edit is mandatory, not optional.
+- The api-surface side of the same work is the `EntityDescriptor` mapping change already specified
+  in §13, plus the `describe.ts` descriptor changes in §1.2.
 - `check_error_parity.py` gains the §12 templates. Every parse-time template needs a covering
   conformance case (the extractor enforces it); registration-time templates need a
   `SIGNATURE_STATUS` entry only where an implementation legitimately lacks the message (§10.3).
+- **Templates that cannot be covered by a conformance case need `coverage_deferred`
+  `SIGNATURE_STATUS` entries**, one per implementation, following the file's existing precedent
+  (the `'--*: cannot read stdin'` and `'--*: stdin (@-) can only be used once per invocation'` rows
+  already carry
+  `"coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner"`).
+  The confirm-protocol templates are exactly that case -- `promptConfirmMutating`,
+  `errConfirmNonInteractive` and `errConfirmDeclined` (§12.6) all require driving stdin and/or
+  faking TTY-ness of a subprocess, which the conformance runner does not do. Use the existing
+  rationale string verbatim so the precedent stays greppable. `errEffectHTTPFailed` (§12.8) gets
+  its own deferral -- rationale: requires issuing a real network request, which conformance cases
+  must not do.
 - The cross-process cases that would have exercised an env-mode token are **not written**: A9
   deleted that mechanism (§16). What remains is in-process spawn-record assertions -- a `spawn`
   effect appearing in `effects_equals` with `recorded: true`.
@@ -1041,6 +1443,10 @@ already funnel through; the per-site work is passing the effects/reserved-flag s
   to propagate. When a consumer genuinely needs a child CLI to run dry, it passes `--dry-run`
   explicitly in the child's argv, like any other flag. Ambient mode inheritance is silent runtime
   behavior change and is forbidden.
+- **No runtime currency machinery.** There is no current set, no resource-state tracking, no
+  skip-if-current evaluation, no persistence, nothing that crosses a spawn. `resource=` is declared
+  metadata and `skip_if_current=` is a preview annotation (§5). Real-mode idempotency is the
+  handler's job and stays in handler code.
 - **No `dry_run_supported` capability negotiation** inside the framework.
 - **No inference** of classification from a command's name, tags, flags or handler body.
 - **No partial preview fallback.** When the preview cannot continue it truncates loudly (§3.3);
@@ -1065,69 +1471,195 @@ Recorded so implementors do not re-litigate them:
 - **Go**: extraction is a runtime panic, not a compile error. Non-comparability is the only
   compile-time protection available.
 - **Go**: no compile-time ctx narrowing exists; the twin-factory affordance is TS-only.
+- **Go**: carrier-accepting effect parameters are typed `any` (§2.5.5), so passing a wrong type is
+  a call-time hard error rather than a compile error. Go has no union type; the alternative -- a
+  sealed `Arg` interface with an `S("literal")` wrapper on every element -- was rejected as worse
+  ergonomics for the overwhelmingly common all-literal case.
+- **Go**: effect methods return `(carrier, error)` where Python and TypeScript raise/throw
+  (§2.5.4). This is an idiom divergence, not a behavioral one: the same conditions produce a
+  failure in all three. `check_error_parity.py` records it with an `impl_exclusions` rationale.
 - **Go/TS**: guard v2 has no enforcement surface (§10.3).
 - **The go-scope-adapter** stays parked; this contract does not touch it.
 
 ---
 
-## 18. Spelling-level pins made while authoring
+## 18. Decision provenance
 
-Everything in §§1-17 that the ratified pin list did not already spell out is enumerated here, so a
-reviewer can see exactly what was decided at authoring time versus ratified upstream. All of these
-are mechanical/spelling decisions forced by the ratified semantics; none of them changes a
-ruling.
+This section is **exhaustive**: every decision in §§1-17 that is not verbatim plan text is listed
+below, in one of three classes. If a statement in this document is not derivable from the ratified
+pin list in the campaign ledger, it appears here.
 
-1. **Log line layout** -- `  <N>. <verb>: <detail>`: two-space indent, unpadded 1-based number,
-   `. ` after the number, `: ` after the verb. The pin fixed "numbered verb-prefixed lines"
-   without fixing the punctuation.
-2. **Four additional verbs** -- `mkdir:`, `remove:`, `rename:`, `chmod:`. The pin named the verbs
-   for the four kinds whose spelling was in question (`run:`, `write:`, `net:`, `spawn:`); the
-   remaining four `FILE_WRITE` methods need verbs of their own, and reusing `write:` for
-   `mkdir` would read as nonsense. The **kind** set is unchanged.
-3. **Detail spelling per verb** -- byte count as `<path> (<n> bytes)`, rename as `<from> -> <to>`,
-   chmod mode as leading-zero octal, `http` as `<METHOD> <url>`.
-4. **Suffix ordering** -- grant suffix before conditional suffix when both apply.
-5. **Observes are not logged.** The log is what would *change*.
-6. **Reserved-flag delivery is on the Context, not in kwargs** (§7.2), with the concrete accessor
-   names per language. Forced by guard v2 tightening in the same release and by `Context` needing
-   the values for its own gating; recorded here because the pin said "delivery" without a site.
-7. **The four reserved flags have no short forms**, and the ban covers long flag names at every
-   level but not arg names or short names.
-8. **`check --dry-run` is subsumed alongside `--verbose`** (§7.5) -- forced by the unconditional
-   name ban, and Go's check command must gain the candidate-filter that Python and TS already
-   have.
-9. **`--quiet` + `--verbose` together is silently quiet**, not an error and not a mutex.
-10. **Confirm answer grammar** -- exactly `y`/`Y` proceeds; everything else including EOF
+### 18.1 User-ratified rulings folded in at the execution round (2026-08-02)
+
+These are **ratified by the user**, not authored here. They amended an earlier draft of this
+document after its adversarial audit, and they override anything that contradicts them.
+
+1. **`skip_if_current` is preview-annotation-only** (§5.2). The earlier per-run "current set"
+   evaluation model is deleted in full: no currency tracking, no skipping, no framework state.
+   Dry mode renders the pinned conditional suffix; real mode executes unconditionally. Real-mode
+   idempotency stays in handler code, which may branch on allowlisted-observe results because
+   those return real values even in dry mode (§3.1, §6.2). `resource=` survives as declared
+   metadata carried on the effect record (§5.1).
+2. **Mutating passthrough commands prompt** (§8.1). The earlier passthrough exemption from the
+   confirm protocol is deleted. A `mutating` passthrough prompts exactly like any other mutating
+   command; `--yes` skips it; a `read_only` passthrough never prompts.
+3. **Confirmed forced consequences** (ratified as forced, i.e. the user accepted that no
+   alternative existed): TS `defineCommand` is removed and the twins are the sole registration
+   surface (§1.2); the four additional `FILE_WRITE` log verbs stand (§3.2); `config set` is
+   `mutating` (§9.2); framework-blessed `CACHE_WRITE`s execute even in dry mode (§3.1, §9.2);
+   deprecated commands are classification-exempt (§1.1); framework-internal `**kwargs` handlers
+   are rewritten or use declared forwarding under the module-verification hardening (§10.4).
+
+### 18.2 Forced consequences (no design freedom existed)
+
+Recorded so a reviewer does not mistake them for choices.
+
+4. **`check --verbose` and `check --dry-run` are subsumed** (§7.5). Two flags cannot share a
+   spelling, and the ban is unconditional; Go's check command must additionally gain the
+   candidate-filter Python and TypeScript already have.
+5. **Guard v2 enforcement is Python-only** (§10.3). Go handlers take `map[string]interface{}` and
+   TypeScript handlers a typed args object; neither can be introspected for a var-keyword
+   parameter. The *declaration* exists in all three so the API surface stays in parity.
+6. **Truncation exits `1` and splits its streams** (§3.3): the already-recorded log to stdout, the
+   pinned error text to stderr. Fail-closed admits no other outcome, and the log is dry mode's
+   primary output so it must still be emitted.
+7. **Observes execute in dry mode and are not logged** (§6.2, §3.2). An observe that did not
+   execute could not return the real value the regime promises pre-mutation; an observe in the
+   would-do log would misrepresent a read as a change.
+8. **`--quiet` never suppresses the would-do log** (§3.4, §7.4). It is dry mode's primary output,
+   not a diagnostic.
+9. **Reserved-flag values are delivered on the Context, not as handler kwargs** (§7.2). Injecting
+   four mandatory parameters into every handler would contradict guard v2 in the same release, and
+   `Context` needs `quiet` / `verbose` / `dry_run` for its own gating regardless.
+10. **A read-only dry run's would-do body is always empty** (§3.1). Observes are unlogged and
+    cache writes are unlogged, so nothing can appear. The header is still emitted.
+
+### 18.3 Spelling-level pins authored in this document
+
+Mechanical decisions forced by the ratified semantics. None changes a ruling; each fixes a
+spelling the pin list left open.
+
+11. **Log line layout** -- `  <N>. <verb>: <detail>`: two-space indent, unpadded 1-based number,
+    `. ` after the number, `: ` after the verb. The pin fixed "numbered verb-prefixed lines"
+    without fixing the punctuation.
+12. **Four additional verbs** -- `mkdir:`, `remove:`, `rename:`, `chmod:`. The pin named the verbs
+    for the four kinds whose spelling was in question (`run:`, `write:`, `net:`, `spawn:`); the
+    remaining four `FILE_WRITE` methods need verbs of their own, and reusing `write:` for
+    `mkdir` would read as nonsense. The **kind** set is unchanged.
+13. **Detail spelling per verb** -- byte count as `<path> (<n> bytes)`, rename as `<from> -> <to>`,
+    chmod mode as leading-zero octal, `http` as `<METHOD> <url>`.
+14. **Suffix ordering** -- grant suffix before conditional suffix when both apply.
+15. **The four reserved flags have no short forms**, and the ban covers long flag names at every
+    level but not arg names or short names.
+16. **Concrete reserved-flag accessor names per language** (§7.2).
+17. **`--quiet` + `--verbose` together is silently quiet**, not an error and not a mutex; the
+    gating table of §7.4 and its never-suppressed list.
+18. **Confirm answer grammar** -- exactly `y`/`Y` proceeds; everything else including EOF
     declines; decline prints `aborted` to stderr and exits 1.
-11. **Programmatic dispatch behaves as if `--yes`** (§8.4) -- the only non-hanging option for
-    `test`/`call`/MCP.
-12. **Go's TTY check uses `os.Stdin.Stat()` + `os.ModeCharDevice`**, keeping the Go package
+19. **Programmatic dispatch behaves as if `--yes`** (§8.4) -- `test`, `call`/`Call`/`invoke` and
+    the MCP server never prompt and never emit the non-TTY error, and `--dry-run` is not reachable
+    through them. The only non-hanging option for callers with no TTY contract.
+20. **Go's TTY check uses `os.Stdin.Stat()` + `os.ModeCharDevice`**, keeping the Go package
     zero-dependency.
-13. **Python's `__repr__` is the single non-poisoned dunder**, and `__class__` stays intact so
+21. **Python's `__repr__` is the single non-poisoned dunder**, and `__class__` stays intact so
     `isinstance` works at the forwarding boundary; `__str__` and `__format__` ARE poisoned
     (stringifying a carrier in handler code is extraction, not forwarding).
-14. **Go's `Unsettled` is made non-comparable via a `[0]func()` field**; brand read through an
+22. **Go's carriers are made non-comparable via a `[0]func()` field**; brand read through an
     unexported `brandForm()`.
-15. **TS Proxy exemptions are exactly three** -- the internal brand symbol,
+23. **TS Proxy exemptions are exactly three** -- the internal brand symbol,
     `Symbol.toStringTag`, and the Node inspect symbol.
-16. **Conditional-effect evaluation model** (§5.2) -- a per-run current set fed by `resource=`,
-    consulted by `skip_if_current=`; real mode skips, dry mode always records with the suffix.
-17. **Grant `kind` is drawn from the effect-kind enum** and must match the effect it is used on;
+24. **Grant `kind` is drawn from the effect-kind enum** and must match the effect it is used on;
     grant names match `[a-z][a-z0-9-]*`.
-18. **`proc_observe_allowlist` matching is element-wise argv-prefix string equality.**
-19. **`CACHE_WRITE` is unreachable from application code** and its site list is closed at three
+25. **`proc_observe_allowlist` matching is element-wise argv-prefix string equality.**
+26. **`CACHE_WRITE` is unreachable from application code** and its site list is closed at three
     (§9.2); the five `config` subcommands' classifications are pinned in the same section.
-20. **Declared forwarding mirrors `Passthrough`'s registration shape** and carries a mandatory
+27. **Declared forwarding mirrors `Passthrough`'s registration shape** and carries a mandatory
     `reason`.
-21. **The bypass check is named `effects-bypass`** with the tag/severity/fast/pure/network values
+28. **The bypass check is named `effects-bypass`** with the tag/severity/fast/pure/network values
     in §11.
-22. **Error-template function names** (§12) follow the existing `err*` catalog convention, one
+29. **Error-template function names** (§12) follow the existing `err*` catalog convention, one
     function per template in Go and TS.
-23. **Schema emission rules** (§13) -- `effect` always emitted (no default to omit against);
+30. **Go templates that interpolate nothing are `const`s, not functions** (§12 preamble), matching
+    `errors.go`'s existing style; TypeScript keeps a parameterless function. Affects
+    `errConfirmNonInteractive` and `errConfirmDeclined`.
+31. **Schema emission rules** (§13) -- `effect` always emitted (no default to omit against);
     `grants`, `forwarding` and `proc_observe_allowlist` omitted when empty.
-24. **`effects_equals` compares a structured effect log**, whose record shape is `$defs/
+32. **`effects_equals` compares a structured effect log**, whose record shape is `$defs/
     effect_record` (§14.2), delivered through the `CONFORMANCE_EFFECT_LOG` file handoff (§14.3)
     modelled on the existing `CONFORMANCE_APP_DEF` pattern, read via a test-only
     `App.effect_log()` accessor.
-25. **`handler_effects` is the harness vocabulary extension** (§14.4), with `forward_from` and
+33. **`handler_effects` is the harness vocabulary extension** (§14.4), with `forward_from` and
     `extract_from` as 1-based back-references and `extract_from` terminal.
+34. **Observes do not appear in the structured effect log either** (§14.2). Derived from the
+    pinned `kind`/`verb` enums, which have no observe member; recording one as `proc_mutate`/`run`
+    would make a read indistinguishable from a change.
+
+The following pins were authored at the execution round, alongside the §18.1 rulings.
+
+35. **The eight methods' parameters** (§2.5.2): `run(argv, cwd, env, check, stream)`;
+    `spawn(argv, cwd, env)`; `write(path, content)`; `mkdir(path)`; `remove(path)`;
+    `rename(src, dst)`; `chmod(path, mode)`; `http(method, url, body, headers, check)`. No method
+    accepts a shell string. `env` merges over the inherited environment rather than replacing it.
+36. **`mkdir` creates missing parents and tolerates an existing directory; `remove` is recursive
+    and tolerates a missing path** (§2.5.2). One behavior each, no mode flags -- the would-do log
+    shows exactly which path is affected, which is the regime's answer to the danger.
+37. **Three result shapes** -- `Completed` (`exit_code`, `stdout`, `stderr`), `Spawned` (`pid`,
+    `wait()`), `Response` (`status`, `body`, `headers`); the five path-mutating methods return no
+    value (§2.5.1).
+38. **`Spawned` is the reading of the pin's "spawn returns the same as run"** (§2.5.1): a minimal
+    handle whose `wait()` yields exactly `run`'s `Completed`. §2.2 pins spawn as
+    "without waiting", so the shapes are made identical at the point the result exists rather than
+    at call time. This is the one place where the ratified direction admitted more than one
+    reading; the alternative (returning `Completed` directly, i.e. waiting) contradicts §2.2.
+39. **`stdout` / `stderr` are text, not bytes** -- decoded UTF-8 strictly, one trailing newline
+    removed (§2.5.1). Chosen because it is the form that can be forwarded straight into a later
+    effect's argv, which is what lets one piece of handler code be correct in both modes.
+40. **Error semantics: a failed operation is an error, not a value** (§2.5.4). Nonzero exit and
+    non-2xx status fail the call by default; `check=false` opts a single call out. Raising by
+    default keeps previews long (a handler that never tests a status never branches on a carrier),
+    and the opt-out is required for the §5.2 idempotency idiom, whose commonest predicate is an
+    exit code.
+41. **Go effect methods return `(carrier, error)`** where Python and TypeScript raise (§2.5.4,
+    §17). Idiom divergence only; recorded with an `impl_exclusions` rationale.
+42. **Go returns a carrier type always** (§2.5.3): `Completed`, `Spawned` and `Response` are
+    settleable carriers whose extractors return real values in live mode and panic when unsettled;
+    the payload-less `Unsettled` of §4.4 is the void carrier returned by the five path-mutating
+    methods, so a `write` result stays forwardable.
+43. **The forwarding boundary and its scalar projections** (§2.5.5): a carrier is accepted for any
+    `argv` element, `path`, `src`, `dst`, `url` or `content`; `Completed` projects to `stdout`,
+    `Response` to its decoded `body`, `Spawned` to nothing. Reading a member of a carrier remains
+    extraction.
+44. **Go types carrier-accepting parameters `any`** (§2.5.5, §17), hard-erroring at call time on
+    anything that is neither the natural Go type nor a carrier.
+45. **TS passthrough twins are `readOnlyPassthrough` / `mutatingPassthrough`** (§1.2), splicing
+    the classification into the existing factory name exactly as the command twins splice it into
+    `defineCommand`. `passthrough` is removed; `PassthroughDef` gains `effect` and `grants`.
+46. **`describe.ts` gains two command-factory descriptors and two passthrough descriptors**, with
+    two spec types `ReadOnlyCommandSpec` / `MutatingCommandSpec` because the twins' handler
+    signatures differ; the `defineCommand` and `passthrough` descriptors are deleted, not renamed
+    (§1.2).
+47. **The conformance schema encodes the deprecated exemption as an `else` branch**, not as a
+    top-level `required` entry (§13) -- a top-level `required` applies conjunctively with the
+    existing deprecated `then` and would make `effect` mandatory on deprecated entries.
+48. **`errDeprecatedCommandEffect`** (§12.2) enforces the exemption in the one enforceable
+    direction.
+49. **Framework-internal commands use declared forwarding plus a private marker and module
+    verification** (§10.4), with the fixed reason string
+    `framework-internal: absorbs app-defined global flag values`; the marker is unreachable from
+    any public API and a foreign handler carrying it is `errFrameworkInternalHandlerForeign`
+    (§12.9).
+50. **The `config` group's direct-`Command`-construction bypass is deleted** (§10.4): all five
+    subcommands route through the single validated registration path, in every implementation.
+51. **§12.8's failure templates** -- `errEffectRunFailed`, `errEffectHTTPFailed`,
+    `errEffectOutputNotUTF8`, `errEffectParamRejectsCarrier`.
+52. **`coverage_deferred` `SIGNATURE_STATUS` entries** for the confirm-protocol templates and
+    `errEffectHTTPFailed` (§14.5), reusing the runner's existing stdin-piping rationale string
+    verbatim.
+53. **`RICH_APP`'s fixture edit is mandatory** (§14.5): it lives in `check_schema_parity.py` and
+    every one of its command entries gains `effect`, even though that file's comparison logic is
+    unchanged.
+54. **`check --dry-run` gains a trailing dry-run header** (§7.5), so its existing assertions must
+    be updated.
+
+Nothing else in this document was decided at authoring time. Every remaining statement is either
+verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
