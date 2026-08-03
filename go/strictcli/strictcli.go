@@ -387,6 +387,32 @@ type App struct {
 	lastYes     bool
 	lastQuiet   bool
 	lastVerbose bool
+
+	// exitHook runs immediately before Run's terminal os.Exit. Test-only
+	// surface; see SetExitHook.
+	exitHook func()
+}
+
+// SetExitHook registers a function to run immediately before Run's terminal
+// os.Exit, after the handler has returned and the would-do log has been
+// written.
+//
+// Test-only surface, beside Test() and EffectLog(). Go has no stdlib at-exit
+// facility and Run ends in os.Exit, so a caller that needs to read a
+// post-dispatch diagnostic -- EffectLog() above all -- has no other seam. It
+// gives Go what Python's atexit and Node's process.on("exit") give their
+// harnesses for free. It changes no behavior: the hook runs after every
+// observable output the run produces, and its own errors are the caller's.
+func (a *App) SetExitHook(fn func()) {
+	a.exitHook = fn
+}
+
+// runExitHook invokes the registered exit hook, if any. Called immediately
+// before Run's terminal os.Exit calls.
+func (a *App) runExitHook() {
+	if a.exitHook != nil {
+		a.exitHook()
+	}
 }
 
 // --- Option types ---
@@ -2092,6 +2118,7 @@ func (a *App) Run() {
 		if reserved.dryRun && !truncated {
 			fmt.Fprintln(os.Stdout, a.renderWouldDoLog())
 		}
+		a.runExitHook()
 		os.Exit(code)
 	}
 
@@ -2113,6 +2140,7 @@ func (a *App) Run() {
 	if reserved.dryRun && !truncated {
 		fmt.Fprintln(os.Stdout, a.renderWouldDoLog())
 	}
+	a.runExitHook()
 	os.Exit(code)
 }
 

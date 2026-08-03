@@ -1343,3 +1343,22 @@ func TestCoverageShardRecordsACacheWrite(t *testing.T) {
 		t.Fatalf("expected the coverage shard path, got %#v", log[0])
 	}
 }
+
+// The exit hook is the Go counterpart of Python's atexit and Node's
+// process.on("exit"): Run ends in os.Exit, so a caller that needs to read a
+// post-dispatch diagnostic (EffectLog above all) has no other seam. Run itself
+// cannot be exercised in-process, so the seam is pinned directly.
+func TestSetExitHookRunsOnce(t *testing.T) {
+	app := NewApp("app", "1.0.0", "h")
+	calls := 0
+	app.SetExitHook(func() { calls++ })
+	app.runExitHook()
+	if calls != 1 {
+		t.Fatalf("expected the registered hook to run once, got %d calls", calls)
+	}
+}
+
+func TestRunExitHookIsANoOpWhenUnset(t *testing.T) {
+	app := NewApp("app", "1.0.0", "h")
+	app.runExitHook() // must not panic
+}
