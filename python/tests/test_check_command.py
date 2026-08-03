@@ -400,6 +400,17 @@ class TestCheckCommandVerboseNotes:
         assert "passed /" not in result.stdout
         assert "ms)" not in result.stdout
 
+    def test_dry_run_emits_the_framework_would_do_header(self, tmp_path, monkeypatch):
+        """--dry-run is now the framework flag, so it also puts the whole run
+        in dry mode. check is read_only, so the body is empty."""
+        app = _setup_checks_app(tmp_path, monkeypatch, TWO_CHECKS_TOML)
+        result = app.test(["--dry-run", "check", "--all"])
+        assert result.exit_code == 0
+        assert result.stdout.endswith(
+            "DRY RUN — no changes were made. Would do:\n"
+        )
+        assert "Would run 2 checks:" in result.stdout
+
     def test_check_no_longer_declares_verbose_or_dry_run_flags(self, tmp_path, monkeypatch):
         """--verbose and --dry-run are framework-owned reserved names, so the
         check command's own two flags are dropped and the values are read off
