@@ -293,6 +293,38 @@ test("effects: a carrier in an EXCLUDED parameter is rejected", async () => {
 	}
 });
 
+test("effects: a carrier in check/stream is rejected, not silently ignored", async () => {
+	const cases: [string, string, (ctx: MutatingContext, c: unknown) => void][] =
+		[
+			[
+				"run",
+				"check",
+				(ctx, c) => ctx.effects.run(["x"], { check: c as boolean }),
+			],
+			[
+				"run",
+				"stream",
+				(ctx, c) => ctx.effects.run(["x"], { stream: c as boolean }),
+			],
+			[
+				"http",
+				"check",
+				(ctx, c) =>
+					ctx.effects.http("GET", "https://x.test", { check: c as boolean }),
+			],
+		];
+	for (const [method, param, body] of cases) {
+		const app = mutApp((ctx) => {
+			const built = ctx.effects.run(["make"]);
+			body(ctx, built);
+			return 0;
+		});
+		await assert.rejects(app.test(["--dry-run", "go"]), {
+			message: `command "go": effects.${method} parameter '${param}' does not accept an unsettled value`,
+		});
+	}
+});
+
 // --- Inapplicable options are a call-time hard error (§2.5.2) ---
 
 test("effects: an option a method does not accept is a call-time error", async () => {
@@ -791,6 +823,80 @@ test("effects: a coverage shard is a CACHE_WRITE that executes even in dry mode"
 		assert.ok(existsSync(String(records[0]?.detail)));
 		// ...and it is never written to the would-do log.
 		assert.equal(r.stdout, HEADER);
+	} finally {
+		process.chdir(cwd);
+	}
+});
+
+test("effects: a CACHE_WRITE never consumes a would-do number", async () => {
+	// The same counter feeds the log lines, the «step N output» brand and the
+	// truncation error's "ends at step N": an invisible record shifting it would
+	// move user-visible numbering for no visible reason.
+	const dir = tmp();
+	const cwd = process.cwd();
+	process.chdir(dir);
+	try {
+		const app = createApp({
+			name: "t",
+			version: "1",
+			help: "h",
+			testCoverage: true,
+		});
+		app.command(
+			defineMutatingCommand("rel", {
+				help: "h",
+				handler: (_a, ctx) => {
+					const c = ctx.effects.run(["git", "tag", "v1"]);
+					ctx.effects.run(["push", c]);
+					return 0;
+				},
+			}),
+		);
+		const r = await app.test(["--dry-run", "rel"]);
+		assert.equal(
+			r.stdout,
+			`${HEADER}  1. run: git tag v1\n  2. run: push «step 1 output»\n`,
+		);
+		const records = log(app);
+		assert.ok(records.some((rec) => rec.kind === "cache_write"));
+		assert.deepEqual(
+			records.filter((rec) => rec.kind !== "cache_write").map((rec) => rec.seq),
+			[1, 2],
+		);
+	} finally {
+		process.chdir(cwd);
+	}
+});
+
+test("effects: a CACHE_WRITE never shifts the truncation step", async () => {
+	const dir = tmp();
+	const cwd = process.cwd();
+	process.chdir(dir);
+	try {
+		const app = createApp({
+			name: "t",
+			version: "1",
+			help: "h",
+			testCoverage: true,
+		});
+		app.command(
+			defineMutatingCommand("rel", {
+				help: "h",
+				handler: (_a, ctx) => {
+					const c = ctx.effects.run(["git", "tag", "v1"]);
+					return c.exitCode;
+				},
+			}),
+		);
+		const r = await app.test(["--dry-run", "rel"]);
+		assert.equal(r.exitCode, 1);
+		assert.ok(
+			r.stderr.includes(
+				"error: dry-run preview ends at step 2: rel branched on unsettled " +
+					"value «step 1 output» — cannot preview past this point",
+			),
+			r.stderr,
+		);
 	} finally {
 		process.chdir(cwd);
 	}

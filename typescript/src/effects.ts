@@ -315,12 +315,34 @@ export class EffectLog {
 	 */
 	truncated: DryRunTruncated | null = null;
 
+	/**
+	 * TWO counters, deliberately. Would-do numbering is the numbering of the
+	 * RENDERED lines: it feeds the log's `<N>.` prefix, the `«step N output»`
+	 * brand and the truncation error's "ends at step N". CACHE_WRITEs are never
+	 * rendered, so they must never consume one of those numbers -- otherwise a
+	 * coverage-instrumented run would silently start its preview at `2.`. They
+	 * get their own sequence instead, so every record still carries a `seq`.
+	 */
+	private renderedCount = 0;
+	private cachedCount = 0;
+
 	append(rec: EffectRecord): void {
 		this.records.push(rec);
+		if (rec.kind === CACHE_WRITE) {
+			this.cachedCount += 1;
+		} else {
+			this.renderedCount += 1;
+		}
 	}
 
+	/** The next would-do number. Pure: callers may ask without appending. */
 	nextSeq(): number {
-		return this.records.length + 1;
+		return this.renderedCount + 1;
+	}
+
+	/** The next CACHE_WRITE number, on its own counter. */
+	nextCacheSeq(): number {
+		return this.cachedCount + 1;
 	}
 
 	/** Renders the would-do log. CACHE_WRITEs are never written to it. */
@@ -373,7 +395,7 @@ export class EffectLog {
 	/** Records a framework-blessed CACHE_WRITE (executes even in dry mode). */
 	recordCacheWrite(path: string): void {
 		this.append({
-			seq: this.nextSeq(),
+			seq: this.nextCacheSeq(),
 			kind: CACHE_WRITE,
 			verb: "cache",
 			detail: path,
@@ -884,6 +906,8 @@ export class Effects implements MutatingEffects {
 		this.rejectCarrierParams("run", {
 			cwd: opts.cwd,
 			env: opts.env,
+			check: opts.check,
+			stream: opts.stream,
 			resource: opts.resource,
 			skipIfCurrent: opts.skipIfCurrent,
 			grant: opts.grant,
@@ -1155,6 +1179,7 @@ export class Effects implements MutatingEffects {
 			method,
 			body: opts.body,
 			headers: opts.headers,
+			check: opts.check,
 			resource: opts.resource,
 			skipIfCurrent: opts.skipIfCurrent,
 			grant: opts.grant,
