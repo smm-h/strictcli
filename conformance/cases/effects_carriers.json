@@ -11,13 +11,31 @@
           "help": "forward one effect's result into the next",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "rev-parse", "HEAD"]},
-            {"method": "run", "argv": ["gh", "release", "create"], "forward_from": 1}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "rev-parse",
+                "HEAD"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "gh",
+                "release",
+                "create"
+              ],
+              "forward_from": 1
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "chain"],
+    "argv": [
+      "--dry-run",
+      "chain"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git rev-parse HEAD\n  2. run: gh release create «step 1 output»\n"
@@ -35,16 +53,47 @@
           "help": "forward an earlier step's result past later ones",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "rev-parse", "HEAD"]},
-            {"method": "mkdir", "path": "build"},
-            {"method": "run", "argv": ["git", "describe"]},
-            {"method": "run", "argv": ["echo"], "forward_from": 1},
-            {"method": "run", "argv": ["echo"], "forward_from": 3}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "rev-parse",
+                "HEAD"
+              ]
+            },
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "describe"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "echo"
+              ],
+              "forward_from": 1
+            },
+            {
+              "method": "run",
+              "argv": [
+                "echo"
+              ],
+              "forward_from": 3
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "chain"],
+    "argv": [
+      "--dry-run",
+      "chain"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git rev-parse HEAD\n  2. mkdir: build\n  3. run: git describe\n  4. run: echo «step 1 output»\n  5. run: echo «step 3 output»\n"
@@ -62,14 +111,38 @@
           "help": "forward the same carrier twice",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "rev-parse", "HEAD"]},
-            {"method": "run", "argv": ["echo", "first"], "forward_from": 1},
-            {"method": "run", "argv": ["echo", "second"], "forward_from": 1}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "rev-parse",
+                "HEAD"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "first"
+              ],
+              "forward_from": 1
+            },
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "second"
+              ],
+              "forward_from": 1
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "chain"],
+    "argv": [
+      "--dry-run",
+      "chain"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git rev-parse HEAD\n  2. run: echo first «step 1 output»\n  3. run: echo second «step 1 output»\n"
@@ -87,13 +160,28 @@
           "help": "write a computed version",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "describe", "--tags"]},
-            {"method": "write", "path": "VERSION", "content": "unused", "forward_from": 1}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "describe",
+                "--tags"
+              ]
+            },
+            {
+              "method": "write",
+              "path": "VERSION",
+              "content": "unused",
+              "forward_from": 1
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "stamp"],
+    "argv": [
+      "--dry-run",
+      "stamp"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git describe --tags\n  2. write: VERSION («step 1 output»)\n"
@@ -111,17 +199,50 @@
           "help": "forward a carrier into path, dst, url and mode-bearing calls",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "rev-parse", "HEAD"]},
-            {"method": "mkdir", "path": "unused", "forward_from": 1},
-            {"method": "remove", "path": "unused", "forward_from": 1},
-            {"method": "rename", "path": "old.txt", "to": "unused", "forward_from": 1},
-            {"method": "chmod", "path": "unused", "mode": "600", "forward_from": 1},
-            {"method": "http", "http_method": "GET", "url": "unused", "forward_from": 1}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "rev-parse",
+                "HEAD"
+              ]
+            },
+            {
+              "method": "mkdir",
+              "path": "unused",
+              "forward_from": 1
+            },
+            {
+              "method": "remove",
+              "path": "unused",
+              "forward_from": 1
+            },
+            {
+              "method": "rename",
+              "path": "old.txt",
+              "to": "unused",
+              "forward_from": 1
+            },
+            {
+              "method": "chmod",
+              "path": "unused",
+              "mode": "600",
+              "forward_from": 1
+            },
+            {
+              "method": "http",
+              "http_method": "GET",
+              "url": "unused",
+              "forward_from": 1
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "positions"],
+    "argv": [
+      "--dry-run",
+      "positions"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git rev-parse HEAD\n  2. mkdir: «step 1 output»\n  3. remove: «step 1 output»\n  4. rename: old.txt -> «step 1 output»\n  5. chmod: «step 1 output» 0600\n  6. net: GET «step 1 output»\n"
@@ -139,13 +260,28 @@
           "help": "publish then inspect",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "http", "http_method": "POST", "url": "https://api.example.com/releases"},
-            {"method": "run", "argv": ["gh", "release", "view"], "forward_from": 1}
+            {
+              "method": "http",
+              "http_method": "POST",
+              "url": "https://api.example.com/releases"
+            },
+            {
+              "method": "run",
+              "argv": [
+                "gh",
+                "release",
+                "view"
+              ],
+              "forward_from": 1
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "publish"],
+    "argv": [
+      "--dry-run",
+      "publish"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. net: POST https://api.example.com/releases\n  2. run: gh release view «step 1 output»\n"
@@ -157,21 +293,44 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["git", "status"]],
+      "proc_observe_allowlist": [
+        [
+          "git",
+          "status"
+        ]
+      ],
       "commands": [
         {
           "name": "report",
           "help": "mutate, then observe, then record the observation",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "mkdir", "path": "build"},
-            {"method": "run", "argv": ["git", "status", "--porcelain"]},
-            {"method": "write", "path": "report.txt", "content": "unused", "forward_from": 2}
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "status",
+                "--porcelain"
+              ]
+            },
+            {
+              "method": "write",
+              "path": "report.txt",
+              "content": "unused",
+              "forward_from": 2
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "report"],
+    "argv": [
+      "--dry-run",
+      "report"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n  2. write: report.txt («stale: git status --porcelain»)\n"
@@ -189,15 +348,43 @@
           "help": "branch on an unsettled result",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "tag", "v1.2.3"]},
-            {"method": "run", "argv": ["git", "push", "origin", "v1.2.3"]},
-            {"method": "run", "argv": ["never", "reached"], "extract_from": 2},
-            {"method": "mkdir", "path": "unreachable"}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "tag",
+                "v1.2.3"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "push",
+                "origin",
+                "v1.2.3"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "never",
+                "reached"
+              ],
+              "extract_from": 2
+            },
+            {
+              "method": "mkdir",
+              "path": "unreachable"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "chain"],
+    "argv": [
+      "--dry-run",
+      "chain"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git tag v1.2.3\n  2. run: git push origin v1.2.3\n",
@@ -216,13 +403,26 @@
           "help": "branch on the very first result",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "mkdir", "path": "build"},
-            {"method": "run", "argv": ["never", "reached"], "extract_from": 1}
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "run",
+              "argv": [
+                "never",
+                "reached"
+              ],
+              "extract_from": 1
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "chain"],
+    "argv": [
+      "--dry-run",
+      "chain"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n",
@@ -236,7 +436,12 @@
       "version": "1.0.0",
       "help": "test app",
       "commands": [
-        {"name": "noop", "help": "does nothing", "effect": "read_only", "handler_prints": "noop"}
+        {
+          "name": "noop",
+          "help": "does nothing",
+          "effect": "read_only",
+          "handler_prints": "noop"
+        }
       ],
       "groups": [
         {
@@ -248,15 +453,33 @@
               "help": "run a release",
               "effect": "mutating",
               "handler_effects": [
-                {"method": "run", "argv": ["git", "tag", "v1.2.3"]},
-                {"method": "run", "argv": ["never", "reached"], "extract_from": 1}
+                {
+                  "method": "run",
+                  "argv": [
+                    "git",
+                    "tag",
+                    "v1.2.3"
+                  ]
+                },
+                {
+                  "method": "run",
+                  "argv": [
+                    "never",
+                    "reached"
+                  ],
+                  "extract_from": 1
+                }
               ]
             }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "release", "run"],
+    "argv": [
+      "--dry-run",
+      "release",
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git tag v1.2.3\n",
@@ -269,25 +492,193 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["git", "status"]],
+      "proc_observe_allowlist": [
+        [
+          "git",
+          "status"
+        ]
+      ],
       "commands": [
         {
           "name": "chain",
           "help": "branch on a post-mutation observe",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "mkdir", "path": "build"},
-            {"method": "run", "argv": ["git", "status"]},
-            {"method": "run", "argv": ["never", "reached"], "extract_from": 2}
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "status"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "never",
+                "reached"
+              ],
+              "extract_from": 2
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "chain"],
+    "argv": [
+      "--dry-run",
+      "chain"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n",
       "stderr_equals": "error: dry-run preview ends at step 2: chain branched on unsettled value «stale: git status» — cannot preview past this point\n"
+    }
+  },
+  {
+    "name": "effects_carriers: a settled pre-mutation observe projects its real value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "proc_observe_allowlist": [
+        [
+          "echo"
+        ]
+      ],
+      "commands": [
+        {
+          "name": "stamp",
+          "help": "observe first, then record",
+          "effect": "mutating",
+          "handler_effects": [
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "v1.2.3"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "tag"
+              ],
+              "forward_from": 1
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "stamp"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git tag v1.2.3\n"
+    }
+  },
+  {
+    "name": "effects_carriers: a settled forwarded content still renders a real byte count",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "proc_observe_allowlist": [
+        [
+          "echo"
+        ]
+      ],
+      "commands": [
+        {
+          "name": "stamp",
+          "help": "observe first, then write what it produced",
+          "effect": "mutating",
+          "handler_effects": [
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "v1.2.3"
+              ]
+            },
+            {
+              "method": "write",
+              "path": "VERSION",
+              "content": "unused",
+              "forward_from": 1
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "stamp"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. write: VERSION (6 bytes)\n",
+      "effects_equals": [
+        {
+          "seq": 1,
+          "kind": "file_write",
+          "verb": "write",
+          "detail": "VERSION (6 bytes)",
+          "bytes": 6,
+          "recorded": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "effects_carriers: branching on a settled pre-mutation observe does not truncate",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "proc_observe_allowlist": [
+        [
+          "echo"
+        ]
+      ],
+      "commands": [
+        {
+          "name": "sync",
+          "help": "branch on a real value, then record",
+          "effect": "mutating",
+          "handler_effects": [
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "current"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "push"
+              ],
+              "extract_from": 1
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "sync"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n",
+      "stderr_equals": ""
     }
   }
 ]
