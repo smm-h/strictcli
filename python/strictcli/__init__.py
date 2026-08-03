@@ -679,6 +679,23 @@ def _msg_confirm_prompt(cmd_path: str) -> str:
     return f"about to run mutating command '{cmd_path}'. Proceed? [y/N] "
 
 
+def _strip_confirm_line(answer: str) -> str:
+    """Strip the confirm answer's line terminator: one ``\\n``, then one ``\\r``.
+
+    Exactly one of each, never more. The carriage return matters because a human
+    at a Windows console types the same ``y`` as everyone else and their terminal
+    terminates the line CRLF; a stdin stream that does not translate newlines
+    hands us ``"y\\r\\n"``, and declining there would refuse an answer that was
+    plainly given. Stripping only the terminator (rather than whitespace) keeps
+    ``"  y"`` a decline, which §8.2 requires.
+    """
+    if answer.endswith("\n"):
+        answer = answer[:-1]
+    if answer.endswith("\r"):
+        answer = answer[:-1]
+    return answer
+
+
 def _msg_confirm_non_interactive() -> str:
     return "error: stdin is not interactive; pass --yes to confirm"
 
@@ -5267,7 +5284,7 @@ class App:
             answer = sys.stdin.readline()
         except (EOFError, KeyboardInterrupt):
             answer = ""
-        if answer.rstrip("\n") not in ("y", "Y"):
+        if _strip_confirm_line(answer) not in ("y", "Y"):
             print(_msg_confirm_declined(), file=sys.stderr)
             sys.exit(1)
 

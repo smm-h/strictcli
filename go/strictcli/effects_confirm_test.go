@@ -128,3 +128,29 @@ func TestConfirmFiresForAMutatingPassthrough(t *testing.T) {
 		t.Fatal("the passthrough handler must not have run")
 	}
 }
+
+// The confirm answer's line terminator is exactly one "\n" and then exactly one
+// "\r" (§8.2). The carriage return matters because a human at a Windows console
+// types the same 'y' as everyone else and their terminal terminates the line
+// CRLF; declining there would refuse an answer that was plainly given. Only the
+// terminator is stripped, never whitespace, so "  y" stays a decline.
+func TestConfirmLineTerminatorStripping(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{"y\n", "y"},
+		{"Y\r\n", "Y"},
+		{"y\r", "y"},
+		{"y\r\r\n", "y\r"},
+		{"y\n\n", "y"},
+		{"  y\n", "  y"},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		got, _ := readConfirmLine(strings.NewReader(tc.raw))
+		if got != tc.want {
+			t.Fatalf("readConfirmLine(%q) = %q, want %q", tc.raw, got, tc.want)
+		}
+	}
+}

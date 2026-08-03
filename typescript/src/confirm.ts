@@ -85,7 +85,13 @@ export function confirmMutating(cmdPath: string, err: Writer): boolean {
 	}
 	// The prompt carries its own trailing space and NO trailing newline.
 	err.write(promptConfirmMutating(cmdPath));
-	const answer = confirmIO.readLine();
+	// readLine already dropped the trailing newline; drop exactly one trailing
+	// carriage return too. A human at a Windows console types the same 'y' as
+	// everyone else and their terminal terminates the line CRLF, so declining
+	// there would refuse an answer that was plainly given. Exactly one, never
+	// more, and never whitespace: "  y" stays a decline (§8.2).
+	const raw = confirmIO.readLine();
+	const answer = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
 	if (answer !== "y" && answer !== "Y") {
 		err.write(`${errConfirmDeclined()}\n`);
 		return false;

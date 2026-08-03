@@ -62,7 +62,22 @@ class TestPrompt:
         assert "ran" in out.out
         assert out.err == "about to run mutating command 'deploy'. Proceed? [y/N] "
 
-    @pytest.mark.parametrize("answer", ["n\n", "\n", "", "yes\n", "Yes\n", "no\n", "  y\n"])
+    @pytest.mark.parametrize("answer", ["y\r\n", "Y\r\n", "y\r", "Y\r"])
+    def test_a_crlf_terminated_answer_proceeds(self, answer, monkeypatch,
+                                               capsys):
+        """A human at a Windows console types the same 'y' (§8.2).
+
+        Their terminal terminates the line CRLF, and a stdin stream that does
+        not translate newlines hands the framework a trailing carriage return.
+        Declining there would refuse an answer the human plainly gave.
+        """
+        stdin = FakeStdin(answer=answer, tty=True)
+        code = _run(_app(), ["deploy"], stdin, monkeypatch)
+        assert code == 0
+        assert "ran" in capsys.readouterr().out
+
+    @pytest.mark.parametrize("answer", ["n\n", "\n", "", "yes\n", "Yes\n", "no\n", "  y\n",
+                                        "y\r\r\n", "\r\ry\n", "y\n\n"])
     def test_everything_else_declines(self, answer, monkeypatch, capsys):
         stdin = FakeStdin(answer=answer, tty=True)
         code = _run(_app(), ["deploy"], stdin, monkeypatch)

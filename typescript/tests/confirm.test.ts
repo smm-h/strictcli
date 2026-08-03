@@ -111,7 +111,19 @@ test("confirm: exactly 'y' or 'Y' proceeds; everything else declines", async () 
 			setConfirmIO(null);
 		}
 	}
-	for (const answer of ["", "yes", "n", "N", "Yes", " y"]) {
+	// A human at a Windows console types the same 'y'; their terminal terminates
+	// the line CRLF and stdin hands us the carriage return (§8.2).
+	for (const answer of ["y\r", "Y\r"]) {
+		const ran: string[] = [];
+		setConfirmIO(io(answer));
+		try {
+			await captureRun(ranApp(ran), ["deploy"]);
+			assert.deepEqual(ran, ["ran"], JSON.stringify(answer));
+		} finally {
+			setConfirmIO(null);
+		}
+	}
+	for (const answer of ["", "yes", "n", "N", "Yes", " y", "y\r\r", "\ry"]) {
 		const ran: string[] = [];
 		setConfirmIO(io(answer));
 		try {
