@@ -768,6 +768,29 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "go": "coverage_deferred:Requires issuing a real network request, which conformance cases must not do",
         "typescript": "coverage_deferred:Requires issuing a real network request, which conformance cases must not do",
     },
+
+    # -- Effects regime: the §12.10 argument type guards. Go's effect signatures
+    #    are statically typed where Python's and TypeScript's are not, so three
+    #    of the family are inexpressible there (contract §12.10, §17) --
+    'command *: effects.* argv must be a sequence of strings, not *': {
+        "go": "excluded:Go's argv parameter is typed []any -- a non-sequence argv is a compile error, not a runtime one",
+    },
+    "command *: effects.chmod parameter 'mode' must be an int, got *": {
+        "go": "excluded:Go's Chmod takes mode int positionally -- a non-int mode is a compile error, not a runtime one",
+    },
+    "command *: effects.http parameter 'method' must be a string, got *": {
+        "go": "excluded:Go's HTTP takes method string positionally -- a non-string method is a compile error, not a runtime one",
+    },
+
+    # -- Effects regime: registration-time declarations Go and TypeScript type
+    #    statically, so their runtime guards have no counterpart there --
+    'command *: grants must be Grant instances, got *': {
+        "go": "excluded:Go's WithGrants takes ...Grant (a struct type); a non-Grant element is a compile error",
+        "typescript": "excluded:TS's grants option is typed readonly Grant[]; a non-Grant element is a compile error",
+    },
+    'proc_observe_allowlist entries must be lists of strings, got *': {
+        "go": "excluded:Go's WithProcObserveAllowlist takes [][]string; a non-string element is a compile error",
+    },
 }
 
 
@@ -906,13 +929,19 @@ _PY_MSG_FUNC_PAT = re.compile(r"^def (_msg_\w+)\(", re.MULTILINE)
 # sections, so the membership is listed.  It is the confirm protocol (§12.6,
 # which TypeScript files under its own parse-time header) plus the truncation
 # error, which effects contract §12.5 pins to "the parse-time section of the
-# catalogs".  The remaining `_msg_*` templates are the effect-parameter type
-# guards, which §12 does not list at all; they stay registration-time.
+# catalogs", plus §12.8's option guard.  The remaining `_msg_*` templates are
+# the effect-parameter type guards of §12.10, which the contract keeps in the
+# registration-time section; they stay registration-time here too.
 _PY_PARSE_TIME_MSG_FUNCS = frozenset({
     "_msg_confirm_prompt",
     "_msg_confirm_non_interactive",
     "_msg_confirm_declined",
     "_msg_dry_run_truncated",
+    # §12.8's option guard. Python raises it as a TypeError (matching every
+    # other call-time argument guard on the handle), so it needs a `_msg_*`
+    # function to be visible at all -- and §12.8 is a parse-time section in
+    # Go's and TypeScript's catalogs, so it is one here too.
+    "_msg_effect_option_not_accepted",
 })
 _PY_TOP_LEVEL_DEF_PAT = re.compile(r"^(?:def |class |@)", re.MULTILINE)
 _PY_RETURN_PAT = re.compile(r"^    return\s", re.MULTILINE)
