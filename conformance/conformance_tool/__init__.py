@@ -109,11 +109,21 @@ def check_schema_freshness(ctx, reporter):
     This tool is a dev_node: it is never released, so rlsbl's release-time
     schema auto-regen never fires for it. The check gate (run by CI on every
     relevant push) is therefore the only freshness trigger. Comparison uses the
-    CWD-free ``dump_schema_dict()`` accessor (id-free) against the parsed
-    committed file with ``project_id`` excluded, so key order is irrelevant but
-    list order (which is semantic) still counts.
+    registration-time snapshot (id-free) against the parsed committed file with
+    ``project_id`` excluded, so key order is irrelevant but list order (which is
+    semantic) still counts.
+
+    The snapshot, not a live ``dump_schema_dict()`` call, is what makes the
+    comparison like-for-like. By the time this check body runs, the check
+    command has materialized the registered check providers, which inserts
+    their specs (strictcli's own built-in ``effects-bypass``, among any others)
+    into the registry the schema's ``checks`` section serializes. A
+    ``--dump-schema`` run never materializes providers -- deliberately, because
+    a provider's result depends on the cwd and the schema must not -- so a live
+    call here would compare a post-materialization registry against a
+    pre-materialization file and report every committed schema as stale.
     """
-    current = app.dump_schema_dict()
+    current = _REGISTRATION_TIME_SCHEMA
     remediation = (
         f"Regenerate with `conformance --dump-schema` run from {CONFORMANCE_DIR}."
     )
@@ -135,6 +145,13 @@ def check_schema_freshness(ctx, reporter):
         )
         return reporter.found("schema-freshness failed (committed schema is stale)")
     return reporter.passed("committed schema matches the current in-memory schema")
+
+
+# Captured after every check is registered and before anything can run, so it is
+# exactly what `conformance --dump-schema` writes: no project_id (the accessor
+# is id-free) and no provider-sourced checks (nothing has materialized them
+# yet). See check_schema_freshness for why a live call would not do.
+_REGISTRATION_TIME_SCHEMA = app.dump_schema_dict()
 
 
 def main():
