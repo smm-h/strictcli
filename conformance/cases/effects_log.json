@@ -1,0 +1,292 @@
+[
+  {
+    "name": "effects_log: a dry run records every application effect",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "everything",
+          "help": "issue one effect of every verb",
+          "effect": "mutating",
+          "handler_effects": [
+            {"method": "run", "argv": ["git", "tag", "v1.2.3"]},
+            {"method": "spawn", "argv": ["worker", "--daemon"]},
+            {"method": "write", "path": "CHANGELOG.md", "content": "hello"},
+            {"method": "mkdir", "path": "build/out"},
+            {"method": "remove", "path": "build/stale"},
+            {"method": "rename", "path": "old.txt", "to": "new.txt"},
+            {"method": "chmod", "path": "run.sh", "mode": "755"},
+            {"method": "http", "http_method": "POST", "url": "https://api.example.com/releases"}
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "everything"],
+    "expect": {
+      "exit_code": 0,
+      "effects_equals": [
+        {"seq": 1, "kind": "proc_mutate", "verb": "run", "detail": "git tag v1.2.3", "recorded": true},
+        {"seq": 2, "kind": "proc_spawn", "verb": "spawn", "detail": "worker --daemon", "recorded": true},
+        {"seq": 3, "kind": "file_write", "verb": "write", "detail": "CHANGELOG.md (5 bytes)", "bytes": 5, "recorded": true},
+        {"seq": 4, "kind": "file_write", "verb": "mkdir", "detail": "build/out", "recorded": true},
+        {"seq": 5, "kind": "file_write", "verb": "remove", "detail": "build/stale", "recorded": true},
+        {"seq": 6, "kind": "file_write", "verb": "rename", "detail": "old.txt -> new.txt", "recorded": true},
+        {"seq": 7, "kind": "file_write", "verb": "chmod", "detail": "run.sh 0755", "recorded": true},
+        {"seq": 8, "kind": "net_mutate", "verb": "net", "detail": "POST https://api.example.com/releases", "recorded": true}
+      ]
+    }
+  },
+  {
+    "name": "effects_log: a spawn is an effect and is recorded, not performed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "start",
+          "help": "start a worker",
+          "effect": "mutating",
+          "handler_effects": [
+            {"method": "spawn", "argv": ["myapp", "worker", "--dry-run"]}
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "start"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. spawn: myapp worker --dry-run\n",
+      "effects_equals": [
+        {
+          "seq": 1,
+          "kind": "proc_spawn",
+          "verb": "spawn",
+          "detail": "myapp worker --dry-run",
+          "recorded": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "effects_log: declared metadata rides the record",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "sync",
+          "help": "sync the remote",
+          "effect": "mutating",
+          "grants": [
+            {"name": "push", "reason": "release engine owns remote refs", "kind": "proc_mutate"}
+          ],
+          "handler_effects": [
+            {
+              "method": "run",
+              "argv": ["git", "push", "origin", "main"],
+              "resource": "remote:origin/main",
+              "skip_if_current": "remote:origin/main",
+              "grant": "push"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "sync"],
+    "expect": {
+      "exit_code": 0,
+      "effects_equals": [
+        {
+          "seq": 1,
+          "kind": "proc_mutate",
+          "verb": "run",
+          "detail": "git push origin main",
+          "resource": "remote:origin/main",
+          "skip_if_current": "remote:origin/main",
+          "grant": "push",
+          "recorded": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "effects_log: an unsettled write content carries no byte count",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "stamp",
+          "help": "write a computed version",
+          "effect": "mutating",
+          "handler_effects": [
+            {"method": "run", "argv": ["git", "describe", "--tags"]},
+            {"method": "write", "path": "VERSION", "content": "unused", "forward_from": 1}
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "stamp"],
+    "expect": {
+      "exit_code": 0,
+      "effects_equals": [
+        {"seq": 1, "kind": "proc_mutate", "verb": "run", "detail": "git describe --tags", "recorded": true},
+        {"seq": 2, "kind": "file_write", "verb": "write", "detail": "VERSION («step 1 output»)", "bytes": null, "recorded": true}
+      ]
+    }
+  },
+  {
+    "name": "effects_log: observes never enter the structured log",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "proc_observe_allowlist": [["echo"]],
+      "commands": [
+        {
+          "name": "report",
+          "help": "observe, then mutate",
+          "effect": "mutating",
+          "handler_effects": [
+            {"method": "run", "argv": ["echo", "before"]},
+            {"method": "mkdir", "path": "build"},
+            {"method": "run", "argv": ["echo", "after"]}
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "report"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n",
+      "effects_equals": [
+        {"seq": 1, "kind": "file_write", "verb": "mkdir", "detail": "build", "recorded": true}
+      ]
+    }
+  },
+  {
+    "name": "effects_log: a read-only command's log is empty",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "proc_observe_allowlist": [["echo"]],
+      "commands": [
+        {
+          "name": "show",
+          "help": "observe something",
+          "effect": "read_only",
+          "handler_prints": "shown",
+          "handler_effects": [
+            {"method": "run", "argv": ["echo", "observed"]}
+          ]
+        }
+      ]
+    },
+    "argv": ["show"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "shown\n",
+      "effects_equals": []
+    }
+  },
+  {
+    "name": "effects_log: a live run records the effect it performed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "build",
+          "help": "build something",
+          "effect": "mutating",
+          "handler_prints": "built",
+          "handler_effects": [
+            {"method": "run", "argv": ["echo", "performed"], "stream": true}
+          ]
+        }
+      ]
+    },
+    "argv": ["--yes", "build"],
+    "expect": {
+      "exit_code": 0,
+      "effects_equals": [
+        {
+          "seq": 1,
+          "kind": "proc_mutate",
+          "verb": "run",
+          "detail": "echo performed",
+          "recorded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "effects_log: a live path mutation records recorded false",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "clean",
+          "help": "remove a path that is not there",
+          "effect": "mutating",
+          "handler_prints": "cleaned",
+          "handler_effects": [
+            {"method": "remove", "path": "no-such-path-effects-conformance"}
+          ]
+        }
+      ]
+    },
+    "argv": ["--yes", "clean"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "cleaned\n",
+      "effects_equals": [
+        {
+          "seq": 1,
+          "kind": "file_write",
+          "verb": "remove",
+          "detail": "no-such-path-effects-conformance",
+          "recorded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "effects_log: the log stops where the preview truncates",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "chain",
+          "help": "branch on an unsettled result",
+          "effect": "mutating",
+          "handler_effects": [
+            {"method": "mkdir", "path": "build"},
+            {"method": "run", "argv": ["git", "tag", "v1.2.3"]},
+            {"method": "run", "argv": ["never", "reached"], "extract_from": 2},
+            {"method": "mkdir", "path": "unreachable"}
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "chain"],
+    "expect": {
+      "exit_code": 1,
+      "effects_equals": [
+        {"seq": 1, "kind": "file_write", "verb": "mkdir", "detail": "build", "recorded": true},
+        {"seq": 2, "kind": "proc_mutate", "verb": "run", "detail": "git tag v1.2.3", "recorded": true}
+      ]
+    }
+  }
+]
