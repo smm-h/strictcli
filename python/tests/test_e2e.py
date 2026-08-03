@@ -229,7 +229,7 @@ def _build_kwargs_app():
 
     @app.command(
         "deploy",
-        effect="read_only", help="deploy the app",
+        effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="deploy the app",
         args=[strictcli.Arg(name="target", help="deploy target")],
     )
     @strictcli.flag("sim-run", type=bool, default=False, help="preview without making changes")
@@ -275,7 +275,7 @@ def test_e2e_kwargs_handler_with_flag_sets():
 
     app = strictcli.App(name="kw", version="1.0.0", help="kwargs test app")
 
-    @app.command("push", effect="read_only", help="push changes", flag_sets=[auth_flag_set])
+    @app.command("push", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="push changes", flag_sets=[auth_flag_set])
     def push_handler(ctx, **kwargs):
         print(f"token={kwargs['token']}")
         return 0
@@ -296,7 +296,7 @@ def test_e2e_kwargs_handler_with_global_flags():
         ],
     )
 
-    @app.command("run", effect="read_only", help="run something")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     def run_handler(ctx, **kwargs):
         print(f"loud={kwargs['loud']}")
         return 0
@@ -313,7 +313,7 @@ def test_e2e_kwargs_handler_registration_no_error():
     # This should not raise ValueError even though the handler has no named params
     @app.command(
         "cmd",
-        effect="read_only", help="a command",
+        effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="a command",
         args=[strictcli.Arg(name="name", help="a name")],
     )
     @strictcli.flag("count", type=int, help="a count", default=0)

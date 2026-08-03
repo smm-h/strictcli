@@ -321,7 +321,7 @@ class TestCommandConfigFieldBinding:
         app.config_field("db.url", type=str, help="Database URL")
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
-        @app.command(name="serve", effect="read_only", help="start server",
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start server",
                      config_fields=["db.url", "cache.ttl"])
         def serve(ctx, **kw):
             pass
@@ -333,7 +333,7 @@ class TestCommandConfigFieldBinding:
         app = _build_app()
         app.config_field("db.url", type=str, help="Database URL")
         with pytest.raises(ValueError, match='unknown config field "nonexistent"'):
-            @app.command(name="serve", effect="read_only", help="start server",
+            @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start server",
                          config_fields=["nonexistent"])
             def serve(ctx, **kw):
                 pass
@@ -341,7 +341,7 @@ class TestCommandConfigFieldBinding:
     def test_no_config_fields_default(self):
         app = _build_app()
 
-        @app.command(name="serve", effect="read_only", help="start server")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start server")
         def serve(ctx, **kw):
             pass
 
@@ -351,7 +351,7 @@ class TestCommandConfigFieldBinding:
     def test_empty_config_fields(self):
         app = _build_app()
 
-        @app.command(name="serve", effect="read_only", help="start server", config_fields=[])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start server", config_fields=[])
         def serve(ctx, **kw):
             pass
 
@@ -363,7 +363,7 @@ class TestCommandConfigFieldBinding:
         app.config_field("db.url", type=str, help="Database URL")
         grp = app.group(name="server", help="server commands")
 
-        @grp.command(name="start", effect="read_only", help="start server",
+        @grp.command(name="start", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start server",
                      config_fields=["db.url"])
         def start(ctx, **kw):
             pass
@@ -375,7 +375,7 @@ class TestCommandConfigFieldBinding:
         app = _build_app()
         grp = app.group(name="server", help="server commands")
         with pytest.raises(ValueError, match='unknown config field "missing"'):
-            @grp.command(name="start", effect="read_only", help="start server",
+            @grp.command(name="start", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start server",
                          config_fields=["missing"])
             def start(ctx, **kw):
                 pass
@@ -386,7 +386,7 @@ class TestCommandConfigFieldBinding:
         grp = app.group(name="server", help="server commands")
         sub = grp.group(name="db", help="database commands")
 
-        @sub.command(name="migrate", effect="read_only", help="run migrations",
+        @sub.command(name="migrate", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run migrations",
                      config_fields=["log_level"])
         def migrate(ctx, **kw):
             pass
@@ -433,7 +433,7 @@ class TestConfigFieldValidation:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url"])
         def serve(ctx, **kw):
             pass
 
@@ -445,7 +445,7 @@ class TestConfigFieldValidation:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["cache.ttl"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["cache.ttl"])
         def serve(ctx, **kw):
             return 0
 
@@ -456,7 +456,7 @@ class TestConfigFieldValidation:
         app = _build_config_app(tmp_path, config_data={"db": {"port": "not_int"}})
         app.config_field("db.port", type=int, help="DB port")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.port"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.port"])
         def serve(ctx, **kw):
             pass
 
@@ -469,7 +469,7 @@ class TestConfigFieldValidation:
                                 config_data={"port": 8080, "totally_unknown": "value"})
         app.config_field("port", type=int, help="Port")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["port"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["port"])
         def serve(ctx, **kw):
             pass
 
@@ -481,7 +481,7 @@ class TestConfigFieldValidation:
         app = _build_config_app(tmp_path, config_data={"db": {"url": "postgres://..."}})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url"])
         def serve(ctx, **kw):
             return 0
 
@@ -493,7 +493,7 @@ class TestConfigFieldValidation:
         app = _build_config_app(tmp_path, config_data={"loud": True})
         app.config_field("port", type=int, help="Port", default=8080)
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["port"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["port"])
         @strictcli.flag("loud", type=bool, default=False, help="loud output")
         def serve(ctx, loud, **kw):
             return 0
@@ -508,7 +508,7 @@ class TestConfigFieldValidation:
             "_schema_version", type=int, help="config schema version"
         )
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             return 0
 
@@ -521,7 +521,7 @@ class TestConfigFieldValidation:
         app.config_field("db.url", type=str, help="Database URL")
 
         # This command does NOT bind db.url, so missing db.url is fine
-        @app.command(name="ping", effect="read_only", help="ping")
+        @app.command(name="ping", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="ping")
         def ping(ctx, **kw):
             return 0
 
@@ -532,7 +532,7 @@ class TestConfigFieldValidation:
         app = _build_config_app(tmp_path, config_data={"debug": 1})
         app.config_field("debug", type=bool, help="Debug mode")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["debug"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["debug"])
         def serve(ctx, **kw):
             pass
 
@@ -545,7 +545,7 @@ class TestConfigFieldValidation:
         app = _build_config_app(tmp_path, config_data={"rate": 5})
         app.config_field("rate", type=float, help="Rate limit")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["rate"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["rate"])
         def serve(ctx, **kw):
             return 0
 
@@ -560,7 +560,7 @@ class TestConfigSubcommandExemption:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url"])
         def serve(ctx, **kw):
             pass
 
@@ -571,7 +571,7 @@ class TestConfigSubcommandExemption:
         app = _build_config_app(tmp_path, config_data={"unknown_key": 42})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url"])
         def serve(ctx, **kw):
             pass
 
@@ -582,7 +582,7 @@ class TestConfigSubcommandExemption:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url"])
         def serve(ctx, **kw):
             pass
 
@@ -598,7 +598,7 @@ class TestConfigSubcommandExemption:
         )
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url"])
         def serve(ctx, **kw):
             pass
 
@@ -618,7 +618,7 @@ class TestConfigShowWithFields:
         app.config_field("db.url", type=str, help="Database URL")
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -639,7 +639,7 @@ class TestConfigShowWithFields:
         app.config_field("db.url", type=str, help="Database URL")
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -660,7 +660,7 @@ class TestConfigShowWithFields:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -677,7 +677,7 @@ class TestConfigSetWithFields:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -694,7 +694,7 @@ class TestConfigSetWithFields:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("cache.ttl", type=int, help="Cache TTL")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -710,7 +710,7 @@ class TestConfigSetWithFields:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("debug", type=bool, help="Debug mode")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -726,7 +726,7 @@ class TestConfigSetWithFields:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("rate", type=float, help="Rate limit")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -742,7 +742,7 @@ class TestConfigSetWithFields:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -754,7 +754,7 @@ class TestConfigSetWithFields:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("cache.ttl", type=int, help="Cache TTL")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -767,7 +767,7 @@ class TestConfigSetWithFields:
                                 config_data={"db": {"url": "old_value"}})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -785,7 +785,7 @@ class TestConfigSetWithFields:
         app = _build_config_app(tmp_path, config_data={})
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -809,7 +809,7 @@ class TestConfigInit:
         app.config_field("db.url", type=str, help="Database URL")
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -833,7 +833,7 @@ class TestConfigInit:
         app.config_field("db.url", type=str, help="Database URL")
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -857,7 +857,7 @@ class TestConfigInit:
             config=True, config_path=config_file,
         )
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -872,7 +872,7 @@ class TestConfigInit:
             config=True, config_path=config_file,
         )
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -887,7 +887,7 @@ class TestConfigInit:
             config=True, config_path=config_file,
         )
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         @strictcli.flag("loud", type=bool, default=False, help="loud output")
         def serve(ctx, loud, **kw):
             pass
@@ -912,7 +912,7 @@ class TestSchemaWithConfigFields:
         app.config_field("db.url", type=str, help="Database URL")
         app.config_field("cache.ttl", type=int, help="Cache TTL", default=3600)
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url", "cache.ttl"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url", "cache.ttl"])
         def serve(ctx, **kw):
             pass
 
@@ -935,11 +935,11 @@ class TestSchemaWithConfigFields:
         app = _build_app()
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url"])
         def serve(ctx, **kw):
             pass
 
-        @app.command(name="migrate", effect="read_only", help="run migrations",
+        @app.command(name="migrate", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run migrations",
                      config_fields=["db.url"])
         def migrate(ctx, **kw):
             pass
@@ -954,7 +954,7 @@ class TestSchemaWithConfigFields:
     def test_schema_no_config_fields_when_empty(self):
         app = _build_app()
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -967,7 +967,7 @@ class TestSchemaWithConfigFields:
         app = _build_app()
         app.config_field("db.url", type=str, help="Database URL")
 
-        @app.command(name="serve", effect="read_only", help="start", config_fields=["db.url"])
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start", config_fields=["db.url"])
         def serve(ctx, **kw):
             pass
 
@@ -980,7 +980,7 @@ class TestSchemaWithConfigFields:
     def test_schema_command_no_config_fields_when_empty(self):
         app = _build_app()
 
-        @app.command(name="serve", effect="read_only", help="start")
+        @app.command(name="serve", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start")
         def serve(ctx, **kw):
             pass
 
@@ -994,7 +994,7 @@ class TestSchemaWithConfigFields:
         app.config_field("db.url", type=str, help="Database URL")
         grp = app.group(name="server", help="server commands")
 
-        @grp.command(name="start", effect="read_only", help="start server",
+        @grp.command(name="start", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="start server",
                      config_fields=["db.url"])
         def start(ctx, **kw):
             pass

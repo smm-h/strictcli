@@ -6,7 +6,8 @@ __version__ = "0.34.0"
 
 __all__ = [
     "App", "Flag", "Arg", "FlagSet", "MutexGroup", "CoRequired", "Requires",
-    "Implies", "Passthrough", "DeprecatedCommand", "Result", "InvokeError",
+    "Implies", "Passthrough", "Forwarding", "DeprecatedCommand", "Result",
+    "InvokeError",
     "flag", "arg",
     "CheckContext", "ConnectionEnvReader", "CheckRunResult",
     "ErrorReporter", "WarnReporter", "SkipCheck",
@@ -2267,6 +2268,45 @@ class Passthrough:
 
 
 @dataclass
+class Forwarding:
+    """Declares that a handler deliberately accepts and forwards ``**kwargs``.
+
+    Guard v2 refuses a var-keyword handler unless the command declares
+    forwarding. The ``reason`` is mandatory, non-empty, and emitted in the
+    schema so a consumer's audit gate can review every forwarding site.
+    """
+
+    reason: str
+
+
+# The one reason string strictcli's own auto-registered commands use. Their
+# handlers must absorb the app's app-defined global flag values, which a
+# framework-authored handler cannot name.
+_FRAMEWORK_INTERNAL_FORWARDING_REASON = (
+    "framework-internal: absorbs app-defined global flag values"
+)
+
+
+def _err_handler_var_keyword_undeclared(name: str) -> str:
+    return (
+        f'command "{name}": handler accepts **kwargs but the command does not '
+        f'declare forwarding; add forwarding=Forwarding(reason=...) or name '
+        f'every parameter explicitly'
+    )
+
+
+def _err_forwarding_reason_empty(name: str) -> str:
+    return f'command "{name}": forwarding reason must be a non-empty string'
+
+
+def _err_framework_internal_handler_foreign(name: str) -> str:
+    return (
+        f'command "{name}": handler is marked framework-internal but is not '
+        f'defined in the strictcli module'
+    )
+
+
+@dataclass
 class DeprecatedCommand:
     """A declaration-only deprecated command: prints message to stderr and exits 1."""
 
@@ -2321,6 +2361,11 @@ class Command:
     hidden: bool = False
     interactive: bool = False
     config_fields: tuple[str, ...] = ()
+    forwarding: Forwarding | None = None
+    # Private marker, set ONLY by strictcli's own registration paths. It is not
+    # reachable from any public factory, option or keyword, and is not emitted
+    # in the schema.
+    _framework_internal: bool = False
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
@@ -2416,6 +2461,7 @@ class Group:
         mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
+        forwarding: Forwarding | None = None,
         tags: set[str] | None = None,
         hidden: bool = False,
         interactive: bool = False,
@@ -2435,6 +2481,7 @@ class Group:
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
+                forwarding=forwarding,
                 tags=tags,
                 inherited_tags=self._accumulated_tags,
                 hidden=hidden,
@@ -3890,6 +3937,7 @@ class App:
         mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
+        forwarding: Forwarding | None = None,
         tags: set[str] | None = None,
         hidden: bool = False,
         interactive: bool = False,
@@ -3910,6 +3958,7 @@ class App:
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
+                forwarding=forwarding,
                 tags=tags,
                 inherited_tags=None,
                 hidden=hidden,
@@ -4042,6 +4091,8 @@ class App:
             env_prefix=self.env_prefix,
             global_flags=self._global_flags,
             passthrough=None,
+            forwarding=Forwarding(reason=_FRAMEWORK_INTERNAL_FORWARDING_REASON),
+            framework_internal=True,
             extra_flags=extra_flags,
             interactive=interactive,
         )
@@ -6445,6 +6496,8 @@ def _build_and_validate_command(
     env_prefix: str | None,
     global_flags: list[Flag] | None = None,
     passthrough: Passthrough | None = None,
+    forwarding: Forwarding | None = None,
+    framework_internal: bool = False,
     extra_flags: list[Flag] | None = None,
     tags: set[str] | None = None,
     inherited_tags: frozenset[str] | None = None,
@@ -6470,6 +6523,19 @@ def _build_and_validate_command(
         raise ValueError(_err_command_effect_missing(name))
     if effect not in _EFFECT_VALUES:
         raise ValueError(_err_command_effect_invalid(name, effect))
+
+    # Declared forwarding: the reason is mandatory and non-empty.
+    if forwarding is not None:
+        if not isinstance(forwarding.reason, str) or not forwarding.reason.strip():
+            raise ValueError(_err_forwarding_reason_empty(name))
+
+    # The framework-internal marker is only claimable by handlers defined in
+    # this module. A consumer that reaches the marker by any route -- monkey-
+    # patching, reflection, subclassing -- fails loudly here rather than
+    # silently inheriting a framework exemption.
+    if framework_internal:
+        if getattr(handler, "__module__", None) != __name__:
+            raise ValueError(_err_framework_internal_handler_foreign(name))
 
     effective_tags = (inherited_tags or frozenset()) | frozenset(tags or set())
 
@@ -6518,6 +6584,8 @@ def _build_and_validate_command(
             hidden=hidden,
             interactive=interactive,
             config_fields=resolved_config_fields,
+            forwarding=forwarding,
+            _framework_internal=framework_internal,
         )
 
     # Collect flags attached by @strictcli.flag decorators
@@ -6648,8 +6716,13 @@ def _build_and_validate_command(
         for gf in global_flags:
             expected_names.add(_flag_param_name(gf.name))
 
-    # Skip strict checks when handler accepts **kwargs -- it can receive
-    # any parameter, so missing/extra checks are not meaningful.
+    # Guard v2: a **kwargs handler no longer gets a blanket exemption from the
+    # "declare everything" guarantee. It must declare forwarding, which waives
+    # ONLY the signature cross-check -- flags and args are still fully declared
+    # and still fully parsed.
+    if has_var_keyword and forwarding is None:
+        raise ValueError(_err_handler_var_keyword_undeclared(name))
+
     if not has_var_keyword:
         # Check each flag has a matching parameter
         for f in all_flags:
@@ -6779,6 +6852,8 @@ def _build_and_validate_command(
         hidden=hidden,
         interactive=interactive,
         config_fields=resolved_config_fields,
+        forwarding=forwarding,
+        _framework_internal=framework_internal,
     )
 
 
@@ -7866,6 +7941,8 @@ def _serialize_command(cmd: Command) -> dict:
         d["interactive"] = True
     if cmd.config_fields:
         d["config_fields"] = list(cmd.config_fields)
+    if cmd.forwarding is not None:
+        d["forwarding"] = {"reason": cmd.forwarding.reason}
     return d
 
 

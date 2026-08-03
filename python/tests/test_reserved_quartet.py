@@ -37,7 +37,7 @@ class TestReservedNameBan:
     def test_banned_as_a_command_flag(self, name):
         app = strictcli.App(name="app", version="1.0.0", help="app")
         with pytest.raises(ValueError) as exc:
-            @app.command("run", effect="read_only", help="run")
+            @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run")
             @strictcli.flag(name, type=bool, default=False, help="nope")
             def _run(ctx, **kw):
                 return 0

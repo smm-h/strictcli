@@ -801,7 +801,7 @@ def _make_repeatable_config_app(tmp_path, monkeypatch, config_data,
         config=True,
     )
 
-    @app.command("run", effect="read_only", help="run something")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     @strictcli.flag(flag_name, type=flag_type, help="the flag",
                      repeatable=True, unique=False)
     def run(ctx, **kwargs):
@@ -922,7 +922,7 @@ def _make_unique_config_app(tmp_path, monkeypatch, config_data,
         config=True,
     )
 
-    @app.command("run", effect="read_only", help="run something")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     @strictcli.flag(flag_name, type=flag_type, help="the flag",
                      repeatable=True, unique=unique)
     def run(ctx, **kwargs):
@@ -962,7 +962,7 @@ def test_config_show_plain_array(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", effect="read_only", help="run something")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     @strictcli.flag("tags", type=str, help="the tags",
                      repeatable=True, unique=False)
     def run(ctx, **kwargs):
@@ -985,7 +985,7 @@ def test_config_show_json_array(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", effect="read_only", help="run something")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     @strictcli.flag("tags", type=str, help="the tags",
                      repeatable=True, unique=False)
     def run(ctx, **kwargs):
@@ -1016,7 +1016,7 @@ def test_config_unique_enforcement_global_flag(tmp_path, monkeypatch):
         ],
     )
 
-    @app.command("run", effect="read_only", help="run something")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     def run(ctx, **kwargs):
         print(f"tags={kwargs['tags']}")
 

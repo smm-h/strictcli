@@ -223,7 +223,7 @@ class TestDoubleEntryValidation:
         )
 
         # Register a dummy command so the app has something to run
-        @app.command("hello", effect="read_only", help="say hello")
+        @app.command("hello", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="say hello")
         def hello(ctx, **kw):
             print("hello")
 
@@ -247,7 +247,7 @@ class TestDoubleEntryValidation:
             checks_path=str(toml_file),
         )
 
-        @app.command("hello", effect="read_only", help="say hello")
+        @app.command("hello", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="say hello")
         def hello(ctx, **kw):
             print("hello")
 
@@ -268,7 +268,7 @@ class TestDoubleEntryValidation:
 
         app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
-        @app.command("hello", effect="read_only", help="say hello")
+        @app.command("hello", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="say hello")
         def hello(ctx, **kw):
             print("hello")
 

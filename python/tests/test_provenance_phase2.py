@@ -156,7 +156,7 @@ def test_global_flag_env_source(monkeypatch):
         ],
     )
 
-    @app.command("run", effect="read_only", help="run it")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run it")
     def run(ctx, **kw):
         return 0
 
@@ -181,7 +181,7 @@ def test_global_flag_config_source():
             ],
         )
 
-        @app.command("run", effect="read_only", help="run it")
+        @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run it")
         def run(ctx, **kw):
             return 0
 
@@ -202,7 +202,7 @@ def test_global_flag_cli_source():
         ],
     )
 
-    @app.command("run", effect="read_only", help="run it")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run it")
     def run(ctx, **kw):
         return 0
 
@@ -221,7 +221,7 @@ def test_global_flag_default_source():
         ],
     )
 
-    @app.command("run", effect="read_only", help="run it")
+    @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run it")
     def run(ctx, **kw):
         return 0
 

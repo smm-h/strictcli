@@ -53,7 +53,7 @@ def test_command_with_global_flag():
     app = strictcli.App(name="testapp", version="1.0.0", help="test app")
     received = {}
 
-    @app.command("cmd", effect="read_only", help="a command")
+    @app.command("cmd", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="a command")
     @strictcli.flag("global", type=bool, default=False, help="apply globally")
     def cmd(ctx, **kwargs):
         received.update(kwargs)
@@ -68,7 +68,7 @@ def test_command_with_global_flag_default():
     app = strictcli.App(name="testapp", version="1.0.0", help="test app")
     received = {}
 
-    @app.command("cmd", effect="read_only", help="a command")
+    @app.command("cmd", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="a command")
     @strictcli.flag("global", type=bool, default=False, help="apply globally")
     def cmd(ctx, **kwargs):
         received.update(kwargs)
@@ -102,7 +102,7 @@ def test_config_key_uses_suffixed_name(tmp_path):
         )
         received = {}
 
-        @app.command("cmd", effect="read_only", help="a command")
+        @app.command("cmd", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="a command")
         @strictcli.flag("global", type=bool, default=False, help="apply globally")
         def cmd(ctx, **kwargs):
             received.update(kwargs)
