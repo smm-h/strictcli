@@ -636,77 +636,79 @@ class _EffectLog:
         return [rec.to_dict() for rec in self.records]
 
 
-def _err_effect_mutating_in_read_only(name: str, method: str) -> str:
-    return (
+def _raise_effect_mutating_in_read_only(name: str, method: str):
+    raise ValueError(
         f'command "{name}" is classified read_only; effects.{method} is a '
         f"mutating operation"
     )
 
 
-def _err_effect_run_not_allowlisted(name: str, argv: str) -> str:
-    return (
+def _raise_effect_run_not_allowlisted(name: str, argv: str):
+    raise ValueError(
         f'command "{name}" is classified read_only; effects.run argv {argv} '
         f"is not on the app's proc_observe_allowlist"
     )
 
 
-def _err_effect_grant_undeclared(name: str, grant: str) -> str:
-    return f'command "{name}": grant \'{grant}\' is not declared on this command'
+def _raise_effect_grant_undeclared(name: str, grant: str):
+    raise ValueError(f'command "{name}": grant \'{grant}\' is not declared on this command')
 
 
-def _err_effect_grant_kind_mismatch(name: str, grant: str, k1: str, k2: str) -> str:
-    return (
+def _raise_effect_grant_kind_mismatch(name: str, grant: str, k1: str, k2: str):
+    raise ValueError(
         f'command "{name}": grant \'{grant}\' is declared for kind {k1} but '
         f"was used for a {k2} effect"
     )
 
 
-def _err_effect_grant_on_observe(name: str, grant: str) -> str:
-    return (
+def _raise_effect_grant_on_observe(name: str, grant: str):
+    raise ValueError(
         f'command "{name}": grant \'{grant}\' cannot be used on an observe '
         f"(an allowlisted effects.run changes nothing)"
     )
 
 
-def _err_effect_run_failed(name: str, method: str, argv: str, code: int) -> str:
-    return f'command "{name}": effects.{method} failed: {argv} exited {code}'
+def _raise_effect_run_failed(name: str, method: str, argv: str, code: int):
+    raise EffectFailed(f'command "{name}": effects.{method} failed: {argv} exited {code}')
 
 
-def _err_effect_http_failed(name: str, http_method: str, url: str, status: int) -> str:
-    return (
+def _raise_effect_http_failed(name: str, http_method: str, url: str, status: int):
+    raise EffectFailed(
         f'command "{name}": effects.http failed: {http_method} {url} '
         f"returned {status}"
     )
 
 
-def _err_effect_output_not_utf8(name: str, method: str) -> str:
-    return f'command "{name}": effects.{method} produced output that is not valid UTF-8'
+def _raise_effect_output_not_utf8(name: str, method: str, *, cause=None):
+    raise EffectFailed(
+        f'command "{name}": effects.{method} produced output that is not valid UTF-8'
+    ) from cause
 
 
-def _err_effect_param_rejects_carrier(name: str, method: str, param: str) -> str:
-    return (
+def _raise_effect_param_rejects_carrier(name: str, method: str, param: str):
+    raise ValueError(
         f'command "{name}": effects.{method} parameter \'{param}\' does not '
         f"accept an unsettled value"
     )
 
 
-def _err_grant_reason_empty(name: str, grant: str) -> str:
-    return f'command "{name}": grant \'{grant}\' reason must be a non-empty string'
+def _raise_grant_reason_empty(name: str, grant: str):
+    raise ValueError(f'command "{name}": grant \'{grant}\' reason must be a non-empty string')
 
 
-def _err_grant_duplicate(name: str, grant: str) -> str:
-    return f'command "{name}": duplicate grant \'{grant}\''
+def _raise_grant_duplicate(name: str, grant: str):
+    raise ValueError(f'command "{name}": duplicate grant \'{grant}\'')
 
 
-def _err_grant_name_invalid(name: str, grant: str) -> str:
-    return (
+def _raise_grant_name_invalid(name: str, grant: str):
+    raise ValueError(
         f'command "{name}": invalid grant name \'{grant}\': '
         f"must match [a-z][a-z0-9-]*"
     )
 
 
-def _err_grant_kind_invalid(name: str, grant: str, kind: object) -> str:
-    return (
+def _raise_grant_kind_invalid(name: str, grant: str, kind: object):
+    raise ValueError(
         f'command "{name}": grant \'{grant}\' has invalid kind \'{kind}\': '
         f"must be one of proc_mutate, proc_spawn, file_write, net_mutate"
     )
@@ -741,16 +743,12 @@ class _Effects:
         """Hard-error when a carrier reaches a parameter that cannot take one."""
         for param, value in params.items():
             if isinstance(value, _CARRIER_TYPES):
-                raise ValueError(
-                    _err_effect_param_rejects_carrier(self._cmd_path, method, param)
-                )
+                _raise_effect_param_rejects_carrier(self._cmd_path, method, param)
             if isinstance(value, dict):
                 for k, v in value.items():
                     if isinstance(k, _CARRIER_TYPES) or isinstance(v, _CARRIER_TYPES):
-                        raise ValueError(
-                            _err_effect_param_rejects_carrier(
-                                self._cmd_path, method, param,
-                            )
+                        _raise_effect_param_rejects_carrier(
+                            self._cmd_path, method, param,
                         )
 
     def _operand(self, value: object, method: str, param: str) -> tuple:
@@ -762,15 +760,11 @@ class _Effects:
         """
         if isinstance(value, Unsettled):
             if not value._forwardable:
-                raise ValueError(
-                    _err_effect_param_rejects_carrier(self._cmd_path, method, param)
-                )
+                _raise_effect_param_rejects_carrier(self._cmd_path, method, param)
             return None, value._brand
         if isinstance(value, Spawned):
             # A Spawned has no scalar projection.
-            raise ValueError(
-                _err_effect_param_rejects_carrier(self._cmd_path, method, param)
-            )
+            _raise_effect_param_rejects_carrier(self._cmd_path, method, param)
         if isinstance(value, Completed):
             return value.stdout, value.stdout
         if isinstance(value, Response):
@@ -812,9 +806,7 @@ class _Effects:
     def _authorize(self, method: str, kind: str, grant: str | None) -> Grant | None:
         """Read-only enforcement plus grant validation, at call time."""
         if self._cmd.effect == EFFECT_READ_ONLY:
-            raise ValueError(
-                _err_effect_mutating_in_read_only(self._cmd_path, method)
-            )
+            _raise_effect_mutating_in_read_only(self._cmd_path, method)
         return self._check_grant(kind, grant)
 
     def _check_grant(self, kind: str, grant: str | None) -> Grant | None:
@@ -822,14 +814,10 @@ class _Effects:
             return None
         declared = self._grants.get(grant)
         if declared is None:
-            raise ValueError(
-                _err_effect_grant_undeclared(self._cmd_path, grant)
-            )
+            _raise_effect_grant_undeclared(self._cmd_path, grant)
         if declared.kind != kind:
-            raise ValueError(
-                _err_effect_grant_kind_mismatch(
-                    self._cmd_path, grant, declared.kind, kind,
-                )
+            _raise_effect_grant_kind_mismatch(
+                self._cmd_path, grant, declared.kind, kind,
             )
         return declared
 
@@ -906,17 +894,13 @@ class _Effects:
             # An observe changes nothing: it is legal in a read_only command,
             # never written to the would-do log, and never carries a grant.
             if grant is not None:
-                raise ValueError(
-                    _err_effect_grant_on_observe(self._cmd_path, grant)
-                )
+                _raise_effect_grant_on_observe(self._cmd_path, grant)
             if self._dry_run and self._mutation_recorded:
                 return self._stale(joined)
             return self._exec_run(runtime, joined, cwd, env, check, stream, "run")
 
         if self._cmd.effect == EFFECT_READ_ONLY:
-            raise ValueError(
-                _err_effect_run_not_allowlisted(self._cmd_path, joined)
-            )
+            _raise_effect_run_not_allowlisted(self._cmd_path, joined)
         declared = self._check_grant(PROC_MUTATE, grant)
 
         if self._dry_run:
@@ -1124,18 +1108,14 @@ class _Effects:
         if value is None:
             # Unreachable: an unsettled operand only survives in dry mode, where
             # nothing executes. Kept as a fail-closed backstop.
-            raise ValueError(
-                _err_effect_param_rejects_carrier(self._cmd_path, method, param)
-            )
+            _raise_effect_param_rejects_carrier(self._cmd_path, method, param)
         return value
 
     def _settled_argv(self, runtime, joined, method):
         for i, element in enumerate(runtime):
             if element is None:
-                raise ValueError(
-                    _err_effect_param_rejects_carrier(
-                        self._cmd_path, method, f"argv[{i}]",
-                    )
+                _raise_effect_param_rejects_carrier(
+                    self._cmd_path, method, f"argv[{i}]",
                 )
         return list(runtime)
 
@@ -1159,10 +1139,8 @@ class _Effects:
             out = _decode_effect_output(proc.stdout, self._cmd_path, method)
             err = _decode_effect_output(proc.stderr, self._cmd_path, method)
         if check and proc.returncode != 0:
-            raise EffectFailed(
-                _err_effect_run_failed(
-                    self._cmd_path, method, joined, proc.returncode,
-                )
+            _raise_effect_run_failed(
+                self._cmd_path, method, joined, proc.returncode,
             )
         return Completed(exit_code=proc.returncode, stdout=out, stderr=err)
 
@@ -1183,9 +1161,7 @@ class _Effects:
             payload = e.read()
             hdrs = {k.lower(): v for k, v in e.headers.items()}
         if check and not (200 <= status <= 299):
-            raise EffectFailed(
-                _err_effect_http_failed(self._cmd_path, method, url, status)
-            )
+            _raise_effect_http_failed(self._cmd_path, method, url, status)
         return Response(status=status, body=payload, headers=hdrs)
 
 
@@ -1196,9 +1172,7 @@ def _decode_effect_output(data: bytes, cmd_path: str, method: str) -> str:
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as e:
-        raise EffectFailed(
-            _err_effect_output_not_utf8(cmd_path, method)
-        ) from e
+        _raise_effect_output_not_utf8(cmd_path, method, cause=e)
     if text.endswith("\n"):
         text = text[:-1]
     return text
@@ -1225,13 +1199,13 @@ def _validate_grants(cmd_name: str, grants) -> tuple:
                 f"got {type(g).__name__}"
             )
         if not isinstance(g.name, str) or not _GRANT_NAME_RE.fullmatch(g.name):
-            raise ValueError(_err_grant_name_invalid(cmd_name, g.name))
+            _raise_grant_name_invalid(cmd_name, g.name)
         if g.name in seen:
-            raise ValueError(_err_grant_duplicate(cmd_name, g.name))
+            _raise_grant_duplicate(cmd_name, g.name)
         if not isinstance(g.reason, str) or not g.reason.strip():
-            raise ValueError(_err_grant_reason_empty(cmd_name, g.name))
+            _raise_grant_reason_empty(cmd_name, g.name)
         if g.kind not in _GRANTABLE_KINDS:
-            raise ValueError(_err_grant_kind_invalid(cmd_name, g.name, g.kind))
+            _raise_grant_kind_invalid(cmd_name, g.name, g.kind)
         seen.add(g.name)
         resolved.append(g)
     return tuple(resolved)
@@ -2719,9 +2693,9 @@ _RESERVED_QUARTET_TOKENS = {
 }
 
 
-def _err_flag_name_reserved_by_framework(name: str) -> str:
+def _raise_flag_name_reserved_by_framework(name: str):
     """Message template: a flag name collides with the reserved quartet."""
-    return (
+    raise ValueError(
         f"flag name '{name}' is reserved by the framework "
         f"(dry-run, yes, quiet, verbose)"
     )
@@ -2873,7 +2847,7 @@ class Flag:
                 "like 'force-overwrite' or 'force-delete'"
             )
         if self.name in _RESERVED_FRAMEWORK_FLAG_NAMES:
-            raise ValueError(_err_flag_name_reserved_by_framework(self.name))
+            _raise_flag_name_reserved_by_framework(self.name)
         if self.name.startswith("no-"):
             raise ValueError(
                 f"flag '{self.name}': names starting with 'no-' are "
@@ -3287,20 +3261,20 @@ _FRAMEWORK_INTERNAL_FORWARDING_REASON = (
 )
 
 
-def _err_handler_var_keyword_undeclared(name: str) -> str:
-    return (
+def _raise_handler_var_keyword_undeclared(name: str):
+    raise ValueError(
         f'command "{name}": handler accepts **kwargs but the command does not '
         f'declare forwarding; add forwarding=Forwarding(reason=...) or name '
         f'every parameter explicitly'
     )
 
 
-def _err_forwarding_reason_empty(name: str) -> str:
-    return f'command "{name}": forwarding reason must be a non-empty string'
+def _raise_forwarding_reason_empty(name: str):
+    raise ValueError(f'command "{name}": forwarding reason must be a non-empty string')
 
 
-def _err_framework_internal_handler_foreign(name: str) -> str:
-    return (
+def _raise_framework_internal_handler_foreign(name: str):
+    raise ValueError(
         f'command "{name}": handler is marked framework-internal but is not '
         f'defined in the strictcli module'
     )
@@ -3322,22 +3296,22 @@ EFFECT_MUTATING = "mutating"
 _EFFECT_VALUES = (EFFECT_READ_ONLY, EFFECT_MUTATING)
 
 
-def _err_command_effect_missing(name: str) -> str:
-    return (
+def _raise_command_effect_missing(name: str):
+    raise ValueError(
         f'command "{name}": effect classification is required '
         f'(effect="read_only" or effect="mutating")'
     )
 
 
-def _err_command_effect_invalid(name: str, value: object) -> str:
-    return (
+def _raise_command_effect_invalid(name: str, value: object):
+    raise ValueError(
         f'command "{name}": invalid effect "{value}": '
         f'must be "read_only" or "mutating"'
     )
 
 
-def _err_deprecated_command_effect(name: str) -> str:
-    return (
+def _raise_deprecated_command_effect(name: str):
+    raise ValueError(
         f'deprecated command "{name}": effect classification does not apply '
         f'(a deprecated command has no handler)'
     )
@@ -3371,7 +3345,7 @@ class Command:
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
         if self.effect not in _EFFECT_VALUES:
-            raise ValueError(_err_command_effect_invalid(self.name, self.effect))
+            _raise_command_effect_invalid(self.name, self.effect)
         for tag in self.tags:
             if not _IDENTIFIER_RE.fullmatch(tag):
                 raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
@@ -3432,7 +3406,7 @@ class Group:
         execute nothing, so passing ``effect=`` is a registration-time error.
         """
         if effect is not None:
-            raise ValueError(_err_deprecated_command_effect(name))
+            _raise_deprecated_command_effect(name)
         if not name or not name.strip():
             raise ValueError("deprecated command name must be a non-empty string")
         if not message or not message.strip():
@@ -4014,7 +3988,7 @@ class App:
                 # Unreachable through Flag() construction (Flag.__post_init__
                 # bans the quartet first); kept so the global-flag validation
                 # path carries the same message for any other construction route.
-                raise ValueError(_err_flag_name_reserved_by_framework(f.name))
+                _raise_flag_name_reserved_by_framework(f.name)
             if f.name in _RESERVED_GLOBAL_FLAG_NAMES:
                 raise ValueError(
                     f'global flag name "{f.name}" is reserved'
@@ -5072,7 +5046,7 @@ class App:
         execute nothing, so passing ``effect=`` is a registration-time error.
         """
         if effect is not None:
-            raise ValueError(_err_deprecated_command_effect(name))
+            _raise_deprecated_command_effect(name)
         if not name or not name.strip():
             raise ValueError("deprecated command name must be a non-empty string")
         if not message or not message.strip():
@@ -7713,16 +7687,16 @@ def _build_and_validate_command(
 
     # Classification is mandatory and has no default.
     if effect is None:
-        raise ValueError(_err_command_effect_missing(name))
+        _raise_command_effect_missing(name)
     if effect not in _EFFECT_VALUES:
-        raise ValueError(_err_command_effect_invalid(name, effect))
+        _raise_command_effect_invalid(name, effect)
 
     resolved_grants = _validate_grants(name, grants)
 
     # Declared forwarding: the reason is mandatory and non-empty.
     if forwarding is not None:
         if not isinstance(forwarding.reason, str) or not forwarding.reason.strip():
-            raise ValueError(_err_forwarding_reason_empty(name))
+            _raise_forwarding_reason_empty(name)
 
     # The framework-internal marker is only claimable by handlers defined in
     # this module. A consumer that reaches the marker by any route -- monkey-
@@ -7730,7 +7704,7 @@ def _build_and_validate_command(
     # silently inheriting a framework exemption.
     if framework_internal:
         if getattr(handler, "__module__", None) != __name__:
-            raise ValueError(_err_framework_internal_handler_foreign(name))
+            _raise_framework_internal_handler_foreign(name)
 
     effective_tags = (inherited_tags or frozenset()) | frozenset(tags or set())
 
@@ -7917,7 +7891,7 @@ def _build_and_validate_command(
     # ONLY the signature cross-check -- flags and args are still fully declared
     # and still fully parsed.
     if has_var_keyword and forwarding is None:
-        raise ValueError(_err_handler_var_keyword_undeclared(name))
+        _raise_handler_var_keyword_undeclared(name)
 
     if not has_var_keyword:
         # Check each flag has a matching parameter
