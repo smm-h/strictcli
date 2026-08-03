@@ -41,6 +41,7 @@ import tomllib
 import tomlkit
 from tomlkit.items import InlineTable, Table
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol, TypeVar, get_args, get_origin, runtime_checkable
@@ -878,10 +879,23 @@ class _Effects:
             rendered.append(text)
         return runtime, rendered
 
-    # -- the eight methods -----------------------------------------------
+    # -- the eight methods -------------------------------------------------
+    #
+    # Every method DECLARES its settled return type and nothing else --
+    # `Completed`, `Spawned`, `Response`, `None`. There is no `| Unsettled`
+    # union in the surface and no is_unsettled() predicate, because branching
+    # on unsettledness IS mode-branching: a declared union would oblige every
+    # handler to narrow before touching `.stdout`, which is exactly the silent
+    # mode-branch the truncation mechanism exists to prevent. In dry mode the
+    # runtime value sitting at these positions is the `Unsettled` carrier,
+    # which the static type deliberately does not mention -- a handler that
+    # only forwards it never notices, and a handler that extracts from it
+    # truncates the preview at runtime, where it is honest. A handler that
+    # legitimately needs the mode reads `ctx.dry_run`.
 
-    def run(self, argv, *, cwd=None, env=None, check=True, stream=False,
-            resource=None, skip_if_current=None, grant=None):
+    def run(self, argv: Sequence[str | Completed | Response], *, cwd=None,
+            env=None, check=True, stream=False, resource=None,
+            skip_if_current=None, grant=None) -> Completed:
         """Run a subprocess to completion (PROC_MUTATE, or an observe)."""
         self._reject_carrier_params("run", {
             "cwd": cwd, "env": env, "resource": resource,
@@ -916,8 +930,9 @@ class _Effects:
         )
         return self._exec_run(runtime, joined, cwd, env, check, stream, "run")
 
-    def spawn(self, argv, *, cwd=None, env=None, resource=None,
-              skip_if_current=None, grant=None):
+    def spawn(self, argv: Sequence[str | Completed | Response], *, cwd=None,
+              env=None, resource=None, skip_if_current=None,
+              grant=None) -> Spawned:
         """Start a subprocess without waiting (PROC_SPAWN).
 
         Spawning is itself an effect: a dry run RECORDS the spawn instead of
@@ -948,8 +963,9 @@ class _Effects:
         )
         return Spawned(pid=proc.pid, _proc=proc, _cmd_path=self._cmd_path)
 
-    def write(self, path, content, *, resource=None, skip_if_current=None,
-              grant=None):
+    def write(self, path: str | Completed | Response,
+              content: str | bytes | Completed | Response, *, resource=None,
+              skip_if_current=None, grant=None) -> None:
         """Write bytes to a path (FILE_WRITE)."""
         self._reject_carrier_params("write", {
             "resource": resource, "skip_if_current": skip_if_current,
@@ -978,20 +994,24 @@ class _Effects:
             fh.write(data)
         return None
 
-    def mkdir(self, path, *, resource=None, skip_if_current=None, grant=None):
+    def mkdir(self, path: str | Completed | Response, *, resource=None,
+              skip_if_current=None, grant=None) -> None:
         """Create a directory, parents included; an existing one is not an error."""
         return self._path_effect(
             "mkdir", path, resource, skip_if_current, grant,
             lambda p: os.makedirs(p, exist_ok=True),
         )
 
-    def remove(self, path, *, resource=None, skip_if_current=None, grant=None):
+    def remove(self, path: str | Completed | Response, *, resource=None,
+               skip_if_current=None, grant=None) -> None:
         """Remove a file, symlink or directory tree; a missing path is not an error."""
         return self._path_effect(
             "remove", path, resource, skip_if_current, grant, _remove_path,
         )
 
-    def rename(self, src, dst, *, resource=None, skip_if_current=None, grant=None):
+    def rename(self, src: str | Completed | Response,
+               dst: str | Completed | Response, *, resource=None,
+               skip_if_current=None, grant=None) -> None:
         """Move/rename a path (FILE_WRITE)."""
         self._reject_carrier_params("rename", {
             "resource": resource, "skip_if_current": skip_if_current,
@@ -1019,7 +1039,8 @@ class _Effects:
         )
         return None
 
-    def chmod(self, path, mode, *, resource=None, skip_if_current=None, grant=None):
+    def chmod(self, path: str | Completed | Response, mode, *, resource=None,
+              skip_if_current=None, grant=None) -> None:
         """Change a path's mode (FILE_WRITE)."""
         self._reject_carrier_params("chmod", {
             "mode": mode, "resource": resource,
@@ -1048,8 +1069,9 @@ class _Effects:
         os.chmod(self._settled(rt_path, "chmod", "path"), mode)
         return None
 
-    def http(self, method, url, *, body=None, headers=None, check=True,
-             resource=None, skip_if_current=None, grant=None):
+    def http(self, method, url: str | Completed | Response, *, body=None,
+             headers=None, check=True, resource=None, skip_if_current=None,
+             grant=None) -> Response:
         """Perform a network request (NET_MUTATE)."""
         self._reject_carrier_params("http", {
             "method": method, "body": body, "headers": headers,

@@ -417,6 +417,119 @@ class TestCarriers:
             app.test(["--dry-run", "rel"])
 
 
+class TestDeclaredSignatures:
+    """The surface declares the SETTLED types only.
+
+    A declared ``Completed | Unsettled`` would oblige a type-checked handler to
+    narrow before touching ``.stdout``, and narrowing on unsettledness is
+    mode-branching -- exactly what the truncation mechanism exists to make
+    impossible to do silently. The runtime still hands back an ``Unsettled``
+    carrier in dry mode; the annotation simply does not advertise a union that
+    callers must not branch on.
+    """
+
+    # (method, declared return annotation)
+    RETURNS = [
+        ("run", "Completed"),
+        ("spawn", "Spawned"),
+        ("write", "None"),
+        ("mkdir", "None"),
+        ("remove", "None"),
+        ("rename", "None"),
+        ("chmod", "None"),
+        ("http", "Response"),
+    ]
+
+    # (method, parameter, declared annotation) for the six carrier-accepting
+    # positions. Everything else is deliberately unannotated.
+    PARAMS = [
+        ("run", "argv", "Sequence[str | Completed | Response]"),
+        ("spawn", "argv", "Sequence[str | Completed | Response]"),
+        ("write", "path", "str | Completed | Response"),
+        ("write", "content", "str | bytes | Completed | Response"),
+        ("mkdir", "path", "str | Completed | Response"),
+        ("remove", "path", "str | Completed | Response"),
+        ("rename", "src", "str | Completed | Response"),
+        ("rename", "dst", "str | Completed | Response"),
+        ("chmod", "path", "str | Completed | Response"),
+        ("http", "url", "str | Completed | Response"),
+    ]
+
+    @pytest.mark.parametrize("method,expected", RETURNS)
+    def test_declared_return_is_settled_only(self, method, expected):
+        ann = getattr(sc._Effects, method).__annotations__
+        assert ann["return"] == expected
+
+    def test_spawned_wait_declares_completed(self):
+        assert sc.Spawned.wait.__annotations__["return"] == "Completed"
+
+    @pytest.mark.parametrize("method,param,expected", PARAMS)
+    def test_carrier_accepting_parameter_annotations(self, method, param, expected):
+        ann = getattr(sc._Effects, method).__annotations__
+        assert ann[param] == expected
+
+    @pytest.mark.parametrize("method,_expected", RETURNS)
+    def test_no_declared_annotation_mentions_unsettled(self, method, _expected):
+        ann = getattr(sc._Effects, method).__annotations__
+        for name, text in ann.items():
+            assert "Unsettled" not in text, f"{method}.{name} declares Unsettled"
+
+    def test_no_narrowing_predicate_exists(self):
+        """No is_unsettled(): branching on unsettledness is mode-branching."""
+        assert not hasattr(sc.Unsettled, "is_unsettled")
+        assert not hasattr(sc._Effects, "is_unsettled")
+        assert not any(
+            "unsettled" in name.lower() for name in sc.__all__
+            if name != "Unsettled"
+        )
+
+    def test_runtime_still_returns_unsettled_despite_the_declaration(self):
+        """The declaration is settled-only; the runtime value is not.
+
+        This is the whole point of the settled-only ruling: the static type
+        stays out of the way while the runtime seal keeps its teeth.
+        """
+        holder = {}
+        app = _app()
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            holder["run"] = ctx.effects.run(["git", "tag", "v1"])
+            holder["spawn"] = ctx.effects.spawn(["daemon"])
+            holder["write"] = ctx.effects.write("f", "x")
+            holder["mkdir"] = ctx.effects.mkdir("d")
+            holder["remove"] = ctx.effects.remove("d")
+            holder["rename"] = ctx.effects.rename("a", "b")
+            holder["chmod"] = ctx.effects.chmod("f", 0o755)
+            holder["http"] = ctx.effects.http("POST", "https://x/y")
+            return 0
+
+        app.test(["--dry-run", "rel"])
+        assert set(holder) == {
+            "run", "spawn", "write", "mkdir", "remove", "rename", "chmod",
+            "http",
+        }
+        for name, value in holder.items():
+            assert isinstance(value, sc.Unsettled), name
+
+    def test_live_mode_still_returns_the_real_settled_result(self, tmp_path,
+                                                             monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        holder = {}
+        app = _app()
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            holder["run"] = ctx.effects.run([PY, "-c", "print('hi')"])
+            holder["mkdir"] = ctx.effects.mkdir("d")
+            return 0
+
+        app.test(["rel"])
+        assert isinstance(holder["run"], sc.Completed)
+        assert holder["run"].stdout == "hi"
+        assert holder["mkdir"] is None
+
+
 class TestObserves:
     def test_observe_returns_a_real_value_in_dry_mode(self):
         app = _app(proc_observe_allowlist=[[PY, "-c"]])
