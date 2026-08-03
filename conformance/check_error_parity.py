@@ -1017,6 +1017,29 @@ def extract_python_message_templates(source: str) -> list[tuple[str, str]]:
 # 2. Extract error patterns from Go source
 # ---------------------------------------------------------------------------
 
+# Section header shared by the Go and TypeScript catalogs: a dashed line, one
+# or more comment lines, a dashed line.  A continuation line may be a bare `//`
+# (an empty comment line), which is how a section separates its title from its
+# explanatory prose -- the pattern must not stop there, or the whole section is
+# missed and its templates silently inherit the previous section's category.
+SECTION_HEADER_PAT = re.compile(
+    r'// -{10,}\n((?://.*\n)+?)// -{10,}\n',
+)
+
+
+def _section_category(header: str) -> str:
+    """Classify a matched section header as 'parse' or 'registration'.
+
+    The marker lives in the section's TITLE line (`... (parse-time)`,
+    `... (TS-only; parse-time)`).  Only that line is consulted: a section's
+    prose may legitimately name other sections and their categories, and
+    scanning the whole block would misread such a mention as the section's own
+    marker.
+    """
+    title = header.splitlines()[0]
+    return "parse" if "parse-time" in title else "registration"
+
+
 def extract_go_errors(errors_src: str) -> list[tuple[str, str]]:
     """Extract (category, format_string) pairs from Go source.
 
@@ -1024,9 +1047,9 @@ def extract_go_errors(errors_src: str) -> list[tuple[str, str]]:
     the single extraction source.  errors.go contains fmt.Sprintf("...") and
     fmt.Errorf("...") patterns that were extracted from other source files,
     plus const string literals.  Templates are grouped into sections
-    delimited by dashed header comments.  A section header containing
-    "(parse-time)" marks every template in that section as a parse-time
-    error; all other sections hold registration-time templates.
+    delimited by dashed header comments.  A section whose title line carries
+    the "parse-time" marker holds parse-time errors; all other sections hold
+    registration-time templates.
     """
     results: list[tuple[str, str]] = []
 
@@ -1043,22 +1066,15 @@ def extract_go_errors(errors_src: str) -> list[tuple[str, str]]:
         r'^const\s+err\w+\s*=\s*"((?:[^"\\]|\\.)*)"',
         re.MULTILINE,
     )
-    # Section header: dashed line, one-plus comment lines, dashed line.
-    section_header_pat = re.compile(
-        r'// -{10,}\n((?:// .*\n)+?)// -{10,}\n',
-    )
     # Split errors.go into (category, body) segments. Content before the
     # first header (package clause, imports) has no templates but is
     # scanned as registration for uniformity.
     segments: list[tuple[str, str]] = []
     prev_end = 0
     prev_category = "registration"
-    for hm in section_header_pat.finditer(errors_src):
+    for hm in SECTION_HEADER_PAT.finditer(errors_src):
         segments.append((prev_category, errors_src[prev_end:hm.start()]))
-        header = hm.group(1)
-        prev_category = (
-            "parse" if "(parse-time)" in header else "registration"
-        )
+        prev_category = _section_category(hm.group(1))
         prev_end = hm.end()
     segments.append((prev_category, errors_src[prev_end:]))
     for category, body in segments:
@@ -1081,8 +1097,9 @@ def extract_typescript_errors(errors_src: str) -> list[tuple[str, str]]:
 
     All TS user-facing error templates are centralized in errors.ts, which
     mirrors errors.go one-to-one: the same dashed section headers group the
-    templates, and a header containing "(parse-time)" marks every template in
-    that section as a parse-time error.  Each named errXxx function returns a
+    templates, and a header whose title line carries the "parse-time" marker
+    marks every template in that section as a parse-time error.  Each named
+    errXxx function returns a
     single template literal (or plain string literal); we extract the literal
     from each return statement.
 
@@ -1095,23 +1112,14 @@ def extract_typescript_errors(errors_src: str) -> list[tuple[str, str]]:
     ret_backtick = re.compile(r'return\s+`((?:[^`\\]|\\.)*)`')
     ret_dq = re.compile(r'return\s+"((?:[^"\\]|\\.)*)"')
     ret_sq = re.compile(r"return\s+'((?:[^'\\]|\\.)*)'")
-    # Section header: dashed line, one-plus comment lines, dashed line.
-    # Same shape as errors.go (the headers were carried over verbatim).
-    section_header_pat = re.compile(
-        r'// -{10,}\n((?:// .*\n)+?)// -{10,}\n',
-    )
-
     segments: list[tuple[str, str]] = []
     prev_end: int | None = None
     prev_category = "registration"
-    for hm in section_header_pat.finditer(errors_src):
+    for hm in SECTION_HEADER_PAT.finditer(errors_src):
         if prev_end is not None:
             segments.append((prev_category, errors_src[prev_end:hm.start()]))
         # else: skip the pre-header preamble (classes + q() helper)
-        header = hm.group(1)
-        prev_category = (
-            "parse" if "(parse-time)" in header else "registration"
-        )
+        prev_category = _section_category(hm.group(1))
         prev_end = hm.end()
     if prev_end is not None:
         segments.append((prev_category, errors_src[prev_end:]))
