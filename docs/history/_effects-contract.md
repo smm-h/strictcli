@@ -20,6 +20,12 @@ non-forwardability, `body`'s exclusion, `grant=` on an observe) plus the effect 
 live-mode population and two unpinned spellings. §18 records the full provenance of every
 decision, ratified and authored alike, and is exhaustive.
 
+Amended a third time 2026-08-03 at the conformance-and-parity round, folding in five ratified
+rulings (§18.4) that reconcile this document with the three shipped implementations. The governing
+one inverts the precedence clause above for this round only: **where all three implementations
+agree against this document's draft text, the implementations win and the document is amended.**
+Every amendment is marked in place with the ruling letter it implements.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -249,14 +255,25 @@ parameter anywhere and no method ever accepts a shell string -- argv lists only.
 
 Per-language spelling follows §2.3: Python keyword arguments; TypeScript an optional final options
 object (`cwd`, `env`, `check`, `stream`, `body`, `headers` alongside `resource`, `skipIfCurrent`,
-`grant`); Go a trailing variadic `...EffectOption`, adding `Cwd(string)`, `Env(map[string]string)`,
-`Check(bool)`, `Stream(bool)`, `Body([]byte)` and `Header(k, v string)` to the three of §2.3.
+`grant`); Go a trailing variadic `...EffectOption`, adding `Cwd(string)`,
+`EffectEnv(map[string]string)`, `Check(bool)`, `Stream(bool)`, `Body([]byte)` and
+`Header(k, v string)` to the three of §2.3.
 `Spawned.wait()` accepts `check` and nothing else (Python `wait(check=True)`, Go
 `Wait(opts ...EffectOption)` honouring `Check(bool)` only, TypeScript `wait({ check? })`).
 
+**Go's environment option is spelled `EffectEnv`, not `Env`** (amended 2026-08-03, ruling B). The
+package already exports `Env(varName string) FlagOption` and Go has no overloading, so the pinned
+`Env` spelling was unavailable. Only the *constructor* moves: the option's canonical snake_case
+name stays `env` (§12.8), so `errEffectOptionNotAccepted` renders byte-identically in all three.
+This is the sole per-language deviation in the option constructor set.
+
 **An option a method does not accept is a call-time hard error** (`errEffectOptionNotAccepted`,
 §12.8), in all three implementations. Python and TypeScript reject the unknown keyword / options-
-object key; Go, whose options are a single untyped variadic, **validates its `...EffectOption`
+object key -- **Python through an explicit `**_options` catch-all on each of the eight methods**,
+not through CPython's native `unexpected keyword argument` `TypeError`, so that the rendered text
+is the pinned template rather than an interpreter message (amended 2026-08-03, ruling C; forced by
+§14.5's own conformance case, which requires the byte-identical message in all three). Go, whose
+options are a single untyped variadic, **validates its `...EffectOption`
 list at call time** and errors on any option outside the receiving method's accepted set. There
 is no silent ignoring: `ctx.effects.mkdir(p, stream=True)` and
 `ctx.Effects().Mkdir(p, Stream(true))` both fail, loudly, at the call. The accepted set per method
@@ -391,8 +408,18 @@ which the declared-settled returns of §2.5.3 make precise:
 | Position | Python type | TypeScript type |
 |----------|-------------|-----------------|
 | `argv` element | `str \| Completed \| Response` | `string \| Completed \| Response` |
-| `path`, `src`, `dst`, `url` | `str \| Completed \| Response` | `string \| Completed \| Response` |
+| `path`, `src`, `dst`, `url` | `str \| os.PathLike[str] \| Completed \| Response` | `string \| Completed \| Response` |
 | `content` | `str \| bytes \| Completed \| Response` | `string \| Uint8Array \| Completed \| Response` |
+
+**Python's four path positions carry `os.PathLike[str]`** (amended 2026-08-03, ruling D). The
+runtime has always accepted a path object there -- the operand resolver runs `os.fspath` before
+anything else -- and strictcli ships a PEP 561 `py.typed` marker, so a declared union without it
+would make `ctx.effects.write(Path("out.txt"), ...)` a type error against code that works. The row
+is the unit: all four of `path`, `src`, `dst` and `url` widen together, because all four resolve
+through the same code path and a surface where `rename(Path(a), Path(b))` type-checks but
+`http("GET", url)` does not would be incoherent. `argv` elements and `content` are **not** path
+positions and keep their pinned unions unchanged. TypeScript needs no counterpart: it has no
+path-object protocol.
 
 Python spells `argv` itself `Sequence[str | Completed | Response]`; TypeScript's `argv` is an array
 of the element type. The two rows differ only in each language's native byte-string spelling
@@ -411,12 +438,12 @@ are written inline in the method signatures; they mint no new exported type and 
 |--------|--------|-----|-----------|
 | `run` | `ctx.effects.run(argv: Sequence[str \| Completed \| Response], *, cwd=None, env=None, check=True, stream=False, resource=None, skip_if_current=None, grant=None) -> Completed` | `ctx.Effects().Run(argv []any, opts ...EffectOption) (Completed, error)` | `ctx.effects.run(argv, opts?) => Completed` |
 | `spawn` | `ctx.effects.spawn(argv: Sequence[str \| Completed \| Response], *, cwd=None, env=None, ...) -> Spawned` | `ctx.Effects().Spawn(argv []any, opts ...EffectOption) (Spawned, error)` | `ctx.effects.spawn(argv, opts?) => Spawned` |
-| `write` | `ctx.effects.write(path: str \| Completed \| Response, content: str \| bytes \| Completed \| Response, ...) -> None` | `ctx.Effects().Write(path any, content any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.write(path, content, opts?) => void` |
-| `mkdir` | `ctx.effects.mkdir(path: str \| Completed \| Response, ...) -> None` | `ctx.Effects().Mkdir(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.mkdir(path, opts?) => void` |
-| `remove` | `ctx.effects.remove(path: str \| Completed \| Response, ...) -> None` | `ctx.Effects().Remove(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.remove(path, opts?) => void` |
-| `rename` | `ctx.effects.rename(src: str \| Completed \| Response, dst: str \| Completed \| Response, ...) -> None` | `ctx.Effects().Rename(src, dst any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.rename(src, dst, opts?) => void` |
-| `chmod` | `ctx.effects.chmod(path: str \| Completed \| Response, mode, ...) -> None` | `ctx.Effects().Chmod(path any, mode int, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.chmod(path, mode, opts?) => void` |
-| `http` | `ctx.effects.http(method, url: str \| Completed \| Response, *, body=None, headers=None, check=True, ...) -> Response` | `ctx.Effects().HTTP(method string, url any, opts ...EffectOption) (Response, error)` | `ctx.effects.http(method, url, opts?) => Response` |
+| `write` | `ctx.effects.write(path: str \| os.PathLike[str] \| Completed \| Response, content: str \| bytes \| Completed \| Response, ...) -> None` | `ctx.Effects().Write(path any, content any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.write(path, content, opts?) => void` |
+| `mkdir` | `ctx.effects.mkdir(path: str \| os.PathLike[str] \| Completed \| Response, ...) -> None` | `ctx.Effects().Mkdir(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.mkdir(path, opts?) => void` |
+| `remove` | `ctx.effects.remove(path: str \| os.PathLike[str] \| Completed \| Response, ...) -> None` | `ctx.Effects().Remove(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.remove(path, opts?) => void` |
+| `rename` | `ctx.effects.rename(src: str \| os.PathLike[str] \| Completed \| Response, dst: str \| os.PathLike[str] \| Completed \| Response, ...) -> None` | `ctx.Effects().Rename(src, dst any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.rename(src, dst, opts?) => void` |
+| `chmod` | `ctx.effects.chmod(path: str \| os.PathLike[str] \| Completed \| Response, mode, ...) -> None` | `ctx.Effects().Chmod(path any, mode int, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.chmod(path, mode, opts?) => void` |
+| `http` | `ctx.effects.http(method, url: str \| os.PathLike[str] \| Completed \| Response, *, body=None, headers=None, check=True, ...) -> Response` | `ctx.Effects().HTTP(method string, url any, opts ...EffectOption) (Response, error)` | `ctx.effects.http(method, url, opts?) => Response` |
 | `Spawned.wait` | `spawned.wait(*, check=True) -> Completed` | `spawned.Wait(opts ...EffectOption) (Completed, error)` | `spawned.wait(opts?) => Completed` |
 
 TypeScript parameter and member names camelCase (`skipIfCurrent`, `exitCode`); the options object
@@ -426,9 +453,14 @@ Neither the Python nor the TypeScript column carries `| Unsettled`: both declare
 only (§2.5.3), and their carrier-accepting parameter positions are typed as the unions of §2.5.5.
 Python annotates exactly those six positions and leaves every other parameter unannotated -- the
 annotations exist to pin the forwarding boundary, not to retype the whole surface. `url` is typed
-`any` in Go and `str | Completed | Response` / `string | Completed | Response` in Python and
+`any` in Go and `str | os.PathLike[str] | Completed | Response` /
+`string | Completed | Response` in Python and
 TypeScript because it is one of the six carrier-accepting positions; `method` and `body` are not,
 and keep their concrete types.
+
+The eight Python signatures additionally end in `**_options`, which is the catch-all that raises
+`errEffectOptionNotAccepted` (§2.5.2, §12.8). It is a message-parity mechanism, not a parameter:
+reaching it is always an error.
 `Spawned.wait` is listed for completeness -- it is not a ninth method on the handle (§2.2), it is
 the one member `Spawned` exposes besides `pid`, and it never yields a carrier: reaching it at all
 means the `Spawned` was settled, since calling `.wait()` on an unsettled `Spawned` is extraction
@@ -1150,6 +1182,23 @@ The structural model for a registration-time ban is the existing `force` triple:
 `validateFlagConfig` in `typescript/src/factories.ts`), and the inline `ValueError` in Python's
 `Flag.__post_init__`. Every new registration-time template below follows that shape.
 
+**Category placement.** `check_error_parity.py` sorts every template into `parse` or
+`registration`, and only `parse` templates are required to have a covering conformance case. Go and
+TypeScript express the split with dashed section headers whose text contains `(parse-time)`; Python
+expresses it through the raised exception type plus a listed set of `_msg_*` function names. The
+effects regime's split is pinned here, and the three catalogs' section markers must agree with it:
+
+| Section | Category |
+|---------|----------|
+| §12.5 truncation | parse-time |
+| §12.6 confirm trio | parse-time |
+| §12.8 effect failure, carrier rejection and the option guard | parse-time |
+| §12.1, §12.2, §12.3, §12.4, §12.7, §12.9, §12.10 | registration-time |
+
+§12.4's templates fire at effect-call time rather than at registration, but they take the
+registration-time category: the taxonomy's `parse` bucket is the set the coverage gate binds, and
+the ruling pins that bucket to the three sections above.
+
 **Go declaration form.** A template that interpolates nothing is a **`const`**, not a function --
 matching `errors.go`'s existing style (`const errFlagForceReserved = "..."`,
 `const errArgHelpEmpty = "..."`, and the ~20 other parameterless consts already there). Only
@@ -1232,12 +1281,15 @@ command "<name>": grant '<g>' is declared for kind <k1> but was used for a <k2> 
 `errEffectGrantKindMismatch(name, g, k1, k2)`.
 
 ```
-command "<name>": grant '<g>' cannot be used on an observe; effects.run argv <argv> is on the app's proc_observe_allowlist
+command "<name>": grant '<g>' cannot be used on an observe (an allowlisted effects.run changes nothing)
 ```
 
-`errEffectGrantOnObserve(name, g, argv)`. Call-time; `<argv>` is the space-joined argv. Enforces
-§6.1: an observe is never recorded and never logged, so no preview line exists for the grant to
-label.
+`errEffectGrantOnObserve(name, g)`. Call-time. Enforces §6.1: an observe is never recorded and
+never logged, so no preview line exists for the grant to label. The message takes **no argv
+parameter** -- naming the argv would repeat what the caller just wrote without adding the one fact
+the reader needs, which is *why* the grant cannot land. (Amended 2026-08-03, ruling A: the draft
+above pinned an argv-carrying wording, all three implementations shipped this one, and where the
+implementations agree against the draft the implementations win.)
 
 ### 12.5 Truncation
 
@@ -1340,6 +1392,92 @@ command "<name>": handler is marked framework-internal but is not defined in the
 ```
 
 `errFrameworkInternalHandlerForeign(name)`. Registration-time, all three.
+
+### 12.10 Argument guards and declaration guards
+
+Added 2026-08-03 (ruling E). These templates shipped in the implementations without a §12 entry.
+They are **added here rather than deleted from the code**: every one of them names a real
+fail-closed guard, and deleting a guard to satisfy a document would be exactly backwards. Each has
+one canonical wording, byte-identical wherever it exists.
+
+Category: **registration-time** in the parity taxonomy. They are argument guards, not the §12.8
+failure family, and the campaign's category ruling puts only §12.5, §12.6 and §12.8 in the
+parse-time section.
+
+**Effect argument type guards (call-time), all raised as the language's type error:**
+
+```
+command "<name>": effects.<method> parameter '<p>' must be a string, a path, or a forwarded effect result; got <t>
+```
+
+`errEffectParamNotStringish(name, method, p, t)` (Go: `errEffectParamType`). All three.
+
+```
+command "<name>": effects.<method> argv must not be empty
+```
+
+`errEffectArgvEmpty(name, method)`. All three.
+
+```
+command "<name>": effects.<method> argv must be a sequence of strings, not <t>
+```
+
+`errEffectArgvNotSequence(name, method, t)`. Python and TypeScript. **Go-excluded**: Go's `argv`
+parameter is typed `[]any`, so a non-sequence argv is a compile error, not a runtime one.
+
+```
+command "<name>": effects.chmod parameter 'mode' must be an int, got <t>
+```
+
+`errEffectModeNotInt(name, t)`. Python and TypeScript. **Go-excluded**: `Chmod` takes `mode int`
+positionally.
+
+```
+command "<name>": effects.http parameter 'method' must be a string, got <t>
+```
+
+`errEffectHTTPMethodNotString(name, t)`. Python and TypeScript. **Go-excluded**: `HTTP` takes
+`method string` positionally.
+
+**Handle availability.** The message names each language's own accessor spelling (§2.1), so the
+three texts differ by exactly that noun phrase and each is excluded in the other two:
+
+| Impl | Text |
+|------|------|
+| Python | `ctx.effects is unavailable: this Context was constructed outside a command dispatch` |
+| TypeScript | `ctx.effects is unavailable: this Context was constructed outside a command dispatch` |
+| Go | `ctx.Effects() is unavailable: this Context was constructed outside a command dispatch` |
+
+`errEffectsUnavailable`.
+
+**Declaration guards (registration-time):**
+
+```
+command "<name>": grant '<g>' has invalid kind '<k>': must be one of proc_mutate, proc_spawn, file_write, net_mutate
+```
+
+`errGrantKindInvalid(name, g, k)`. All three. It completes §12.7's grant-declaration trio.
+
+```
+command "<name>": grants must be Grant instances, got <t>
+```
+
+Python only. **Go- and TypeScript-excluded**: `WithGrants(...Grant)` and the `readonly Grant[]`
+option are statically typed, so a non-grant element is a compile error.
+
+```
+proc_observe_allowlist entries must not be empty
+```
+
+`errProcObserveAllowlistEmptyPrefix`. All three. An empty prefix matches every argv, which would
+turn the allowlist into a blanket exemption.
+
+```
+proc_observe_allowlist entries must be lists of strings, got <t>
+```
+
+`errProcObserveAllowlistNotStrings(t)`. Python and TypeScript. **Go-excluded**:
+`WithProcObserveAllowlist([][]string)` is statically typed.
 
 ---
 
@@ -1948,6 +2086,47 @@ alone.
     extraction. Every other parameter stays unannotated -- the annotations pin the forwarding
     boundary and the return shape, which are the two things a caller could otherwise be misled
     about, and nothing else.
+
+### 18.4 User-ratified rulings folded in at the conformance-and-parity round (2026-08-03)
+
+These are **ratified by the user**, not authored here. They amend this document after the three
+implementations shipped; each is marked in place at the section it changes.
+
+71. **Where the three implementations agree against this document's draft text, the
+    implementations win and the document is amended.** The governing ruling of the round; it
+    inverts the precedence clause of the preamble for this round only. Its one concrete
+    application is item 72.
+72. **`errEffectGrantOnObserve` takes no argv parameter** (§12.4, ruling A). The draft pinned
+    `... cannot be used on an observe; effects.run argv <argv> is on the app's
+    proc_observe_allowlist`; all three implementations shipped
+    `... cannot be used on an observe (an allowlisted effects.run changes nothing)`, which states
+    the reason rather than restating the caller's own argv. The shipped wording is now the pinned
+    wording, and the function signature drops to `(name, g)`.
+73. **Go's environment option is `EffectEnv(map[string]string)`** (§2.5.2, §2.5.6, ruling B). The
+    pinned `Env` spelling collides with the package's existing `Env(varName string) FlagOption`
+    and Go has no overloading. Only the constructor moves; the canonical snake_case option name
+    stays `env`, so `errEffectOptionNotAccepted` stays byte-identical across the three.
+74. **Python gains an explicit `errEffectOptionNotAccepted`** (§2.5.2, §12.8, ruling C),
+    through a `**_options` catch-all on each of the eight methods, raised as a `TypeError` (which
+    is what CPython itself raises for an unexpected keyword, and what every other call-time
+    argument guard on the handle raises) and made visible to the parity extractor by a `_msg_*`
+    function. Forced by §14.5's own conformance case: `{"method": "mkdir", "path": "d",
+    "stream": true}` must produce the byte-identical message in all three, and CPython's native
+    `unexpected keyword argument` wording is not it.
+75. **Python's four path positions widen to include `os.PathLike[str]`** (§2.5.5, §2.5.6,
+    ruling D). The runtime already resolved them through `os.fspath`; a PEP 561 package must not
+    type-error on `Path("out.txt")`. The §2.5.5 row is the unit -- `path`, `src`, `dst` and `url`
+    widen together, because they share one resolver and a surface where some of them accept a path
+    object and others do not would be incoherent. `argv` elements and `content` are unchanged.
+76. **Templates present in the implementations but absent from §12 are added to §12, not deleted
+    from the code** (§12.10, ruling E). Each names a real fail-closed guard; deleting a guard to
+    satisfy a document is backwards. One canonical wording each, byte-identical wherever the
+    template exists, with per-implementation exclusions recorded where a language's static typing
+    makes the guard unreachable.
+77. **The catalogs' category placement is pinned** (§12 preamble, ruling F): parse-time is exactly
+    §12.5, §12.6 and §12.8; everything else is registration-time. Go's and TypeScript's section
+    markers are brought into agreement so that the coverage requirements this document prescribes
+    actually bind.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
