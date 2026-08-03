@@ -8,6 +8,8 @@ __all__ = [
     "App", "Flag", "Arg", "FlagSet", "MutexGroup", "CoRequired", "Requires",
     "Implies", "Passthrough", "Forwarding", "DeprecatedCommand", "Result",
     "InvokeError",
+    "Grant", "EffectFailed", "Unsettled", "Completed", "Spawned", "Response",
+    "PROC_MUTATE", "PROC_SPAWN", "FILE_WRITE", "NET_MUTATE",
     "flag", "arg",
     "CheckContext", "ConnectionEnvReader", "CheckRunResult",
     "ErrorReporter", "WarnReporter", "SkipCheck",
@@ -379,6 +381,859 @@ class Context:
         raise KeyError(
             f'"{env_var}" is not a declared connection env var'
         )
+
+
+# ---------------------------------------------------------------------------
+# The effects regime
+#
+# Command classification (read_only / mutating), the ctx.effects handle, dry
+# mode's would-do log, and the Unsettled carriers that make a data-flow preview
+# complete without letting the framework invent a value it cannot know.
+#
+# Two rules govern the whole regime: FAIL CLOSED (when the framework cannot
+# prove an operation is safe to preview, it stops with a precise error instead
+# of guessing) and ZERO INFERENCE (nothing is inferred -- not classification,
+# not whether an argument is a path, not whether a resource is current).
+# ---------------------------------------------------------------------------
+
+# Effect kinds. CACHE_WRITE has NO public method: it is minted only by
+# framework-internal code (schema dump, test-coverage shards and manifest) and
+# is unreachable from application code.
+PROC_MUTATE = "proc_mutate"
+PROC_SPAWN = "proc_spawn"
+FILE_WRITE = "file_write"
+NET_MUTATE = "net_mutate"
+CACHE_WRITE = "cache_write"
+
+# The kinds a Grant may be declared for (CACHE_WRITE is excluded: it is not
+# reachable from application code, so nothing could ever use such a grant).
+_GRANTABLE_KINDS = (PROC_MUTATE, PROC_SPAWN, FILE_WRITE, NET_MUTATE)
+_GRANT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
+class EffectFailed(Exception):
+    """A failed effect operation.
+
+    A failed operation is an error, not a value: a ``run`` whose child exits
+    nonzero and an ``http`` whose status is outside 200-299 raise this, as does
+    invalid UTF-8 on a captured stream. ``check=False`` opts a single call out.
+    """
+
+
+class _DryRunTruncated(BaseException):
+    """Raised when handler code extracts from or branches on an Unsettled value.
+
+    Derives from BaseException deliberately: a handler's ``except Exception``
+    must not be able to swallow the truncation and let the preview continue
+    with a value the framework refuses to invent.
+    """
+
+    def __init__(self, message: str, log: "_EffectLog") -> None:
+        super().__init__(message)
+        self.message = message
+        self.log = log
+
+
+@dataclass(frozen=True)
+class Grant:
+    """A per-command, per-effect-kind authorization with a mandatory reason.
+
+    A grant is not permission to do something otherwise forbidden; it is a
+    labelled reason that surfaces in the preview so a reviewer reading a dry
+    run sees why a dangerous step is there.
+    """
+
+    name: str
+    reason: str
+    kind: str
+
+
+@dataclass(frozen=True)
+class Completed:
+    """The result of a subprocess that ran to completion.
+
+    ``stdout``/``stderr`` are the child's output decoded as UTF-8 strictly,
+    with a single trailing newline removed if present -- the form that can be
+    forwarded straight into a later effect's argv.
+    """
+
+    exit_code: int
+    stdout: str
+    stderr: str
+
+
+@dataclass(frozen=True)
+class Response:
+    """The result of an HTTP request. Header names are lower-cased."""
+
+    status: int
+    body: bytes
+    headers: dict
+
+
+@dataclass(frozen=True)
+class Spawned:
+    """A handle for a started-but-not-awaited child process."""
+
+    pid: int
+    _proc: object = field(default=None, repr=False, compare=False)
+    _cmd_path: str = field(default="", repr=False, compare=False)
+
+    def wait(self, *, check: bool = True) -> Completed:
+        """Wait for the child and return its Completed result.
+
+        ``check`` mirrors ``run``'s opt-out: with the default ``True`` a
+        nonzero exit raises :class:`EffectFailed`.
+        """
+        code = self._proc.wait()
+        argv = " ".join(str(a) for a in self._proc.args)
+        if check and code != 0:
+            raise EffectFailed(
+                f'command "{self._cmd_path}": effects.spawn failed: '
+                f"{argv} exited {code}"
+            )
+        # spawn always streams (the child inherits stdio), so there is nothing
+        # captured to report.
+        return Completed(exit_code=code, stdout="", stderr="")
+
+
+# The dunders Unsettled poisons. Every one of them is an EXTRACTION or a
+# BRANCH: reading a concrete value out of a carrier, or deciding something from
+# it. `__repr__` is the single non-poisoned dunder (so debuggers, tracebacks and
+# logging never themselves detonate) and `__class__` is untouched (isinstance
+# must work -- the effects API uses it at the forwarding boundary).
+_UNSETTLED_POISONED_DUNDERS = (
+    "__bool__", "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__",
+    "__hash__", "__len__", "__iter__", "__contains__", "__getitem__",
+    "__getattr__", "__int__", "__float__", "__index__", "__str__",
+    "__format__", "__bytes__", "__add__", "__radd__", "__mod__", "__rmod__",
+    "__call__",
+)
+
+
+class Unsettled:
+    """A value standing in for a result that cannot exist because nothing ran.
+
+    Produced by every mutating effect recorded in dry mode and by every
+    post-mutation observe. FORWARDING one into a later ``ctx.effects`` call is
+    legal and renders its brand inline; EXTRACTING from it or BRANCHING on it
+    truncates the preview with a precise error.
+    """
+
+    __slots__ = ("_brand", "_log", "_cmd_path", "_forwardable")
+
+    def __init__(self, brand: str, log: "_EffectLog", cmd_path: str,
+                 forwardable: bool) -> None:
+        self._brand = brand
+        self._log = log
+        self._cmd_path = cmd_path
+        # Void results (write/mkdir/remove/rename/chmod) and spawn results have
+        # no scalar projection, so they are never forwardable -- in either mode.
+        self._forwardable = forwardable
+
+    def __repr__(self) -> str:
+        return f"Unsettled({self._brand})"
+
+    def _truncate(self) -> "_DryRunTruncated":
+        step = len(self._log.records) + 1
+        return _DryRunTruncated(
+            f"error: dry-run preview ends at step {step}: {self._cmd_path} "
+            f"branched on unsettled value {self._brand} — cannot preview past "
+            f"this point",
+            self._log,
+        )
+
+
+def _make_poisoned_dunder(dunder_name: str):
+    def _poisoned(self, *args, **kwargs):
+        raise self._truncate()
+
+    _poisoned.__name__ = dunder_name
+    _poisoned.__qualname__ = f"Unsettled.{dunder_name}"
+    _poisoned.__doc__ = (
+        "Poisoned: extracting from or branching on an unsettled value "
+        "truncates the dry-run preview."
+    )
+    return _poisoned
+
+
+for _dunder in _UNSETTLED_POISONED_DUNDERS:
+    setattr(Unsettled, _dunder, _make_poisoned_dunder(_dunder))
+del _dunder
+
+
+@dataclass
+class _EffectRecord:
+    """One entry in the structured effect log (see the conformance surface)."""
+
+    seq: int
+    kind: str
+    verb: str
+    detail: str
+    bytes: int | None = None
+    resource: str | None = None
+    skip_if_current: str | None = None
+    grant: str | None = None
+    grant_reason: str | None = None
+    recorded: bool = False
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "seq": self.seq,
+            "kind": self.kind,
+            "verb": self.verb,
+            "detail": self.detail,
+            "recorded": self.recorded,
+        }
+        if self.bytes is not None:
+            d["bytes"] = self.bytes
+        if self.resource is not None:
+            d["resource"] = self.resource
+        if self.skip_if_current is not None:
+            d["skip_if_current"] = self.skip_if_current
+        if self.grant is not None:
+            d["grant"] = self.grant
+        return d
+
+    def render(self) -> str:
+        """Render this record as a would-do log line (without the indent)."""
+        line = f"{self.seq}. {self.verb}: {self.detail}"
+        if self.grant is not None:
+            line += f" (granted: {self.grant} — {self.grant_reason})"
+        if self.skip_if_current is not None:
+            line += f" [unless resource '{self.skip_if_current}' already current]"
+        return line
+
+
+_DRY_RUN_HEADER = "DRY RUN — no changes were made. Would do:"
+
+
+class _EffectLog:
+    """The ordered effect records produced by one dispatch."""
+
+    __slots__ = ("records",)
+
+    def __init__(self) -> None:
+        self.records: list[_EffectRecord] = []
+
+    def append(self, rec: _EffectRecord) -> None:
+        self.records.append(rec)
+
+    def next_seq(self) -> int:
+        return len(self.records) + 1
+
+    def render(self) -> str:
+        """Render the would-do log. CACHE_WRITEs are never written to it."""
+        lines = [_DRY_RUN_HEADER]
+        for rec in self.records:
+            if rec.kind == CACHE_WRITE:
+                continue
+            lines.append("  " + rec.render())
+        return "\n".join(lines)
+
+    def to_list(self) -> list[dict]:
+        return [rec.to_dict() for rec in self.records]
+
+
+def _err_effect_mutating_in_read_only(name: str, method: str) -> str:
+    return (
+        f'command "{name}" is classified read_only; effects.{method} is a '
+        f"mutating operation"
+    )
+
+
+def _err_effect_run_not_allowlisted(name: str, argv: str) -> str:
+    return (
+        f'command "{name}" is classified read_only; effects.run argv {argv} '
+        f"is not on the app's proc_observe_allowlist"
+    )
+
+
+def _err_effect_grant_undeclared(name: str, grant: str) -> str:
+    return f'command "{name}": grant \'{grant}\' is not declared on this command'
+
+
+def _err_effect_grant_kind_mismatch(name: str, grant: str, k1: str, k2: str) -> str:
+    return (
+        f'command "{name}": grant \'{grant}\' is declared for kind {k1} but '
+        f"was used for a {k2} effect"
+    )
+
+
+def _err_effect_grant_on_observe(name: str, grant: str) -> str:
+    return (
+        f'command "{name}": grant \'{grant}\' cannot be used on an observe '
+        f"(an allowlisted effects.run changes nothing)"
+    )
+
+
+def _err_effect_run_failed(name: str, method: str, argv: str, code: int) -> str:
+    return f'command "{name}": effects.{method} failed: {argv} exited {code}'
+
+
+def _err_effect_http_failed(name: str, http_method: str, url: str, status: int) -> str:
+    return (
+        f'command "{name}": effects.http failed: {http_method} {url} '
+        f"returned {status}"
+    )
+
+
+def _err_effect_output_not_utf8(name: str, method: str) -> str:
+    return f'command "{name}": effects.{method} produced output that is not valid UTF-8'
+
+
+def _err_effect_param_rejects_carrier(name: str, method: str, param: str) -> str:
+    return (
+        f'command "{name}": effects.{method} parameter \'{param}\' does not '
+        f"accept an unsettled value"
+    )
+
+
+def _err_grant_reason_empty(name: str, grant: str) -> str:
+    return f'command "{name}": grant \'{grant}\' reason must be a non-empty string'
+
+
+def _err_grant_duplicate(name: str, grant: str) -> str:
+    return f'command "{name}": duplicate grant \'{grant}\''
+
+
+def _err_grant_name_invalid(name: str, grant: str) -> str:
+    return (
+        f'command "{name}": invalid grant name \'{grant}\': '
+        f"must match [a-z][a-z0-9-]*"
+    )
+
+
+def _err_grant_kind_invalid(name: str, grant: str, kind: object) -> str:
+    return (
+        f'command "{name}": grant \'{grant}\' has invalid kind \'{kind}\': '
+        f"must be one of proc_mutate, proc_spawn, file_write, net_mutate"
+    )
+
+
+_CARRIER_TYPES = (Unsettled, Completed, Response, Spawned)
+
+
+class _Effects:
+    """The effects handle reached as ``ctx.effects``.
+
+    Exactly eight methods, and the set is CLOSED: there is no escape hatch that
+    mints an unlisted effect, and CACHE_WRITE has no public method at all.
+    """
+
+    __slots__ = ("_cmd", "_cmd_path", "_dry_run", "_log", "_allowlist",
+                 "_grants", "_mutation_recorded")
+
+    def __init__(self, *, cmd: "Command", cmd_path: str, dry_run: bool,
+                 log: _EffectLog, allowlist: tuple) -> None:
+        self._cmd = cmd
+        self._cmd_path = cmd_path
+        self._dry_run = dry_run
+        self._log = log
+        self._allowlist = allowlist
+        self._grants = {g.name: g for g in cmd.grants}
+        self._mutation_recorded = False
+
+    # -- helpers ---------------------------------------------------------
+
+    def _reject_carrier_params(self, method: str, params: dict) -> None:
+        """Hard-error when a carrier reaches a parameter that cannot take one."""
+        for param, value in params.items():
+            if isinstance(value, _CARRIER_TYPES):
+                raise ValueError(
+                    _err_effect_param_rejects_carrier(self._cmd_path, method, param)
+                )
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    if isinstance(k, _CARRIER_TYPES) or isinstance(v, _CARRIER_TYPES):
+                        raise ValueError(
+                            _err_effect_param_rejects_carrier(
+                                self._cmd_path, method, param,
+                            )
+                        )
+
+    def _operand(self, value: object, method: str, param: str) -> tuple:
+        """Resolve a carrier-accepting parameter.
+
+        Returns ``(runtime_value, rendered)``. ``runtime_value`` is ``None``
+        when the value is unsettled (nothing ran, so there is nothing to use);
+        ``rendered`` is what the log line shows.
+        """
+        if isinstance(value, Unsettled):
+            if not value._forwardable:
+                raise ValueError(
+                    _err_effect_param_rejects_carrier(self._cmd_path, method, param)
+                )
+            return None, value._brand
+        if isinstance(value, Spawned):
+            # A Spawned has no scalar projection.
+            raise ValueError(
+                _err_effect_param_rejects_carrier(self._cmd_path, method, param)
+            )
+        if isinstance(value, Completed):
+            return value.stdout, value.stdout
+        if isinstance(value, Response):
+            text = _decode_effect_output(
+                value.body, self._cmd_path, "http",
+            )
+            return text, text
+        if isinstance(value, str):
+            return value, value
+        if isinstance(value, os.PathLike):
+            text = os.fspath(value)
+            if isinstance(text, bytes):
+                text = text.decode()
+            return text, text
+        raise TypeError(
+            f'command "{self._cmd_path}": effects.{method} parameter '
+            f"'{param}' must be a string, a path, or a forwarded effect result; "
+            f"got {type(value).__name__}"
+        )
+
+    def _content_operand(self, value: object) -> tuple:
+        """Resolve ``write``'s content. Returns ``(bytes_or_None, rendered)``.
+
+        The rendered form is the encoded byte count for a settled value, and the
+        forwarded carrier's brand when the content is unsettled (there is no
+        byte count to report -- nothing produced the bytes).
+        """
+        if isinstance(value, bytes):
+            return value, f"{len(value)} bytes"
+        if isinstance(value, str):
+            data = value.encode("utf-8")
+            return data, f"{len(data)} bytes"
+        runtime, rendered = self._operand(value, "write", "content")
+        if runtime is None:
+            return None, rendered
+        data = runtime.encode("utf-8")
+        return data, f"{len(data)} bytes"
+
+    def _authorize(self, method: str, kind: str, grant: str | None) -> Grant | None:
+        """Read-only enforcement plus grant validation, at call time."""
+        if self._cmd.effect == EFFECT_READ_ONLY:
+            raise ValueError(
+                _err_effect_mutating_in_read_only(self._cmd_path, method)
+            )
+        return self._check_grant(kind, grant)
+
+    def _check_grant(self, kind: str, grant: str | None) -> Grant | None:
+        if grant is None:
+            return None
+        declared = self._grants.get(grant)
+        if declared is None:
+            raise ValueError(
+                _err_effect_grant_undeclared(self._cmd_path, grant)
+            )
+        if declared.kind != kind:
+            raise ValueError(
+                _err_effect_grant_kind_mismatch(
+                    self._cmd_path, grant, declared.kind, kind,
+                )
+            )
+        return declared
+
+    def _record(self, *, kind: str, verb: str, detail: str,
+                resource: str | None, skip_if_current: str | None,
+                grant: Grant | None, nbytes: int | None = None,
+                recorded: bool) -> _EffectRecord:
+        rec = _EffectRecord(
+            seq=self._log.next_seq(),
+            kind=kind,
+            verb=verb,
+            detail=detail,
+            bytes=nbytes,
+            resource=resource,
+            skip_if_current=skip_if_current,
+            grant=grant.name if grant is not None else None,
+            grant_reason=grant.reason if grant is not None else None,
+            recorded=recorded,
+        )
+        self._log.append(rec)
+        return rec
+
+    def _carrier(self, seq: int, *, forwardable: bool) -> Unsettled:
+        self._mutation_recorded = True
+        return Unsettled(f"«step {seq} output»", self._log, self._cmd_path,
+                         forwardable)
+
+    def _stale(self, descr: str) -> Unsettled:
+        return Unsettled(f"«stale: {descr}»", self._log, self._cmd_path, True)
+
+    def _is_observe(self, argv: list) -> bool:
+        """Element-wise argv-prefix matching by string equality. Nothing else."""
+        for prefix in self._allowlist:
+            if len(prefix) > len(argv):
+                continue
+            if all(
+                isinstance(argv[i], str) and argv[i] == prefix[i]
+                for i in range(len(prefix))
+            ):
+                return True
+        return False
+
+    def _resolve_argv(self, argv: object, method: str) -> tuple:
+        if isinstance(argv, (str, bytes)) or not isinstance(argv, (list, tuple)):
+            raise TypeError(
+                f'command "{self._cmd_path}": effects.{method} argv must be a '
+                f"sequence of strings, not {type(argv).__name__}"
+            )
+        if not argv:
+            raise ValueError(
+                f'command "{self._cmd_path}": effects.{method} argv must not be empty'
+            )
+        runtime: list = []
+        rendered: list[str] = []
+        for i, element in enumerate(argv):
+            r, text = self._operand(element, method, f"argv[{i}]")
+            runtime.append(r)
+            rendered.append(text)
+        return runtime, rendered
+
+    # -- the eight methods -----------------------------------------------
+
+    def run(self, argv, *, cwd=None, env=None, check=True, stream=False,
+            resource=None, skip_if_current=None, grant=None):
+        """Run a subprocess to completion (PROC_MUTATE, or an observe)."""
+        self._reject_carrier_params("run", {
+            "cwd": cwd, "env": env, "resource": resource,
+            "skip_if_current": skip_if_current, "grant": grant,
+        })
+        runtime, rendered = self._resolve_argv(argv, "run")
+        joined = " ".join(rendered)
+
+        if self._is_observe(runtime):
+            # An observe changes nothing: it is legal in a read_only command,
+            # never written to the would-do log, and never carries a grant.
+            if grant is not None:
+                raise ValueError(
+                    _err_effect_grant_on_observe(self._cmd_path, grant)
+                )
+            if self._dry_run and self._mutation_recorded:
+                return self._stale(joined)
+            return self._exec_run(runtime, joined, cwd, env, check, stream, "run")
+
+        if self._cmd.effect == EFFECT_READ_ONLY:
+            raise ValueError(
+                _err_effect_run_not_allowlisted(self._cmd_path, joined)
+            )
+        declared = self._check_grant(PROC_MUTATE, grant)
+
+        if self._dry_run:
+            rec = self._record(
+                kind=PROC_MUTATE, verb="run", detail=joined, resource=resource,
+                skip_if_current=skip_if_current, grant=declared, recorded=True,
+            )
+            return self._carrier(rec.seq, forwardable=True)
+
+        self._record(
+            kind=PROC_MUTATE, verb="run", detail=joined, resource=resource,
+            skip_if_current=skip_if_current, grant=declared, recorded=False,
+        )
+        return self._exec_run(runtime, joined, cwd, env, check, stream, "run")
+
+    def spawn(self, argv, *, cwd=None, env=None, resource=None,
+              skip_if_current=None, grant=None):
+        """Start a subprocess without waiting (PROC_SPAWN).
+
+        Spawning is itself an effect: a dry run RECORDS the spawn instead of
+        performing it, which is why no cross-process mode token exists.
+        """
+        self._reject_carrier_params("spawn", {
+            "cwd": cwd, "env": env, "resource": resource,
+            "skip_if_current": skip_if_current, "grant": grant,
+        })
+        runtime, rendered = self._resolve_argv(argv, "spawn")
+        joined = " ".join(rendered)
+        declared = self._authorize("spawn", PROC_SPAWN, grant)
+
+        if self._dry_run:
+            rec = self._record(
+                kind=PROC_SPAWN, verb="spawn", detail=joined, resource=resource,
+                skip_if_current=skip_if_current, grant=declared, recorded=True,
+            )
+            return self._carrier(rec.seq, forwardable=False)
+
+        self._record(
+            kind=PROC_SPAWN, verb="spawn", detail=joined, resource=resource,
+            skip_if_current=skip_if_current, grant=declared, recorded=False,
+        )
+        proc = subprocess.Popen(
+            self._settled_argv(runtime, joined, "spawn"),
+            cwd=cwd, env=self._merged_env(env),
+        )
+        return Spawned(pid=proc.pid, _proc=proc, _cmd_path=self._cmd_path)
+
+    def write(self, path, content, *, resource=None, skip_if_current=None,
+              grant=None):
+        """Write bytes to a path (FILE_WRITE)."""
+        self._reject_carrier_params("write", {
+            "resource": resource, "skip_if_current": skip_if_current,
+            "grant": grant,
+        })
+        rt_path, rendered_path = self._operand(path, "write", "path")
+        data, rendered_content = self._content_operand(content)
+        detail = f"{rendered_path} ({rendered_content})"
+        declared = self._authorize("write", FILE_WRITE, grant)
+        nbytes = len(data) if data is not None else None
+
+        if self._dry_run:
+            rec = self._record(
+                kind=FILE_WRITE, verb="write", detail=detail, resource=resource,
+                skip_if_current=skip_if_current, grant=declared, nbytes=nbytes,
+                recorded=True,
+            )
+            return self._carrier(rec.seq, forwardable=False)
+
+        self._record(
+            kind=FILE_WRITE, verb="write", detail=detail, resource=resource,
+            skip_if_current=skip_if_current, grant=declared, nbytes=nbytes,
+            recorded=False,
+        )
+        with open(self._settled(rt_path, "write", "path"), "wb") as fh:
+            fh.write(data)
+        return None
+
+    def mkdir(self, path, *, resource=None, skip_if_current=None, grant=None):
+        """Create a directory, parents included; an existing one is not an error."""
+        return self._path_effect(
+            "mkdir", path, resource, skip_if_current, grant,
+            lambda p: os.makedirs(p, exist_ok=True),
+        )
+
+    def remove(self, path, *, resource=None, skip_if_current=None, grant=None):
+        """Remove a file, symlink or directory tree; a missing path is not an error."""
+        return self._path_effect(
+            "remove", path, resource, skip_if_current, grant, _remove_path,
+        )
+
+    def rename(self, src, dst, *, resource=None, skip_if_current=None, grant=None):
+        """Move/rename a path (FILE_WRITE)."""
+        self._reject_carrier_params("rename", {
+            "resource": resource, "skip_if_current": skip_if_current,
+            "grant": grant,
+        })
+        rt_src, r_src = self._operand(src, "rename", "src")
+        rt_dst, r_dst = self._operand(dst, "rename", "dst")
+        detail = f"{r_src} -> {r_dst}"
+        declared = self._authorize("rename", FILE_WRITE, grant)
+
+        if self._dry_run:
+            rec = self._record(
+                kind=FILE_WRITE, verb="rename", detail=detail, resource=resource,
+                skip_if_current=skip_if_current, grant=declared, recorded=True,
+            )
+            return self._carrier(rec.seq, forwardable=False)
+
+        self._record(
+            kind=FILE_WRITE, verb="rename", detail=detail, resource=resource,
+            skip_if_current=skip_if_current, grant=declared, recorded=False,
+        )
+        os.replace(
+            self._settled(rt_src, "rename", "src"),
+            self._settled(rt_dst, "rename", "dst"),
+        )
+        return None
+
+    def chmod(self, path, mode, *, resource=None, skip_if_current=None, grant=None):
+        """Change a path's mode (FILE_WRITE)."""
+        self._reject_carrier_params("chmod", {
+            "mode": mode, "resource": resource,
+            "skip_if_current": skip_if_current, "grant": grant,
+        })
+        if not isinstance(mode, int) or isinstance(mode, bool):
+            raise TypeError(
+                f'command "{self._cmd_path}": effects.chmod parameter \'mode\' '
+                f"must be an int, got {type(mode).__name__}"
+            )
+        rt_path, r_path = self._operand(path, "chmod", "path")
+        detail = f"{r_path} 0{mode:o}"
+        declared = self._authorize("chmod", FILE_WRITE, grant)
+
+        if self._dry_run:
+            rec = self._record(
+                kind=FILE_WRITE, verb="chmod", detail=detail, resource=resource,
+                skip_if_current=skip_if_current, grant=declared, recorded=True,
+            )
+            return self._carrier(rec.seq, forwardable=False)
+
+        self._record(
+            kind=FILE_WRITE, verb="chmod", detail=detail, resource=resource,
+            skip_if_current=skip_if_current, grant=declared, recorded=False,
+        )
+        os.chmod(self._settled(rt_path, "chmod", "path"), mode)
+        return None
+
+    def http(self, method, url, *, body=None, headers=None, check=True,
+             resource=None, skip_if_current=None, grant=None):
+        """Perform a network request (NET_MUTATE)."""
+        self._reject_carrier_params("http", {
+            "method": method, "body": body, "headers": headers,
+            "resource": resource, "skip_if_current": skip_if_current,
+            "grant": grant,
+        })
+        if not isinstance(method, str):
+            raise TypeError(
+                f'command "{self._cmd_path}": effects.http parameter \'method\' '
+                f"must be a string, got {type(method).__name__}"
+            )
+        rt_url, r_url = self._operand(url, "http", "url")
+        detail = f"{method} {r_url}"
+        declared = self._authorize("http", NET_MUTATE, grant)
+
+        if self._dry_run:
+            rec = self._record(
+                kind=NET_MUTATE, verb="net", detail=detail, resource=resource,
+                skip_if_current=skip_if_current, grant=declared, recorded=True,
+            )
+            return self._carrier(rec.seq, forwardable=True)
+
+        self._record(
+            kind=NET_MUTATE, verb="net", detail=detail, resource=resource,
+            skip_if_current=skip_if_current, grant=declared, recorded=False,
+        )
+        return self._exec_http(
+            method, self._settled(rt_url, "http", "url"), body, headers, check,
+        )
+
+    # -- shared execution paths ------------------------------------------
+
+    def _path_effect(self, verb, path, resource, skip_if_current, grant, perform):
+        self._reject_carrier_params(verb, {
+            "resource": resource, "skip_if_current": skip_if_current,
+            "grant": grant,
+        })
+        rt_path, r_path = self._operand(path, verb, "path")
+        declared = self._authorize(verb, FILE_WRITE, grant)
+
+        if self._dry_run:
+            rec = self._record(
+                kind=FILE_WRITE, verb=verb, detail=r_path, resource=resource,
+                skip_if_current=skip_if_current, grant=declared, recorded=True,
+            )
+            return self._carrier(rec.seq, forwardable=False)
+
+        self._record(
+            kind=FILE_WRITE, verb=verb, detail=r_path, resource=resource,
+            skip_if_current=skip_if_current, grant=declared, recorded=False,
+        )
+        perform(self._settled(rt_path, verb, "path"))
+        return None
+
+    def _settled(self, value, method, param):
+        if value is None:
+            # Unreachable: an unsettled operand only survives in dry mode, where
+            # nothing executes. Kept as a fail-closed backstop.
+            raise ValueError(
+                _err_effect_param_rejects_carrier(self._cmd_path, method, param)
+            )
+        return value
+
+    def _settled_argv(self, runtime, joined, method):
+        for i, element in enumerate(runtime):
+            if element is None:
+                raise ValueError(
+                    _err_effect_param_rejects_carrier(
+                        self._cmd_path, method, f"argv[{i}]",
+                    )
+                )
+        return list(runtime)
+
+    def _merged_env(self, env):
+        """``env`` merges OVER the inherited environment, never replacing it."""
+        if env is None:
+            return None
+        merged = dict(os.environ)
+        merged.update({str(k): str(v) for k, v in env.items()})
+        return merged
+
+    def _exec_run(self, runtime, joined, cwd, env, check, stream, method):
+        argv = self._settled_argv(runtime, joined, method)
+        proc = subprocess.run(
+            argv, cwd=cwd, env=self._merged_env(env),
+            capture_output=not stream,
+        )
+        if stream:
+            out = err = ""
+        else:
+            out = _decode_effect_output(proc.stdout, self._cmd_path, method)
+            err = _decode_effect_output(proc.stderr, self._cmd_path, method)
+        if check and proc.returncode != 0:
+            raise EffectFailed(
+                _err_effect_run_failed(
+                    self._cmd_path, method, joined, proc.returncode,
+                )
+            )
+        return Completed(exit_code=proc.returncode, stdout=out, stderr=err)
+
+    def _exec_http(self, method, url, body, headers, check):
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(url, data=body, method=method)
+        for key, value in (headers or {}).items():
+            req.add_header(str(key), str(value))
+        try:
+            with urllib.request.urlopen(req) as resp:
+                status = resp.status
+                payload = resp.read()
+                hdrs = {k.lower(): v for k, v in resp.headers.items()}
+        except urllib.error.HTTPError as e:
+            status = e.code
+            payload = e.read()
+            hdrs = {k.lower(): v for k, v in e.headers.items()}
+        if check and not (200 <= status <= 299):
+            raise EffectFailed(
+                _err_effect_http_failed(self._cmd_path, method, url, status)
+            )
+        return Response(status=status, body=payload, headers=hdrs)
+
+
+def _decode_effect_output(data: bytes, cmd_path: str, method: str) -> str:
+    """Decode captured output as UTF-8 strictly, dropping one trailing newline."""
+    if data is None:
+        return ""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise EffectFailed(
+            _err_effect_output_not_utf8(cmd_path, method)
+        ) from e
+    if text.endswith("\n"):
+        text = text[:-1]
+    return text
+
+
+def _remove_path(path: str) -> None:
+    """Remove a file, a symlink or a directory tree. A missing path is fine."""
+    import shutil
+
+    if os.path.islink(path) or os.path.isfile(path):
+        os.unlink(path)
+    elif os.path.isdir(path):
+        shutil.rmtree(path)
+
+
+def _validate_grants(cmd_name: str, grants) -> tuple:
+    """Validate a command's grant declarations at registration time."""
+    resolved: list[Grant] = []
+    seen: set[str] = set()
+    for g in grants or ():
+        if not isinstance(g, Grant):
+            raise ValueError(
+                f'command "{cmd_name}": grants must be Grant instances, '
+                f"got {type(g).__name__}"
+            )
+        if not isinstance(g.name, str) or not _GRANT_NAME_RE.fullmatch(g.name):
+            raise ValueError(_err_grant_name_invalid(cmd_name, g.name))
+        if g.name in seen:
+            raise ValueError(_err_grant_duplicate(cmd_name, g.name))
+        if not isinstance(g.reason, str) or not g.reason.strip():
+            raise ValueError(_err_grant_reason_empty(cmd_name, g.name))
+        if g.kind not in _GRANTABLE_KINDS:
+            raise ValueError(_err_grant_kind_invalid(cmd_name, g.name, g.kind))
+        seen.add(g.name)
+        resolved.append(g)
+    return tuple(resolved)
 
 
 # Module-private brand token: an Outcome can be constructed only through the
@@ -2361,6 +3216,7 @@ class Command:
     hidden: bool = False
     interactive: bool = False
     config_fields: tuple[str, ...] = ()
+    grants: tuple[Grant, ...] = ()
     forwarding: Forwarding | None = None
     # Private marker, set ONLY by strictcli's own registration paths. It is not
     # reachable from any public factory, option or keyword, and is not emitted
@@ -2461,6 +3317,7 @@ class Group:
         mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
+        grants: list[Grant] | None = None,
         forwarding: Forwarding | None = None,
         tags: set[str] | None = None,
         hidden: bool = False,
@@ -2481,6 +3338,7 @@ class Group:
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
+                grants=grants,
                 forwarding=forwarding,
                 tags=tags,
                 inherited_tags=self._accumulated_tags,
@@ -2986,6 +3844,11 @@ class App:
     # handshakes it is hermetic-SUPPRESSED: under --hermetic it resolves as
     # absent. No default, read lazily. Flags bind to it via connection_url=.
     connection_env: dict[str, str] | None = None
+    # App-level observe authorization: a list of argv PREFIXES. A
+    # ctx.effects.run whose argv matches one element-wise (string equality only)
+    # is an observe: it executes even in dry mode, returns a real value, and is
+    # never written to the would-do log.
+    proc_observe_allowlist: list[list[str]] | None = None
     checks_path: str | Path | None = None
     checks_embed: bytes | None = None
     test_coverage: bool = False
@@ -3026,6 +3889,32 @@ class App:
         self._last_yes: bool = False
         self._last_quiet: bool = False
         self._last_verbose: bool = False
+
+        # Observe allowlist: plain argv prefixes, compared by string equality.
+        prefixes: list[tuple[str, ...]] = []
+        for prefix in self.proc_observe_allowlist or ():
+            if isinstance(prefix, str) or not isinstance(prefix, (list, tuple)):
+                raise ValueError(
+                    "proc_observe_allowlist entries must be lists of strings, "
+                    f"got {type(prefix).__name__}"
+                )
+            if not prefix:
+                raise ValueError(
+                    "proc_observe_allowlist entries must not be empty"
+                )
+            for element in prefix:
+                if not isinstance(element, str):
+                    raise ValueError(
+                        "proc_observe_allowlist entries must be lists of "
+                        f"strings, got {type(element).__name__}"
+                    )
+            prefixes.append(tuple(prefix))
+        self._proc_observe_allowlist: tuple[tuple[str, ...], ...] = tuple(prefixes)
+
+        # The structured effect log for the most recent dispatch. Populated in
+        # BOTH modes: recorded entries in dry mode, executed entries (with
+        # recorded=False) in live mode, plus framework-blessed CACHE_WRITEs.
+        self._effect_log = _EffectLog()
 
         # Resolve infrastructure roots eagerly, at construction. Infra vars have
         # no argv dependency, so resolution is sound here -- and this is WHY it
@@ -3196,6 +4085,7 @@ class App:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"command": cmd_path}) + "\n")
+        self._record_cache_write(path)
 
     def _collect_all_command_paths(self) -> set[str]:
         """Enumerate all non-deprecated leaf command paths as dotted strings."""
@@ -3308,6 +4198,7 @@ class App:
                     os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
                     with open(manifest_path, "w", encoding="utf-8") as f:
                         f.write(new_content)
+                    self._record_cache_write(manifest_path)
 
             # Compare against command surface (exclude the framework-injected
             # check command -- it is not a user command)
@@ -3937,6 +4828,7 @@ class App:
         mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
+        grants: list[Grant] | None = None,
         forwarding: Forwarding | None = None,
         tags: set[str] | None = None,
         hidden: bool = False,
@@ -3958,6 +4850,7 @@ class App:
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
+                grants=grants,
                 forwarding=forwarding,
                 tags=tags,
                 inherited_tags=None,
@@ -4055,6 +4948,84 @@ class App:
             for name, cf in self._config_fields.items()
             if name in flag_params
         }
+
+    def _confirm_mutating(self, cmd: "Command", cmd_path: str) -> None:
+        """The framework-owned confirm protocol.
+
+        Fires before dispatching a ``mutating`` command on the real CLI path
+        when neither --dry-run nor --yes was passed. Never fires for read_only
+        commands, and never on the programmatic paths (test/call/_invoke/MCP),
+        which have no TTY contract and would hang.
+
+        A mutating PASSTHROUGH is not exempt: the framework knows LESS about
+        what is about to happen, not more.
+        """
+        if cmd.effect != EFFECT_MUTATING:
+            return
+        if self._last_dry_run or self._last_yes:
+            return
+        if not sys.stdin.isatty():
+            print("error: stdin is not interactive; pass --yes to confirm",
+                  file=sys.stderr)
+            sys.exit(1)
+        print(
+            f"about to run mutating command '{cmd_path}'. Proceed? [y/N] ",
+            file=sys.stderr, end="", flush=True,
+        )
+        try:
+            answer = sys.stdin.readline()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer.rstrip("\n") not in ("y", "Y"):
+            print("aborted", file=sys.stderr)
+            sys.exit(1)
+
+    def _arm_effects(self, cmd: "Command", cmd_path: str, *,
+                     dry_run: bool) -> "_Effects":
+        """Arm the effects handle for one dispatch (the runtime seal).
+
+        Called at EVERY ctx-construction site that dispatches a handler, so
+        there is no path on which ctx.effects is missing or a carrier escapes
+        unpoisoned. The log itself is reset by :meth:`_begin_dispatch`, which
+        runs earlier so pre-handler CACHE_WRITEs (coverage shards) land in the
+        same dispatch's log.
+        """
+        return _Effects(
+            cmd=cmd,
+            cmd_path=cmd_path,
+            dry_run=dry_run,
+            log=self._effect_log,
+            allowlist=self._proc_observe_allowlist,
+        )
+
+    def _begin_dispatch(self) -> None:
+        """Start a new dispatch: reset the structured effect log."""
+        self._effect_log = _EffectLog()
+
+    def _record_cache_write(self, path: str) -> None:
+        """Record a framework-blessed CACHE_WRITE.
+
+        The closed list of sites is exactly three: the schema dump, the
+        test-coverage shards, and the test-coverage manifest. CACHE_WRITEs have
+        no public method, never appear in the would-do log, never trip
+        read-only enforcement, and EXECUTE even in dry mode -- which is why
+        they always carry ``recorded: false``.
+        """
+        log = self._effect_log
+        log.append(_EffectRecord(
+            seq=log.next_seq(),
+            kind=CACHE_WRITE,
+            verb="cache",
+            detail=path,
+            recorded=False,
+        ))
+
+    def effect_log(self) -> list[dict]:
+        """Return the structured effect records of the most recent dispatch.
+
+        Test-only surface, beside ``test()`` and ``_last_sources``.
+        """
+        return self._effect_log.to_list()
 
     def _build_framework_command(
         self,
@@ -5310,20 +6281,35 @@ class App:
             print(f"try '{prefix} --help'", file=sys.stderr)
             sys.exit(1)
         else:
+            self._begin_dispatch()
             self._last_sources = sources
+            cmd_path = ".".join(self._last_resolved_path + [cmd.name])
+            effects = self._arm_effects(
+                cmd, cmd_path, dry_run=self._last_dry_run,
+            )
             ctx = Context(
                 stdout=sys.stdout, stderr=sys.stderr, sources=sources,
                 infra=self._infra_access(self._last_hermetic),
                 dry_run=self._last_dry_run, yes=self._last_yes,
                 quiet=self._last_quiet, verbose=self._last_verbose,
+                effects=effects,
             )
-            if cmd.passthrough is not None:
-                result = cmd.passthrough.handler(ctx, cmd.name, data, self._last_global_values)
-            else:
-                result = cmd.handler(ctx, **data)
+            # The confirm protocol fires only on the real CLI path.
+            self._confirm_mutating(cmd, cmd_path)
+            try:
+                if cmd.passthrough is not None:
+                    result = cmd.passthrough.handler(ctx, cmd.name, data, self._last_global_values)
+                else:
+                    result = cmd.handler(ctx, **data)
+            except _DryRunTruncated as trunc:
+                print(trunc.log.render())
+                print(trunc.message, file=sys.stderr)
+                sys.exit(1)
             exit_code, out_data = _interpret_handler_return(result)
             if out_data is not _MISSING:
                 print(json.dumps(out_data, default=str, separators=(",", ":")))
+            if self._last_dry_run:
+                print(self._effect_log.render())
             sys.exit(exit_code)
 
     def test(self, argv: list[str]) -> Result:
@@ -5381,6 +6367,7 @@ class App:
             stderr_buf.write(f"try '{prefix} --help'\n")
             exit_code = 1
         else:
+            self._begin_dispatch()
             # Record test-coverage hit (command-level only).
             if self.test_coverage:
                 cmd_path = ".".join(self._last_resolved_path + [cmd.name])
@@ -5394,6 +6381,11 @@ class App:
                         infra=self._infra_access(self._last_hermetic),
                         dry_run=self._last_dry_run, yes=self._last_yes,
                         quiet=self._last_quiet, verbose=self._last_verbose,
+                        effects=self._arm_effects(
+                            cmd,
+                            ".".join(self._last_resolved_path + [cmd.name]),
+                            dry_run=self._last_dry_run,
+                        ),
                     )
                     if cmd.passthrough is not None:
                         handler_return = cmd.passthrough.handler(
@@ -5405,6 +6397,12 @@ class App:
                     if out_data is not _MISSING:
                         result_data = out_data
                         print(json.dumps(out_data, default=str, separators=(",", ":")))
+                    if self._last_dry_run:
+                        print(self._effect_log.render())
+                except _DryRunTruncated as trunc:
+                    print(trunc.log.render())
+                    print(trunc.message, file=sys.stderr)
+                    exit_code = 1
                 except SystemExit as e:
                     exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
 
@@ -5444,6 +6442,7 @@ class App:
         path_segments = command_path.split(".")
         cmd, _rest, _path = self._resolve_command(path_segments)
 
+        self._begin_dispatch()
         # Record test-coverage hit (command-level only).
         if self.test_coverage:
             self._record_coverage(command_path)
@@ -5481,7 +6480,13 @@ class App:
                         f"global flag '--{gf.name}' is required"
                     )
 
-            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources={}, infra=self._infra_access())
+            # Programmatic dispatch: --dry-run is not reachable (argv parsing
+            # is bypassed entirely) and the confirm protocol never fires.
+            ctx = Context(
+                stdout=sys.stdout, stderr=sys.stderr, sources={},
+                infra=self._infra_access(),
+                effects=self._arm_effects(cmd, command_path, dry_run=False),
+            )
             result = cmd.passthrough.handler(
                 ctx, cmd.name, raw_args, global_values,
             )
@@ -5557,7 +6562,11 @@ class App:
         # Store sources for function handlers that need provenance info
         self._last_sources = invoke_sources
 
-        ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources, infra=self._infra_access())
+        ctx = Context(
+            stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources,
+            infra=self._infra_access(),
+            effects=self._arm_effects(cmd, command_path, dry_run=False),
+        )
         result = cmd.handler(ctx, **final_kwargs)
         _interpret_handler_return(result)  # validate return type
         if isinstance(result, Outcome):
@@ -6496,6 +7505,7 @@ def _build_and_validate_command(
     env_prefix: str | None,
     global_flags: list[Flag] | None = None,
     passthrough: Passthrough | None = None,
+    grants: list[Grant] | None = None,
     forwarding: Forwarding | None = None,
     framework_internal: bool = False,
     extra_flags: list[Flag] | None = None,
@@ -6523,6 +7533,8 @@ def _build_and_validate_command(
         raise ValueError(_err_command_effect_missing(name))
     if effect not in _EFFECT_VALUES:
         raise ValueError(_err_command_effect_invalid(name, effect))
+
+    resolved_grants = _validate_grants(name, grants)
 
     # Declared forwarding: the reason is mandatory and non-empty.
     if forwarding is not None:
@@ -6584,6 +7596,7 @@ def _build_and_validate_command(
             hidden=hidden,
             interactive=interactive,
             config_fields=resolved_config_fields,
+            grants=resolved_grants,
             forwarding=forwarding,
             _framework_internal=framework_internal,
         )
@@ -6852,6 +7865,7 @@ def _build_and_validate_command(
         hidden=hidden,
         interactive=interactive,
         config_fields=resolved_config_fields,
+        grants=resolved_grants,
         forwarding=forwarding,
         _framework_internal=framework_internal,
     )
@@ -7941,6 +8955,11 @@ def _serialize_command(cmd: Command) -> dict:
         d["interactive"] = True
     if cmd.config_fields:
         d["config_fields"] = list(cmd.config_fields)
+    if cmd.grants:
+        d["grants"] = [
+            {"name": g.name, "reason": g.reason, "kind": g.kind}
+            for g in cmd.grants
+        ]
     if cmd.forwarding is not None:
         d["forwarding"] = {"reason": cmd.forwarding.reason}
     return d
@@ -8089,6 +9108,10 @@ def _dump_schema_core(app: App) -> dict:
         schema["env_prefix"] = app.env_prefix
     if app.config:
         schema["config"] = app.config
+    if app._proc_observe_allowlist:
+        schema["proc_observe_allowlist"] = [
+            list(prefix) for prefix in app._proc_observe_allowlist
+        ]
     global_flags = [_serialize_flag(f) for f in app._global_flags]
     if global_flags:
         schema["global_flags"] = global_flags
@@ -8214,6 +9237,7 @@ def _write_schema(app: App) -> str:
     _check_schema_project_id(file_path, schema["project_id"])
     with open(file_path, "w") as f:
         f.write(json.dumps(schema, indent=2) + "\n")
+    app._record_cache_write(file_path)
     return file_path
 
 
