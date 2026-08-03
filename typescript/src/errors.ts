@@ -46,6 +46,36 @@ export class InvokeError extends Error {
 }
 
 /**
+ * Thrown when an effect operation fails: a `run` whose child exits nonzero, an
+ * `http` whose status is outside 200-299, or invalid UTF-8 on a captured
+ * stream. A failed operation is an error, not a value; `check: false` opts a
+ * single call out. Mirrors Python's EffectFailed and Go's non-nil error.
+ */
+export class EffectFailed extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "EffectFailed";
+	}
+}
+
+/**
+ * Thrown when handler code extracts from or branches on an Unsettled carrier.
+ * Internal (never re-exported): the framework catches it at the dispatch
+ * boundary, prints the already-recorded would-do log, and truncates.
+ *
+ * TS ceiling: unlike Python's BaseException-derived twin, a handler's
+ * `catch (e)` CAN swallow this. The dispatch sites therefore also consult the
+ * effects handle's `truncated` record after the handler returns, so a
+ * swallowed truncation still fails closed.
+ */
+export class DryRunTruncated extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "DryRunTruncated";
+	}
+}
+
+/**
  * Go strconv.Quote: wrap in double quotes, escape backslash and double quote,
  * use the standard named escapes for ASCII control characters, and \xNN for
  * the rest of the control range. Code points above 0x7f pass through -- Go
@@ -1651,6 +1681,215 @@ export function errJsonSchemaIsGroup(commandPath: string): string {
 
 export function errRouterCommandMustBeString(): string {
 	return "command must be a string";
+}
+
+// ---------------------------------------------------------------------------
+// effects.go — command classification (registration-time)
+// ---------------------------------------------------------------------------
+
+export function errFlagNameReservedByFramework(name: string): string {
+	return `flag name '${name}' is reserved by the framework (dry-run, yes, quiet, verbose)`;
+}
+
+export function errCommandEffectMissing(name: string): string {
+	return `command ${q(name)}: effect classification is required (effect="read_only" or effect="mutating")`;
+}
+
+export function errCommandEffectInvalid(name: string, value: string): string {
+	return `command ${q(name)}: invalid effect "${value}": must be "read_only" or "mutating"`;
+}
+
+export function errDeprecatedCommandEffect(name: string): string {
+	return `deprecated command ${q(name)}: effect classification does not apply (a deprecated command has no handler)`;
+}
+
+// ---------------------------------------------------------------------------
+// effects.go — guard v2 and declared forwarding (registration-time)
+//
+// errHandlerVarKeywordUndeclared has no TS enforcement surface: a TS handler
+// takes a typed args object, which cannot be introspected for a var-keyword
+// parameter (contract §10.3). The template exists so the three catalogs stay
+// in parity; check_error_parity.py carries the impl_exclusions rationale.
+// ---------------------------------------------------------------------------
+
+export function errHandlerVarKeywordUndeclared(name: string): string {
+	return `command ${q(name)}: handler accepts **kwargs but the command does not declare forwarding; add forwarding=Forwarding(reason=...) or name every parameter explicitly`;
+}
+
+export function errForwardingReasonEmpty(name: string): string {
+	return `command ${q(name)}: forwarding reason must be a non-empty string`;
+}
+
+export function errFrameworkInternalHandlerForeign(name: string): string {
+	return `command ${q(name)}: handler is marked framework-internal but is not defined in the strictcli module`;
+}
+
+// ---------------------------------------------------------------------------
+// effects.go — grant declaration (registration-time)
+// ---------------------------------------------------------------------------
+
+export function errGrantReasonEmpty(name: string, grant: string): string {
+	return `command ${q(name)}: grant '${grant}' reason must be a non-empty string`;
+}
+
+export function errGrantDuplicate(name: string, grant: string): string {
+	return `command ${q(name)}: duplicate grant '${grant}'`;
+}
+
+export function errGrantNameInvalid(name: string, grant: string): string {
+	return `command ${q(name)}: invalid grant name '${grant}': must match [a-z][a-z0-9-]*`;
+}
+
+export function errGrantKindInvalid(
+	name: string,
+	grant: string,
+	kind: string,
+): string {
+	return `command ${q(name)}: grant '${grant}' has invalid kind '${kind}': must be one of proc_mutate, proc_spawn, file_write, net_mutate`;
+}
+
+// ---------------------------------------------------------------------------
+// effects.go — effect call-time errors
+// ---------------------------------------------------------------------------
+
+export function errEffectMutatingInReadOnly(
+	name: string,
+	method: string,
+): string {
+	return `command ${q(name)} is classified read_only; effects.${method} is a mutating operation`;
+}
+
+export function errEffectRunNotAllowlisted(name: string, argv: string): string {
+	return `command ${q(name)} is classified read_only; effects.run argv ${argv} is not on the app's proc_observe_allowlist`;
+}
+
+export function errEffectGrantUndeclared(name: string, grant: string): string {
+	return `command ${q(name)}: grant '${grant}' is not declared on this command`;
+}
+
+export function errEffectGrantKindMismatch(
+	name: string,
+	grant: string,
+	declaredKind: string,
+	usedKind: string,
+): string {
+	return `command ${q(name)}: grant '${grant}' is declared for kind ${declaredKind} but was used for a ${usedKind} effect`;
+}
+
+export function errEffectGrantOnObserve(name: string, grant: string): string {
+	return `command ${q(name)}: grant '${grant}' cannot be used on an observe (an allowlisted effects.run changes nothing)`;
+}
+
+// ---------------------------------------------------------------------------
+// effects.go — effect failure and parameter rejection (call-time)
+// ---------------------------------------------------------------------------
+
+export function errEffectRunFailed(
+	name: string,
+	method: string,
+	argv: string,
+	code: number,
+): string {
+	return `command ${q(name)}: effects.${method} failed: ${argv} exited ${code}`;
+}
+
+export function errEffectHTTPFailed(
+	name: string,
+	httpMethod: string,
+	url: string,
+	status: number,
+): string {
+	return `command ${q(name)}: effects.http failed: ${httpMethod} ${url} returned ${status}`;
+}
+
+export function errEffectOutputNotUTF8(name: string, method: string): string {
+	return `command ${q(name)}: effects.${method} produced output that is not valid UTF-8`;
+}
+
+export function errEffectParamRejectsCarrier(
+	name: string,
+	method: string,
+	param: string,
+): string {
+	return `command ${q(name)}: effects.${method} parameter '${param}' does not accept an unsettled value`;
+}
+
+export function errEffectOptionNotAccepted(
+	name: string,
+	method: string,
+	opt: string,
+): string {
+	return `command ${q(name)}: effects.${method} does not accept option '${opt}'`;
+}
+
+// ---------------------------------------------------------------------------
+// effects.go — effect argument type guards (call-time)
+//
+// Python raises these as inline TypeErrors; the TS type-name slots carry the
+// TS runtime vocabulary, so check_error_parity.py excludes the type slot.
+// ---------------------------------------------------------------------------
+
+export function errEffectParamNotStringish(
+	name: string,
+	method: string,
+	param: string,
+	gotType: string,
+): string {
+	return `command ${q(name)}: effects.${method} parameter '${param}' must be a string, a path, or a forwarded effect result; got ${gotType}`;
+}
+
+export function errEffectArgvNotSequence(
+	name: string,
+	method: string,
+	gotType: string,
+): string {
+	return `command ${q(name)}: effects.${method} argv must be a sequence of strings, not ${gotType}`;
+}
+
+export function errEffectArgvEmpty(name: string, method: string): string {
+	return `command ${q(name)}: effects.${method} argv must not be empty`;
+}
+
+export function errEffectModeNotInt(name: string, gotType: string): string {
+	return `command ${q(name)}: effects.chmod parameter 'mode' must be an int, got ${gotType}`;
+}
+
+export function errEffectHTTPMethodNotString(
+	name: string,
+	gotType: string,
+): string {
+	return `command ${q(name)}: effects.http parameter 'method' must be a string, got ${gotType}`;
+}
+
+// ---------------------------------------------------------------------------
+// effects.go — dry-run truncation (parse-time)
+//
+// The template carries its own "error: " prefix: it is written straight to
+// stderr, not through the parse-error formatter.
+// ---------------------------------------------------------------------------
+
+export function errDryRunTruncated(
+	step: number,
+	cmd: string,
+	brand: string,
+): string {
+	return `error: dry-run preview ends at step ${step}: ${cmd} branched on unsettled value ${brand} — cannot preview past this point`;
+}
+
+// ---------------------------------------------------------------------------
+// effects.go — the confirm protocol (parse-time)
+// ---------------------------------------------------------------------------
+
+export function promptConfirmMutating(name: string): string {
+	return `about to run mutating command '${name}'. Proceed? [y/N] `;
+}
+
+export function errConfirmNonInteractive(): string {
+	return "error: stdin is not interactive; pass --yes to confirm";
+}
+
+export function errConfirmDeclined(): string {
+	return "aborted";
 }
 
 // ---------------------------------------------------------------------------
