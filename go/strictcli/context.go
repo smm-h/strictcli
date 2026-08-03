@@ -15,6 +15,22 @@ type Context struct {
 	stderr  io.Writer
 	sources map[string]string // flag param name -> source label (cli/env/config/default/implied/infra)
 	infra   *infraAccess      // resolved infra roots + declared handshake vars (nil if none)
+
+	// The framework-owned reserved quartet, delivered here and never as handler
+	// kwargs.
+	reserved reservedFlags
+	// effects is the per-dispatch effects handle (the runtime seal). nil for a
+	// Context constructed outside a command dispatch.
+	effects *Effects
+}
+
+// reservedFlags carries the values of the framework-owned reserved quartet for
+// one dispatch.
+type reservedFlags struct {
+	dryRun  bool
+	yes     bool
+	quiet   bool
+	verbose bool
 }
 
 // infraAccess carries a Context's view of infrastructure env vars: resolved root
@@ -28,8 +44,11 @@ type infraAccess struct {
 	hermetic    bool              // when true, connection env vars resolve as absent
 }
 
-// newContext creates a new Context with the given writers and provenance sources.
-func newContext(stdout, stderr io.Writer, sources map[string]string, infra *infraAccess) *Context {
+// newContext creates a new Context with the given writers and provenance
+// sources. It is the single arming point for the runtime seal: every dispatch
+// site funnels through here and passes the reserved-flag state and the
+// per-dispatch effects handle in.
+func newContext(stdout, stderr io.Writer, sources map[string]string, infra *infraAccess, reserved reservedFlags, effects *Effects) *Context {
 	if stdout == nil {
 		stdout = io.Discard
 	}
@@ -40,11 +59,34 @@ func newContext(stdout, stderr io.Writer, sources map[string]string, infra *infr
 		sources = make(map[string]string)
 	}
 	return &Context{
-		stdout:  stdout,
-		stderr:  stderr,
-		sources: sources,
-		infra:   infra,
+		stdout:   stdout,
+		stderr:   stderr,
+		sources:  sources,
+		infra:    infra,
+		reserved: reserved,
+		effects:  effects,
 	}
+}
+
+// DryRun reports whether the framework-owned --dry-run flag was passed.
+func (c *Context) DryRun() bool { return c.reserved.dryRun }
+
+// Yes reports whether the framework-owned --yes flag was passed.
+func (c *Context) Yes() bool { return c.reserved.yes }
+
+// Quiet reports whether the framework-owned --quiet flag was passed.
+func (c *Context) Quiet() bool { return c.reserved.quiet }
+
+// Verbose reports whether the framework-owned --verbose flag was passed.
+func (c *Context) Verbose() bool { return c.reserved.verbose }
+
+// Effects returns the effects handle for this run. Panics when the Context was
+// constructed outside a command dispatch.
+func (c *Context) Effects() *Effects {
+	if c.effects == nil {
+		panic(errEffectsUnavailable)
+	}
+	return c.effects
 }
 
 // InfraValue returns the value of a declared infrastructure env var.
@@ -98,23 +140,29 @@ func (c *Context) ConnectionEnvValue(envVar string) (string, bool) {
 	panic(errConnectionValueUndeclared(envVar))
 }
 
-// Info writes an informational message to stdout.
+// Info writes an informational message to stdout (hidden under --quiet).
 func (c *Context) Info(msg string) {
+	if c.reserved.quiet {
+		return
+	}
 	fmt.Fprintln(c.stdout, msg)
 }
 
-// Warn writes a warning message to stderr.
+// Warn writes a warning message to stderr (never suppressed).
 func (c *Context) Warn(msg string) {
 	fmt.Fprintln(c.stderr, msg)
 }
 
-// Debug writes a debug message to stdout.
-// Future: will be gated by a verbose flag.
+// Debug writes a debug message to stdout (shown only under --verbose).
+// --quiet DOMINATES --verbose: passing both hides debug output.
 func (c *Context) Debug(msg string) {
+	if c.reserved.quiet || !c.reserved.verbose {
+		return
+	}
 	fmt.Fprintln(c.stdout, msg)
 }
 
-// Error writes an error message to stderr.
+// Error writes an error message to stderr (never suppressed).
 func (c *Context) Error(msg string) {
 	fmt.Fprintln(c.stderr, msg)
 }
@@ -137,9 +185,20 @@ func (c *Context) Source(name string) string {
 	panic(errNoSourceInfo(name))
 }
 
-// reservedGlobalFlagNames are names that cannot be used for user-defined global flags
-// because they are reserved by the framework.
-var reservedGlobalFlagNames = map[string]bool{
+// reservedFrameworkFlagNames is the effects-regime quartet. The ban on these
+// four LONG flag names is unconditional and applies at every level -- command
+// flags, flag-set flags, mutex-group flags and app global flags. The four have
+// no short forms, and short-flag names are unaffected by this ban.
+var reservedFrameworkFlagNames = map[string]bool{
+	"dry-run": true,
+	"yes":     true,
+	"quiet":   true,
+	"verbose": true,
+}
+
+// reservedGlobalShortNames are the pre-existing reserved names; they are also
+// what a SHORT flag name is checked against.
+var reservedGlobalShortNames = map[string]bool{
 	"help":        true,
 	"h":           true,
 	"version":     true,
@@ -149,3 +208,16 @@ var reservedGlobalFlagNames = map[string]bool{
 	"config":      true,
 	"hermetic":    true,
 }
+
+// reservedGlobalFlagNames are names that cannot be used for user-defined global flags
+// because they are reserved by the framework.
+var reservedGlobalFlagNames = func() map[string]bool {
+	m := make(map[string]bool, len(reservedGlobalShortNames)+len(reservedFrameworkFlagNames))
+	for k := range reservedGlobalShortNames {
+		m[k] = true
+	}
+	for k := range reservedFrameworkFlagNames {
+		m[k] = true
+	}
+	return m
+}()

@@ -1,0 +1,1253 @@
+package strictcli
+
+// The effects regime.
+//
+// Command classification (read_only / mutating), the ctx.Effects() handle, dry
+// mode's would-do log, and the carriers that make a data-flow preview complete
+// without letting the framework invent a value it cannot know.
+//
+// Two rules govern the whole regime: FAIL CLOSED (when the framework cannot
+// prove an operation is safe to preview, it stops with a precise error instead
+// of guessing) and ZERO INFERENCE (nothing is inferred -- not classification,
+// not whether an argument is a path, not whether a resource is current).
+//
+// Go returns a CARRIER TYPE ALWAYS (§2.5.3). Completed, Spawned and Response are
+// settleable carriers: their extractors return real values in live mode and
+// panic with the truncation error when unsettled. Unsettled is the payload-less
+// VOID carrier returned by the five path-mutating methods in both modes -- it
+// never carries a value, is never forwardable, and its extractors panic always.
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"sort"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+)
+
+// --- classification -------------------------------------------------------
+
+// The two legal command classifications. There is no default: every command
+// declares one through WithEffect, and a command registered without it is a
+// registration-time hard error. Deprecated commands are exempt (no handler).
+const (
+	EffectReadOnly = "read_only"
+	EffectMutating = "mutating"
+)
+
+// Effect kinds. CacheWrite has NO public method: it is minted only by
+// framework-internal code (schema dump, test-coverage shards and manifest) and
+// is unreachable from application code.
+const (
+	ProcMutate = "proc_mutate"
+	ProcSpawn  = "proc_spawn"
+	FileWrite  = "file_write"
+	NetMutate  = "net_mutate"
+	CacheWrite = "cache_write"
+)
+
+// grantableKinds are the kinds a Grant may be declared for. CacheWrite is
+// excluded: it is unreachable from application code, so nothing could ever use
+// such a grant.
+var grantableKinds = []string{ProcMutate, ProcSpawn, FileWrite, NetMutate}
+
+// Grant is a per-command, per-effect-kind authorization with a mandatory reason.
+//
+// A grant is not permission to do something otherwise forbidden; it is a
+// labelled reason that surfaces in the preview so a reviewer reading a dry run
+// sees why a dangerous step is there.
+type Grant struct {
+	Name   string
+	Reason string
+	Kind   string
+}
+
+// Forwarding declares that a handler deliberately accepts and forwards the
+// app's global flag values. In Go the declaration is inert beyond the schema
+// emission (guard v2's enforcement is Python-only, §10.3); it exists so the API
+// surface stays in parity and consumers can label forwarding wrappers uniformly.
+type Forwarding struct {
+	Reason string
+}
+
+// frameworkInternalForwardingReason is the one reason string strictcli's own
+// auto-registered commands use. Their handlers absorb the app's app-defined
+// global flag values, which a framework-authored handler cannot name.
+const frameworkInternalForwardingReason = "framework-internal: absorbs app-defined global flag values"
+
+// --- the truncation panic -------------------------------------------------
+
+// dryRunTruncation is the panic value raised by a carrier's extractor. It is a
+// distinct unexported type so the dispatch sites can recover exactly this and
+// re-panic anything else.
+type dryRunTruncation struct {
+	message string
+	log     *effectLog
+}
+
+// --- carriers -------------------------------------------------------------
+
+// Unsettled is Go's VOID carrier: the value returned by write, mkdir, remove,
+// rename and chmod in BOTH modes. It never carries a value, only a brand, and
+// exists solely to give every Go effect method one uniform return shape. Its
+// extractors panic in both modes, and it is never forwardable -- passing one
+// into a later effect is a call-time hard error.
+//
+// The [0]func() field makes the struct non-comparable: `u == v` is a compile
+// error. That is the only compile-time protection Go can offer (§17).
+type Unsettled struct {
+	_       [0]func()
+	brand   string
+	log     *effectLog
+	cmdPath string
+}
+
+func (u Unsettled) brandForm() string { return u.brand }
+
+func (u Unsettled) truncate() dryRunTruncation {
+	return truncationFor(u.log, u.cmdPath, u.brand)
+}
+
+// String panics: stringifying a carrier is extraction, not forwarding.
+func (u Unsettled) String() string { panic(u.truncate()) }
+
+// Bytes panics: extraction.
+func (u Unsettled) Bytes() []byte { panic(u.truncate()) }
+
+// Int panics: extraction.
+func (u Unsettled) Int() int64 { panic(u.truncate()) }
+
+// Bool panics: extraction (and branching).
+func (u Unsettled) Bool() bool { panic(u.truncate()) }
+
+// Completed is the result of a subprocess that ran to completion, and a
+// settleable carrier. Stdout/Stderr are the child's output decoded as UTF-8
+// strictly with a single trailing newline removed -- the form that can be
+// forwarded straight into a later effect's argv.
+type Completed struct {
+	_        [0]func()
+	settled  bool
+	exitCode int
+	stdout   string
+	stderr   string
+	brand    string
+	log      *effectLog
+	cmdPath  string
+}
+
+func (c Completed) brandForm() string { return c.brand }
+
+func (c Completed) truncate() dryRunTruncation {
+	return truncationFor(c.log, c.cmdPath, c.brand)
+}
+
+// ExitCode returns the child's exit status. Panics when unsettled.
+func (c Completed) ExitCode() int {
+	if !c.settled {
+		panic(c.truncate())
+	}
+	return c.exitCode
+}
+
+// Stdout returns the child's captured stdout. Panics when unsettled.
+func (c Completed) Stdout() string {
+	if !c.settled {
+		panic(c.truncate())
+	}
+	return c.stdout
+}
+
+// Stderr returns the child's captured stderr. Panics when unsettled.
+func (c Completed) Stderr() string {
+	if !c.settled {
+		panic(c.truncate())
+	}
+	return c.stderr
+}
+
+// Spawned is a handle for a started-but-not-awaited child process, and a
+// settleable carrier. It has NO scalar projection: forwarding a Spawned into a
+// string position is a call-time hard error.
+type Spawned struct {
+	_       [0]func()
+	settled bool
+	pid     int
+	proc    *exec.Cmd
+	argv    string
+	brand   string
+	log     *effectLog
+	cmdPath string
+}
+
+func (s Spawned) brandForm() string { return s.brand }
+
+func (s Spawned) truncate() dryRunTruncation {
+	return truncationFor(s.log, s.cmdPath, s.brand)
+}
+
+// PID returns the child's process id. Panics when unsettled.
+func (s Spawned) PID() int {
+	if !s.settled {
+		panic(s.truncate())
+	}
+	return s.pid
+}
+
+// Wait waits for the child and returns its Completed result. It honours
+// Check(bool) and nothing else: with the default true a nonzero exit is an
+// error, mirroring run's opt-out. Calling Wait on an unsettled Spawned is
+// extraction and truncates.
+func (s Spawned) Wait(opts ...EffectOption) (Completed, error) {
+	if !s.settled {
+		panic(s.truncate())
+	}
+	o, err := parseEffectOptions(s.cmdPath, "spawn", opts, acceptedWait)
+	if err != nil {
+		return Completed{}, err
+	}
+	waitErr := s.proc.Wait()
+	code := s.proc.ProcessState.ExitCode()
+	if o.check && code != 0 {
+		return Completed{}, errors.New(errEffectRunFailed(s.cmdPath, "spawn", s.argv, code))
+	}
+	_ = waitErr
+	// spawn always streams (the child inherits stdio), so there is nothing
+	// captured to report.
+	return Completed{settled: true, exitCode: code}, nil
+}
+
+// Response is the result of an HTTP request, and a settleable carrier. Header
+// names are lower-cased.
+type Response struct {
+	_       [0]func()
+	settled bool
+	status  int
+	body    []byte
+	headers map[string]string
+	brand   string
+	log     *effectLog
+	cmdPath string
+}
+
+func (r Response) brandForm() string { return r.brand }
+
+func (r Response) truncate() dryRunTruncation {
+	return truncationFor(r.log, r.cmdPath, r.brand)
+}
+
+// Status returns the HTTP status code. Panics when unsettled.
+func (r Response) Status() int {
+	if !r.settled {
+		panic(r.truncate())
+	}
+	return r.status
+}
+
+// Body returns the raw response body. Panics when unsettled.
+func (r Response) Body() []byte {
+	if !r.settled {
+		panic(r.truncate())
+	}
+	return r.body
+}
+
+// Header returns a response header by (case-insensitive) name. Panics when
+// unsettled.
+func (r Response) Header(name string) string {
+	if !r.settled {
+		panic(r.truncate())
+	}
+	return r.headers[strings.ToLower(name)]
+}
+
+func truncationFor(log *effectLog, cmdPath, brand string) dryRunTruncation {
+	step := 1
+	if log != nil {
+		step = log.nextSeq()
+	}
+	return dryRunTruncation{
+		message: errDryRunTruncated(step, cmdPath, brand),
+		log:     log,
+	}
+}
+
+// --- effect options -------------------------------------------------------
+
+// EffectOption is one trailing option on an effects-handle call. Its canonical
+// snake_case name is what errEffectOptionNotAccepted renders, so the message is
+// byte-identical across the three implementations even though the constructor
+// is spelled Stream(bool).
+type EffectOption struct {
+	name  string
+	value interface{}
+	key   string // second component (header name), unused otherwise
+}
+
+// Resource declares an opaque resource token naming what the effect produces.
+// Declared metadata only: it never gates, skips, orders or deduplicates
+// anything.
+func Resource(token string) EffectOption {
+	return EffectOption{name: "resource", value: token}
+}
+
+// SkipIfCurrent declares a preview-only conditional annotation. In dry mode it
+// renders a suffix on the log line; in real mode the effect executes
+// unconditionally. There is no currency machinery of any kind behind it.
+func SkipIfCurrent(token string) EffectOption {
+	return EffectOption{name: "skip_if_current", value: token}
+}
+
+// UseGrant names a grant declared on the running command. Its kind must match
+// the effect's kind.
+func UseGrant(name string) EffectOption {
+	return EffectOption{name: "grant", value: name}
+}
+
+// Cwd sets the working directory of a run or spawn.
+func Cwd(dir string) EffectOption {
+	return EffectOption{name: "cwd", value: dir}
+}
+
+// EffectEnv merges environment entries OVER the inherited environment, never
+// replacing it.
+//
+// Named EffectEnv rather than Env because the package already exports
+// Env(varName string) FlagOption and Go has no overloading.
+func EffectEnv(env map[string]string) EffectOption {
+	return EffectOption{name: "env", value: env}
+}
+
+// Check opts a single call out of the "a failed operation is an error" rule:
+// with Check(false) the result is returned with its real exit code / status and
+// the handler decides.
+func Check(check bool) EffectOption {
+	return EffectOption{name: "check", value: check}
+}
+
+// Stream makes a run inherit stdout/stderr instead of capturing them; the
+// returned Stdout/Stderr are then empty strings.
+func Stream(stream bool) EffectOption {
+	return EffectOption{name: "stream", value: stream}
+}
+
+// Body sets an HTTP request body. A body is a payload, not a name: it is not a
+// carrier-accepting position.
+func Body(body []byte) EffectOption {
+	return EffectOption{name: "body", value: body}
+}
+
+// Header adds one HTTP request header. Repeat it for several headers.
+func Header(name, value string) EffectOption {
+	return EffectOption{name: "headers", key: name, value: value}
+}
+
+// The accepted option set per method (§2.5.2). Every method also accepts the
+// three common options of §2.3.
+var (
+	acceptedRun   = optionSet("cwd", "env", "check", "stream", "resource", "skip_if_current", "grant")
+	acceptedSpawn = optionSet("cwd", "env", "resource", "skip_if_current", "grant")
+	acceptedPath  = optionSet("resource", "skip_if_current", "grant")
+	acceptedHTTP  = optionSet("body", "headers", "check", "resource", "skip_if_current", "grant")
+	acceptedWait  = optionSet("check")
+)
+
+func optionSet(names ...string) map[string]bool {
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
+
+// effectOpts is the resolved option state of one call.
+type effectOpts struct {
+	cwd           string
+	env           map[string]string
+	check         bool
+	stream        bool
+	resource      string
+	skipIfCurrent string
+	grant         string
+	body          []byte
+	headers       map[string]string
+
+	hasResource      bool
+	hasSkipIfCurrent bool
+	hasGrant         bool
+}
+
+// parseEffectOptions validates the variadic list against the receiving method's
+// accepted set and resolves it. An option a method does not accept is a
+// call-time hard error -- silently ignoring one is the single outcome
+// declare-everything cannot have.
+func parseEffectOptions(cmdPath, method string, opts []EffectOption, accepted map[string]bool) (effectOpts, error) {
+	resolved := effectOpts{check: true}
+	for _, o := range opts {
+		name := o.name
+		if !accepted[name] {
+			return resolved, errors.New(errEffectOptionNotAccepted(cmdPath, method, name))
+		}
+		switch name {
+		case "cwd":
+			resolved.cwd = o.value.(string)
+		case "env":
+			resolved.env = o.value.(map[string]string)
+		case "check":
+			resolved.check = o.value.(bool)
+		case "stream":
+			resolved.stream = o.value.(bool)
+		case "resource":
+			resolved.resource = o.value.(string)
+			resolved.hasResource = true
+		case "skip_if_current":
+			resolved.skipIfCurrent = o.value.(string)
+			resolved.hasSkipIfCurrent = true
+		case "grant":
+			resolved.grant = o.value.(string)
+			resolved.hasGrant = true
+		case "body":
+			resolved.body = o.value.([]byte)
+		case "headers":
+			if resolved.headers == nil {
+				resolved.headers = map[string]string{}
+			}
+			resolved.headers[o.key] = o.value.(string)
+		}
+	}
+	return resolved, nil
+}
+
+// --- the structured effect log --------------------------------------------
+
+// effectRecord is one entry in the structured effect log (§14.2).
+type effectRecord struct {
+	seq           int
+	kind          string
+	verb          string
+	detail        string
+	nbytes        int
+	hasBytes      bool
+	resource      string
+	skipIfCurrent string
+	grant         string
+	grantReason   string
+	recorded      bool
+}
+
+func (r effectRecord) toMap() map[string]interface{} {
+	m := map[string]interface{}{
+		"seq":      r.seq,
+		"kind":     r.kind,
+		"verb":     r.verb,
+		"detail":   r.detail,
+		"recorded": r.recorded,
+	}
+	if r.hasBytes {
+		m["bytes"] = r.nbytes
+	}
+	if r.resource != "" {
+		m["resource"] = r.resource
+	}
+	if r.skipIfCurrent != "" {
+		m["skip_if_current"] = r.skipIfCurrent
+	}
+	if r.grant != "" {
+		m["grant"] = r.grant
+	}
+	return m
+}
+
+// render renders this record as a would-do log line (without the indent).
+func (r effectRecord) render() string {
+	line := fmt.Sprintf("%d. %s: %s", r.seq, r.verb, r.detail)
+	if r.grant != "" {
+		line += fmt.Sprintf(" (granted: %s — %s)", r.grant, r.grantReason)
+	}
+	if r.skipIfCurrent != "" {
+		line += fmt.Sprintf(" [unless resource '%s' already current]", r.skipIfCurrent)
+	}
+	return line
+}
+
+// dryRunHeader is the would-do log's header line. The dash is U+2014 EM DASH.
+const dryRunHeader = "DRY RUN — no changes were made. Would do:"
+
+// effectLog is the ordered effect records produced by one dispatch.
+type effectLog struct {
+	records []effectRecord
+}
+
+func (l *effectLog) append(r effectRecord) { l.records = append(l.records, r) }
+
+func (l *effectLog) nextSeq() int { return len(l.records) + 1 }
+
+// render renders the would-do log. CacheWrites are never written to it.
+func (l *effectLog) render() string {
+	lines := []string{dryRunHeader}
+	for _, r := range l.records {
+		if r.kind == CacheWrite {
+			continue
+		}
+		lines = append(lines, "  "+r.render())
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (l *effectLog) toList() []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(l.records))
+	for _, r := range l.records {
+		out = append(out, r.toMap())
+	}
+	return out
+}
+
+// --- the effects handle ---------------------------------------------------
+
+// Effects is the effects handle reached as ctx.Effects().
+//
+// Exactly eight methods, and the set is CLOSED: there is no escape hatch that
+// mints an unlisted effect, and CacheWrite has no public method at all.
+type Effects struct {
+	cmd              *Command
+	cmdPath          string
+	dryRun           bool
+	log              *effectLog
+	allowlist        [][]string
+	grants           map[string]Grant
+	mutationRecorded bool
+}
+
+func newEffects(cmd *Command, cmdPath string, dryRun bool, log *effectLog, allowlist [][]string) *Effects {
+	grants := make(map[string]Grant, len(cmd.Grants))
+	for _, g := range cmd.Grants {
+		grants[g.Name] = g
+	}
+	return &Effects{
+		cmd:       cmd,
+		cmdPath:   cmdPath,
+		dryRun:    dryRun,
+		log:       log,
+		allowlist: allowlist,
+		grants:    grants,
+	}
+}
+
+// operand is a resolved carrier-accepting parameter.
+type operand struct {
+	value     string
+	rendered  string
+	unsettled bool
+}
+
+// resolveOperand resolves one carrier-accepting parameter position (any argv
+// element, path, src, dst, url or content). A carrier with no scalar projection
+// -- a Spawned, or a void result -- is a call-time hard error in both modes.
+func (e *Effects) resolveOperand(value interface{}, method, param string) (operand, error) {
+	switch v := value.(type) {
+	case string:
+		return operand{value: v, rendered: v}, nil
+	case Unsettled:
+		// The void carrier stands for nothing in either mode.
+		return operand{}, errors.New(errEffectParamRejectsCarrier(e.cmdPath, method, param))
+	case Spawned:
+		// A Spawned has no scalar projection.
+		return operand{}, errors.New(errEffectParamRejectsCarrier(e.cmdPath, method, param))
+	case Completed:
+		if !v.settled {
+			return operand{rendered: v.brand, unsettled: true}, nil
+		}
+		return operand{value: v.stdout, rendered: v.stdout}, nil
+	case Response:
+		if !v.settled {
+			return operand{rendered: v.brand, unsettled: true}, nil
+		}
+		text, err := decodeEffectOutput(v.body, e.cmdPath, "http")
+		if err != nil {
+			return operand{}, err
+		}
+		return operand{value: text, rendered: text}, nil
+	default:
+		return operand{}, errors.New(errEffectParamType(e.cmdPath, method, param, fmt.Sprintf("%T", value)))
+	}
+}
+
+// contentOperand resolves write's content. The rendered form is the encoded
+// byte count for a settled value, and the forwarded carrier's brand when the
+// content is unsettled -- nothing produced those bytes and the framework will
+// not invent a count.
+func (e *Effects) contentOperand(value interface{}) ([]byte, string, error) {
+	switch v := value.(type) {
+	case []byte:
+		return v, fmt.Sprintf("%d bytes", len(v)), nil
+	case string:
+		return []byte(v), fmt.Sprintf("%d bytes", len(v)), nil
+	}
+	op, err := e.resolveOperand(value, "write", "content")
+	if err != nil {
+		return nil, "", err
+	}
+	if op.unsettled {
+		return nil, op.rendered, nil
+	}
+	data := []byte(op.value)
+	return data, fmt.Sprintf("%d bytes", len(data)), nil
+}
+
+// resolveArgv resolves every argv element.
+func (e *Effects) resolveArgv(argv []interface{}, method string) ([]operand, string, error) {
+	if len(argv) == 0 {
+		return nil, "", errors.New(errEffectArgvEmpty(e.cmdPath, method))
+	}
+	ops := make([]operand, 0, len(argv))
+	rendered := make([]string, 0, len(argv))
+	for i, element := range argv {
+		op, err := e.resolveOperand(element, method, fmt.Sprintf("argv[%d]", i))
+		if err != nil {
+			return nil, "", err
+		}
+		ops = append(ops, op)
+		rendered = append(rendered, op.rendered)
+	}
+	return ops, strings.Join(rendered, " "), nil
+}
+
+// isObserve does element-wise argv-prefix matching by string equality. Nothing
+// else: no normalization, no globbing, no shape inference.
+func (e *Effects) isObserve(ops []operand) bool {
+	for _, prefix := range e.allowlist {
+		if len(prefix) > len(ops) {
+			continue
+		}
+		match := true
+		for i := range prefix {
+			if ops[i].unsettled || ops[i].value != prefix[i] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
+// authorize applies read-only enforcement plus grant validation, at call time.
+func (e *Effects) authorize(method, kind, grant string, hasGrant bool) (*Grant, error) {
+	if e.cmd.Effect == EffectReadOnly {
+		return nil, errors.New(errEffectMutatingInReadOnly(e.cmdPath, method))
+	}
+	return e.checkGrant(kind, grant, hasGrant)
+}
+
+func (e *Effects) checkGrant(kind, grant string, hasGrant bool) (*Grant, error) {
+	if !hasGrant {
+		return nil, nil
+	}
+	declared, ok := e.grants[grant]
+	if !ok {
+		return nil, errors.New(errEffectGrantUndeclared(e.cmdPath, grant))
+	}
+	if declared.Kind != kind {
+		return nil, errors.New(errEffectGrantKindMismatch(e.cmdPath, grant, declared.Kind, kind))
+	}
+	return &declared, nil
+}
+
+type recordSpec struct {
+	kind     string
+	verb     string
+	detail   string
+	opts     effectOpts
+	grant    *Grant
+	nbytes   int
+	hasBytes bool
+	recorded bool
+}
+
+func (e *Effects) record(spec recordSpec) effectRecord {
+	rec := effectRecord{
+		seq:           e.log.nextSeq(),
+		kind:          spec.kind,
+		verb:          spec.verb,
+		detail:        spec.detail,
+		nbytes:        spec.nbytes,
+		hasBytes:      spec.hasBytes,
+		resource:      spec.opts.resource,
+		skipIfCurrent: spec.opts.skipIfCurrent,
+		recorded:      spec.recorded,
+	}
+	if spec.grant != nil {
+		rec.grant = spec.grant.Name
+		rec.grantReason = spec.grant.Reason
+	}
+	e.log.append(rec)
+	return rec
+}
+
+func (e *Effects) brandFor(seq int) string {
+	e.mutationRecorded = true
+	return fmt.Sprintf("«step %d output»", seq)
+}
+
+func (e *Effects) staleBrand(descr string) string {
+	return fmt.Sprintf("«stale: %s»", descr)
+}
+
+// --- the eight methods ----------------------------------------------------
+
+// Run runs a subprocess to completion (PROC_MUTATE), or performs an observe
+// when the argv matches an app-level proc_observe_allowlist prefix.
+func (e *Effects) Run(argv []interface{}, opts ...EffectOption) (Completed, error) {
+	o, err := parseEffectOptions(e.cmdPath, "run", opts, acceptedRun)
+	if err != nil {
+		return Completed{}, err
+	}
+	ops, joined, err := e.resolveArgv(argv, "run")
+	if err != nil {
+		return Completed{}, err
+	}
+
+	if e.isObserve(ops) {
+		// An observe changes nothing: it is legal in a read_only command, never
+		// written to the would-do log, and never carries a grant.
+		if o.hasGrant {
+			return Completed{}, errors.New(errEffectGrantOnObserve(e.cmdPath, o.grant))
+		}
+		if e.dryRun && e.mutationRecorded {
+			return Completed{brand: e.staleBrand(joined), log: e.log, cmdPath: e.cmdPath}, nil
+		}
+		return e.execRun(ops, joined, o, "run")
+	}
+
+	if e.cmd.Effect == EffectReadOnly {
+		return Completed{}, errors.New(errEffectRunNotAllowlisted(e.cmdPath, joined))
+	}
+	declared, err := e.checkGrant(ProcMutate, o.grant, o.hasGrant)
+	if err != nil {
+		return Completed{}, err
+	}
+
+	if e.dryRun {
+		rec := e.record(recordSpec{kind: ProcMutate, verb: "run", detail: joined, opts: o, grant: declared, recorded: true})
+		return Completed{brand: e.brandFor(rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+	}
+	e.record(recordSpec{kind: ProcMutate, verb: "run", detail: joined, opts: o, grant: declared, recorded: false})
+	return e.execRun(ops, joined, o, "run")
+}
+
+// Spawn starts a subprocess without waiting (PROC_SPAWN).
+//
+// Spawning is itself an effect: a dry run RECORDS the spawn instead of
+// performing it, which is why no cross-process mode token exists.
+func (e *Effects) Spawn(argv []interface{}, opts ...EffectOption) (Spawned, error) {
+	o, err := parseEffectOptions(e.cmdPath, "spawn", opts, acceptedSpawn)
+	if err != nil {
+		return Spawned{}, err
+	}
+	ops, joined, err := e.resolveArgv(argv, "spawn")
+	if err != nil {
+		return Spawned{}, err
+	}
+	declared, err := e.authorize("spawn", ProcSpawn, o.grant, o.hasGrant)
+	if err != nil {
+		return Spawned{}, err
+	}
+
+	if e.dryRun {
+		rec := e.record(recordSpec{kind: ProcSpawn, verb: "spawn", detail: joined, opts: o, grant: declared, recorded: true})
+		return Spawned{brand: e.brandFor(rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+	}
+	e.record(recordSpec{kind: ProcSpawn, verb: "spawn", detail: joined, opts: o, grant: declared, recorded: false})
+
+	settled, err := e.settledArgv(ops, "spawn")
+	if err != nil {
+		return Spawned{}, err
+	}
+	cmd := exec.Command(settled[0], settled[1:]...)
+	cmd.Dir = o.cwd
+	cmd.Env = mergedEnv(o.env)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return Spawned{}, err
+	}
+	return Spawned{settled: true, pid: cmd.Process.Pid, proc: cmd, argv: joined, cmdPath: e.cmdPath}, nil
+}
+
+// Write writes bytes to a path (FILE_WRITE).
+func (e *Effects) Write(path interface{}, content interface{}, opts ...EffectOption) (Unsettled, error) {
+	o, err := parseEffectOptions(e.cmdPath, "write", opts, acceptedPath)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	pathOp, err := e.resolveOperand(path, "write", "path")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	data, renderedContent, err := e.contentOperand(content)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	detail := fmt.Sprintf("%s (%s)", pathOp.rendered, renderedContent)
+	declared, err := e.authorize("write", FileWrite, o.grant, o.hasGrant)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	spec := recordSpec{kind: FileWrite, verb: "write", detail: detail, opts: o, grant: declared}
+	if data != nil {
+		spec.nbytes = len(data)
+		spec.hasBytes = true
+	}
+
+	if e.dryRun {
+		spec.recorded = true
+		rec := e.record(spec)
+		return Unsettled{brand: e.brandFor(rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+	}
+	rec := e.record(spec)
+	target, err := e.settled(pathOp, "write", "path")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	if err := os.WriteFile(target, data, 0o644); err != nil {
+		return Unsettled{}, err
+	}
+	return Unsettled{brand: fmt.Sprintf("«step %d output»", rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+}
+
+// Mkdir creates a directory, parents included; an already-existing directory is
+// not an error.
+func (e *Effects) Mkdir(path interface{}, opts ...EffectOption) (Unsettled, error) {
+	return e.pathEffect("mkdir", path, opts, func(p string) error {
+		return os.MkdirAll(p, 0o755)
+	})
+}
+
+// Remove removes a file, a symlink or a directory tree recursively; a missing
+// path is not an error.
+func (e *Effects) Remove(path interface{}, opts ...EffectOption) (Unsettled, error) {
+	return e.pathEffect("remove", path, opts, os.RemoveAll)
+}
+
+// Rename moves/renames a path (FILE_WRITE).
+func (e *Effects) Rename(src interface{}, dst interface{}, opts ...EffectOption) (Unsettled, error) {
+	o, err := parseEffectOptions(e.cmdPath, "rename", opts, acceptedPath)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	srcOp, err := e.resolveOperand(src, "rename", "src")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	dstOp, err := e.resolveOperand(dst, "rename", "dst")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	detail := fmt.Sprintf("%s -> %s", srcOp.rendered, dstOp.rendered)
+	declared, err := e.authorize("rename", FileWrite, o.grant, o.hasGrant)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	spec := recordSpec{kind: FileWrite, verb: "rename", detail: detail, opts: o, grant: declared}
+
+	if e.dryRun {
+		spec.recorded = true
+		rec := e.record(spec)
+		return Unsettled{brand: e.brandFor(rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+	}
+	rec := e.record(spec)
+	from, err := e.settled(srcOp, "rename", "src")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	to, err := e.settled(dstOp, "rename", "dst")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	if err := os.Rename(from, to); err != nil {
+		return Unsettled{}, err
+	}
+	return Unsettled{brand: fmt.Sprintf("«step %d output»", rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+}
+
+// Chmod changes a path's mode (FILE_WRITE). The mode renders in the log as
+// leading-zero octal.
+func (e *Effects) Chmod(path interface{}, mode int, opts ...EffectOption) (Unsettled, error) {
+	o, err := parseEffectOptions(e.cmdPath, "chmod", opts, acceptedPath)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	pathOp, err := e.resolveOperand(path, "chmod", "path")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	detail := fmt.Sprintf("%s 0%s", pathOp.rendered, strconv.FormatInt(int64(mode), 8))
+	declared, err := e.authorize("chmod", FileWrite, o.grant, o.hasGrant)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	spec := recordSpec{kind: FileWrite, verb: "chmod", detail: detail, opts: o, grant: declared}
+
+	if e.dryRun {
+		spec.recorded = true
+		rec := e.record(spec)
+		return Unsettled{brand: e.brandFor(rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+	}
+	rec := e.record(spec)
+	target, err := e.settled(pathOp, "chmod", "path")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	if err := os.Chmod(target, os.FileMode(mode)); err != nil {
+		return Unsettled{}, err
+	}
+	return Unsettled{brand: fmt.Sprintf("«step %d output»", rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+}
+
+// HTTP performs a network request (NET_MUTATE).
+func (e *Effects) HTTP(method string, url interface{}, opts ...EffectOption) (Response, error) {
+	o, err := parseEffectOptions(e.cmdPath, "http", opts, acceptedHTTP)
+	if err != nil {
+		return Response{}, err
+	}
+	urlOp, err := e.resolveOperand(url, "http", "url")
+	if err != nil {
+		return Response{}, err
+	}
+	detail := fmt.Sprintf("%s %s", method, urlOp.rendered)
+	declared, err := e.authorize("http", NetMutate, o.grant, o.hasGrant)
+	if err != nil {
+		return Response{}, err
+	}
+
+	if e.dryRun {
+		rec := e.record(recordSpec{kind: NetMutate, verb: "net", detail: detail, opts: o, grant: declared, recorded: true})
+		return Response{brand: e.brandFor(rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+	}
+	e.record(recordSpec{kind: NetMutate, verb: "net", detail: detail, opts: o, grant: declared, recorded: false})
+	target, err := e.settled(urlOp, "http", "url")
+	if err != nil {
+		return Response{}, err
+	}
+	return e.execHTTP(method, target, o)
+}
+
+// --- shared execution paths -----------------------------------------------
+
+func (e *Effects) pathEffect(verb string, path interface{}, opts []EffectOption, perform func(string) error) (Unsettled, error) {
+	o, err := parseEffectOptions(e.cmdPath, verb, opts, acceptedPath)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	pathOp, err := e.resolveOperand(path, verb, "path")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	declared, err := e.authorize(verb, FileWrite, o.grant, o.hasGrant)
+	if err != nil {
+		return Unsettled{}, err
+	}
+	spec := recordSpec{kind: FileWrite, verb: verb, detail: pathOp.rendered, opts: o, grant: declared}
+
+	if e.dryRun {
+		spec.recorded = true
+		rec := e.record(spec)
+		return Unsettled{brand: e.brandFor(rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+	}
+	rec := e.record(spec)
+	target, err := e.settled(pathOp, verb, "path")
+	if err != nil {
+		return Unsettled{}, err
+	}
+	if err := perform(target); err != nil {
+		return Unsettled{}, err
+	}
+	return Unsettled{brand: fmt.Sprintf("«step %d output»", rec.seq), log: e.log, cmdPath: e.cmdPath}, nil
+}
+
+// settled is the fail-closed backstop: an unsettled operand only survives in
+// dry mode, where nothing executes.
+func (e *Effects) settled(op operand, method, param string) (string, error) {
+	if op.unsettled {
+		return "", errors.New(errEffectParamRejectsCarrier(e.cmdPath, method, param))
+	}
+	return op.value, nil
+}
+
+func (e *Effects) settledArgv(ops []operand, method string) ([]string, error) {
+	out := make([]string, 0, len(ops))
+	for i, op := range ops {
+		if op.unsettled {
+			return nil, errors.New(errEffectParamRejectsCarrier(e.cmdPath, method, fmt.Sprintf("argv[%d]", i)))
+		}
+		out = append(out, op.value)
+	}
+	return out, nil
+}
+
+// mergedEnv merges env OVER the inherited environment, never replacing it.
+func mergedEnv(env map[string]string) []string {
+	if env == nil {
+		return nil
+	}
+	base := os.Environ()
+	overrides := make(map[string]string, len(env))
+	for k, v := range env {
+		overrides[k] = v
+	}
+	out := make([]string, 0, len(base)+len(overrides))
+	for _, entry := range base {
+		if eq := strings.IndexByte(entry, '='); eq >= 0 {
+			if _, overridden := overrides[entry[:eq]]; overridden {
+				continue
+			}
+		}
+		out = append(out, entry)
+	}
+	keys := make([]string, 0, len(overrides))
+	for k := range overrides {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		out = append(out, k+"="+overrides[k])
+	}
+	return out
+}
+
+func (e *Effects) execRun(ops []operand, joined string, o effectOpts, method string) (Completed, error) {
+	argv, err := e.settledArgv(ops, method)
+	if err != nil {
+		return Completed{}, err
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = o.cwd
+	cmd.Env = mergedEnv(o.env)
+
+	var outBuf, errBuf bytes.Buffer
+	if o.stream {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	} else {
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &errBuf
+	}
+	runErr := cmd.Run()
+	var exitErr *exec.ExitError
+	if runErr != nil && !errors.As(runErr, &exitErr) {
+		return Completed{}, runErr
+	}
+	code := cmd.ProcessState.ExitCode()
+
+	out, errText := "", ""
+	if !o.stream {
+		out, err = decodeEffectOutput(outBuf.Bytes(), e.cmdPath, method)
+		if err != nil {
+			return Completed{}, err
+		}
+		errText, err = decodeEffectOutput(errBuf.Bytes(), e.cmdPath, method)
+		if err != nil {
+			return Completed{}, err
+		}
+	}
+	if o.check && code != 0 {
+		return Completed{}, errors.New(errEffectRunFailed(e.cmdPath, method, joined, code))
+	}
+	return Completed{settled: true, exitCode: code, stdout: out, stderr: errText}, nil
+}
+
+func (e *Effects) execHTTP(method, url string, o effectOpts) (Response, error) {
+	var reqBody io.Reader
+	if o.body != nil {
+		reqBody = bytes.NewReader(o.body)
+	}
+	req, err := http.NewRequest(method, url, reqBody)
+	if err != nil {
+		return Response{}, err
+	}
+	for k, v := range o.headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return Response{}, err
+	}
+	defer resp.Body.Close()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Response{}, err
+	}
+	headers := make(map[string]string, len(resp.Header))
+	for k, v := range resp.Header {
+		if len(v) > 0 {
+			headers[strings.ToLower(k)] = v[0]
+		}
+	}
+	if o.check && (resp.StatusCode < 200 || resp.StatusCode > 299) {
+		return Response{}, errors.New(errEffectHTTPFailed(e.cmdPath, method, url, resp.StatusCode))
+	}
+	return Response{settled: true, status: resp.StatusCode, body: payload, headers: headers}, nil
+}
+
+// decodeEffectOutput decodes captured output as UTF-8 strictly, dropping one
+// trailing newline.
+func decodeEffectOutput(data []byte, cmdPath, method string) (string, error) {
+	if len(data) == 0 {
+		return "", nil
+	}
+	if !utf8.Valid(data) {
+		return "", errors.New(errEffectOutputNotUTF8(cmdPath, method))
+	}
+	return strings.TrimSuffix(string(data), "\n"), nil
+}
+
+// --- registration-time validation -----------------------------------------
+
+// validateGrants validates a command's grant declarations at registration time.
+func validateGrants(cmdName string, grants []Grant) []Grant {
+	seen := make(map[string]bool, len(grants))
+	resolved := make([]Grant, 0, len(grants))
+	for _, g := range grants {
+		if !identifierRe.MatchString(g.Name) {
+			panic(errGrantNameInvalid(cmdName, g.Name))
+		}
+		if seen[g.Name] {
+			panic(errGrantDuplicate(cmdName, g.Name))
+		}
+		if strings.TrimSpace(g.Reason) == "" {
+			panic(errGrantReasonEmpty(cmdName, g.Name))
+		}
+		valid := false
+		for _, k := range grantableKinds {
+			if g.Kind == k {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			panic(errGrantKindInvalid(cmdName, g.Name, g.Kind))
+		}
+		seen[g.Name] = true
+		resolved = append(resolved, g)
+	}
+	return resolved
+}
+
+// --- the confirm protocol -------------------------------------------------
+
+// stdinIsInteractive reports whether stdin is a TTY. Zero-dependency by
+// construction: a character device is the signal, so no golang.org/x/term.
+func stdinIsInteractive() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+// confirmMutating is the framework-owned confirm protocol. It fires before
+// dispatching a mutating command on the real CLI path when neither --dry-run nor
+// --yes was passed. It never fires for read_only commands, and never on the
+// programmatic paths (Test/Call/invoke/MCP), which have no TTY contract and
+// would hang.
+//
+// A mutating PASSTHROUGH is not exempt: the framework knows LESS about what is
+// about to happen, not more.
+func (a *App) confirmMutating(cmd *Command, cmdPath string) {
+	if cmd.Effect != EffectMutating {
+		return
+	}
+	if a.lastDryRun || a.lastYes {
+		return
+	}
+	if !stdinIsInteractive() {
+		fmt.Fprintln(os.Stderr, errConfirmNonInteractive)
+		os.Exit(1)
+	}
+	fmt.Fprint(os.Stderr, promptConfirmMutating(cmdPath))
+	answer, _ := readConfirmLine(os.Stdin)
+	if answer != "y" && answer != "Y" {
+		fmt.Fprintln(os.Stderr, errConfirmDeclined)
+		os.Exit(1)
+	}
+}
+
+// readConfirmLine reads one line from r. Exactly "y" or "Y" proceeds; anything
+// else -- including empty input and EOF -- declines.
+func readConfirmLine(r io.Reader) (string, error) {
+	var buf []byte
+	one := make([]byte, 1)
+	for {
+		n, err := r.Read(one)
+		if n > 0 {
+			if one[0] == '\n' {
+				break
+			}
+			buf = append(buf, one[0])
+		}
+		if err != nil {
+			return strings.TrimSuffix(string(buf), "\r"), err
+		}
+	}
+	return strings.TrimSuffix(string(buf), "\r"), nil
+}
+
+// --- App-side plumbing ----------------------------------------------------
+
+// armEffects arms the effects handle for one dispatch (the runtime seal).
+//
+// Called at EVERY newContext site that dispatches a handler, so there is no path
+// on which ctx.Effects() is missing or a carrier escapes unpoisoned. The log
+// itself is reset by beginDispatch, which runs earlier so pre-handler
+// CACHE_WRITEs (coverage shards) land in the same dispatch's log.
+func (a *App) armEffects(cmd *Command, cmdPath string, dryRun bool) *Effects {
+	return newEffects(cmd, cmdPath, dryRun, a.effects, a.procObserveAllowlist)
+}
+
+// beginDispatch starts a new dispatch: it resets the structured effect log.
+func (a *App) beginDispatch() {
+	a.effects = &effectLog{}
+}
+
+// recordCacheWrite records a framework-blessed CACHE_WRITE.
+//
+// The closed list of sites is exactly three: the schema dump, the test-coverage
+// shards, and the test-coverage manifest. CACHE_WRITEs have no public method,
+// never appear in the would-do log, never trip read-only enforcement, and
+// EXECUTE even in dry mode -- which is why they always carry recorded: false.
+func (a *App) recordCacheWrite(path string) {
+	if a.effects == nil {
+		a.effects = &effectLog{}
+	}
+	a.effects.append(effectRecord{
+		seq:      a.effects.nextSeq(),
+		kind:     CacheWrite,
+		verb:     "cache",
+		detail:   path,
+		recorded: false,
+	})
+}
+
+// EffectLog returns the structured effect records of the most recent dispatch.
+// Test-only surface, beside Test() and the provenance accessors.
+func (a *App) EffectLog() []map[string]interface{} {
+	if a.effects == nil {
+		return []map[string]interface{}{}
+	}
+	return a.effects.toList()
+}
+
+// renderWouldDoLog renders the would-do log for the most recent dispatch.
+func (a *App) renderWouldDoLog() string {
+	if a.effects == nil {
+		return dryRunHeader
+	}
+	return a.effects.render()
+}

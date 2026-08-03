@@ -1109,3 +1109,135 @@ func errJsonSchemaRouteError(errMsg string) string {
 func errJsonSchemaIsGroup(commandPath string) string {
 	return fmt.Sprintf("JsonSchema: '%s' is a group, not a command", commandPath)
 }
+
+// ---------------------------------------------------------------------------
+// effects.go — the effects regime
+//
+// Registration-time bans, classification, grants, declared forwarding, the
+// call-time effect errors, the dry-run truncation error and the framework-owned
+// confirm protocol. Message strings are byte-identical to the Python and
+// TypeScript catalogs.
+// ---------------------------------------------------------------------------
+
+// errFlagNameReservedByFramework is the reserved-quartet ban (§12.1). It is
+// raised from validateFlagConfig (the same site as the 'force' ban) and
+// additionally from the global-flag validation path.
+func errFlagNameReservedByFramework(name string) string {
+	return fmt.Sprintf("flag name '%s' is reserved by the framework (dry-run, yes, quiet, verbose)", name)
+}
+
+func errCommandEffectMissing(name string) string {
+	return fmt.Sprintf("command %q: effect classification is required (effect=\"read_only\" or effect=\"mutating\")", name)
+}
+
+func errCommandEffectInvalid(name string, value string) string {
+	return fmt.Sprintf("command %q: invalid effect %q: must be \"read_only\" or \"mutating\"", name, value)
+}
+
+func errDeprecatedCommandEffect(name string) string {
+	return fmt.Sprintf("deprecated command %q: effect classification does not apply (a deprecated command has no handler)", name)
+}
+
+// errHandlerVarKeywordUndeclared exists for catalog parity only. Guard v2's
+// ENFORCEMENT is Python-only: a Go handler takes map[string]interface{}, which
+// carries no var-keyword parameter to introspect. The declaration
+// (WithForwarding) exists in all three so the API surface stays in parity.
+func errHandlerVarKeywordUndeclared(name string) string {
+	return fmt.Sprintf("command %q: handler accepts **kwargs but the command does not declare forwarding; add forwarding=Forwarding(reason=...) or name every parameter explicitly", name)
+}
+
+func errForwardingReasonEmpty(name string) string {
+	return fmt.Sprintf("command %q: forwarding reason must be a non-empty string", name)
+}
+
+func errFrameworkInternalHandlerForeign(name string) string {
+	return fmt.Sprintf("command %q: handler is marked framework-internal but is not defined in the strictcli module", name)
+}
+
+// --- grant declarations (registration-time) ---
+
+func errGrantReasonEmpty(name string, grant string) string {
+	return fmt.Sprintf("command %q: grant '%s' reason must be a non-empty string", name, grant)
+}
+
+func errGrantDuplicate(name string, grant string) string {
+	return fmt.Sprintf("command %q: duplicate grant '%s'", name, grant)
+}
+
+func errGrantNameInvalid(name string, grant string) string {
+	return fmt.Sprintf("command %q: invalid grant name '%s': must match [a-z][a-z0-9-]*", name, grant)
+}
+
+func errGrantKindInvalid(name string, grant string, kind string) string {
+	return fmt.Sprintf("command %q: grant '%s' has invalid kind '%s': must be one of proc_mutate, proc_spawn, file_write, net_mutate", name, grant, kind)
+}
+
+const errProcObserveAllowlistEmptyPrefix = "proc_observe_allowlist entries must not be empty"
+
+// --- effect call-time errors ---
+
+func errEffectMutatingInReadOnly(name string, method string) string {
+	return fmt.Sprintf("command %q is classified read_only; effects.%s is a mutating operation", name, method)
+}
+
+func errEffectRunNotAllowlisted(name string, argv string) string {
+	return fmt.Sprintf("command %q is classified read_only; effects.run argv %s is not on the app's proc_observe_allowlist", name, argv)
+}
+
+func errEffectGrantUndeclared(name string, grant string) string {
+	return fmt.Sprintf("command %q: grant '%s' is not declared on this command", name, grant)
+}
+
+func errEffectGrantKindMismatch(name string, grant string, declaredKind string, usedKind string) string {
+	return fmt.Sprintf("command %q: grant '%s' is declared for kind %s but was used for a %s effect", name, grant, declaredKind, usedKind)
+}
+
+func errEffectGrantOnObserve(name string, grant string) string {
+	return fmt.Sprintf("command %q: grant '%s' cannot be used on an observe (an allowlisted effects.run changes nothing)", name, grant)
+}
+
+func errEffectRunFailed(name string, method string, argv string, code int) string {
+	return fmt.Sprintf("command %q: effects.%s failed: %s exited %d", name, method, argv, code)
+}
+
+func errEffectHTTPFailed(name string, httpMethod string, url string, status int) string {
+	return fmt.Sprintf("command %q: effects.http failed: %s %s returned %d", name, httpMethod, url, status)
+}
+
+func errEffectOutputNotUTF8(name string, method string) string {
+	return fmt.Sprintf("command %q: effects.%s produced output that is not valid UTF-8", name, method)
+}
+
+func errEffectParamRejectsCarrier(name string, method string, param string) string {
+	return fmt.Sprintf("command %q: effects.%s parameter '%s' does not accept an unsettled value", name, method, param)
+}
+
+func errEffectOptionNotAccepted(name string, method string, opt string) string {
+	return fmt.Sprintf("command %q: effects.%s does not accept option '%s'", name, method, opt)
+}
+
+func errEffectParamType(name string, method string, param string, got string) string {
+	return fmt.Sprintf("command %q: effects.%s parameter '%s' must be a string, a path, or a forwarded effect result; got %s", name, method, param, got)
+}
+
+func errEffectArgvEmpty(name string, method string) string {
+	return fmt.Sprintf("command %q: effects.%s argv must not be empty", name, method)
+}
+
+const errEffectsUnavailable = "ctx.Effects() is unavailable: this Context was constructed outside a command dispatch"
+
+// --- truncation (§12.5) ---
+
+func errDryRunTruncated(step int, cmd string, brand string) string {
+	return fmt.Sprintf("error: dry-run preview ends at step %d: %s branched on unsettled value %s — cannot preview past this point", step, cmd, brand)
+}
+
+// --- the confirm protocol (§12.6) ---
+
+func promptConfirmMutating(name string) string {
+	return fmt.Sprintf("about to run mutating command '%s'. Proceed? [y/N] ", name)
+}
+
+const errConfirmNonInteractive = "error: stdin is not interactive; pass --yes to confirm"
+
+const errConfirmDeclined = "aborted"
