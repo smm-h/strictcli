@@ -212,11 +212,14 @@ func (s Spawned) Wait(opts ...EffectOption) (Completed, error) {
 		return Completed{}, err
 	}
 	waitErr := s.proc.Wait()
+	var exitErr *exec.ExitError
+	if waitErr != nil && !errors.As(waitErr, &exitErr) {
+		return Completed{}, waitErr
+	}
 	code := s.proc.ProcessState.ExitCode()
 	if o.check && code != 0 {
 		return Completed{}, errors.New(errEffectRunFailed(s.cmdPath, "spawn", s.argv, code))
 	}
-	_ = waitErr
 	// spawn always streams (the child inherits stdio), so there is nothing
 	// captured to report.
 	return Completed{settled: true, exitCode: code}, nil
