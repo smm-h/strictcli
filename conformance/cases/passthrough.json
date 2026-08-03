@@ -9,6 +9,7 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         }
@@ -34,6 +35,7 @@
         {
           "name": "merge",
           "help": "merge branches",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         }
@@ -59,6 +61,7 @@
         {
           "name": "status",
           "help": "show status",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         }
@@ -80,9 +83,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -90,13 +93,14 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         }
       ]
     },
     "argv": [
-      "--verbose",
+      "--chatter",
       "checkout",
       "-b",
       "foo"
@@ -104,10 +108,10 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "verbose=true",
+        "chatter=true",
         "checkout:-b,foo"
       ],
-      "stdout_equals": "verbose=true\ncheckout:-b,foo"
+      "stdout_equals": "chatter=true\ncheckout:-b,foo"
     }
   },
   {
@@ -118,9 +122,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -128,6 +132,7 @@
         {
           "name": "raw",
           "help": "run raw command",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         }
@@ -135,15 +140,15 @@
     },
     "argv": [
       "raw",
-      "--verbose"
+      "--chatter"
     ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "verbose=false",
-        "raw:--verbose"
+        "chatter=false",
+        "raw:--chatter"
       ],
-      "stdout_equals": "verbose=false\nraw:--verbose"
+      "stdout_equals": "chatter=false\nraw:--chatter"
     }
   },
   {
@@ -156,12 +161,14 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         },
         {
           "name": "status",
           "help": "show status",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -187,6 +194,7 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         }
@@ -213,6 +221,7 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}",
           "flags": [
@@ -245,6 +254,7 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}",
           "args": [
@@ -275,6 +285,7 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}",
           "handler_exit_code": 3
@@ -301,6 +312,7 @@
         {
           "name": "exec",
           "help": "execute a command",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "cmd={name} rest={args}"
         }
@@ -308,12 +320,12 @@
     },
     "argv": [
       "exec",
-      "--verbose",
+      "--chatter",
       "deploy"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "cmd=exec rest=--verbose,deploy"
+      "stdout_equals": "cmd=exec rest=--chatter,deploy"
     }
   },
   {
@@ -326,12 +338,14 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         },
         {
           "name": "merge",
           "help": "merge branches",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}"
         }
@@ -357,6 +371,7 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}",
           "flag_sets": [
@@ -364,9 +379,9 @@
               "name": "output",
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 }
               ]
             }
@@ -393,20 +408,21 @@
         {
           "name": "checkout",
           "help": "checkout a branch",
+          "effect": "read_only",
           "passthrough": true,
           "passthrough_handler_prints": "{name}:{args}",
           "mutex": [
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 },
                 {
-                  "name": "quiet",
+                  "name": "muted",
                   "type": "bool",
-                  "help": "quiet output"
+                  "help": "muted output"
                 }
               ]
             }
@@ -438,6 +454,7 @@
             {
               "name": "checkout",
               "help": "checkout a branch",
+              "effect": "read_only",
               "passthrough": true,
               "passthrough_handler_prints": "{name}:{args}"
             }

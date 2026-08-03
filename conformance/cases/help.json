@@ -9,11 +9,13 @@
         {
           "name": "run",
           "help": "run something",
+          "effect": "read_only",
           "handler_prints": "ok"
         },
         {
           "name": "test",
           "help": "run tests",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -41,6 +43,7 @@
         {
           "name": "deploy",
           "help": "deploy the app",
+          "effect": "read_only",
           "args": [
             {
               "name": "target",
@@ -49,13 +52,13 @@
           ],
           "flags": [
             {
-              "name": "dry-run",
+              "name": "preview",
               "type": "bool",
               "help": "preview changes",
               "default": false
             }
           ],
-          "handler_prints": "{target}:{dry-run}"
+          "handler_prints": "{target}:{preview}"
         }
       ]
     },
@@ -66,12 +69,12 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "--dry-run",
-        "--no-dry-run",
+        "--preview",
+        "--no-preview",
         "target",
         "deploy the app"
       ],
-      "stdout_equals": "myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target\n\nFlags:\n  --dry-run, --no-dry-run    preview changes [default: false]"
+      "stdout_equals": "myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target\n\nFlags:\n  --preview, --no-preview    preview changes [default: false]"
     }
   },
   {
@@ -84,6 +87,7 @@
         {
           "name": "deploy",
           "help": "deploy the app",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -108,6 +112,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "output",
@@ -143,6 +148,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -179,6 +185,7 @@
             {
               "name": "show",
               "help": "display config",
+              "effect": "read_only",
               "handler_prints": "ok"
             }
           ]
@@ -205,6 +212,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "path",
@@ -237,6 +245,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "path",
@@ -268,6 +277,7 @@
         {
           "name": "run",
           "help": "run something",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]

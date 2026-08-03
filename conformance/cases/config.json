@@ -10,11 +10,15 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["config", "path"],
+    "argv": [
+      "config",
+      "path"
+    ],
     "env": {
       "XDG_CONFIG_HOME": "/tmp/fake-config"
     },
@@ -33,11 +37,14 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["config"],
+    "argv": [
+      "config"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown command"
@@ -54,14 +61,20 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["--help"],
+    "argv": [
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["Groups:", "config"]
+      "stdout_contains": [
+        "Groups:",
+        "config"
+      ]
     }
   },
   {
@@ -74,11 +87,14 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["--help"],
+    "argv": [
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_not_contains": "config"
@@ -95,14 +111,23 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["config", "--help"],
+    "argv": [
+      "config",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["path", "show", "set", "edit"]
+      "stdout_contains": [
+        "path",
+        "show",
+        "set",
+        "edit"
+      ]
     }
   }
 ]

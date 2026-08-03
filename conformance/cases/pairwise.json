@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag0={flag0} alt0={alt0}",
           "mutex": [
             {
@@ -62,6 +63,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag1={flag1} alt1={alt1}",
           "mutex": [
             {
@@ -103,6 +105,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag2={flag2}",
           "flags": [
             {
@@ -138,6 +141,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag3={flag3}",
           "flags": [
             {
@@ -178,6 +182,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag4={flag4}",
           "flags": [
             {
@@ -215,6 +220,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag5={flag5}",
           "flags": [
             {
@@ -255,6 +261,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag6={flag6}",
           "flags": [
             {
@@ -289,6 +296,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag7={flag7} alt7={alt7}",
           "mutex": [
             {
@@ -331,6 +339,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag8={flag8}",
           "flags": [
             {
@@ -366,6 +375,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "flag9={flag9}",
           "flags": [
             {

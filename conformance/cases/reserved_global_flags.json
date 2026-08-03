@@ -16,11 +16,14 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "reserved"
@@ -43,11 +46,14 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "reserved"
@@ -71,11 +77,14 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "reserved"
@@ -99,11 +108,14 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "reserved"
@@ -126,11 +138,14 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "reserved"
@@ -144,9 +159,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -154,11 +169,14 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "ok"

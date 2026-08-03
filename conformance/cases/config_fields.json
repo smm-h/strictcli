@@ -18,12 +18,17 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
-          "config_fields": ["api.key"]
+          "config_fields": [
+            "api.key"
+          ]
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "required config field \"api.key\" is missing from config file"
@@ -49,15 +54,25 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "port={port}",
-          "config_fields": ["port"],
+          "config_fields": [
+            "port"
+          ],
           "flags": [
-            {"name": "port", "help": "server port", "type": "int", "default": 8080}
+            {
+              "name": "port",
+              "help": "server port",
+              "type": "int",
+              "default": 8080
+            }
           ]
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "port=8080"
@@ -83,12 +98,17 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
-          "config_fields": ["port"]
+          "config_fields": [
+            "port"
+          ]
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown key \"bogus\" in config file"
@@ -106,14 +126,22 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "port={port}",
           "flags": [
-            {"name": "port", "help": "port number", "type": "int", "default": 80}
+            {
+              "name": "port",
+              "help": "port number",
+              "type": "int",
+              "default": 80
+            }
           ]
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "port=9090"
@@ -131,14 +159,24 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "port={port}",
           "flags": [
-            {"name": "port", "help": "port number", "type": "int", "default": 80}
+            {
+              "name": "port",
+              "help": "port number",
+              "type": "int",
+              "default": 80
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--port", "8080"],
+    "argv": [
+      "run",
+      "--port",
+      "8080"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "port=8080"

@@ -209,6 +209,14 @@
           "type": "array",
           "items": { "$ref": "#/$defs/config_field_def" },
           "description": "Config field definitions registered on the app via app.config_field() / app.ConfigField()."
+        },
+        "proc_observe_allowlist": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "App-level observe authorization (effects contract §6.2): argv PREFIXES matched element-wise by string equality. A ctx.effects.run whose argv matches one is an observe -- it executes even in dry mode, returns a real value, and is never written to the would-do log."
         }
       }
     },
@@ -318,6 +326,29 @@
       "properties": {
         "name": { "type": "string" },
         "help": { "type": "string" },
+        "effect": {
+          "enum": ["read_only", "mutating"],
+          "description": "The mandatory command classification (effects contract §1.1). Deliberately NOT in the top-level 'required' list: a top-level required applies conjunctively with the deprecated branch's 'then', which would make classification mandatory on deprecated entries too -- the opposite of §1.1's exemption. The 'else' branch below is what makes it mandatory on every non-deprecated entry."
+        },
+        "grants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/grant" },
+          "description": "Per-command grant declarations (effects contract §6.1)."
+        },
+        "forwarding": {
+          "type": "object",
+          "required": ["reason"],
+          "additionalProperties": false,
+          "properties": {
+            "reason": { "type": "string", "minLength": 1 }
+          },
+          "description": "Declared forwarding (effects contract §10.2). The reason is mandatory and non-empty."
+        },
+        "handler_effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/handler_effect" },
+          "description": "Effect calls the generated handler issues, in order, before its return (effects contract §14.4). Runs BEFORE the handler_prints / handler_returns path and does not replace it."
+        },
         "hidden": { "type": "boolean", "default": false },
         "interactive": { "type": "boolean", "default": false },
         "config_fields": {
@@ -401,6 +432,10 @@
           "handler_prints": false,
           "handler_exit_code": false,
           "handler_returns": false,
+          "handler_effects": false,
+          "effect": false,
+          "grants": false,
+          "forwarding": false,
           "flags": false,
           "args": false,
           "flag_sets": false,
@@ -413,6 +448,73 @@
           "interactive": false,
           "config_fields": false
         }
+      },
+      "else": {
+        "required": ["effect"]
+      }
+    },
+    "grant": {
+      "type": "object",
+      "required": ["name", "reason", "kind"],
+      "additionalProperties": false,
+      "description": "A per-command, per-effect-kind authorization with a mandatory human reason (effects contract §6.1).",
+      "properties": {
+        "name": { "type": "string" },
+        "reason": { "type": "string" },
+        "kind": {
+          "enum": ["proc_mutate", "proc_spawn", "file_write", "net_mutate"]
+        }
+      }
+    },
+    "handler_effect": {
+      "type": "object",
+      "required": ["method"],
+      "additionalProperties": false,
+      "description": "One effect call the generated handler issues (effects contract §14.4). Each harness materializes this identically: iterate in order, call the named method with EXACTLY the keys the entry declares (no per-method filtering -- a case declaring a key the method does not accept is asserting the error), and keep the returned carrier in a per-run slice indexed by position so forward_from / extract_from can reference it.",
+      "properties": {
+        "method": {
+          "enum": ["run", "spawn", "write", "mkdir", "remove", "rename", "chmod", "http"]
+        },
+        "argv": { "type": "array", "items": { "type": "string" } },
+        "path": { "type": "string" },
+        "to": { "type": "string" },
+        "mode": { "type": "string" },
+        "content": { "type": "string" },
+        "url": { "type": "string" },
+        "http_method": { "type": "string" },
+        "stream": { "type": "boolean" },
+        "resource": { "type": "string" },
+        "skip_if_current": { "type": "string" },
+        "grant": { "type": "string" },
+        "forward_from": {
+          "type": "integer",
+          "description": "1-based index of an earlier handler_effects entry whose carrier is forwarded as the final argument of this call."
+        },
+        "extract_from": {
+          "type": "integer",
+          "description": "1-based index of an earlier entry whose carrier the handler EXTRACTS from (bool-tests it), triggering the truncation path. Terminal: nothing after this entry runs."
+        }
+      }
+    },
+    "effect_record": {
+      "type": "object",
+      "required": ["seq", "kind", "verb", "detail", "recorded"],
+      "additionalProperties": false,
+      "description": "One record of the structured effect log (effects contract §14.2). Populated in BOTH modes; 'recorded' is the key that says which happened.",
+      "properties": {
+        "seq": { "type": "integer" },
+        "kind": {
+          "enum": ["proc_mutate", "proc_spawn", "file_write", "net_mutate", "cache_write"]
+        },
+        "verb": {
+          "enum": ["run", "spawn", "write", "mkdir", "remove", "rename", "chmod", "net", "cache"]
+        },
+        "detail": { "type": "string" },
+        "bytes": { "type": ["integer", "null"] },
+        "resource": { "type": "string" },
+        "skip_if_current": { "type": "string" },
+        "grant": { "type": "string" },
+        "recorded": { "type": "boolean" }
       }
     },
     "arg": {
@@ -689,6 +791,11 @@
             { "type": "array", "items": { "type": "string" } }
           ],
           "description": "Regex pattern(s) that must match (re.search) somewhere in the seeded config file after the run. Useful for asserting key ordering."
+        },
+        "effects_equals": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect_record" },
+          "description": "Deep-equality assertion against the structured effect log the run produced (effects contract §14.1). Comparison is deep equality over the parsed JSON arrays, in order; absent optional keys and explicit-null keys are equivalent. 'recorded' is required on every record and is therefore never absent."
         }
       }
     }

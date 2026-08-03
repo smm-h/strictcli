@@ -9,17 +9,21 @@
         {
           "name": "visible",
           "help": "a visible command",
+          "effect": "read_only",
           "handler_prints": "visible"
         },
         {
           "name": "secret",
           "help": "a hidden command",
+          "effect": "read_only",
           "hidden": true,
           "handler_prints": "secret"
         }
       ]
     },
-    "argv": ["--help"],
+    "argv": [
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "visible",
@@ -36,17 +40,21 @@
         {
           "name": "visible",
           "help": "a visible command",
+          "effect": "read_only",
           "handler_prints": "visible"
         },
         {
           "name": "secret",
           "help": "a hidden command",
+          "effect": "read_only",
           "hidden": true,
           "handler_prints": "secret"
         }
       ]
     },
-    "argv": ["secret"],
+    "argv": [
+      "secret"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "secret"
@@ -62,12 +70,15 @@
         {
           "name": "serve",
           "help": "start interactive server",
+          "effect": "read_only",
           "interactive": true,
           "handler_prints": "serving"
         }
       ]
     },
-    "argv": ["--help"],
+    "argv": [
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "serve"
@@ -83,12 +94,15 @@
         {
           "name": "serve",
           "help": "start interactive server",
+          "effect": "read_only",
           "interactive": true,
           "handler_prints": "serving"
         }
       ]
     },
-    "argv": ["serve"],
+    "argv": [
+      "serve"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "serving"
@@ -104,6 +118,7 @@
         {
           "name": "run",
           "help": "run something",
+          "effect": "read_only",
           "handler_prints": "running"
         }
       ],
@@ -116,13 +131,16 @@
             {
               "name": "debug",
               "help": "debug info",
+              "effect": "read_only",
               "handler_prints": "debug"
             }
           ]
         }
       ]
     },
-    "argv": ["--help"],
+    "argv": [
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "run",
@@ -139,6 +157,7 @@
         {
           "name": "run",
           "help": "run something",
+          "effect": "read_only",
           "handler_prints": "running"
         }
       ],
@@ -151,13 +170,17 @@
             {
               "name": "debug",
               "help": "debug info",
+              "effect": "read_only",
               "handler_prints": "debug"
             }
           ]
         }
       ]
     },
-    "argv": ["internal", "debug"],
+    "argv": [
+      "internal",
+      "debug"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "debug"

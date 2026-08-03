@@ -9,11 +9,16 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["--config", "/tmp/fake.json", "run"],
+    "argv": [
+      "--config",
+      "/tmp/fake.json",
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "--config is not available"
@@ -30,11 +35,16 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["run", "--config", "/tmp/fake.json"],
+    "argv": [
+      "run",
+      "--config",
+      "/tmp/fake.json"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown flag"
@@ -50,11 +60,15 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["run", "--dump-schema"],
+    "argv": [
+      "run",
+      "--dump-schema"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown flag"
@@ -70,11 +84,15 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["--", "--dump-schema"],
+    "argv": [
+      "--",
+      "--dump-schema"
+    ],
     "expect": {
       "exit_code": 1
     }
@@ -90,11 +108,16 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["--", "--config", "/tmp/fake.json"],
+    "argv": [
+      "--",
+      "--config",
+      "/tmp/fake.json"
+    ],
     "expect": {
       "exit_code": 1
     }
@@ -111,14 +134,24 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "port={port}",
           "flags": [
-            {"name": "port", "help": "port number", "type": "int", "default": 80}
+            {
+              "name": "port",
+              "help": "port number",
+              "type": "int",
+              "default": 80
+            }
           ]
         }
       ]
     },
-    "argv": ["--config", "$CONFIG_PATH", "run"],
+    "argv": [
+      "--config",
+      "$CONFIG_PATH",
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "port=9090"
@@ -136,14 +169,23 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "port={port}",
           "flags": [
-            {"name": "port", "help": "port number", "type": "int", "default": 80}
+            {
+              "name": "port",
+              "help": "port number",
+              "type": "int",
+              "default": 80
+            }
           ]
         }
       ]
     },
-    "argv": ["--config=$CONFIG_PATH", "run"],
+    "argv": [
+      "--config=$CONFIG_PATH",
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "port=9090"
@@ -160,11 +202,14 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["--config"],
+    "argv": [
+      "--config"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "'--config' requires a value"
@@ -183,14 +228,24 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "port={port}",
           "flags": [
-            {"name": "port", "help": "port number", "type": "int", "default": 80}
+            {
+              "name": "port",
+              "help": "port number",
+              "type": "int",
+              "default": 80
+            }
           ]
         }
       ]
     },
-    "argv": ["--config", "$CONFIG_PATH", "run"],
+    "argv": [
+      "--config",
+      "$CONFIG_PATH",
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "port=9090"

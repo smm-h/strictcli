@@ -9,7 +9,8 @@
         {
           "name": "run",
           "help": "Run with provenance",
-          "handler_prints": "{source:output}:{source:verbose}",
+          "effect": "read_only",
+          "handler_prints": "{source:output}:{source:chatter}",
           "flags": [
             {
               "name": "output",
@@ -17,8 +18,8 @@
               "type": "str"
             },
             {
-              "name": "verbose",
-              "help": "Enable verbose mode",
+              "name": "chatter",
+              "help": "Enable chatter mode",
               "type": "bool",
               "default": false
             }
@@ -26,7 +27,11 @@
         }
       ]
     },
-    "argv": ["run", "--output", "file.txt"],
+    "argv": [
+      "run",
+      "--output",
+      "file.txt"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "cli:default"
@@ -43,6 +48,7 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "{source:level}",
           "flags": [
             {
@@ -56,7 +62,9 @@
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "env": {
       "PROV_LEVEL": "42"
     },
@@ -77,6 +85,7 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "{source:level}",
           "flags": [
             {
@@ -89,7 +98,9 @@
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "config"
@@ -105,6 +116,7 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "{source:level}",
           "flags": [
             {
@@ -117,7 +129,9 @@
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "default"
@@ -133,7 +147,8 @@
         {
           "name": "run",
           "help": "Run it",
-          "handler_prints": "{source:all}:{source:verbose}",
+          "effect": "read_only",
+          "handler_prints": "{source:all}:{source:chatter}",
           "flags": [
             {
               "name": "all",
@@ -142,8 +157,8 @@
               "default": false
             },
             {
-              "name": "verbose",
-              "help": "Verbose mode",
+              "name": "chatter",
+              "help": "Chatter mode",
               "type": "bool",
               "default": false
             }
@@ -152,14 +167,17 @@
             {
               "type": "implies",
               "flag": "all",
-              "implies": "verbose",
+              "implies": "chatter",
               "value": true
             }
           ]
         }
       ]
     },
-    "argv": ["run", "--all"],
+    "argv": [
+      "run",
+      "--all"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "cli:implied"
@@ -176,6 +194,7 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "{source:level}:{level}",
           "flags": [
             {
@@ -189,7 +208,10 @@
         }
       ]
     },
-    "argv": ["--hermetic", "run"],
+    "argv": [
+      "--hermetic",
+      "run"
+    ],
     "env": {
       "PROV_LEVEL": "99"
     },
@@ -209,6 +231,7 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "{source:level}",
           "flags": [
             {
@@ -222,7 +245,11 @@
         }
       ]
     },
-    "argv": ["run", "--level", "99"],
+    "argv": [
+      "run",
+      "--level",
+      "99"
+    ],
     "env": {
       "PROV_LEVEL": "42"
     },
@@ -249,12 +276,17 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "{source:settings}",
           "flags": []
         }
       ]
     },
-    "argv": ["run", "--settings", "from-cli"],
+    "argv": [
+      "run",
+      "--settings",
+      "from-cli"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "cli"
@@ -278,12 +310,17 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "{source:settings}",
           "flags": []
         }
       ]
     },
-    "argv": ["--settings", "from-cli", "run"],
+    "argv": [
+      "--settings",
+      "from-cli",
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "cli"

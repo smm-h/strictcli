@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "handler_exit_code": 0
         }
@@ -32,6 +33,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "failing",
           "handler_exit_code": 1
         }
@@ -55,6 +57,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "custom code",
           "handler_exit_code": 42
         }
@@ -78,6 +81,7 @@
         {
           "name": "deploy",
           "help": "deploy the app",
+          "effect": "read_only",
           "args": [
             {
               "name": "target",

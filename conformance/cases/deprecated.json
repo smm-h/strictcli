@@ -9,6 +9,7 @@
         {
           "name": "new-cmd",
           "help": "the replacement command",
+          "effect": "read_only",
           "handler_prints": "new"
         },
         {
@@ -37,6 +38,7 @@
         {
           "name": "run",
           "help": "run something",
+          "effect": "read_only",
           "handler_prints": "running"
         },
         {
@@ -74,6 +76,7 @@
             {
               "name": "show",
               "help": "display config",
+              "effect": "read_only",
               "handler_prints": "showing config"
             },
             {
@@ -110,6 +113,7 @@
         {
           "name": "deploy",
           "help": "deploy the app",
+          "effect": "read_only",
           "handler_prints": "deploying"
         },
         {
@@ -138,6 +142,7 @@
         {
           "name": "deploy",
           "help": "deploy the app",
+          "effect": "read_only",
           "handler_prints": "deploying"
         },
         {
@@ -196,9 +201,9 @@
           "deprecated_message": "use 'new-cmd' instead",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "verbose output",
+              "help": "chatter output",
               "default": false
             }
           ]

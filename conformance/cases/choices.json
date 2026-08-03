@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -44,6 +45,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -85,6 +87,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -121,6 +124,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -157,6 +161,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -198,6 +203,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -237,6 +243,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -279,6 +286,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "env",
@@ -313,6 +321,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "env",
@@ -346,6 +355,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "env",
@@ -385,6 +395,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [

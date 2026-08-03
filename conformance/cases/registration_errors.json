@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -32,6 +33,7 @@
         {
           "name": "cmd",
           "help": "",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -55,9 +57,10 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
               "help": "",
               "default": false
@@ -86,6 +89,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "file",
@@ -120,6 +124,7 @@
             {
               "name": "show",
               "help": "display config",
+              "effect": "read_only",
               "handler_prints": "ok"
             }
           ]
@@ -147,11 +152,12 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "repeatable": true,
               "default": false
             }
@@ -169,7 +175,7 @@
         "repeatable",
         "bool"
       ],
-      "stderr_equals": "error: Flag \"verbose\": repeatable is incompatible with type=bool"
+      "stderr_equals": "error: Flag \"chatter\": repeatable is incompatible with type=bool"
     }
   },
   {
@@ -182,11 +188,12 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "choices_str": [
                 "yes",
                 "no"
@@ -207,7 +214,7 @@
         "choices",
         "bool"
       ],
-      "stderr_equals": "error: Flag \"verbose\": choices is incompatible with type=bool"
+      "stderr_equals": "error: Flag \"chatter\": choices is incompatible with type=bool"
     }
   },
   {
@@ -221,13 +228,14 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 }
               ]
             }
@@ -255,6 +263,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -290,6 +299,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "file",
@@ -323,9 +333,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -333,11 +343,12 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
@@ -351,7 +362,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "collides",
-      "stderr_equals": "error: command \"cmd\": flag \"verbose\" collides with a global flag"
+      "stderr_equals": "error: command \"cmd\": flag \"chatter\" collides with a global flag"
     }
   },
   {
@@ -365,6 +376,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -398,6 +410,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "file",
@@ -428,15 +441,15 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         },
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output again",
+          "help": "enable chatter output again",
           "default": false
         }
       ],
@@ -444,6 +457,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -454,7 +468,7 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": "duplicate",
-      "stderr_equals": "error: duplicate global flag name \"verbose\""
+      "stderr_equals": "error: duplicate global flag name \"chatter\""
     }
   },
   {
@@ -467,6 +481,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -501,6 +516,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -540,6 +556,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
@@ -593,6 +610,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -622,7 +640,7 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
           "help": "",
           "default": false
@@ -632,6 +650,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -655,6 +674,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "output",
@@ -694,6 +714,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "output",
@@ -739,6 +760,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "output",
@@ -784,6 +806,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "output",
@@ -821,6 +844,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "output",
@@ -858,6 +882,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -889,6 +914,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -921,6 +947,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -953,6 +980,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -987,6 +1015,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -1021,6 +1050,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -1056,6 +1086,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",

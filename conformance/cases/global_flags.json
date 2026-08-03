@@ -7,9 +7,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -17,17 +17,18 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "verbose={verbose}"
+          "effect": "read_only",
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
-      "--verbose",
+      "--chatter",
       "cmd"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -38,9 +39,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -48,17 +49,18 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "verbose={verbose}"
+          "effect": "read_only",
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--verbose"
+      "--chatter"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -69,9 +71,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -79,17 +81,18 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "verbose={verbose}"
+          "effect": "read_only",
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
-      "--no-verbose",
+      "--no-chatter",
       "cmd"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false"
+      "stdout_equals": "chatter=false"
     }
   },
   {
@@ -110,6 +113,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "settings={settings}"
         }
       ]
@@ -142,6 +146,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "port={port}"
         }
       ]
@@ -164,9 +169,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         },
         {
@@ -180,6 +185,7 @@
         {
           "name": "run",
           "help": "run something",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -191,11 +197,11 @@
       "exit_code": 0,
       "stdout_contains": [
         "Global flags:",
-        "--verbose",
+        "--chatter",
         "--settings",
-        "enable verbose output"
+        "enable chatter output"
       ],
-      "stdout_equals": "myapp v1.0.0 -- test app\n\nCommands:\n  run    run something\n\nGlobal flags:\n  --verbose     enable verbose output\n  --settings    settings directory\n\nUse 'myapp <command> --help' for more information."
+      "stdout_equals": "myapp v1.0.0 -- test app\n\nCommands:\n  run    run something\n\nGlobal flags:\n  --chatter     enable chatter output\n  --settings    settings directory\n\nUse 'myapp <command> --help' for more information."
     }
   },
   {
@@ -206,9 +212,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -216,6 +222,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -227,10 +234,10 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "--verbose",
-        "enable verbose output"
+        "--chatter",
+        "enable chatter output"
       ],
-      "stdout_equals": "myapp cmd -- a command\n\nGlobal flags:\n  --verbose, --no-verbose    enable verbose output [default: false]"
+      "stdout_equals": "myapp cmd -- a command\n\nGlobal flags:\n  --chatter, --no-chatter    enable chatter output [default: false]"
     }
   },
   {
@@ -242,10 +249,10 @@
       "env_prefix": "MYAPP",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
-          "env": "MYAPP_VERBOSE",
+          "help": "enable chatter output",
+          "env": "MYAPP_CHATTER",
           "default": false
         }
       ],
@@ -253,7 +260,8 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "verbose={verbose}"
+          "effect": "read_only",
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -261,11 +269,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "true"
+      "MYAPP_CHATTER": "true"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -276,9 +284,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -286,6 +294,7 @@
         {
           "name": "deploy",
           "help": "deploy the app",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -293,19 +302,19 @@
               "help": "deploy target"
             }
           ],
-          "handler_prints": "verbose={verbose} target={target}"
+          "handler_prints": "chatter={chatter} target={target}"
         }
       ]
     },
     "argv": [
-      "--verbose",
+      "--chatter",
       "deploy",
       "--target",
       "prod"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true target=prod"
+      "stdout_equals": "chatter=true target=prod"
     }
   },
   {
@@ -316,9 +325,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         },
         {
@@ -332,7 +341,8 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "verbose={verbose} settings={settings}"
+          "effect": "read_only",
+          "handler_prints": "chatter={chatter} settings={settings}"
         }
       ]
     },
@@ -341,7 +351,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false settings=/etc/myapp"
+      "stdout_equals": "chatter=false settings=/etc/myapp"
     }
   },
   {
@@ -352,9 +362,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         },
         {
@@ -368,6 +378,7 @@
         {
           "name": "deploy",
           "help": "deploy the app",
+          "effect": "read_only",
           "flags": [
             {
               "name": "force-deploy",
@@ -376,12 +387,12 @@
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose} settings={settings} force-deploy={force-deploy}"
+          "handler_prints": "chatter={chatter} settings={settings} force-deploy={force-deploy}"
         }
       ]
     },
     "argv": [
-      "--verbose",
+      "--chatter",
       "--settings",
       "/tmp/cfg",
       "deploy",
@@ -389,7 +400,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true settings=/tmp/cfg force-deploy=true"
+      "stdout_equals": "chatter=true settings=/tmp/cfg force-deploy=true"
     }
   }
 ]

@@ -9,11 +9,17 @@
         {
           "name": "run",
           "help": "Return an exit-only outcome",
-          "handler_returns": { "kind": "exit", "code": 3 }
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 3
+          }
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 3,
       "stdout_equals": ""
@@ -29,14 +35,20 @@
         {
           "name": "run",
           "help": "Return a data-only outcome",
+          "effect": "read_only",
           "handler_returns": {
             "kind": "data",
-            "data": { "count": 3, "name": "strictcli" }
+            "data": {
+              "count": 3,
+              "name": "strictcli"
+            }
           }
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"count\":3,\"name\":\"strictcli\"}"
@@ -52,15 +64,20 @@
         {
           "name": "run",
           "help": "Return an exit+data outcome",
+          "effect": "read_only",
           "handler_returns": {
             "kind": "exit_data",
             "code": 2,
-            "data": { "ok": false }
+            "data": {
+              "ok": false
+            }
           }
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 2,
       "stdout_equals": "{\"ok\":false}"
@@ -76,11 +93,16 @@
         {
           "name": "run",
           "help": "Return None / Exit(0)",
-          "handler_returns": { "kind": "none" }
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "none"
+          }
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": ""
@@ -88,10 +110,17 @@
   },
   {
     "name": "outcome: bad handler return is a hard error (Python and TypeScript; Go's type system forbids it)",
-    "targets": ["python", "typescript"],
+    "targets": [
+      "python",
+      "typescript"
+    ],
     "acknowledged_divergence": {
       "reason": "Python surfaces the bad return as an uncaught TypeError traceback (host paths, line numbers, Python type names: int/None/list); TypeScript prints the framework's one-line error with JS type names (number/undefined/Array). Both assert the shared 'command handler must return' contract via stderr_contains.",
-      "streams": {"stderr": ["python"]}
+      "streams": {
+        "stderr": [
+          "python"
+        ]
+      }
     },
     "app": {
       "name": "outcomeapp",
@@ -101,11 +130,16 @@
         {
           "name": "run",
           "help": "Return an invalid value",
-          "handler_returns": { "kind": "bad" }
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "bad"
+          }
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command handler must return"

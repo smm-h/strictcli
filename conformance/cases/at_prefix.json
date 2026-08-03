@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "msg",
@@ -20,7 +21,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--msg", "@fixtures/simple.txt"],
+    "argv": [
+      "cmd",
+      "--msg",
+      "@fixtures/simple.txt"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "hello world"
@@ -36,6 +41,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "msg",
@@ -47,7 +53,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--msg", "@fixtures/multiline.txt"],
+    "argv": [
+      "cmd",
+      "--msg",
+      "@fixtures/multiline.txt"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "line one\nline two\nline three"
@@ -63,6 +73,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "msg",
@@ -74,7 +85,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--msg", "@fixtures/trailing_ws.txt"],
+    "argv": [
+      "cmd",
+      "--msg",
+      "@fixtures/trailing_ws.txt"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "content"
@@ -90,6 +105,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "msg",
@@ -101,7 +117,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--msg", "@fixtures/empty.txt"],
+    "argv": [
+      "cmd",
+      "--msg",
+      "@fixtures/empty.txt"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "[]"
@@ -117,6 +137,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "msg",
@@ -128,7 +149,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--msg", "@@literal"],
+    "argv": [
+      "cmd",
+      "--msg",
+      "@@literal"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "@literal"
@@ -144,6 +169,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "msg",
@@ -155,7 +181,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--msg", "@@@more"],
+    "argv": [
+      "cmd",
+      "--msg",
+      "@@@more"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "@@more"
@@ -171,6 +201,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "msg",
@@ -182,7 +213,10 @@
         }
       ]
     },
-    "argv": ["cmd", "--msg=@fixtures/simple.txt"],
+    "argv": [
+      "cmd",
+      "--msg=@fixtures/simple.txt"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "hello world"
@@ -198,6 +232,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "msg",
@@ -209,7 +244,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--msg", "@nonexistent.txt"],
+    "argv": [
+      "cmd",
+      "--msg",
+      "@nonexistent.txt"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "file not found",
@@ -226,6 +265,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "count",
@@ -237,7 +277,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--count", "@5"],
+    "argv": [
+      "cmd",
+      "--count",
+      "@5"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "expected integer",

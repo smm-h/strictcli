@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -40,6 +41,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -70,6 +72,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -101,6 +104,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -135,6 +139,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -165,6 +170,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -200,6 +206,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -231,6 +238,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -262,6 +270,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -298,6 +307,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -337,6 +347,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "temp",
@@ -368,6 +379,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",
@@ -401,6 +413,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "rate",

@@ -11,14 +11,22 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "port={port}",
           "flags": [
-            {"name": "port", "help": "port number", "type": "int", "default": 80}
+            {
+              "name": "port",
+              "help": "port number",
+              "type": "int",
+              "default": 80
+            }
           ]
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "port=80"

@@ -11,14 +11,27 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": true}
+            {
+              "name": "tags",
+              "help": "the tags",
+              "type": "str",
+              "repeatable": true,
+              "unique": true
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "set", "tags", "a,a"],
+    "argv": [
+      "--yes",
+      "config",
+      "set",
+      "tags",
+      "a,a"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "config set: key 'tags': duplicate value 'a'"
@@ -36,14 +49,27 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+            {
+              "name": "tags",
+              "help": "the tags",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "set", "tags", "--clear"],
+    "argv": [
+      "--yes",
+      "config",
+      "set",
+      "tags",
+      "--clear"
+    ],
     "expect": {
       "exit_code": 0
     }
@@ -60,14 +86,26 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "count", "help": "a count", "type": "int", "default": 0}
+            {
+              "name": "count",
+              "help": "a count",
+              "type": "int",
+              "default": 0
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "set", "count", "--clear"],
+    "argv": [
+      "--yes",
+      "config",
+      "set",
+      "count",
+      "--clear"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "config set: --clear is only for repeatable flags"
@@ -85,14 +123,26 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "count", "help": "a count", "type": "int", "default": 0}
+            {
+              "name": "count",
+              "help": "a count",
+              "type": "int",
+              "default": 0
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "set", "count", "--default"],
+    "argv": [
+      "--yes",
+      "config",
+      "set",
+      "count",
+      "--default"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "config set: key 'count' not in config"
@@ -110,14 +160,28 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+            {
+              "name": "tags",
+              "help": "the tags",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "set", "tags", "a,b", "--clear"],
+    "argv": [
+      "--yes",
+      "config",
+      "set",
+      "tags",
+      "a,b",
+      "--clear"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "config set: cannot provide a value with --clear"
@@ -135,14 +199,27 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "count", "help": "a count", "type": "int", "default": 0}
+            {
+              "name": "count",
+              "help": "a count",
+              "type": "int",
+              "default": 0
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "set", "count", "42", "--default"],
+    "argv": [
+      "--yes",
+      "config",
+      "set",
+      "count",
+      "42",
+      "--default"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "config set: cannot provide a value with --default"
@@ -160,14 +237,28 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "tags", "help": "the tags", "type": "str", "repeatable": true, "unique": false}
+            {
+              "name": "tags",
+              "help": "the tags",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "set", "tags", "--clear", "--default"],
+    "argv": [
+      "--yes",
+      "config",
+      "set",
+      "tags",
+      "--clear",
+      "--default"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "config set: --clear and --default are mutually exclusive"

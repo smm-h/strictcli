@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -40,6 +41,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -70,25 +72,26 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--verbose"
+      "--chatter"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -101,15 +104,16 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -118,7 +122,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false"
+      "stdout_equals": "chatter=false"
     }
   },
   {
@@ -131,25 +135,26 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--no-verbose"
+      "--no-chatter"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false"
+      "stdout_equals": "chatter=false"
     }
   },
   {
@@ -162,16 +167,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
               "short": "V",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -181,7 +187,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -194,6 +200,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -226,6 +233,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -256,6 +264,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "format",
@@ -288,6 +297,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -318,26 +328,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--verbose=true"
+      "--chatter=true"
     ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "boolean flag",
-      "stderr_equals": "error: flag '--verbose' is a boolean flag and does not take a value\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: flag '--chatter' is a boolean flag and does not take a value\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -350,27 +361,28 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "negatable": false,
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--no-verbose"
+      "--no-chatter"
     ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "unknown flag",
-      "stderr_equals": "error: unknown flag '--no-verbose'\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: unknown flag '--no-chatter'\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -383,26 +395,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "negatable": true,
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--no-verbose"
+      "--no-chatter"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false"
+      "stdout_equals": "chatter=false"
     }
   }
 ]

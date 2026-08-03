@@ -7,12 +7,12 @@
       "help": "test app",
       "config": true,
       "config_conflict_mode": "error",
-      "config_content": "{\"verbose\": true}",
+      "config_content": "{\"chatter\": true}",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "verbose output",
+          "help": "chatter output",
           "default": false
         }
       ],
@@ -20,13 +20,14 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
     "argv": [
       "run",
-      "--no-verbose"
+      "--no-chatter"
     ],
     "expect": {
       "exit_code": 1,
@@ -41,12 +42,12 @@
       "help": "test app",
       "config": true,
       "config_conflict_mode": "error",
-      "config_content": "{\"verbose\": true}",
+      "config_content": "{\"chatter\": true}",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "verbose output",
+          "help": "chatter output",
           "default": false
         }
       ],
@@ -54,13 +55,14 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
     "argv": [
       "run",
-      "--verbose"
+      "--chatter"
     ],
     "expect": {
       "exit_code": 0,
@@ -82,13 +84,16 @@
           "type": "list[str]",
           "help": "tags",
           "unique": false,
-          "default": ["from-default"]
+          "default": [
+            "from-default"
+          ]
         }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -123,6 +128,7 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]

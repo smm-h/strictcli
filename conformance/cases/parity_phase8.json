@@ -12,6 +12,7 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
             {
@@ -36,7 +37,13 @@
         }
       ]
     },
-    "argv": ["config", "set", "alpha", "42"],
+    "argv": [
+      "--yes",
+      "config",
+      "set",
+      "alpha",
+      "42"
+    ],
     "expect": {
       "exit_code": 0,
       "config_file_contains": [
@@ -47,8 +54,12 @@
         "zeta = \"keep\"",
         "beta = true"
       ],
-      "config_file_not_contains": ["alpha = 1"],
-      "config_file_matches": ["zeta[\\s\\S]*alpha[\\s\\S]*beta"]
+      "config_file_not_contains": [
+        "alpha = 1"
+      ],
+      "config_file_matches": [
+        "zeta[\\s\\S]*alpha[\\s\\S]*beta"
+      ]
     }
   },
   {
@@ -61,6 +72,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "beyond-double",
@@ -99,6 +111,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "labels",

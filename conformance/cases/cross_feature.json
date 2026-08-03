@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
@@ -50,6 +51,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
@@ -92,6 +94,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
@@ -141,6 +144,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "force-mode={force-mode}"
         }
       ]
@@ -175,6 +179,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "force-mode={force-mode}"
         }
       ]
@@ -194,13 +199,18 @@
       "version": "1.0.0",
       "help": "test app",
       "tag_contracts": {
-        "strict": { "requires_flag": "strict" }
+        "strict": {
+          "requires_flag": "strict"
+        }
       },
       "commands": [
         {
           "name": "lint",
           "help": "lint code",
-          "tags": ["strict"],
+          "effect": "read_only",
+          "tags": [
+            "strict"
+          ],
           "flags": [
             {
               "name": "strict",
@@ -227,13 +237,18 @@
       "version": "1.0.0",
       "help": "test app",
       "tag_contracts": {
-        "strict": { "requires_flag": "strict" }
+        "strict": {
+          "requires_flag": "strict"
+        }
       },
       "commands": [
         {
           "name": "lint",
           "help": "lint code",
-          "tags": ["strict"],
+          "effect": "read_only",
+          "tags": [
+            "strict"
+          ],
           "flags": [
             {
               "name": "strict",
@@ -261,13 +276,18 @@
       "version": "1.0.0",
       "help": "test app",
       "tag_contracts": {
-        "strict": { "requires_flag": "strict" }
+        "strict": {
+          "requires_flag": "strict"
+        }
       },
       "commands": [
         {
           "name": "lint",
           "help": "lint code",
-          "tags": ["strict"],
+          "effect": "read_only",
+          "tags": [
+            "strict"
+          ],
           "flags": [
             {
               "name": "strict",
@@ -295,13 +315,18 @@
       "version": "1.0.0",
       "help": "test app",
       "tag_contracts": {
-        "strict": { "requires_flag": "strict" }
+        "strict": {
+          "requires_flag": "strict"
+        }
       },
       "commands": [
         {
           "name": "lint",
           "help": "lint code",
-          "tags": ["strict"],
+          "effect": "read_only",
+          "tags": [
+            "strict"
+          ],
           "flags": [
             {
               "name": "strict",
@@ -339,6 +364,7 @@
         {
           "name": "show",
           "help": "show data",
+          "effect": "read_only",
           "flags": [
             {
               "name": "item",
@@ -380,6 +406,7 @@
         {
           "name": "show",
           "help": "show data",
+          "effect": "read_only",
           "flags": [
             {
               "name": "item",

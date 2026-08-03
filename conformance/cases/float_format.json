@@ -12,28 +12,108 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "whole", "help": "v", "type": "float", "default": 0.0},
-            {"name": "neg", "help": "v", "type": "float", "default": 0.0},
-            {"name": "half", "help": "v", "type": "float", "default": 0.0},
-            {"name": "negzero", "help": "v", "type": "float", "default": 0.0},
-            {"name": "hundred", "help": "v", "type": "float", "default": 0.0},
-            {"name": "fix15", "help": "v", "type": "float", "default": 0.0},
-            {"name": "big16", "help": "v", "type": "float", "default": 0.0},
-            {"name": "big20", "help": "v", "type": "float", "default": 0.0},
-            {"name": "top21", "help": "v", "type": "float", "default": 0.0},
-            {"name": "small4", "help": "v", "type": "float", "default": 0.0},
-            {"name": "small5", "help": "v", "type": "float", "default": 0.0},
-            {"name": "tiny7", "help": "v", "type": "float", "default": 0.0},
-            {"name": "tenth", "help": "v", "type": "float", "default": 0.0},
-            {"name": "twop53", "help": "v", "type": "float", "default": 0.0},
-            {"name": "e300", "help": "v", "type": "float", "default": 0.0}
+            {
+              "name": "whole",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "neg",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "half",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "negzero",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "hundred",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "fix15",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "big16",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "big20",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "top21",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "small4",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "small5",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "tiny7",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "tenth",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "twop53",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            },
+            {
+              "name": "e300",
+              "help": "v",
+              "type": "float",
+              "default": 0.0
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "show", "--plain"],
+    "argv": [
+      "config",
+      "show",
+      "--plain"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -73,28 +153,107 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "whole", "help": "v", "type": "float", "default": 1.0},
-            {"name": "neg", "help": "v", "type": "float", "default": -1.0},
-            {"name": "half", "help": "v", "type": "float", "default": 0.5},
-            {"name": "negzero", "help": "v", "type": "float", "default": -0.0},
-            {"name": "hundred", "help": "v", "type": "float", "default": 100.0},
-            {"name": "fix15", "help": "v", "type": "float", "default": 1e15},
-            {"name": "big16", "help": "v", "type": "float", "default": 1e16},
-            {"name": "big20", "help": "v", "type": "float", "default": 1e20},
-            {"name": "top21", "help": "v", "type": "float", "default": 1e21},
-            {"name": "small4", "help": "v", "type": "float", "default": 1e-4},
-            {"name": "small5", "help": "v", "type": "float", "default": 1e-5},
-            {"name": "tiny7", "help": "v", "type": "float", "default": 1e-7},
-            {"name": "tenth", "help": "v", "type": "float", "default": 0.1},
-            {"name": "e300", "help": "v", "type": "float", "default": 1.5e300},
-            {"name": "twop53", "help": "v", "type": "float", "default": 9007199254740992.0}
+            {
+              "name": "whole",
+              "help": "v",
+              "type": "float",
+              "default": 1.0
+            },
+            {
+              "name": "neg",
+              "help": "v",
+              "type": "float",
+              "default": -1.0
+            },
+            {
+              "name": "half",
+              "help": "v",
+              "type": "float",
+              "default": 0.5
+            },
+            {
+              "name": "negzero",
+              "help": "v",
+              "type": "float",
+              "default": -0.0
+            },
+            {
+              "name": "hundred",
+              "help": "v",
+              "type": "float",
+              "default": 100.0
+            },
+            {
+              "name": "fix15",
+              "help": "v",
+              "type": "float",
+              "default": 1000000000000000.0
+            },
+            {
+              "name": "big16",
+              "help": "v",
+              "type": "float",
+              "default": 1e+16
+            },
+            {
+              "name": "big20",
+              "help": "v",
+              "type": "float",
+              "default": 1e+20
+            },
+            {
+              "name": "top21",
+              "help": "v",
+              "type": "float",
+              "default": 1e+21
+            },
+            {
+              "name": "small4",
+              "help": "v",
+              "type": "float",
+              "default": 0.0001
+            },
+            {
+              "name": "small5",
+              "help": "v",
+              "type": "float",
+              "default": 1e-05
+            },
+            {
+              "name": "tiny7",
+              "help": "v",
+              "type": "float",
+              "default": 1e-07
+            },
+            {
+              "name": "tenth",
+              "help": "v",
+              "type": "float",
+              "default": 0.1
+            },
+            {
+              "name": "e300",
+              "help": "v",
+              "type": "float",
+              "default": 1.5e+300
+            },
+            {
+              "name": "twop53",
+              "help": "v",
+              "type": "float",
+              "default": 9007199254740992.0
+            }
           ]
         }
       ]
     },
-    "argv": ["cmd", "--help"],
+    "argv": [
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -134,14 +293,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
-            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [
+                1.5,
+                2.5
+              ]
+            }
           ],
           "handler_prints": "rate={rate}"
         }
       ]
     },
-    "argv": ["cmd", "--rate", "1e16"],
+    "argv": [
+      "cmd",
+      "--rate",
+      "1e16"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --rate: invalid value '10000000000000000.0', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
@@ -157,14 +329,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
-            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [
+                1.5,
+                2.5
+              ]
+            }
           ],
           "handler_prints": "rate={rate}"
         }
       ]
     },
-    "argv": ["cmd", "--rate", "1e-7"],
+    "argv": [
+      "cmd",
+      "--rate",
+      "1e-7"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --rate: invalid value '1e-7', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
@@ -180,14 +365,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
-            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [
+                1.5,
+                2.5
+              ]
+            }
           ],
           "handler_prints": "rate={rate}"
         }
       ]
     },
-    "argv": ["cmd", "--rate", "1e0"],
+    "argv": [
+      "cmd",
+      "--rate",
+      "1e0"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --rate: invalid value '1.0', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
@@ -203,14 +401,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
-            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [
+                1.5,
+                2.5
+              ]
+            }
           ],
           "handler_prints": "rate={rate}"
         }
       ]
     },
-    "argv": ["cmd", "--rate", "-0.0"],
+    "argv": [
+      "cmd",
+      "--rate",
+      "-0.0"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --rate: invalid value '-0.0', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
@@ -226,14 +437,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
-            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [
+                1.5,
+                2.5
+              ]
+            }
           ],
           "handler_prints": "rate={rate}"
         }
       ]
     },
-    "argv": ["cmd", "--rate", "1e15"],
+    "argv": [
+      "cmd",
+      "--rate",
+      "1e15"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --rate: invalid value '1000000000000000.0', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
@@ -249,14 +473,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
-            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [
+                1.5,
+                2.5
+              ]
+            }
           ],
           "handler_prints": "rate={rate}"
         }
       ]
     },
-    "argv": ["cmd", "--rate", "1e21"],
+    "argv": [
+      "cmd",
+      "--rate",
+      "1e21"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --rate: invalid value '1e+21', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
@@ -272,14 +509,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
-            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [
+                1.5,
+                2.5
+              ]
+            }
           ],
           "handler_prints": "rate={rate}"
         }
       ]
     },
-    "argv": ["cmd", "--rate", "1e-5"],
+    "argv": [
+      "cmd",
+      "--rate",
+      "1e-5"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --rate: invalid value '0.00001', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
@@ -295,14 +545,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
-            {"name": "rate", "type": "float", "help": "the rate", "choices_float": [1.5, 2.5]}
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "the rate",
+              "choices_float": [
+                1.5,
+                2.5
+              ]
+            }
           ],
           "handler_prints": "rate={rate}"
         }
       ]
     },
-    "argv": ["cmd", "--rate", "1.5e300"],
+    "argv": [
+      "cmd",
+      "--rate",
+      "1.5e300"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_equals": "error: --rate: invalid value '1.5e+300', must be one of: 1.5, 2.5\ntry 'myapp cmd --help'"
@@ -321,14 +584,24 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "rate", "help": "a rate", "type": "float", "default": 0.0}
+            {
+              "name": "rate",
+              "help": "a rate",
+              "type": "float",
+              "default": 0.0
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "show", "--json"],
+    "argv": [
+      "config",
+      "show",
+      "--json"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [

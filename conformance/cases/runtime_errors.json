@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -50,6 +51,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "settings={settings}"
         }
       ]
@@ -81,6 +83,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "port={port}"
         }
       ]
@@ -116,6 +119,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "settings={settings}"
         }
       ]
@@ -141,10 +145,10 @@
       "env_prefix": "MYAPP",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
-          "env": "MYAPP_VERBOSE",
+          "help": "enable chatter output",
+          "env": "MYAPP_CHATTER",
           "default": false
         }
       ],
@@ -152,7 +156,8 @@
         {
           "name": "cmd",
           "help": "a command",
-          "handler_prints": "verbose={verbose}"
+          "effect": "read_only",
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -160,16 +165,16 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "maybe"
+      "MYAPP_CHATTER": "maybe"
     },
     "expect": {
       "exit_code": 1,
       "stderr_contains": [
         "invalid boolean value",
         "'maybe'",
-        "MYAPP_VERBOSE"
+        "MYAPP_CHATTER"
       ],
-      "stderr_equals": "error: invalid boolean value 'maybe' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp --help'"
+      "stderr_equals": "error: invalid boolean value 'maybe' for env var 'MYAPP_CHATTER' (flag '--chatter')\ntry 'myapp --help'"
     }
   },
   {
@@ -182,6 +187,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -217,6 +223,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -252,6 +259,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",

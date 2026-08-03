@@ -12,21 +12,38 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "name", "help": "a name", "type": "str", "default": ""}
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "acknowledged_divergence": {
       "reason": "The TOML parser's prose is language-specific (Python tomllib vs Go go-toml-edit vs the TypeScript parser). The shared surface -- 'error: config file <path>: ... (line 1, column 8)' -- is asserted per target by this case's expect block.",
-      "streams": {"stderr": ["go", "typescript"]}
+      "streams": {
+        "stderr": [
+          "go",
+          "typescript"
+        ]
+      }
     },
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["config file", "line", "column"]
+      "stderr_contains": [
+        "config file",
+        "line",
+        "column"
+      ]
     }
   },
   {
@@ -41,21 +58,37 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "name", "help": "a name", "type": "str", "default": ""}
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "acknowledged_divergence": {
       "reason": "Go's encoding/json prose and column convention (one past the offending byte) differ from the Python-shaped message that Python and TypeScript share. The shared surface -- 'error: config file <path>: ... (line, column)' -- is asserted per target by this case's expect block; Python and TypeScript remain byte-compared.",
-      "streams": {"stderr": ["go"]}
+      "streams": {
+        "stderr": [
+          "go"
+        ]
+      }
     },
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["config file", "line", "column"]
+      "stderr_contains": [
+        "config file",
+        "line",
+        "column"
+      ]
     }
   },
   {
@@ -69,11 +102,16 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["--config", "/nonexistent/path/config.json", "run"],
+    "argv": [
+      "--config",
+      "/nonexistent/path/config.json",
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "config file not found"
@@ -91,14 +129,23 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["config", "show", "--plain"],
+    "argv": [
+      "config",
+      "show",
+      "--plain"
+    ],
     "acknowledged_divergence": {
       "reason": "Go's encoding/json prose and column convention (one past the offending byte) differ from the Python-shaped message that Python and TypeScript share. Python and TypeScript remain byte-compared.",
-      "streams": {"stderr": ["go"]}
+      "streams": {
+        "stderr": [
+          "go"
+        ]
+      }
     },
     "expect": {
       "exit_code": 1,
@@ -118,14 +165,24 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "name", "help": "a name", "type": "str", "default": ""}
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--name", "from-cli"],
+    "argv": [
+      "run",
+      "--name",
+      "from-cli"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag 'name' set in both cli and config; remove one"
@@ -144,14 +201,23 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "name", "help": "a name", "type": "str", "default": "", "env": "MYAPP_NAME"}
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "default": "",
+              "env": "MYAPP_NAME"
+            }
           ]
         }
       ]
     },
-    "argv": ["run"],
+    "argv": [
+      "run"
+    ],
     "env": {
       "MYAPP_NAME": "from-env"
     },
@@ -172,14 +238,24 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "name", "help": "a name", "type": "str", "default": ""}
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--name", "from-cli"],
+    "argv": [
+      "run",
+      "--name",
+      "from-cli"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "ok"
@@ -198,14 +274,24 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "name", "help": "a name", "type": "str", "default": ""}
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--name", "same"],
+    "argv": [
+      "run",
+      "--name",
+      "same"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "ok"
@@ -224,14 +310,25 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "name", "help": "a name", "type": "str", "default": "", "conflict_mode": "error"}
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "default": "",
+              "conflict_mode": "error"
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--name", "from-cli"],
+    "argv": [
+      "run",
+      "--name",
+      "from-cli"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag 'name' set in both cli and config; remove one"
@@ -250,14 +347,25 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "name", "help": "a name", "type": "str", "default": "", "conflict_mode": "cli-wins"}
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "default": "",
+              "conflict_mode": "cli-wins"
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--name", "from-cli"],
+    "argv": [
+      "run",
+      "--name",
+      "from-cli"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "ok"
@@ -276,14 +384,27 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "tag", "help": "tags", "type": "str", "repeatable": true, "unique": false}
+            {
+              "name": "tag",
+              "help": "tags",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--tag", "a", "--tag", "b"],
+    "argv": [
+      "run",
+      "--tag",
+      "a",
+      "--tag",
+      "b"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "ok"
@@ -302,14 +423,27 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "tag", "help": "tags", "type": "str", "repeatable": true, "unique": false}
+            {
+              "name": "tag",
+              "help": "tags",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--tag", "b", "--tag", "a"],
+    "argv": [
+      "run",
+      "--tag",
+      "b",
+      "--tag",
+      "a"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag 'tag' set in both cli and config; remove one"
@@ -328,14 +462,27 @@
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "tag", "help": "tags", "type": "str", "repeatable": true, "unique": true}
+            {
+              "name": "tag",
+              "help": "tags",
+              "type": "str",
+              "repeatable": true,
+              "unique": true
+            }
           ]
         }
       ]
     },
-    "argv": ["run", "--tag", "b", "--tag", "a"],
+    "argv": [
+      "run",
+      "--tag",
+      "b",
+      "--tag",
+      "a"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "ok"
@@ -351,17 +498,27 @@
       "config_conflict_mode": "error",
       "config_content": "{\"settings\": \"from-config\"}",
       "global_flags": [
-        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default"}
+        {
+          "name": "settings",
+          "type": "str",
+          "help": "settings path",
+          "default": "from-default"
+        }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["run", "--settings", "from-cli"],
+    "argv": [
+      "run",
+      "--settings",
+      "from-cli"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag 'settings' set in both cli and config; remove one"
@@ -377,17 +534,28 @@
       "config_conflict_mode": "cli-wins",
       "config_content": "{\"settings\": \"from-config\"}",
       "global_flags": [
-        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default", "conflict_mode": "error"}
+        {
+          "name": "settings",
+          "type": "str",
+          "help": "settings path",
+          "default": "from-default",
+          "conflict_mode": "error"
+        }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["run", "--settings", "from-cli"],
+    "argv": [
+      "run",
+      "--settings",
+      "from-cli"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag 'settings' set in both cli and config; remove one"
@@ -403,17 +571,27 @@
       "config_conflict_mode": "error",
       "config_content": "{\"settings\": \"from-config\"}",
       "global_flags": [
-        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default"}
+        {
+          "name": "settings",
+          "type": "str",
+          "help": "settings path",
+          "default": "from-default"
+        }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["--settings", "from-cli", "run"],
+    "argv": [
+      "--settings",
+      "from-cli",
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag 'settings' set in both cli and config; remove one"
@@ -429,17 +607,27 @@
       "config_conflict_mode": "error",
       "config_content": "{\"settings\": \"same\"}",
       "global_flags": [
-        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default"}
+        {
+          "name": "settings",
+          "type": "str",
+          "help": "settings path",
+          "default": "from-default"
+        }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["run", "--settings", "same"],
+    "argv": [
+      "run",
+      "--settings",
+      "same"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "ok"
@@ -455,17 +643,27 @@
       "config_conflict_mode": "cli-wins",
       "config_content": "{\"settings\": \"from-config\"}",
       "global_flags": [
-        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default"}
+        {
+          "name": "settings",
+          "type": "str",
+          "help": "settings path",
+          "default": "from-default"
+        }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "settings={settings}"
         }
       ]
     },
-    "argv": ["run", "--settings", "from-cli"],
+    "argv": [
+      "run",
+      "--settings",
+      "from-cli"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "settings=from-cli"
@@ -482,17 +680,28 @@
       "config_conflict_mode": "error",
       "config_content": "{\"settings\": \"shared\"}",
       "global_flags": [
-        {"name": "settings", "type": "str", "help": "settings path", "default": "from-default", "env": "MYAPP_SETTINGS"}
+        {
+          "name": "settings",
+          "type": "str",
+          "help": "settings path",
+          "default": "from-default",
+          "env": "MYAPP_SETTINGS"
+        }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["run", "--settings", "from-cli"],
+    "argv": [
+      "run",
+      "--settings",
+      "from-cli"
+    ],
     "env": {
       "MYAPP_SETTINGS": "shared"
     },

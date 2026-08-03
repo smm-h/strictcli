@@ -7,15 +7,38 @@
       "help": "test",
       "test_coverage": true,
       "commands": [
-        {"name": "deploy", "help": "deploy the app", "flags": [], "handler_prints": "deployed"},
-        {"name": "status", "help": "show status", "flags": [], "handler_prints": "ok"},
-        {"name": "build", "help": "build the app", "flags": [], "handler_prints": "built"}
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "deployed"
+        },
+        {
+          "name": "status",
+          "help": "show status",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "ok"
+        },
+        {
+          "name": "build",
+          "help": "build the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "built"
+        }
       ],
       "pre_test": [
-        ["deploy"]
+        [
+          "deploy"
+        ]
       ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_contains": [
@@ -34,17 +57,44 @@
       "help": "test",
       "test_coverage": true,
       "commands": [
-        {"name": "deploy", "help": "deploy the app", "flags": [], "handler_prints": "deployed"},
-        {"name": "status", "help": "show status", "flags": [], "handler_prints": "ok"},
-        {"name": "build", "help": "build the app", "flags": [], "handler_prints": "built"}
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "deployed"
+        },
+        {
+          "name": "status",
+          "help": "show status",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "ok"
+        },
+        {
+          "name": "build",
+          "help": "build the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "built"
+        }
       ],
       "pre_test": [
-        ["deploy"],
-        ["status"],
-        ["build"]
+        [
+          "deploy"
+        ],
+        [
+          "status"
+        ],
+        [
+          "build"
+        ]
       ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -61,13 +111,38 @@
       "help": "test",
       "test_coverage": true,
       "commands": [
-        {"name": "deploy", "help": "deploy the app", "flags": [], "handler_prints": "deployed"},
-        {"name": "status", "help": "show status", "flags": [], "handler_prints": "ok"},
-        {"name": "build", "help": "build the app", "flags": [], "handler_prints": "built"}
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "deployed"
+        },
+        {
+          "name": "status",
+          "help": "show status",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "ok"
+        },
+        {
+          "name": "build",
+          "help": "build the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "built"
+        }
       ],
-      "coverage_manifest": ["build", "deploy", "status"]
+      "coverage_manifest": [
+        "build",
+        "deploy",
+        "status"
+      ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -84,12 +159,33 @@
       "help": "test",
       "test_coverage": true,
       "commands": [
-        {"name": "deploy", "help": "deploy the app", "flags": [], "handler_prints": "deployed"},
-        {"name": "status", "help": "show status", "flags": [], "handler_prints": "ok"},
-        {"name": "build", "help": "build the app", "flags": [], "handler_prints": "built"}
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "deployed"
+        },
+        {
+          "name": "status",
+          "help": "show status",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "ok"
+        },
+        {
+          "name": "build",
+          "help": "build the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "built"
+        }
       ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [

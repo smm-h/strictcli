@@ -12,14 +12,23 @@
           "name": "audit",
           "mint": "passed",
           "message": "audit clean",
-          "notes": ["scanned 5 files"]
+          "notes": [
+            "scanned 5 files"
+          ]
         }
       ]
     },
-    "argv": ["check", "--name", "audit"],
+    "argv": [
+      "check",
+      "--name",
+      "audit"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["audit", "audit clean"],
+      "stdout_contains": [
+        "audit",
+        "audit clean"
+      ],
       "stdout_not_contains": "[note]"
     }
   },
@@ -36,11 +45,19 @@
           "name": "audit",
           "mint": "passed",
           "message": "audit clean",
-          "notes": ["scanned 5 files", "no findings"]
+          "notes": [
+            "scanned 5 files",
+            "no findings"
+          ]
         }
       ]
     },
-    "argv": ["check", "--name", "audit", "--verbose"],
+    "argv": [
+      "--verbose",
+      "check",
+      "--name",
+      "audit"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
@@ -64,15 +81,29 @@
           "name": "gate",
           "mint": "found",
           "message": "gate failed",
-          "problems": [{ "severity": "error", "text": "blocking issue" }],
-          "notes": ["ran deep scan"]
+          "problems": [
+            {
+              "severity": "error",
+              "text": "blocking issue"
+            }
+          ],
+          "notes": [
+            "ran deep scan"
+          ]
         }
       ]
     },
-    "argv": ["check", "--name", "gate"],
+    "argv": [
+      "check",
+      "--name",
+      "gate"
+    ],
     "expect": {
       "exit_code": 1,
-      "stdout_contains": ["gate", "[error] blocking issue"],
+      "stdout_contains": [
+        "gate",
+        "[error] blocking issue"
+      ],
       "stdout_not_contains": "[note]"
     }
   },
@@ -89,25 +120,38 @@
           "name": "audit",
           "mint": "passed",
           "message": "audit clean",
-          "notes": ["scanned 5 files"]
+          "notes": [
+            "scanned 5 files"
+          ]
         },
         {
           "name": "gate",
           "mint": "found",
           "message": "gate failed",
-          "problems": [{ "severity": "error", "text": "blocking issue" }],
-          "notes": ["ran deep scan"]
+          "problems": [
+            {
+              "severity": "error",
+              "text": "blocking issue"
+            }
+          ],
+          "notes": [
+            "ran deep scan"
+          ]
         }
       ]
     },
-    "argv": ["check", "--all", "--verbose"],
+    "argv": [
+      "--verbose",
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_contains": [
         "[note] scanned 5 files",
         "[note] ran deep scan",
         "[error] blocking issue",
-        "1 passed / 1 failed / 0 warned / 0 skipped"
+        "2 passed / 1 failed / 0 warned / 0 skipped"
       ],
       "stdout_matches": "\\(\\d+ms\\)"
     }

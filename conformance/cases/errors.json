@@ -9,11 +9,12 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
@@ -41,6 +42,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -65,6 +67,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -98,6 +101,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -122,6 +126,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -153,6 +158,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -179,11 +185,12 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
@@ -193,12 +200,12 @@
     },
     "argv": [
       "cmd",
-      "--no-verbose=true"
+      "--no-chatter=true"
     ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "boolean negation",
-      "stderr_equals": "error: flag '--no-verbose' is a boolean negation and does not take a value\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: flag '--no-chatter' is a boolean negation and does not take a value\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -211,6 +218,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -242,6 +250,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -249,24 +258,24 @@
               "help": "the target"
             },
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
-          "handler_prints": "target={target} verbose={verbose}"
+          "handler_prints": "target={target} chatter={chatter}"
         }
       ]
     },
     "argv": [
       "cmd",
       "--target",
-      "--verbose"
+      "--chatter"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "target=--verbose verbose=false"
+      "stdout_equals": "target=--chatter chatter=false"
     }
   },
   {
@@ -279,6 +288,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -303,6 +313,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",

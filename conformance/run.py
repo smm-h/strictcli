@@ -198,6 +198,48 @@ def _check_equals(actual: str, expected: str, stream_name: str) -> list[str]:
     return errors
 
 
+# The optional keys of $defs/effect_record. Effects contract §14.1: absent
+# optional keys and explicit-null keys are equivalent, so both sides drop them
+# before comparison. `recorded` is deliberately NOT in this set -- it is a
+# required key precisely so that "absent" never has to mean both "live" and
+# "unstated" at once.
+_EFFECT_RECORD_OPTIONAL_KEYS = ("bytes", "resource", "skip_if_current", "grant")
+
+
+def _normalize_effect_record(rec: dict) -> dict:
+    """Drop optional keys whose value is absent or null."""
+    return {
+        k: v
+        for k, v in rec.items()
+        if not (k in _EFFECT_RECORD_OPTIONAL_KEYS and v is None)
+    }
+
+
+def _check_effects_equals(log_path: str | None, expected: list) -> list[str]:
+    """Deep-equality assertion against the structured effect log (§14.1)."""
+    if log_path is None or not os.path.exists(log_path):
+        return [
+            "  effects_equals: the harness wrote no effect log "
+            f"(expected it at {log_path!r})"
+        ]
+    with open(log_path, encoding="utf-8") as fh:
+        raw = fh.read()
+    try:
+        actual = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return [f"  effects_equals: effect log is not valid JSON: {e}"]
+
+    actual_norm = [_normalize_effect_record(r) for r in actual]
+    expected_norm = [_normalize_effect_record(r) for r in expected]
+    if actual_norm == expected_norm:
+        return []
+    return [
+        "  effects_equals mismatch:",
+        f"    expected: {json.dumps(expected_norm, sort_keys=True)}",
+        f"    actual:   {json.dumps(actual_norm, sort_keys=True)}",
+    ]
+
+
 # --- N-way target registry ---------------------------------------------------
 #
 # Each registered target is a self-contained descriptor that knows how to
@@ -376,6 +418,19 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
     extra_env = prep.extra_env
     cleanup_paths = prep.cleanup_paths
 
+    # The structured effect-log side channel (effects contract §14.3): the same
+    # env-var file handoff as CONFORMANCE_APP_DEF, set ONLY for a case that
+    # declares effects_equals. It selects a diagnostic destination and changes
+    # no behavior -- it is not the deleted A9 mode token.
+    effect_log_path = None
+    if "effects_equals" in case["expect"]:
+        effect_log_path = tempfile.mktemp(
+            suffix=".json", prefix="strictcli_efflog_",
+        )
+        extra_env = dict(extra_env)
+        extra_env["CONFORMANCE_EFFECT_LOG"] = effect_log_path
+        cleanup_paths = list(cleanup_paths) + [effect_log_path]
+
     # --dump-schema needs the target's project marker file (go.mod / pyproject.toml)
     # in the CWD to determine project_id. Create a temp dir with the right file.
     # test_coverage needs a writable temp dir for .strictcli/coverage/ shard files.
@@ -503,6 +558,12 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
                             cfg_text, expect["config_file_matches"], "config_file"
                         )
                     )
+
+        # Check the structured effect log the run produced (§14.1).
+        if "effects_equals" in expect:
+            errors.extend(
+                _check_effects_equals(effect_log_path, expect["effects_equals"])
+            )
 
     except subprocess.TimeoutExpired:
         errors.append("  timed out after 10 seconds")

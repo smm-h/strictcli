@@ -9,15 +9,25 @@
         {
           "name": "greet",
           "help": "say hello",
-          "tags": ["json"],
+          "effect": "read_only",
+          "tags": [
+            "json"
+          ],
           "handler_prints": "hello",
           "flags": [
-            { "name": "name", "help": "who to greet" }
+            {
+              "name": "name",
+              "help": "who to greet"
+            }
           ]
         }
       ]
     },
-    "argv": ["greet", "--name", "world"],
+    "argv": [
+      "greet",
+      "--name",
+      "world"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "hello\n"
@@ -33,12 +43,18 @@
         {
           "name": "greet",
           "help": "say hello",
-          "tags": ["json", "api"],
+          "effect": "read_only",
+          "tags": [
+            "json",
+            "api"
+          ],
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["--dump-schema"],
+    "argv": [
+      "--dump-schema"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": ".strictcli/schema.json"
@@ -54,11 +70,14 @@
         {
           "name": "admin",
           "help": "admin commands",
-          "tags": ["admin"],
+          "tags": [
+            "admin"
+          ],
           "commands": [
             {
               "name": "reset",
               "help": "reset data",
+              "effect": "read_only",
               "handler_prints": "reset done"
             }
           ]
@@ -66,7 +85,10 @@
       ],
       "commands": []
     },
-    "argv": ["admin", "reset"],
+    "argv": [
+      "admin",
+      "reset"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "reset done\n"
@@ -82,11 +104,14 @@
         {
           "name": "admin",
           "help": "admin commands",
-          "tags": ["admin"],
+          "tags": [
+            "admin"
+          ],
           "commands": [
             {
               "name": "reset",
               "help": "reset data",
+              "effect": "read_only",
               "handler_prints": "reset done"
             }
           ]
@@ -94,7 +119,9 @@
       ],
       "commands": []
     },
-    "argv": ["--dump-schema"],
+    "argv": [
+      "--dump-schema"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": ".strictcli/schema.json"
@@ -110,16 +137,21 @@
         {
           "name": "cloud",
           "help": "cloud commands",
-          "tags": ["cloud"],
+          "tags": [
+            "cloud"
+          ],
           "groups": [
             {
               "name": "compute",
               "help": "compute commands",
-              "tags": ["compute"],
+              "tags": [
+                "compute"
+              ],
               "commands": [
                 {
                   "name": "list",
                   "help": "list vms",
+                  "effect": "read_only",
                   "handler_prints": "listing vms"
                 }
               ]
@@ -129,7 +161,11 @@
       ],
       "commands": []
     },
-    "argv": ["cloud", "compute", "list"],
+    "argv": [
+      "cloud",
+      "compute",
+      "list"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "listing vms\n"
@@ -142,21 +178,33 @@
       "version": "1.0.0",
       "help": "test app",
       "tag_contracts": {
-        "json": { "requires_flag": "json" }
+        "json": {
+          "requires_flag": "json"
+        }
       },
       "commands": [
         {
           "name": "greet",
           "help": "say hello",
-          "tags": ["json"],
+          "effect": "read_only",
+          "tags": [
+            "json"
+          ],
           "handler_prints": "hello",
           "flags": [
-            { "name": "json", "type": "bool", "help": "output as json", "default": false }
+            {
+              "name": "json",
+              "type": "bool",
+              "help": "output as json",
+              "default": false
+            }
           ]
         }
       ]
     },
-    "argv": ["greet"],
+    "argv": [
+      "greet"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "hello\n"
@@ -169,18 +217,25 @@
       "version": "1.0.0",
       "help": "test app",
       "tag_contracts": {
-        "json": { "requires_flag": "json" }
+        "json": {
+          "requires_flag": "json"
+        }
       },
       "commands": [
         {
           "name": "greet",
           "help": "say hello",
-          "tags": ["json"],
+          "effect": "read_only",
+          "tags": [
+            "json"
+          ],
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["greet"],
+    "argv": [
+      "greet"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"greet\": tag \"json\" requires flag \"--json\""
@@ -193,18 +248,26 @@
       "version": "1.0.0",
       "help": "test app",
       "tag_contracts": {
-        "json": { "requires_flag": "json" }
+        "json": {
+          "requires_flag": "json"
+        }
       },
       "commands": [
         {
           "name": "run",
           "help": "run something",
-          "tags": ["json"],
+          "effect": "read_only",
+          "tags": [
+            "json"
+          ],
           "passthrough": true
         }
       ]
     },
-    "argv": ["run", "hello"],
+    "argv": [
+      "run",
+      "hello"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "run"
@@ -217,21 +280,33 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        { "name": "json", "type": "bool", "help": "output as json", "default": false }
+        {
+          "name": "json",
+          "type": "bool",
+          "help": "output as json",
+          "default": false
+        }
       ],
       "tag_contracts": {
-        "json": { "requires_flag": "json" }
+        "json": {
+          "requires_flag": "json"
+        }
       },
       "commands": [
         {
           "name": "greet",
           "help": "say hello",
-          "tags": ["json"],
+          "effect": "read_only",
+          "tags": [
+            "json"
+          ],
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["greet"],
+    "argv": [
+      "greet"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "hello\n"
@@ -248,12 +323,17 @@
         {
           "name": "greet",
           "help": "say hello",
-          "tags": ["BAD"],
+          "effect": "read_only",
+          "tags": [
+            "BAD"
+          ],
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["greet"],
+    "argv": [
+      "greet"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "invalid tag name"

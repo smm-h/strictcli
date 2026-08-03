@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "name",
@@ -41,6 +42,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "name",
@@ -73,6 +75,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "name",
@@ -105,6 +108,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "name",
@@ -137,6 +141,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "name",
@@ -169,6 +174,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -200,6 +206,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "count",
@@ -231,6 +238,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "count",
@@ -262,6 +270,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -293,6 +302,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -325,16 +335,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -342,11 +353,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "TRUE"
+      "MYAPP_CHATTER": "TRUE"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -360,16 +371,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -377,11 +389,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "True"
+      "MYAPP_CHATTER": "True"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -395,16 +407,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -412,11 +425,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "YES"
+      "MYAPP_CHATTER": "YES"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -430,16 +443,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -447,11 +461,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "NO"
+      "MYAPP_CHATTER": "NO"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false"
+      "stdout_equals": "chatter=false"
     }
   },
   {
@@ -465,16 +479,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -482,11 +497,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "FALSE"
+      "MYAPP_CHATTER": "FALSE"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false"
+      "stdout_equals": "chatter=false"
     }
   },
   {
@@ -500,16 +515,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -517,12 +533,12 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "maybe"
+      "MYAPP_CHATTER": "maybe"
     },
     "expect": {
       "exit_code": 1,
       "stderr_contains": "invalid boolean value",
-      "stderr_equals": "error: invalid boolean value 'maybe' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: invalid boolean value 'maybe' for env var 'MYAPP_CHATTER' (flag '--chatter')\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -536,16 +552,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -553,11 +570,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "False"
+      "MYAPP_CHATTER": "False"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false"
+      "stdout_equals": "chatter=false"
     }
   },
   {
@@ -571,16 +588,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -588,12 +606,12 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": ""
+      "MYAPP_CHATTER": ""
     },
     "expect": {
       "exit_code": 1,
       "stderr_contains": "invalid boolean value",
-      "stderr_equals": "error: invalid boolean value '' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: invalid boolean value '' for env var 'MYAPP_CHATTER' (flag '--chatter')\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -607,16 +625,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -624,11 +643,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "   "
+      "MYAPP_CHATTER": "   "
     },
     "expect": {
       "exit_code": 1,
-      "stderr_equals": "error: invalid boolean value '   ' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: invalid boolean value '   ' for env var 'MYAPP_CHATTER' (flag '--chatter')\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -641,6 +660,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -666,6 +686,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -693,6 +714,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "path",
@@ -722,6 +744,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -746,6 +769,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "target",
@@ -781,6 +805,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -815,6 +840,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "count",
@@ -847,6 +873,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "count",
@@ -878,6 +905,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -910,16 +938,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -927,11 +956,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "no"
+      "MYAPP_CHATTER": "no"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=false"
+      "stdout_equals": "chatter=false"
     }
   },
   {
@@ -945,16 +974,17 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
-              "env": "MYAPP_VERBOSE",
+              "help": "be chatter",
+              "env": "MYAPP_CHATTER",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
@@ -962,11 +992,11 @@
       "cmd"
     ],
     "env": {
-      "MYAPP_VERBOSE": "2"
+      "MYAPP_CHATTER": "2"
     },
     "expect": {
       "exit_code": 1,
-      "stderr_equals": "error: invalid boolean value '2' for env var 'MYAPP_VERBOSE' (flag '--verbose')\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: invalid boolean value '2' for env var 'MYAPP_CHATTER' (flag '--chatter')\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -979,6 +1009,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -1002,6 +1033,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "name",
@@ -1037,6 +1069,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "name",
@@ -1071,6 +1104,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",

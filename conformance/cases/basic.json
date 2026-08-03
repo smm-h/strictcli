@@ -9,6 +9,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -31,6 +32,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -54,6 +56,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -79,6 +82,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -101,6 +105,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -123,6 +128,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -149,6 +155,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
@@ -172,11 +179,13 @@
         {
           "name": "start",
           "help": "start service",
+          "effect": "read_only",
           "handler_prints": "started"
         },
         {
           "name": "stop",
           "help": "stop service",
+          "effect": "read_only",
           "handler_prints": "stopped"
         }
       ]

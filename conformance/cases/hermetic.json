@@ -10,6 +10,7 @@
         {
           "name": "run",
           "help": "Run with hermetic",
+          "effect": "read_only",
           "handler_prints": "{source:output}:{source:level}:{output}:{level}",
           "flags": [
             {
@@ -30,7 +31,12 @@
         }
       ]
     },
-    "argv": ["--hermetic", "run", "--output", "file.txt"],
+    "argv": [
+      "--hermetic",
+      "run",
+      "--output",
+      "file.txt"
+    ],
     "env": {
       "MYAPP_OUTPUT": "from-env",
       "MYAPP_LEVEL": "42"
@@ -51,6 +57,7 @@
         {
           "name": "run",
           "help": "Run with hermetic",
+          "effect": "read_only",
           "handler_prints": "{source:level}:{level}",
           "flags": [
             {
@@ -64,7 +71,10 @@
         }
       ]
     },
-    "argv": ["--hermetic", "run"],
+    "argv": [
+      "--hermetic",
+      "run"
+    ],
     "env": {
       "MYAPP_LEVEL": "42"
     },
@@ -84,11 +94,17 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["--hermetic", "--config", "/tmp/nonexistent.json", "run"],
+    "argv": [
+      "--hermetic",
+      "--config",
+      "/tmp/nonexistent.json",
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "--hermetic and --config are mutually exclusive"
@@ -105,11 +121,16 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["--hermetic", "config", "show"],
+    "argv": [
+      "--hermetic",
+      "config",
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "--hermetic cannot be used with config commands"
@@ -126,6 +147,7 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "name={name}",
           "flags": [
             {
@@ -138,7 +160,10 @@
         }
       ]
     },
-    "argv": ["--hermetic", "run"],
+    "argv": [
+      "--hermetic",
+      "run"
+    ],
     "env": {
       "MYAPP_NAME": "test-value"
     },
@@ -165,11 +190,14 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "reserved"
@@ -186,6 +214,7 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "{source:level}",
           "flags": [
             {
@@ -199,7 +228,10 @@
         }
       ]
     },
-    "argv": ["--hermetic", "run"],
+    "argv": [
+      "--hermetic",
+      "run"
+    ],
     "env": {
       "MYAPP_LEVEL": "99"
     },
@@ -219,6 +251,7 @@
         {
           "name": "run",
           "help": "Run it",
+          "effect": "read_only",
           "handler_prints": "level={level}",
           "flags": [
             {
@@ -232,7 +265,10 @@
         }
       ]
     },
-    "argv": ["--hermetic", "run"],
+    "argv": [
+      "--hermetic",
+      "run"
+    ],
     "env": {
       "MYAPP_LEVEL": "42"
     },

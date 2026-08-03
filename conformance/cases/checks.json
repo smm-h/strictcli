@@ -308,9 +308,9 @@
       ]
     },
     "argv": [
+      "--dry-run",
       "check",
-      "--all",
-      "--dry-run"
+      "--all"
     ],
     "expect": {
       "exit_code": 0,
@@ -783,9 +783,9 @@
       ]
     },
     "argv": [
+      "--verbose",
       "check",
-      "--all",
-      "--verbose"
+      "--all"
     ],
     "expect": {
       "exit_code": 0,

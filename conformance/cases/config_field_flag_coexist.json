@@ -8,23 +8,40 @@
       "config": true,
       "config_content": "{\"target\": \"deployed\"}",
       "config_fields_def": [
-        {"name": "target", "type": "str", "help": "the deploy target", "default": "prod"}
+        {
+          "name": "target",
+          "type": "str",
+          "help": "the deploy target",
+          "default": "prod"
+        }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "target", "help": "deploy target", "type": "str", "default": "prod"}
+            {
+              "name": "target",
+              "help": "deploy target",
+              "type": "str",
+              "default": "prod"
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "show", "--plain"],
+    "argv": [
+      "config",
+      "show",
+      "--plain"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["target = deployed  (source: config)  -- the deploy target"],
+      "stdout_contains": [
+        "target = deployed  (source: config)  -- the deploy target"
+      ],
       "stdout_not_contains": "Config fields:"
     }
   },
@@ -37,23 +54,41 @@
       "config": true,
       "config_content": "{\"target\": \"deployed\"}",
       "config_fields_def": [
-        {"name": "target", "type": "str", "help": "the deploy target", "default": "prod"}
+        {
+          "name": "target",
+          "type": "str",
+          "help": "the deploy target",
+          "default": "prod"
+        }
       ],
       "commands": [
         {
           "name": "run",
           "help": "run command",
+          "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "target", "help": "deploy target", "type": "str", "default": "prod"}
+            {
+              "name": "target",
+              "help": "deploy target",
+              "type": "str",
+              "default": "prod"
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "show", "--json"],
+    "argv": [
+      "config",
+      "show",
+      "--json"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["\"deployed\"", "\"source\": \"config\""],
+      "stdout_contains": [
+        "\"deployed\"",
+        "\"source\": \"config\""
+      ],
       "stdout_not_contains": "\"type\""
     }
   }

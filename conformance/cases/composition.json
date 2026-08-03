@@ -10,6 +10,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
@@ -56,6 +57,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
@@ -119,6 +121,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "format={format}"
         }
       ]
@@ -155,6 +158,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -193,6 +197,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -229,6 +234,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "settings={settings}"
         }
       ]
@@ -264,6 +270,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "settings={settings}"
         }
       ]
@@ -294,6 +301,7 @@
             {
               "name": "set",
               "help": "set a config value",
+              "effect": "read_only",
               "mutex": [
                 {
                   "flags": [
@@ -317,6 +325,7 @@
       ]
     },
     "argv": [
+      "--yes",
       "config",
       "set",
       "--local"
@@ -341,6 +350,7 @@
             {
               "name": "set",
               "help": "set a config value",
+              "effect": "read_only",
               "mutex": [
                 {
                   "flags": [
@@ -364,6 +374,7 @@
       ]
     },
     "argv": [
+      "--yes",
       "config",
       "set",
       "--local",
@@ -387,9 +398,9 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
+          "help": "enable chatter output",
           "default": false
         }
       ],
@@ -402,20 +413,21 @@
             {
               "name": "show",
               "help": "display config",
-              "handler_prints": "verbose={verbose}"
+              "effect": "read_only",
+              "handler_prints": "chatter={chatter}"
             }
           ]
         }
       ]
     },
     "argv": [
-      "--verbose",
+      "--chatter",
       "config",
       "show"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -429,6 +441,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flag_sets": [
             {
               "name": "output",
@@ -468,6 +481,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flag_sets": [
             {
               "name": "output",
@@ -509,6 +523,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flag_sets": [
             {
               "name": "output",
@@ -554,6 +569,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flag_sets": [
             {
               "name": "filter",
@@ -595,6 +611,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "level",
@@ -638,6 +655,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "level",
@@ -683,10 +701,10 @@
       "env_prefix": "MYAPP",
       "global_flags": [
         {
-          "name": "verbose",
+          "name": "chatter",
           "type": "bool",
-          "help": "enable verbose output",
-          "env": "MYAPP_VERBOSE",
+          "help": "enable chatter output",
+          "env": "MYAPP_CHATTER",
           "default": false
         }
       ],
@@ -699,7 +717,8 @@
             {
               "name": "show",
               "help": "display config",
-              "handler_prints": "verbose={verbose}"
+              "effect": "read_only",
+              "handler_prints": "chatter={chatter}"
             }
           ]
         }
@@ -710,11 +729,11 @@
       "show"
     ],
     "env": {
-      "MYAPP_VERBOSE": "true"
+      "MYAPP_CHATTER": "true"
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -732,6 +751,7 @@
             {
               "name": "query",
               "help": "run a query",
+              "effect": "read_only",
               "flag_sets": [
                 {
                   "name": "output",
@@ -777,6 +797,7 @@
             {
               "name": "compile",
               "help": "compile sources",
+              "effect": "read_only",
               "args": [
                 {
                   "name": "files",
@@ -813,6 +834,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -848,6 +870,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -880,6 +903,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -918,6 +942,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -962,6 +987,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "tag={tag}"
         }
       ]
@@ -997,6 +1023,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "tag={tag}"
         }
       ]
@@ -1031,6 +1058,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "tag={tag}"
         }
       ]

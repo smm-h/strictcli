@@ -9,23 +9,24 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 },
                 {
-                  "name": "quiet",
+                  "name": "muted",
                   "type": "bool",
-                  "help": "quiet output"
+                  "help": "muted output"
                 }
               ]
             }
           ],
-          "handler_prints": "verbose={verbose} quiet={quiet}"
+          "handler_prints": "chatter={chatter} muted={muted}"
         }
       ]
     },
@@ -50,37 +51,38 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 },
                 {
-                  "name": "quiet",
+                  "name": "muted",
                   "type": "bool",
-                  "help": "quiet output"
+                  "help": "muted output"
                 }
               ]
             }
           ],
-          "handler_prints": "verbose={verbose} quiet={quiet}"
+          "handler_prints": "chatter={chatter} muted={muted}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--verbose"
+      "--chatter"
     ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "verbose=true",
-        "quiet=None"
+        "chatter=true",
+        "muted=None"
       ],
-      "stdout_equals": "verbose=true quiet=None"
+      "stdout_equals": "chatter=true muted=None"
     }
   },
   {
@@ -93,18 +95,19 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 },
                 {
-                  "name": "quiet",
+                  "name": "muted",
                   "type": "bool",
-                  "help": "quiet output"
+                  "help": "muted output"
                 }
               ]
             }
@@ -115,17 +118,17 @@
     },
     "argv": [
       "cmd",
-      "--verbose",
-      "--quiet"
+      "--chatter",
+      "--muted"
     ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": [
-        "--verbose",
-        "--quiet",
+        "--chatter",
+        "--muted",
         "mutually exclusive"
       ],
-      "stderr_equals": "error: --verbose and --quiet are mutually exclusive\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: --chatter and --muted are mutually exclusive\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -138,18 +141,19 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 },
                 {
-                  "name": "quiet",
+                  "name": "muted",
                   "type": "bool",
-                  "help": "quiet output"
+                  "help": "muted output"
                 }
               ]
             }
@@ -164,11 +168,11 @@
     "expect": {
       "exit_code": 1,
       "stderr_contains": [
-        "--verbose",
-        "--quiet",
+        "--chatter",
+        "--muted",
         "required"
       ],
-      "stderr_equals": "error: one of --verbose, --quiet is required\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: one of --chatter, --muted is required\ntry 'myapp cmd --help'"
     }
   },
   {
@@ -181,37 +185,38 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 },
                 {
-                  "name": "quiet",
+                  "name": "muted",
                   "type": "bool",
-                  "help": "quiet output"
+                  "help": "muted output"
                 }
               ]
             }
           ],
-          "handler_prints": "verbose={verbose} quiet={quiet}"
+          "handler_prints": "chatter={chatter} muted={muted}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--quiet"
+      "--muted"
     ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "verbose=None",
-        "quiet=true"
+        "chatter=None",
+        "muted=true"
       ],
-      "stdout_equals": "verbose=None quiet=true"
+      "stdout_equals": "chatter=None muted=true"
     }
   },
   {
@@ -224,6 +229,7 @@
         {
           "name": "fetch",
           "help": "fetch data",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
@@ -267,6 +273,7 @@
         {
           "name": "fetch",
           "help": "fetch data",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
@@ -316,6 +323,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "name",
@@ -328,14 +336,14 @@
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 },
                 {
-                  "name": "quiet",
+                  "name": "muted",
                   "type": "bool",
-                  "help": "quiet output"
+                  "help": "muted output"
                 }
               ]
             }
@@ -352,12 +360,12 @@
       "exit_code": 0,
       "stdout_contains": [
         "Flags (mutually exclusive):",
-        "--verbose",
-        "--quiet",
+        "--chatter",
+        "--muted",
         "Flags:",
         "--name"
       ],
-      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --verbose, --no-verbose    verbose output [required]\n  --quiet, --no-quiet        quiet output [required]"
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [required]\n  --muted, --no-muted        muted output [required]"
     }
   },
   {
@@ -370,18 +378,19 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "mutex": [
             {
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output"
+                  "help": "chatter output"
                 },
                 {
-                  "name": "quiet",
+                  "name": "muted",
                   "type": "bool",
-                  "help": "quiet output"
+                  "help": "muted output"
                 }
               ]
             }
@@ -397,7 +406,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": "Flags (mutually exclusive):",
-      "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive):\n  --verbose, --no-verbose    verbose output [required]\n  --quiet, --no-quiet        quiet output [required]"
+      "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [required]\n  --muted, --no-muted        muted output [required]"
     }
   }
 ]

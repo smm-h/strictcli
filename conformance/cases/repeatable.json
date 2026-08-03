@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -42,6 +43,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -79,6 +81,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -110,6 +113,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "port",
@@ -145,6 +149,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -185,6 +190,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -228,6 +234,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -261,6 +268,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -297,6 +305,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -331,6 +340,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -367,6 +377,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -374,7 +385,10 @@
               "help": "a tag",
               "repeatable": true,
               "unique": false,
-              "default": ["x", "y"]
+              "default": [
+                "x",
+                "y"
+              ]
             }
           ],
           "handler_prints": "ok"
@@ -401,6 +415,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -408,7 +423,10 @@
               "help": "a tag",
               "repeatable": true,
               "unique": false,
-              "default": ["x", "y"]
+              "default": [
+                "x",
+                "y"
+              ]
             }
           ],
           "handler_prints": "tags={tag}"
@@ -433,6 +451,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -440,7 +459,10 @@
               "help": "a tag",
               "repeatable": true,
               "unique": false,
-              "default": ["x", "y"]
+              "default": [
+                "x",
+                "y"
+              ]
             }
           ],
           "handler_prints": "tags={tag}"
@@ -469,6 +491,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flags": [
             {
               "name": "tag",
@@ -476,7 +499,10 @@
               "help": "a tag",
               "repeatable": true,
               "unique": false,
-              "default": ["x", "y"]
+              "default": [
+                "x",
+                "y"
+              ]
             }
           ],
           "handler_prints": "tags={tag}"

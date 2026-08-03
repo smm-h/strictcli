@@ -9,6 +9,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "args": [
             {
               "name": "name",
@@ -38,6 +39,7 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "args": [
             {
               "name": "name",
@@ -67,6 +69,7 @@
         {
           "name": "copy",
           "help": "copy files",
+          "effect": "read_only",
           "args": [
             {
               "name": "src",
@@ -101,6 +104,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "handler_prints": "ok"
         }
       ]
@@ -125,6 +129,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "path",
@@ -156,6 +161,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "path",
@@ -186,6 +192,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "src",
@@ -221,6 +228,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "path",
@@ -250,6 +258,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "path",
@@ -258,13 +267,13 @@
           ],
           "flags": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "type": "bool",
-              "help": "be verbose",
+              "help": "be chatter",
               "default": false
             }
           ],
-          "handler_prints": "verbose={verbose} path={path}"
+          "handler_prints": "chatter={chatter} path={path}"
         }
       ]
     },
@@ -276,10 +285,10 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "verbose=false",
+        "chatter=false",
         "path=--not-a-flag"
       ],
-      "stdout_equals": "verbose=false path=--not-a-flag"
+      "stdout_equals": "chatter=false path=--not-a-flag"
     }
   }
 ]

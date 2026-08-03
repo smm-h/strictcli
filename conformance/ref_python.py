@@ -259,6 +259,109 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# The effects vocabulary (effects contract §14.4)
+#
+# `handler_effects` is materialized identically by all three harnesses: iterate
+# the array in order, call the named method with EXACTLY the keys the entry
+# declares (no per-method filtering -- a case declaring a key the method does
+# not accept is asserting the error), and keep the returned carrier in a per-run
+# map indexed by position so `forward_from` / `extract_from` can reference it.
+# ---------------------------------------------------------------------------
+
+# The carrier-accepting positional each method's `forward_from` supplies. It is
+# the method's LAST carrier-accepting argument (§2.5.5); `run` and `spawn` have
+# only `argv`, so the carrier is appended as its final element.
+_FORWARD_TARGET = {
+    "run": "argv",
+    "spawn": "argv",
+    "write": "content",
+    "mkdir": "path",
+    "remove": "path",
+    "rename": "to",
+    "chmod": "path",
+    "http": "url",
+}
+
+# The option keys the vocabulary carries, in the order the harnesses pass them.
+_EFFECT_OPTION_KEYS = ("stream", "resource", "skip_if_current", "grant")
+
+
+def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
+    """Emit the effects-regime registration keywords: effect, grants, forwarding.
+
+    `effect` is mandatory on every non-deprecated command (§1.1), so it is
+    emitted whenever the case declares it and omitted when it does not -- a case
+    that omits it is asserting the registration hard error.
+    """
+    lines: list[str] = []
+    if "effect" in cmd_def:
+        lines.append(f"{indent}effect={cmd_def['effect']!r},")
+    if cmd_def.get("grants"):
+        exprs = [
+            f"strictcli.Grant(name={g['name']!r}, reason={g['reason']!r}, "
+            f"kind={g['kind']!r})"
+            for g in cmd_def["grants"]
+        ]
+        lines.append(f"{indent}grants=[{', '.join(exprs)}],")
+    if "forwarding" in cmd_def:
+        reason = cmd_def["forwarding"]["reason"]
+        lines.append(
+            f"{indent}forwarding=strictcli.Forwarding(reason={reason!r}),"
+        )
+    return lines
+
+
+def _emit_handler_effects(cmd_def: dict, indent: str) -> list[str]:
+    """Emit the effect calls a generated handler issues, in order."""
+    entries = cmd_def.get("handler_effects")
+    if not entries:
+        return []
+
+    lines = [f"{indent}_eff = {{}}"]
+    for i, e in enumerate(entries, start=1):
+        method = e["method"]
+
+        extract_from = e.get("extract_from")
+        if extract_from is not None:
+            # Extraction is terminal by construction: it truncates the preview,
+            # so nothing after this entry runs.
+            lines.append(f"{indent}bool(_eff[{extract_from}])")
+            break
+
+        forward_from = e.get("forward_from")
+        fwd = f"_eff[{forward_from}]" if forward_from is not None else None
+        target = _FORWARD_TARGET[method]
+
+        pos: list[str] = []
+        if method in ("run", "spawn"):
+            argv = [repr(a) for a in e.get("argv", [])]
+            if fwd is not None and target == "argv":
+                argv.append(fwd)
+            pos.append(f"[{', '.join(argv)}]")
+        elif method == "write":
+            pos.append(fwd if (fwd and target == "path") else repr(e["path"]))
+            pos.append(fwd if (fwd and target == "content") else repr(e["content"]))
+        elif method in ("mkdir", "remove"):
+            pos.append(fwd if fwd is not None else repr(e["path"]))
+        elif method == "rename":
+            pos.append(repr(e["path"]))
+            pos.append(fwd if fwd is not None else repr(e["to"]))
+        elif method == "chmod":
+            pos.append(fwd if fwd is not None else repr(e["path"]))
+            pos.append(str(int(e["mode"], 8)))
+        elif method == "http":
+            pos.append(repr(e["http_method"]))
+            pos.append(fwd if fwd is not None else repr(e["url"]))
+
+        for key in _EFFECT_OPTION_KEYS:
+            if key in e:
+                pos.append(f"{key}={e[key]!r}")
+
+        lines.append(f"{indent}_eff[{i}] = ctx.effects.{method}({', '.join(pos)})")
+    return lines
+
+
 def _emit_command_registration(
     cmd_def: dict, target: str, indent: str = "",
     global_flags: list[dict] | None = None,
@@ -369,6 +472,7 @@ def _emit_command_registration(
         if cmd_def.get("tags"):
             tag_set = ", ".join(repr(t) for t in cmd_def["tags"])
             lines.append(f"{indent}    tags={{{tag_set}}},")
+        lines.extend(_emit_classification(cmd_def, indent + "    "))
         lines.append(f"{indent}    passthrough=strictcli.Passthrough(handler={handler_name}),")
         lines.append(f"{indent})")
 
@@ -479,6 +583,9 @@ def _emit_command_registration(
     if cmd_def.get("interactive", False):
         decorator_parts.append(f"{indent}    interactive=True,")
 
+    # effect / grants / forwarding (the effects regime, §1.1, §6.1, §10.2)
+    decorator_parts.extend(_emit_classification(cmd_def, indent + "    "))
+
     decorator_parts.append(f"{indent})")
 
     # Flag decorators (for direct flags)
@@ -575,12 +682,22 @@ def _emit_command_registration(
         lines.append(fd)
     lines.append(f"{indent}def {fn_name}({sig_params}):")
 
+    # handler_effects runs BEFORE the handler_prints / handler_returns path and
+    # does not replace it (§14.4).
+    effect_lines = _emit_handler_effects(cmd_def, indent + "    ")
+    lines.extend(effect_lines)
+
     handler_returns = cmd_def.get("handler_returns")
     if handler_returns is not None:
         # Survivor-contract cases pin an explicit return value.
         lines.extend(_emit_handler_return(handler_returns, indent + "    "))
     else:
-        lines.append(_emit_handler_body(cmd_def, global_flags))
+        # A handler_effects-only command prints nothing; the effect calls above
+        # are its whole body.
+        if "handler_prints" in cmd_def:
+            lines.append(_emit_handler_body(cmd_def, global_flags))
+        elif not effect_lines:
+            lines.append(f"{indent}    pass")
         # Unified return: build an Outcome carrying the exit code.
         lines.append(f"{indent}    return strictcli.outcome(exit_code={exit_code})")
     lines.append("")
@@ -671,6 +788,10 @@ def generate(app_def: dict) -> str:
         app_parts.append("checks_path=_checks_path")
     if app_def.get("test_coverage", False):
         app_parts.append("test_coverage=True")
+    if app_def.get("proc_observe_allowlist"):
+        app_parts.append(
+            f"proc_observe_allowlist={app_def['proc_observe_allowlist']!r}"
+        )
     if global_flags:
         gf_exprs = [_emit_flag(gf) for gf in global_flags]
         app_parts.append(f"flags=[{', '.join(gf_exprs)}]")
@@ -807,6 +928,21 @@ def generate(app_def: dict) -> str:
     if app_def.get("pre_test"):
         lines.append("")
 
+    # The structured effect-log side channel (§14.3): the same env-var file
+    # handoff as CONFORMANCE_APP_DEF. app.run() ends in sys.exit, so the write
+    # rides atexit -- the Python counterpart of the Go harness's SetExitHook and
+    # the TS harness's process.on("exit").
+    lines.append("    _effect_log_path = os.environ.get('CONFORMANCE_EFFECT_LOG')")
+    lines.append("    if _effect_log_path:")
+    lines.append("        import atexit, json as _json")
+    lines.append("")
+    lines.append("        def _write_effect_log():")
+    lines.append("            with open(_effect_log_path, 'w') as _elf:")
+    lines.append("                _json.dump(app.effect_log(), _elf, sort_keys=True,")
+    lines.append("                           separators=(',', ':'))")
+    lines.append("")
+    lines.append("        atexit.register(_write_effect_log)")
+    lines.append("")
     lines.append("    app.run()")
     lines.append("except ValueError as e:")
     lines.append("    print(f'error: {e}', file=sys.stderr)")

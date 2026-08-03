@@ -9,6 +9,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "count",
@@ -20,7 +21,10 @@
         }
       ]
     },
-    "argv": ["cmd", "42"],
+    "argv": [
+      "cmd",
+      "42"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "count=42"
@@ -36,6 +40,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "count",
@@ -47,10 +52,16 @@
         }
       ]
     },
-    "argv": ["cmd", "abc"],
+    "argv": [
+      "cmd",
+      "abc"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["expected integer", "'abc'"],
+      "stderr_contains": [
+        "expected integer",
+        "'abc'"
+      ],
       "stderr_equals": "error: argument 'count': expected integer, got 'abc'\ntry 'myapp cmd --help'"
     }
   },
@@ -64,6 +75,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "rate",
@@ -75,7 +87,10 @@
         }
       ]
     },
-    "argv": ["cmd", "3.14"],
+    "argv": [
+      "cmd",
+      "3.14"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "rate=3.14"
@@ -91,6 +106,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "rate",
@@ -102,10 +118,16 @@
         }
       ]
     },
-    "argv": ["cmd", "xyz"],
+    "argv": [
+      "cmd",
+      "xyz"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["expected float", "'xyz'"],
+      "stderr_contains": [
+        "expected float",
+        "'xyz'"
+      ],
       "stderr_equals": "error: argument 'rate': expected float, got 'xyz'\ntry 'myapp cmd --help'"
     }
   },
@@ -119,6 +141,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "flag",
@@ -130,7 +153,10 @@
         }
       ]
     },
-    "argv": ["cmd", "true"],
+    "argv": [
+      "cmd",
+      "true"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "flag=true"
@@ -146,6 +172,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "flag",
@@ -157,7 +184,10 @@
         }
       ]
     },
-    "argv": ["cmd", "false"],
+    "argv": [
+      "cmd",
+      "false"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "flag=false"
@@ -173,6 +203,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "flag",
@@ -184,7 +215,10 @@
         }
       ]
     },
-    "argv": ["cmd", "maybe"],
+    "argv": [
+      "cmd",
+      "maybe"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "expected boolean",
@@ -201,19 +235,27 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "level",
               "help": "verbosity level",
               "type": "int",
-              "choices_int": [0, 1, 2]
+              "choices_int": [
+                0,
+                1,
+                2
+              ]
             }
           ],
           "handler_prints": "level={level}"
         }
       ]
     },
-    "argv": ["cmd", "1"],
+    "argv": [
+      "cmd",
+      "1"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "level=1"
@@ -229,22 +271,33 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "level",
               "help": "verbosity level",
               "type": "int",
-              "choices_int": [0, 1, 2]
+              "choices_int": [
+                0,
+                1,
+                2
+              ]
             }
           ],
           "handler_prints": "level={level}"
         }
       ]
     },
-    "argv": ["cmd", "5"],
+    "argv": [
+      "cmd",
+      "5"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["invalid value", "5"],
+      "stderr_contains": [
+        "invalid value",
+        "5"
+      ],
       "stderr_equals": "error: argument 'level': invalid value '5', must be one of: 0, 1, 2\ntry 'myapp cmd --help'"
     }
   },
@@ -258,18 +311,26 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "color",
               "help": "a color",
-              "choices_str": ["red", "green", "blue"]
+              "choices_str": [
+                "red",
+                "green",
+                "blue"
+              ]
             }
           ],
           "handler_prints": "color={color}"
         }
       ]
     },
-    "argv": ["cmd", "green"],
+    "argv": [
+      "cmd",
+      "green"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "color=green"
@@ -285,21 +346,32 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "color",
               "help": "a color",
-              "choices_str": ["red", "green", "blue"]
+              "choices_str": [
+                "red",
+                "green",
+                "blue"
+              ]
             }
           ],
           "handler_prints": "color={color}"
         }
       ]
     },
-    "argv": ["cmd", "yellow"],
+    "argv": [
+      "cmd",
+      "yellow"
+    ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": ["invalid value", "'yellow'"],
+      "stderr_contains": [
+        "invalid value",
+        "'yellow'"
+      ],
       "stderr_equals": "error: argument 'color': invalid value 'yellow', must be one of: red, green, blue\ntry 'myapp cmd --help'"
     }
   },
@@ -313,6 +385,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "offset",
@@ -324,7 +397,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--", "-5"],
+    "argv": [
+      "cmd",
+      "--",
+      "-5"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "offset=-5"
@@ -340,6 +417,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "count",
@@ -351,7 +429,10 @@
         }
       ]
     },
-    "argv": ["cmd", "1_000"],
+    "argv": [
+      "cmd",
+      "1_000"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": [
@@ -371,6 +452,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "args": [
             {
               "name": "rate",
@@ -382,7 +464,10 @@
         }
       ]
     },
-    "argv": ["cmd", "1e999"],
+    "argv": [
+      "cmd",
+      "1e999"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": [

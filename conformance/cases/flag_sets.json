@@ -9,30 +9,31 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flag_sets": [
             {
-              "name": "verbose",
+              "name": "chatter",
               "flags": [
                 {
-                  "name": "verbose",
+                  "name": "chatter",
                   "type": "bool",
-                  "help": "verbose output",
+                  "help": "chatter output",
                   "default": false
                 }
               ]
             }
           ],
-          "handler_prints": "verbose={verbose}"
+          "handler_prints": "chatter={chatter}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--verbose"
+      "--chatter"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "verbose=true"
+      "stdout_equals": "chatter=true"
     }
   },
   {
@@ -45,6 +46,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flag_sets": [
             {
               "name": "output",
@@ -93,6 +95,7 @@
         {
           "name": "deploy",
           "help": "deploy the app",
+          "effect": "read_only",
           "flag_sets": [
             {
               "name": "auth",
@@ -138,6 +141,7 @@
         {
           "name": "cmd",
           "help": "a command",
+          "effect": "read_only",
           "flag_sets": [
             {
               "name": "debug",

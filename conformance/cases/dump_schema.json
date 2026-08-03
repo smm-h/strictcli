@@ -9,11 +9,14 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["--dump-schema"],
+    "argv": [
+      "--dump-schema"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": ".strictcli/schema.json"
@@ -29,11 +32,14 @@
         {
           "name": "greet",
           "help": "say hello",
+          "effect": "read_only",
           "handler_prints": "hello"
         }
       ]
     },
-    "argv": ["--dump-schema"],
+    "argv": [
+      "--dump-schema"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "/"
