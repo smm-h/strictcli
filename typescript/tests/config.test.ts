@@ -11,11 +11,17 @@
  */
 
 import { strict as assert } from "node:assert";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { AppSpec } from "../src/app.js";
+import type { AppImpl, AppSpec } from "../src/app.js";
 import {
 	coerceConfigValueForFlag,
 	configFilePath,
@@ -1329,4 +1335,127 @@ test("configPath option: loads from the explicit path, ~ expanded", async () => 
 	assert.equal(r.stdout, "port=9090\n");
 	const path = await portApp({ configPath: p }).test(["config", "path"]);
 	assert.equal(path.stdout, `${p}\n`);
+});
+
+// =========================================================================
+// The framework's own mutating commands honour --dry-run (§9.2, §3.1)
+//
+// `config set`, `config init` and `config edit` are classified `mutating`, so
+// every mutation they make must ride ctx.effects: under --dry-run they are
+// RECORDED and rendered, never performed. A framework command that printed
+// "DRY RUN — no changes were made." while rewriting the user's config file (or
+// launching their editor) would be the loudest possible counterexample to the
+// regime it ships.
+// =========================================================================
+
+const DRY_HEADER = "DRY RUN — no changes were made. Would do:\n";
+
+function dryConfigApp(
+	appName: string,
+	configFormat: "json" | "toml" = "json",
+): App {
+	const app = createApp({
+		name: appName,
+		version: "1.0.0",
+		help: "test app",
+		config: true,
+		configFormat,
+	});
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run something",
+			flags: { opt: flag("opt", t.str, { help: "an option", default: "" }) },
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("config set: --dry-run records the write and changes nothing", async () => {
+	const { dir } = freshXdg("dryset");
+	const path = join(dir, "config.json");
+	writeFileSync(path, '{\n  "opt": "before"\n}\n');
+	const app = dryConfigApp("dryset");
+	const r = await app.test(["--dry-run", "config", "set", "opt", "after"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.equal(r.stdout, `${DRY_HEADER}  1. write: ${path} (21 bytes)\n`);
+	assert.equal(readFileSync(path, "utf8"), '{\n  "opt": "before"\n}\n');
+});
+
+test("config set: --dry-run previews the missing config directory", async () => {
+	const xdg = mkdtempSync(join(tmpdir(), "strictcli-config-"));
+	process.env.XDG_CONFIG_HOME = xdg;
+	const dir = join(xdg, "drymk");
+	const path = join(dir, "config.json");
+	const app = dryConfigApp("drymk");
+	const r = await app.test(["--dry-run", "config", "set", "opt", "v"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.ok(
+		r.stdout.startsWith(
+			`${DRY_HEADER}  1. mkdir: ${dir}\n  2. write: ${path} (`,
+		),
+		r.stdout,
+	);
+	assert.equal(existsSync(dir), false);
+});
+
+test("config set: --dry-run leaves a TOML config untouched", async () => {
+	const { dir } = freshXdg("drytoml");
+	const path = join(dir, "config.toml");
+	writeFileSync(path, '# a comment\nopt = "before"\n');
+	const app = dryConfigApp("drytoml", "toml");
+	const r = await app.test(["--dry-run", "config", "set", "opt", "after"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.ok(r.stdout.includes(`1. write: ${path}`), r.stdout);
+	assert.equal(readFileSync(path, "utf8"), '# a comment\nopt = "before"\n');
+});
+
+test("config init: --dry-run writes nothing", async () => {
+	const { dir } = freshXdg("dryinit");
+	const path = join(dir, "config.json");
+	const app = dryConfigApp("dryinit");
+	const r = await app.test(["--dry-run", "config", "init"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.ok(r.stdout.includes(`1. write: ${path} (`), r.stdout);
+	assert.equal(existsSync(path), false);
+});
+
+test("config edit: --dry-run does not launch the editor", async () => {
+	// The sharpest form of the bug: a dry run must not open $EDITOR.
+	const xdg = mkdtempSync(join(tmpdir(), "strictcli-config-"));
+	process.env.XDG_CONFIG_HOME = xdg;
+	const dir = join(xdg, "dryedit");
+	const path = join(dir, "config.json");
+	const marker = join(xdg, "editor-ran");
+	const editor = join(xdg, "fake-editor");
+	writeFileSync(editor, `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+	await withEnv({ EDITOR: editor }, async () => {
+		const app = dryConfigApp("dryedit");
+		const r = await app.test(["--dry-run", "config", "edit"]);
+		assert.equal(r.exitCode, 0, r.stderr);
+		assert.equal(
+			r.stdout,
+			`${DRY_HEADER}  1. mkdir: ${dir}\n  2. write: ${path} (3 bytes)\n  3. run: ${editor} ${path}\n`,
+		);
+		assert.equal(existsSync(marker), false);
+		assert.equal(existsSync(path), false);
+	});
+});
+
+test("config set/init still mutate in live mode", async () => {
+	const xdg = mkdtempSync(join(tmpdir(), "strictcli-config-"));
+	process.env.XDG_CONFIG_HOME = xdg;
+	const path = join(xdg, "livecfg", "config.json");
+	const app = dryConfigApp("livecfg");
+	assert.equal((await app.test(["config", "init"])).exitCode, 0);
+	assert.equal(existsSync(path), true);
+	assert.equal((await app.test(["config", "set", "opt", "v"])).exitCode, 0);
+	assert.ok(readFileSync(path, "utf8").includes('"opt"'));
+	const log = (app as unknown as AppImpl)
+		.effectLog()
+		.filter((r) => r.kind !== "cache_write");
+	assert.deepEqual(
+		log.map((r) => [r.verb, r.recorded]),
+		[["write", false]],
+	);
 });

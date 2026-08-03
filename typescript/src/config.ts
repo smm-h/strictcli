@@ -18,8 +18,7 @@
  * "config file <path>: <msg> (line X, column Y)" surface.
  */
 
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AppImpl, RegisteredCommand } from "./app.js";
@@ -1243,9 +1242,15 @@ function readFileOrEmpty(path: string): string {
 }
 
 /**
- * Persists `key` = `value`: the TOML path uses the comment-preserving
- * splicer on the file bytes; JSON re-serializes the in-memory data (already
- * mutated). Returns the handler exit code.
+ * Persists `key` = `value` THROUGH `ctx.effects`: the TOML path uses the
+ * comment-preserving splicer on the file bytes; JSON re-serializes the
+ * in-memory data (already mutated). Returns the handler exit code.
+ *
+ * The write is a `FILE_WRITE` on the effects handle, not a bare
+ * `writeFileSync`: `config set` is classified `mutating`, so under `--dry-run`
+ * the write must be RECORDED, never performed. A framework command that printed
+ * "DRY RUN — no changes were made." while rewriting the user's config file
+ * would be the loudest possible counterexample to its own regime.
  */
 function writeConfigSet(
 	app: AppImpl,
@@ -1265,16 +1270,17 @@ function writeConfigSet(
 			ctx.error(`error: cannot update config: ${(e as Error).message}`);
 			return 1;
 		}
-		writeFileSync(path, newText);
+		ctx.effects.write(path, newText);
 		return 0;
 	}
-	writeFileSync(path, `${jsonDumpsPy(data, 2)}\n`);
+	ctx.effects.write(path, `${jsonDumpsPy(data, 2)}\n`);
 	return 0;
 }
 
 /**
  * Removes `key` and persists. Returns "absent" when the key was not in the
- * loaded data, otherwise the handler exit code.
+ * loaded data, otherwise the handler exit code. The write rides `ctx.effects`
+ * for the reason spelled out above.
  */
 function writeConfigUnset(
 	app: AppImpl,
@@ -1295,11 +1301,26 @@ function writeConfigUnset(
 			ctx.error(`error: cannot update config: ${(e as Error).message}`);
 			return 1;
 		}
-		writeFileSync(path, newText);
+		ctx.effects.write(path, newText);
 		return 0;
 	}
-	writeFileSync(path, `${jsonDumpsPy(data, 2)}\n`);
+	ctx.effects.write(path, `${jsonDumpsPy(data, 2)}\n`);
 	return 0;
+}
+
+/**
+ * Records/performs the config file's parent directory creation.
+ *
+ * The existence probe is an ordinary filesystem READ (never an effect), and
+ * branching on it is branching on a real value, so the preview walks straight
+ * through it in both modes. Probing keeps the preview honest: a `mkdir` line
+ * appears only when a directory would really be created.
+ */
+function ensureConfigDir(path: string, ctx: Context): void {
+	const dir = dirname(path);
+	if (dir !== "" && !existsSync(dir)) {
+		ctx.effects.mkdir(dir);
+	}
 }
 
 // --- config set handlers ---
@@ -1750,18 +1771,23 @@ export function registerConfigGroup(app: AppImpl): void {
 					app.configPathOverride,
 					app.configFormat,
 				);
-				mkdirSync(dirname(path), { recursive: true });
+				ensureConfigDir(path, ctx);
 				if (!existsSync(path)) {
-					writeFileSync(path, app.configFormat === "toml" ? "" : "{}\n");
+					ctx.effects.write(path, app.configFormat === "toml" ? "" : "{}\n");
 				}
 				const editor = process.env.EDITOR || "vi";
-				const res = spawnSync(editor, [path], { stdio: "inherit" });
-				if (res.error !== undefined) {
-					ctx.error(`error: editor failed: ${res.error.message}`);
-					return 1;
-				}
-				if (res.status !== 0) {
-					ctx.error(`error: editor failed: exit status ${res.status}`);
+				// LAUNCHING AN EDITOR IS A MUTATION. Routed through the handle, a
+				// dry run records `run: <editor> <path>` and never opens anything;
+				// a bare spawnSync here would open the user's editor during a run
+				// that announced it would change nothing.
+				//
+				// check: true (the default) is what keeps the preview walking: a
+				// failed operation is an error, not a value (§2.5.4), so nothing
+				// here ever reads an exit code off a carrier.
+				try {
+					ctx.effects.run([editor, path], { stream: true });
+				} catch (e) {
+					ctx.error(`error: editor failed: ${(e as Error).message}`);
 					return 1;
 				}
 				return 0;
@@ -1782,12 +1808,12 @@ export function registerConfigGroup(app: AppImpl): void {
 					ctx.error(`config init: config file already exists: ${path}`);
 					return 1;
 				}
-				mkdirSync(dirname(path), { recursive: true });
+				ensureConfigDir(path, ctx);
 				const content =
 					app.configFormat === "toml"
 						? generateTomlTemplate(app)
 						: generateJsonTemplate(app);
-				writeFileSync(path, content);
+				ctx.effects.write(path, content);
 				ctx.info(path);
 				return 0;
 			}) as never,
@@ -1806,7 +1832,9 @@ function configSetDispatch(
 		app.configPathOverride,
 		app.configFormat,
 	);
-	mkdirSync(dirname(path), { recursive: true });
+	// Every mutation this handler performs rides ctx.effects: the command is
+	// classified `mutating`, so a dry run must RECORD them and change nothing.
+	ensureConfigDir(path, ctx);
 	// The data loaded at parse time (Python uses _config_data the same way).
 	const existing = (app.configData ?? {}) as Record<string, unknown>;
 
