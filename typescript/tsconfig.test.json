@@ -6,5 +6,6 @@
 		"declaration": false,
 		"types": ["node"]
 	},
-	"include": ["src", "tests"]
+	"include": ["src", "tests"],
+	"exclude": ["tests/negative"]
 }
