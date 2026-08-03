@@ -22,6 +22,7 @@ __all__ = [
     "RelativeToRoot",
 ]
 
+import ast
 import contextlib
 import decimal
 import keyword
@@ -1234,6 +1235,150 @@ def _validate_grants(cmd_name: str, grants) -> tuple:
         seen.add(g.name)
         resolved.append(g)
     return tuple(resolved)
+
+
+# ---------------------------------------------------------------------------
+# The effects-bypass lint (the `effects-bypass` check provider, see below)
+#
+# Closed lists, matched on the called attribute/function name: process starts,
+# filesystem mutations, and network calls. The analyser is stdlib `ast` -- a
+# regular dependency, no optional import and no soft degradation.
+# ---------------------------------------------------------------------------
+
+_BYPASS_PROCESS = frozenset({
+    "run", "Popen", "call", "check_call", "check_output", "getoutput",
+    "getstatusoutput", "system", "popen", "execv", "execvp", "execve",
+    "spawnv", "spawnl", "fork",
+})
+_BYPASS_FILESYSTEM = frozenset({
+    "remove", "unlink", "rmdir", "removedirs", "mkdir", "makedirs",
+    "rename", "renames", "replace", "chmod", "chown", "symlink", "link",
+    "truncate", "rmtree", "move", "copy", "copy2", "copyfile", "copytree",
+    "write_text", "write_bytes", "touch", "symlink_to", "hardlink_to",
+    "mkstemp", "mkdtemp",
+})
+_BYPASS_NETWORK = frozenset({
+    "urlopen", "urlretrieve", "request", "get", "post", "put", "patch",
+    "delete", "head", "HTTPConnection", "HTTPSConnection", "socket",
+    "create_connection",
+})
+# Network members are banned only when reached through one of these receivers,
+# so an ordinary `mapping.get(...)` inside a handler is not a finding.
+_BYPASS_NETWORK_RECEIVERS = frozenset({
+    "requests", "httpx", "urllib", "request", "http", "client", "socket",
+    "aiohttp", "urllib3", "session", "Session",
+})
+_BYPASS_SKIP_DIRS = frozenset({
+    ".git", ".venv", "venv", "env", "node_modules", "__pycache__",
+    "site-packages", "build", "dist", ".tox", ".mypy_cache", ".ruff_cache",
+    ".pytest_cache", ".eggs",
+})
+
+
+def _call_target_name(node) -> tuple:
+    """Return ``(dotted_target, receiver)`` for a call's callee."""
+    if isinstance(node, ast.Name):
+        return node.id, None
+    if isinstance(node, ast.Attribute):
+        parts: list[str] = [node.attr]
+        cur = node.value
+        while isinstance(cur, ast.Attribute):
+            parts.append(cur.attr)
+            cur = cur.value
+        if isinstance(cur, ast.Name):
+            parts.append(cur.id)
+        parts.reverse()
+        receiver = parts[-2] if len(parts) >= 2 else None
+        return ".".join(parts), receiver
+    return None, None
+
+
+def _reaches_effects_handle(node) -> bool:
+    """True when a callee's receiver chain goes through ``.effects``."""
+    cur = node
+    while isinstance(cur, ast.Attribute):
+        if cur.attr == "effects":
+            return True
+        cur = cur.value
+    return False
+
+
+def _function_opts_into_effects(fn) -> bool:
+    """True when a function body reaches for an ``.effects`` handle at all.
+
+    Opting in is the trigger: a function that uses the effects handle must
+    route ALL of its effects through it, or the preview it promises is a lie.
+    """
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Attribute) and node.attr == "effects":
+            return True
+    return False
+
+
+def _open_is_write_mode(node) -> bool:
+    """True when a bare ``open(...)`` call requests a writing mode."""
+    mode = None
+    if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant):
+        mode = node.args[1].value
+    for kw in node.keywords:
+        if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+            mode = kw.value.value
+    if not isinstance(mode, str):
+        return False
+    return any(ch in mode for ch in ("w", "a", "x", "+"))
+
+
+def _scan_effects_bypasses(root: Path) -> list[tuple]:
+    """Find direct effect calls inside functions that opted into ctx.effects.
+
+    Returns ``(relative_path, lineno, function_name, target)`` tuples, in file
+    then line order.
+    """
+    findings: list[tuple] = []
+    if not root.is_dir():
+        return findings
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if d not in _BYPASS_SKIP_DIRS and not d.startswith(".")
+        )
+        for fname in sorted(filenames):
+            if not fname.endswith(".py"):
+                continue
+            path = os.path.join(dirpath, fname)
+            try:
+                tree = ast.parse(Path(path).read_text(encoding="utf-8"), filename=path)
+            except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+                # A file the analyser cannot read is not evidence of a bypass.
+                continue
+            rel = os.path.relpath(path, root)
+            for fn in ast.walk(tree):
+                if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if not _function_opts_into_effects(fn):
+                    continue
+                for node in ast.walk(fn):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    if _reaches_effects_handle(node.func):
+                        continue
+                    target, receiver = _call_target_name(node.func)
+                    if target is None:
+                        continue
+                    leaf = target.rsplit(".", 1)[-1]
+                    if leaf == "open" and receiver is None:
+                        banned = _open_is_write_mode(node)
+                    else:
+                        banned = (
+                            (leaf in _BYPASS_PROCESS and receiver is not None)
+                            or leaf in _BYPASS_FILESYSTEM
+                            or (leaf in _BYPASS_NETWORK
+                                and receiver in _BYPASS_NETWORK_RECEIVERS)
+                        )
+                    if banned:
+                        findings.append((rel, node.lineno, fn.name, target))
+    return findings
+
 
 
 # Module-private brand token: an Outcome can be constructed only through the
@@ -4228,6 +4373,39 @@ class App:
             ),
         ]
 
+    def _effects_bypass_provider(self) -> list[CheckSpec]:
+        """Built-in check provider for the ``effects-bypass`` lint.
+
+        Registered whenever the check system turns on, so a consumer that
+        adopts checks at all gets the lint without a TOML declaration. It fails
+        on any direct process, filesystem-mutation or network call made from a
+        handler that opted into ``ctx.effects``.
+        """
+        def impl(ctx: CheckContext, reporter: "ErrorReporter") -> "_CheckOutcome":
+            findings = _scan_effects_bypasses(Path(ctx.project_root))
+            for rel, lineno, func_name, target in findings:
+                reporter.error(
+                    f"{rel}:{lineno}: {func_name} calls {target} directly; "
+                    f"route it through ctx.effects"
+                )
+            if findings:
+                return reporter.found(
+                    f"{len(findings)} direct effect call(s) bypassing ctx.effects"
+                )
+            return reporter.passed("no direct effect calls bypass ctx.effects")
+
+        return [
+            error_check_spec(
+                name="effects-bypass",
+                tags=["effects", "quality"],
+                fast=True,
+                pure=True,
+                needs_network=False,
+                depends_on=[],
+                impl=impl,
+            ),
+        ]
+
     @property
     def config_file_path(self) -> str:
         """Return the resolved config file path for this app."""
@@ -4707,6 +4885,11 @@ class App:
         if not hasattr(self, "_check_defs"):
             self._check_defs: dict[str, _CheckDef] = {}
         self._register_check_command()
+        # The built-in effects-bypass lint rides the same provider hook the
+        # built-in cli-test-coverage check uses. Appended directly (not through
+        # register_check_provider) because that method routes back here.
+        self._check_providers.append(self._effects_bypass_provider)
+        self._provider_materialized_cwd = None
 
     def _add_check_def(self, cdef: _CheckDef) -> None:
         """Single internal insertion point for check definitions.

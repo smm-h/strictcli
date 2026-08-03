@@ -10,7 +10,7 @@ import pytest
 
 import strictcli
 from strictcli import CheckSpec, error_check_spec, warn_check_spec
-from conftest import pass_outcome
+from conftest import drop_builtin_check_providers, pass_outcome
 
 
 TOML = """\
@@ -39,6 +39,13 @@ class SimpleContext:
     project_root: Path
 
 
+# An empty, dedicated project root. Checks that statically analyse the
+# consumer's sources (effects-bypass) walk this, so it must not be a shared
+# scratch directory.
+EMPTY_ROOT = Path(__file__).parent / "_fixtures" / "empty_project"
+EMPTY_ROOT.mkdir(parents=True, exist_ok=True)
+
+
 def err_spec(name, tags=("provider",)):
     return error_check_spec(
         name=name, tags=list(tags), fast=True, pure=True,
@@ -49,7 +56,7 @@ def err_spec(name, tags=("provider",)):
 
 def make_app():
     app = strictcli.App(name="testapp", version="1.0.0", help="test app")
-    app.set_check_context(lambda: SimpleContext(project_root=Path("/tmp")))
+    app.set_check_context(lambda: SimpleContext(project_root=EMPTY_ROOT))
     return app
 
 
@@ -75,8 +82,9 @@ def test_tomlless_list_dryrun_execution():
 def test_programmatic_run_checks():
     app = make_app()
     app.register_check_provider(lambda: [err_spec("prov-a")])
+    drop_builtin_check_providers(app)
     results, _, code = app.run_checks(
-        SimpleContext(project_root=Path("/tmp")), run_all=True,
+        SimpleContext(project_root=EMPTY_ROOT), run_all=True,
     )
     assert code == 0
     assert len(results) == 1 and results[0].name == "prov-a"
@@ -111,7 +119,8 @@ def test_collision_with_toml(tmp_path):
     )
     for name in ("version-consistency", "changelog-coverage"):
         app._check_defs[name].impl = lambda ctx, n=name: pass_outcome(f"{n} ok")
-    app.set_check_context(lambda: SimpleContext(project_root=Path("/tmp")))
+    app.set_check_context(lambda: SimpleContext(project_root=EMPTY_ROOT))
+    drop_builtin_check_providers(app)
     app.register_check_provider(lambda: [err_spec("version-consistency")])
 
     with pytest.raises(ValueError, match="duplicate check definition"):
@@ -152,7 +161,7 @@ def test_provider_raise_hard_error_programmatic():
 
     app.register_check_provider(boom)
     with pytest.raises(RuntimeError, match="provider boom"):
-        app.run_checks(SimpleContext(project_root=Path("/tmp")), run_all=True)
+        app.run_checks(SimpleContext(project_root=EMPTY_ROOT), run_all=True)
 
 
 # --- honest-empty is a clean no-op ---
@@ -160,10 +169,11 @@ def test_provider_raise_hard_error_programmatic():
 def test_honest_empty():
     app = make_app()
     app.register_check_provider(lambda: [])
+    drop_builtin_check_providers(app)
     r = app.test(["check", "--list"])
     assert r.exit_code == 0
     results, _, code = app.run_checks(
-        SimpleContext(project_root=Path("/tmp")), run_all=True,
+        SimpleContext(project_root=EMPTY_ROOT), run_all=True,
     )
     assert code == 0 and results == []
 
@@ -195,7 +205,7 @@ def test_memoized_once():
     app.test(["check", "--list"])
     app.test(["--dry-run", "check", "--all"])
     app.test(["check", "--all"])
-    app.run_checks(SimpleContext(project_root=Path("/tmp")), run_all=True)
+    app.run_checks(SimpleContext(project_root=EMPTY_ROOT), run_all=True)
     assert calls["n"] == 1
 
 
@@ -260,6 +270,7 @@ def test_list_json_severity():
         name="warn-prov", tags=["w"], fast=True, pure=True,
         needs_network=False, depends_on=[], impl=lambda ctx, r: r.passed("ok"),
     )])
+    drop_builtin_check_providers(app)
     r = app.test(["check", "--list", "--json"])
     entries = json.loads(r.stdout.strip())
     assert len(entries) == 1

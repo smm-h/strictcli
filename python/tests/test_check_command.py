@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import strictcli
-from conftest import pass_outcome, fail_outcome, warn_outcome
+from conftest import drop_builtin_check_providers, pass_outcome, fail_outcome, warn_outcome
 
 
 TWO_CHECKS_TOML = """\
@@ -91,6 +91,7 @@ def _setup_checks_app(tmp_path, monkeypatch, toml_content, register_impls=True,
                 )
 
     app.set_check_context(lambda: SimpleContext(project_root=tmp_path))
+    drop_builtin_check_providers(app)
     return app
 
 

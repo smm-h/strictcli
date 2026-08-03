@@ -14,7 +14,7 @@ from strictcli import (
     format_check_results,
     format_check_results_json,
 )
-from conftest import pass_outcome, fail_outcome, warn_outcome, skip_outcome
+from conftest import drop_builtin_check_providers, pass_outcome, fail_outcome, warn_outcome, skip_outcome
 
 
 TWO_CHECKS_TOML = """\
@@ -109,6 +109,7 @@ def _make_app(tmp_path, toml_content, impls=None, register_all=True):
         name="testapp", version="1.0.0", help="test app",
         checks_path=str(toml_file),
     )
+    drop_builtin_check_providers(app)
 
     if impls is None:
         impls = {}
