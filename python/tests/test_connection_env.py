@@ -197,7 +197,7 @@ def _make_conn_check_app(tmp_path):
 def test_connection_env_check_side_access(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgres://check/db")
     app = _make_conn_check_app(tmp_path)
-    r = app.test(["check", "--tag", "db", "--verbose"])
+    r = app.test(["--verbose", "check", "--tag", "db"])
     assert "dsn=postgres://check/db" in r.stdout
     assert "PASS" in r.stdout
     # A non-hermetic invocation reports is_hermetic()==False to the check.
@@ -207,7 +207,7 @@ def test_connection_env_check_side_access(tmp_path, monkeypatch):
 def test_connection_env_check_side_hermetic_skips(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgres://check/db")
     app = _make_conn_check_app(tmp_path)
-    r = app.test(["--hermetic", "check", "--tag", "db", "--verbose"])
+    r = app.test(["--hermetic", "--verbose", "check", "--tag", "db"])
     assert "SKIP" in r.stdout
     assert "dsn=" not in r.stdout
     # The check SEES hermetic (is_hermetic()==True) and skips for that reason.
@@ -222,7 +222,7 @@ def test_connection_env_check_side_hermetic_conflation(tmp_path, monkeypatch):
     config fallbacks can honor hermetic instead of connecting via a config URL."""
     monkeypatch.delenv("DATABASE_URL", raising=False)  # env UNSET
     app = _make_conn_check_app(tmp_path)
-    r = app.test(["--hermetic", "check", "--tag", "db", "--verbose"])
+    r = app.test(["--hermetic", "--verbose", "check", "--tag", "db"])
     assert "hermetic=True" in r.stdout
     assert "suppressed by --hermetic" in r.stdout
     assert "DATABASE_URL unset" not in r.stdout
@@ -233,7 +233,7 @@ def test_connection_env_check_side_unset_not_hermetic(tmp_path, monkeypatch):
     consumer is free to consult a config fallback (here reported as plain unset)."""
     monkeypatch.delenv("DATABASE_URL", raising=False)  # env UNSET, no --hermetic
     app = _make_conn_check_app(tmp_path)
-    r = app.test(["check", "--tag", "db", "--verbose"])
+    r = app.test(["--verbose", "check", "--tag", "db"])
     assert "hermetic=False" in r.stdout
     assert "DATABASE_URL unset" in r.stdout
 

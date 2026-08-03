@@ -37,7 +37,7 @@ class TestConfigFieldRegistration:
 
     def test_register_bool_field(self):
         app = _build_app()
-        cf = app.config_field("verbose", type=bool, help="enable verbose")
+        cf = app.config_field("loud", type=bool, help="enable loud")
         assert cf.type is bool
         assert cf.required is True
 
@@ -490,12 +490,12 @@ class TestConfigFieldValidation:
 
     def test_flag_key_is_known(self, tmp_path):
         """Flag-backed keys are recognized and don't trigger unknown key error."""
-        app = _build_config_app(tmp_path, config_data={"verbose": True})
+        app = _build_config_app(tmp_path, config_data={"loud": True})
         app.config_field("port", type=int, help="Port", default=8080)
 
         @app.command(name="serve", help="start", config_fields=["port"])
-        @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
-        def serve(ctx, verbose, **kw):
+        @strictcli.flag("loud", type=bool, default=False, help="loud output")
+        def serve(ctx, loud, **kw):
             return 0
 
         result = app.test(["serve"])
@@ -888,8 +888,8 @@ class TestConfigInit:
         )
 
         @app.command(name="serve", help="start")
-        @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
-        def serve(ctx, verbose, **kw):
+        @strictcli.flag("loud", type=bool, default=False, help="loud output")
+        def serve(ctx, loud, **kw):
             pass
 
         result = app.test(["config", "init"])
@@ -898,7 +898,7 @@ class TestConfigInit:
         with open(config_file) as f:
             data = json.load(f)
         # Bool flag defaults to False
-        assert "verbose" in data
+        assert "loud" in data
 
 
 # ---- Task 5g: Schema serialization ----

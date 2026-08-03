@@ -259,21 +259,21 @@ def test_global_flags_with_deep_nesting():
     """Global flags are parsed and passed through deep nesting."""
     app = strictcli.App(
         name="nch", version="1.0.0", help="cloud tool",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="enable verbose output")],
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="enable loud output")],
     )
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage zones")
 
     @zone.command("list", help="list zones")
-    def list_zones(ctx, verbose):
-        if verbose:
-            print("verbose listing")
+    def list_zones(ctx, loud):
+        if loud:
+            print("loud listing")
         else:
             print("normal listing")
 
-    r = app.test(["--verbose", "dns", "zone", "list"])
+    r = app.test(["--loud", "dns", "zone", "list"])
     assert r.exit_code == 0
-    assert "verbose listing" in r.stdout
+    assert "loud listing" in r.stdout
 
     r = app.test(["dns", "zone", "list"])
     assert r.exit_code == 0
@@ -284,21 +284,21 @@ def test_global_flags_after_command_deep_nesting():
     """Global flags placed after the command work with deep nesting."""
     app = strictcli.App(
         name="nch", version="1.0.0", help="cloud tool",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="enable verbose output")],
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="enable loud output")],
     )
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage zones")
 
     @zone.command("list", help="list zones")
-    def list_zones(ctx, verbose):
-        if verbose:
-            print("verbose listing")
+    def list_zones(ctx, loud):
+        if loud:
+            print("loud listing")
         else:
             print("normal listing")
 
-    r = app.test(["dns", "zone", "list", "--verbose"])
+    r = app.test(["dns", "zone", "list", "--loud"])
     assert r.exit_code == 0
-    assert "verbose listing" in r.stdout
+    assert "loud listing" in r.stdout
 
 
 # --- Name collision validation ---

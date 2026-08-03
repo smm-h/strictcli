@@ -102,14 +102,14 @@ class TestCallReturnsDict:
         app = _build_app()
 
         @app.command("status", help="get status")
-        @strictcli.flag("verbose", type=bool, default=False, help="include details")
-        def status(ctx, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="include details")
+        def status(ctx, loud):
             data = {"healthy": True}
-            if verbose:
+            if loud:
                 data["details"] = "all systems operational"
             return strictcli.outcome(data=data)
 
-        result = app.call("status", verbose=True)
+        result = app.call("status", loud=True)
         assert result == {"healthy": True, "details": "all systems operational"}
 
 

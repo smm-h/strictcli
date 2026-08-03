@@ -856,14 +856,14 @@ def test_mixed_typed_arg_and_flags():
         help="a command",
         args=[strictcli.Arg(name="count", help="a count", type=int)],
     )
-    @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
-    def cmd(ctx, count, verbose):
-        print(f"count={count} type={type(count).__name__} verbose={verbose}")
+    @strictcli.flag("loud", type=bool, default=False, help="loud output")
+    def cmd(ctx, count, loud):
+        print(f"count={count} type={type(count).__name__} loud={loud}")
 
-    r = app.test(["cmd", "--verbose", "42"])
+    r = app.test(["cmd", "--loud", "42"])
     assert r.exit_code == 0
     assert "count=42 type=int" in r.stdout
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 def test_int_arg_with_leading_whitespace():

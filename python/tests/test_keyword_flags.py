@@ -12,7 +12,7 @@ from strictcli import _flag_param_name
 
 def test_non_keyword_unchanged():
     """Non-keyword flag names convert normally (dashes to underscores)."""
-    assert _flag_param_name("--dry-run") == "dry_run"
+    assert _flag_param_name("--sim-run") == "sim_run"
 
 
 def test_keyword_global():

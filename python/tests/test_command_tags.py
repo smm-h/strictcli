@@ -31,8 +31,8 @@ class TestFrozenCommand:
         app = _make_app()
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-        def cmd(ctx, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="be loud")
+        def cmd(ctx, loud):
             pass
 
         c = app._commands["cmd"]
@@ -189,12 +189,12 @@ class TestGroupTagInheritance:
         app = _make_app()
         grp = app.group("grp", help="a group", tags={"json"})
 
-        @grp.command("cmd", help="a command", tags={"verbose"})
+        @grp.command("cmd", help="a command", tags={"loud"})
         def cmd(ctx):
             pass
 
         c = grp.commands["cmd"]
-        assert c.tags == frozenset({"json", "verbose"})
+        assert c.tags == frozenset({"json", "loud"})
 
     def test_command_no_tags_under_tagged_group(self):
         app = _make_app()
@@ -345,12 +345,12 @@ class TestTagContracts:
         # Both contracts satisfied: should pass
         app_good = _make_app()
         app_good.tag_contract("json", requires_flag="json")
-        app_good.tag_contract("verbose", requires_flag="verbose")
+        app_good.tag_contract("loud", requires_flag="loud")
 
-        @app_good.command("good", help="has both flags", tags={"json", "verbose"})
+        @app_good.command("good", help="has both flags", tags={"json", "loud"})
         @strictcli.flag("json", type=bool, default=False, help="output json")
-        @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-        def good(ctx, json, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="be loud")
+        def good(ctx, json, loud):
             pass
 
         result = app_good.test(["good"])
@@ -359,9 +359,9 @@ class TestTagContracts:
         # One contract violated: should fail
         app_bad = _make_app()
         app_bad.tag_contract("json", requires_flag="json")
-        app_bad.tag_contract("verbose", requires_flag="verbose")
+        app_bad.tag_contract("loud", requires_flag="loud")
 
-        @app_bad.command("bad", help="missing verbose flag", tags={"json", "verbose"})
+        @app_bad.command("bad", help="missing loud flag", tags={"json", "loud"})
         @strictcli.flag("json", type=bool, default=False, help="output json")
         def bad(ctx, json):
             pass

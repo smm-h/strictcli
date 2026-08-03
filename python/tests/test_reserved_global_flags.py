@@ -40,7 +40,7 @@ class TestReservedGlobalFlagNames:
             help="test",
             flags=[
                 strictcli.Flag(
-                    name="verbose", type=bool, help="enable verbose", default=False
+                    name="loud", type=bool, help="enable loud output", default=False
                 ),
                 strictcli.Flag(name="output", type=str, help="output file"),
             ],

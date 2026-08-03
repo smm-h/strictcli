@@ -243,13 +243,13 @@ def test_bool_flag_ignores_at_prefix():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", type=bool, default=False, help="verbose")
-    def cmd(ctx, verbose):
-        print(f"verbose={verbose}")
+    @strictcli.flag("loud", type=bool, default=False, help="loud")
+    def cmd(ctx, loud):
+        print(f"loud={loud}")
 
-    r = app.test(["cmd", "--verbose"])
+    r = app.test(["cmd", "--loud"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 # --- Env var with @ ---

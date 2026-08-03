@@ -126,7 +126,7 @@ def test_choices_with_bool_raises():
     """choices with type=bool raises ValueError at registration."""
     with pytest.raises(ValueError, match="incompatible with type=bool"):
         strictcli.Flag(
-            name="verbose", type=bool, help="be verbose",
+            name="loud", type=bool, help="be loud",
             choices=[True, False],
         )
 

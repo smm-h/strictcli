@@ -36,13 +36,13 @@ def _build_rlsbl_app():
         args=[strictcli.Arg(name="bump", help="version bump type")],
         flag_sets=[auth_flag_set],
     )
-    @strictcli.flag("dry-run", type=bool, default=False, help="preview without making changes")
-    @strictcli.flag("yes", type=bool, default=False, help="non-interactive mode")
-    def release(ctx, bump, token, dry_run, yes):
+    @strictcli.flag("sim-run", type=bool, default=False, help="preview without making changes")
+    @strictcli.flag("agree", type=bool, default=False, help="non-interactive mode")
+    def release(ctx, bump, token, sim_run, agree):
         parts = [f"releasing {bump}"]
-        if dry_run:
-            parts.append("(dry-run)")
-        if yes:
+        if sim_run:
+            parts.append("(sim-run)")
+        if agree:
             parts.append("(non-interactive)")
         if token:
             parts.append(f"token={'set' if token else 'unset'}")
@@ -93,10 +93,10 @@ def test_e2e_status_with_token(monkeypatch):
 def test_e2e_release_full():
     """Release command with all flags and args."""
     app = _build_rlsbl_app()
-    r = app.test(["release", "--dry-run", "--yes", "minor"])
+    r = app.test(["release", "--sim-run", "--agree", "minor"])
     assert r.exit_code == 0
     assert "releasing minor" in r.stdout
-    assert "(dry-run)" in r.stdout
+    assert "(sim-run)" in r.stdout
     assert "(non-interactive)" in r.stdout
 
 
@@ -106,7 +106,7 @@ def test_e2e_release_minimal():
     r = app.test(["release", "patch"])
     assert r.exit_code == 0
     assert "releasing patch" in r.stdout
-    assert "(dry-run)" not in r.stdout
+    assert "(sim-run)" not in r.stdout
 
 
 def test_e2e_watch():
@@ -186,8 +186,8 @@ def test_e2e_command_help():
     app = _build_rlsbl_app()
     r = app.test(["release", "--help"])
     assert r.exit_code == 0
-    assert "--dry-run" in r.stdout
-    assert "--yes" in r.stdout
+    assert "--sim-run" in r.stdout
+    assert "--agree" in r.stdout
     assert "--token" in r.stdout
     assert "bump" in r.stdout
 
@@ -232,11 +232,11 @@ def _build_kwargs_app():
         help="deploy the app",
         args=[strictcli.Arg(name="target", help="deploy target")],
     )
-    @strictcli.flag("dry-run", type=bool, default=False, help="preview without making changes")
+    @strictcli.flag("sim-run", type=bool, default=False, help="preview without making changes")
     @strictcli.flag("replicas", type=int, help="number of replicas", default=1)
     def deploy_handler(ctx, **kwargs):
         parts = [f"target={kwargs['target']}"]
-        parts.append(f"dry_run={kwargs['dry_run']}")
+        parts.append(f"sim_run={kwargs['sim_run']}")
         parts.append(f"replicas={kwargs['replicas']}")
         print(" ".join(parts))
         return 0
@@ -247,10 +247,10 @@ def _build_kwargs_app():
 def test_e2e_kwargs_handler_dispatches():
     """Command with **kwargs handler dispatches and receives all parameters."""
     app = _build_kwargs_app()
-    r = app.test(["deploy", "--dry-run", "--replicas", "3", "production"])
+    r = app.test(["deploy", "--sim-run", "--replicas", "3", "production"])
     assert r.exit_code == 0
     assert "target=production" in r.stdout
-    assert "dry_run=True" in r.stdout
+    assert "sim_run=True" in r.stdout
     assert "replicas=3" in r.stdout
 
 
@@ -260,7 +260,7 @@ def test_e2e_kwargs_handler_defaults():
     r = app.test(["deploy", "staging"])
     assert r.exit_code == 0
     assert "target=staging" in r.stdout
-    assert "dry_run=False" in r.stdout
+    assert "sim_run=False" in r.stdout
     assert "replicas=1" in r.stdout
 
 
@@ -292,18 +292,18 @@ def test_e2e_kwargs_handler_with_global_flags():
         version="1.0.0",
         help="kwargs test app",
         flags=[
-            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="loud", type=bool, default=False, help="loud output"),
         ],
     )
 
     @app.command("run", help="run something")
     def run_handler(ctx, **kwargs):
-        print(f"verbose={kwargs['verbose']}")
+        print(f"loud={kwargs['loud']}")
         return 0
 
-    r = app.test(["--verbose", "run"])
+    r = app.test(["--loud", "run"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 def test_e2e_kwargs_handler_registration_no_error():

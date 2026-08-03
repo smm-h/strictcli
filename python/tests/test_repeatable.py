@@ -93,7 +93,7 @@ def test_repeatable_with_bool_raises():
     """repeatable=True with type=bool raises ValueError at registration."""
     with pytest.raises(ValueError, match="repeatable is incompatible with type=bool"):
         strictcli.Flag(
-            name="verbose", type=bool, help="be verbose", repeatable=True,
+            name="loud", type=bool, help="be loud", repeatable=True,
         )
 
 

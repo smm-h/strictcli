@@ -265,24 +265,24 @@ class TestSchemaGlobalFlags:
         monkeypatch.chdir(tmp_path)
         app = _make_app(
             flags=[
-                strictcli.Flag(name="verbose", type=bool, default=False, help="Verbose output", short="V"),
+                strictcli.Flag(name="loud", type=bool, default=False, help="Verbose output", short="V"),
                 strictcli.Flag(name="output", type=str, help="Output format",
                                default="text", choices=["text", "json"]),
             ]
         )
 
         @app.command("noop", help="Does nothing")
-        def noop(ctx, verbose, output):
+        def noop(ctx, loud, output):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         assert len(data["global_flags"]) == 2
-        verbose = data["global_flags"][0]
-        assert verbose["name"] == "verbose"
-        assert verbose["type"] == "bool"
-        assert verbose["short"] == "V"
-        assert verbose["negatable"] is True
+        loud = data["global_flags"][0]
+        assert loud["name"] == "loud"
+        assert loud["type"] == "bool"
+        assert loud["short"] == "V"
+        assert loud["negatable"] is True
 
         output = data["global_flags"][1]
         assert output["name"] == "output"
@@ -874,10 +874,10 @@ class TestSchemaConstraints:
 
         @app.command("deploy", help="Deploy",
                      dependencies=[strictcli.Implies(
-                         flag="force-deploy", implies="yes", value=True)])
+                         flag="force-deploy", implies="agree", value=True)])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
-        @strictcli.flag("yes", type=bool, default=False, help="Skip confirmation")
-        def deploy(ctx, force_deploy, yes):
+        @strictcli.flag("agree", type=bool, default=False, help="Skip confirmation")
+        def deploy(ctx, force_deploy, agree):
             pass
 
         app.test(["--dump-schema"])
@@ -887,7 +887,7 @@ class TestSchemaConstraints:
         c = cmd["constraints"][0]
         assert c["type"] == "implies"
         assert c["flag"] == "force-deploy"
-        assert c["implies"] == "yes"
+        assert c["implies"] == "agree"
         assert c["value"] is True
 
     def test_multiple_constraints(self, tmp_path, monkeypatch):
@@ -923,17 +923,17 @@ class TestSchemaConstraints:
 
         @app.command("deploy", help="Deploy",
                      dependencies=[strictcli.CoRequired(
-                         flags=["dry-run", "skip-confirm"])])
-        @strictcli.flag("dry-run", type=bool, default=False, help="Dry run")
+                         flags=["sim-run", "skip-confirm"])])
+        @strictcli.flag("sim-run", type=bool, default=False, help="Dry run")
         @strictcli.flag("skip-confirm", type=bool, default=False, help="Skip confirmation")
-        def deploy(ctx, dry_run, skip_confirm):
+        def deploy(ctx, sim_run, skip_confirm):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["deploy"]
         c = cmd["constraints"][0]
-        assert c["flags"] == ["dry-run", "skip-confirm"]
+        assert c["flags"] == ["sim-run", "skip-confirm"]
 
 
 class TestSchemaTagContracts:

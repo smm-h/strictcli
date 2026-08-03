@@ -49,9 +49,9 @@ def _make_bool_env_app():
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", type=bool, default=False, help="be verbose", env="MYAPP_VERBOSE")
-    def cmd(ctx, verbose):
-        print(f"verbose={verbose}")
+    @strictcli.flag("loud", type=bool, default=False, help="be loud", env="MYAPP_VERBOSE")
+    def cmd(ctx, loud):
+        print(f"loud={loud}")
 
     return app
 
@@ -63,7 +63,7 @@ def test_bool_env_true_values(monkeypatch):
         monkeypatch.setenv("MYAPP_VERBOSE", val)
         r = app.test(["cmd"])
         assert r.exit_code == 0, f"failed for env value {val!r}: {r.stderr}"
-        assert "verbose=True" in r.stdout, f"failed for env value {val!r}"
+        assert "loud=True" in r.stdout, f"failed for env value {val!r}"
 
 
 def test_bool_env_false_values(monkeypatch):
@@ -73,7 +73,7 @@ def test_bool_env_false_values(monkeypatch):
         monkeypatch.setenv("MYAPP_VERBOSE", val)
         r = app.test(["cmd"])
         assert r.exit_code == 0, f"failed for env value {val!r}: {r.stderr}"
-        assert "verbose=False" in r.stdout, f"failed for env value {val!r}"
+        assert "loud=False" in r.stdout, f"failed for env value {val!r}"
 
 
 def test_bool_env_invalid(monkeypatch):

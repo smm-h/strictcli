@@ -242,26 +242,71 @@ class Context:
     a handler returns ``strictcli.outcome(data=...)``.
     """
 
-    def __init__(self, stdout=None, stderr=None, sources=None, infra=None):
+    def __init__(self, stdout=None, stderr=None, sources=None, infra=None,
+                 *, dry_run: bool = False, yes: bool = False,
+                 quiet: bool = False, verbose: bool = False,
+                 effects: "_Effects | None" = None):
         self._stdout = stdout or sys.stdout
         self._stderr = stderr or sys.stderr
         self._sources = sources or {}  # flag-name -> source label (cli/env/config/default/implied/infra)
         self._infra = infra  # _InfraAccess | None
+        self._dry_run = dry_run
+        self._yes = yes
+        self._quiet = quiet
+        self._verbose = verbose
+        self._effects = effects
+
+    @property
+    def dry_run(self) -> bool:
+        """True when the framework-owned ``--dry-run`` flag was passed."""
+        return self._dry_run
+
+    @property
+    def yes(self) -> bool:
+        """True when the framework-owned ``--yes`` flag was passed."""
+        return self._yes
+
+    @property
+    def quiet(self) -> bool:
+        """True when the framework-owned ``--quiet`` flag was passed."""
+        return self._quiet
+
+    @property
+    def verbose(self) -> bool:
+        """True when the framework-owned ``--verbose`` flag was passed."""
+        return self._verbose
+
+    @property
+    def effects(self) -> "_Effects":
+        """The effects handle for this run (see the effects-regime contract)."""
+        if self._effects is None:
+            raise RuntimeError(
+                "ctx.effects is unavailable: this Context was constructed "
+                "outside a command dispatch"
+            )
+        return self._effects
 
     def info(self, msg: str) -> None:
-        """Write an informational message to stdout."""
+        """Write an informational message to stdout (hidden under --quiet)."""
+        if self._quiet:
+            return
         print(msg, file=self._stdout)
 
     def warn(self, msg: str) -> None:
-        """Write a warning message to stderr."""
+        """Write a warning message to stderr (never suppressed)."""
         print(msg, file=self._stderr)
 
     def debug(self, msg: str) -> None:
-        """Write a debug message to stdout."""
+        """Write a debug message to stdout (shown only under --verbose).
+
+        ``--quiet`` dominates ``--verbose``: passing both hides debug output.
+        """
+        if self._quiet or not self._verbose:
+            return
         print(msg, file=self._stdout)
 
     def error(self, msg: str) -> None:
-        """Write an error message to stderr."""
+        """Write an error message to stderr (never suppressed)."""
         print(msg, file=self._stderr)
 
     def source(self, name: str) -> str:
@@ -1646,11 +1691,39 @@ def _store_dict_flag(f: "Flag", raw: str, cli_set: dict) -> None:
 _SCALAR_TYPES = (str, bool, int, float)
 _NON_BOOL_SCALAR_TYPES = (str, int, float)
 
-# Names reserved by the framework for global flags.
-# These cannot be used for user-defined global flags.
-_RESERVED_GLOBAL_FLAG_NAMES = frozenset({
+# The reserved flag quartet owned by the effects regime. Banned unconditionally
+# at EVERY level (app global flags, command flags, flag-set flags, mutex-group
+# flags) -- not just at the global level. Short-flag names and positional arg
+# names are unaffected by this ban, and the four flags themselves have no short
+# forms.
+_RESERVED_FRAMEWORK_FLAG_NAMES = frozenset({
+    "dry-run", "yes", "quiet", "verbose",
+})
+
+# Names reserved by the framework for global flags. The pre-existing set is
+# also what a SHORT flag name is checked against (the framework quartet bans
+# long names only).
+_RESERVED_GLOBAL_SHORT_NAMES = frozenset({
     "help", "h", "version", "v", "dump-schema", "mcp", "config", "hermetic",
 })
+_RESERVED_GLOBAL_FLAG_NAMES = _RESERVED_GLOBAL_SHORT_NAMES | _RESERVED_FRAMEWORK_FLAG_NAMES
+
+
+# argv token -> pre-scan result key for the reserved quartet.
+_RESERVED_QUARTET_TOKENS = {
+    "--dry-run": "dry_run",
+    "--yes": "yes",
+    "--quiet": "quiet",
+    "--verbose": "verbose",
+}
+
+
+def _err_flag_name_reserved_by_framework(name: str) -> str:
+    """Message template: a flag name collides with the reserved quartet."""
+    return (
+        f"flag name '{name}' is reserved by the framework "
+        f"(dry-run, yes, quiet, verbose)"
+    )
 
 
 def _parse_compound_type(
@@ -1798,6 +1871,8 @@ class Flag:
                 "flag 'force' is a reserved name; use a qualified name "
                 "like 'force-overwrite' or 'force-delete'"
             )
+        if self.name in _RESERVED_FRAMEWORK_FLAG_NAMES:
+            raise ValueError(_err_flag_name_reserved_by_framework(self.name))
         if self.name.startswith("no-"):
             raise ValueError(
                 f"flag '{self.name}': names starting with 'no-' are "
@@ -2839,11 +2914,16 @@ class App:
         for f in self.flags:
             if f.name in seen:
                 raise ValueError(f'duplicate global flag name "{f.name}"')
+            if f.name in _RESERVED_FRAMEWORK_FLAG_NAMES:
+                # Unreachable through Flag() construction (Flag.__post_init__
+                # bans the quartet first); kept so the global-flag validation
+                # path carries the same message for any other construction route.
+                raise ValueError(_err_flag_name_reserved_by_framework(f.name))
             if f.name in _RESERVED_GLOBAL_FLAG_NAMES:
                 raise ValueError(
                     f'global flag name "{f.name}" is reserved'
                 )
-            if f.short and f.short in _RESERVED_GLOBAL_FLAG_NAMES:
+            if f.short and f.short in _RESERVED_GLOBAL_SHORT_NAMES:
                 raise ValueError(
                     f'global short flag "{f.short}" is reserved'
                 )
@@ -2852,6 +2932,12 @@ class App:
         self._last_global_values: dict[str, object] = {}
         self._last_sources: dict[str, str] = {}
         self._last_hermetic: bool = False
+        # Framework-owned reserved quartet, extracted by the pre-scan and
+        # delivered on the Context (never as handler kwargs).
+        self._last_dry_run: bool = False
+        self._last_yes: bool = False
+        self._last_quiet: bool = False
+        self._last_verbose: bool = False
 
         # Resolve infrastructure roots eagerly, at construction. Infra vars have
         # no argv dependency, so resolution is sound here -- and this is WHY it
@@ -3661,8 +3747,13 @@ class App:
         def _check_handler(
             ctx, *, all: bool, tag: str, name: str,
             list: bool, json: bool, ignore_warnings: bool,
-            verbose: bool, dry_run: bool, **_kw,
+            **_kw,
         ) -> int:
+            # --verbose and --dry-run are framework-owned reserved names, so the
+            # check command's own two flags are gone and their values are read
+            # off the Context instead.
+            verbose = ctx.verbose
+            dry_run = ctx.dry_run
             # Materialize provider-sourced checks before any registry read
             # (covers the list, dry-run, and execution branches below).
             app_ref._materialize_check_providers()
@@ -3735,8 +3826,6 @@ class App:
             Flag(name="list", type=bool, default=False, help="List all registered checks with their tags and exit without running"),
             Flag(name="json", type=bool, default=False, help="Output check results as machine-readable JSON instead of human text"),
             Flag(name="ignore-warnings", type=bool, default=False, help="Treat warn-severity results as passing so they do not cause nonzero exit"),
-            Flag(name="verbose", type=bool, default=False, help="Show per-check notes and durations (including on passing checks) plus a trailing pass/fail/warn/skip count summary"),
-            Flag(name="dry-run", type=bool, default=False, help="Show which checks would run based on current filters without executing them"),
         ]
         extra_flags = [f for f in candidate_extra_flags if f.name not in global_flag_names]
         check_cmd = _build_and_validate_command(
@@ -4297,15 +4386,20 @@ class App:
         self._groups["config"] = config_grp
 
     def _pre_scan_reserved_flags(self, argv: list[str]) -> dict:
-        """Position-aware pre-scan for --dump-schema, --mcp, --config, --hermetic.
+        """Position-aware pre-scan for the framework-owned reserved flags.
+
+        Handles --dump-schema, --mcp, --config, --hermetic and the effects-regime
+        quartet --dry-run/--yes/--quiet/--verbose.
 
         Scans the pre-command region of argv (before the first non-flag
         token, before ``--``).  Known global flags and their values are
         skipped so that a global-flag value matching a command name does
-        not terminate the scan early.
+        not terminate the scan early. Everything at or after the command token
+        is left untouched -- which is what keeps a passthrough command's args
+        opaque to the framework.
 
         Returns a dict with keys: dump_schema, serve_mcp, hermetic, config_path,
-        err, cleaned_argv.
+        dry_run, yes, quiet, verbose, err, cleaned_argv.
         """
         # Build a set of known global flag tokens with value-taking info
         known_flags: dict[str, bool] = {}  # token -> takes_value
@@ -4343,6 +4437,14 @@ class App:
             # --hermetic (boolean, no value)
             if tok == "--hermetic":
                 result["hermetic"] = True
+                exclude_indices.add(i)
+                i += 1
+                continue
+
+            # The reserved quartet: booleans, no values, stripped from argv and
+            # delivered on the Context (never as handler kwargs).
+            if tok in _RESERVED_QUARTET_TOKENS:
+                result[_RESERVED_QUARTET_TOKENS[tok]] = True
                 exclude_indices.add(i)
                 i += 1
                 continue
@@ -4440,6 +4542,12 @@ class App:
         # Record for the dispatch ctx: connection env access is suppressed under
         # --hermetic so connection-dependent behavior (incl. checks) skips.
         self._last_hermetic = is_hermetic
+
+        # Record the reserved quartet for the dispatch ctx.
+        self._last_dry_run = bool(pre_scan.get("dry_run"))
+        self._last_yes = bool(pre_scan.get("yes"))
+        self._last_quiet = bool(pre_scan.get("quiet"))
+        self._last_verbose = bool(pre_scan.get("verbose"))
 
         # --hermetic + --config mutual exclusion
         if is_hermetic and pre_scan.get("config_path"):
@@ -5061,7 +5169,12 @@ class App:
             sys.exit(1)
         else:
             self._last_sources = sources
-            ctx = Context(stdout=sys.stdout, stderr=sys.stderr, sources=sources, infra=self._infra_access(self._last_hermetic))
+            ctx = Context(
+                stdout=sys.stdout, stderr=sys.stderr, sources=sources,
+                infra=self._infra_access(self._last_hermetic),
+                dry_run=self._last_dry_run, yes=self._last_yes,
+                quiet=self._last_quiet, verbose=self._last_verbose,
+            )
             if cmd.passthrough is not None:
                 result = cmd.passthrough.handler(ctx, cmd.name, data, self._last_global_values)
             else:
@@ -5134,7 +5247,12 @@ class App:
             self._last_sources = sources
             with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
                 try:
-                    ctx = Context(stdout=stdout_buf, stderr=stderr_buf, sources=sources, infra=self._infra_access(self._last_hermetic))
+                    ctx = Context(
+                        stdout=stdout_buf, stderr=stderr_buf, sources=sources,
+                        infra=self._infra_access(self._last_hermetic),
+                        dry_run=self._last_dry_run, yes=self._last_yes,
+                        quiet=self._last_quiet, verbose=self._last_verbose,
+                    )
                     if cmd.passthrough is not None:
                         handler_return = cmd.passthrough.handler(
                             ctx, cmd.name, data, self._last_global_values,

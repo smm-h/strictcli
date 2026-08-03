@@ -240,7 +240,7 @@ class TestCheckDryRun:
                 return impl
             app._check_defs[name].impl = make_impl(name)
 
-        result = app.test(["check", "--all", "--dry-run"])
+        result = app.test(["--dry-run", "check", "--all"])
         assert result.exit_code == 0
         assert "Would run" in result.stdout
         assert len(ran) == 0  # Nothing should have actually run
@@ -276,7 +276,7 @@ class TestCheckVerbose:
                 "version-check": pass_outcome("All good"),
             },
         )
-        result = app.test(["check", "--all", "--verbose"])
+        result = app.test(["--verbose", "check", "--all"])
         assert result.exit_code == 0
         assert "PASS" in result.stdout
         assert "[error]" not in result.stdout
@@ -381,7 +381,7 @@ class TestCheckCommandVerboseNotes:
             tmp_path, monkeypatch, TWO_CHECKS_TOML,
             pass_results={"version-check": self._noted_pass()},
         )
-        result = app.test(["check", "--all", "--verbose"])
+        result = app.test(["--verbose", "check", "--all"])
         assert result.exit_code == 0
         assert "[note] a verbose-only note" in result.stdout
         import re
@@ -399,13 +399,18 @@ class TestCheckCommandVerboseNotes:
         assert "passed /" not in result.stdout
         assert "ms)" not in result.stdout
 
-    def test_verbose_flag_help_describes_real_behavior(self, tmp_path, monkeypatch):
+    def test_check_no_longer_declares_verbose_or_dry_run_flags(self, tmp_path, monkeypatch):
+        """--verbose and --dry-run are framework-owned reserved names, so the
+        check command's own two flags are dropped and the values are read off
+        the Context (subsumption)."""
         app = _setup_checks_app(tmp_path, monkeypatch, TWO_CHECKS_TOML)
+        check_cmd = app._commands["check"]
+        names = {f.name for f in check_cmd.flags}
+        assert names == {"all", "tag", "name", "list", "json", "ignore-warnings"}
         result = app.test(["check", "--help"])
         assert result.exit_code == 0
-        assert "notes" in result.stdout
-        # The old help text ("Show full details for passing checks") was a lie.
-        assert "Show full details for passing checks" not in result.stdout
+        assert "--verbose" not in result.stdout
+        assert "--dry-run" not in result.stdout
 
     def test_json_includes_notes_and_duration(self, tmp_path, monkeypatch):
         app = _setup_checks_app(

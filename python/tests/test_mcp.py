@@ -195,8 +195,8 @@ class TestMcpToolsList:
         @app.command("deploy", help="deploy the app")
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
-        @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-        def deploy(ctx, target, count, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="loud mode")
+        def deploy(ctx, target, count, loud):
             pass
 
         resp = _send_one(app, {
@@ -286,17 +286,17 @@ class TestMcpToolsCall:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def migrate(ctx, dry_run):
-            return strictcli.outcome(data={"migrated": True, "dry_run": dry_run})
+        @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
+        def migrate(ctx, sim_run):
+            return strictcli.outcome(data={"migrated": True, "sim_run": sim_run})
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 14, "method": "tools/call",
-            "params": {"name": "db.migrate", "arguments": {"dry_run": True}},
+            "params": {"name": "db.migrate", "arguments": {"sim_run": True}},
         })
         content = resp["result"]["content"]
         parsed = json.loads(content[0]["text"])
-        assert parsed == {"migrated": True, "dry_run": True}
+        assert parsed == {"migrated": True, "sim_run": True}
 
     def test_call_unknown_tool(self):
         """Unknown tools surface as tool-result errors (isError), not -32602.

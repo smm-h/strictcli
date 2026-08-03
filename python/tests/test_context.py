@@ -35,7 +35,8 @@ class TestContextOutputRouting:
     def test_debug_writes_to_stdout(self):
         stdout = io.StringIO()
         stderr = io.StringIO()
-        ctx = Context(stdout=stdout, stderr=stderr)
+        # debug is gated by --verbose (see the quartet gating table).
+        ctx = Context(stdout=stdout, stderr=stderr, verbose=True)
         ctx.debug("trace")
         assert stdout.getvalue() == "trace\n"
         assert stderr.getvalue() == ""

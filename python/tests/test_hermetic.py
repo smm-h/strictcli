@@ -46,17 +46,17 @@ def test_hermetic_skips_env_global_flags(monkeypatch):
 
     app = strictcli.App(
         name="myapp", version="1.0.0", help="test app", env_prefix="MYAPP",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose", env="MYAPP_VERBOSE", default=False)],
+        flags=[strictcli.Flag(name="loud", type=bool, help="loud", env="MYAPP_VERBOSE", default=False)],
     )
 
     @app.command("run", help="run it")
-    def run(ctx, verbose):
-        print(f"verbose={'true' if verbose else 'false'}")
+    def run(ctx, loud):
+        print(f"loud={'true' if loud else 'false'}")
         return 0
 
     r = app.test(["--hermetic", "run"])
     assert r.exit_code == 0
-    assert "verbose=false" in r.stdout
+    assert "loud=false" in r.stdout
 
 
 def test_hermetic_cli_flag_still_works(monkeypatch):
@@ -165,8 +165,8 @@ def test_hermetic_required_bool_missing():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
     @app.command("run", help="run it")
-    @strictcli.flag(name="verbose", type=bool, help="verbose mode")
-    def run(ctx, verbose):
+    @strictcli.flag(name="loud", type=bool, help="loud mode")
+    def run(ctx, loud):
         return 0
 
     r = app.test(["--hermetic", "run"])

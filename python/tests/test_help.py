@@ -134,14 +134,14 @@ def test_help_after_flags():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", type=bool, default=False, help="enable verbose output")
-    def cmd(ctx, verbose):
+    @strictcli.flag("loud", type=bool, default=False, help="enable loud output")
+    def cmd(ctx, loud):
         pass
 
-    r = app.test(["cmd", "--verbose", "--help"])
+    r = app.test(["cmd", "--loud", "--help"])
     assert r.exit_code == 0
     assert "cmd" in r.stdout
-    assert "--verbose" in r.stdout
+    assert "--loud" in r.stdout
 
 
 def test_help_not_after_separator():

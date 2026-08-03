@@ -64,7 +64,7 @@ def test_tomlless_list_dryrun_execution():
     assert r.exit_code == 0
     assert "prov-a" in r.stdout and "prov-b" in r.stdout
 
-    r = app.test(["check", "--all", "--dry-run"])
+    r = app.test(["--dry-run", "check", "--all"])
     assert "prov-a" in r.stdout and "prov-b" in r.stdout
 
     r = app.test(["check", "--all"])
@@ -130,7 +130,7 @@ def test_collision_between_providers():
 
 @pytest.mark.parametrize("argv", [
     ["check", "--list"],
-    ["check", "--all", "--dry-run"],
+    ["--dry-run", "check", "--all"],
     ["check", "--all"],
 ])
 def test_provider_raise_hard_error_cli(argv):
@@ -193,7 +193,7 @@ def test_memoized_once():
 
     app.register_check_provider(provider)
     app.test(["check", "--list"])
-    app.test(["check", "--all", "--dry-run"])
+    app.test(["--dry-run", "check", "--all"])
     app.test(["check", "--all"])
     app.run_checks(SimpleContext(project_root=Path("/tmp")), run_all=True)
     assert calls["n"] == 1

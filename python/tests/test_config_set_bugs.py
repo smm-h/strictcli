@@ -31,15 +31,15 @@ def test_config_set_writes_typed_values(tmp_path):
 
     @app.command("run", help="run something")
     @strictcli.flag("count", type=int, help="how many", default=0)
-    @strictcli.flag("verbose", type=bool, help="be verbose", default=False)
+    @strictcli.flag("loud", type=bool, help="be loud", default=False)
     @strictcli.flag("rate", type=float, help="the rate", default=0.0)
-    def run(ctx, count, verbose, rate):
+    def run(ctx, count, loud, rate):
         pass
 
     r = app.test(["config", "set", "count", "42"])
     assert r.exit_code == 0
 
-    r = app.test(["config", "set", "verbose", "true"])
+    r = app.test(["config", "set", "loud", "true"])
     assert r.exit_code == 0
 
     r = app.test(["config", "set", "rate", "3.14"])
@@ -48,8 +48,8 @@ def test_config_set_writes_typed_values(tmp_path):
     data = json.loads(config_file.read_text())
     assert isinstance(data["count"], int), f"expected int, got {type(data['count']).__name__}: {data['count']!r}"
     assert data["count"] == 42
-    assert isinstance(data["verbose"], bool), f"expected bool, got {type(data['verbose']).__name__}: {data['verbose']!r}"
-    assert data["verbose"] is True
+    assert isinstance(data["loud"], bool), f"expected bool, got {type(data['loud']).__name__}: {data['loud']!r}"
+    assert data["loud"] is True
     assert isinstance(data["rate"], float), f"expected float, got {type(data['rate']).__name__}: {data['rate']!r}"
     assert data["rate"] == 3.14
 

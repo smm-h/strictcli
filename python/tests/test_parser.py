@@ -20,9 +20,9 @@ def _make_app_with_bool_flag():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-    def cmd(ctx, verbose):
-        print(f"verbose={verbose}")
+    @strictcli.flag("loud", type=bool, default=False, help="be loud")
+    def cmd(ctx, loud):
+        print(f"loud={loud}")
 
     return app
 
@@ -46,9 +46,9 @@ def test_str_flag_equals():
 def test_bool_flag_present():
     """Bool flag present means True."""
     app = _make_app_with_bool_flag()
-    r = app.test(["cmd", "--verbose"])
+    r = app.test(["cmd", "--loud"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 def test_bool_flag_absent():
@@ -56,15 +56,15 @@ def test_bool_flag_absent():
     app = _make_app_with_bool_flag()
     r = app.test(["cmd"])
     assert r.exit_code == 0
-    assert "verbose=False" in r.stdout
+    assert "loud=False" in r.stdout
 
 
 def test_no_flag_negation():
     """--no-flag negation sets False."""
     app = _make_app_with_bool_flag()
-    r = app.test(["cmd", "--no-verbose"])
+    r = app.test(["cmd", "--no-loud"])
     assert r.exit_code == 0
-    assert "verbose=False" in r.stdout
+    assert "loud=False" in r.stdout
 
 
 def test_short_flag_bool():
@@ -72,13 +72,13 @@ def test_short_flag_bool():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command")
-    @strictcli.flag("verbose", short="v", type=bool, default=False, help="be verbose")
-    def cmd(ctx, verbose):
-        print(f"verbose={verbose}")
+    @strictcli.flag("loud", short="v", type=bool, default=False, help="be loud")
+    def cmd(ctx, loud):
+        print(f"loud={loud}")
 
     r = app.test(["cmd", "-v"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 def test_short_flag_with_value():
@@ -116,14 +116,14 @@ def test_double_dash_separator():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", args=[strictcli.Arg(name="path", help="a path")])
-    @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-    def cmd(ctx, verbose, path):
-        print(f"verbose={verbose} path={path}")
+    @strictcli.flag("loud", type=bool, default=False, help="be loud")
+    def cmd(ctx, loud, path):
+        print(f"loud={loud} path={path}")
 
     r = app.test(["cmd", "--", "--not-a-flag"])
     assert r.exit_code == 0
     assert "path=--not-a-flag" in r.stdout
-    assert "verbose=False" in r.stdout
+    assert "loud=False" in r.stdout
 
 
 def test_positional_args_in_order():

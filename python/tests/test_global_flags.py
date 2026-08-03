@@ -6,19 +6,19 @@ import strictcli
 
 
 def _make_app_with_global_verbose():
-    """Helper: app with a global --verbose flag and a simple command."""
+    """Helper: app with a global --loud flag and a simple command."""
     app = strictcli.App(
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="enable verbose output")],
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="enable loud output")],
     )
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="build target", default="all")
-    def run(ctx, target, verbose):
-        if verbose:
-            print(f"verbose: running {target}")
+    def run(ctx, target, loud):
+        if loud:
+            print(f"loud: running {target}")
         else:
             print(f"running {target}")
 
@@ -28,9 +28,9 @@ def _make_app_with_global_verbose():
 def test_global_bool_flag_before_command():
     """Global bool flag before the command name is parsed."""
     app = _make_app_with_global_verbose()
-    r = app.test(["--verbose", "run"])
+    r = app.test(["--loud", "run"])
     assert r.exit_code == 0
-    assert "verbose: running all" in r.stdout
+    assert "loud: running all" in r.stdout
 
 
 def test_global_bool_flag_not_provided():
@@ -39,7 +39,7 @@ def test_global_bool_flag_not_provided():
     r = app.test(["run"])
     assert r.exit_code == 0
     assert "running all" in r.stdout
-    assert "verbose" not in r.stdout
+    assert "loud" not in r.stdout
 
 
 def test_global_str_flag_with_value():
@@ -140,15 +140,15 @@ def test_global_flag_appears_in_command_help():
     r = app.test(["run", "--help"])
     assert r.exit_code == 0
     assert "Global flags:" in r.stdout
-    assert "--verbose" in r.stdout
+    assert "--loud" in r.stdout
 
 
 def test_global_and_command_flags_together():
     """Global flags and command flags work together."""
     app = _make_app_with_global_verbose()
-    r = app.test(["--verbose", "run", "--target", "web"])
+    r = app.test(["--loud", "run", "--target", "web"])
     assert r.exit_code == 0
-    assert "verbose: running web" in r.stdout
+    assert "loud: running web" in r.stdout
 
 
 def test_collision_between_global_and_command_flag():
@@ -157,14 +157,14 @@ def test_collision_between_global_and_command_flag():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
     )
 
     with pytest.raises(ValueError, match="collides with a global flag"):
 
         @app.command("run", help="run something")
-        @strictcli.flag("verbose", type=bool, default=False, help="also verbose")
-        def run(ctx, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="also loud")
+        def run(ctx, loud):
             pass
 
 
@@ -174,41 +174,41 @@ def test_global_flag_with_double_dash_separator():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
     )
 
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="build target", default="all")
-    def run(ctx, target, verbose):
-        print(f"verbose={verbose} target={target}")
+    def run(ctx, target, loud):
+        print(f"loud={loud} target={target}")
 
-    # -- stops global flag parsing, so --verbose is not consumed as global
+    # -- stops global flag parsing, so --loud is not consumed as global
     # The command parser sees: -- run --target web
     # But "-- run" means run is a positional, not a command name... actually
     # the remaining tokens include -- so command routing sees "--" first.
-    # Let's test: --verbose before --, then command after --
-    r = app.test(["--verbose", "--", "run", "--target", "web"])
+    # Let's test: --loud before --, then command after --
+    r = app.test(["--loud", "--", "run", "--target", "web"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
     assert "target=web" in r.stdout
 
 
 def test_global_flag_negation():
-    """--no-verbose negation works for global bool flags."""
+    """--no-loud negation works for global bool flags."""
     app = strictcli.App(
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, help="verbose output", default=True)],
+        flags=[strictcli.Flag(name="loud", type=bool, help="loud output", default=True)],
     )
 
     @app.command("run", help="run something")
-    def run(ctx, verbose):
-        print(f"verbose={verbose}")
+    def run(ctx, loud):
+        print(f"loud={loud}")
 
-    r = app.test(["--no-verbose", "run"])
+    r = app.test(["--no-loud", "run"])
     assert r.exit_code == 0
-    assert "verbose=False" in r.stdout
+    assert "loud=False" in r.stdout
 
 
 def test_global_flag_short_form():
@@ -217,16 +217,16 @@ def test_global_flag_short_form():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", short="V", type=bool, default=False, help="verbose output")],
+        flags=[strictcli.Flag(name="loud", short="V", type=bool, default=False, help="loud output")],
     )
 
     @app.command("run", help="run something")
-    def run(ctx, verbose):
-        print(f"verbose={verbose}")
+    def run(ctx, loud):
+        print(f"loud={loud}")
 
     r = app.test(["-V", "run"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 def test_global_flag_with_group():
@@ -235,18 +235,18 @@ def test_global_flag_with_group():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
     )
 
     grp = app.group("config", help="manage config")
 
     @grp.command("show", help="show config")
-    def show(ctx, verbose):
-        print(f"verbose={verbose}")
+    def show(ctx, loud):
+        print(f"loud={loud}")
 
-    r = app.test(["--verbose", "config", "show"])
+    r = app.test(["--loud", "config", "show"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 def test_global_flag_with_group_and_command_flags():
@@ -255,7 +255,7 @@ def test_global_flag_with_group_and_command_flags():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
     )
 
     grp = app.group("config", help="manage config")
@@ -263,15 +263,15 @@ def test_global_flag_with_group_and_command_flags():
     @grp.command("set", help="set a value")
     @strictcli.flag("key", type=str, help="config key")
     @strictcli.flag("value", type=str, help="config value")
-    def set_(ctx, key, value, verbose):
-        if verbose:
-            print(f"verbose: setting {key}={value}")
+    def set_(ctx, key, value, loud):
+        if loud:
+            print(f"loud: setting {key}={value}")
         else:
             print(f"setting {key}={value}")
 
-    r = app.test(["--verbose", "config", "set", "--key", "name", "--value", "test"])
+    r = app.test(["--loud", "config", "set", "--key", "name", "--value", "test"])
     assert r.exit_code == 0
-    assert "verbose: setting name=test" in r.stdout
+    assert "loud: setting name=test" in r.stdout
 
 
 def test_global_flag_collision_in_group():
@@ -280,7 +280,7 @@ def test_global_flag_collision_in_group():
         name="myapp",
         version="1.0.0",
         help="test app",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
     )
 
     grp = app.group("config", help="manage config")
@@ -288,8 +288,8 @@ def test_global_flag_collision_in_group():
     with pytest.raises(ValueError, match="collides with a global flag"):
 
         @grp.command("show", help="show config")
-        @strictcli.flag("verbose", type=bool, default=False, help="also verbose")
-        def show(ctx, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="also loud")
+        def show(ctx, loud):
             pass
 
 
@@ -318,18 +318,18 @@ def test_multiple_global_flags():
         version="1.0.0",
         help="test app",
         flags=[
-            strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+            strictcli.Flag(name="loud", type=bool, default=False, help="loud output"),
             strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml"),
         ],
     )
 
     @app.command("run", help="run")
-    def run(ctx, verbose, settings):
-        print(f"verbose={verbose} settings={settings}")
+    def run(ctx, loud, settings):
+        print(f"loud={loud} settings={settings}")
 
-    r = app.test(["--verbose", "--settings", "custom.toml", "run"])
+    r = app.test(["--loud", "--settings", "custom.toml", "run"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
     assert "settings=custom.toml" in r.stdout
 
 

@@ -22,9 +22,9 @@ def _make_config_app(config=True, flags=None):
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
-    @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-    def run(ctx, target, count, verbose):
-        print(f"target={target} count={count} verbose={verbose}")
+    @strictcli.flag("loud", type=bool, default=False, help="be loud")
+    def run(ctx, target, count, loud):
+        print(f"target={target} count={count} loud={loud}")
 
     return app
 
@@ -185,23 +185,23 @@ def test_config_show(tmp_path, monkeypatch):
     assert r.exit_code == 0
     assert "target = from-config  (source: config)" in r.stdout
     assert "count = 1  (source: default)" in r.stdout
-    assert "verbose = false  (source: default)" in r.stdout
+    assert "loud = false  (source: default)" in r.stdout
 
 
 # --- Test 10b: config show formats bools as lowercase (Go parity) ---
 
 def test_config_show_lowercase_bools(tmp_path, monkeypatch):
     """Config show formats bools as lowercase true/false, matching Go output."""
-    config_home = _write_config(tmp_path, "testapp", {"verbose": True})
+    config_home = _write_config(tmp_path, "testapp", {"loud": True})
     monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
     app = _make_config_app(config=True)
     r = app.test(["config", "show", "--plain"])
     assert r.exit_code == 0
     # Bool from config must be lowercase
-    assert "verbose = true  (source: config)" in r.stdout
+    assert "loud = true  (source: config)" in r.stdout
     # None (no default for bool) must show as <nil>
-    assert "verbose = True" not in r.stdout
-    assert "verbose = False" not in r.stdout
+    assert "loud = True" not in r.stdout
+    assert "loud = False" not in r.stdout
 
 
 def test_config_show_bool_false_default_lowercase(tmp_path, monkeypatch):
@@ -210,9 +210,9 @@ def test_config_show_bool_false_default_lowercase(tmp_path, monkeypatch):
     app = _make_config_app(config=True)
     r = app.test(["config", "show", "--plain"])
     assert r.exit_code == 0
-    # verbose has no explicit default, defaults to False -- must be lowercase
-    assert "verbose = false  (source: default)" in r.stdout
-    assert "verbose = False" not in r.stdout
+    # loud has no explicit default, defaults to False -- must be lowercase
+    assert "loud = false  (source: default)" in r.stdout
+    assert "loud = False" not in r.stdout
 
 
 # --- Test 11: config respects XDG_CONFIG_HOME ---
@@ -232,12 +232,12 @@ def test_xdg_config_home(tmp_path, monkeypatch):
 
 def test_config_bool_value(tmp_path, monkeypatch):
     """Config file with bool values works correctly."""
-    config_home = _write_config(tmp_path, "testapp", {"verbose": True})
+    config_home = _write_config(tmp_path, "testapp", {"loud": True})
     monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
     app = _make_config_app(config=True)
     r = app.test(["run"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 # --- Additional: config with int values ---
@@ -509,7 +509,7 @@ def test_custom_config_path_config_set(tmp_path):
 def test_toml_format_reads_correctly(tmp_path):
     """TOML format config reads values correctly."""
     config_file = tmp_path / "config.toml"
-    config_file.write_text('target = "toml-value"\ncount = 42\nverbose = true\n')
+    config_file.write_text('target = "toml-value"\ncount = 42\nloud = true\n')
 
     app = strictcli.App(
         name="testapp",
@@ -523,15 +523,15 @@ def test_toml_format_reads_correctly(tmp_path):
     @app.command("run", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
-    @strictcli.flag("verbose", type=bool, default=False, help="be verbose")
-    def run(ctx, target, count, verbose):
-        print(f"target={target} count={count} verbose={verbose}")
+    @strictcli.flag("loud", type=bool, default=False, help="be loud")
+    def run(ctx, target, count, loud):
+        print(f"target={target} count={count} loud={loud}")
 
     r = app.test(["run"])
     assert r.exit_code == 0
     assert "target=toml-value" in r.stdout
     assert "count=42" in r.stdout
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 def test_toml_format_set_writes_correctly(tmp_path):
@@ -744,7 +744,7 @@ def test_config_show_json(tmp_path, monkeypatch):
     data = json.loads(r.stdout)
     assert data["target"] == {"value": "from-config", "source": "config"}
     assert data["count"] == {"value": 1, "source": "default"}
-    assert data["verbose"] == {"value": False, "source": "default"}
+    assert data["loud"] == {"value": False, "source": "default"}
     # Keys must be sorted
     keys = list(data.keys())
     assert keys == sorted(keys)
@@ -752,14 +752,14 @@ def test_config_show_json(tmp_path, monkeypatch):
 
 def test_config_show_json_bool_values(tmp_path, monkeypatch):
     """config show --json preserves typed values (bools, ints)."""
-    config_home = _write_config(tmp_path, "testapp", {"verbose": True, "count": 42})
+    config_home = _write_config(tmp_path, "testapp", {"loud": True, "count": 42})
     monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
     app = _make_config_app(config=True)
     r = app.test(["config", "show", "--json"])
     assert r.exit_code == 0
     data = json.loads(r.stdout)
-    assert data["verbose"]["value"] is True
-    assert data["verbose"]["source"] == "config"
+    assert data["loud"]["value"] is True
+    assert data["loud"]["source"] == "config"
     assert data["count"]["value"] == 42
     assert data["count"]["source"] == "config"
 
@@ -1655,7 +1655,7 @@ def test_conflict_mode_implied_excluded(tmp_path, monkeypatch):
     """Implied source does NOT trigger conflict with config."""
     config_dir = tmp_path / "testapp"
     config_dir.mkdir(parents=True)
-    (config_dir / "config.json").write_text('{"verbose": true}')
+    (config_dir / "config.json").write_text('{"loud": true}')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = strictcli.App(
         name="testapp", version="1.0.0", help="test",
@@ -1663,11 +1663,11 @@ def test_conflict_mode_implied_excluded(tmp_path, monkeypatch):
     )
 
     @app.command("run", help="run",
-                 dependencies=[strictcli.Implies(flag="debug", implies="verbose", value=True)])
+                 dependencies=[strictcli.Implies(flag="debug", implies="loud", value=True)])
     @strictcli.flag("debug", type=bool, help="enable debug", default=False)
-    @strictcli.flag("verbose", type=bool, help="be verbose", default=False)
-    def run(ctx, debug, verbose):
-        print(f"verbose={verbose}")
+    @strictcli.flag("loud", type=bool, help="be loud", default=False)
+    def run(ctx, debug, loud):
+        print(f"loud={loud}")
 
     r = app.test(["run", "--debug"])
     assert r.exit_code == 0

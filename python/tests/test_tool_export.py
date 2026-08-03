@@ -56,12 +56,12 @@ class TestJsonSchemaBasicTypes:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-        def cmd(ctx, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="loud mode")
+        def cmd(ctx, loud):
             pass
 
         schema = app.json_schema("cmd")
-        assert schema["properties"]["verbose"]["type"] == "boolean"
+        assert schema["properties"]["loud"]["type"] == "boolean"
 
     def test_all_types_together(self):
         app = _build_app()
@@ -70,8 +70,8 @@ class TestJsonSchemaBasicTypes:
         @strictcli.flag("name", type=str, help="string flag")
         @strictcli.flag("count", type=int, help="integer flag")
         @strictcli.flag("factor", type=float, help="number flag")
-        @strictcli.flag("verbose", type=bool, default=False, help="boolean flag")
-        def cmd(ctx, name, count, factor, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="boolean flag")
+        def cmd(ctx, name, count, factor, loud):
             pass
 
         schema = app.json_schema("cmd")
@@ -80,7 +80,7 @@ class TestJsonSchemaBasicTypes:
         assert schema["properties"]["name"]["type"] == "string"
         assert schema["properties"]["count"]["type"] == "integer"
         assert schema["properties"]["factor"]["type"] == "number"
-        assert schema["properties"]["verbose"]["type"] == "boolean"
+        assert schema["properties"]["loud"]["type"] == "boolean"
 
 
 class TestJsonSchemaRequired:
@@ -115,12 +115,12 @@ class TestJsonSchemaRequired:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-        def cmd(ctx, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="loud mode")
+        def cmd(ctx, loud):
             pass
 
         schema = app.json_schema("cmd")
-        assert "verbose" not in schema["required"]
+        assert "loud" not in schema["required"]
 
     def test_repeatable_flag_never_required(self):
         """Repeatable (list) flags have default [], so never required."""
@@ -271,13 +271,13 @@ class TestJsonSchemaPositionalArgs:
         @app.command("cmd", help="a command", args=[
             strictcli.Arg(name="target", help="the target"),
         ])
-        @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-        def cmd(ctx, target, verbose):
+        @strictcli.flag("loud", type=bool, default=False, help="loud mode")
+        def cmd(ctx, target, loud):
             pass
 
         schema = app.json_schema("cmd")
         assert "target" in schema["properties"]
-        assert "verbose" in schema["properties"]
+        assert "loud" in schema["properties"]
 
 
 class TestJsonSchemaListFlag:
@@ -361,13 +361,13 @@ class TestJsonSchemaNestedPath:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def migrate(ctx, dry_run):
+        @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
+        def migrate(ctx, sim_run):
             pass
 
         schema = app.json_schema("db.migrate")
-        assert "dry_run" in schema["properties"]
-        assert schema["properties"]["dry_run"]["type"] == "boolean"
+        assert "sim_run" in schema["properties"]
+        assert schema["properties"]["sim_run"]["type"] == "boolean"
 
     def test_deeply_nested(self):
         app = _build_app()
@@ -417,13 +417,13 @@ class TestJsonSchemaFlagNameConversion:
         app = _build_app()
 
         @app.command("cmd", help="a command")
-        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def cmd(ctx, dry_run):
+        @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
+        def cmd(ctx, sim_run):
             pass
 
         schema = app.json_schema("cmd")
-        assert "dry_run" in schema["properties"]
-        assert "dry-run" not in schema["properties"]
+        assert "sim_run" in schema["properties"]
+        assert "sim-run" not in schema["properties"]
 
 
 class TestJsonSchemaVariadicArg:
@@ -911,13 +911,13 @@ class TestToolExecuteGroupedCommand:
         grp = app.group("db", help="database commands")
 
         @grp.command("migrate", help="run migrations")
-        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def migrate(ctx, dry_run):
-            captured["dry_run"] = dry_run
-            return strictcli.outcome(data={"migrated": True, "dry_run": dry_run})
+        @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
+        def migrate(ctx, sim_run):
+            captured["sim_run"] = sim_run
+            return strictcli.outcome(data={"migrated": True, "sim_run": sim_run})
 
         tools = app.as_tools()
         migrate_tool = next(t for t in tools if t.name == "db.migrate")
-        result = asyncio.run(migrate_tool.execute(dry_run=True))
-        assert captured["dry_run"] is True
-        assert result == {"migrated": True, "dry_run": True}
+        result = asyncio.run(migrate_tool.execute(sim_run=True))
+        assert captured["sim_run"] is True
+        assert result == {"migrated": True, "sim_run": True}

@@ -27,10 +27,10 @@ class TestPassthroughReceivesRawArgs:
         def exec_cmd():
             pass
 
-        result = app.test(["exec", "--verbose", "-n", "3", "file.txt"])
+        result = app.test(["exec", "--loud", "-n", "3", "file.txt"])
         assert result.exit_code == 0
         assert capture["name"] == "exec"
-        assert capture["args"] == ["--verbose", "-n", "3", "file.txt"]
+        assert capture["args"] == ["--loud", "-n", "3", "file.txt"]
 
 
 class TestPassthroughNoArgs:
@@ -151,8 +151,8 @@ class TestPassthroughWithFlagsRaisesValueError:
         app = _build_app()
         try:
             @app.command("exec", help="run", passthrough=pt)
-            @strictcli.flag("verbose", type=bool, default=False, help="verbose output")
-            def exec_cmd(verbose):
+            @strictcli.flag("loud", type=bool, default=False, help="loud output")
+            def exec_cmd(loud):
                 pass
             assert False, "should have raised ValueError"
         except ValueError as e:

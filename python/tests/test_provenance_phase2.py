@@ -151,8 +151,8 @@ def test_global_flag_env_source(monkeypatch):
         name="myapp", version="1.0.0", help="test app",
         env_prefix="MYAPP",
         flags=[
-            strictcli.Flag(name="verbose", type=bool, env="MYAPP_VERBOSE",
-                           default=False, help="verbose"),
+            strictcli.Flag(name="loud", type=bool, env="MYAPP_VERBOSE",
+                           default=False, help="loud"),
         ],
     )
 
@@ -162,13 +162,13 @@ def test_global_flag_env_source(monkeypatch):
 
     r = app.test(["run"])
     assert r.exit_code == 0, r.stderr
-    assert app._last_sources["verbose"] == "env"
+    assert app._last_sources["loud"] == "env"
 
 
 def test_global_flag_config_source():
     """A global flag set by config gets source 'config'."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump({"verbose": True}, f)
+        json.dump({"loud": True}, f)
         config_path = f.name
 
     try:
@@ -176,8 +176,8 @@ def test_global_flag_config_source():
             name="myapp", version="1.0.0", help="test app",
             config=True, config_path=config_path,
             flags=[
-                strictcli.Flag(name="verbose", type=bool, default=False,
-                               help="verbose"),
+                strictcli.Flag(name="loud", type=bool, default=False,
+                               help="loud"),
             ],
         )
 
@@ -187,7 +187,7 @@ def test_global_flag_config_source():
 
         r = app.test(["run"])
         assert r.exit_code == 0, r.stderr
-        assert app._last_sources["verbose"] == "config"
+        assert app._last_sources["loud"] == "config"
     finally:
         os.unlink(config_path)
 
@@ -197,8 +197,8 @@ def test_global_flag_cli_source():
     app = strictcli.App(
         name="myapp", version="1.0.0", help="test app",
         flags=[
-            strictcli.Flag(name="verbose", type=bool, default=False,
-                           help="verbose"),
+            strictcli.Flag(name="loud", type=bool, default=False,
+                           help="loud"),
         ],
     )
 
@@ -206,9 +206,9 @@ def test_global_flag_cli_source():
     def run(ctx, **kw):
         return 0
 
-    r = app.test(["--verbose", "run"])
+    r = app.test(["--loud", "run"])
     assert r.exit_code == 0, r.stderr
-    assert app._last_sources["verbose"] == "cli"
+    assert app._last_sources["loud"] == "cli"
 
 
 def test_global_flag_default_source():
@@ -216,8 +216,8 @@ def test_global_flag_default_source():
     app = strictcli.App(
         name="myapp", version="1.0.0", help="test app",
         flags=[
-            strictcli.Flag(name="verbose", type=bool, default=False,
-                           help="verbose"),
+            strictcli.Flag(name="loud", type=bool, default=False,
+                           help="loud"),
         ],
     )
 
@@ -227,7 +227,7 @@ def test_global_flag_default_source():
 
     r = app.test(["run"])
     assert r.exit_code == 0, r.stderr
-    assert app._last_sources["verbose"] == "default"
+    assert app._last_sources["loud"] == "default"
 
 
 # ---------------------------------------------------------------------------

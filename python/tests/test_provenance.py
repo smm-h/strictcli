@@ -64,17 +64,17 @@ def test_mutex_implied_source_not_present():
     @app.command(
         "out", help="output command", mutex=[mg],
         dependencies=[
-            # --verbose implies --text=true
-            strictcli.Implies(flag="verbose", implies="text", value=True),
+            # --loud implies --text=true
+            strictcli.Implies(flag="loud", implies="text", value=True),
         ],
     )
-    @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-    def out(ctx, json, text, verbose):
+    @strictcli.flag("loud", type=bool, default=False, help="loud mode")
+    def out(ctx, json, text, loud):
         print(f"json={json} text={text}")
 
-    # Provide --json and --verbose. --verbose implies --text=True (source=implied).
+    # Provide --json and --loud. --loud implies --text=True (source=implied).
     # Mutex should see only --json as present, NOT fire.
-    r = app.test(["out", "--json", "--verbose"])
+    r = app.test(["out", "--json", "--loud"])
     assert r.exit_code == 0, f"expected success, got: {r.stderr}"
 
 
@@ -121,20 +121,20 @@ def test_requires_implied_source_counts_as_present():
     @app.command(
         "deploy", help="deploy",
         dependencies=[
-            # --all implies --verbose=true
-            strictcli.Implies(flag="all", implies="verbose", value=True),
-            # --target requires --verbose
-            strictcli.Requires(flag="target", depends_on="verbose"),
+            # --all implies --loud=true
+            strictcli.Implies(flag="all", implies="loud", value=True),
+            # --target requires --loud
+            strictcli.Requires(flag="target", depends_on="loud"),
         ],
     )
     @strictcli.flag("all", type=bool, default=False, help="deploy all")
-    @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
+    @strictcli.flag("loud", type=bool, default=False, help="loud mode")
     @strictcli.flag("target", type=str, help="deploy target")
-    def deploy(ctx, all, verbose, target):
-        print(f"all={all} verbose={verbose} target={target}")
+    def deploy(ctx, all, loud, target):
+        print(f"all={all} loud={loud} target={target}")
 
-    # Provide --all and --target. --all implies --verbose (source=implied).
-    # --target requires --verbose. Implied counts for deps, so should succeed.
+    # Provide --all and --target. --all implies --loud (source=implied).
+    # --target requires --loud. Implied counts for deps, so should succeed.
     r = app.test(["deploy", "--all", "--target", "prod"])
     assert r.exit_code == 0, f"expected success, got: {r.stderr}"
 
@@ -150,16 +150,16 @@ def test_requires_default_source_not_present():
     @app.command(
         "deploy", help="deploy",
         dependencies=[
-            # --target requires --verbose
-            strictcli.Requires(flag="target", depends_on="verbose"),
+            # --target requires --loud
+            strictcli.Requires(flag="target", depends_on="loud"),
         ],
     )
     @strictcli.flag("target", type=str, help="deploy target")
-    @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-    def deploy(ctx, target, verbose):
-        print(f"target={target} verbose={verbose}")
+    @strictcli.flag("loud", type=bool, default=False, help="loud mode")
+    def deploy(ctx, target, loud):
+        print(f"target={target} loud={loud}")
 
-    # Provide --target but NOT --verbose. --verbose has default=False,
+    # Provide --target but NOT --loud. --loud has default=False,
     # so it gets source=default. Default does NOT count for deps.
     r = app.test(["deploy", "--target", "prod"])
     assert r.exit_code == 1
@@ -195,15 +195,15 @@ def test_invoke_defaulted_not_present_for_requires():
     @app.command(
         "deploy", help="deploy",
         dependencies=[
-            strictcli.Requires(flag="target", depends_on="verbose"),
+            strictcli.Requires(flag="target", depends_on="loud"),
         ],
     )
     @strictcli.flag("target", type=str, help="deploy target")
-    @strictcli.flag("verbose", type=bool, default=False, help="verbose mode")
-    def deploy(ctx, target, verbose):
-        print(f"target={target} verbose={verbose}")
+    @strictcli.flag("loud", type=bool, default=False, help="loud mode")
+    def deploy(ctx, target, loud):
+        print(f"target={target} loud={loud}")
 
-    # Provide target but not verbose. verbose will be defaulted.
+    # Provide target but not loud. loud will be defaulted.
     try:
         app.call("deploy", target="prod")
         assert False, "expected InvokeError for requires violation"

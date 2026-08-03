@@ -6,18 +6,18 @@ import strictcli
 def test_flag_set_with_single_flag():
     """FlagSet with single flag applied to command."""
     verbose_flag_set = strictcli.FlagSet(
-        name="verbose",
-        flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+        name="loud",
+        flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", help="a command", flag_sets=[verbose_flag_set])
-    def cmd(ctx, verbose):
-        print(f"verbose={verbose}")
+    def cmd(ctx, loud):
+        print(f"loud={loud}")
 
-    r = app.test(["cmd", "--verbose"])
+    r = app.test(["cmd", "--loud"])
     assert r.exit_code == 0
-    assert "verbose=True" in r.stdout
+    assert "loud=True" in r.stdout
 
 
 def test_flag_set_with_multiple_flags():

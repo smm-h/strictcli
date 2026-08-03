@@ -623,7 +623,7 @@ class TestRunChecksPurityPartition:
 
     def test_dry_run_annotates_purity(self, tmp_path):
         app = _make_app(tmp_path, PARTITION_TOML)
-        result = app.test(["check", "--all", "--dry-run"])
+        result = app.test(["--dry-run", "check", "--all"])
         assert result.exit_code == 0
         assert "[pure]" in result.stdout
         assert "[impure]" in result.stdout

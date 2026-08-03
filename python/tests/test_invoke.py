@@ -36,16 +36,16 @@ class TestInvokeBasicFlags:
         app = _build_app()
 
         @app.command("deploy", help="deploy")
-        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def deploy(ctx, dry_run):
-            captured["dry_run"] = dry_run
+        @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
+        def deploy(ctx, sim_run):
+            captured["sim_run"] = sim_run
 
-        app._invoke("deploy", {"dry_run": True})
-        assert captured["dry_run"] is True
+        app._invoke("deploy", {"sim_run": True})
+        assert captured["sim_run"] is True
 
         captured.clear()
-        app.test(["deploy", "--dry-run"])
-        assert captured["dry_run"] is True
+        app.test(["deploy", "--sim-run"])
+        assert captured["sim_run"] is True
 
     def test_int_flag(self):
         """Int flag passed via _invoke matches CLI parsing."""
@@ -87,12 +87,12 @@ class TestInvokeBasicFlags:
         app = _build_app()
 
         @app.command("deploy", help="deploy")
-        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def deploy(ctx, dry_run):
-            captured["dry_run"] = dry_run
+        @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
+        def deploy(ctx, sim_run):
+            captured["sim_run"] = sim_run
 
         app._invoke("deploy", {})
-        assert captured["dry_run"] is False
+        assert captured["sim_run"] is False
 
 
 class TestInvokeWithDefaults:
@@ -154,18 +154,18 @@ class TestInvokePositionalArgs:
             "deploy", help="deploy",
             args=[strictcli.Arg(name="target", help="deploy target")],
         )
-        @strictcli.flag("dry-run", type=bool, default=False, help="dry run mode")
-        def deploy(ctx, target, dry_run):
-            captured.update({"target": target, "dry_run": dry_run})
+        @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
+        def deploy(ctx, target, sim_run):
+            captured.update({"target": target, "sim_run": sim_run})
 
-        app._invoke("deploy", {"target": "staging", "dry_run": True})
+        app._invoke("deploy", {"target": "staging", "sim_run": True})
         assert captured["target"] == "staging"
-        assert captured["dry_run"] is True
+        assert captured["sim_run"] is True
 
         captured.clear()
-        app.test(["deploy", "--dry-run", "staging"])
+        app.test(["deploy", "--sim-run", "staging"])
         assert captured["target"] == "staging"
-        assert captured["dry_run"] is True
+        assert captured["sim_run"] is True
 
     def test_missing_required_positional_raises(self):
         app = _build_app()
@@ -230,28 +230,28 @@ class TestInvokeGlobalFlags:
     def test_global_flag_passed(self):
         captured = {}
         app = _build_app(
-            flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+            flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
         )
 
         @app.command("run", help="run")
-        def run(ctx, verbose):
-            captured["verbose"] = verbose
+        def run(ctx, loud):
+            captured["loud"] = loud
 
-        app._invoke("run", {"verbose": True})
-        assert captured["verbose"] is True
+        app._invoke("run", {"loud": True})
+        assert captured["loud"] is True
 
     def test_global_flag_default(self):
         captured = {}
         app = _build_app(
-            flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+            flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
         )
 
         @app.command("run", help="run")
-        def run(ctx, verbose):
-            captured["verbose"] = verbose
+        def run(ctx, loud):
+            captured["loud"] = loud
 
         app._invoke("run", {})
-        assert captured["verbose"] is False
+        assert captured["loud"] is False
 
     def test_global_str_flag(self):
         captured = {}
@@ -283,23 +283,23 @@ class TestInvokeGlobalFlags:
         """Global flags and command flags both appear in handler kwargs."""
         captured = {}
         app = _build_app(
-            flags=[strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output")],
+            flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
         )
 
         @app.command("deploy", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target", default="staging")
-        def deploy(ctx, target, verbose):
-            captured.update({"target": target, "verbose": verbose})
+        def deploy(ctx, target, loud):
+            captured.update({"target": target, "loud": loud})
 
-        app._invoke("deploy", {"target": "prod", "verbose": True})
+        app._invoke("deploy", {"target": "prod", "loud": True})
         assert captured["target"] == "prod"
-        assert captured["verbose"] is True
+        assert captured["loud"] is True
 
         # Compare with CLI path
         captured.clear()
-        app.test(["--verbose", "deploy", "--target", "prod"])
+        app.test(["--loud", "deploy", "--target", "prod"])
         assert captured["target"] == "prod"
-        assert captured["verbose"] is True
+        assert captured["loud"] is True
 
 
 class TestInvokePassthrough:
@@ -355,7 +355,7 @@ class TestInvokePassthrough:
 
         app = _build_app(
             flags=[
-                strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+                strictcli.Flag(name="loud", type=bool, default=False, help="loud output"),
                 strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml"),
             ],
         )
@@ -365,8 +365,8 @@ class TestInvokePassthrough:
         def exec_cmd():
             pass
 
-        app._invoke("exec", {"_args": ["--foo"], "verbose": True, "settings": "custom.toml"})
-        assert captured["globals"]["verbose"] is True
+        app._invoke("exec", {"_args": ["--foo"], "loud": True, "settings": "custom.toml"})
+        assert captured["globals"]["loud"] is True
         assert captured["globals"]["settings"] == "custom.toml"
 
     def test_passthrough_global_flag_defaults(self):
@@ -379,7 +379,7 @@ class TestInvokePassthrough:
 
         app = _build_app(
             flags=[
-                strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+                strictcli.Flag(name="loud", type=bool, default=False, help="loud output"),
                 strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml"),
             ],
         )
@@ -390,7 +390,7 @@ class TestInvokePassthrough:
             pass
 
         app._invoke("exec", {"_args": ["x"]})
-        assert captured["globals"]["verbose"] is False
+        assert captured["globals"]["loud"] is False
         assert captured["globals"]["settings"] == "default.toml"
 
     def test_passthrough_unknown_kwarg_raises(self):
@@ -595,17 +595,17 @@ class TestInvokeImplies:
         @app.command(
             "deploy", help="deploy",
             dependencies=[
-                strictcli.Implies(flag="ci", implies="yes", value=True),
+                strictcli.Implies(flag="ci", implies="agree", value=True),
             ],
         )
         @strictcli.flag("ci", type=bool, default=False, help="CI mode")
-        @strictcli.flag("yes", type=bool, default=False, help="non-interactive")
-        def deploy(ctx, ci, yes):
-            captured.update({"ci": ci, "yes": yes})
+        @strictcli.flag("agree", type=bool, default=False, help="non-interactive")
+        def deploy(ctx, ci, agree):
+            captured.update({"ci": ci, "agree": agree})
 
         app._invoke("deploy", {"ci": True})
         assert captured["ci"] is True
-        assert captured["yes"] is True
+        assert captured["agree"] is True
 
 
 class TestInvokeVariadicArgs:
