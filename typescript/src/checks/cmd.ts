@@ -22,6 +22,7 @@ import { type Context, contextIsHermetic } from "../context.js";
 import { type AnyFlag, flag } from "../factories.js";
 import { formatCommandHelp } from "../help.js";
 import { t } from "../types.js";
+import { effectsBypassProvider } from "./effects_bypass.js";
 import type {
 	CheckContext,
 	CheckDef,
@@ -50,6 +51,11 @@ export function enableChecks(app: AppImpl): void {
 	}
 	app.checks.enabled = true;
 	registerCheckCommand(app);
+	// The built-in effects-bypass lint rides the same provider hook the
+	// built-in cli-test-coverage check uses. Pushed directly (not through
+	// app.registerCheckProvider, which routes back here).
+	app.checks.providers.push(effectsBypassProvider(app));
+	app.checks.providerMaterializedCwd = undefined;
 }
 
 /** Registers the auto-generated `check` command (called from enableChecks). */

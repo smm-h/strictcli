@@ -30,12 +30,12 @@
 	},
 	"dependencies": {
 		"smol-toml": "^1.7.0",
-		"toml-eslint-parser": "^1.0.3"
+		"toml-eslint-parser": "^1.0.3",
+		"typescript": "^7.0.2"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.4",
-		"@types/node": "^22.20.1",
-		"typescript": "^7.0.2"
+		"@types/node": "^22.20.1"
 	},
 	"keywords": [
 		"rlsbl"
