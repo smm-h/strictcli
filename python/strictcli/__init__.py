@@ -285,10 +285,7 @@ class Context:
     def effects(self) -> "_Effects":
         """The effects handle for this run (see the effects-regime contract)."""
         if self._effects is None:
-            raise RuntimeError(
-                "ctx.effects is unavailable: this Context was constructed "
-                "outside a command dispatch"
-            )
+            raise RuntimeError(_msg_effects_unavailable())
         return self._effects
 
     def info(self, msg: str) -> None:
@@ -490,10 +487,9 @@ class Spawned:
         code = self._proc.wait()
         argv = " ".join(str(a) for a in self._proc.args)
         if check and code != 0:
-            raise EffectFailed(
-                f'command "{self._cmd_path}": effects.spawn failed: '
-                f"{argv} exited {code}"
-            )
+            # One template covers run and spawn (the method name is the
+            # parameter), so the parity catalogs carry one signature, not two.
+            _raise_effect_run_failed(self._cmd_path, "spawn", argv, code)
         # spawn always streams (the child inherits stdio), so there is nothing
         # captured to report.
         return Completed(exit_code=code, stdout="", stderr="")
@@ -539,9 +535,7 @@ class Unsettled:
     def _truncate(self) -> "_DryRunTruncated":
         step = len(self._log.records) + 1
         return _DryRunTruncated(
-            f"error: dry-run preview ends at step {step}: {self._cmd_path} "
-            f"branched on unsettled value {self._brand} — cannot preview past "
-            f"this point",
+            _msg_dry_run_truncated(step, self._cmd_path, self._brand),
             self._log,
         )
 
@@ -635,6 +629,72 @@ class _EffectLog:
 
     def to_list(self) -> list[dict]:
         return [rec.to_dict() for rec in self.records]
+
+
+# Message templates that are NOT raised -- printed to stderr, or carried on a
+# non-ValueError exception. Every one is a `_msg_*` function returning the
+# finished string, which is the shape conformance/check_error_parity.py extracts
+# (mirroring the Go `err*`/`prompt*` functions in errors.go and their TypeScript
+# twins). A template that is only ever inlined at its use site is invisible to
+# the extractor and silently drops out of the cross-language catalog.
+
+def _msg_dry_run_truncated(step: int, cmd: str, brand: str) -> str:
+    """The truncation error. Carries its own `error: ` prefix (it goes to
+    stderr directly, not through the parse-error formatter)."""
+    return (
+        f"error: dry-run preview ends at step {step}: {cmd} branched on "
+        f"unsettled value {brand} — cannot preview past this point"
+    )
+
+
+def _msg_confirm_prompt(cmd_path: str) -> str:
+    """The confirm prompt. A prompt, not an error, but parity is still checked."""
+    return f"about to run mutating command '{cmd_path}'. Proceed? [y/N] "
+
+
+def _msg_confirm_non_interactive() -> str:
+    return "error: stdin is not interactive; pass --yes to confirm"
+
+
+def _msg_confirm_declined() -> str:
+    return "aborted"
+
+
+def _msg_effects_unavailable() -> str:
+    return (
+        "ctx.effects is unavailable: this Context was constructed "
+        "outside a command dispatch"
+    )
+
+
+def _msg_effect_argv_not_sequence(name: str, method: str, got: str) -> str:
+    return (
+        f'command "{name}": effects.{method} argv must be a '
+        f"sequence of strings, not {got}"
+    )
+
+
+def _msg_effect_param_not_stringish(name: str, method: str, param: str,
+                                    got: str) -> str:
+    return (
+        f'command "{name}": effects.{method} parameter '
+        f"'{param}' must be a string, a path, or a forwarded effect result; "
+        f"got {got}"
+    )
+
+
+def _msg_effect_mode_not_int(name: str, got: str) -> str:
+    return (
+        f'command "{name}": effects.chmod parameter \'mode\' '
+        f"must be an int, got {got}"
+    )
+
+
+def _msg_effect_http_method_not_str(name: str, got: str) -> str:
+    return (
+        f'command "{name}": effects.http parameter \'method\' '
+        f"must be a string, got {got}"
+    )
 
 
 def _raise_effect_mutating_in_read_only(name: str, method: str):
@@ -780,11 +840,9 @@ class _Effects:
             if isinstance(text, bytes):
                 text = text.decode()
             return text, text
-        raise TypeError(
-            f'command "{self._cmd_path}": effects.{method} parameter '
-            f"'{param}' must be a string, a path, or a forwarded effect result; "
-            f"got {type(value).__name__}"
-        )
+        raise TypeError(_msg_effect_param_not_stringish(
+            self._cmd_path, method, param, type(value).__name__,
+        ))
 
     def _content_operand(self, value: object) -> tuple:
         """Resolve ``write``'s content. Returns ``(bytes_or_None, rendered)``.
@@ -863,10 +921,9 @@ class _Effects:
 
     def _resolve_argv(self, argv: object, method: str) -> tuple:
         if isinstance(argv, (str, bytes)) or not isinstance(argv, (list, tuple)):
-            raise TypeError(
-                f'command "{self._cmd_path}": effects.{method} argv must be a '
-                f"sequence of strings, not {type(argv).__name__}"
-            )
+            raise TypeError(_msg_effect_argv_not_sequence(
+                self._cmd_path, method, type(argv).__name__,
+            ))
         if not argv:
             raise ValueError(
                 f'command "{self._cmd_path}": effects.{method} argv must not be empty'
@@ -1047,10 +1104,9 @@ class _Effects:
             "skip_if_current": skip_if_current, "grant": grant,
         })
         if not isinstance(mode, int) or isinstance(mode, bool):
-            raise TypeError(
-                f'command "{self._cmd_path}": effects.chmod parameter \'mode\' '
-                f"must be an int, got {type(mode).__name__}"
-            )
+            raise TypeError(_msg_effect_mode_not_int(
+                self._cmd_path, type(mode).__name__,
+            ))
         rt_path, r_path = self._operand(path, "chmod", "path")
         detail = f"{r_path} 0{mode:o}"
         declared = self._authorize("chmod", FILE_WRITE, grant)
@@ -1079,10 +1135,9 @@ class _Effects:
             "grant": grant,
         })
         if not isinstance(method, str):
-            raise TypeError(
-                f'command "{self._cmd_path}": effects.http parameter \'method\' '
-                f"must be a string, got {type(method).__name__}"
-            )
+            raise TypeError(_msg_effect_http_method_not_str(
+                self._cmd_path, type(method).__name__,
+            ))
         rt_url, r_url = self._operand(url, "http", "url")
         detail = f"{method} {r_url}"
         declared = self._authorize("http", NET_MUTATE, grant)
@@ -5144,19 +5199,15 @@ class App:
         if self._last_dry_run or self._last_yes:
             return
         if not sys.stdin.isatty():
-            print("error: stdin is not interactive; pass --yes to confirm",
-                  file=sys.stderr)
+            print(_msg_confirm_non_interactive(), file=sys.stderr)
             sys.exit(1)
-        print(
-            f"about to run mutating command '{cmd_path}'. Proceed? [y/N] ",
-            file=sys.stderr, end="", flush=True,
-        )
+        print(_msg_confirm_prompt(cmd_path), file=sys.stderr, end="", flush=True)
         try:
             answer = sys.stdin.readline()
         except (EOFError, KeyboardInterrupt):
             answer = ""
         if answer.rstrip("\n") not in ("y", "Y"):
-            print("aborted", file=sys.stderr)
+            print(_msg_confirm_declined(), file=sys.stderr)
             sys.exit(1)
 
     def _arm_effects(self, cmd: "Command", cmd_path: str, *,
