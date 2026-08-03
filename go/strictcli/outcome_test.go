@@ -11,7 +11,7 @@ func TestExitOutcomeSetsExitCodeNoData(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(3)
-	})
+	}, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 3 {
 		t.Fatalf("exit = %d, want 3", r.ExitCode)
@@ -28,7 +28,7 @@ func TestExitDataPrintsJSONAndCaptures(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return ExitData(0, map[string]interface{}{"name": "widget", "count": 42})
-	})
+	}, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"info"})
 	if r.ExitCode != 0 {
 		t.Fatalf("exit = %d: %s", r.ExitCode, r.Stderr)
@@ -51,7 +51,7 @@ func TestExitDataNilDataDoesNotPrint(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return ExitData(0, nil)
-	})
+	}, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"info"})
 	if r.Stdout != "" {
 		t.Fatalf("Stdout = %q, want empty for nil data", r.Stdout)
@@ -68,7 +68,7 @@ func TestExitDataReturnedViaCall(t *testing.T) {
 	}, WithFlags(
 		StringFlag("key", "data key"),
 		StringFlag("value", "data value"),
-	))
+	), WithEffect(EffectReadOnly))
 	result, err := app.Call("store", map[string]interface{}{"key": "status", "value": "active"})
 	if err != nil {
 		t.Fatalf("Call error: %v", err)
@@ -142,7 +142,7 @@ func TestPassthroughReceivesContext(t *testing.T) {
 		gotCtx = ctx != nil
 		ctx.Warn("passthrough ran")
 		return 7
-	})
+	}, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"exec", "a", "b"})
 	if !gotCtx {
 		t.Fatal("passthrough did not receive a non-nil Context")
@@ -159,18 +159,18 @@ func TestPassthroughReceivesContext(t *testing.T) {
 
 func TestGlobalsMergedIntoKwargs(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "verbose", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "loud", Default(false)))
 	var captured bool
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		captured = Get[bool](kwargs, "verbose")
+		captured = Get[bool](kwargs, "loud")
 		return Exit(0)
-	})
-	r := app.Test([]string{"--verbose", "run"})
+	}, WithEffect(EffectReadOnly))
+	r := app.Test([]string{"--loud", "run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("exit = %d: %s", r.ExitCode, r.Stderr)
 	}
 	if !captured {
-		t.Fatal("global flag 'verbose' not visible in handler kwargs")
+		t.Fatal("global flag 'loud' not visible in handler kwargs")
 	}
 }
 
@@ -187,7 +187,7 @@ func TestTestCaptureLargeOutputNotTruncated(t *testing.T) {
 		ctx.Info(payload)  // stdout
 		ctx.Error(payload) // stderr
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"emit"})
 	if r.ExitCode != 0 {

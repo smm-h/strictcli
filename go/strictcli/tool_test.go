@@ -19,8 +19,8 @@ func TestJsonSchemaAllScalarTypes(t *testing.T) {
 		StringFlag("name", "a string flag"),
 		IntFlag("count", "an integer flag"),
 		FloatFlag("ratio", "a float flag"),
-		BoolFlag("verbose", "a bool flag", Default(false)),
-	))
+		BoolFlag("loud", "a bool flag", Default(false)),
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 
@@ -36,7 +36,7 @@ func TestJsonSchemaAllScalarTypes(t *testing.T) {
 		{"name", "string"},
 		{"count", "integer"},
 		{"ratio", "number"},
-		{"verbose", "boolean"},
+		{"loud", "boolean"},
 	}
 
 	for _, tc := range cases {
@@ -56,9 +56,9 @@ func TestJsonSchemaRequiredFlags(t *testing.T) {
 		StringFlag("target", "deploy target"),                // required (no default)
 		IntFlag("replicas", "replica count"),                 // required (no default)
 		StringFlag("region", "region", Default("us-east-1")), // optional (has default)
-		BoolFlag("dry-run", "dry run mode", Default(false)),  // optional (has default)
+		BoolFlag("sim-run", "dry run mode", Default(false)),  // optional (has default)
 		FloatFlag("threshold", "threshold", Default(0.5)),    // optional (has default)
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("deploy")
 
@@ -84,8 +84,8 @@ func TestJsonSchemaOptionalFlagNotInRequired(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run something", nopHandler, WithFlags(
 		StringFlag("mode", "mode", Default("fast")),
-		BoolFlag("verbose", "verbosity", Default(false)),
-	))
+		BoolFlag("loud", "verbosity", Default(false)),
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 
@@ -102,7 +102,7 @@ func TestJsonSchemaChoicesAsEnum(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("deploy", "deploy", nopHandler, WithFlags(
 		StringFlag("env", "environment", Choices("dev", "staging", "prod")),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("deploy")
 	props := schema["properties"].(map[string]interface{})
@@ -125,7 +125,7 @@ func TestJsonSchemaListType(t *testing.T) {
 		ListFlag(TypeStr, "tags", "tag list", Unique(false)),
 		ListFlag(TypeInt, "ports", "port list", Unique(false)),
 		ListFlag(TypeFloat, "weights", "weight list", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 	props := schema["properties"].(map[string]interface{})
@@ -156,7 +156,7 @@ func TestJsonSchemaDictType(t *testing.T) {
 	app.Command("run", "run", nopHandler, WithFlags(
 		DictFlag(TypeStr, "labels", "label map", Unique(false)),
 		DictFlag(TypeInt, "counts", "count map", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 	props := schema["properties"].(map[string]interface{})
@@ -185,7 +185,7 @@ func TestJsonSchemaHelpAsDescription(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
 		StringFlag("name", "the user name"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 	props := schema["properties"].(map[string]interface{})
@@ -199,7 +199,7 @@ func TestJsonSchemaHelpAsDescription(t *testing.T) {
 func TestJsonSchemaPositionalArg(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("greet", "greet someone", nopHandler,
-		WithArgs(NewArg("person", "who to greet")),
+		WithArgs(NewArg("person", "who to greet")), WithEffect(EffectReadOnly),
 	)
 
 	schema := app.JsonSchema("greet")
@@ -230,7 +230,7 @@ func TestJsonSchemaPositionalArg(t *testing.T) {
 func TestJsonSchemaArgChoices(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("set-level", "set level", nopHandler,
-		WithArgs(NewArg("level", "log level", ArgChoices("debug", "info", "warn", "error"))),
+		WithArgs(NewArg("level", "log level", ArgChoices("debug", "info", "warn", "error"))), WithEffect(EffectReadOnly),
 	)
 
 	schema := app.JsonSchema("set-level")
@@ -250,7 +250,7 @@ func TestJsonSchemaArgChoices(t *testing.T) {
 func TestJsonSchemaVariadicArg(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler,
-		WithArgs(NewArg("files", "files to process", ArgRequired(false), Variadic())),
+		WithArgs(NewArg("files", "files to process", ArgRequired(false), Variadic())), WithEffect(EffectReadOnly),
 	)
 
 	schema := app.JsonSchema("run")
@@ -268,7 +268,7 @@ func TestJsonSchemaVariadicArg(t *testing.T) {
 
 func TestJsonSchemaAdditionalPropertiesFalse(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run", nopHandler)
+	app.Command("run", "run", nopHandler, WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 	if schema["additionalProperties"] != false {
@@ -282,16 +282,16 @@ func TestJsonSchemaAdditionalPropertiesFalse(t *testing.T) {
 func TestJsonSchemaDashedFlagBecomesUnderscored(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
-		BoolFlag("dry-run", "dry run mode", Default(false)),
-	))
+		BoolFlag("sim-run", "dry run mode", Default(false)),
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 	props := schema["properties"].(map[string]interface{})
 
-	if _, ok := props["dry_run"]; !ok {
-		t.Error("expected dashed flag 'dry-run' to appear as 'dry_run' in schema")
+	if _, ok := props["sim_run"]; !ok {
+		t.Error("expected dashed flag 'sim-run' to appear as 'sim_run' in schema")
 	}
-	if _, ok := props["dry-run"]; ok {
+	if _, ok := props["sim-run"]; ok {
 		t.Error("dashed flag name should not appear in schema")
 	}
 }
@@ -301,7 +301,7 @@ func TestJsonSchemaGroupedCommand(t *testing.T) {
 	g := app.Group("dns", "manage DNS")
 	g.Command("list", "list DNS records", nopHandler, WithFlags(
 		StringFlag("zone", "DNS zone"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("dns.list")
 	props := schema["properties"].(map[string]interface{})
@@ -312,7 +312,7 @@ func TestJsonSchemaGroupedCommand(t *testing.T) {
 
 func TestJsonSchemaPanicsOnInvalidPath(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("run", "run", nopHandler)
+	app.Command("run", "run", nopHandler, WithEffect(EffectReadOnly))
 
 	defer func() {
 		r := recover()
@@ -326,7 +326,7 @@ func TestJsonSchemaPanicsOnInvalidPath(t *testing.T) {
 func TestJsonSchemaPanicsOnGroup(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	g := app.Group("dns", "manage DNS")
-	g.Command("list", "list", nopHandler)
+	g.Command("list", "list", nopHandler, WithEffect(EffectReadOnly))
 
 	defer func() {
 		r := recover()
@@ -341,9 +341,9 @@ func TestJsonSchemaPanicsOnGroup(t *testing.T) {
 
 func TestAsToolsCount(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy something", nopHandler)
-	app.Command("status", "check status", nopHandler)
-	app.Command("rollback", "rollback deploy", nopHandler)
+	app.Command("deploy", "deploy something", nopHandler, WithEffect(EffectReadOnly))
+	app.Command("status", "check status", nopHandler, WithEffect(EffectReadOnly))
+	app.Command("rollback", "rollback deploy", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -355,8 +355,8 @@ func TestAsToolsCount(t *testing.T) {
 
 func TestAsToolsHiddenExclusion(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy something", nopHandler)
-	app.Command("internal", "internal command", nopHandler, WithHidden())
+	app.Command("deploy", "deploy something", nopHandler, WithEffect(EffectReadOnly))
+	app.Command("internal", "internal command", nopHandler, WithHidden(), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -375,8 +375,8 @@ func TestAsToolsHiddenExclusion(t *testing.T) {
 
 func TestAsToolsInteractiveExclusion(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy something", nopHandler)
-	app.Command("wizard", "interactive wizard", nopHandler, WithInteractive())
+	app.Command("deploy", "deploy something", nopHandler, WithEffect(EffectReadOnly))
+	app.Command("wizard", "interactive wizard", nopHandler, WithInteractive(), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -394,11 +394,11 @@ func TestAsToolsInteractiveExclusion(t *testing.T) {
 
 func TestAsToolsHiddenGroupExclusion(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy something", nopHandler)
+	app.Command("deploy", "deploy something", nopHandler, WithEffect(EffectReadOnly))
 
 	g := app.Group("secret", "secret commands")
 	g.Hidden = true
-	g.Command("internal", "internal command", nopHandler)
+	g.Command("internal", "internal command", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -416,14 +416,14 @@ func TestAsToolsHiddenGroupExclusion(t *testing.T) {
 
 func TestAsToolsGroupedCommands(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("status", "check status", nopHandler)
+	app.Command("status", "check status", nopHandler, WithEffect(EffectReadOnly))
 
 	dns := app.Group("dns", "manage DNS")
-	dns.Command("list", "list records", nopHandler)
-	dns.Command("create", "create record", nopHandler)
+	dns.Command("list", "list records", nopHandler, WithEffect(EffectReadOnly))
+	dns.Command("create", "create record", nopHandler, WithEffect(EffectReadOnly))
 
 	zone := dns.Group("zone", "manage zones")
-	zone.Command("delete", "delete zone", nopHandler)
+	zone.Command("delete", "delete zone", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -448,7 +448,7 @@ func TestAsToolsGroupedCommands(t *testing.T) {
 
 func TestAsToolsToolDescription(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy the application", nopHandler)
+	app.Command("deploy", "deploy the application", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -468,8 +468,8 @@ func TestAsToolsToolParameters(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("deploy", "deploy", nopHandler, WithFlags(
 		StringFlag("target", "deploy target"),
-		BoolFlag("dry-run", "dry run", Default(false)),
-	))
+		BoolFlag("sim-run", "dry run", Default(false)),
+	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -482,8 +482,8 @@ func TestAsToolsToolParameters(t *testing.T) {
 			if _, ok := props["target"]; !ok {
 				t.Error("missing 'target' in tool parameters")
 			}
-			if _, ok := props["dry_run"]; !ok {
-				t.Error("missing 'dry_run' in tool parameters")
+			if _, ok := props["sim_run"]; !ok {
+				t.Error("missing 'sim_run' in tool parameters")
 			}
 			return
 		}
@@ -495,8 +495,8 @@ func TestAsToolsToolParameters(t *testing.T) {
 
 func TestRouterToolName(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy", nopHandler)
-	app.Command("status", "status", nopHandler)
+	app.Command("deploy", "deploy", nopHandler, WithEffect(EffectReadOnly))
+	app.Command("status", "status", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -509,7 +509,7 @@ func TestRouterToolName(t *testing.T) {
 
 func TestRouterToolDescription(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy", nopHandler)
+	app.Command("deploy", "deploy", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 	router := tools[len(tools)-1]
@@ -521,8 +521,8 @@ func TestRouterToolDescription(t *testing.T) {
 
 func TestRouterToolCommandEnum(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy", nopHandler)
-	app.Command("status", "status", nopHandler)
+	app.Command("deploy", "deploy", nopHandler, WithEffect(EffectReadOnly))
+	app.Command("status", "status", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 	router := tools[len(tools)-1]
@@ -540,7 +540,7 @@ func TestRouterToolCommandEnum(t *testing.T) {
 
 func TestRouterToolCommandRequired(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy", nopHandler)
+	app.Command("deploy", "deploy", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 	router := tools[len(tools)-1]
@@ -553,8 +553,8 @@ func TestRouterToolCommandRequired(t *testing.T) {
 
 func TestRouterToolListsCommandsWithoutArg(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy", nopHandler)
-	app.Command("status", "status", nopHandler)
+	app.Command("deploy", "deploy", nopHandler, WithEffect(EffectReadOnly))
+	app.Command("status", "status", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 	router := tools[len(tools)-1]
@@ -583,7 +583,7 @@ func TestExecuteViaTool(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("greet", "greet someone", captureHandler(&captured), WithFlags(
 		StringFlag("name", "who to greet"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -620,7 +620,7 @@ func TestExecuteViaRouterTool(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("deploy", "deploy", captureHandler(&captured), WithFlags(
 		StringFlag("target", "deploy target"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 	router := tools[len(tools)-1]
@@ -648,7 +648,7 @@ func TestExecuteGroupedCommandViaTool(t *testing.T) {
 	dns := app.Group("dns", "manage DNS")
 	dns.Command("list", "list records", captureHandler(&captured), WithFlags(
 		StringFlag("zone", "DNS zone"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -682,7 +682,7 @@ func TestExecuteReturnsError(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("deploy", "deploy", nopHandler, WithFlags(
 		StringFlag("target", "deploy target"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -716,7 +716,7 @@ func TestExecuteDataHandler(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return ExitData(0, map[string]string{"version": "1.0.0"})
-	})
+	}, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 
@@ -747,7 +747,7 @@ func TestExecuteDataHandler(t *testing.T) {
 
 func TestRouterToolInvalidCommandType(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
-	app.Command("deploy", "deploy", nopHandler)
+	app.Command("deploy", "deploy", nopHandler, WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
 	router := tools[len(tools)-1]
@@ -765,7 +765,7 @@ func TestAsToolsRepeatableFlagNotRequired(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("run", "run", nopHandler, WithFlags(
 		StringFlag("tag", "a tag", Repeatable(), Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 
@@ -798,7 +798,7 @@ func TestAsToolsEmptyApp(t *testing.T) {
 
 func TestJsonSchemaNoCommandFlags(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
-	app.Command("noop", "does nothing", nopHandler)
+	app.Command("noop", "does nothing", nopHandler, WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("noop")
 
@@ -812,7 +812,7 @@ func TestJsonSchemaDefaultNilOptional(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
 		StringFlag("config", "config path", Default(nil)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 

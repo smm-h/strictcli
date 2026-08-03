@@ -7,7 +7,7 @@ import (
 
 func TestContextInfoWritesToStdout(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil, reservedFlags{}, nil)
 
 	ctx.Info("hello world")
 
@@ -21,7 +21,7 @@ func TestContextInfoWritesToStdout(t *testing.T) {
 
 func TestContextWarnWritesToStderr(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil, reservedFlags{}, nil)
 
 	ctx.Warn("something is off")
 
@@ -35,7 +35,8 @@ func TestContextWarnWritesToStderr(t *testing.T) {
 
 func TestContextDebugWritesToStdout(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil)
+	// Debug is gated: it is shown only under --verbose.
+	ctx := newContext(&stdout, &stderr, nil, nil, reservedFlags{verbose: true}, nil)
 
 	ctx.Debug("trace info")
 
@@ -49,7 +50,7 @@ func TestContextDebugWritesToStdout(t *testing.T) {
 
 func TestContextErrorWritesToStderr(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	ctx := newContext(&stdout, &stderr, nil, nil)
+	ctx := newContext(&stdout, &stderr, nil, nil, reservedFlags{}, nil)
 
 	ctx.Error("something broke")
 
@@ -63,7 +64,7 @@ func TestContextErrorWritesToStderr(t *testing.T) {
 
 func TestNewContextWithNilWriters(t *testing.T) {
 	// nil writers should not crash — they are replaced with io.Discard
-	ctx := newContext(nil, nil, nil, nil)
+	ctx := newContext(nil, nil, nil, nil, reservedFlags{}, nil)
 
 	// These should not panic
 	ctx.Info("info message")

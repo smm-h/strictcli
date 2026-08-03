@@ -24,7 +24,7 @@ func TestEnvSourceLabel(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL")),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -51,7 +51,7 @@ func TestConfigSourceLabel(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -77,7 +77,7 @@ func TestCliOverridesConfig(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--level", "99"})
 	if r.ExitCode != 0 {
@@ -101,7 +101,7 @@ func TestCliOverridesEnv(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL")),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--level", "99"})
 	if r.ExitCode != 0 {
@@ -130,7 +130,7 @@ func TestEnvOverridesConfig(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -156,7 +156,7 @@ func TestDefaultWithConfigAvailableButAbsent(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -178,19 +178,19 @@ func TestGlobalFlagEnvSource(t *testing.T) {
 	defer os.Unsetenv("MYAPP_VERBOSE")
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
-	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Env("MYAPP_VERBOSE"), Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "loud mode", Env("MYAPP_VERBOSE"), Default(false)))
 	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		capturedCtx = ctx
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if capturedCtx.Source("verbose") != "env" {
-		t.Fatalf("expected source 'env' for verbose, got %q", capturedCtx.Source("verbose"))
+	if capturedCtx.Source("loud") != "env" {
+		t.Fatalf("expected source 'env' for loud, got %q", capturedCtx.Source("loud"))
 	}
 }
 
@@ -199,23 +199,23 @@ func TestGlobalFlagEnvSource(t *testing.T) {
 func TestGlobalFlagConfigSource(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := tmpDir + "/config.json"
-	os.WriteFile(configFile, []byte(`{"verbose": true}`), 0o644)
+	os.WriteFile(configFile, []byte(`{"loud": true}`), 0o644)
 
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConfig(), WithConfigPath(configFile))
-	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "loud mode", Default(false)))
 	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		capturedCtx = ctx
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if capturedCtx.Source("verbose") != "config" {
-		t.Fatalf("expected source 'config' for verbose, got %q", capturedCtx.Source("verbose"))
+	if capturedCtx.Source("loud") != "config" {
+		t.Fatalf("expected source 'config' for loud, got %q", capturedCtx.Source("loud"))
 	}
 }
 
@@ -223,19 +223,19 @@ func TestGlobalFlagConfigSource(t *testing.T) {
 // gets source "cli".
 func TestGlobalFlagCliSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "loud mode", Default(false)))
 	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		capturedCtx = ctx
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
-	r := app.Test([]string{"--verbose", "run"})
+	r := app.Test([]string{"--loud", "run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if capturedCtx.Source("verbose") != "cli" {
-		t.Fatalf("expected source 'cli' for verbose, got %q", capturedCtx.Source("verbose"))
+	if capturedCtx.Source("loud") != "cli" {
+		t.Fatalf("expected source 'cli' for loud, got %q", capturedCtx.Source("loud"))
 	}
 }
 
@@ -243,19 +243,19 @@ func TestGlobalFlagCliSource(t *testing.T) {
 // gets source "default".
 func TestGlobalFlagDefaultSource(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "loud mode", Default(false)))
 	var capturedCtx *Context
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		capturedCtx = ctx
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if capturedCtx.Source("verbose") != "default" {
-		t.Fatalf("expected source 'default' for verbose, got %q", capturedCtx.Source("verbose"))
+	if capturedCtx.Source("loud") != "default" {
+		t.Fatalf("expected source 'default' for loud, got %q", capturedCtx.Source("loud"))
 	}
 }
 
@@ -276,7 +276,7 @@ func TestConfigShowReportsEnv(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "show", "--json"})
 	if r.ExitCode != 0 {
@@ -308,7 +308,7 @@ func TestConfigShowReportsConfig(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "show", "--json"})
 	if r.ExitCode != 0 {
@@ -332,7 +332,7 @@ func TestConfigShowReportsDefault(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "show", "--json"})
 	if r.ExitCode != 0 {
@@ -362,7 +362,7 @@ func TestInvokeProvidedKwargSourceIsCli(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	ir := app.invoke("run", map[string]interface{}{"level": 42})
 	if ir.err != "" {
@@ -383,7 +383,7 @@ func TestInvokeAbsentKwargSourceIsDefault(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	ir := app.invoke("run", map[string]interface{}{})
 	if ir.err != "" {
@@ -406,7 +406,7 @@ func TestConfigShowPlainFormat(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "show", "--plain"})
 	if r.ExitCode != 0 {

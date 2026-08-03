@@ -377,7 +377,7 @@ func TestWithConfigFieldsStoresOnCommand(t *testing.T) {
 
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("api_key", "region"))
+	}, WithConfigFields("api_key", "region"), WithEffect(EffectReadOnly))
 
 	cmd := app.commands["deploy"]
 	if len(cmd.configFields) != 2 {
@@ -393,7 +393,7 @@ func TestWithConfigFieldsValidationAtRunTime(t *testing.T) {
 	// Bind a config field that doesn't exist — should fail at Test() time
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("nonexistent"))
+	}, WithConfigFields("nonexistent"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"deploy"})
 	if r.ExitCode != 1 {
@@ -409,7 +409,7 @@ func TestWithConfigFieldsValidBinding(t *testing.T) {
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("region"))
+	}, WithConfigFields("region"), WithEffect(EffectReadOnly))
 
 	// Should succeed since "region" is declared and has a default
 	r := app.Test([]string{"deploy"})
@@ -425,7 +425,7 @@ func TestWithConfigFieldsInGroup(t *testing.T) {
 	grp := app.Group("infra", "Infrastructure commands")
 	grp.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("api_key"))
+	}, WithConfigFields("api_key"), WithEffect(EffectReadOnly))
 
 	// Should validate correctly
 	r := app.Test([]string{"infra", "deploy"})
@@ -440,7 +440,7 @@ func TestWithConfigFieldsInGroupUnknownField(t *testing.T) {
 	grp := app.Group("infra", "Infrastructure commands")
 	grp.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("ghost-field"))
+	}, WithConfigFields("ghost-field"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"infra", "deploy"})
 	if r.ExitCode != 1 {
@@ -463,7 +463,7 @@ func TestConfigFieldValidationRequiredFieldMissing(t *testing.T) {
 	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("api_key"))
+	}, WithConfigFields("api_key"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"deploy"})
 	if r.ExitCode != 1 {
@@ -483,7 +483,7 @@ func TestConfigFieldValidationRequiredFieldPresent(t *testing.T) {
 	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("api_key"))
+	}, WithConfigFields("api_key"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"deploy"})
 	if r.ExitCode != 0 {
@@ -500,7 +500,7 @@ func TestConfigFieldValidationTypeMismatch(t *testing.T) {
 	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt))
 	app.Command("serve", "Start server", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("port"))
+	}, WithConfigFields("port"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"serve"})
 	if r.ExitCode != 1 {
@@ -520,7 +520,7 @@ func TestConfigFieldValidationOptionalFieldMissing(t *testing.T) {
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("region"))
+	}, WithConfigFields("region"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"deploy"})
 	if r.ExitCode != 0 {
@@ -537,7 +537,7 @@ func TestConfigFieldValidationUnknownKeyInConfig(t *testing.T) {
 	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("api_key"))
+	}, WithConfigFields("api_key"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"deploy"})
 	if r.ExitCode != 1 {
@@ -573,7 +573,7 @@ func TestConfigFieldValidationNoConfigFieldsSkipsBoundValidation(t *testing.T) {
 	// Command has no config fields bound — bound validation should not run
 	app.Command("status", "Show status", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"status"})
 	if r.ExitCode != 0 {
@@ -591,7 +591,7 @@ func TestConfigFieldValidationUnknownKeyStillCheckedWhenNoBinding(t *testing.T) 
 	// Command has no config fields bound, but app-wide unknown-key check still runs
 	app.Command("status", "Show status", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"status"})
 	if r.ExitCode != 1 {
@@ -844,7 +844,7 @@ func TestConfigInitJSON(t *testing.T) {
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
 	app.ConfigField("api_key", ConfigFieldHelp("API key"))
 	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
-	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "init"})
 	if r.ExitCode != 0 {
@@ -873,7 +873,7 @@ func TestConfigInitTOML(t *testing.T) {
 	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
 	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(443))
 	app.ConfigField("api_key", ConfigFieldHelp("API key"))
-	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "init"})
 	if r.ExitCode != 0 {
@@ -902,7 +902,7 @@ func TestConfigInitErrorIfExists(t *testing.T) {
 	os.WriteFile(configFile, []byte(`{}`), 0o644)
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
-	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "init"})
 	if r.ExitCode != 1 {
@@ -920,7 +920,7 @@ func TestConfigInitJSONNested(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("db.host", ConfigFieldHelp("Database host"), ConfigFieldDefault("localhost"))
 	app.ConfigField("db.port", ConfigFieldHelp("Database port"), ConfigFieldType(TypeInt), ConfigFieldDefault(5432))
-	app.Command("serve", "Serve", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("serve", "Serve", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "init"})
 	if r.ExitCode != 0 {
@@ -948,7 +948,7 @@ func TestSchemaIncludesConfigFields(t *testing.T) {
 
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("region", "port"))
+	}, WithConfigFields("region", "port"), WithEffect(EffectReadOnly))
 
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -1029,7 +1029,7 @@ func TestSchemaNoConfigFieldsWhenNoneDeclared(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("hello", "Say hello", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -1052,7 +1052,7 @@ func TestConfigFieldValidationNestedJSONRequired(t *testing.T) {
 	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"))
 	app.Command("serve", "Start server", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("server.host"))
+	}, WithConfigFields("server.host"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"serve"})
 	if r.ExitCode != 0 {
@@ -1069,7 +1069,7 @@ func TestConfigFieldValidationNestedJSONMissing(t *testing.T) {
 	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"))
 	app.Command("serve", "Start server", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("server.host"))
+	}, WithConfigFields("server.host"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"serve"})
 	if r.ExitCode != 1 {
@@ -1089,7 +1089,7 @@ func TestConfigFieldValidationNestedJSONTypeMismatch(t *testing.T) {
 	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt))
 	app.Command("serve", "Start server", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("server.port"))
+	}, WithConfigFields("server.port"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"serve"})
 	if r.ExitCode != 1 {
@@ -1109,7 +1109,7 @@ func TestConfigFieldValidationNestedJSONUnknownKey(t *testing.T) {
 	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"))
 	app.Command("serve", "Start server", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("server.host"))
+	}, WithConfigFields("server.host"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"serve"})
 	if r.ExitCode != 1 {
@@ -1253,7 +1253,7 @@ func TestConfigFieldValidationDeepNestedJSON(t *testing.T) {
 	app.ConfigField("database.primary.host", ConfigFieldHelp("Primary database host"))
 	app.Command("serve", "Start server", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithConfigFields("database.primary.host"))
+	}, WithConfigFields("database.primary.host"), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"serve"})
 	if r.ExitCode != 0 {
@@ -1300,7 +1300,7 @@ func TestConfigFlagSelectsFile(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("port", "port number", Default(8080)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--config", customPath, "serve"})
 	if r.ExitCode != 0 {
@@ -1324,7 +1324,7 @@ func TestConfigFlagEqualsForm(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("port", "port number", Default(8080)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--config=" + customPath, "serve"})
 	if r.ExitCode != 0 {
@@ -1353,7 +1353,7 @@ func TestConfigFlagOverridesConstructedPath(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("port", "port number", Default(8080)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--config", overridePath, "serve"})
 	if r.ExitCode != 0 {
@@ -1366,7 +1366,7 @@ func TestConfigFlagOverridesConstructedPath(t *testing.T) {
 
 func TestConfigFlagOnDisabledAppIsError(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
-	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--config", "/tmp/fake.json", "run"})
 	if r.ExitCode != 1 {
@@ -1379,7 +1379,7 @@ func TestConfigFlagOnDisabledAppIsError(t *testing.T) {
 
 func TestConfigFlagAfterCommandIsUnknown(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
-	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--config", "/tmp/fake.json"})
 	if r.ExitCode != 1 {
@@ -1392,7 +1392,7 @@ func TestConfigFlagAfterCommandIsUnknown(t *testing.T) {
 
 func TestConfigFlagAfterDoubleDash(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
-	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--", "--config", "/tmp/fake.json"})
 	// After --, --config is treated as a command name (unknown command error)
@@ -1413,7 +1413,7 @@ func TestConfigFlagNotInSchema(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
-	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -1439,7 +1439,7 @@ func TestConfigFlagNotInSchema(t *testing.T) {
 
 func TestDumpSchemaAfterCommandIsNotIntercepted(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
-	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--dump-schema"})
 	if r.ExitCode != 1 {
@@ -1452,7 +1452,7 @@ func TestDumpSchemaAfterCommandIsNotIntercepted(t *testing.T) {
 
 func TestDumpSchemaAfterDoubleDash(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
-	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--", "--dump-schema"})
 	// After --, --dump-schema is treated as a command name (unknown command error)
@@ -1478,7 +1478,7 @@ func TestNoDefaultConfigPath(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("port", "port number", Default(8080)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Without --config, the XDG default is NOT loaded
 	r := app.Test([]string{"serve"})
@@ -1504,7 +1504,7 @@ func TestNoDefaultConfigPathWithConfigFlag(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("port", "port number", Default(8080)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// With --config, the explicit path IS loaded
 	r := app.Test([]string{"--config", customPath, "serve"})
@@ -1525,7 +1525,7 @@ func TestFieldFlagShowPlainRendersOnceWithAnnotation(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target")))
+		WithFlags(StringFlag("target", "deploy target")), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"))
 
 	r := app.Test([]string{"config", "show", "--plain"})
@@ -1552,7 +1552,7 @@ func TestFieldFlagShowJSONRendersOnce(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target")))
+		WithFlags(StringFlag("target", "deploy target")), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"))
 
 	r := app.Test([]string{"config", "show", "--json"})
@@ -1581,7 +1581,7 @@ func TestFieldFlagInitTomlRendersOnce(t *testing.T) {
 	configFile := dir + "/config.toml"
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile), WithConfigFormat("toml"))
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
 
 	r := app.Test([]string{"config", "init"})
@@ -1602,7 +1602,7 @@ func TestFieldFlagInitJSONRendersOnce(t *testing.T) {
 	configFile := dir + "/config.json"
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
 
 	r := app.Test([]string{"config", "init"})
@@ -1630,7 +1630,7 @@ func TestFieldFlagUnequalDefaultsFieldAfterFlagPanics(t *testing.T) {
 	}()
 	app := NewApp("test", "1.0.0", "test app", WithConfig())
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("staging"))
 }
 
@@ -1643,13 +1643,13 @@ func TestFieldFlagUnequalDefaultsFlagAfterFieldPanics(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig())
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("staging"))
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))), WithEffect(EffectReadOnly))
 }
 
 func TestFieldFlagEqualDefaultsOK(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig())
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
 }
 
@@ -1657,13 +1657,13 @@ func TestFieldFlagOneAbsentDefaultOK(t *testing.T) {
 	// Flag has default, field has none.
 	app := NewApp("test", "1.0.0", "test app", WithConfig())
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target", Default("prod"))))
+		WithFlags(StringFlag("target", "deploy target", Default("prod"))), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"))
 
 	// Field has default, flag has none.
 	app2 := NewApp("test", "1.0.0", "test app", WithConfig())
 	app2.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target")))
+		WithFlags(StringFlag("target", "deploy target")), WithEffect(EffectReadOnly))
 	app2.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
 }
 
@@ -1700,7 +1700,7 @@ host = "localhost"
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
 	app.ConfigField("server.host", ConfigFieldHelp("Server host"), ConfigFieldDefault("localhost"))
 	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
-	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "set", "region", "us-west-2"})
 	if r.ExitCode != 0 {
@@ -1740,7 +1740,7 @@ port = 9090
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
 	app.ConfigField("server.host", ConfigFieldHelp("Server host"), ConfigFieldDefault("localhost"))
 	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
-	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"config", "set", "server.port", "--default"})
 	if r.ExitCode != 0 {

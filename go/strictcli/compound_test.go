@@ -159,7 +159,7 @@ func TestListFlagStrParsing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeStr, "tag", "tags to apply", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--tag", "alpha", "--tag", "beta"})
 	if r.ExitCode != 0 {
@@ -179,7 +179,7 @@ func TestListFlagIntParsing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids to process", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--id", "10", "--id", "20", "--id", "30"})
 	if r.ExitCode != 0 {
@@ -199,7 +199,7 @@ func TestListFlagFloatParsing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeFloat, "weight", "weights", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--weight", "1.5", "--weight", "2.7"})
 	if r.ExitCode != 0 {
@@ -217,7 +217,7 @@ func TestListFlagIntTypeError(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--id", "abc"})
 	if r.ExitCode != 1 {
@@ -234,7 +234,7 @@ func TestListFlagUnique(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeStr, "tag", "tags", Unique(true)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--tag", "a", "--tag", "a"})
 	if r.ExitCode != 1 {
@@ -253,7 +253,7 @@ func TestListFlagDefault(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeStr, "tag", "tags", Unique(false), Default([]interface{}{"default-tag"})),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -273,7 +273,7 @@ func TestListFlagEmptyDefault(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeStr, "tag", "tags", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -293,7 +293,7 @@ func TestListFlagEqualsSyntax(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--id=42", "--id=99"})
 	if r.ExitCode != 0 {
@@ -315,7 +315,7 @@ func TestDictFlagStrParsing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--header", "Content-Type=json", "--header", "Accept=text"})
 	if r.ExitCode != 0 {
@@ -335,7 +335,7 @@ func TestDictFlagIntParsing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeInt, "port", "port mappings", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--port", "http=80", "--port", "https=443"})
 	if r.ExitCode != 0 {
@@ -355,7 +355,7 @@ func TestDictFlagFloatParsing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeFloat, "rate", "rates", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--rate", "cpu=0.75", "--rate", "mem=1.5"})
 	if r.ExitCode != 0 {
@@ -375,7 +375,7 @@ func TestDictFlagJSONParsing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--header", `{"Content-Type": "json", "Accept": "text"}`})
 	if r.ExitCode != 0 {
@@ -395,7 +395,7 @@ func TestDictFlagJSONIntParsing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeInt, "port", "port mappings", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--port", `{"http": 80, "https": 443}`})
 	if r.ExitCode != 0 {
@@ -413,7 +413,7 @@ func TestDictFlagMissingEquals(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--header", "no-equals-here"})
 	if r.ExitCode != 1 {
@@ -433,7 +433,7 @@ func TestDictFlagEmptyKey(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--header", "=value"})
 	if r.ExitCode != 1 {
@@ -450,7 +450,7 @@ func TestDictFlagIntTypeError(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeInt, "port", "port mappings", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--port", "http=notanumber"})
 	if r.ExitCode != 1 {
@@ -470,7 +470,7 @@ func TestDictFlagDefault(t *testing.T) {
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false),
 			Default(map[string]interface{}{"X-Default": "yes"})),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -490,7 +490,7 @@ func TestDictFlagEmptyDefault(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -510,7 +510,7 @@ func TestDictFlagMergesMultipleEntries(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Two separate --meta flags, should merge into one map
 	r := app.Test([]string{"run", "--meta", "a=1", "--meta", "b=2"})
@@ -531,7 +531,7 @@ func TestDictFlagOverwriteKey(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Same key twice: last value wins
 	r := app.Test([]string{"run", "--meta", "a=1", "--meta", "a=2"})
@@ -552,7 +552,7 @@ func TestDictFlagEqualsSyntax(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--meta=key=value"})
 	if r.ExitCode != 0 {
@@ -572,7 +572,7 @@ func TestDictFlagValueWithEquals(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Value containing = sign
 	r := app.Test([]string{"run", "--meta", "url=https://example.com?a=b"})
@@ -596,7 +596,7 @@ func TestListFlagEnvVar(t *testing.T) {
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false),
 			Env("TEST_IDS"), Prefixed(false), EnvSeparator(",")),
-	))
+	), WithEffect(EffectReadOnly))
 
 	os.Setenv("TEST_IDS", "1,2,3")
 	defer os.Unsetenv("TEST_IDS")
@@ -620,7 +620,7 @@ func TestDictFlagEnvVar(t *testing.T) {
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false),
 			Env("TEST_HEADERS"), Prefixed(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	os.Setenv("TEST_HEADERS", `{"Content-Type": "json"}`)
 	defer os.Unsetenv("TEST_HEADERS")
@@ -642,7 +642,7 @@ func TestDictFlagEnvVarInvalidJSON(t *testing.T) {
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false),
 			Env("TEST_HEADERS_BAD"), Prefixed(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	os.Setenv("TEST_HEADERS_BAD", "not json")
 	defer os.Unsetenv("TEST_HEADERS_BAD")
@@ -671,7 +671,7 @@ func TestListFlagConfigCoercion(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -696,7 +696,7 @@ func TestDictFlagConfigCoercion(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
@@ -718,7 +718,7 @@ func TestListFlagInvoke(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	result, err := app.Call("run", map[string]interface{}{
 		"id": []interface{}{1, 2, 3},
@@ -743,7 +743,7 @@ func TestListFlagInvokeTypedSlice(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Go caller passes []int instead of []interface{}
 	result, err := app.Call("run", map[string]interface{}{
@@ -769,7 +769,7 @@ func TestDictFlagInvoke(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	result, err := app.Call("run", map[string]interface{}{
 		"header": map[string]interface{}{"X-Key": "val"},
@@ -794,7 +794,7 @@ func TestDictFlagInvokeTypedMap(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Go caller passes map[string]string instead of map[string]interface{}
 	result, err := app.Call("run", map[string]interface{}{
@@ -822,7 +822,7 @@ func TestVariadicArgListInt(t *testing.T) {
 		return Exit(0)
 	}, WithArgs(
 		NewArg("numbers", "numbers to sum", Variadic(), ArgType(ListOf(TypeInt))),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"sum", "1", "2", "3"})
 	if r.ExitCode != 0 {
@@ -842,7 +842,7 @@ func TestVariadicArgListFloat(t *testing.T) {
 		return Exit(0)
 	}, WithArgs(
 		NewArg("weights", "weight values", Variadic(), ArgType(ListOf(TypeFloat))),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"sum", "1.5", "2.7"})
 	if r.ExitCode != 0 {
@@ -860,7 +860,7 @@ func TestVariadicArgListIntTypeError(t *testing.T) {
 		return Exit(0)
 	}, WithArgs(
 		NewArg("numbers", "numbers to sum", Variadic(), ArgType(ListOf(TypeInt))),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"sum", "1", "abc"})
 	if r.ExitCode != 1 {
@@ -906,7 +906,7 @@ func TestListFlagSchema(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids to process", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -928,7 +928,7 @@ func TestDictFlagSchema(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -951,7 +951,7 @@ func TestListFlagHelp(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		ListFlag(TypeInt, "id", "ids to process", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--help"})
 	if r.ExitCode != 0 {
@@ -971,7 +971,7 @@ func TestDictFlagHelp(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--help"})
 	if r.ExitCode != 0 {
@@ -995,7 +995,7 @@ func TestDictFlagJSONRoundTrip(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "data", "data map", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Pass JSON with special characters in values
 	jsonInput := `{"key with spaces": "value with = sign", "simple": "ok"}`
@@ -1019,7 +1019,7 @@ func TestDictFlagMixedJSONAndKV(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "meta", "metadata", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// First a key=value, then a JSON object -- both should merge
 	r := app.Test([]string{"run", "--meta", "a=1", "--meta", `{"b": "2"}`})
@@ -1044,7 +1044,7 @@ func TestInvokeMatchesTestForListFlag(t *testing.T) {
 			return Exit(0)
 		}, WithFlags(
 			ListFlag(TypeInt, "id", "ids", Unique(false)),
-		))
+		), WithEffect(EffectReadOnly))
 		return app
 	}
 
@@ -1079,7 +1079,7 @@ func TestInvokeMatchesTestForDictFlag(t *testing.T) {
 			return Exit(0)
 		}, WithFlags(
 			DictFlag(TypeStr, "header", "headers", Unique(false)),
-		))
+		), WithEffect(EffectReadOnly))
 		return app
 	}
 
@@ -1114,7 +1114,7 @@ func TestDictFlagInvalidJSON(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeStr, "data", "data map", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--data", "{invalid json"})
 	if r.ExitCode != 1 {
@@ -1133,7 +1133,7 @@ func TestDictFlagJSONTypeMismatch(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		DictFlag(TypeInt, "data", "data map", Unique(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// JSON values are strings, but dict expects int
 	r := app.Test([]string{"run", "--data", `{"a": "notanint"}`})
@@ -1194,7 +1194,7 @@ func TestDictFlagEnvWithoutSeparator(t *testing.T) {
 	}, WithFlags(
 		DictFlag(TypeStr, "header", "HTTP headers", Unique(false),
 			Env("TEST_DICT_NO_SEP"), Prefixed(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	os.Setenv("TEST_DICT_NO_SEP", `{"a": "b"}`)
 	defer os.Unsetenv("TEST_DICT_NO_SEP")

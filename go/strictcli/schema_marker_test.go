@@ -21,7 +21,7 @@ func TestSchemaMarkerDefault_CommandAndGlobalFlag(t *testing.T) {
 		Default(RelativeToRoot("MYAPP_HOME", "global.sqlite"))))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(StringFlag("db", "db path",
-			Default(RelativeToRoot("MYAPP_HOME", "sub", "db.sqlite")))))
+			Default(RelativeToRoot("MYAPP_HOME", "sub", "db.sqlite")))), WithEffect(EffectReadOnly))
 
 	schema := app.DumpSchemaDict()
 

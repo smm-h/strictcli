@@ -12,7 +12,7 @@ func TestTagContractSatisfiedByGlobalFlag(t *testing.T) {
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("ok")
 		return Exit(0)
-	}, WithTags("json"))
+	}, WithTags("json"), WithEffect(EffectReadOnly))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0 (global flag satisfies contract), got %d: stderr=%q", r.ExitCode, r.Stderr)

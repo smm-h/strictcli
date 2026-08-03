@@ -49,7 +49,7 @@ func buildGlobalConflictApp(t *testing.T, conflictMode, flagConflictMode, config
 
 	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	return app
 }
 
@@ -126,7 +126,7 @@ func TestPostCommandGlobalProvenanceIsCli(t *testing.T) {
 	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		capturedCtx = ctx
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"run", "--settings", "from-cli"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", r.ExitCode, r.Stderr)
@@ -143,7 +143,7 @@ func TestPreCommandGlobalProvenanceIsCli(t *testing.T) {
 	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		capturedCtx = ctx
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"--settings", "from-cli", "run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", r.ExitCode, r.Stderr)
@@ -161,7 +161,7 @@ func TestPostCommandGlobalProvenanceConfigWhenNotOnCli(t *testing.T) {
 	app.Command("run", "run something", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		capturedCtx = ctx
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", r.ExitCode, r.Stderr)

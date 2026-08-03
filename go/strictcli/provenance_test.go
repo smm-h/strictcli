@@ -20,7 +20,7 @@ func TestMutexDefaultSourceNotPresent(t *testing.T) {
 		WithMutex(MutexGroup{Flags: []Flag{
 			BoolFlag("json", "JSON output", Default(false)),
 			BoolFlag("text", "text output", Default(false)),
-		}}),
+		}}), WithEffect(EffectReadOnly),
 	)
 
 	// Provide only --json via CLI. --text has Default(false), so it will get
@@ -40,7 +40,7 @@ func TestMutexDefaultSourceNotPresent(t *testing.T) {
 		WithMutex(MutexGroup{Flags: []Flag{
 			BoolFlag("json", "JSON output", Default(false)),
 			BoolFlag("text", "text output", Default(false)),
-		}}),
+		}}), WithEffect(EffectReadOnly),
 	)
 	ir := app2.invoke("out", map[string]interface{}{"json": true})
 	if ir.err != "" {
@@ -60,18 +60,18 @@ func TestMutexImpliedSourceNotPresent(t *testing.T) {
 			BoolFlag("text", "text output", Default(nil)),
 		}}),
 		WithDependencies(
-			// Providing --verbose implies --text=true
-			Implies{Flag: "verbose", Implies: "text", Value: true},
+			// Providing --loud implies --text=true
+			Implies{Flag: "loud", Implies: "text", Value: true},
 		),
 		WithFlags(
-			BoolFlag("verbose", "verbose mode", Default(false)),
-		),
+			BoolFlag("loud", "loud mode", Default(false)),
+		), WithEffect(EffectReadOnly),
 	)
 
-	// Provide --json and --verbose. --verbose implies --text=true (source=implied).
+	// Provide --json and --loud. --loud implies --text=true (source=implied).
 	// The mutex group contains both json and text, but text is implied, so
 	// the mutex should see only json as "present" and NOT fire a violation.
-	r := app.Test([]string{"out", "--json", "--verbose"})
+	r := app.Test([]string{"out", "--json", "--loud"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
@@ -97,7 +97,7 @@ func TestMutexCliAndConfigBothPresent(t *testing.T) {
 		WithMutex(MutexGroup{Flags: []Flag{
 			StringFlag("json", "JSON output", Default(nil)),
 			StringFlag("text", "text output", Default(nil)),
-		}}),
+		}}), WithEffect(EffectReadOnly),
 	)
 
 	ir := app.invoke("out", map[string]interface{}{"json": "data", "text": "data"})
@@ -118,19 +118,19 @@ func TestRequiresImpliedSourceCountsAsPresent(t *testing.T) {
 	},
 		WithFlags(
 			BoolFlag("all", "deploy all", Default(false)),
-			BoolFlag("verbose", "verbose mode", Default(false)),
+			BoolFlag("loud", "loud mode", Default(false)),
 			StringFlag("target", "deploy target"),
 		),
 		WithDependencies(
-			// --all implies --verbose=true
-			Implies{Flag: "all", Implies: "verbose", Value: true},
-			// --target requires --verbose
-			Requires{Flag: "target", DependsOn: "verbose"},
-		),
+			// --all implies --loud=true
+			Implies{Flag: "all", Implies: "loud", Value: true},
+			// --target requires --loud
+			Requires{Flag: "target", DependsOn: "loud"},
+		), WithEffect(EffectReadOnly),
 	)
 
-	// Provide --all and --target. --all implies --verbose (source=implied).
-	// --target requires --verbose. Since implied counts for deps, this
+	// Provide --all and --target. --all implies --loud (source=implied).
+	// --target requires --loud. Since implied counts for deps, this
 	// should succeed.
 	r := app.Test([]string{"deploy", "--all", "--target", "prod"})
 	if r.ExitCode != 0 {
@@ -147,15 +147,15 @@ func TestRequiresDefaultSourceNotPresent(t *testing.T) {
 	},
 		WithFlags(
 			StringFlag("target", "deploy target"),
-			BoolFlag("verbose", "verbose mode", Default(false)),
+			BoolFlag("loud", "loud mode", Default(false)),
 		),
 		WithDependencies(
-			// --target requires --verbose
-			Requires{Flag: "target", DependsOn: "verbose"},
-		),
+			// --target requires --loud
+			Requires{Flag: "target", DependsOn: "loud"},
+		), WithEffect(EffectReadOnly),
 	)
 
-	// Provide --target but NOT --verbose. --verbose has Default(false), so
+	// Provide --target but NOT --loud. --loud has Default(false), so
 	// it will get source=default. Since default does NOT count as "present"
 	// for deps, this should fail with "requires" error.
 	r := app.Test([]string{"deploy", "--target", "prod"})
@@ -181,7 +181,7 @@ func TestInvokeMutexProvidedKwargIsCliSource(t *testing.T) {
 		WithMutex(MutexGroup{Flags: []Flag{
 			StringFlag("json", "JSON output", Default(nil)),
 			StringFlag("text", "text output", Default(nil)),
-		}}),
+		}}), WithEffect(EffectReadOnly),
 	)
 
 	// Provide exactly one mutex flag via invoke -- should succeed.
@@ -200,14 +200,14 @@ func TestInvokeDefaultedNotPresentForRequires(t *testing.T) {
 	},
 		WithFlags(
 			StringFlag("target", "deploy target"),
-			BoolFlag("verbose", "verbose mode", Default(false)),
+			BoolFlag("loud", "loud mode", Default(false)),
 		),
 		WithDependencies(
-			Requires{Flag: "target", DependsOn: "verbose"},
-		),
+			Requires{Flag: "target", DependsOn: "loud"},
+		), WithEffect(EffectReadOnly),
 	)
 
-	// Provide target but not verbose. verbose will be defaulted.
+	// Provide target but not loud. loud will be defaulted.
 	// Default does not count as present for Requires, so this should fail.
 	ir := app.invoke("deploy", map[string]interface{}{"target": "prod"})
 	if ir.err == "" {

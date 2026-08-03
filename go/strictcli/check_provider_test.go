@@ -23,7 +23,7 @@ func errSpec(name string, tags ...string) CheckSpec {
 func newProviderApp(t *testing.T) *App {
 	t.Helper()
 	app := NewApp("testapp", "1.0.0", "test app")
-	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: "/tmp"} })
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
 	return app
 }
 
@@ -48,7 +48,7 @@ func TestProvider_TomlLessListExecution(t *testing.T) {
 	}
 
 	// --dry-run
-	r = app.Test([]string{"check", "--all", "--dry-run"})
+	r = app.Test([]string{"--dry-run", "check", "--all"})
 	if !strings.Contains(r.Stdout, "prov-a") || !strings.Contains(r.Stdout, "prov-b") {
 		t.Fatalf("--dry-run missing provider checks: %q", r.Stdout)
 	}
@@ -66,8 +66,9 @@ func TestProvider_TomlLessListExecution(t *testing.T) {
 func TestProvider_ProgrammaticRunChecks(t *testing.T) {
 	app := newProviderApp(t)
 	app.RegisterCheckProvider(func() []CheckSpec { return []CheckSpec{errSpec("prov-a")} })
+	dropBuiltinCheckProviders(app)
 
-	results, _, code, err := app.RunChecks(&testCheckContext{root: "/tmp"}, RunChecksOptions{RunAll: true})
+	results, _, code, err := app.RunChecks(&testCheckContext{root: emptyProjectRoot}, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("RunChecks err: %v", err)
 	}
@@ -108,7 +109,7 @@ func TestProvider_CollisionWithToml(t *testing.T) {
 	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
-	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: "/tmp"} })
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
 	app.RegisterCheckProvider(func() []CheckSpec { return []CheckSpec{errSpec("version-consistency")} })
 
 	assertPanicContains(t, "duplicate check definition", func() {
@@ -134,14 +135,14 @@ func TestProvider_PanicIsHardErrorInEveryMode(t *testing.T) {
 		app.RegisterCheckProvider(func() []CheckSpec { panic("provider boom") })
 		return app
 	}
-	for _, mode := range [][]string{{"check", "--list"}, {"check", "--all", "--dry-run"}, {"check", "--all"}} {
+	for _, mode := range [][]string{{"check", "--list"}, {"--dry-run", "check", "--all"}, {"check", "--all"}} {
 		app := makeApp()
 		assertPanicContains(t, "provider boom", func() { app.Test(mode) })
 	}
 	// programmatic
 	app := makeApp()
 	assertPanicContains(t, "provider boom", func() {
-		app.RunChecks(&testCheckContext{root: "/tmp"}, RunChecksOptions{RunAll: true})
+		app.RunChecks(&testCheckContext{root: emptyProjectRoot}, RunChecksOptions{RunAll: true})
 	})
 }
 
@@ -150,12 +151,13 @@ func TestProvider_PanicIsHardErrorInEveryMode(t *testing.T) {
 func TestProvider_HonestEmpty(t *testing.T) {
 	app := newProviderApp(t)
 	app.RegisterCheckProvider(func() []CheckSpec { return nil })
+	dropBuiltinCheckProviders(app)
 
 	r := app.Test([]string{"check", "--list"})
 	if r.ExitCode != 0 {
 		t.Fatalf("honest-empty list exit=%d stderr=%q", r.ExitCode, r.Stderr)
 	}
-	results, _, code, err := app.RunChecks(&testCheckContext{root: "/tmp"}, RunChecksOptions{RunAll: true})
+	results, _, code, err := app.RunChecks(&testCheckContext{root: emptyProjectRoot}, RunChecksOptions{RunAll: true})
 	if err != nil || code != 0 || len(results) != 0 {
 		t.Fatalf("honest-empty programmatic: err=%v code=%d results=%+v", err, code, results)
 	}
@@ -187,9 +189,9 @@ func TestProvider_MemoizedOnce(t *testing.T) {
 		return []CheckSpec{errSpec("prov-a")}
 	})
 	app.Test([]string{"check", "--list"})
-	app.Test([]string{"check", "--all", "--dry-run"})
+	app.Test([]string{"--dry-run", "check", "--all"})
 	app.Test([]string{"check", "--all"})
-	app.RunChecks(&testCheckContext{root: "/tmp"}, RunChecksOptions{RunAll: true})
+	app.RunChecks(&testCheckContext{root: emptyProjectRoot}, RunChecksOptions{RunAll: true})
 	if calls != 1 {
 		t.Fatalf("provider should be called once across reads, got %d", calls)
 	}
@@ -274,6 +276,7 @@ func TestProvider_ListJSON(t *testing.T) {
 			func(ctx CheckContext, r *WarnReporter) CheckOutcome { return r.Passed("ok") },
 		)}
 	})
+	dropBuiltinCheckProviders(app)
 	r := app.Test([]string{"check", "--list", "--json"})
 	var entries []struct {
 		Name     string `json:"name"`

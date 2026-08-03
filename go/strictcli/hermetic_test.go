@@ -42,7 +42,7 @@ func TestHermeticSkipsEnv(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "run"})
 	if r.ExitCode != 0 {
@@ -64,24 +64,24 @@ func TestHermeticSkipsEnvGlobalFlags(t *testing.T) {
 	defer os.Unsetenv("MYAPP_VERBOSE")
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
-	app.GlobalFlag(BoolFlag("verbose", "verbose mode", Env("MYAPP_VERBOSE"), Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "loud mode", Env("MYAPP_VERBOSE"), Default(false)))
 	var capturedCtx *Context
-	var verboseVal interface{}
+	var loudVal interface{}
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		capturedCtx = ctx
-		verboseVal = kwargs["verbose"]
+		loudVal = kwargs["loud"]
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
-	if verboseVal != false {
-		t.Fatalf("expected verbose=false (default), got %v", verboseVal)
+	if loudVal != false {
+		t.Fatalf("expected loud=false (default), got %v", loudVal)
 	}
-	if capturedCtx.Source("verbose") != "default" {
-		t.Fatalf("expected source 'default' for verbose under hermetic, got %q", capturedCtx.Source("verbose"))
+	if capturedCtx.Source("loud") != "default" {
+		t.Fatalf("expected source 'default' for loud under hermetic, got %q", capturedCtx.Source("loud"))
 	}
 }
 
@@ -99,7 +99,7 @@ func TestHermeticCLIFlagStillWorks(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "run", "--level", "99"})
 	if r.ExitCode != 0 {
@@ -129,7 +129,7 @@ func TestHermeticSkipsConfig(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "run"})
 	if r.ExitCode != 0 {
@@ -148,7 +148,7 @@ func TestHermeticConfigMutualExclusion(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithConfig())
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "--config", "/tmp/foo.json", "run"})
 	if r.ExitCode != 1 {
@@ -164,7 +164,7 @@ func TestHermeticConfigSubcommandError(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app", WithConfig())
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "config", "show"})
 	if r.ExitCode != 1 {
@@ -186,7 +186,7 @@ func TestHermeticRequiredFlagMissing(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		StringFlag("name", "name to use", Env("MYAPP_NAME")),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Without hermetic, this would succeed (env provides the value).
 	// With hermetic, env is ignored, so the required flag is missing.
@@ -212,7 +212,7 @@ func TestHermeticOnAppWithoutConfig(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Default(0)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "run"})
 	if r.ExitCode != 0 {
@@ -230,8 +230,8 @@ func TestHermeticRequiredBoolMissing(t *testing.T) {
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithFlags(
-		BoolFlag("verbose", "enable verbose"),
-	))
+		BoolFlag("loud", "enable loud"),
+	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "run"})
 	if r.ExitCode != 1 {
@@ -248,10 +248,10 @@ func TestHermeticRequiredBoolMissing(t *testing.T) {
 // the pre-scan, not registered as a global flag).
 func TestHermeticAbsentFromSchema(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "enable loud", Default(false)))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	// Verify hermetic is not in globalFlags (which feed the schema)
 	for _, gf := range app.globalFlags {

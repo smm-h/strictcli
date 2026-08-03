@@ -559,6 +559,7 @@ func TestNewApp_WithChecks(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	if !app.checksEnabled {
 		t.Fatal("expected checksEnabled to be true")
 	}
@@ -587,6 +588,7 @@ func TestRegisterCheck_DeclaredName(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -600,6 +602,7 @@ func TestRegisterCheck_UndeclaredName_Panics(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 
 	defer func() {
 		r := recover()
@@ -621,6 +624,7 @@ func TestRegisterCheck_DuplicatePanics(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -664,10 +668,11 @@ func TestDoubleEntry_DeclaredButNotRegistered(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.Command("greet", "say hello", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("hello")
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	// Only register one of two checks
 	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
@@ -691,10 +696,11 @@ func TestDoubleEntry_AllRegistered_NoError(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.Command("greet", "say hello", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("hello")
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.RegisterErrorCheck("lint-code", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1352,6 +1358,7 @@ depends_on = ["version-consistency"]
 func makeAppWithChecks(t *testing.T, checksPath string) *App {
 	t.Helper()
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	if !app.checksEnabled {
 		t.Fatal("expected checksEnabled after setting up checks dir")
 	}
@@ -1362,6 +1369,7 @@ func TestCheckCommand_NoFlags_ShowsHelp(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1369,7 +1377,7 @@ func TestCheckCommand_NoFlags_ShowsHelp(t *testing.T) {
 		return passOutcome("ok")
 	})
 	app.SetCheckContext(func() CheckContext {
-		return &testCheckContext{root: "/tmp"}
+		return &testCheckContext{root: emptyProjectRoot}
 	})
 
 	r := app.Test([]string{"check"})
@@ -1389,6 +1397,7 @@ func TestCheckCommand_List_Human(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1418,6 +1427,7 @@ func TestCheckCommand_List_JSON(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1456,6 +1466,7 @@ func TestCheckCommand_All_Passing(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("1.0.0 across 2 targets")
 	})
@@ -1463,7 +1474,7 @@ func TestCheckCommand_All_Passing(t *testing.T) {
 		return passOutcome("all commits covered")
 	})
 	app.SetCheckContext(func() CheckContext {
-		return &testCheckContext{root: "/tmp"}
+		return &testCheckContext{root: emptyProjectRoot}
 	})
 
 	r := app.Test([]string{"check", "--all"})
@@ -1479,6 +1490,7 @@ func TestCheckCommand_All_WithFailure(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return failOutcome("version mismatch", "pyproject: 1.0.0", "package.json: 1.0.1")
 	})
@@ -1487,7 +1499,7 @@ func TestCheckCommand_All_WithFailure(t *testing.T) {
 		return CheckOutcome{}
 	})
 	app.SetCheckContext(func() CheckContext {
-		return &testCheckContext{root: "/tmp"}
+		return &testCheckContext{root: emptyProjectRoot}
 	})
 
 	r := app.Test([]string{"check", "--all"})
@@ -1506,6 +1518,7 @@ func TestCheckCommand_TagFilter(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1513,7 +1526,7 @@ func TestCheckCommand_TagFilter(t *testing.T) {
 		return passOutcome("ok")
 	})
 	app.SetCheckContext(func() CheckContext {
-		return &testCheckContext{root: "/tmp"}
+		return &testCheckContext{root: emptyProjectRoot}
 	})
 
 	// Only version-consistency has tag "release"
@@ -1530,6 +1543,7 @@ func TestCheckCommand_NameGlob(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1537,7 +1551,7 @@ func TestCheckCommand_NameGlob(t *testing.T) {
 		return passOutcome("ok")
 	})
 	app.SetCheckContext(func() CheckContext {
-		return &testCheckContext{root: "/tmp"}
+		return &testCheckContext{root: emptyProjectRoot}
 	})
 
 	r := app.Test([]string{"check", "--name", "version-*"})
@@ -1555,6 +1569,7 @@ func TestCheckCommand_DryRun(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		t.Fatal("should not run in dry-run mode")
 		return CheckOutcome{}
@@ -1564,7 +1579,7 @@ func TestCheckCommand_DryRun(t *testing.T) {
 		return CheckOutcome{}
 	})
 
-	r := app.Test([]string{"check", "--all", "--dry-run"})
+	r := app.Test([]string{"--dry-run", "check", "--all"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -1587,6 +1602,7 @@ func TestCheckCommand_All_JSON(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1594,7 +1610,7 @@ func TestCheckCommand_All_JSON(t *testing.T) {
 		return passOutcome("covered")
 	})
 	app.SetCheckContext(func() CheckContext {
-		return &testCheckContext{root: "/tmp"}
+		return &testCheckContext{root: emptyProjectRoot}
 	})
 
 	r := app.Test([]string{"check", "--all", "--json"})
@@ -1626,6 +1642,7 @@ func TestCheckCommand_All_Verbose(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1633,13 +1650,13 @@ func TestCheckCommand_All_Verbose(t *testing.T) {
 		return passOutcome("covered")
 	})
 	app.SetCheckContext(func() CheckContext {
-		return &testCheckContext{root: "/tmp"}
+		return &testCheckContext{root: emptyProjectRoot}
 	})
 
 	// A passing outcome carries NO problems (Passed hard-errors if any were
 	// reported), so --verbose has nothing extra to reveal for a pure PASS: the
 	// run succeeds and shows PASS rows, but no problem lines appear.
-	r := app.Test([]string{"check", "--all", "--verbose"})
+	r := app.Test([]string{"--verbose", "check", "--all"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -1655,6 +1672,7 @@ func TestCheckCommand_IgnoreWarnings(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return warnOutcome("tag not pushed")
 	})
@@ -1662,7 +1680,7 @@ func TestCheckCommand_IgnoreWarnings(t *testing.T) {
 		return passOutcome("ok")
 	})
 	app.SetCheckContext(func() CheckContext {
-		return &testCheckContext{root: "/tmp"}
+		return &testCheckContext{root: emptyProjectRoot}
 	})
 
 	// Without --ignore-warnings, warn = exit 1
@@ -1682,7 +1700,7 @@ func TestCheckCommand_NotInHelp_WithoutToml(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
 	app.Command("greet", "say hello", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--help"})
 	if r.ExitCode != 0 {
@@ -1697,6 +1715,7 @@ func TestCheckCommand_NoContextFactory_Error(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1721,6 +1740,7 @@ func TestDumpSchema_WithChecks(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -1729,7 +1749,7 @@ func TestDumpSchema_WithChecks(t *testing.T) {
 	})
 	app.Command("noop", "does nothing", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--dump-schema"})
 	if r.ExitCode != 0 {
@@ -1822,7 +1842,7 @@ func TestDumpSchema_WithoutChecks(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
 	app.Command("noop", "does nothing", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--dump-schema"})
 	if r.ExitCode != 0 {
@@ -2201,6 +2221,7 @@ func makeAppWithRegisteredChecks(t *testing.T, toml string) *App {
 	t.Helper()
 	checksPath := writeChecksFile(t, toml)
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	return app
 }
 
@@ -2244,7 +2265,7 @@ func TestRunChecks_AllPass(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2274,7 +2295,7 @@ func TestRunChecks_OneFail(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2307,7 +2328,7 @@ func TestRunChecks_TagFiltering(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	// Only "fast" tagged checks: check-a and check-c
 	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{TagExpr: "fast"})
 	if err != nil {
@@ -2334,7 +2355,7 @@ func TestRunChecks_NameGlob(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{NameGlob: "check-a"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2362,7 +2383,7 @@ func TestRunChecks_RunAll(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, _, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2388,7 +2409,7 @@ func TestRunChecks_DependencyOrdering(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	_, _, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2425,7 +2446,7 @@ func TestRunChecks_DependencyFailureCascade(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2457,7 +2478,7 @@ func TestRunChecks_WarnWithIgnoreWarningsFalse(t *testing.T) {
 		return warnOutcome("minor issue")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	_, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, IgnoreWarnings: false})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2479,7 +2500,7 @@ func TestRunChecks_WarnWithIgnoreWarningsTrue(t *testing.T) {
 		return warnOutcome("minor issue")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	_, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, IgnoreWarnings: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2501,7 +2522,7 @@ func TestRunChecks_NoMatches(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, _, exitCode, err := app.RunChecks(ctx, RunChecksOptions{NameGlob: "nonexistent-*"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2517,7 +2538,7 @@ func TestRunChecks_NoMatches(t *testing.T) {
 func TestRunChecks_ErrorWhenChecksNotEnabled(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	_, _, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err == nil {
 		t.Fatal("expected error when checks not enabled")
@@ -2534,7 +2555,7 @@ func TestRunChecks_ErrorWhenRegistrationsIncomplete(t *testing.T) {
 		return passOutcome("ok")
 	})
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	_, _, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err == nil {
 		t.Fatal("expected error when registrations incomplete")
@@ -2809,6 +2830,7 @@ bogus = true
 func TestAddCheckDef_RejectsDuplicate(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 
 	err := app.addCheckDef(&checkDef{name: "lint-code"})
 	if err == nil {
@@ -2822,6 +2844,7 @@ func TestAddCheckDef_RejectsDuplicate(t *testing.T) {
 func TestAddCheckDef_InsertsAndSortsOrder(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 
 	if err := app.addCheckDef(&checkDef{name: "aaa-first"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2841,6 +2864,7 @@ func TestAddCheckDef_InsertsAndSortsOrder(t *testing.T) {
 func TestEnableChecks_IdempotentCommandRegistration(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml)
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 
 	// Calling enableChecks again must not double-register the check command.
 	app.enableChecks()
@@ -2956,6 +2980,7 @@ func TestWarnReporter_LacksErrorMethod(t *testing.T) {
 func TestRegisterErrorCheck_OnWarnSeverity_Panics(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml) // check-deps is severity "warn"
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -2976,6 +3001,7 @@ func TestRegisterErrorCheck_OnWarnSeverity_Panics(t *testing.T) {
 func TestRegisterWarnCheck_OnErrorSeverity_Panics(t *testing.T) {
 	checksPath := writeChecksFile(t, validChecksToml) // lint-code is severity "error"
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -3011,7 +3037,7 @@ func TestRunChecks_NonMintedOutcome_Panics(t *testing.T) {
 			t.Fatalf("unexpected panic: %v", r)
 		}
 	}()
-	runChecks(defs, []string{"check-a"}, &testCheckContext{root: "/tmp"}, false, false)
+	runChecks(defs, []string{"check-a"}, &testCheckContext{root: emptyProjectRoot}, false, false)
 }
 
 func TestCheckRunResult_GatedWarnedConsistency(t *testing.T) {
@@ -3054,7 +3080,7 @@ func TestRunChecks_ErrorCheckOnlyWarns_NoCascade(t *testing.T) {
 			impl: func(ctx CheckContext) CheckOutcome { bRan = true; return passOutcome("ok") },
 		},
 	}
-	results, _, exitCode := runChecks(defs, []string{"check-a", "check-b"}, &testCheckContext{root: "/tmp"}, false, false)
+	results, _, exitCode := runChecks(defs, []string{"check-a", "check-b"}, &testCheckContext{root: emptyProjectRoot}, false, false)
 	if !bRan {
 		t.Fatal("dependent must run when dependency only warned")
 	}
@@ -3150,7 +3176,7 @@ func TestRunChecks_Partition_ExecutesPureListsImpure(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, partitionToml)
 	registerAllPassing(t, app, "pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, impureListed, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, PureOnly: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3201,7 +3227,7 @@ func TestRunChecks_Partition_PureDependingOnImpureIsListed(t *testing.T) {
 		})
 	}
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	_, impureListed, _, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, PureOnly: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3230,7 +3256,7 @@ func TestRunChecks_Partition_FailedPureDependencyCascadesOverListing(t *testing.
 	})
 	registerAllPassing(t, app, "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, impureListed, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, PureOnly: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3266,7 +3292,7 @@ func TestRunChecks_Partition_ListedCheckContributesNoExitCode(t *testing.T) {
 	})
 	registerAllPassing(t, app, "pure-a", "net-b", "dep-on-impure", "dep-on-pure")
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	_, impureListed, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true, PureOnly: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3293,7 +3319,7 @@ func TestRunChecks_Partition_OffIsUnchanged(t *testing.T) {
 	app := makeAppWithRegisteredChecks(t, partitionToml)
 	registerAllPassing(t, app, "pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
 
-	ctx := &testCheckContext{root: "/tmp"}
+	ctx := &testCheckContext{root: emptyProjectRoot}
 	results, impureListed, exitCode, err := app.RunChecks(ctx, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3312,9 +3338,10 @@ func TestRunChecks_Partition_OffIsUnchanged(t *testing.T) {
 func TestCheckCommand_DryRun_PurityAnnotation(t *testing.T) {
 	checksPath := writeChecksFile(t, partitionToml)
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	registerAllPassing(t, app, "pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
 
-	r := app.Test([]string{"check", "--all", "--dry-run"})
+	r := app.Test([]string{"--dry-run", "check", "--all"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -3498,14 +3525,15 @@ func TestFormatCheckResultsJSON_NotesAndDurationAlways(t *testing.T) {
 func TestRunChecks_DurationFieldPresent(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
 	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("covered")
 	})
-	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: "/tmp"} })
-	results, _, _, err := app.RunChecks(&testCheckContext{root: "/tmp"}, RunChecksOptions{RunAll: true})
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
+	results, _, _, err := app.RunChecks(&testCheckContext{root: emptyProjectRoot}, RunChecksOptions{RunAll: true})
 	if err != nil {
 		t.Fatalf("RunChecks error: %v", err)
 	}
@@ -3519,6 +3547,7 @@ func TestRunChecks_DurationFieldPresent(t *testing.T) {
 func TestCheckCommand_Verbose_NotesDurationSummary(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, r *ErrorReporter) CheckOutcome {
 		r.Note("a verbose-only note")
 		return r.Passed("ok")
@@ -3526,9 +3555,9 @@ func TestCheckCommand_Verbose_NotesDurationSummary(t *testing.T) {
 	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("covered")
 	})
-	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: "/tmp"} })
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
 
-	r := app.Test([]string{"check", "--all", "--verbose"})
+	r := app.Test([]string{"--verbose", "check", "--all"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -3552,6 +3581,7 @@ func TestCheckCommand_Verbose_NotesDurationSummary(t *testing.T) {
 func TestCheckCommand_VerboseHelpText(t *testing.T) {
 	checksPath := writeChecksFile(t, twoChecksToml)
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
 	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
 		return passOutcome("ok")
 	})
@@ -3559,8 +3589,11 @@ func TestCheckCommand_VerboseHelpText(t *testing.T) {
 		return passOutcome("covered")
 	})
 	r := app.Test([]string{"check", "--help"})
-	if !strings.Contains(r.Stdout, "notes") {
-		t.Fatalf("expected verbose help to mention notes, got %q", r.Stdout)
+	// --verbose and --dry-run are framework-owned reserved names, so the check
+	// command no longer declares flags of its own for them and its help must not
+	// advertise them.
+	if strings.Contains(r.Stdout, "--verbose") || strings.Contains(r.Stdout, "--dry-run") {
+		t.Fatalf("check help must not declare the framework-owned flags, got %q", r.Stdout)
 	}
 	if strings.Contains(r.Stdout, "Show full details for passing checks") {
 		t.Fatalf("stale/lying verbose help text still present, got %q", r.Stdout)

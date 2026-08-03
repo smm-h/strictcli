@@ -17,19 +17,19 @@ func mcpTestApp() *App {
 		return Exit(0)
 	}, WithFlags(
 		StringFlag("name", "who to greet"),
-	))
+	), WithEffect(EffectReadOnly))
 	app.Command("status", "check status", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
-	})
-	app.Command("secret", "hidden command", nopHandler, WithHidden())
-	app.Command("wizard", "interactive wizard", nopHandler, WithInteractive())
+	}, WithEffect(EffectReadOnly))
+	app.Command("secret", "hidden command", nopHandler, WithHidden(), WithEffect(EffectReadOnly))
+	app.Command("wizard", "interactive wizard", nopHandler, WithInteractive(), WithEffect(EffectReadOnly))
 
 	dns := app.Group("dns", "manage DNS")
 	dns.Command("list", "list DNS records", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithFlags(
 		StringFlag("zone", "DNS zone"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	return app
 }
@@ -251,7 +251,7 @@ func TestMCPToolsCallSuccess(t *testing.T) {
 	app.Command("greet", "greet someone", captureHandler(&captured), WithFlags(
 		StringFlag("name", "who to greet"),
 		BoolFlag("loud", "shout greeting", Default(false)),
-	))
+	), WithEffect(EffectReadOnly))
 
 	resp, err := sendMCPRequest(app, "tools/call", 4, map[string]interface{}{
 		"name": "greet",
@@ -297,7 +297,7 @@ func TestMCPToolsCallGroupedCommand(t *testing.T) {
 	dns := app.Group("dns", "manage DNS")
 	dns.Command("list", "list records", captureHandler(&captured), WithFlags(
 		StringFlag("zone", "DNS zone"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	resp, err := sendMCPRequest(app, "tools/call", 5, map[string]interface{}{
 		"name": "dns_list",
@@ -325,7 +325,7 @@ func TestMCPToolsCallMissingRequired(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("greet", "greet someone", nopHandler, WithFlags(
 		StringFlag("name", "who to greet"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	resp, err := sendMCPRequest(app, "tools/call", 6, map[string]interface{}{
 		"name":      "greet",
@@ -453,7 +453,7 @@ func TestMCPToolsCallNoArguments(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("status", "check status", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	resp, err := sendMCPRequest(app, "tools/call", 8, map[string]interface{}{
 		"name": "status",
@@ -472,7 +472,7 @@ func TestMCPToolsCallDataHandler(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return ExitData(0, map[string]interface{}{"status": "ok", "count": 42})
-	})
+	}, WithEffect(EffectReadOnly))
 
 	resp, err := sendMCPRequest(app, "tools/call", 9, map[string]interface{}{
 		"name": "info",
@@ -538,7 +538,7 @@ func TestMCPMultiMessageSession(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("greet", "greet someone", captureHandler(&captured), WithFlags(
 		StringFlag("name", "who to greet"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Build a multi-line session: initialize, notification, tools/list, tools/call
 	lines := []string{
@@ -688,7 +688,7 @@ func TestMCPNameResolutionDashedCommand(t *testing.T) {
 	dns := app.Group("dns", "manage DNS")
 	dns.Command("zone-list", "list DNS zones", captureHandler(&captured), WithFlags(
 		StringFlag("filter", "filter zones", Default("all")),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// MCP name would be "dns_zone_list" -- should resolve to "dns.zone-list"
 	// not "dns.zone.list" (which doesn't exist)
@@ -715,7 +715,7 @@ func TestMCPNameResolutionNestedGroup(t *testing.T) {
 	zone := dns.Group("zone", "manage zones")
 	zone.Command("create", "create a zone", captureHandler(&captured), WithFlags(
 		StringFlag("name", "zone name"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// MCP name "dns_zone_create" -> should resolve to "dns.zone.create"
 	resp, err := sendMCPRequest(app, "tools/call", 1, map[string]interface{}{
@@ -748,7 +748,7 @@ func TestMCPViaPipe(t *testing.T) {
 		return Exit(0)
 	}, WithFlags(
 		StringFlag("msg", "message to echo"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	// Use os.Pipe to simulate stdin/stdout
 	inReader, inWriter := io.Pipe()

@@ -24,7 +24,7 @@ func buildInvokeTestApp(captured *map[string]interface{}) *App {
 		return Exit(0)
 	}, WithFlags(
 		StringFlag("name", "who to greet"),
-	))
+	), WithEffect(EffectReadOnly))
 
 	return app
 }
@@ -56,9 +56,9 @@ func TestInvokeMatchesTest(t *testing.T) {
 		app.Command("deploy", "deploy something", captureHandler(captured),
 			WithFlags(
 				StringFlag("target", "deploy target"),
-				BoolFlag("dry-run", "dry run mode", Default(false)),
+				BoolFlag("sim-run", "dry run mode", Default(false)),
 				IntFlag("count", "instance count", Default(1)),
-			),
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
@@ -67,7 +67,7 @@ func TestInvokeMatchesTest(t *testing.T) {
 	app1 := makeApp(&invokeKwargs)
 	ir := app1.invoke("deploy", map[string]interface{}{
 		"target":  "production",
-		"dry_run": true,
+		"sim_run": true,
 		"count":   3,
 	})
 	if ir.err != "" {
@@ -76,7 +76,7 @@ func TestInvokeMatchesTest(t *testing.T) {
 
 	// Test via Test (CLI parsing)
 	app2 := makeApp(&testKwargs)
-	r := app2.Test([]string{"deploy", "--target", "production", "--dry-run", "--count", "3"})
+	r := app2.Test([]string{"deploy", "--target", "production", "--sim-run", "--count", "3"})
 	if r.ExitCode != 0 {
 		t.Fatalf("Test failed: %s", r.Stderr)
 	}
@@ -93,14 +93,14 @@ func TestInvokeWithDefaults(t *testing.T) {
 	app.Command("run", "run something", captureHandler(&captured),
 		WithFlags(
 			StringFlag("mode", "operation mode", Default("fast")),
-			BoolFlag("verbose", "verbose output", Default(false)),
+			BoolFlag("loud", "loud output", Default(false)),
 			IntFlag("retries", "retry count", Default(3)),
-		),
+		), WithEffect(EffectReadOnly),
 	)
 
 	// Only provide non-default values
 	ir := app.invoke("run", map[string]interface{}{
-		"verbose": true,
+		"loud": true,
 	})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
@@ -108,8 +108,8 @@ func TestInvokeWithDefaults(t *testing.T) {
 	if captured["mode"] != "fast" {
 		t.Fatalf("expected mode='fast', got %v", captured["mode"])
 	}
-	if captured["verbose"] != true {
-		t.Fatalf("expected verbose=true, got %v", captured["verbose"])
+	if captured["loud"] != true {
+		t.Fatalf("expected loud=true, got %v", captured["loud"])
 	}
 	if captured["retries"] != 3 {
 		t.Fatalf("expected retries=3, got %v", captured["retries"])
@@ -124,9 +124,9 @@ func TestInvokeDefaultsMatchTest(t *testing.T) {
 		app.Command("run", "run it", captureHandler(captured),
 			WithFlags(
 				StringFlag("mode", "operation mode", Default("fast")),
-				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("loud", "loud output", Default(false)),
 				IntFlag("retries", "retry count", Default(3)),
-			),
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
@@ -156,18 +156,18 @@ func TestInvokeGroupCommand(t *testing.T) {
 	grp := app.Group("db", "database commands")
 	grp.Command("migrate", "run migrations", captureHandler(&captured),
 		WithFlags(
-			BoolFlag("dry-run", "preview only", Default(false)),
-		),
+			BoolFlag("sim-run", "preview only", Default(false)),
+		), WithEffect(EffectReadOnly),
 	)
 
 	ir := app.invoke("db.migrate", map[string]interface{}{
-		"dry_run": true,
+		"sim_run": true,
 	})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
 	}
-	if captured["dry_run"] != true {
-		t.Fatalf("expected dry_run=true, got %v", captured["dry_run"])
+	if captured["sim_run"] != true {
+		t.Fatalf("expected sim_run=true, got %v", captured["sim_run"])
 	}
 }
 
@@ -179,7 +179,7 @@ func TestInvokeNestedGroupCommand(t *testing.T) {
 	zone.Command("create", "create a zone", captureHandler(&captured),
 		WithFlags(
 			StringFlag("name", "zone name"),
-		),
+		), WithEffect(EffectReadOnly),
 	)
 
 	ir := app.invoke("dns.zone.create", map[string]interface{}{
@@ -204,7 +204,7 @@ func TestInvokeNestedGroupMatchesTest(t *testing.T) {
 			WithFlags(
 				StringFlag("name", "zone name"),
 				IntFlag("ttl", "time to live", Default(3600)),
-			),
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
@@ -232,33 +232,33 @@ func TestInvokeNestedGroupMatchesTest(t *testing.T) {
 func TestInvokeWithGlobalFlags(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
-	app.Command("run", "run it", captureHandler(&captured))
+	app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
+	app.Command("run", "run it", captureHandler(&captured), WithEffect(EffectReadOnly))
 
 	ir := app.invoke("run", map[string]interface{}{
-		"verbose": true,
+		"loud": true,
 	})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
 	}
-	if captured["verbose"] != true {
-		t.Fatalf("expected verbose=true, got %v", captured["verbose"])
+	if captured["loud"] != true {
+		t.Fatalf("expected loud=true, got %v", captured["loud"])
 	}
 }
 
 func TestInvokeGlobalFlagDefaults(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
-	app.Command("run", "run it", captureHandler(&captured))
+	app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
+	app.Command("run", "run it", captureHandler(&captured), WithEffect(EffectReadOnly))
 
 	// Don't provide the global flag -- should get default (false)
 	ir := app.invoke("run", map[string]interface{}{})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
 	}
-	if captured["verbose"] != false {
-		t.Fatalf("expected verbose=false, got %v", captured["verbose"])
+	if captured["loud"] != false {
+		t.Fatalf("expected loud=false, got %v", captured["loud"])
 	}
 }
 
@@ -267,19 +267,19 @@ func TestInvokeGlobalFlagsMatchTest(t *testing.T) {
 
 	makeApp := func(captured *map[string]interface{}) *App {
 		app := NewApp("myapp", "1.0.0", "test app")
-		app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
+		app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
 		app.GlobalFlag(StringFlag("format", "output format", Default("text")))
 		app.Command("run", "run it", captureHandler(captured),
 			WithFlags(
 				StringFlag("target", "deploy target", Default("local")),
-			),
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
 
 	app1 := makeApp(&invokeKwargs)
 	ir := app1.invoke("run", map[string]interface{}{
-		"verbose": true,
+		"loud": true,
 		"format":  "json",
 		"target":  "remote",
 	})
@@ -288,7 +288,7 @@ func TestInvokeGlobalFlagsMatchTest(t *testing.T) {
 	}
 
 	app2 := makeApp(&testKwargs)
-	r := app2.Test([]string{"--verbose", "--format", "json", "run", "--target", "remote"})
+	r := app2.Test([]string{"--loud", "--format", "json", "run", "--target", "remote"})
 	if r.ExitCode != 0 {
 		t.Fatalf("Test failed: %s", r.Stderr)
 	}
@@ -305,7 +305,7 @@ func TestInvokeWithPositionalArgs(t *testing.T) {
 		WithArgs(
 			NewArg("source", "source file"),
 			NewArg("dest", "destination file"),
-		),
+		), WithEffect(EffectReadOnly),
 	)
 
 	ir := app.invoke("cp", map[string]interface{}{
@@ -335,7 +335,7 @@ func TestInvokePositionalArgsMatchTest(t *testing.T) {
 			),
 			WithFlags(
 				BoolFlag("recursive", "copy recursively", Default(false)),
-			),
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
@@ -367,7 +367,7 @@ func TestInvokeVariadicArgs(t *testing.T) {
 	app.Command("rm", "remove files", captureHandler(&captured),
 		WithArgs(
 			NewArg("files", "files to remove", Variadic()),
-		),
+		), WithEffect(EffectReadOnly),
 	)
 
 	ir := app.invoke("rm", map[string]interface{}{
@@ -396,7 +396,7 @@ func TestInvokeVariadicArgsMatchTest(t *testing.T) {
 			),
 			WithArgs(
 				NewArg("files", "files to remove", Variadic()),
-			),
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
@@ -427,17 +427,17 @@ func TestInvokePassthroughCommand(t *testing.T) {
 	var capturedGlobals map[string]interface{}
 
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
 	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		capturedName = name
 		capturedArgs = args
 		capturedGlobals = globals
 		return 0
-	})
+	}, WithEffect(EffectReadOnly))
 
 	ir := app.invoke("exec", map[string]interface{}{
 		"_args":   []string{"ls", "-la", "/tmp"},
-		"verbose": true,
+		"loud": true,
 	})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
@@ -448,21 +448,21 @@ func TestInvokePassthroughCommand(t *testing.T) {
 	if len(capturedArgs) != 3 || capturedArgs[0] != "ls" {
 		t.Fatalf("unexpected args: %v", capturedArgs)
 	}
-	if capturedGlobals["verbose"] != true {
-		t.Fatalf("expected verbose=true in globals, got %v", capturedGlobals["verbose"])
+	if capturedGlobals["loud"] != true {
+		t.Fatalf("expected loud=true in globals, got %v", capturedGlobals["loud"])
 	}
 }
 
 func TestInvokePassthroughUnknownKwargs(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
 	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
-	})
+	}, WithEffect(EffectReadOnly))
 
 	ir := app.invoke("exec", map[string]interface{}{
 		"_args":      []string{"ls"},
-		"verbose":    true,
+		"loud":    true,
 		"bogus_flag": "should fail",
 	})
 	if ir.err == "" {
@@ -479,15 +479,15 @@ func TestInvokePassthroughUnknownKwargs(t *testing.T) {
 func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.GlobalFlag(StringFlag("token", "auth token"))
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
 	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
-	})
+	}, WithEffect(EffectReadOnly))
 
 	// Don't provide "token" -- it's a required string global flag (no default)
 	ir := app.invoke("exec", map[string]interface{}{
 		"_args":   []string{"ls"},
-		"verbose": true,
+		"loud": true,
 	})
 	if ir.err == "" {
 		t.Fatal("expected error for missing required global flag in passthrough command")
@@ -506,7 +506,7 @@ func TestInvokePassthroughMissingRequiredBoolGlobalFlag(t *testing.T) {
 	app.GlobalFlag(BoolFlag("force-run", "force operation"))
 	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
-	})
+	}, WithEffect(EffectReadOnly))
 
 	// Don't provide "force-run" -- it's a required bool global flag (no default)
 	ir := app.invoke("exec", map[string]interface{}{
@@ -525,7 +525,7 @@ func TestInvokePassthroughMissingRequiredBoolGlobalFlag(t *testing.T) {
 
 func TestInvokeUnknownCommand(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("greet", "say hello", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("greet", "say hello", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	ir := app.invoke("nonexistent", map[string]interface{}{})
 	if ir.err == "" {
@@ -542,7 +542,7 @@ func TestInvokeUnknownParameter(t *testing.T) {
 	app.Command("greet", "say hello", captureHandler(&captured),
 		WithFlags(
 			StringFlag("name", "who to greet"),
-		),
+		), WithEffect(EffectReadOnly),
 	)
 
 	ir := app.invoke("greet", map[string]interface{}{
@@ -563,7 +563,7 @@ func TestInvokeMissingRequiredFlag(t *testing.T) {
 	app.Command("deploy", "deploy it", captureHandler(&captured),
 		WithFlags(
 			StringFlag("target", "deploy target"),
-		),
+		), WithEffect(EffectReadOnly),
 	)
 
 	ir := app.invoke("deploy", map[string]interface{}{})
@@ -581,7 +581,7 @@ func TestInvokeChoicesValidation(t *testing.T) {
 	app.Command("run", "run it", captureHandler(&captured),
 		WithFlags(
 			StringFlag("mode", "operation mode", Choices("fast", "slow")),
-		),
+		), WithEffect(EffectReadOnly),
 	)
 
 	// Valid choice
@@ -609,7 +609,7 @@ func TestInvokeMutexGroup(t *testing.T) {
 			WithMutex(MutexGroup{Flags: []Flag{
 				StringFlag("json", "JSON output", Default(nil)),
 				StringFlag("text", "text output", Default(nil)),
-			}}),
+			}}), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
@@ -636,7 +636,7 @@ func TestInvokeExitCode(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("fail", "always fails", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(42)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	ir := app.invoke("fail", map[string]interface{}{})
 	if ir.err != "" {
@@ -655,7 +655,7 @@ func TestInvokeFloatFlag(t *testing.T) {
 		app.Command("scale", "scale it", captureHandler(captured),
 			WithFlags(
 				FloatFlag("factor", "scale factor"),
-			),
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
@@ -687,7 +687,7 @@ func TestInvokeHandlerReceivesOutput(t *testing.T) {
 		called = true
 		fmt.Print("pong")
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 
 	ir := app.invoke("ping", map[string]interface{}{})
 	if ir.err != "" {
@@ -704,20 +704,20 @@ func TestInvokeDashFlagName(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("run", "run it", captureHandler(&captured),
 		WithFlags(
-			BoolFlag("dry-run", "preview mode", Default(false)),
+			BoolFlag("sim-run", "preview mode", Default(false)),
 			StringFlag("output-dir", "output directory", Default("/tmp")),
-		),
+		), WithEffect(EffectReadOnly),
 	)
 
 	ir := app.invoke("run", map[string]interface{}{
-		"dry_run":    true,
+		"sim_run":    true,
 		"output_dir": "/home/out",
 	})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
 	}
-	if captured["dry_run"] != true {
-		t.Fatalf("expected dry_run=true, got %v", captured["dry_run"])
+	if captured["sim_run"] != true {
+		t.Fatalf("expected sim_run=true, got %v", captured["sim_run"])
 	}
 	if captured["output_dir"] != "/home/out" {
 		t.Fatalf("expected output_dir='/home/out', got %v", captured["output_dir"])
@@ -733,7 +733,7 @@ func TestInvokeOptionalArgMatchesTest(t *testing.T) {
 			WithArgs(
 				NewArg("item", "item to show"),
 				NewArg("detail", "detail level", ArgRequired(false), ArgDefault("summary")),
-			),
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
@@ -786,16 +786,16 @@ func TestInvokeImpliesDependency(t *testing.T) {
 		app.Command("run", "run it", captureHandler(captured),
 			WithFlags(
 				BoolFlag("all", "do everything", Default(false)),
-				BoolFlag("verbose", "verbose output", Default(false)),
+				BoolFlag("loud", "loud output", Default(false)),
 			),
 			WithDependencies(
-				Implies{Flag: "all", Implies: "verbose", Value: true},
-			),
+				Implies{Flag: "all", Implies: "loud", Value: true},
+			), WithEffect(EffectReadOnly),
 		)
 		return app
 	}
 
-	// --all should imply --verbose
+	// --all should imply --loud
 	app1 := makeApp(&invokeKwargs)
 	ir := app1.invoke("run", map[string]interface{}{
 		"all": true,
@@ -814,8 +814,8 @@ func TestInvokeImpliesDependency(t *testing.T) {
 		t.Fatalf("kwargs mismatch:\ninvoke: %v\nTest:   %v", invokeKwargs, testKwargs)
 	}
 
-	if invokeKwargs["verbose"] != true {
-		t.Fatalf("expected verbose=true (implied), got %v", invokeKwargs["verbose"])
+	if invokeKwargs["loud"] != true {
+		t.Fatalf("expected loud=true (implied), got %v", invokeKwargs["loud"])
 	}
 }
 
@@ -829,14 +829,14 @@ func TestCallHandlerSourceProvenance(t *testing.T) {
 	app.Command("greet", "greet someone", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		// Store the sources in a package-level variable so the test can inspect them
 		capturedSources["name"] = ctx.Source("name")
-		capturedSources["verbose"] = ctx.Source("verbose")
+		capturedSources["loud"] = ctx.Source("loud")
 		return Exit(0)
 	}, WithFlags(
 		StringFlag("name", "who to greet"),
-		BoolFlag("verbose", "verbose output", Default(false)),
-	))
+		BoolFlag("loud", "loud output", Default(false)),
+	), WithEffect(EffectReadOnly))
 
-	// Call with "name" provided, "verbose" absent (should get default)
+	// Call with "name" provided, "loud" absent (should get default)
 	result, err := app.Call("greet", map[string]interface{}{
 		"name": "world",
 	})
@@ -852,7 +852,7 @@ func TestCallHandlerSourceProvenance(t *testing.T) {
 		t.Fatalf("expected source 'cli' for name, got %q", capturedSources["name"])
 	}
 	// Absent kwarg with default should have source "default"
-	if capturedSources["verbose"] != "default" {
-		t.Fatalf("expected source 'default' for verbose, got %q", capturedSources["verbose"])
+	if capturedSources["loud"] != "default" {
+		t.Fatalf("expected source 'default' for loud, got %q", capturedSources["loud"])
 	}
 }

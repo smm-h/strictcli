@@ -24,7 +24,7 @@ func TestConnectionEnv_Declaration(t *testing.T) {
 func TestConnectionEnv_HelpRendering(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConnectionEnv("DATABASE_URL", "Postgres connection string"))
-	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"--help"})
 	if !strings.Contains(r.Stdout, "Infrastructure:") {
 		t.Fatalf("help missing Infrastructure section: %q", r.Stdout)
@@ -38,7 +38,7 @@ func TestConnectionEnv_HelpRendering(t *testing.T) {
 func TestConnectionEnv_SchemaDump(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConnectionEnv("DATABASE_URL", "Postgres connection string"))
-	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 	schema := dumpSchemaCore(app)
 	infra, ok := schema["infra"].(map[string]interface{})
 	if !ok {
@@ -72,7 +72,7 @@ func newConnApp(t *testing.T) (*App, *map[string]interface{}, *map[string]string
 		return Exit(0)
 	}, WithFlags(
 		StringFlag("dsn", "connection string", Default(nil), ConnectionURLFlag("DATABASE_URL")),
-	))
+	), WithEffect(EffectReadOnly))
 	return app, &kw, &src
 }
 
@@ -136,7 +136,7 @@ func TestConnectionEnv_InfraValueLive(t *testing.T) {
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		got, present = ctx.ConnectionEnvValue("DATABASE_URL")
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.Test([]string{"run"})
 	if !present || got != "postgres://live/db" {
 		t.Fatalf("ConnectionEnvValue = (%q, %v)", got, present)
@@ -145,7 +145,7 @@ func TestConnectionEnv_InfraValueLive(t *testing.T) {
 	app.Command("run2", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		got, present = ctx.InfraValue("DATABASE_URL")
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.Test([]string{"run2"})
 	if !present || got != "postgres://live/db" {
 		t.Fatalf("InfraValue = (%q, %v)", got, present)
@@ -161,7 +161,7 @@ func TestConnectionEnv_HermeticSuppressesInfraValue(t *testing.T) {
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		_, present = ctx.ConnectionEnvValue("DATABASE_URL")
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.Test([]string{"--hermetic", "run"})
 	if present {
 		t.Fatalf("hermetic must make ConnectionEnvValue absent")
@@ -179,7 +179,7 @@ func TestConnectionEnv_UndeclaredValuePanics(t *testing.T) {
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		ctx.ConnectionEnvValue("NOPE")
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.Test([]string{"run"})
 }
 
@@ -222,7 +222,7 @@ func newConnCheckApp(t *testing.T) *App {
 		rep.Note("dsn=" + dsn)
 		return rep.Passed("connection env visible")
 	})
-	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: "/tmp"} })
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
 	return app
 }
 
@@ -230,7 +230,7 @@ func TestConnectionEnv_CheckSideAccess(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://check/db")
 	defer os.Unsetenv("DATABASE_URL")
 	app := newConnCheckApp(t)
-	r := app.Test([]string{"check", "--tag", "db", "--verbose"})
+	r := app.Test([]string{"--verbose", "check", "--tag", "db"})
 	if !strings.Contains(r.Stdout, "dsn=postgres://check/db") {
 		t.Fatalf("check did not see connection env: %q", r.Stdout)
 	}
@@ -247,7 +247,7 @@ func TestConnectionEnv_CheckSideHermeticSkips(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://check/db")
 	defer os.Unsetenv("DATABASE_URL")
 	app := newConnCheckApp(t)
-	r := app.Test([]string{"--hermetic", "check", "--tag", "db", "--verbose"})
+	r := app.Test([]string{"--hermetic", "--verbose", "check", "--tag", "db"})
 	if !strings.Contains(r.Stdout, "SKIP") {
 		t.Fatalf("expected SKIP under hermetic: %q (stderr=%q)", r.Stdout, r.Stderr)
 	}
@@ -271,7 +271,7 @@ func TestConnectionEnv_CheckSideHermeticSkips(t *testing.T) {
 func TestConnectionEnv_CheckSideHermeticConflation(t *testing.T) {
 	os.Unsetenv("DATABASE_URL") // env UNSET
 	app := newConnCheckApp(t)
-	r := app.Test([]string{"--hermetic", "check", "--tag", "db", "--verbose"})
+	r := app.Test([]string{"--hermetic", "--verbose", "check", "--tag", "db"})
 	// present=false (env unset) AND hermetic=true: the skip must attribute to
 	// hermetic, not to "unset".
 	if !strings.Contains(r.Stdout, "hermetic=true") {
@@ -291,7 +291,7 @@ func TestConnectionEnv_CheckSideHermeticConflation(t *testing.T) {
 func TestConnectionEnv_CheckSideUnsetNotHermetic(t *testing.T) {
 	os.Unsetenv("DATABASE_URL") // env UNSET, no --hermetic
 	app := newConnCheckApp(t)
-	r := app.Test([]string{"check", "--tag", "db", "--verbose"})
+	r := app.Test([]string{"--verbose", "check", "--tag", "db"})
 	if !strings.Contains(r.Stdout, "hermetic=false") {
 		t.Fatalf("env-unset+non-hermetic must report IsHermetic()==false: %q", r.Stdout)
 	}
@@ -313,7 +313,7 @@ func TestConnectionURLFlag_UnboundPanics(t *testing.T) {
 	// URL-class flag with no ConnectionEnv binding -- the bug class the
 	// framework refuses at registration.
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(Flag{Name: "dsn", Type: TypeStr, Help: "dsn", ConnectionURL: true, hasDefault: true}))
+		WithFlags(Flag{Name: "dsn", Type: TypeStr, Help: "dsn", ConnectionURL: true, hasDefault: true}), WithEffect(EffectReadOnly))
 }
 
 func TestConnectionURLFlag_UndeclaredBindingPanics(t *testing.T) {
@@ -325,7 +325,7 @@ func TestConnectionURLFlag_UndeclaredBindingPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConnectionEnv("DATABASE_URL", "conn"))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("dsn", "dsn", Default(nil), ConnectionURLFlag("OTHER_URL"))))
+		WithFlags(StringFlag("dsn", "dsn", Default(nil), ConnectionURLFlag("OTHER_URL"))), WithEffect(EffectReadOnly))
 }
 
 func TestConnectionEnv_BindingWithoutURLMarkerPanics(t *testing.T) {
@@ -337,7 +337,7 @@ func TestConnectionEnv_BindingWithoutURLMarkerPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConnectionEnv("DATABASE_URL", "conn"))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(Flag{Name: "dsn", Type: TypeStr, Help: "dsn", ConnectionEnv: "DATABASE_URL", hasDefault: true}))
+		WithFlags(Flag{Name: "dsn", Type: TypeStr, Help: "dsn", ConnectionEnv: "DATABASE_URL", hasDefault: true}), WithEffect(EffectReadOnly))
 }
 
 func TestConnectionEnv_BindingPlusPerFlagEnvPanics(t *testing.T) {
@@ -349,7 +349,7 @@ func TestConnectionEnv_BindingPlusPerFlagEnvPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConnectionEnv("DATABASE_URL", "conn"))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("dsn", "dsn", Default(nil), Env("SOMETHING_ELSE"), ConnectionURLFlag("DATABASE_URL"))))
+		WithFlags(StringFlag("dsn", "dsn", Default(nil), Env("SOMETHING_ELSE"), ConnectionURLFlag("DATABASE_URL"))), WithEffect(EffectReadOnly))
 }
 
 func TestConnectionEnv_EmptyHelpPanics(t *testing.T) {

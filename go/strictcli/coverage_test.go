@@ -27,13 +27,13 @@ func makeTestCoverageApp(t *testing.T) *App {
 	app := NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
 	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.Command("status", "show status", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.Command("build", "build the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.SetCheckContext(func() CheckContext { return &testCheckCtx{root: dir} })
 	return app
 }
@@ -50,13 +50,13 @@ func makeGroupedCoverageApp(t *testing.T) *App {
 	grp := app.Group("infra", "infrastructure commands")
 	grp.Command("deploy", "deploy infra", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	grp.Command("teardown", "tear down infra", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.Command("status", "show status", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.SetCheckContext(func() CheckContext { return &testCheckCtx{root: dir} })
 	return app
 }
@@ -436,7 +436,7 @@ func TestCoverageDisabled_NoShardsCreated(t *testing.T) {
 	app := NewApp("nocover", "1.0.0", "no coverage")
 	app.Command("greet", "say hello", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
-	})
+	}, WithEffect(EffectReadOnly))
 	app.Test([]string{"greet"})
 
 	if _, err := os.Stat(".strictcli/coverage"); !os.IsNotExist(err) {

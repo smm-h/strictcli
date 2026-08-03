@@ -65,7 +65,7 @@ func TestGlobalFlagReservedShortNames(t *testing.T) {
 // without panic.
 func TestGlobalFlagNonReservedAllowed(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test")
-	app.GlobalFlag(BoolFlag("verbose", "enable verbose output", Default(false)))
+	app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
 	app.GlobalFlag(StringFlag("output", "output file"))
 	// No panic means success.
 }

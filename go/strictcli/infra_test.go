@@ -72,7 +72,7 @@ func newInfraFlagApp(t *testing.T) (*App, *map[string]string, *map[string]interf
 		return Exit(0)
 	}, WithFlags(
 		StringFlag("db", "db path", Default(RelativeToRoot("MYAPP_HOME", "db.sqlite"))),
-	))
+	), WithEffect(EffectReadOnly))
 	return app, &sources, &kw
 }
 
@@ -152,7 +152,7 @@ func TestUndeclaredRootMarker_Panics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("db", "db path", Default(RelativeToRoot("NOPE", "x")))))
+		WithFlags(StringFlag("db", "db path", Default(RelativeToRoot("NOPE", "x")))), WithEffect(EffectReadOnly))
 }
 
 func TestConfigPathMarker_UndeclaredPanics(t *testing.T) {
@@ -204,7 +204,7 @@ func TestInfraValue_RootAndHandshakeLiveRead(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"),
 		WithHandshakeEnv("CI_TOKEN", "CI auth token"))
-	app.Command("run", "run it", h.command())
+	app.Command("run", "run it", h.command(), WithEffect(EffectReadOnly))
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("exit %d: %s", r.ExitCode, r.Stderr)
@@ -224,7 +224,7 @@ func TestInfraValue_HandshakeUnsetLiveRead(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"),
 		WithHandshakeEnv("CI_TOKEN", "CI auth token"))
-	app.Command("run", "run it", h.command())
+	app.Command("run", "run it", h.command(), WithEffect(EffectReadOnly))
 	r := app.Test([]string{"run"})
 	if r.ExitCode != 0 {
 		t.Fatalf("exit %d: %s", r.ExitCode, r.Stderr)
@@ -238,7 +238,7 @@ func TestInfraValue_UndeclaredPanics(t *testing.T) {
 	h := &infraHandler{testUndef: true}
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"))
-	app.Command("run", "run it", h.command())
+	app.Command("run", "run it", h.command(), WithEffect(EffectReadOnly))
 	app.Test([]string{"run"})
 	if !h.panicked {
 		t.Fatalf("expected InfraValue on undeclared var to panic")
@@ -297,7 +297,7 @@ func TestInfraHelpSurface(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"),
 		WithHandshakeEnv("CI_TOKEN", "CI auth token"))
-	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) })
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"--help"})
 	if !strings.Contains(r.Stdout, "Infrastructure:") {
 		t.Fatalf("help missing Infrastructure section: %s", r.Stdout)
