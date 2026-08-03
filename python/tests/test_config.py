@@ -1030,11 +1030,22 @@ def test_config_unique_enforcement_global_flag(tmp_path, monkeypatch):
 
 
 def _toml_write_roundtrip(tmp_path, values):
-    """Write each key via _write_config_set (toml) and read back via tomllib."""
+    """Write each key via _write_config_set (toml) and read back via tomllib.
+
+    The write rides ``ctx.effects`` like every other config mutation, so the
+    round-trip runs inside a real (live-mode) dispatch to get a handle.
+    """
     path = str(tmp_path / "config.toml")
     data = {}
-    for key, value in values.items():
-        strictcli._write_config_set(data, path, "toml", key, value)
+    app = strictcli.App(name="writer", version="1.0.0", help="writer")
+
+    @app.command("write", help="write", effect="mutating")
+    def _write(ctx):
+        for key, value in values.items():
+            strictcli._write_config_set(ctx.effects, data, path, "toml", key, value)
+        return 0
+
+    assert app.test(["write"]).exit_code == 0
     with open(path, "rb") as f:
         return tomllib.load(f)
 
@@ -1942,3 +1953,120 @@ def test_config_edit_editor_not_found_is_hard_error(tmp_path, monkeypatch):
     r = app.test(["config", "edit"])
     assert r.exit_code == 1
     assert "error: editor failed" in r.stderr
+
+
+# --- The framework's own mutating commands honour --dry-run (§9.2, §3.1) ---
+#
+# `config set`, `config init` and `config edit` are classified `mutating`, so
+# every mutation they make must ride ctx.effects: under --dry-run they are
+# RECORDED and rendered, never performed. A framework command that printed
+# "DRY RUN — no changes were made." while rewriting the user's config file (or
+# launching their editor) would be the loudest possible counterexample to the
+# regime it ships.
+
+_DRY_HEADER = "DRY RUN — no changes were made. Would do:\n"
+
+
+def _dry_app(config_file, config_format="json"):
+    app = strictcli.App(
+        name="myapp", version="1.0.0", help="test app",
+        config=True, config_path=str(config_file), config_format=config_format,
+    )
+
+    @app.command("run", effect="read_only", help="run something")
+    @strictcli.flag("opt", type=str, help="an option", default="")
+    def _run(ctx, opt):
+        return 0
+
+    return app
+
+
+def test_config_set_dry_run_changes_nothing(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"opt": "before"}\n')
+    app = _dry_app(config_file)
+    r = app.test(["--dry-run", "config", "set", "opt", "after"])
+    assert r.exit_code == 0
+    assert r.stdout == (
+        f"{_DRY_HEADER}  1. write: {config_file} (21 bytes)\n"
+    )
+    assert config_file.read_text() == '{"opt": "before"}\n'
+
+
+def test_config_set_default_dry_run_changes_nothing(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"opt": "before"}\n')
+    app = _dry_app(config_file)
+    r = app.test(["--dry-run", "config", "set", "opt", "--default"])
+    assert r.exit_code == 0
+    assert f"1. write: {config_file}" in r.stdout
+    assert config_file.read_text() == '{"opt": "before"}\n'
+
+
+def test_config_set_dry_run_previews_the_missing_directory(tmp_path):
+    config_file = tmp_path / "nested" / "deeper" / "config.json"
+    app = _dry_app(config_file)
+    r = app.test(["--dry-run", "config", "set", "opt", "v"])
+    assert r.exit_code == 0
+    assert r.stdout.startswith(
+        f"{_DRY_HEADER}  1. mkdir: {config_file.parent}\n  2. write: {config_file} ("
+    )
+    assert not config_file.parent.exists()
+
+
+def test_config_set_toml_dry_run_changes_nothing(tmp_path):
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('# a comment\nopt = "before"\n')
+    app = _dry_app(config_file, config_format="toml")
+    r = app.test(["--dry-run", "config", "set", "opt", "after"])
+    assert r.exit_code == 0
+    assert f"1. write: {config_file}" in r.stdout
+    assert config_file.read_text() == '# a comment\nopt = "before"\n'
+
+
+def test_config_init_dry_run_writes_nothing(tmp_path):
+    config_file = tmp_path / "config.json"
+    app = _dry_app(config_file)
+    r = app.test(["--dry-run", "config", "init"])
+    assert r.exit_code == 0
+    assert f"{config_file}\n" in r.stdout
+    assert f"1. write: {config_file} (" in r.stdout
+    assert not config_file.exists()
+
+
+def test_config_edit_dry_run_does_not_launch_the_editor(tmp_path, monkeypatch):
+    """The sharpest form of the bug: a dry run must not open $EDITOR."""
+    config_file = tmp_path / "config.json"
+    marker = tmp_path / "editor-ran"
+    editor = tmp_path / "fake-editor"
+    editor.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    editor.chmod(0o755)
+    monkeypatch.setenv("EDITOR", str(editor))
+    app = _dry_app(config_file)
+    r = app.test(["--dry-run", "config", "edit"])
+    assert r.exit_code == 0
+    assert r.stdout == (
+        f"{_DRY_HEADER}"
+        f"  1. write: {config_file} (3 bytes)\n"
+        f"  2. run: {editor} {config_file}\n"
+    )
+    assert not marker.exists()
+    assert not config_file.exists()
+
+
+def test_config_commands_still_mutate_in_live_mode(tmp_path):
+    config_file = tmp_path / "sub" / "config.json"
+    app = _dry_app(config_file)
+    assert app.test(["config", "init"]).exit_code == 0
+    assert config_file.is_file()
+    assert app.test(["config", "set", "opt", "v"]).exit_code == 0
+    assert json.loads(config_file.read_text())["opt"] == "v"
+
+
+def test_config_set_records_its_write_in_the_live_effect_log(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text("{}\n")
+    app = _dry_app(config_file)
+    app.test(["config", "set", "opt", "v"])
+    log = [r for r in app.effect_log() if r["kind"] != "cache_write"]
+    assert [(r["verb"], r["recorded"]) for r in log] == [("write", False)]

@@ -1969,6 +1969,7 @@ def _check_config_field_type(cf: "ConfigField", value: object) -> str | None:
 
 
 def _config_set_field(
+    effects: "_Effects",
     key: str,
     value: str | None,
     cf: "ConfigField",
@@ -2000,7 +2001,7 @@ def _config_set_field(
         return 1
 
     if use_default:
-        if not _write_config_unset(existing, path, config_format, key):
+        if not _write_config_unset(effects, existing, path, config_format, key):
             print(f"config set: key '{key}' not in config", file=sys.stderr)
             return 1
         return 0
@@ -2025,45 +2026,65 @@ def _config_set_field(
         print(f"config set: key '{key}': {e}", file=sys.stderr)
         return 1
 
-    _write_config_set(existing, path, config_format, key, typed_value)
+    _write_config_set(effects, existing, path, config_format, key, typed_value)
     return 0
 
 
-def _write_config_set(data: dict, path: str, config_format: str, key: str, value: object) -> None:
-    """Set ``key`` = ``value`` in config and persist.
+def _write_config_set(effects: "_Effects", data: dict, path: str,
+                      config_format: str, key: str, value: object) -> None:
+    """Set ``key`` = ``value`` in config and persist THROUGH ``ctx.effects``.
 
     For TOML, edits are comment/order-preserving: the existing file is loaded
     into a tomlkit document, only the changed key is written, and the document
     is dumped back. JSON is serialized from the in-memory ``data`` dict.
+
+    The write is a `FILE_WRITE` on the effects handle, not a bare ``open``:
+    ``config set`` is classified `mutating`, so under ``--dry-run`` the write
+    must be RECORDED, never performed. A framework command that printed
+    "DRY RUN -- no changes were made." while rewriting the user's config file
+    would be the loudest possible counterexample to its own regime.
     """
     _nested_set(data, key, value)
     if config_format == "toml":
         doc = _load_toml_doc(path)
         _toml_set_nested(doc, key, value)
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(tomlkit.dumps(doc))
+        text = tomlkit.dumps(doc)
     else:
-        with open(path, "w") as fh:
-            fh.write(json.dumps(data, indent=2) + "\n")
+        text = json.dumps(data, indent=2) + "\n"
+    effects.write(path, text)
 
 
-def _write_config_unset(data: dict, path: str, config_format: str, key: str) -> bool:
+def _write_config_unset(effects: "_Effects", data: dict, path: str,
+                        config_format: str, key: str) -> bool:
     """Remove ``key`` from config and persist. Returns False if key was absent.
 
     For TOML, the removal is comment/order-preserving (only the target key is
-    dropped). JSON is serialized from the in-memory ``data`` dict.
+    dropped). JSON is serialized from the in-memory ``data`` dict. The write
+    goes through ``ctx.effects`` for the reason spelled out above.
     """
     if not _nested_delete(data, key):
         return False
     if config_format == "toml":
         doc = _load_toml_doc(path)
         _toml_del_nested(doc, key)
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(tomlkit.dumps(doc))
+        text = tomlkit.dumps(doc)
     else:
-        with open(path, "w") as fh:
-            fh.write(json.dumps(data, indent=2) + "\n")
+        text = json.dumps(data, indent=2) + "\n"
+    effects.write(path, text)
     return True
+
+
+def _ensure_config_dir(effects: "_Effects", path: str) -> None:
+    """Record/perform the config file's parent directory creation.
+
+    The existence probe is an ordinary filesystem READ (never an effect), and
+    branching on it is branching on a real value, so the preview walks straight
+    through it in both modes -- the §5.2 idiom. Probing keeps the preview honest:
+    a `mkdir` line appears only when a directory would really be created.
+    """
+    dir_path = os.path.dirname(path)
+    if dir_path and not os.path.isdir(dir_path):
+        effects.mkdir(dir_path)
 
 
 def _generate_config_template_toml(
@@ -5553,8 +5574,11 @@ class App:
                 override=app_ref.config_path,
                 config_format=app_ref.config_format,
             )
-            dir_path = os.path.dirname(path)
-            os.makedirs(dir_path, exist_ok=True)
+            # Every mutation this handler performs rides ctx.effects: the
+            # command is classified `mutating`, so a dry run must RECORD them
+            # and change nothing.
+            effects = ctx.effects
+            _ensure_config_dir(effects, path)
             # Read existing config (use already-loaded data from parse time)
             existing = app_ref._config_data
 
@@ -5577,7 +5601,7 @@ class App:
             # Config field path: simpler handling (no repeatable, no mutex)
             if matched_config_field is not None:
                 return _config_set_field(
-                    key, value, matched_config_field, existing, path,
+                    effects, key, value, matched_config_field, existing, path,
                     app_ref.config_format, _kw,
                 )
 
@@ -5613,12 +5637,12 @@ class App:
                     print("config set: --clear is only for repeatable flags",
                           file=sys.stderr)
                     return 1
-                _write_config_set(existing, path, app_ref.config_format, key, cleared)
+                _write_config_set(effects, existing, path, app_ref.config_format, key, cleared)
                 return 0
 
             # --default: remove the key from config
             if use_default:
-                if not _write_config_unset(existing, path, app_ref.config_format, key):
+                if not _write_config_unset(effects, existing, path, app_ref.config_format, key):
                     print(f"config set: key '{key}' not in config",
                           file=sys.stderr)
                     return 1
@@ -5707,7 +5731,7 @@ class App:
                     print(f"config set: key '{key}': {e}", file=sys.stderr)
                     return 1
 
-            _write_config_set(existing, path, app_ref.config_format, key, typed_value)
+            _write_config_set(effects, existing, path, app_ref.config_format, key, typed_value)
             return 0
 
         config_grp.commands["set"] = self._build_framework_command(
@@ -5736,26 +5760,23 @@ class App:
                 override=app_ref.config_path,
                 config_format=app_ref.config_format,
             )
-            dir_path = os.path.dirname(path)
-            os.makedirs(dir_path, exist_ok=True)
+            effects = ctx.effects
+            _ensure_config_dir(effects, path)
             if not os.path.isfile(path):
-                if app_ref.config_format == "toml":
-                    with open(path, "w") as fh:
-                        fh.write("")
-                else:
-                    with open(path, "w") as fh:
-                        fh.write("{}\n")
+                effects.write(path, "" if app_ref.config_format == "toml" else "{}\n")
             editor = os.environ.get("EDITOR", "vi")
+            # LAUNCHING AN EDITOR IS A MUTATION. Routed through the handle, a
+            # dry run records `run: <editor> <path>` and never opens anything;
+            # a bare subprocess.run here would open the user's editor during a
+            # run that announced it would change nothing.
+            #
+            # check=True (the default) is what keeps the preview walking: a
+            # failed operation is an error, not a value (§2.5.4), so nothing
+            # here ever reads an exit code off a carrier.
             try:
-                proc = subprocess.run([editor, path])
-            except OSError as e:
+                effects.run([editor, path], stream=True)
+            except (OSError, EffectFailed) as e:
                 print(f"error: editor failed: {e}", file=sys.stderr)
-                return 1
-            if proc.returncode != 0:
-                print(
-                    f"error: editor failed: exit status {proc.returncode}",
-                    file=sys.stderr,
-                )
                 return 1
             return 0
 
@@ -5780,8 +5801,8 @@ class App:
                     file=sys.stderr,
                 )
                 return 1
-            dir_path = os.path.dirname(cfg_path)
-            os.makedirs(dir_path, exist_ok=True)
+            effects = ctx.effects
+            _ensure_config_dir(effects, cfg_path)
             if app_ref.config_format == "toml":
                 content = _generate_config_template_toml(
                     app_ref._collect_all_flags(),
@@ -5792,8 +5813,7 @@ class App:
                     app_ref._collect_all_flags(),
                     app_ref._config_fields,
                 )
-            with open(cfg_path, "w") as fh:
-                fh.write(content)
+            effects.write(cfg_path, content)
             print(cfg_path)
             return 0
 
