@@ -101,8 +101,30 @@ func (a *App) effectsBypassProvider() []CheckSpec {
 	}
 }
 
-// scanEffectsBypasses finds direct effect calls inside functions that opted
-// into ctx.Effects(). Results are in file then line order.
+// bypassFunc is one analysable function-like node, with the file it came from.
+type bypassFunc struct {
+	name    string
+	body    *ast.BlockStmt
+	rel     string
+	pkgDir  string
+	aliases map[string]bool
+}
+
+// scanEffectsBypasses finds direct effect calls REACHABLE FROM A REGISTERED
+// COMMAND HANDLER. Results are in file then line order.
+//
+// §11's scope is reachability, not "a function whose own body mentions
+// Effects()" -- a handler that never touches the handle, and a bypass one
+// helper-call away, are both trivial escapes from the narrower reading, and this
+// lint is the sole stated mitigation for the accepted no-sandbox ceiling.
+//
+// Roots are handler-shaped functions (first parameter *Context /
+// *strictcli.Context, which is exactly the command-handler and
+// passthrough-handler signature) plus, as before, any function that reaches for
+// Effects() itself. From each root the closure follows DIRECT calls to
+// package-level functions, transitively, WITHIN ONE PACKAGE (one directory) --
+// the most go/ast can resolve without a type checker, and the boundary at which
+// a bare name stops being unambiguous.
 func scanEffectsBypasses(root string) []bypassFinding {
 	var findings []bypassFinding
 	info, err := os.Stat(root)
@@ -129,6 +151,12 @@ func scanEffectsBypasses(root string) []bypassFinding {
 	sort.Strings(files)
 
 	fset := token.NewFileSet()
+	// Pass 1: parse every file, index package-level funcs per directory, and
+	// collect every function-like node with its roots-ness precomputed.
+	var all []*bypassFunc
+	roots := map[*bypassFunc]bool{}
+	// pkgDir -> func name -> the package-level function
+	pkgFuncs := map[string]map[string]*bypassFunc{}
 	for _, path := range files {
 		tree, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
@@ -139,47 +167,236 @@ func scanEffectsBypasses(root string) []bypassFinding {
 		if relErr != nil {
 			rel = path
 		}
+		pkgDir := filepath.Dir(path)
+		fileAliases := effectsHandleAliases(tree)
+		for _, decl := range tree.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok || fd.Body == nil || fd.Recv != nil {
+				continue
+			}
+			if _, seen := pkgFuncs[pkgDir]; !seen {
+				pkgFuncs[pkgDir] = map[string]*bypassFunc{}
+			}
+			if _, dup := pkgFuncs[pkgDir][fd.Name.Name]; !dup {
+				pkgFuncs[pkgDir][fd.Name.Name] = nil // reserved; filled below
+			}
+		}
 		ast.Inspect(tree, func(n ast.Node) bool {
 			name, body := functionNameAndBody(n)
 			if body == nil {
 				return true
 			}
-			if !functionOptsIntoEffects(body) {
-				return true
+			bf := &bypassFunc{
+				name:    name,
+				body:    body,
+				rel:     rel,
+				pkgDir:  pkgDir,
+				aliases: fileAliases,
 			}
-			ast.Inspect(body, func(inner ast.Node) bool {
-				call, ok := inner.(*ast.CallExpr)
-				if !ok {
-					return true
+			all = append(all, bf)
+			if isHandlerShaped(n) || functionOptsIntoEffects(body) {
+				roots[bf] = true
+			}
+			if fd, ok := n.(*ast.FuncDecl); ok && fd.Recv == nil {
+				if m := pkgFuncs[pkgDir]; m != nil {
+					if existing, seen := m[fd.Name.Name]; seen && existing == nil {
+						m[fd.Name.Name] = bf
+					}
 				}
-				if reachesEffectsHandle(call.Fun) {
-					return true
-				}
-				target, receiver := callTargetName(call.Fun)
-				if target == "" {
-					return true
-				}
-				leaf := target
-				if i := strings.LastIndex(target, "."); i >= 0 {
-					leaf = target[i+1:]
-				}
-				banned := (bypassProcess[leaf] && bypassProcessReceivers[receiver]) ||
-					(bypassFilesystem[leaf] && receiver != "") ||
-					(bypassNetwork[leaf] && bypassNetworkReceivers[receiver])
-				if banned {
-					findings = append(findings, bypassFinding{
-						file:   rel,
-						line:   fset.Position(call.Pos()).Line,
-						fn:     name,
-						target: target,
-					})
-				}
-				return true
-			})
+			}
 			return true
 		})
 	}
+
+	// Pass 2: transitive closure over direct calls to package-level functions.
+	reachable := map[*bypassFunc]bool{}
+	var queue []*bypassFunc
+	for _, bf := range all {
+		if roots[bf] {
+			queue = append(queue, bf)
+		}
+	}
+	for len(queue) > 0 {
+		bf := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		if reachable[bf] {
+			continue
+		}
+		reachable[bf] = true
+		for _, callee := range directCallNames(bf.body) {
+			if target := pkgFuncs[bf.pkgDir][callee]; target != nil && !reachable[target] {
+				queue = append(queue, target)
+			}
+		}
+	}
+	if len(reachable) == 0 {
+		return findings
+	}
+
+	// Pass 3: report banned calls, once per call site, at the innermost
+	// reachable enclosing function. Nesting means a call can sit inside several
+	// analysable bodies; the innermost one names the finding.
+	seen := map[token.Pos]bool{}
+	for _, bf := range all {
+		if !reachable[bf] {
+			continue
+		}
+		ast.Inspect(bf.body, func(inner ast.Node) bool {
+			if inner != ast.Node(bf.body) {
+				if _, nested := functionNameAndBody(inner); nested != nil {
+					// A nested function is its own bypassFunc; it reports its
+					// own calls (and inherits reachability through `all`).
+					if isNestedAnalysable(inner, all, reachable) {
+						return false
+					}
+				}
+			}
+			call, ok := inner.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if seen[call.Pos()] {
+				return true
+			}
+			if reachesEffectsHandle(call.Fun, bf.aliases) {
+				return true
+			}
+			target, receiver := callTargetName(call.Fun)
+			if target == "" {
+				return true
+			}
+			leaf := target
+			if i := strings.LastIndex(target, "."); i >= 0 {
+				leaf = target[i+1:]
+			}
+			banned := (bypassProcess[leaf] && bypassProcessReceivers[receiver]) ||
+				(bypassFilesystem[leaf] && receiver != "") ||
+				(bypassNetwork[leaf] && bypassNetworkReceivers[receiver])
+			if banned {
+				seen[call.Pos()] = true
+				findings = append(findings, bypassFinding{
+					file:   bf.rel,
+					line:   fset.Position(call.Pos()).Line,
+					fn:     bf.name,
+					target: target,
+				})
+			}
+			return true
+		})
+	}
+	sort.SliceStable(findings, func(i, j int) bool {
+		if findings[i].file != findings[j].file {
+			return findings[i].file < findings[j].file
+		}
+		return findings[i].line < findings[j].line
+	})
 	return findings
+}
+
+// isNestedAnalysable reports whether a nested function node is itself one of the
+// reachable bypassFuncs, so the enclosing walk can stop and let it report.
+func isNestedAnalysable(n ast.Node, all []*bypassFunc, reachable map[*bypassFunc]bool) bool {
+	_, body := functionNameAndBody(n)
+	for _, bf := range all {
+		if bf.body == body {
+			return reachable[bf]
+		}
+	}
+	return false
+}
+
+// isHandlerShaped reports whether a function's FIRST parameter is *Context (or
+// *strictcli.Context) -- exactly the command-handler and passthrough-handler
+// signatures, and nothing else in the surface.
+func isHandlerShaped(n ast.Node) bool {
+	var params *ast.FieldList
+	switch fn := n.(type) {
+	case *ast.FuncDecl:
+		params = fn.Type.Params
+	case *ast.FuncLit:
+		params = fn.Type.Params
+	default:
+		return false
+	}
+	if params == nil || len(params.List) == 0 {
+		return false
+	}
+	star, ok := params.List[0].Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	switch t := star.X.(type) {
+	case *ast.Ident:
+		return t.Name == "Context"
+	case *ast.SelectorExpr:
+		return t.Sel.Name == "Context"
+	}
+	return false
+}
+
+// directCallNames returns the bare `name(...)` callees inside a body.
+func directCallNames(body *ast.BlockStmt) []string {
+	var names []string
+	ast.Inspect(body, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if ident, ok := call.Fun.(*ast.Ident); ok {
+				names = append(names, ident.Name)
+			}
+		}
+		return true
+	})
+	return names
+}
+
+// effectsHandleAliases returns the names bound to the effects handle anywhere in
+// a file: locals assigned from ctx.Effects() (`e := ctx.Effects()`) and
+// parameters declared *Effects (a helper that takes the handle). Both are
+// ordinary ways to write handler code and must not read as bypasses. File scope,
+// not function scope, so a closure that uses its enclosing function's handle is
+// covered too.
+func effectsHandleAliases(tree *ast.File) map[string]bool {
+	aliases := map[string]bool{}
+	record := func(lhs, rhs []ast.Expr) {
+		for i, r := range rhs {
+			if i >= len(lhs) || !reachesEffectsHandle(r, nil) {
+				continue
+			}
+			if ident, ok := lhs[i].(*ast.Ident); ok {
+				aliases[ident.Name] = true
+			}
+		}
+	}
+	ast.Inspect(tree, func(n ast.Node) bool {
+		switch s := n.(type) {
+		case *ast.AssignStmt:
+			record(s.Lhs, s.Rhs)
+		case *ast.ValueSpec:
+			lhs := make([]ast.Expr, len(s.Names))
+			for i, name := range s.Names {
+				lhs[i] = name
+			}
+			record(lhs, s.Values)
+		case *ast.Field:
+			if star, ok := s.Type.(*ast.StarExpr); ok && isEffectsTypeName(star.X) {
+				for _, name := range s.Names {
+					aliases[name.Name] = true
+				}
+			}
+		}
+		return true
+	})
+	return aliases
+}
+
+// isEffectsTypeName reports whether a type expression names the Effects handle.
+func isEffectsTypeName(expr ast.Expr) bool {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name == "Effects"
+	case *ast.SelectorExpr:
+		return t.Sel.Name == "Effects"
+	}
+	return false
 }
 
 // functionNameAndBody returns a function-like node's display name and body.
@@ -194,9 +411,9 @@ func functionNameAndBody(n ast.Node) (string, *ast.BlockStmt) {
 }
 
 // functionOptsIntoEffects reports whether a function body reaches for an
-// Effects handle at all. Opting in is the trigger: a function that uses the
-// effects handle must route ALL of its effects through it, or the preview it
-// promises is a lie.
+// Effects handle at all. One of the two root conditions: a function that uses
+// the effects handle must route ALL of its effects through it, or the preview
+// it promises is a lie.
 func functionOptsIntoEffects(body *ast.BlockStmt) bool {
 	found := false
 	ast.Inspect(body, func(n ast.Node) bool {
@@ -210,8 +427,9 @@ func functionOptsIntoEffects(body *ast.BlockStmt) bool {
 }
 
 // reachesEffectsHandle reports whether a callee's receiver chain goes through
-// .Effects().
-func reachesEffectsHandle(expr ast.Expr) bool {
+// .Effects(). `aliases` are local names bound to the handle (`e :=
+// ctx.Effects()`), which is an ordinary way to write a handler.
+func reachesEffectsHandle(expr ast.Expr, aliases map[string]bool) bool {
 	for {
 		switch e := expr.(type) {
 		case *ast.SelectorExpr:
@@ -221,6 +439,8 @@ func reachesEffectsHandle(expr ast.Expr) bool {
 			expr = e.X
 		case *ast.CallExpr:
 			expr = e.Fun
+		case *ast.Ident:
+			return aliases[e.Name]
 		default:
 			return false
 		}

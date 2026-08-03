@@ -192,3 +192,148 @@ func TestBypassCheckMetadataMatchesTheContract(t *testing.T) {
 		t.Fatalf("depends_on = %v", m.DependsOn)
 	}
 }
+
+// --- §11's scope: reachability from a registered command handler -----------
+
+// Escape shape 1: opting in cannot be the trigger. A handler that mentions the
+// handle nowhere is the easiest possible bypass, and a lint that only looked at
+// effects-using functions would wave it straight through.
+func TestBypassLintFlagsAHandlerThatNeverMentionsEffects(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFile(t, dir, "handler.go", `package app
+
+import (
+	"os"
+	"os/exec"
+)
+
+func deploy(ctx *Context, args map[string]interface{}) Outcome {
+	exec.Command("git", "push").Run()
+	os.MkdirAll("build", 0o755)
+	os.RemoveAll("stale")
+	return Exit(0)
+}
+`)
+	findings := scanEffectsBypasses(dir)
+	if len(findings) != 3 {
+		t.Fatalf("expected 3 findings, got %#v", findings)
+	}
+	for _, f := range findings {
+		if f.fn != "deploy" {
+			t.Fatalf("unexpected finding %#v", f)
+		}
+	}
+}
+
+// Escape shape 2: reachability, not the immediate body.
+func TestBypassLintFollowsAHelperCall(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFile(t, dir, "handler.go", `package app
+
+import "os/exec"
+
+func publish(path string) {
+	exec.Command("rsync", path, "remote:/srv").Run()
+}
+
+func deploy(ctx *Context, args map[string]interface{}) Outcome {
+	ctx.Effects().Run([]interface{}{"make", "build"})
+	publish("build")
+	return Exit(0)
+}
+`)
+	findings := scanEffectsBypasses(dir)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %#v", findings)
+	}
+	if findings[0].fn != "publish" || findings[0].target != "exec.Command" {
+		t.Fatalf("unexpected finding %#v", findings[0])
+	}
+}
+
+func TestBypassLintReachabilityIsTransitiveAndCrossFile(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFile(t, dir, "handler.go", `package app
+
+func deploy(ctx *Context, args map[string]interface{}) Outcome {
+	outer()
+	return Exit(0)
+}
+`)
+	writeGoFile(t, dir, "helpers.go", `package app
+
+import "os"
+
+func inner() { os.Remove("x") }
+
+func outer() { inner() }
+`)
+	findings := scanEffectsBypasses(dir)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %#v", findings)
+	}
+	if findings[0].fn != "inner" || findings[0].target != "os.Remove" {
+		t.Fatalf("unexpected finding %#v", findings[0])
+	}
+}
+
+// The scope is reachability, not "every function in the tree".
+func TestBypassLintIgnoresAnUnreachableHelper(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFile(t, dir, "handler.go", `package app
+
+import "os"
+
+func neverCalled() { os.Remove("x") }
+
+func deploy(ctx *Context, args map[string]interface{}) Outcome {
+	ctx.Effects().Run([]interface{}{"make"})
+	return Exit(0)
+}
+`)
+	if findings := scanEffectsBypasses(dir); len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+// Package boundaries are respected: a same-named function in another directory
+// is a different symbol and must not be pulled in.
+func TestBypassLintDoesNotCrossPackageBoundaries(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFile(t, dir, "handler.go", `package app
+
+func deploy(ctx *Context, args map[string]interface{}) Outcome {
+	helper()
+	return Exit(0)
+}
+
+func helper() {}
+`)
+	writeGoFile(t, dir, "other/other.go", `package other
+
+import "os"
+
+func helper() { os.Remove("x") }
+`)
+	if findings := scanEffectsBypasses(dir); len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+// `e := ctx.Effects()` then `e.Write(...)` is the same call as
+// `ctx.Effects().Write(...)`; the handle itself must never read as a bypass.
+func TestBypassLintAcceptsALocalHandleAlias(t *testing.T) {
+	dir := t.TempDir()
+	writeGoFile(t, dir, "handler.go", `package app
+
+func deploy(ctx *Context, args map[string]interface{}) Outcome {
+	e := ctx.Effects()
+	e.Mkdir("build")
+	e.Remove("stale")
+	return Exit(0)
+}
+`)
+	if findings := scanEffectsBypasses(dir); len(findings) != 0 {
+		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
