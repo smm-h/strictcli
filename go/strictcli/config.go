@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -654,16 +653,22 @@ type configChange struct {
 	remove bool        // true = delete the key
 }
 
-// writeConfigFile persists a single config mutation to disk.
+// writeConfigFile persists a single config mutation THROUGH ctx.Effects().
 //
 // The JSON branch re-marshals the full data map (the caller has already
 // applied the change to it). The TOML branch parses the existing file,
 // applies the change via go-toml-edit's document API, and re-serializes —
 // preserving comments, formatting, and key order for all untouched keys.
-func writeConfigFile(data map[string]interface{}, path string, format string, change configChange) int {
+//
+// The write is a FILE_WRITE on the effects handle, not a bare os.WriteFile:
+// config set is classified mutating, so under --dry-run the write must be
+// RECORDED, never performed. A framework command that printed
+// "DRY RUN — no changes were made." while rewriting the user's config file
+// would be the loudest possible counterexample to its own regime.
+func writeConfigFile(e *Effects, data map[string]interface{}, path string, format string, change configChange) int {
 	switch format {
 	case "toml":
-		return writeConfigFileTOML(path, change)
+		return writeConfigFileTOML(e, path, change)
 	default:
 		raw, err := json.MarshalIndent(data, "", "  ")
 		if err != nil {
@@ -671,12 +676,33 @@ func writeConfigFile(data map[string]interface{}, path string, format string, ch
 			return 1
 		}
 		raw = append(raw, '\n')
-		if err := os.WriteFile(path, raw, 0o644); err != nil {
+		if _, err := e.Write(path, raw); err != nil {
 			fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
 			return 1
 		}
 		return 0
 	}
+}
+
+// ensureConfigDir records/performs the config file's parent directory creation.
+//
+// The existence probe is an ordinary filesystem READ (never an effect), and
+// branching on it is branching on a real value, so the preview walks straight
+// through it in both modes. Probing keeps the preview honest: a mkdir line
+// appears only when a directory would really be created.
+func ensureConfigDir(e *Effects, path string) int {
+	dirPath := filepath.Dir(path)
+	if dirPath == "" {
+		return 0
+	}
+	if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
+		return 0
+	}
+	if _, err := e.Mkdir(dirPath); err != nil {
+		fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
+		return 1
+	}
+	return 0
 }
 
 // writeConfigFileTOML applies a single mutation to a TOML config file while
@@ -685,7 +711,7 @@ func writeConfigFile(data map[string]interface{}, path string, format string, ch
 // bytes back. Bytes() (round-trip fidelity) is used rather than Format() so
 // that unrelated formatting — blank lines, alignment, comment placement —
 // survives byte-for-byte; only the changed key is touched.
-func writeConfigFileTOML(path string, change configChange) int {
+func writeConfigFileTOML(e *Effects, path string, change configChange) int {
 	var doc *tomledit.DocumentNode
 	existingBytes, err := os.ReadFile(path)
 	if err != nil {
@@ -719,7 +745,7 @@ func writeConfigFileTOML(path string, change configChange) int {
 		}
 	}
 
-	if err := os.WriteFile(path, doc.Bytes(), 0o644); err != nil {
+	if _, err := e.Write(path, doc.Bytes()); err != nil {
 		fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
 		return 1
 	}
@@ -978,10 +1004,12 @@ func (a *App) registerConfigGroup() {
 	registerFrameworkSubcommand(grp, "set", "Set a persistent config value that overrides the default for a flag", EffectMutating, func(ctx *Context, args map[string]interface{}) Outcome {
 		key := Get[string](args, "key")
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
-		dirPath := filepath.Dir(path)
-		if err := os.MkdirAll(dirPath, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
-			return Exit(1)
+		// Every mutation this handler performs rides ctx.Effects(): the command
+		// is classified mutating, so a dry run must RECORD them and change
+		// nothing.
+		e := ctx.Effects()
+		if code := ensureConfigDir(e, path); code != 0 {
+			return Exit(code)
 		}
 		// Read existing config (use the already-loaded data from parse time)
 		existing := a.configData
@@ -1039,7 +1067,7 @@ func (a *App) registerConfigGroup() {
 				return Exit(1)
 			}
 			existing[key] = []interface{}{}
-			return Exit(writeConfigFile(existing, path, a.configFormat, configChange{key: key, value: []interface{}{}}))
+			return Exit(writeConfigFile(e, existing, path, a.configFormat, configChange{key: key, value: []interface{}{}}))
 		}
 
 		// --default: remove the key from config
@@ -1049,7 +1077,7 @@ func (a *App) registerConfigGroup() {
 				return Exit(1)
 			}
 			nestedDelete(existing, key)
-			return Exit(writeConfigFile(existing, path, a.configFormat, configChange{key: key, remove: true}))
+			return Exit(writeConfigFile(e, existing, path, a.configFormat, configChange{key: key, remove: true}))
 		}
 
 		// Config field: coerce to config field type
@@ -1081,7 +1109,7 @@ func (a *App) registerConfigGroup() {
 				typedValue = value
 			}
 			nestedSet(existing, key, typedValue)
-			return Exit(writeConfigFile(existing, path, a.configFormat, configChange{key: key, value: typedValue}))
+			return Exit(writeConfigFile(e, existing, path, a.configFormat, configChange{key: key, value: typedValue}))
 		}
 
 		// Flag: coerce the string value to the flag's type
@@ -1152,7 +1180,7 @@ func (a *App) registerConfigGroup() {
 		}
 
 		existing[key] = typedValue
-		return Exit(writeConfigFile(existing, path, a.configFormat, configChange{key: key, value: typedValue}))
+		return Exit(writeConfigFile(e, existing, path, a.configFormat, configChange{key: key, value: typedValue}))
 	}, WithArgs(
 		NewArg("key", "The config key to set, matching a registered flag name"),
 		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
@@ -1165,17 +1193,16 @@ func (a *App) registerConfigGroup() {
 	// config edit
 	registerFrameworkSubcommand(grp, "edit", "Open the config file for manual editing in $EDITOR (creates if missing)", EffectMutating, func(ctx *Context, args map[string]interface{}) Outcome {
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
-		dirPath := filepath.Dir(path)
-		if err := os.MkdirAll(dirPath, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
-			return Exit(1)
+		e := ctx.Effects()
+		if code := ensureConfigDir(e, path); code != 0 {
+			return Exit(code)
 		}
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			emptyContent := "{}\n"
 			if a.configFormat == "toml" {
 				emptyContent = ""
 			}
-			if err := os.WriteFile(path, []byte(emptyContent), 0o644); err != nil {
+			if _, err := e.Write(path, []byte(emptyContent)); err != nil {
 				fmt.Fprintf(os.Stderr, "error: cannot create config file: %s\n", err)
 				return Exit(1)
 			}
@@ -1184,11 +1211,15 @@ func (a *App) registerConfigGroup() {
 		if editor == "" {
 			editor = "vi"
 		}
-		cmd := exec.Command(editor, path)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		// LAUNCHING AN EDITOR IS A MUTATION. Routed through the handle, a dry
+		// run records `run: <editor> <path>` and never opens anything; a bare
+		// exec.Command here would open the user's editor during a run that
+		// announced it would change nothing.
+		//
+		// Check(true) is the default and is what keeps the preview walking: a
+		// failed operation is an error, not a value (§2.5.4), so nothing here
+		// ever reads an exit code off a carrier.
+		if _, err := e.Run([]interface{}{editor, path}, Stream(true)); err != nil {
 			fmt.Fprintf(os.Stderr, "error: editor failed: %s\n", err)
 			return Exit(1)
 		}
@@ -1202,26 +1233,20 @@ func (a *App) registerConfigGroup() {
 			fmt.Fprintf(os.Stderr, "error: config file already exists: %s\n", path)
 			return Exit(1)
 		}
-		dirPath := filepath.Dir(path)
-		if err := os.MkdirAll(dirPath, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "error: cannot create config directory: %s\n", err)
-			return Exit(1)
+		e := ctx.Effects()
+		if code := ensureConfigDir(e, path); code != 0 {
+			return Exit(code)
 		}
 
 		allFlags := a.collectAllFlags()
 
+		content := a.generateJSONTemplate(allFlags)
 		if a.configFormat == "toml" {
-			content := a.generateTomlTemplate(allFlags)
-			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-				fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
-				return Exit(1)
-			}
-		} else {
-			content := a.generateJSONTemplate(allFlags)
-			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-				fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
-				return Exit(1)
-			}
+			content = a.generateTomlTemplate(allFlags)
+		}
+		if _, err := e.Write(path, []byte(content)); err != nil {
+			fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
+			return Exit(1)
 		}
 		fmt.Println(path)
 		return Exit(0)
