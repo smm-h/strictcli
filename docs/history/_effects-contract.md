@@ -13,8 +13,12 @@ until it is amended.
 
 Amended 2026-08-02 after an adversarial audit, folding in two freshly-ratified user rulings
 (`skip_if_current` is preview-annotation-only; mutating passthrough commands prompt) and the
-audit's defect list. §18 records the full provenance of every decision, ratified and authored
-alike, and is exhaustive.
+audit's defect list. Amended again 2026-08-03 after a re-audit, closing the residual gaps it
+found -- all of them in §2.5's surface (TS declared return and parameter types, `url`'s
+carrier-acceptance, carrier-valued `write` content, inapplicable options, void
+non-forwardability, `body`'s exclusion, `grant=` on an observe) plus the effect log's
+live-mode population and two unpinned spellings. §18 records the full provenance of every
+decision, ratified and authored alike, and is exhaustive.
 
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
@@ -204,12 +208,12 @@ to log it and to run it.
 
 #### 2.5.1 Result shapes
 
-Three shapes cover all eight methods.
+Three result shapes, plus the void case, cover all eight methods -- four rows.
 
 | Shape | Members | Produced by |
 |-------|---------|-------------|
 | `Completed` | `exit_code` (int), `stdout` (text), `stderr` (text) | `run`, and `Spawned.wait()` |
-| `Spawned` | `pid` (int), plus `wait()` returning `Completed` | `spawn` |
+| `Spawned` | `pid` (int), plus `wait(check=True)` returning `Completed` (§2.5.2) | `spawn` |
 | `Response` | `status` (int), `body` (bytes), `headers` (mapping, header names lower-cased) | `http` |
 | *(none)* | -- | `write`, `mkdir`, `remove`, `rename`, `chmod` |
 
@@ -234,19 +238,29 @@ parameter anywhere and no method ever accepts a shell string -- argv lists only.
 
 | Method | Operation-specific parameters |
 |--------|------------------------------|
-| `run` | `argv` (sequence of strings, required); `cwd` (path, default: inherit); `env` (mapping merged **over** the inherited environment, never replacing it; default: none); `check` (bool, default `true` -- §2.5.4); `stream` (bool, default `false`; when true the child inherits stdout/stderr and the returned `stdout` / `stderr` are empty strings) |
-| `spawn` | `argv` (required); `cwd`; `env`. Always streams (the child inherits stdio). No `check` -- there is no exit status at call time; `Spawned.wait()` carries it. |
-| `write` | `path` (required); `content` (required -- bytes, or text which is encoded UTF-8; the log's byte count is the encoded length) |
+| `run` | `argv` (sequence of strings, required; any element may instead be a forwarded carrier -- §2.5.5); `cwd` (path, default: inherit); `env` (mapping merged **over** the inherited environment, never replacing it; default: none); `check` (bool, default `true` -- §2.5.4); `stream` (bool, default `false`; when true the child inherits stdout/stderr and the returned `stdout` / `stderr` are empty strings) |
+| `spawn` | `argv` (required); `cwd`; `env`. Always streams (the child inherits stdio). No `check` on the `spawn` call itself -- there is no exit status at call time; `Spawned.wait(check=True)` carries it and takes the opt-out (§2.5.4). |
+| `write` | `path` (required); `content` (required -- bytes, or text which is encoded UTF-8, or a forwarded carrier (§2.5.5); the log's byte count is the encoded length, and is replaced by the brand when the content is an *unsettled* carrier -- §3.2) |
 | `mkdir` | `path` (required). Missing parents are created; an already-existing directory is not an error. |
 | `remove` | `path` (required). Removes a file, a symlink, or a directory tree **recursively**; a missing path is not an error. |
 | `rename` | `src` (required); `dst` (required) |
 | `chmod` | `path` (required); `mode` (int, required; rendered in the log as leading-zero octal, §3.2) |
-| `http` | `method` (string, required, upper-case); `url` (string, required); `body` (bytes, default none); `headers` (mapping, default none); `check` (bool, default `true` -- §2.5.4) |
+| `http` | `method` (string, required, upper-case); `url` (string, required; may instead be a forwarded carrier -- §2.5.5); `body` (bytes, default none; never accepts a carrier -- §2.5.5); `headers` (mapping, default none); `check` (bool, default `true` -- §2.5.4) |
 
 Per-language spelling follows §2.3: Python keyword arguments; TypeScript an optional final options
 object (`cwd`, `env`, `check`, `stream`, `body`, `headers` alongside `resource`, `skipIfCurrent`,
 `grant`); Go a trailing variadic `...EffectOption`, adding `Cwd(string)`, `Env(map[string]string)`,
 `Check(bool)`, `Stream(bool)`, `Body([]byte)` and `Header(k, v string)` to the three of §2.3.
+`Spawned.wait()` accepts `check` and nothing else (Python `wait(check=True)`, Go
+`Wait(opts ...EffectOption)` honouring `Check(bool)` only, TypeScript `wait({ check? })`).
+
+**An option a method does not accept is a call-time hard error** (`errEffectOptionNotAccepted`,
+§12.8), in all three implementations. Python and TypeScript reject the unknown keyword / options-
+object key; Go, whose options are a single untyped variadic, **validates its `...EffectOption`
+list at call time** and errors on any option outside the receiving method's accepted set. There
+is no silent ignoring: `ctx.effects.mkdir(p, stream=True)` and
+`ctx.Effects().Mkdir(p, Stream(true))` both fail, loudly, at the call. The accepted set per method
+is exactly the table above plus the three common options of §2.3.
 
 #### 2.5.3 Returns, per language and per mode
 
@@ -254,16 +268,39 @@ Python and TypeScript return the **real result** in live mode and an `Unsettled`
 mode (per §4.1: every recorded mutation, and every post-mutation observe). Void methods return
 `None` / `undefined` in live mode.
 
+**TypeScript declares the settled types only.** Every effect method's declared return type is its
+settled shape and nothing else: `run` and `Spawned.wait` return `Completed`, `spawn` returns
+`Spawned`, `http` returns `Response`, and the five path-mutating methods return `void`. There is
+**no `| Unsettled` union** anywhere in the surface and **no narrowing predicate** -- no
+`isUnsettled()`, no type guard, no discriminant member. In dry mode the runtime value sitting at
+those positions is the `Unsettled` Proxy (§4.4), which the static type deliberately does not
+mention: a handler that only forwards it never notices, and a handler that extracts from it or
+branches on it trips the runtime seal and truncates the preview (§3.3). This is exactly the
+Go-parity **one body, both modes** model -- the same handler source is the correct source in live
+and in dry mode, and the mismatch surfaces at runtime, where it is honest, instead of being
+papered over at compile time by a narrowing branch.
+
+There is no `isUnsettled()` because **branching on unsettledness is mode-branching.** A predicate
+would let a handler take one path in live mode and another in dry mode, at which point the preview
+stops describing the run that will actually happen -- precisely what the truncation mechanism
+exists to make impossible to do silently. A handler that legitimately needs to know the mode for
+some non-effect reason reads `ctx.dryRun` (§7.2); no property of a *carrier* answers that question,
+by construction.
+
 Go has no union type, so **every Go effect method returns a carrier type, always** -- settled in
 live mode (its extractors return real values) and unsettled in dry mode (its extractors panic with
 the truncation error, §3.3). `Completed`, `Spawned` and `Response` are therefore settleable
 carriers: non-comparable structs (the `[0]func()` field of §4.4) whose extractor methods are
-`ExitCode() int` / `Stdout() string` / `Stderr() string`, `PID() int` / `Wait() (Completed, error)`,
-and `Status() int` / `Body() []byte` / `Header(name string) string` respectively. The void methods
-return the plain payload-less `Unsettled` of §4.4, whose extractors panic in **both** modes -- it
-never carries a value, only a brand, and exists so the result of a `write` remains forwardable.
+`ExitCode() int` / `Stdout() string` / `Stderr() string`, `PID() int` /
+`Wait(opts ...EffectOption) (Completed, error)`, and `Status() int` / `Body() []byte` /
+`Header(name string) string` respectively. The void methods return the plain payload-less
+`Unsettled` of §4.4, whose extractors panic in **both** modes -- it never carries a value, only a
+brand, and exists solely to give every Go effect method one uniform return shape. It is **not**
+forwardable: a void result stands for nothing in either mode, so passing one into a later effect
+is a call-time hard error in both modes and in all three languages (§2.5.5, §12.8).
 All four Go carrier types expose the unexported `brandForm() string` the effects API reads at the
-forwarding boundary.
+forwarding boundary -- for the three settleable carriers, to render the brand into the log line;
+for the void carrier, to recognize it there and reject it.
 
 | Method | Python / TS live | Python / TS dry | Go (always) |
 |--------|------------------|-----------------|-------------|
@@ -283,7 +320,9 @@ captured stream fails the same way. The rule is uniform across `run`, `Spawned.w
 the five void methods fail only on the underlying OS error.
 
 Passing `check=false` (Go: `Check(false)`) opts a single call out: the result is returned with its
-real `exit_code` / `status` and the handler decides. This exists because the ratified real-mode
+real `exit_code` / `status` and the handler decides. The opt-out is available on all three of the
+failing calls -- `run`, `http` and `Spawned.wait()` -- so a handler can read a spawned child's
+nonzero exit code the same way it reads a `run`'s. This exists because the ratified real-mode
 idempotency idiom (§5.2) branches on **allowlisted observes**, and exit codes are the most common
 predicate (`git rev-parse --verify`, `git diff --quiet`); without the opt-out that idiom would be
 unusable.
@@ -303,8 +342,12 @@ Message templates: §12.8.
 
 §4.3 makes forwarding legal. Concretely, a carrier (or, in live mode, a result object) may be
 passed anywhere a string-ish parameter is expected: any `argv` element, `path`, `src`, `dst`,
-`url`, or `content`. `mode`, `method`, `cwd`, `env`, `headers` and the three common options do
-**not** accept carriers -- passing one there is a call-time hard error.
+`url`, or `content` -- six positions, and no others. `mode`, `method`, `body`, `cwd`, `env`,
+`headers`, `check`, `stream` and the three common options do **not** accept carriers -- passing
+one there is a call-time hard error (§12.8). The two lists together are exhaustive over §2.5.2:
+every operation-specific parameter of every method appears in exactly one of them. `body` sits on
+the excluding side deliberately -- an HTTP request body is a payload, not a name, and a preview
+that forwarded one would have to render an arbitrary blob into a log line.
 
 At that boundary the API coerces via each shape's declared **scalar projection**:
 
@@ -313,7 +356,16 @@ At that boundary the API coerces via each shape's declared **scalar projection**
 | `Completed` | `stdout` (already decoded and newline-trimmed, §2.5.1) |
 | `Response` | `body`, decoded UTF-8 strictly, one trailing newline removed |
 | `Spawned` | none -- forwarding a `Spawned` into a string position is a call-time hard error |
-| `Unsettled` (void carrier) | none in live mode (it holds nothing); its brand in dry mode |
+| `Unsettled` (void carrier) | none, in either mode -- forwarding a void result is a call-time hard error |
+
+**Void results are never forwardable.** `write`, `mkdir`, `remove`, `rename` and `chmod` produce
+nothing a later effect could name, in either mode, so passing their result into any of the six
+accepting positions is a call-time hard error in **both** modes and in all three languages -- the
+same `errEffectParamRejectsCarrier` family as the excluded parameters (§12.8). In Python and
+TypeScript this is nearly unreachable by accident (a void method returns `None` / `undefined` in
+live mode, and the dry-mode carrier is the only thing there is to pass); in Go, where every method
+returns a carrier type by construction (§2.5.3), it is the rule that keeps the carrier-always
+model from implying a forwardability it never had.
 
 In dry mode the value is unsettled, so the brand form renders instead (§4.2) and no projection is
 taken. This is what makes the §3.2 example -- `run: gh release view «step 4 output»`, forwarding
@@ -329,21 +381,47 @@ carrier and hard-erroring at call time on anything else. This is a Go-specific c
 common all-literal case reads acceptably (`[]any{"git", "tag", "v1.2.3"}`) and matches the repo's
 existing `map[string]interface{}` handler-args idiom.
 
+TypeScript types the same six positions as unions of exactly the shapes that project, which the
+declared-settled returns of §2.5.3 make precise:
+
+| Position | TypeScript type |
+|----------|-----------------|
+| `argv` element | `string \| Completed \| Response` |
+| `path`, `src`, `dst`, `url` | `string \| Completed \| Response` |
+| `content` | `string \| Uint8Array \| Completed \| Response` |
+
+`Spawned` is a member of none of them (it has no projection), `void` is a member of none of them
+(void results are not forwardable), and `Unsettled` appears in none of them either -- in dry mode
+the runtime carrier arrives at a position statically typed `Completed` or `Response`, which is
+exactly what lets one handler body typecheck once and be correct in both modes. The unions are
+written inline in the method signatures; they mint no new exported type and therefore no new
+`describe.ts` entity (§1.2).
+
 #### 2.5.6 Cross-language parity table
 
 | Method | Python | Go | TypeScript |
 |--------|--------|-----|-----------|
-| `run` | `ctx.effects.run(argv, *, cwd=None, env=None, check=True, stream=False, resource=None, skip_if_current=None, grant=None) -> Completed \| Unsettled` | `ctx.Effects().Run(argv []any, opts ...EffectOption) (Completed, error)` | `ctx.effects.run(argv, opts?) => Completed \| Unsettled` |
-| `spawn` | `ctx.effects.spawn(argv, *, cwd=None, env=None, ...) -> Spawned \| Unsettled` | `ctx.Effects().Spawn(argv []any, opts ...EffectOption) (Spawned, error)` | `ctx.effects.spawn(argv, opts?) => Spawned \| Unsettled` |
-| `write` | `ctx.effects.write(path, content, ...) -> None \| Unsettled` | `ctx.Effects().Write(path any, content any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.write(path, content, opts?) => void \| Unsettled` |
-| `mkdir` | `ctx.effects.mkdir(path, ...) -> None \| Unsettled` | `ctx.Effects().Mkdir(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.mkdir(path, opts?) => void \| Unsettled` |
-| `remove` | `ctx.effects.remove(path, ...) -> None \| Unsettled` | `ctx.Effects().Remove(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.remove(path, opts?) => void \| Unsettled` |
-| `rename` | `ctx.effects.rename(src, dst, ...) -> None \| Unsettled` | `ctx.Effects().Rename(src, dst any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.rename(src, dst, opts?) => void \| Unsettled` |
-| `chmod` | `ctx.effects.chmod(path, mode, ...) -> None \| Unsettled` | `ctx.Effects().Chmod(path any, mode int, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.chmod(path, mode, opts?) => void \| Unsettled` |
-| `http` | `ctx.effects.http(method, url, *, body=None, headers=None, check=True, ...) -> Response \| Unsettled` | `ctx.Effects().HTTP(method, url string, opts ...EffectOption) (Response, error)` | `ctx.effects.http(method, url, opts?) => Response \| Unsettled` |
+| `run` | `ctx.effects.run(argv, *, cwd=None, env=None, check=True, stream=False, resource=None, skip_if_current=None, grant=None) -> Completed \| Unsettled` | `ctx.Effects().Run(argv []any, opts ...EffectOption) (Completed, error)` | `ctx.effects.run(argv, opts?) => Completed` |
+| `spawn` | `ctx.effects.spawn(argv, *, cwd=None, env=None, ...) -> Spawned \| Unsettled` | `ctx.Effects().Spawn(argv []any, opts ...EffectOption) (Spawned, error)` | `ctx.effects.spawn(argv, opts?) => Spawned` |
+| `write` | `ctx.effects.write(path, content, ...) -> None \| Unsettled` | `ctx.Effects().Write(path any, content any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.write(path, content, opts?) => void` |
+| `mkdir` | `ctx.effects.mkdir(path, ...) -> None \| Unsettled` | `ctx.Effects().Mkdir(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.mkdir(path, opts?) => void` |
+| `remove` | `ctx.effects.remove(path, ...) -> None \| Unsettled` | `ctx.Effects().Remove(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.remove(path, opts?) => void` |
+| `rename` | `ctx.effects.rename(src, dst, ...) -> None \| Unsettled` | `ctx.Effects().Rename(src, dst any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.rename(src, dst, opts?) => void` |
+| `chmod` | `ctx.effects.chmod(path, mode, ...) -> None \| Unsettled` | `ctx.Effects().Chmod(path any, mode int, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.chmod(path, mode, opts?) => void` |
+| `http` | `ctx.effects.http(method, url, *, body=None, headers=None, check=True, ...) -> Response \| Unsettled` | `ctx.Effects().HTTP(method string, url any, opts ...EffectOption) (Response, error)` | `ctx.effects.http(method, url, opts?) => Response` |
+| `Spawned.wait` | `spawned.wait(*, check=True) -> Completed` | `spawned.Wait(opts ...EffectOption) (Completed, error)` | `spawned.wait(opts?) => Completed` |
 
 TypeScript parameter and member names camelCase (`skipIfCurrent`, `exitCode`); the options object
 carries every keyword-style parameter. Go's second result is the §2.5.4 error in every case.
+
+The TypeScript column carries **no `| Unsettled`**: TS declares the settled types only (§2.5.3),
+and its carrier-accepting parameter positions are typed as the unions of §2.5.5. `url` is typed
+`any` in Go and `string | Completed | Response` in TypeScript because it is one of the six
+carrier-accepting positions; `method` and `body` are not, and keep their concrete types.
+`Spawned.wait` is listed for completeness -- it is not a ninth method on the handle (§2.2), it is
+the one member `Spawned` exposes besides `pid`, and it never yields a carrier: reaching it at all
+means the `Spawned` was settled, since calling `.wait()` on an unsettled `Spawned` is extraction
+(§4.4) and truncates.
 
 ---
 
@@ -399,7 +477,7 @@ Verb prefixes, one per method:
 |------|--------|--------|
 | `run:` | `run` (mutating) | the argv, shell-free, space-joined |
 | `spawn:` | `spawn` | the argv, shell-free, space-joined |
-| `write:` | `write` | `<path> (<n> bytes)` |
+| `write:` | `write` | `<path> (<n> bytes)`, or `<path> (<brand>)` when the content is an unsettled carrier |
 | `mkdir:` | `mkdir` | the path |
 | `remove:` | `remove` | the path |
 | `rename:` | `rename` | `<from> -> <to>` |
@@ -425,7 +503,18 @@ Conditional suffix, appended when the effect declared `skip_if_current`:
 (Leading space, single quotes around the token.) When both suffixes apply, the grant suffix
 comes first, then the conditional suffix.
 
-Carriers forwarded into an effect render inline in the detail, in their brand form (§4.2).
+Carriers forwarded into an effect render inline in the detail, in their brand form (§4.2). That
+includes `write`'s `content`, which is not an argv position: when the content is an **unsettled**
+carrier the brand takes the byte count's place, parentheses and all --
+
+```
+  3. write: VERSION («step 2 output»)
+```
+
+-- because nothing produced those bytes and the framework will not invent a count. The same
+effect's structured record carries `bytes: null` (§14.2). Literal content is unaffected and still
+renders `(<n> bytes)`, and so is a forwarded result that is *settled* -- a pre-mutation observe's
+`Completed` (§3.1) projects normally even in dry mode, and its encoded length is a real number.
 
 Fully worked example:
 
@@ -470,8 +559,16 @@ The type is named `Unsettled` in all three implementations.
 
 - Every mutating effect recorded in dry mode returns one.
 - Every post-mutation observe in dry mode returns one.
-- Nothing else ever produces one. Outside dry mode, and for pre-mutation observes, callers get
-  real values.
+- Nothing else ever produces an *unsettled* one. Outside dry mode, and for pre-mutation observes,
+  callers get real values -- in Python and TypeScript literally so (`None` / `undefined` from the
+  void methods).
+- **Go's carrier-always model is the one carve-out, and it is a spelling, not a semantic.** Every
+  Go effect method returns a carrier type in every mode (§2.5.3), so a Go caller in live mode
+  holds a *settled* `Completed` / `Spawned` / `Response` whose extractors return the real values;
+  the two conditions above are still exactly the conditions under which a Go carrier is
+  **unsettled**. Go's payload-less void `Unsettled` is a third thing again: returned by the five
+  path-mutating methods in both modes, never settled, never forwardable (§2.5.5), standing for
+  nothing at all.
 
 ### 4.2 Brand forms
 
@@ -631,6 +728,14 @@ grant is not permission to do something otherwise forbidden; it is a *labelled* 
 surfaces in the preview so that a reviewer reading a dry run sees why a dangerous step is there.
 Grants are emitted in the schema (§13).
 
+**A grant on an observe is a hard error at call time** (`errEffectGrantOnObserve`, §12.4). A grant
+exists to label real work in the preview, and an observe produces no preview line at all -- it
+already executed (§6.2), it is never recorded, and it is never logged (§3.2). There is nothing for
+the label to appear on, so the declaration cannot mean anything, and declare-everything makes a
+meaningless declaration an error rather than a silently-dropped no-op. Like the read-only
+enforcement of §9.1 this is decided by the argv at the call, not at registration: a `run` that
+matches an allowlist prefix *and* passes `grant=` fails, whatever the command's classification.
+
 ### 6.2 `proc_observe_allowlist`
 
 App-level, not command-level:
@@ -646,7 +751,8 @@ matches any listed prefix is an **observe**: it executes even in dry mode, retur
 written to the would-do log.
 
 A `run` whose argv does not match any prefix is a `PROC_MUTATE`. In a `read_only` command,
-issuing a non-matching `run` is a hard error (§12.4).
+issuing a non-matching `run` is a hard error (§12.4). Passing `grant=` on a *matching* `run` --
+i.e. on an observe -- is likewise a hard error at call time (§6.1, §12.4).
 
 Per-language spelling: Python `App(proc_observe_allowlist=[...])`; Go
 `WithProcObserveAllowlist([][]string{...})` as an `AppOption`; TypeScript
@@ -939,11 +1045,21 @@ framework can claim it:
 3. **Module verification (the hardening).** At registration, when the marker is set, the framework
    verifies the handler is defined inside strictcli's own module -- Python
    `getattr(handler, "__module__", None) == __name__`; Go, the handler's function pointer resolves
-   into the strictcli package via `runtime.FuncForPC`; TS, the handler identity is one the
-   registering module itself created. If it is not, registration hard-errors with
-   `errFrameworkInternalHandlerForeign` (§12.9). A consumer that reaches the marker by any route
-   -- monkey-patching, prototype tampering, reflection -- therefore fails loudly at registration
-   rather than silently inheriting a framework exemption.
+   into the strictcli package via `runtime.FuncForPC`; TS, the handler's identity is a member of a
+   **`WeakSet<Function>` of framework-created handler identities**. If it is not, registration
+   hard-errors with `errFrameworkInternalHandlerForeign` (§12.9). A consumer that reaches the
+   marker by any route -- monkey-patching, prototype tampering, reflection -- therefore fails
+   loudly at registration rather than silently inheriting a framework exemption.
+
+   The TypeScript `WeakSet` is the mechanism, pinned: a module-level `const` declared in
+   `typescript/src/app.ts` next to the single validated registration path, written by the two
+   modules that mint internal handlers (`typescript/src/checks/cmd.ts` and
+   `typescript/src/config.ts`) at the moment each handler is created, and **never re-exported from
+   `typescript/src/index.ts`** -- so it is package-internal and unreachable from consumer code,
+   exactly as the marker itself is. Verification is one membership test. It keys on **function
+   identity**, not on `handler.name`, `Function.prototype.toString()` output or a marker property,
+   because each of those is forgeable and identity is not; and it is a `WeakSet` rather than a
+   `Set` so a handler that goes out of scope remains collectible.
 
 **The `config` subcommands' validation bypass is closed in the same change.** Python's
 `_register_config_group` currently builds all five commands by calling the `Command` constructor
@@ -1094,6 +1210,14 @@ command "<name>": grant '<g>' is declared for kind <k1> but was used for a <k2> 
 
 `errEffectGrantKindMismatch(name, g, k1, k2)`.
 
+```
+command "<name>": grant '<g>' cannot be used on an observe; effects.run argv <argv> is on the app's proc_observe_allowlist
+```
+
+`errEffectGrantOnObserve(name, g, argv)`. Call-time; `<argv>` is the space-joined argv. Enforces
+§6.1: an observe is never recorded and never logged, so no preview line exists for the grant to
+label.
+
 ### 12.5 Truncation
 
 ```
@@ -1170,9 +1294,23 @@ command "<name>": effects.<method> produced output that is not valid UTF-8
 command "<name>": effects.<method> parameter '<p>' does not accept an unsettled value
 ```
 
-`errEffectParamRejectsCarrier(name, method, p)`. Call-time; raised when a carrier is passed to one
-of the parameters §2.5.5 excludes (`mode`, `method`, `cwd`, `env`, `headers`, the three common
-options), or when a `Spawned` is forwarded into a string position.
+`errEffectParamRejectsCarrier(name, method, p)`. Call-time; raised in two situations. First, when
+a carrier is passed to one of the parameters §2.5.5 excludes -- `mode`, `method`, `body`, `cwd`,
+`env`, `headers`, `check`, `stream` and the three common options. Second, when a carrier that has
+no scalar projection is forwarded into one of the six *accepting* positions: a `Spawned`, or a
+void result (§2.5.5). The void case is an error in **both** modes and in all three
+implementations; in Go, where the void carrier is never settled, the message reads literally.
+
+```
+command "<name>": effects.<method> does not accept option '<opt>'
+```
+
+`errEffectOptionNotAccepted(name, method, opt)`. Call-time, all three (§2.5.2). `<opt>` is the
+option's **canonical snake_case name** (`check`, `stream`, `body`, `cwd`, `env`, `headers`,
+`resource`, `skip_if_current`, `grant`), identical in every implementation, so the rendered message
+is byte-identical too: Go's `EffectOption` values therefore carry that canonical name for the
+message even though the constructor is spelled `Stream(bool)`. Python and TypeScript raise it from
+the keyword / options-object-key check; Go from its call-time variadic validation.
 
 ### 12.9 Framework-internal handlers (§10.4)
 
@@ -1250,22 +1388,26 @@ alongside the existing `stdout_*` / `stderr_*` / `config_file_*` families:
 ```
 
 Comparison is deep equality over the parsed JSON arrays, in order. Absent optional keys and
-explicit-null keys are equivalent. It is an ordinary expect key: a case may combine it with
-`stdout_equals` (asserting the rendered log) and with `exit_code`.
+explicit-null keys are equivalent. The one key that equivalence never reaches is `recorded`, which
+is **required** on every record (§14.2) and therefore never absent -- that is the point of making
+it required. Where the equivalence earns its keep is `bytes`: absent on every non-`write` effect,
+and explicitly `null` on a `write` whose content was a forwarded carrier (§3.2). It is an ordinary
+expect key: a case may combine it with `stdout_equals` (asserting the rendered log) and with
+`exit_code`.
 
 ### 14.2 `$defs/effect_record`
 
 ```json
 {
   "type": "object",
-  "required": ["seq", "kind", "verb", "detail"],
+  "required": ["seq", "kind", "verb", "detail", "recorded"],
   "additionalProperties": false,
   "properties": {
     "seq":             { "type": "integer" },
     "kind":            { "enum": ["proc_mutate", "proc_spawn", "file_write", "net_mutate", "cache_write"] },
     "verb":            { "enum": ["run", "spawn", "write", "mkdir", "remove", "rename", "chmod", "net", "cache"] },
     "detail":          { "type": "string" },
-    "bytes":           { "type": "integer" },
+    "bytes":           { "type": ["integer", "null"] },
     "resource":        { "type": "string" },
     "skip_if_current": { "type": "string" },
     "grant":           { "type": "string" },
@@ -1275,9 +1417,20 @@ explicit-null keys are equivalent. It is an ordinary expect key: a case may comb
 ```
 
 `detail` is the same string the would-do log renders after the verb (so forwarded carriers appear
-in brand form). `bytes` is present only for `write`. `recorded` is `true` when the effect was
-recorded instead of performed, and `false` when it actually executed -- so framework-blessed
-`CACHE_WRITE`s carry `recorded: false` even during a dry run (§3.1).
+in brand form). `bytes` is present only for `write`, and is `null` rather than an integer when that
+`write`'s content was an unsettled carrier (§3.2) -- there are no bytes to count. A settled content
+value, forwarded or literal, in either mode, carries its real encoded length. `recorded` is
+`true` when the effect was recorded instead of performed, and `false` when it actually executed --
+so framework-blessed `CACHE_WRITE`s carry `recorded: false` even during a dry run (§3.1).
+
+**The structured effect log is populated in both modes,** and `recorded` is the key that says
+which happened. A live run records every effect it performs, each with `recorded: false`; a dry
+run records every application effect with `recorded: true` and the framework-blessed cache writes
+it still performs with `recorded: false`. This is why `recorded` is in `required`: with it
+optional, an absent key and an explicit `null` are equivalent under §14.1's comparison rule, and
+"absent" would have had to mean both "live" and "unstated" at once. It is not the would-do log --
+that is dry mode's stdout rendering (§3.2) and does not exist in live mode at all; the structured
+log is a diagnostic, read only through the §14.3 accessor, and changes nothing about the run.
 
 Observes (§6.2) do not appear in the structured effect log at all. The `kind` and `verb` enums
 above have no observe member, and an observe recorded as a `proc_mutate`/`run` pair would be
@@ -1299,8 +1452,10 @@ as the existing `CONFORMANCE_APP_DEF`**:
   machinery.
 
 The framework accessor is `App.effect_log()` / `(*App).EffectLog()` / `app.effectLog()`, returning
-the ordered records for the most recent dispatch. It sits beside the existing test-only surfaces
-(`test()`, `_last_sources`) and is excluded from the api-surface catalog the same way.
+the ordered records for the most recent dispatch -- in **either** mode, since the log is populated
+in both (§14.2), which is what lets a case assert a live run's effects as readily as a dry run's.
+It sits beside the existing test-only surfaces (`test()`, `_last_sources`) and is excluded from
+the api-surface catalog the same way.
 
 This is deliberately **not** an env-var mode switch: it does not change any behavior, only where a
 diagnostic is written. It is not the deleted A9 token (§16).
@@ -1336,6 +1491,7 @@ and `makeHandler` (`conformance/harness_ts/main.js`). It gains one sibling key:
     "content":         { "type": "string" },
     "url":             { "type": "string" },
     "http_method":     { "type": "string" },
+    "stream":          { "type": "boolean" },
     "resource":        { "type": "string" },
     "skip_if_current": { "type": "string" },
     "grant":           { "type": "string" },
@@ -1355,7 +1511,15 @@ the truncation cases want to assert.
 
 Each of the three harnesses materializes this identically: iterate the array in order, call the
 named effects method with the declared arguments, keep the returned carrier in a per-run slice
-indexed by position so `forward_from` / `extract_from` can reference it.
+indexed by position so `forward_from` / `extract_from` can reference it. They pass **exactly the
+keys the entry declares**, with no per-method filtering -- a case declaring a key the named method
+does not accept is asserting the error, not misconfigured.
+
+`stream` is the vocabulary's one option key. It maps to `run`'s `stream` parameter (§2.5.2), and
+because no other method accepts it, declaring it on a non-`run` entry is how a case exercises
+`errEffectOptionNotAccepted` (§12.8, §14.5). It is expressible in all three languages -- in Go,
+`Stream(true)` is an ordinary `EffectOption` value that every method accepts syntactically and
+that only `run` accepts at the call, which is exactly the shape the error covers.
 
 ### 14.5 Fixture app and parity checks
 
@@ -1386,6 +1550,17 @@ indexed by position so `forward_from` / `extract_from` can reference it.
 - The cross-process cases that would have exercised an env-mode token are **not written**: A9
   deleted that mechanism (§16). What remains is in-process spawn-record assertions -- a `spawn`
   effect appearing in `effects_equals` with `recorded: true`.
+- **The amendment round's two new templates are covered by ordinary cases, not deferred.**
+  `errEffectGrantOnObserve` (§12.4) is expressible in the §14.4 vocabulary as it stands: an entry
+  whose `argv` matches an app-level `proc_observe_allowlist` prefix and which also sets `grant`.
+  `errEffectOptionNotAccepted` (§12.8) becomes expressible through the one vocabulary key §14.4
+  adds, `stream`: an entry like `{"method": "mkdir", "path": "d", "stream": true}` reaches `mkdir`
+  carrying an option `mkdir` does not accept, which is the error, and it reaches it identically in
+  Python, Go and TypeScript because the harnesses pass the declared keys verbatim. `stream` was
+  chosen over the other method-specific options because it is the only one no method but `run`
+  accepts *and* whose Go spelling (`Stream(true)`) is an ordinary `EffectOption` any method takes
+  syntactically -- a `mode`-on-`mkdir` case, by contrast, would not compile in Go, where `mode` is
+  a positional parameter of `Chmod` and not an option at all.
 
 ---
 
@@ -1624,7 +1799,8 @@ The following pins were authored at the execution round, alongside the §18.1 ru
 42. **Go returns a carrier type always** (§2.5.3): `Completed`, `Spawned` and `Response` are
     settleable carriers whose extractors return real values in live mode and panic when unsettled;
     the payload-less `Unsettled` of §4.4 is the void carrier returned by the five path-mutating
-    methods, so a `write` result stays forwardable.
+    methods, giving Go one uniform return shape. (The original rationale -- "so a `write` result
+    stays forwardable" -- is superseded by item 61: void results are never forwardable.)
 43. **The forwarding boundary and its scalar projections** (§2.5.5): a carrier is accepted for any
     `argv` element, `path`, `src`, `dst`, `url` or `content`; `Completed` projects to `stdout`,
     `Response` to its decoded `body`, `Spawned` to nothing. Reading a member of a carrier remains
@@ -1660,6 +1836,78 @@ The following pins were authored at the execution round, alongside the §18.1 ru
     unchanged.
 54. **`check --dry-run` gains a trailing dry-run header** (§7.5), so its existing assertions must
     be updated.
+
+The following pins were authored at the amendment round (2026-08-03), closing the residual gaps a
+re-audit found. Every one is forced or spelling-level; none reopens a ratified ruling.
+
+55. **TypeScript declares the settled return types only** (§2.5.3, §2.5.6): `Completed`, `Spawned`,
+    `Response`, `void`, with no `| Unsettled` union anywhere in the surface. Forced by the
+    one-body-both-modes model the whole regime rests on -- a declared union would oblige every
+    handler to narrow before use, and narrowing is mode-branching.
+56. **There is no `isUnsettled()` predicate, type guard or discriminant member** (§2.5.3). The same
+    reasoning from the other side: a predicate is exactly the silent mode-branch the truncation
+    mechanism exists to prevent. A handler that legitimately needs the mode reads `ctx.dryRun`
+    (§7.2); no property of a carrier answers that question.
+57. **TypeScript's carrier-accepting parameter types** (§2.5.5): `string | Completed | Response`
+    for every `argv` element and for `path`, `src`, `dst` and `url`;
+    `string | Uint8Array | Completed | Response` for `content`. Written inline in the signatures,
+    minting no exported type and therefore no new `describe.ts` entity.
+58. **`url` is carrier-accepting** (§2.5.2, §2.5.5, §2.5.6): `any` in Go, the union above in
+    TypeScript. §2.5.5's accept list already named it while §2.5.6's Go signature typed it
+    `string`; the signature was the error and is corrected. `method` and `body` remain excluded.
+59. **`body` is not carrier-accepting** (§2.5.5, §12.8), which is what finally makes the exclude
+    list exhaustive over §2.5.2. A request body is a payload, not a name, and a preview that
+    forwarded one would have to render an arbitrary blob into a log line.
+60. **A `write` whose content is an unsettled carrier renders the brand where the byte count goes**
+    (§3.2) -- `write: <path> («step N output»)` -- and that effect's record carries `bytes: null`
+    (§14.2). Nothing produced those bytes, and inventing a count is the one thing §0 forbids. Keyed
+    on unsettledness, not on carrier-ness: a *settled* forwarded result (a pre-mutation observe's
+    `Completed`, which is real even in dry mode) projects normally and renders a real count.
+61. **Void results are never forwardable** (§2.5.5, §12.8): forwarding one is a call-time hard
+    error in **both** modes and in all three implementations, in the
+    `errEffectParamRejectsCarrier` family. This supersedes the original rationale for Go's void
+    carrier (item 42) -- it exists to give Go's carrier-always model one uniform return shape, not
+    to make a `write` result forwardable -- and §4.1's categorical "nothing else ever produces one
+    / callers get real values" is amended to carve Go's carrier-always model out explicitly.
+62. **An option a method does not accept is a call-time hard error** (§2.5.2, §12.8) in all three,
+    `errEffectOptionNotAccepted`. Go validates its `...EffectOption` variadic at call time, and its
+    options carry a canonical snake_case name so the rendered message is byte-identical across the
+    three. Silently ignoring an inapplicable option is the one outcome declare-everything cannot
+    have.
+63. **`Spawned.wait` accepts `check`, with the same opt-out semantics as `run`** (§2.5.1, §2.5.2,
+    §2.5.4, §2.5.6), defaulting to `true`. Without it no handler could read a spawned child's
+    nonzero exit code -- the same gap `check=false` closes for `run`, and the §5.2 idiom's
+    commonest predicate.
+64. **`grant=` on an allowlisted observe is a call-time hard error** (§6.1, §6.2, §12.4),
+    `errEffectGrantOnObserve`. A grant labels a recorded step in the preview; an observe is never
+    recorded and never logged, so there is nothing for the label to appear on. A declaration that
+    cannot mean anything is an error, not a no-op.
+65. **TypeScript's module verification is a package-internal `WeakSet<Function>` of
+    framework-created handler identities** (§10.4): declared in `typescript/src/app.ts`, written by
+    the two modules that mint internal handlers, never re-exported from `typescript/src/index.ts`,
+    keyed on function identity because `name` and source text are both forgeable, and weak so a
+    discarded handler stays collectible.
+66. **The structured effect log is populated in both modes** (§14.2, §14.3), live entries carrying
+    `recorded: false`, and **`recorded` is a required key** of `$defs/effect_record`. Required is
+    what kills the absent-versus-null ambiguity §14.1's equivalence rule would otherwise create,
+    where "absent" would have had to mean both "live" and "unstated" at once.
+67. **Conformance coverage for the two new templates, with no deferral** (§14.4, §14.5).
+    `errEffectGrantOnObserve` needs no new vocabulary. `errEffectOptionNotAccepted` needs one key:
+    `$defs/handler_effect` gains `stream` (boolean), the only method-specific option that both is
+    accepted by exactly one method and, in Go, is an ordinary `EffectOption` every method takes
+    syntactically -- so `{"method": "mkdir", "path": "d", "stream": true}` produces the same error
+    in all three. The harnesses' pass-the-declared-keys-verbatim rule is pinned in the same place,
+    since it is what makes such a case reach the call at all.
+
+The last two were authored at the earlier execution round and omitted from this section by
+oversight. They are recorded here so §18 is exhaustive; neither is new.
+
+68. **`Response.headers` is keyed by lower-cased header name** (§2.5.1). HTTP header names are
+    case-insensitive, so a mapping that preserved the wire casing would make a handler's lookup
+    depend on the server's spelling.
+69. **Absent optional keys and explicit nulls are equivalent under `effects_equals`** (§14.1).
+    Now superseded for `recorded`, which item 66 makes required and therefore never absent; the
+    equivalence continues to govern every other optional key, `bytes` (item 60) above all.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
