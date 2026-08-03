@@ -63,6 +63,9 @@ export function recordCoverage(app: AppImpl, cmdPath: string): void {
 		app.coverageShardPath,
 		`${JSON.stringify({ command: cmdPath })}\n`,
 	);
+	// A framework-blessed CACHE_WRITE: it executes even in dry mode, is never
+	// written to the would-do log, and never trips read-only enforcement.
+	app.recordCacheWrite(app.coverageShardPath);
 }
 
 /**
@@ -210,6 +213,7 @@ export function testCoverageProvider(app: AppImpl): () => CheckSpec[] {
 					if (existing !== newContent) {
 						mkdirSync(dirname(manifestPath), { recursive: true });
 						writeFileSync(manifestPath, newContent);
+						app.recordCacheWrite(manifestPath);
 					}
 				}
 

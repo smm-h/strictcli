@@ -28,6 +28,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import type { ConfigFieldRt } from "./config.js";
+import type { Effect, Forwarding, Grant } from "./effects.js";
 import {
 	errCannotDetermineProjectIDNoName,
 	errCannotDetermineProjectIDNoPackageJson,
@@ -237,9 +238,17 @@ function serializeConstraints(def: AnyCommand): Record<string, unknown>[] {
 
 /** Serializes a registered command (regular or passthrough). */
 function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
+	const carrier = rc.def as {
+		readonly effect: Effect;
+		readonly grants?: readonly Grant[];
+		readonly forwarding?: Forwarding;
+	};
 	const d: Record<string, unknown> = {
 		name: rc.name,
 		help: rc.help,
+		// Always emitted: classification is mandatory, so there is no default
+		// to omit against.
+		effect: carrier.effect,
 	};
 	if (rc.kind === "passthrough") {
 		d.passthrough = true;
@@ -274,6 +283,16 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 		}
 	} else if (rc.hidden) {
 		d.hidden = true;
+	}
+	if (carrier.grants !== undefined && carrier.grants.length > 0) {
+		d.grants = carrier.grants.map((g) => ({
+			name: g.name,
+			reason: g.reason,
+			kind: g.kind,
+		}));
+	}
+	if (carrier.forwarding !== undefined) {
+		d.forwarding = { reason: carrier.forwarding.reason };
 	}
 	return d;
 }
@@ -436,6 +455,9 @@ export function dumpSchemaCore(app: AppImpl): Record<string, unknown> {
 	}
 	if (app.configEnabled) {
 		schema.config = true;
+	}
+	if (app.procObserveAllowlist.length > 0) {
+		schema.proc_observe_allowlist = app.procObserveAllowlist.map((p) => [...p]);
 	}
 	if (app.globalFlags.length > 0) {
 		schema.global_flags = app.globalFlags.map(serializeFlag);
@@ -613,5 +635,7 @@ export function writeSchema(app: AppImpl): string {
 	const filePath = join(dirPath, "schema.json");
 	checkSchemaProjectId(filePath, schema.project_id as string);
 	writeFileSync(filePath, `${schemaJson(schema)}\n`);
+	// A framework-blessed CACHE_WRITE (the closed list of three sites).
+	app.recordCacheWrite(resolve(filePath));
 	return resolve(filePath);
 }
