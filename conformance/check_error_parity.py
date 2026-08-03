@@ -735,6 +735,39 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "python": "excluded:TS-only config set splicer invariant; Python edits TOML in place via tomlkit",
         "go": "excluded:TS-only config set splicer invariant; Go edits TOML in place via go-toml-edit",
     },
+
+    # -- Effects handle accessor spelling (effects contract §2.1 pins one
+    #    accessor per language, and the message names it) --
+    'ctx.effects is unavailable: this Context was constructed outside a command dispatch': {
+        "go": "excluded:Go's accessor is the method ctx.Effects() (effects contract §2.1); its counterpart names that spelling",
+    },
+    'ctx.Effects() is unavailable: this Context was constructed outside a command dispatch': {
+        "python": "excluded:Python's accessor is the property ctx.effects (effects contract §2.1); its counterpart names that spelling",
+        "typescript": "excluded:TS's accessor is the getter ctx.effects (effects contract §2.1); its counterpart names that spelling",
+    },
+
+    # -- Effects regime: templates whose trigger the conformance runner cannot
+    #    reach (effects contract §14.5) --
+    'about to run mutating command *. Proceed? [y/N] ': {
+        "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "typescript": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+    },
+    'error: stdin is not interactive; pass --yes to confirm': {
+        "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "typescript": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+    },
+    'aborted': {
+        "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "typescript": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+    },
+    'command *: effects.http failed: * * returned *': {
+        "python": "coverage_deferred:Requires issuing a real network request, which conformance cases must not do",
+        "go": "coverage_deferred:Requires issuing a real network request, which conformance cases must not do",
+        "typescript": "coverage_deferred:Requires issuing a real network request, which conformance cases must not do",
+    },
 }
 
 
@@ -770,11 +803,19 @@ def _extract_raise_arg(source: str, pos: int) -> str | None:
     return None
 
 
-def _extract_string_literals(arg_text: str) -> str | None:
+def _extract_string_literals(arg_text: str) -> tuple[str, bool] | None:
     """Extract and concatenate all string literal pieces from a raise argument.
 
     Handles: f"...", f'...', "...", '...' and implicit concatenation.
-    Returns the combined template string, or None if no strings found.
+    Returns ``(template, truncated)`` or None if no strings found.
+
+    ``truncated`` is True when the literal run stopped at a non-string
+    expression (``f"..." + ", ".join(parts)``), meaning the real message
+    continues with dynamic text the extractor cannot see.  Callers append a
+    placeholder for it.  A complete literal that merely ENDS with a space (the
+    confirm prompt, `'... Proceed? [y/N] '`) is not truncated and gets none --
+    the distinction has to be made here, where the parse state is known, not
+    guessed from the trailing character later.
     """
     parts: list[str] = []
     i = 0
@@ -789,6 +830,7 @@ def _extract_string_literals(arg_text: str) -> str | None:
     ):
         return None
 
+    truncated = False
     while i < len(text):
         # Skip whitespace and newlines
         if text[i] in " \t\n\r":
@@ -816,42 +858,128 @@ def _extract_string_literals(arg_text: str) -> str | None:
             parts.append("".join(part))
             continue
 
-        # Skip anything else (e.g., the + operator between string parts,
-        # or expressions like ", ".join(...))
-        # If we hit a non-string expression, stop -- the rest is code, not literal
+        # A separator the caller does not care about (a comma before the next
+        # argument, a closing paren) ends the literal run cleanly; anything
+        # else -- the + operator, ", ".join(...) -- means the message continues
+        # with text we cannot see.
         if parts:
+            truncated = text[i] not in ",)"
             break
         i += 1
 
     if not parts:
         return None
-    return "".join(parts)
+    return "".join(parts), truncated
 
 
 # ---------------------------------------------------------------------------
 # 1. Extract error patterns from Python source
 # ---------------------------------------------------------------------------
 
+# The exception types whose messages are user-facing templates, and the
+# category each one lands in.  `_ParseError` is the parse-time formatter;
+# `ValueError` is registration-time (raised while an app is being built);
+# `EffectFailed` is a call-time effect failure (effects contract §12.8), which
+# a conformance case reaches through argv like any parse-time error, so it
+# shares that category and is coverage-checked.
+#
+# TypeError and RuntimeError are deliberately NOT scanned -- SIGNATURE_STATUS
+# carries rationales that depend on that ("TypeError raises are not
+# extracted").  A template carried on one of those exceptions is made visible
+# by giving it a `_msg_*` function, below.
+_PY_RAISED_TEMPLATE_TYPES = {
+    "_ParseError": "parse",
+    "ValueError": "registration",
+    "EffectFailed": "parse",
+}
+
+# Templates that are never raised through a scanned exception type: printed to
+# stderr (the confirm protocol, §12.6), or carried on `_DryRunTruncated`
+# (§12.5), `TypeError` or `RuntimeError`.  Python spells these as `_msg_*`
+# functions returning the finished string -- one function per template,
+# mirroring Go's `err*`/`prompt*` functions in errors.go and their TypeScript
+# twins.
+_PY_MSG_FUNC_PAT = re.compile(r"^def (_msg_\w+)\(", re.MULTILINE)
+
+# The `_msg_*` functions whose messages are parse-time.  Go and TypeScript
+# express the same split with a "(parse-time)" section header; Python has no
+# sections, so the membership is listed.  It is the confirm protocol (§12.6,
+# which TypeScript files under its own parse-time header) plus the truncation
+# error, which effects contract §12.5 pins to "the parse-time section of the
+# catalogs".  The remaining `_msg_*` templates are the effect-parameter type
+# guards, which §12 does not list at all; they stay registration-time.
+_PY_PARSE_TIME_MSG_FUNCS = frozenset({
+    "_msg_confirm_prompt",
+    "_msg_confirm_non_interactive",
+    "_msg_confirm_declined",
+    "_msg_dry_run_truncated",
+})
+_PY_TOP_LEVEL_DEF_PAT = re.compile(r"^(?:def |class |@)", re.MULTILINE)
+_PY_RETURN_PAT = re.compile(r"^    return\s", re.MULTILINE)
+
+
+def _truncation_marker(fmt_str: str, truncated: bool) -> str:
+    """Append a placeholder when the literal run was cut short by an expression.
+
+    The marker is a `{...}` field so normalize_python() turns it into the same
+    `*` any other interpolation becomes.
+    """
+    return fmt_str + "{...}" if truncated else fmt_str
+
+
 def extract_python_errors(source: str) -> list[tuple[str, str]]:
     """Extract (category, format_string) pairs from Python source.
 
-    Categories: 'parse' for _ParseError, 'registration' for ValueError.
+    Two surfaces: raised templates (see _PY_RAISED_TEMPLATE_TYPES) and the
+    `_msg_*` template functions (see _PY_MSG_FUNC_PAT).
     """
     results: list[tuple[str, str]] = []
 
-    # Find all raise _ParseError(...) and raise ValueError(...)
-    pattern = re.compile(r'raise\s+(_ParseError|ValueError)\(')
+    names = "|".join(_PY_RAISED_TEMPLATE_TYPES)
+    pattern = re.compile(rf'raise\s+({names})\(')
     for m in pattern.finditer(source):
-        exc_type = m.group(1)
-        category = "parse" if exc_type == "_ParseError" else "registration"
+        category = _PY_RAISED_TEMPLATE_TYPES[m.group(1)]
         arg_start = m.end()
         arg_text = _extract_raise_arg(source, arg_start)
         if arg_text is None:
             continue
-        fmt_str = _extract_string_literals(arg_text)
-        if fmt_str is None:
+        extracted = _extract_string_literals(arg_text)
+        if extracted is None:
             continue
-        results.append((category, fmt_str))
+        fmt_str, truncated = extracted
+        results.append((category, _truncation_marker(fmt_str, truncated)))
+
+    results.extend(extract_python_message_templates(source))
+    return results
+
+
+def extract_python_message_templates(source: str) -> list[tuple[str, str]]:
+    """Extract (category, format_string) pairs from `_msg_*` functions.
+
+    Each such function is a single `return <string literal>` (possibly an
+    implicitly concatenated, parenthesized run of f-strings).  The body is
+    bounded by the next top-level `def`/`class`/decorator, so a return inside a
+    nested helper can never be mistaken for the template.
+    """
+    results: list[tuple[str, str]] = []
+
+    for m in _PY_MSG_FUNC_PAT.finditer(source):
+        nxt = _PY_TOP_LEVEL_DEF_PAT.search(source, m.end())
+        body = source[m.end() : nxt.start() if nxt else len(source)]
+        rm = _PY_RETURN_PAT.search(body)
+        if rm is None:
+            continue
+        expr = body[rm.end():].lstrip()
+        if expr.startswith("("):
+            expr = expr[1:]
+        extracted = _extract_string_literals(expr)
+        if extracted is None:
+            continue
+        fmt_str, truncated = extracted
+        category = (
+            "parse" if m.group(1) in _PY_PARSE_TIME_MSG_FUNCS else "registration"
+        )
+        results.append((category, _truncation_marker(fmt_str, truncated)))
 
     return results
 
@@ -976,16 +1104,15 @@ def normalize_python(fmt_str: str) -> str:
 
     Replaces {anything} (including {x!r}, {x!s}) with *.
     Then normalizes quoted placeholders: '*' and "*" become *.
-    If the string ends with a trailing space (indicating truncated
-    concatenation with a dynamic part), append * to represent it.
+
+    Truncated concatenation (f"..." + expr) is marked at extraction time with
+    a trailing `{...}` field, which this turns into the same * as any other
+    interpolation -- see _truncation_marker.
     """
     sig = re.sub(r"\{[^}]*\}", "*", fmt_str)
     # Normalize quoted * placeholders
     sig = re.sub(r"""['"](\*)['""]""", r"\1", sig)
     sig = re.sub(r"""['"](\*)['"']""", r"\1", sig)
-    # Trailing space indicates truncated string concatenation (e.g., f"..." + expr)
-    if sig.endswith(" "):
-        sig = sig + "*"
     return sig
 
 
