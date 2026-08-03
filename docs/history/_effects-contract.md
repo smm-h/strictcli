@@ -26,6 +26,13 @@ one inverts the precedence clause above for this round only: **where all three i
 agree against this document's draft text, the implementations win and the document is amended.**
 Every amendment is marked in place with the ruling letter it implements.
 
+Amended a fourth time 2026-08-03 at the spec-audit remediation round (§18.5). That round's
+governing rule is the **normal** one, not §18.4's inversion: an adversarial spec-only audit found
+seven places where the implementations disagreed with this document, and in six of them the
+document was right and the code was fixed. The exceptions are recorded: §11's scope is strengthened
+in code *and* narrowed in text where TypeScript provably cannot deliver it (§17), §8.2 and §3.2
+pin readings this document had left silent, and §8.4 corrects a claim that was simply false.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -514,6 +521,15 @@ Then one line per recorded effect, in record order, each of the form:
 - `. ` (period, single space) separates the number from the verb.
 - `<verb>: ` (colon, single space) separates the verb from the detail.
 
+**The numbering is CONTIGUOUS OVER RENDERED LINES, not over all records** (amended 2026-08-03,
+D3). `<N>` counts only the effects this log renders; `CACHE_WRITE`s are never rendered (§9.2) and
+therefore never consume a number. The same counter feeds the `«step N output»` brand (§4.2) and
+truncation's "ends at step N" (§3.3), so any record that took a number without producing a line
+would silently shift three user-visible strings at once -- a coverage-instrumented dry run would
+start its preview at `2.` for no reason a reader could see. Cache writes carry their own
+independent 1-based sequence, so the `seq` field of §14.2 is still present and still meaningful on
+every record; the two sequences simply do not share a counter.
+
 Verb prefixes, one per method:
 
 | Verb | Method | Detail |
@@ -626,6 +642,10 @@ Two, and only two:
 
 (The guillemets are U+00AB and U+00BB.)
 
+`N` is the would-do number of §3.2 -- the rendered-line counter, which `CACHE_WRITE`s never
+advance (D3). The brand a handler forwards therefore always names a line the reader can see in the
+preview.
+
 ### 4.3 Legal use: forwarding
 
 Passing a carrier as an argument to a later `ctx.effects` call is legal and is the whole point of
@@ -643,10 +663,21 @@ error:
 
 ```
 __bool__  __eq__  __ne__  __lt__  __le__  __gt__  __ge__  __hash__
-__len__  __iter__  __contains__  __getitem__  __getattr__
+__len__  __iter__  __contains__  __getitem__  __getattr__  __setattr__
 __int__  __float__  __index__  __str__  __format__  __bytes__
 __add__  __radd__  __mod__  __rmod__  __call__
 ```
+
+This list is **complete**: a dunder not on it and not exempted below is not poisoned.
+
+**`__setattr__` is on the list, and the write side matters as much as the read side** (amended
+2026-08-03, D6). Without it `u._brand = "«forged»"` mints a preview line that describes nothing
+and `u._forwardable = True` makes a void carrier -- which stands for nothing in either mode
+(§2.5.5) -- forwardable, defeating the pin that void results are never forwardable. `__slots__`
+does not close this: slots make attributes *fixed*, not *read-only*. Go and TypeScript were never
+exposed -- Go's carrier fields are unexported and TypeScript's Proxy already traps `set` -- so this
+is a Python-only parity repair. `Unsettled.__init__` writes its own four slots through
+`object.__setattr__`, which is the only way to construct a carrier whose write path is poisoned.
 
 `__repr__` is the **single** non-poisoned dunder: it returns `Unsettled(«step 3 output»)` so that
 debuggers, tracebacks and logging never themselves detonate. `__class__` is untouched
@@ -803,6 +834,32 @@ Per-language spelling: Python `App(proc_observe_allowlist=[...])`; Go
 `WithProcObserveAllowlist([][]string{...})` as an `AppOption`; TypeScript
 `createApp({ procObserveAllowlist: [...] })`. Emitted in the schema (§13).
 
+#### The breadth hazard (amended 2026-08-03, D4)
+
+A prefix is matched element-wise, so **a short prefix is a near-blanket exemption for that
+binary.** `proc_observe_allowlist=[["git"]]` makes *every* `git` invocation an observe -- including
+`git push`, `git reset --hard` and `git clean -fdx`. Concretely, for every argv that matches:
+
+- it **executes for real under `--dry-run`**, because observes are exactly the operations dry mode
+  still performs (§3.1);
+- it is **never written to the would-do log**, because the log lists what would change (§3.2), and
+  an observe is declared not to;
+- it is **legal inside a `read_only` command**, because read-only enforcement admits an
+  allowlisted `run` (§9.1).
+
+The framework guards only the **empty** prefix, which would match everything and is a registration
+error. It does **not** infer a minimum specificity, and must not: §0's zero-inference rule owns
+this. The allowlist is a **declared, source-visible, app-level choice**, and declaring it *is* the
+authorization -- the app is stating that these argv prefixes change nothing and may really run
+during a preview. A framework that silently narrowed, reordered or rejected a declared prefix
+would be inventing policy the app did not write.
+
+What the framework does instead is **say so out loud, at warn severity**: the built-in
+`observe-allowlist-breadth` check (§11) warns for every single-token prefix. It is a warning and
+not an error precisely because a one-token prefix can be correct -- an app whose only use of a
+binary is genuinely read-only has nothing to fix -- and `--ignore-warnings` clears it. There is no
+mechanism behind the warning: no specificity rule, no per-subcommand table, no runtime narrowing.
+
 ---
 
 ## 7. The reserved flag quartet
@@ -939,9 +996,19 @@ about to run mutating command '<name>'. Proceed? [y/N]
 
 (Note the single trailing space. `<name>` is the dotted command path.)
 
-The answer is read from stdin, one line. After stripping the trailing newline, exactly `y` or `Y`
-proceeds. Anything else -- including empty input, `yes`, `n`, or EOF -- declines. On decline the
-framework writes `aborted` to stderr and exits `1`.
+The answer is read from stdin, one line. The line terminator is stripped as **exactly one `\n`,
+then exactly one `\r`** -- never more of either, and never any other whitespace. After that,
+exactly `y` or `Y` proceeds. Anything else -- including empty input, `yes`, `n`, `  y`, or EOF --
+declines. On decline the framework writes `aborted` to stderr and exits `1`.
+
+**The carriage return is pinned, and it is stripped** (amended 2026-08-03, D2). A human at a
+Windows console types the same `y` as everyone else; their terminal terminates the line CRLF, and
+a stdin stream that does not translate newlines hands the framework `"y\r\n"`. Declining there
+would refuse an answer that was plainly given, so the framework accepts it. Stripping only the
+terminator -- rather than `strip()`ing whitespace -- is what keeps `"  y"` a decline, which this
+section requires. Go already did this (`strings.TrimSuffix(..., "\r")`); Python and TypeScript
+now do too, and Python's previous `rstrip("\n")` (which stripped *every* trailing newline) is
+replaced by the exactly-one rule.
 
 ### 8.3 Non-interactive stdin
 
@@ -961,9 +1028,21 @@ check (Go stays zero-dependency: `fi.Mode() & os.ModeCharDevice != 0`), TypeScri
 
 `test()`, `call()` / `Call()` / `invoke`, and the MCP server behave **as if `--yes` were
 passed**: they never prompt and never emit the non-TTY error. These paths have no TTY contract,
-and a prompt there would hang the caller. `--dry-run` is likewise not reachable through them
-(they bypass argv parsing entirely); a programmatic caller that wants a preview constructs the
-run through the CLI path.
+and a prompt there would hang the caller.
+
+**`--dry-run` reachability splits along the argv boundary, not the dispatch boundary** (amended
+2026-08-03, D1; the previous text said `--dry-run` was unreachable through all of them "because
+they bypass argv parsing entirely", which is false for `test()`):
+
+| Path | Takes argv? | `--dry-run` reachable? |
+|------|-------------|------------------------|
+| `test()` / `Test()` / `app.test()` | yes -- it parses argv exactly as the CLI does | **yes**; `app.test(["--dry-run", ...])` enters dry mode, and the unit suites rely on it |
+| `call()` / `Call()` / `_invoke` / `invokeApp` | no -- pre-typed kwargs | no |
+| the MCP server | no -- it reaches dispatch through `call`/`invoke` | no |
+
+Only the three argv-bypassing paths in the second and third rows cannot express the flag: there is
+no argv for it to appear in. A programmatic caller on one of those paths that wants a preview
+constructs the run through `test()` or through the CLI.
 
 ---
 
@@ -1013,6 +1092,26 @@ write. Specifically, the five auto-registered `config` subcommands classify as:
 Those five, and the `check` command, are the framework-internal commands of §10.4; their
 classification only becomes enforceable once the `config` group's direct-`Command`-construction
 bypass is closed, which §10.4 requires.
+
+**Classifying the three mutating `config` subcommands is not enough: their mutations must ride
+`ctx.effects`** (amended 2026-08-03, A4). Classification alone bought the confirm prompt and put
+the run in dry mode, but the handlers wrote through bare `open` / `os.WriteFile` / `writeFileSync`
+and launched `$EDITOR` through bare `subprocess.run` / `exec.Command` / `spawnSync`, so a dry run
+printed `DRY RUN — no changes were made.` while rewriting the user's config file and opening their
+editor. Every mutation in all three is now minted on the handle:
+
+| Subcommand | Effects it mints |
+|------------|------------------|
+| `config set` | `mkdir` for the config directory when it does not exist; `write` of the serialized file (JSON re-serialization or the comment-preserving TOML splice) |
+| `config init` | the same `mkdir`; `write` of the generated template |
+| `config edit` | the same `mkdir`; `write` of the empty file when it does not exist; `run` of `[$EDITOR, path]` with `stream=true` |
+
+Two details matter. The directory's existence is **probed with an ordinary filesystem
+read** and the `mkdir` is issued only when it would create something -- reads are never effects,
+branching on a real value walks the preview straight through (§5.2's idiom), and the preview stays
+honest about what it would do. And `config edit`'s `run` keeps `check` at its default `true`, so
+the editor's exit status is an error rather than a value (§2.5.4): nothing in these handlers ever
+reads an exit code off a carrier, which is what lets one handler body be right in both modes.
 
 An app-level cache write is an ordinary `FILE_WRITE` and requires a `mutating` command. There is
 no way for an application to mint a `CACHE_WRITE`.
@@ -1123,24 +1222,25 @@ callers left outside it.
 
 ## 11. Bypass lint as check providers
 
-Each implementation ships a **built-in check provider** registering one check:
+Each implementation ships one **built-in check provider** registering **two** checks (amended
+2026-08-03, D4/D5):
 
-| Field | Value |
-|-------|-------|
-| name | `effects-bypass` |
-| tags | `["effects", "quality"]` |
-| severity | `error` |
-| fast | `true` |
-| pure | `true` |
-| needs_network | `false` |
-| depends_on | `[]` |
+| Field | `effects-bypass` | `observe-allowlist-breadth` |
+|-------|------------------|-----------------------------|
+| tags | `["effects", "quality"]` | `["effects", "quality"]` |
+| severity | `error` | `warn` |
+| fast | `true` | `true` |
+| pure | `true` | `true` |
+| needs_network | `false` | `false` |
+| depends_on | `[]` | `[]` |
 
-The check statically analyses the consumer's own sources and fails on any direct process,
-filesystem-mutation or network call reachable from a registered command handler that does not go
-through `ctx.effects`. It is registered through the existing provider hook
-(`App.register_check_provider` / `(*App).RegisterCheckProvider` / the TS provider module), the
-same mechanism the built-in `cli-test-coverage` check already uses, so a TOML-less app still gets
-a working check.
+`effects-bypass` statically analyses the consumer's own sources and fails on any direct process,
+filesystem-mutation or network call **reachable from a registered command handler** that does not
+go through `ctx.effects`. `observe-allowlist-breadth` reads the app's own declared
+`proc_observe_allowlist` and warns on every single-token prefix (§6.2). Both are registered through
+the existing provider hook (`App.register_check_provider` / `(*App).RegisterCheckProvider` / the TS
+provider module), the same mechanism the built-in `cli-test-coverage` check already uses, so a
+TOML-less app still gets working checks.
 
 Analyser per language, all **regular dependencies** (no optional imports, no soft degradation):
 
@@ -1150,10 +1250,53 @@ Analyser per language, all **regular dependencies** (no optional imports, no sof
 | Go | stdlib `go/ast` + `go/parser` |
 | TypeScript | the TypeScript compiler API -- `typescript` moves from `devDependencies` to `dependencies` in `typescript/package.json`. This is a published-surface change and gets its own changelog line. |
 
-Additionally, the TS check flags the two accepted Proxy ceilings (§4.4): a bare truthiness test or
-a `===` comparison against a value the analyser can trace to an effects-handle return. These are
-the only things the runtime seal cannot catch, so lint is the sole line of defence and the check
-must name them explicitly.
+### 11.1 The scope rule, and what each language actually delivers
+
+**Opting in is NOT the trigger.** An earlier reading -- "a call inside a function whose own body
+mentions `.effects`" -- let two shapes escape completely: a handler that never mentions the handle
+at all, and a bypass one helper-call away from a handler that does. Since this lint is the **sole
+stated mitigation for the accepted no-sandbox ceiling** (§16, §17), both shapes are exactly the
+ones an escaping consumer would reach for first. The scope is **reachability**.
+
+**Roots** (both conditions, in every language):
+
+1. a **registered command handler**, recognized per language as below;
+2. as before, any function that reaches for `.effects` itself -- kept because a helper that uses
+   the handle promises a complete preview whether or not the analyser can see who calls it.
+
+**Closure**: from every root, follow **direct calls** to declared functions, transitively.
+
+| Impl | Handler-root recognition | Closure unit | Alias handling |
+|------|--------------------------|--------------|----------------|
+| Python | a `.command` / `.passthrough` decorator on the function, or the function's name passed as `handler=` anywhere in the module | **intra-module** (one file): bare `name(...)` calls resolved against module-level `def`s | names assigned from an expression reaching `.effects` (`e = ctx.effects`) are the handle, not a bypass |
+| Go | the function's **first parameter is `*Context`** (or `*strictcli.Context`) -- exactly the command-handler and passthrough-handler signatures, and nothing else in the surface | **intra-package** (one directory, across its files): bare `name(...)` calls resolved against that package's receiver-less top-level `func`s | names assigned from `ctx.Effects()`, plus parameters declared `*Effects` |
+| TypeScript | the `handler:` property of a factory options object -- inline (`handler: (a, c) => {...}`, including through a wrapper call) or naming a declared function (`handler: deploy`) | **intra-file**: bare `name(` calls resolved against a token-level function table (`function f(...) {}`, `const f = (...) => {}`) | identifiers initialized from an expression ending in `.effects` |
+
+A finding is reported **once per call site**, named for the innermost enclosing function.
+
+**TypeScript's ceiling is real and is recorded, not papered over.** `typescript@7` is the native
+port: it ships the scanner, `SyntaxKind` and the AST node predicates, but **no in-process parser**
+-- building a syntax tree there means spawning the native language server against a resolved
+tsconfig, which a check declared `fast` **and** `pure` must not do. What the scanner gives is brace
+depth (real containment) and token adjacency (a serviceable function table and `handler:` root
+detection), and the TS check builds an intra-file call graph on exactly that. It therefore closes
+both escape shapes *within a file* and no further. The residual gap -- no cross-file/import
+resolution, no scope or shadowing resolution, no method-call resolution, and handler roots
+recognized only through the literal `handler:` spelling -- is an accepted ceiling (§17). This
+document does not claim TypeScript delivers the intra-module reachability Python and Go do.
+
+**Precision is bounded by the closed name lists, in every language.** The lists are matched on the
+called name with coarse receiver gating, so a call whose *name* collides with a listed one is a
+finding even when it is unrelated (`str.replace` matching `os.replace`, `app.call` matching
+`subprocess.call`). Widening the scope to reachability widens that exposure proportionally. The
+lists are deliberately **not** narrowed here: a lint that is the sole mitigation for a ceiling
+fails closed, and a false positive is a visible, one-line fix in consumer code where a false
+negative is silent.
+
+Additionally, the TS `effects-bypass` check flags the two accepted Proxy ceilings (§4.4): a bare
+truthiness test or a `===` comparison against a value the analyser can trace to an effects-handle
+return. These are the only things the runtime seal cannot catch, so lint is the sole line of
+defence and the check must name them explicitly.
 
 ---
 
@@ -1802,6 +1945,21 @@ Recorded so implementors do not re-litigate them:
 
 - **TypeScript**: plain-JS truthiness (`if (carrier)`) and `===` cannot be trapped by a `Proxy`.
   Lint-visible only (§11).
+- **TypeScript**: the `effects-bypass` lint delivers **intra-file** reachability, not the
+  intra-module reachability Python and Go deliver (§11.1). `typescript@7` ships no in-process
+  parser -- only the scanner -- and the check is declared `fast` **and** `pure`, so spawning the
+  native language server against a resolved tsconfig to obtain a syntax tree is not available. The
+  concrete residual gap: a bypass in a helper defined in **another file** is not followed; names
+  are matched as names, with no scope, shadowing or import resolution; method calls
+  (`this.helper()`, `obj.helper()`) are not followed; and handler roots are recognized only through
+  the literal `handler:` property spelling or an `.effects` mention. This is recorded rather than
+  fixed because every available fix violates `fast` or `pure`. A consumer who wants the stronger
+  guarantee keeps its effect-adjacent helpers in the file that registers the handler.
+- **All three**: the lint's closed name lists are matched on the called name with coarse receiver
+  gating, so name collisions with unrelated APIs (`str.replace` vs `os.replace`, `app.call` vs
+  `subprocess.call`) are reported. Not narrowed: a lint that is the sole mitigation for the
+  no-sandbox ceiling fails closed, and a false positive is a visible one-line fix where a false
+  negative is silent (§11.1).
 - **Go**: extraction is a runtime panic, not a compile error. Non-comparability is the only
   compile-time protection available.
 - **Go**: no compile-time ctx narrowing exists; the twin-factory affordance is TS-only.
@@ -2127,6 +2285,67 @@ implementations shipped; each is marked in place at the section it changes.
     §12.5, §12.6 and §12.8; everything else is registration-time. Go's and TypeScript's section
     markers are brought into agreement so that the coverage requirements this document prescribes
     actually bind.
+
+### 18.5 Amendments made at the spec-audit remediation round (2026-08-03)
+
+A spec-only audit of this document against the three shipped implementations found seven defects
+and six places where this document was silent or wrong. The implementation defects were fixed in
+code; the six documentation items are amended in place and listed here. Every one of them is
+**authored at this round**, not ratified upstream, and each is written to be reversible by naming
+the alternative it rejected.
+
+78. **§8.4's programmatic-dispatch clause is corrected (D1).** It claimed `--dry-run` is
+    unreachable through `test()`, `call()`/`invoke` and MCP because "they bypass argv parsing
+    entirely". `test()` does not bypass argv parsing -- it takes and parses argv exactly as the CLI
+    does, and the unit suites of all three implementations rely on `app.test(["--dry-run", ...])`
+    entering dry mode. The clause is now scoped to the three paths that really do take pre-typed
+    kwargs. No behavior changed; the document was simply wrong.
+79. **§8.2 pins the confirm answer's line terminator (D2).** It is exactly one `\n`, then exactly
+    one `\r`, and nothing else. Go already stripped the carriage return, Python and TypeScript did
+    not; the document was silent, so the divergence was invisible. Go's behavior is the one that is
+    right for a human at any console -- a Windows terminal terminates the line CRLF, and refusing
+    a `y` because of it would refuse an answer that was plainly given -- so Python and TypeScript
+    were brought to it rather than the reverse. Stripping *only* the terminator, rather than
+    whitespace, is what preserves this section's existing rule that `"  y"` declines. The
+    alternative rejected: leaving Go to strip and the others not, which is a silent per-platform
+    behavior split in the one prompt the user actually answers.
+80. **§3.2, §4.2 and §14.2 pin the sequence numbering (D3).** The would-do number is contiguous
+    over **rendered lines**; cache writes carry an independent counter. All three implementations
+    had cache writes consuming would-do numbers, so a `test_coverage=True` dry run began its
+    preview at `2.` and every `«step N output»` brand and truncation "ends at step N" shifted with
+    it -- three user-visible strings moved by a record the reader can never see. The alternative
+    reading (contiguous over all records, cache writes included) was rejected because it makes the
+    rendered output depend on an invisible bookkeeping detail.
+81. **§6.2 states the allowlist-breadth hazard plainly and §11 adds a WARN check (D4).** A
+    single-token prefix such as `["git"]` exempts an entire binary: every matching invocation
+    executes for real under `--dry-run`, is never logged, and is legal in a `read_only` command.
+    No specificity rule was invented -- §0's zero-inference rule forbids one, and the allowlist is
+    a declared, source-visible app-level choice that legitimately authorizes real execution in dry
+    mode. The response is documentation plus a warning: `observe-allowlist-breadth`, severity
+    `warn`, cleared by `--ignore-warnings`. Rejected: making it an error (a one-token prefix can be
+    correct) and making the framework narrow the prefix itself (policy the app did not write).
+82. **§11 is rewritten to describe what each language actually delivers (D5).** The section
+    prescribed "reachable from a registered command handler"; all three implementations shipped "a
+    call inside a function whose own body mentions `.effects`", which two trivial shapes escape.
+    Python and Go now implement intra-module and intra-package reachability from handler roots.
+    TypeScript cannot -- `typescript@7` has no in-process parser and the check is `fast` + `pure`
+    -- so it implements the closest scanner-level approximation (a token function table plus an
+    intra-file call graph rooted at `handler:` properties) and the residual gap is recorded in §17
+    rather than left as a guarantee the implementation does not deliver. The closed name lists were
+    deliberately **not** narrowed to offset the widened scope; the imprecision is recorded in §17
+    instead, because a lint that is the sole mitigation for a ceiling must fail closed.
+83. **§4.4 adds `__setattr__` to the poisoned-dunder list (D6).** The list is presented as
+    complete, and `__setattr__`'s absence let `u._brand = "«forged»"` mint a fake preview line and
+    `u._forwardable = True` make a void carrier forwardable -- both pins of §2.5.5 defeated from
+    Python only, since Go's carrier fields are unexported and TypeScript's Proxy already traps
+    `set`. `__delattr__` is deliberately **not** added: deleting a slot cannot forge anything (a
+    subsequent read hits the poisoned `__getattr__` and truncates), so poisoning it would be a
+    guardrail against nothing.
+
+§9.2 additionally gained the table of effects the three mutating `config` subcommands now mint. It
+is not a new decision -- the classification was already pinned and the handlers simply did not obey
+it -- but it is recorded there because the previous text stated the classification without stating
+that the mutations must ride the handle, and that gap is exactly what the implementations fell into.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
