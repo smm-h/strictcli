@@ -375,6 +375,18 @@ def _emit_handler_effects(cmd_def: dict, indent: str) -> list[str]:
     return lines
 
 
+def _emit_handler_diagnostics(cmd_def: dict, indent: str) -> list[str]:
+    """Emit the Context diagnostic calls a generated handler issues, in order.
+
+    The four levels are gated by --quiet / --verbose (effects contract §7.4);
+    the harness itself does no gating, it just calls the named method.
+    """
+    lines: list[str] = []
+    for d in cmd_def.get("handler_diagnostics", []):
+        lines.append(f"{indent}ctx.{d['level']}({d['message']!r})")
+    return lines
+
+
 def _emit_command_registration(
     cmd_def: dict, target: str, indent: str = "",
     global_flags: list[dict] | None = None,
@@ -696,9 +708,12 @@ def _emit_command_registration(
     lines.append(f"{indent}def {fn_name}({sig_params}):")
 
     # handler_effects runs BEFORE the handler_prints / handler_returns path and
-    # does not replace it (§14.4).
+    # does not replace it (§14.4). handler_diagnostics follows it, still before
+    # that path.
     effect_lines = _emit_handler_effects(cmd_def, indent + "    ")
     lines.extend(effect_lines)
+    diag_lines = _emit_handler_diagnostics(cmd_def, indent + "    ")
+    lines.extend(diag_lines)
 
     handler_returns = cmd_def.get("handler_returns")
     if handler_returns is not None:
@@ -709,7 +724,7 @@ def _emit_command_registration(
         # are its whole body.
         if "handler_prints" in cmd_def:
             lines.append(_emit_handler_body(cmd_def, global_flags))
-        elif not effect_lines:
+        elif not effect_lines and not diag_lines:
             lines.append(f"{indent}    pass")
         # Unified return: build an Outcome carrying the exit code.
         lines.append(f"{indent}    return strictcli.outcome(exit_code={exit_code})")

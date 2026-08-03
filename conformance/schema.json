@@ -349,6 +349,11 @@
           "items": { "$ref": "#/$defs/handler_effect" },
           "description": "Effect calls the generated handler issues, in order, before its return (effects contract §14.4). Runs BEFORE the handler_prints / handler_returns path and does not replace it."
         },
+        "handler_diagnostics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/handler_diagnostic" },
+          "description": "Context diagnostic calls the generated handler issues, in order, after its handler_effects and before the handler_prints / handler_returns path."
+        },
         "hidden": { "type": "boolean", "default": false },
         "interactive": { "type": "boolean", "default": false },
         "config_fields": {
@@ -433,6 +438,7 @@
           "handler_exit_code": false,
           "handler_returns": false,
           "handler_effects": false,
+          "handler_diagnostics": false,
           "effect": false,
           "grants": false,
           "forwarding": false,
@@ -494,6 +500,16 @@
           "type": "integer",
           "description": "1-based index of an earlier entry whose carrier the handler EXTRACTS from (bool-tests it), triggering the truncation path. Terminal: nothing after this entry runs."
         }
+      }
+    },
+    "handler_diagnostic": {
+      "type": "object",
+      "required": ["level", "message"],
+      "additionalProperties": false,
+      "description": "One Context diagnostic call the generated handler issues. The four levels are gated by --quiet / --verbose per the effects contract §7.4: debug is hidden unless --verbose, info is hidden under --quiet, and warn / error are never suppressed. Each harness materializes this identically: iterate in order, call ctx.debug / ctx.info / ctx.warn / ctx.error with the declared message.",
+      "properties": {
+        "level": { "enum": ["debug", "info", "warn", "error"] },
+        "message": { "type": "string" }
       }
     },
     "effect_record": {

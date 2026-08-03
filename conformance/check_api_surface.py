@@ -308,6 +308,7 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     # family it describes the harness's synthetic handler body, not a field
     # any implementation's Command carries.
     "handler_effects",
+    "handler_diagnostics",
     "default_relative_to_root",
     "pre_test",
     "coverage_manifest",

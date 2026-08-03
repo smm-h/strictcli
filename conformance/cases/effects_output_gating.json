@@ -1,0 +1,176 @@
+[
+  {
+    "name": "effects_output_gating: by default info shows and debug is hidden",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [
+            {"level": "debug", "message": "debug-line"},
+            {"level": "info", "message": "info-line"},
+            {"level": "warn", "message": "warn-line"},
+            {"level": "error", "message": "error-line"}
+          ]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "info-line\n",
+      "stderr_equals": "warn-line\nerror-line\n"
+    }
+  },
+  {
+    "name": "effects_output_gating: verbose shows debug as well",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [
+            {"level": "debug", "message": "debug-line"},
+            {"level": "info", "message": "info-line"},
+            {"level": "warn", "message": "warn-line"},
+            {"level": "error", "message": "error-line"}
+          ]
+        }
+      ]
+    },
+    "argv": ["--verbose", "cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "debug-line\ninfo-line\n",
+      "stderr_equals": "warn-line\nerror-line\n"
+    }
+  },
+  {
+    "name": "effects_output_gating: quiet hides info and debug but never warn or error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [
+            {"level": "debug", "message": "debug-line"},
+            {"level": "info", "message": "info-line"},
+            {"level": "warn", "message": "warn-line"},
+            {"level": "error", "message": "error-line"}
+          ]
+        }
+      ]
+    },
+    "argv": ["--quiet", "cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": "warn-line\nerror-line\n"
+    }
+  },
+  {
+    "name": "effects_output_gating: quiet dominates verbose",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [
+            {"level": "debug", "message": "debug-line"},
+            {"level": "info", "message": "info-line"},
+            {"level": "warn", "message": "warn-line"},
+            {"level": "error", "message": "error-line"}
+          ]
+        }
+      ]
+    },
+    "argv": ["--quiet", "--verbose", "cmd"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": "warn-line\nerror-line\n"
+    }
+  },
+  {
+    "name": "effects_output_gating: verbose before quiet is still quiet",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [
+            {"level": "debug", "message": "debug-line"},
+            {"level": "info", "message": "info-line"}
+          ]
+        }
+      ]
+    },
+    "argv": ["--verbose", "--quiet", "cmd"],
+    "expect": {"exit_code": 0, "stdout_equals": "", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_output_gating: quiet does not suppress structured handler data",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [{"level": "info", "message": "info-line"}],
+          "handler_returns": {"kind": "data", "data": {"ok": true}}
+        }
+      ]
+    },
+    "argv": ["--quiet", "cmd"],
+    "expect": {"exit_code": 0, "stdout_contains": "\"ok\""}
+  },
+  {
+    "name": "effects_output_gating: quiet does not suppress the would-do log or its diagnostics split",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "build",
+          "help": "build something",
+          "effect": "mutating",
+          "handler_effects": [{"method": "mkdir", "path": "build"}],
+          "handler_diagnostics": [
+            {"level": "info", "message": "info-line"},
+            {"level": "warn", "message": "warn-line"}
+          ]
+        }
+      ]
+    },
+    "argv": ["--quiet", "--dry-run", "build"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n",
+      "stderr_equals": "warn-line\n"
+    }
+  }
+]

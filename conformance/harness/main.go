@@ -817,6 +817,28 @@ func extractCarrier(c interface{}) {
 	}
 }
 
+// runHandlerDiagnostics issues the declared Context diagnostic calls, in
+// order. The four levels are gated by --quiet / --verbose (effects contract
+// §7.4); the harness does no gating of its own, it just calls the method.
+func runHandlerDiagnostics(ctx *strictcli.Context, entries []interface{}) {
+	for _, raw := range entries {
+		d := raw.(map[string]interface{})
+		msg := d["message"].(string)
+		switch d["level"].(string) {
+		case "debug":
+			ctx.Debug(msg)
+		case "info":
+			ctx.Info(msg)
+		case "warn":
+			ctx.Warn(msg)
+		case "error":
+			ctx.Error(msg)
+		default:
+			panic(fmt.Sprintf("unknown handler_diagnostics level: %v", d["level"]))
+		}
+	}
+}
+
 // runHandlerEffects issues the declared effect calls, in order.
 func runHandlerEffects(ctx *strictcli.Context, entries []interface{}) {
 	eff := map[int]interface{}{}
@@ -967,8 +989,10 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 		}
 		data := hr["data"]
 		effects, _ := cmdDef["handler_effects"].([]interface{})
+		diags, _ := cmdDef["handler_diagnostics"].([]interface{})
 		return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
 			runHandlerEffects(ctx, effects)
+			runHandlerDiagnostics(ctx, diags)
 			switch kind {
 			case "data":
 				return strictcli.ExitData(0, data)
@@ -983,6 +1007,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 	// handler_effects runs BEFORE the handler_prints path and does not replace
 	// it (§14.4). A handler_effects-only command declares no template.
 	handlerEffects, _ := cmdDef["handler_effects"].([]interface{})
+	handlerDiagnostics, _ := cmdDef["handler_diagnostics"].([]interface{})
 	template := ""
 	hasTemplate := false
 	if v, ok := cmdDef["handler_prints"]; ok {
@@ -1009,6 +1034,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 
 	return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
 		runHandlerEffects(ctx, handlerEffects)
+		runHandlerDiagnostics(ctx, handlerDiagnostics)
 		if !hasTemplate {
 			return strictcli.Exit(ec)
 		}

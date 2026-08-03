@@ -333,6 +333,32 @@ function extractCarrier(c) {
 	return String(c);
 }
 
+/**
+ * Issues the declared Context diagnostic calls, in order. The four levels are
+ * gated by --quiet / --verbose (effects contract §7.4); the harness does no
+ * gating of its own, it just calls the named method.
+ */
+function runHandlerDiagnostics(ctx, entries) {
+	for (const d of entries) {
+		switch (d.level) {
+			case "debug":
+				ctx.debug(d.message);
+				break;
+			case "info":
+				ctx.info(d.message);
+				break;
+			case "warn":
+				ctx.warn(d.message);
+				break;
+			case "error":
+				ctx.error(d.message);
+				break;
+			default:
+				throw new Error(`unknown handler_diagnostics level: ${d.level}`);
+		}
+	}
+}
+
 function runHandlerEffects(ctx, entries) {
 	const eff = {};
 	for (let i = 0; i < entries.length; i++) {
@@ -402,8 +428,10 @@ function runHandlerEffects(ctx, entries) {
 
 function makeHandler(cmdDef, globalFlags) {
 	// handler_effects runs BEFORE the handler_prints / handler_returns path and
-	// does not replace it (§14.4).
+	// does not replace it (§14.4). handler_diagnostics follows it, still before
+	// that path.
 	const handlerEffects = cmdDef.handler_effects ?? [];
+	const handlerDiagnostics = cmdDef.handler_diagnostics ?? [];
 
 	// handler_returns pins an explicit return (survivor-contract cases): the
 	// template-printing path is skipped entirely. Kinds mirror ref_python's
@@ -414,6 +442,7 @@ function makeHandler(cmdDef, globalFlags) {
 		const code = hr.code ?? 0;
 		return (_args, ctx) => {
 			runHandlerEffects(ctx, handlerEffects);
+			runHandlerDiagnostics(ctx, handlerDiagnostics);
 			switch (hr.kind) {
 				case "data":
 					return outcome(0, hr.data);
@@ -436,6 +465,7 @@ function makeHandler(cmdDef, globalFlags) {
 
 	return (args, ctx) => {
 		runHandlerEffects(ctx, handlerEffects);
+		runHandlerDiagnostics(ctx, handlerDiagnostics);
 		// A handler_effects-only command declares no template and prints
 		// nothing; the effect calls above are its whole body.
 		if (template === undefined) {
