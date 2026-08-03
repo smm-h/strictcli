@@ -1,0 +1,142 @@
+[
+  {
+    "name": "effects_config_commands: config set under --dry-run records the write and changes nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"opt\": \"before\"}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "config", "set", "opt", "after"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  1\\. write: .*strictcli_cfg_.*\\.json \\(\\d+ bytes\\)\n$",
+      "config_file_contains": "before",
+      "config_file_not_contains": "after"
+    }
+  },
+  {
+    "name": "effects_config_commands: config set --default under --dry-run removes nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"opt\": \"before\"}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "config", "set", "opt", "--default"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  1\\. write: .*strictcli_cfg_.*\\.json \\(\\d+ bytes\\)\n$",
+      "config_file_contains": "before"
+    }
+  },
+  {
+    "name": "effects_config_commands: config set on a TOML config under --dry-run changes nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_format": "toml",
+      "config_content": "# a comment\nopt = \"before\"\n",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "argv": ["--dry-run", "config", "set", "opt", "after"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  1\\. write: .*strictcli_cfg_.*\\.toml \\(\\d+ bytes\\)\n$",
+      "config_file_contains": "# a comment",
+      "config_file_not_contains": "after"
+    }
+  },
+  {
+    "name": "effects_config_commands: config edit under --dry-run never launches the editor",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "env": {"EDITOR": "false"},
+    "argv": ["--dry-run", "config", "edit"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  1\\. run: false .*strictcli_cfg_.*\\.json\n$",
+      "stderr_not_contains": "editor failed"
+    }
+  },
+  {
+    "name": "effects_config_commands: config set still writes in live mode",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"opt\": \"before\"}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+          ]
+        }
+      ]
+    },
+    "argv": ["--yes", "config", "set", "opt", "after"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "config_file_contains": "after",
+      "config_file_not_contains": "before"
+    }
+  }
+]
