@@ -498,9 +498,16 @@ function makePassthroughHandler(cmdDef, globalFlags) {
 function registerCommand(cmdDef, target, globalFlags) {
 	const name = cmdDef.name;
 
-	// Deprecated command.
+	// Deprecated command. Deprecated entries are classification-EXEMPT
+	// (effects contract §1.1), so `effect` is spliced onto the DeprecatedDef
+	// ONLY when the case declares it -- which is a case asserting
+	// errDeprecatedCommandEffect. The `deprecated()` factory never mints the
+	// field, so the splice is the only way to reach that guard.
 	if (cmdDef.deprecated === true) {
-		target.deprecate(deprecated(name, cmdDef.deprecated_message ?? ""));
+		const def = deprecated(name, cmdDef.deprecated_message ?? "");
+		target.deprecate(
+			"effect" in cmdDef ? { ...def, effect: cmdDef.effect } : def,
+		);
 		return;
 	}
 
@@ -615,6 +622,17 @@ function classificationOf(cmdDef, name) {
 		throw new Error(
 			`conformance harness: command "${name}" declares no effect; ` +
 				"the TS twin factories cannot express an unclassified command",
+		);
+	}
+	// An INVALID effect string is inexpressible for the same reason a missing
+	// one is: the factory name IS the classification, so there is no string for
+	// the framework to reject. Fail loudly rather than silently defaulting a
+	// bad value to read-only.
+	if (cmdDef.effect !== "read_only" && cmdDef.effect !== "mutating") {
+		throw new Error(
+			`conformance harness: command "${name}" declares effect ` +
+				`"${cmdDef.effect}"; the TS twin factories cannot express an ` +
+				"invalid classification",
 		);
 	}
 	return cmdDef.effect;

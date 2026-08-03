@@ -1,0 +1,269 @@
+[
+  {
+    "name": "effects_classification: a command with no effect is a registration error",
+    "skip_schema_validation": true,
+    "targets": [
+      "python",
+      "go"
+    ],
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"cmd\": effect classification is required (effect=\"read_only\" or effect=\"mutating\")"
+    }
+  },
+  {
+    "name": "effects_classification: a grouped command with no effect is a registration error",
+    "skip_schema_validation": true,
+    "targets": [
+      "python",
+      "go"
+    ],
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "top",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        }
+      ],
+      "groups": [
+        {
+          "name": "db",
+          "help": "database operations",
+          "commands": [
+            {
+              "name": "migrate",
+              "help": "run migrations",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "db",
+      "migrate"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"migrate\": effect classification is required (effect=\"read_only\" or effect=\"mutating\")"
+    }
+  },
+  {
+    "name": "effects_classification: a passthrough command with no effect is a registration error",
+    "skip_schema_validation": true,
+    "targets": [
+      "python",
+      "go"
+    ],
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "run something",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": [
+      "exec",
+      "ls"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"exec\": effect classification is required (effect=\"read_only\" or effect=\"mutating\")"
+    }
+  },
+  {
+    "name": "effects_classification: an unknown effect value is a registration error",
+    "skip_schema_validation": true,
+    "targets": [
+      "python",
+      "go"
+    ],
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "readonly",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"cmd\": invalid effect \"readonly\": must be \"read_only\" or \"mutating\""
+    }
+  },
+  {
+    "name": "effects_classification: an empty effect value is a registration error",
+    "skip_schema_validation": true,
+    "targets": [
+      "python",
+      "go"
+    ],
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"cmd\": invalid effect \"\": must be \"read_only\" or \"mutating\""
+    }
+  },
+  {
+    "name": "effects_classification: a deprecated command needs no effect",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        },
+        {
+          "name": "old-cmd",
+          "help": "a retired command",
+          "deprecated": true,
+          "deprecated_message": "Use 'cmd' instead"
+        }
+      ]
+    },
+    "argv": [
+      "old-cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Use 'cmd' instead"
+    }
+  },
+  {
+    "name": "effects_classification: passing effect to a deprecated command is a registration error",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        },
+        {
+          "name": "old-cmd",
+          "help": "a retired command",
+          "effect": "mutating",
+          "deprecated": true,
+          "deprecated_message": "Use 'cmd' instead"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "deprecated command \"old-cmd\": effect classification does not apply (a deprecated command has no handler)"
+    }
+  },
+  {
+    "name": "effects_classification: an empty forwarding reason is a registration error",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "forwarding": {
+            "reason": ""
+          },
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"cmd\": forwarding reason must be a non-empty string"
+    }
+  },
+  {
+    "name": "effects_classification: a declared forwarding reason is accepted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "forwarding": {
+            "reason": "wraps the underlying linter's own flags"
+          },
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "ok\n"
+    }
+  }
+]

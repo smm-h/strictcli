@@ -418,7 +418,7 @@ func mintWarnOutcome(r *strictcli.WarnReporter, mint, message string, problems [
 // target abstracts over App and Group for command registration.
 type target interface {
 	Command(name, help string, handler func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome, opts ...strictcli.CmdOption)
-	Deprecated(name, message string)
+	Deprecated(name, message string, opts ...strictcli.CmdOption)
 }
 
 type appTarget struct{ a *strictcli.App }
@@ -426,14 +426,18 @@ type appTarget struct{ a *strictcli.App }
 func (t appTarget) Command(name, help string, handler func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome, opts ...strictcli.CmdOption) {
 	t.a.Command(name, help, handler, opts...)
 }
-func (t appTarget) Deprecated(name, message string) { t.a.Deprecated(name, message) }
+func (t appTarget) Deprecated(name, message string, opts ...strictcli.CmdOption) {
+	t.a.Deprecated(name, message, opts...)
+}
 
 type groupTarget struct{ g *strictcli.Group }
 
 func (t groupTarget) Command(name, help string, handler func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome, opts ...strictcli.CmdOption) {
 	t.g.Command(name, help, handler, opts...)
 }
-func (t groupTarget) Deprecated(name, message string) { t.g.Deprecated(name, message) }
+func (t groupTarget) Deprecated(name, message string, opts ...strictcli.CmdOption) {
+	t.g.Deprecated(name, message, opts...)
+}
 
 // buildFlag constructs a strictcli.Flag from a JSON flag definition.
 func buildFlag(fd map[string]interface{}) strictcli.Flag {
@@ -1194,13 +1198,19 @@ func registerCommand(cmdDef map[string]interface{}, t target, globalFlags []map[
 	name := cmdDef["name"].(string)
 	help := cmdDef["help"].(string)
 
-	// Deprecated command.
+	// Deprecated command. Deprecated entries are classification-EXEMPT
+	// (effects contract §1.1), so `effect` is forwarded ONLY when the case
+	// declares it -- which is a case asserting errDeprecatedCommandEffect.
 	if v, ok := cmdDef["deprecated"]; ok && v.(bool) {
 		message := ""
 		if m, ok := cmdDef["deprecated_message"]; ok {
 			message = m.(string)
 		}
-		t.Deprecated(name, message)
+		var depOpts []strictcli.CmdOption
+		if e, ok := cmdDef["effect"]; ok {
+			depOpts = append(depOpts, strictcli.WithEffect(e.(string)))
+		}
+		t.Deprecated(name, message, depOpts...)
 		return
 	}
 

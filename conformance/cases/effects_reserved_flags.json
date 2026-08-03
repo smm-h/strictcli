@@ -1,0 +1,349 @@
+[
+  {
+    "name": "effects_reserved_flags: a command flag named dry-run is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [{"name": "dry-run", "type": "bool", "help": "should be rejected"}]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'dry-run' is reserved by the framework (dry-run, yes, quiet, verbose)"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a command flag named yes is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [{"name": "yes", "type": "bool", "help": "should be rejected"}]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'yes' is reserved by the framework (dry-run, yes, quiet, verbose)"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a command flag named quiet is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [{"name": "quiet", "type": "bool", "help": "should be rejected"}]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'quiet' is reserved by the framework (dry-run, yes, quiet, verbose)"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a command flag named verbose is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [{"name": "verbose", "type": "bool", "help": "should be rejected"}]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'verbose' is reserved by the framework (dry-run, yes, quiet, verbose)"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a global flag named dry-run is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [{"name": "dry-run", "type": "bool", "help": "should be rejected"}],
+      "commands": [
+        {"name": "cmd", "help": "a command", "effect": "read_only", "handler_prints": "ok"}
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'dry-run' is reserved by the framework (dry-run, yes, quiet, verbose)"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a flag-set flag named quiet is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flag_sets": [
+            {
+              "name": "output",
+              "flags": [{"name": "quiet", "type": "bool", "help": "should be rejected"}]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'quiet' is reserved by the framework (dry-run, yes, quiet, verbose)"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a mutex-group flag named verbose is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "mutex": [
+            {
+              "flags": [
+                {"name": "verbose", "type": "bool", "help": "should be rejected"},
+                {"name": "terse", "type": "bool", "help": "the other side"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'verbose' is reserved by the framework (dry-run, yes, quiet, verbose)"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: an arg named verbose is unaffected by the ban",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "arg={verbose}",
+          "args": [{"name": "verbose", "help": "a positional, not a flag"}]
+        }
+      ]
+    },
+    "argv": ["cmd", "value"],
+    "expect": {"exit_code": 0, "stdout_equals": "arg=value\n"}
+  },
+  {
+    "name": "effects_reserved_flags: output is not a reserved flag name",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "output={output}",
+          "flags": [{"name": "output", "type": "str", "help": "an ordinary flag", "default": "text"}]
+        }
+      ]
+    },
+    "argv": ["cmd", "--output", "json"],
+    "expect": {"exit_code": 0, "stdout_equals": "output=json\n"}
+  },
+  {
+    "name": "effects_reserved_flags: a short flag named q is unaffected by the ban",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "terse={terse}",
+          "flags": [{"name": "terse", "type": "bool", "help": "an ordinary flag", "short": "q"}]
+        }
+      ]
+    },
+    "argv": ["cmd", "-q"],
+    "expect": {"exit_code": 0, "stdout_equals": "terse=true\n"}
+  },
+  {
+    "name": "effects_reserved_flags: the pre-scan reads only the pre-command region",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "build",
+          "help": "a command",
+          "effect": "mutating",
+          "handler_effects": [{"method": "mkdir", "path": "d"}]
+        }
+      ]
+    },
+    "argv": ["build", "--dry-run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag '--dry-run'"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a passthrough command's args keep the quartet opaque",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "run something",
+          "effect": "read_only",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["exec", "--dry-run", "--yes"],
+    "expect": {"exit_code": 0, "stdout_equals": "exec:--dry-run,--yes\n"}
+  },
+  {
+    "name": "effects_reserved_flags: a global bool flag value does not end the pre-scan early",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {"name": "profile", "type": "str", "help": "profile name", "default": "none"}
+      ],
+      "commands": [
+        {
+          "name": "build",
+          "help": "a command",
+          "effect": "mutating",
+          "handler_effects": [{"method": "mkdir", "path": "d"}]
+        }
+      ]
+    },
+    "argv": ["--profile", "build", "--dry-run", "build"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: d\n"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: quiet does not suppress handler stdout",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {"name": "cmd", "help": "a command", "effect": "read_only", "handler_prints": "hello"}
+      ]
+    },
+    "argv": ["--quiet", "cmd"],
+    "expect": {"exit_code": 0, "stdout_equals": "hello\n"}
+  },
+  {
+    "name": "effects_reserved_flags: quiet and verbose together are accepted, quiet wins",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {"name": "cmd", "help": "a command", "effect": "read_only", "handler_prints": "hello"}
+      ]
+    },
+    "argv": ["--quiet", "--verbose", "cmd"],
+    "expect": {"exit_code": 0, "stdout_equals": "hello\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_reserved_flags: the quartet is stripped from argv before command parsing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "name={name}",
+          "args": [{"name": "name", "help": "a positional"}]
+        }
+      ]
+    },
+    "argv": ["--quiet", "--verbose", "--yes", "cmd", "positional"],
+    "expect": {"exit_code": 0, "stdout_equals": "name=positional\n"}
+  },
+  {
+    "name": "effects_reserved_flags: yes skips the confirm prompt for a mutating command",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "proc_observe_allowlist": [["echo"]],
+      "commands": [
+        {
+          "name": "build",
+          "help": "a mutating command",
+          "effect": "mutating",
+          "handler_prints": "built",
+          "handler_effects": [{"method": "run", "argv": ["echo", "observed"]}]
+        }
+      ]
+    },
+    "argv": ["--yes", "build"],
+    "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+  }
+]

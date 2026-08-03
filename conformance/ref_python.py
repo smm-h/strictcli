@@ -287,6 +287,19 @@ _FORWARD_TARGET = {
 _EFFECT_OPTION_KEYS = ("stream", "resource", "skip_if_current", "grant")
 
 
+def _deprecated_effect_arg(cmd_def: dict) -> str:
+    """The `effect=` argument for a deprecated registration, if the case declares one.
+
+    Deprecated commands are classification-EXEMPT (§1.1), so a case that
+    declares `effect` on a deprecated entry is asserting the registration hard
+    error `errDeprecatedCommandEffect`. Forwarding it is the only way to reach
+    that guard.
+    """
+    if "effect" not in cmd_def:
+        return ""
+    return f", effect={cmd_def['effect']!r}"
+
+
 def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
     """Emit the effects-regime registration keywords: effect, grants, forwarding.
 
@@ -827,7 +840,9 @@ def generate(app_def: dict) -> str:
         for cmd_def in group_def.get("commands", []):
             if cmd_def.get("deprecated"):
                 lines.append(
-                    f"{indent}{gvar}.deprecate({cmd_def['name']!r}, message={cmd_def.get('deprecated_message', '')!r})"
+                    f"{indent}{gvar}.deprecate({cmd_def['name']!r}, "
+                    f"message={cmd_def.get('deprecated_message', '')!r}"
+                    f"{_deprecated_effect_arg(cmd_def)})"
                 )
                 lines.append("")
             else:
@@ -844,7 +859,9 @@ def generate(app_def: dict) -> str:
     for cmd_def in app_def.get("commands", []):
         if cmd_def.get("deprecated"):
             lines.append(
-                f"    app.deprecate({cmd_def['name']!r}, message={cmd_def.get('deprecated_message', '')!r})"
+                f"    app.deprecate({cmd_def['name']!r}, "
+                f"message={cmd_def.get('deprecated_message', '')!r}"
+                f"{_deprecated_effect_arg(cmd_def)})"
             )
             lines.append("")
         else:
