@@ -782,7 +782,7 @@ func (a *App) registerConfigGroup() {
 	grp := a.Group("config", "Manage persistent configuration values stored in the config file")
 
 	// config path
-	grp.Command("path", "Print the absolute path to the config file for this application", func(ctx *Context, args map[string]interface{}) Outcome {
+	registerFrameworkSubcommand(grp, "path", "Print the absolute path to the config file for this application", EffectReadOnly, func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Println(configPath(a.Name, a.configPathOverride, a.configFormat))
 		return Exit(0)
 	})
@@ -793,7 +793,7 @@ func (a *App) registerConfigGroup() {
 	// "cli" is structurally impossible here -- config show is a subcommand,
 	// so the app's own flags were never passed on the command line.
 	// If the config file is malformed, shows the parse error instead of values.
-	grp.Command("show", "Show all config values with their sources (config file, env, or default)", func(ctx *Context, args map[string]interface{}) Outcome {
+	registerFrameworkSubcommand(grp, "show", "Show all config values with their sources (config file, env, or default)", EffectReadOnly, func(ctx *Context, args map[string]interface{}) Outcome {
 		// If there was a config parse error, show it instead of values
 		if a.configParseErr != "" {
 			fmt.Fprintf(os.Stderr, "error: %s\n", a.configParseErr)
@@ -975,7 +975,7 @@ func (a *App) registerConfigGroup() {
 	))
 
 	// config set
-	grp.Command("set", "Set a persistent config value that overrides the default for a flag", func(ctx *Context, args map[string]interface{}) Outcome {
+	registerFrameworkSubcommand(grp, "set", "Set a persistent config value that overrides the default for a flag", EffectMutating, func(ctx *Context, args map[string]interface{}) Outcome {
 		key := Get[string](args, "key")
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
@@ -1163,7 +1163,7 @@ func (a *App) registerConfigGroup() {
 	))
 
 	// config edit
-	grp.Command("edit", "Open the config file for manual editing in $EDITOR (creates if missing)", func(ctx *Context, args map[string]interface{}) Outcome {
+	registerFrameworkSubcommand(grp, "edit", "Open the config file for manual editing in $EDITOR (creates if missing)", EffectMutating, func(ctx *Context, args map[string]interface{}) Outcome {
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		dirPath := filepath.Dir(path)
 		if err := os.MkdirAll(dirPath, 0o755); err != nil {
@@ -1196,7 +1196,7 @@ func (a *App) registerConfigGroup() {
 	}, WithInteractive())
 
 	// config init
-	grp.Command("init", "Generate a template config file with documented fields and defaults", func(ctx *Context, args map[string]interface{}) Outcome {
+	registerFrameworkSubcommand(grp, "init", "Generate a template config file with documented fields and defaults", EffectMutating, func(ctx *Context, args map[string]interface{}) Outcome {
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
 		if _, err := os.Stat(path); err == nil {
 			fmt.Fprintf(os.Stderr, "error: config file already exists: %s\n", path)

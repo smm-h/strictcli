@@ -20,12 +20,18 @@ func (a *App) enableChecks() {
 		a.checkDefs = make(map[string]*checkDef)
 	}
 	a.registerCheckCommand()
+	// The built-in effects-bypass lint rides the same provider hook the built-in
+	// cli-test-coverage check uses. Appended directly (not through
+	// RegisterCheckProvider) because that method routes back here.
+	a.checkProviders = append(a.checkProviders, a.effectsBypassProvider)
+	a.providerMaterialized = false
+	a.providerMaterializedCwd = ""
 }
 
 // registerCheckCommand registers the auto-generated "check" command.
 // Called from enableChecks when the check system is turned on.
 func (a *App) registerCheckCommand() {
-	a.Command("check", "Run project checks registered via the check framework and report results", func(ctx *Context, args map[string]interface{}) Outcome {
+	handler := func(ctx *Context, args map[string]interface{}) Outcome {
 		// Materialize provider-sourced checks before any registry read (covers
 		// the --list, --dry-run, and execution branches below).
 		a.materializeCheckProviders()
@@ -36,8 +42,11 @@ func (a *App) registerCheckCommand() {
 		list := Get[bool](args, "list")
 		jsonOut := Get[bool](args, "json")
 		ignoreWarnings := Get[bool](args, "ignore_warnings")
-		verbose := Get[bool](args, "verbose")
-		dryRun := Get[bool](args, "dry_run")
+		// --verbose and --dry-run are framework-owned reserved names, so the
+		// check command's own two flags are gone and their values are read off
+		// the Context instead.
+		verbose := ctx.Verbose()
+		dryRun := ctx.DryRun()
 
 		if list {
 			return Exit(a.checkList(jsonOut))
@@ -55,18 +64,60 @@ func (a *App) registerCheckCommand() {
 		cmd := a.commands["check"]
 		fmt.Println(formatCommandHelp(a, cmd, ""))
 		return Exit(0)
-	},
-		WithFlags(
-			BoolFlag("all", "Run every registered check regardless of tag or name filters", Default(false)),
-			StringFlag("tag", "Tag DSL expression to select checks (e.g. 'changelog & !quality')", Default("")),
-			StringFlag("name", "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')", Default("")),
-			BoolFlag("list", "List all registered checks with their tags and exit without running", Default(false)),
-			BoolFlag("json", "Output check results as machine-readable JSON instead of human text", Default(false)),
-			BoolFlag("ignore-warnings", "Treat warn-severity results as passing so they do not cause nonzero exit", Default(false)),
-			BoolFlag("verbose", "Show per-check notes and durations (including on passing checks) plus a trailing pass/fail/warn/skip count summary", Default(false)),
-			BoolFlag("dry-run", "Show which checks would run based on current filters without executing them", Default(false)),
-		),
-	)
+	}
+	// Filter out candidate flags that already exist as global flags to avoid
+	// collisions -- the handler absorbs global flag values automatically.
+	// --verbose and --dry-run are absent from the candidate list entirely: both
+	// names are now reserved by the framework and their values arrive on the
+	// Context (§7.5).
+	globalFlagNames := make(map[string]bool, len(a.globalFlags))
+	for _, gf := range a.globalFlags {
+		globalFlagNames[gf.Name] = true
+	}
+	candidates := []Flag{
+		BoolFlag("all", "Run every registered check regardless of tag or name filters", Default(false)),
+		StringFlag("tag", "Tag DSL expression to select checks (e.g. 'changelog & !quality')", Default("")),
+		StringFlag("name", "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')", Default("")),
+		BoolFlag("list", "List all registered checks with their tags and exit without running", Default(false)),
+		BoolFlag("json", "Output check results as machine-readable JSON instead of human text", Default(false)),
+		BoolFlag("ignore-warnings", "Treat warn-severity results as passing so they do not cause nonzero exit", Default(false)),
+	}
+	extraFlags := make([]Flag, 0, len(candidates))
+	for _, f := range candidates {
+		if !globalFlagNames[f.Name] {
+			extraFlags = append(extraFlags, f)
+		}
+	}
+	// read_only: the check command's only writes are framework-blessed
+	// CACHE_WRITEs (the coverage manifest), which never trip enforcement.
+	a.registerFrameworkCommand("check",
+		"Run project checks registered via the check framework and report results",
+		EffectReadOnly, handler, WithFlags(extraFlags...))
+}
+
+// registerFrameworkCommand registers one of strictcli's own auto-registered
+// commands through the single validated registration path. Their handlers
+// absorb the app's app-defined global flag values, which is legal only because
+// they declare forwarding, and the private framework-internal marker makes the
+// framework verify that the handler really is defined in this package.
+func (a *App) registerFrameworkCommand(name, help, effect string, handler func(ctx *Context, args map[string]interface{}) Outcome, opts ...CmdOption) {
+	all := append([]CmdOption{
+		WithEffect(effect),
+		WithForwarding(frameworkInternalForwardingReason),
+		withFrameworkInternal(),
+	}, opts...)
+	a.Command(name, help, handler, all...)
+}
+
+// registerFrameworkSubcommand is registerFrameworkCommand for a command living
+// inside a framework-owned group (the five `config` subcommands).
+func registerFrameworkSubcommand(grp *Group, name, help, effect string, handler func(ctx *Context, args map[string]interface{}) Outcome, opts ...CmdOption) {
+	all := append([]CmdOption{
+		WithEffect(effect),
+		WithForwarding(frameworkInternalForwardingReason),
+		withFrameworkInternal(),
+	}, opts...)
+	grp.Command(name, help, handler, all...)
 }
 
 // wrapCheckContext augments a tool-supplied CheckContext with connection-env
