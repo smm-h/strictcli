@@ -42,6 +42,12 @@ TARGET_NAMES = ["python", "go", "typescript"]
 # choices, repeatable flags, unique, env, env_separator, passthrough commands,
 # config, tags, flag_sets, optional args, variadic args, negatable, prefixed,
 # and short flags.
+#
+# Effects contract §14.5: every non-deprecated command entry carries `effect`
+# (classification is mandatory, so the fixture cannot even be built without it),
+# the deprecated entries deliberately do not (§1.1), and the app additionally
+# exercises `grants`, `forwarding` and `proc_observe_allowlist` end-to-end so
+# the three new schema keys (§13) are compared across implementations.
 RICH_APP = {
     "name": "richapp",
     "version": "2.5.0",
@@ -50,11 +56,14 @@ RICH_APP = {
     "config": True,
     "infra_root": {"RICH_HOME": "/var/lib/richapp"},
     "handshake_env": {"RICH_SESSION": "Session token from the invoking process"},
+    "proc_observe_allowlist": [["git", "status"], ["git", "rev-parse"]],
     "global_flags": [
+        # Named `trace`, not `verbose`: the reserved quartet (§7.1) bans
+        # dry-run/yes/quiet/verbose as flag names at every level.
         {
-            "name": "verbose",
+            "name": "trace",
             "type": "bool",
-            "help": "Enable verbose output",
+            "help": "Enable trace output",
             "short": "V",
             "default": False,
         },
@@ -83,6 +92,7 @@ RICH_APP = {
         {
             "name": "types",
             "help": "Test all flag types",
+            "effect": "read_only",
             "handler_prints": "types",
             "flags": [
                 {
@@ -103,10 +113,12 @@ RICH_APP = {
                     "help": "A float flag",
                     "default": 3.14,
                 },
+                # Named `simulate`, not `dry-run`: the reserved quartet (§7.1)
+                # bans the four framework names on command flags too.
                 {
-                    "name": "dry-run",
+                    "name": "simulate",
                     "type": "bool",
-                    "help": "Dry run mode",
+                    "help": "Simulate without applying",
                 },
                 # Command flag with a RelativeToRoot marker default.
                 {
@@ -130,6 +142,7 @@ RICH_APP = {
         {
             "name": "multi",
             "help": "Test repeatable flags",
+            "effect": "read_only",
             "handler_prints": "multi",
             "flags": [
                 {
@@ -155,6 +168,7 @@ RICH_APP = {
         {
             "name": "output",
             "help": "Test mutex flags",
+            "effect": "read_only",
             "handler_prints": "output",
             "mutex": [
                 {
@@ -182,6 +196,21 @@ RICH_APP = {
         {
             "name": "deploy",
             "help": "Test dependencies",
+            "effect": "mutating",
+            # Two grants of different kinds, so the schema's `grants` array is
+            # compared for both content and declaration order (§13).
+            "grants": [
+                {
+                    "name": "push",
+                    "reason": "release engine owns remote refs",
+                    "kind": "proc_mutate",
+                },
+                {
+                    "name": "write-manifest",
+                    "reason": "the deploy manifest is regenerated in place",
+                    "kind": "file_write",
+                },
+            ],
             "handler_prints": "deploy",
             "flags": [
                 {
@@ -224,6 +253,7 @@ RICH_APP = {
         {
             "name": "notify",
             "help": "Test implies dependency",
+            "effect": "mutating",
             "handler_prints": "notify",
             "flags": [
                 {
@@ -250,6 +280,7 @@ RICH_APP = {
         {
             "name": "query",
             "help": "Test flag sets",
+            "effect": "read_only",
             "handler_prints": "query",
             "flag_sets": [
                 {
@@ -275,6 +306,7 @@ RICH_APP = {
         {
             "name": "files",
             "help": "Test args",
+            "effect": "read_only",
             "handler_prints": "files",
             "args": [
                 {
@@ -293,6 +325,7 @@ RICH_APP = {
         {
             "name": "exec",
             "help": "Execute a command",
+            "effect": "mutating",
             "passthrough": True,
             "handler_prints": "exec",
             "passthrough_handler_prints": "exec:{name}:{args}",
@@ -301,6 +334,12 @@ RICH_APP = {
         {
             "name": "lint",
             "help": "Run linters",
+            "effect": "read_only",
+            # Declared forwarding (§10.2). Inert in Go and TypeScript and, here,
+            # inert in Python too (the generated handler names its parameters) --
+            # the fixture declares it so the schema's `forwarding` key is
+            # compared across implementations.
+            "forwarding": {"reason": "wraps the underlying linter's own flags"},
             "handler_prints": "lint",
             "tags": ["quality", "ci"],
         },
@@ -315,6 +354,7 @@ RICH_APP = {
         {
             "name": "level",
             "help": "Test int/float choices",
+            "effect": "read_only",
             "handler_prints": "level",
             "flags": [
                 {
@@ -337,6 +377,7 @@ RICH_APP = {
         {
             "name": "info",
             "help": "Show info",
+            "effect": "read_only",
             "handler_prints": "info",
             "flags": [
                 {
@@ -365,6 +406,7 @@ RICH_APP = {
                 {
                     "name": "migrate",
                     "help": "Run migrations",
+                    "effect": "mutating",
                     "handler_prints": "migrate",
                     "flags": [
                         {
@@ -378,6 +420,7 @@ RICH_APP = {
                 {
                     "name": "seed",
                     "help": "Seed database",
+                    "effect": "mutating",
                     "handler_prints": "seed",
                 },
                 # Deprecated command in group
@@ -397,11 +440,13 @@ RICH_APP = {
                         {
                             "name": "clear",
                             "help": "Clear cache",
+                            "effect": "mutating",
                             "handler_prints": "clear",
                         },
                         {
                             "name": "stats",
                             "help": "Show cache stats",
+                            "effect": "read_only",
                             "handler_prints": "stats",
                             "flags": [
                                 {
@@ -427,6 +472,7 @@ MINIMAL_APP = {
         {
             "name": "hello",
             "help": "Say hello",
+            "effect": "read_only",
             "handler_prints": "hello",
         },
     ],
@@ -460,12 +506,14 @@ CONFIG_APP = {
     "commands": [
         {
             "name": "serve",
+            "effect": "mutating",
             "help": "Start the server",
             "handler_prints": "serve",
             "config_fields": ["api.key", "port"],
         },
         {
             "name": "status",
+            "effect": "read_only",
             "help": "Show status",
             "handler_prints": "status",
         },
