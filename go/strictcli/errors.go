@@ -1113,10 +1113,11 @@ func errJsonSchemaIsGroup(commandPath string) string {
 // ---------------------------------------------------------------------------
 // effects.go — the effects regime
 //
-// Registration-time bans, classification, grants, declared forwarding, the
-// call-time effect errors, the dry-run truncation error and the framework-owned
-// confirm protocol. Message strings are byte-identical to the Python and
-// TypeScript catalogs.
+// Registration-time bans, classification, grants, declared forwarding and the
+// §12.4 call-time effect errors. The §12.8 failure family, the §12.5 truncation
+// error and the §12.6 confirm protocol each get their own (parse-time) section
+// below, matching the contract's category placement. Message strings are
+// byte-identical to the Python and TypeScript catalogs.
 // ---------------------------------------------------------------------------
 
 // errFlagNameReservedByFramework is the reserved-quartet ban (§12.1). It is
@@ -1196,6 +1197,14 @@ func errEffectGrantOnObserve(name string, grant string) string {
 	return fmt.Sprintf("command %q: grant '%s' cannot be used on an observe (an allowlisted effects.run changes nothing)", name, grant)
 }
 
+// ---------------------------------------------------------------------------
+// effects.go — effect failure and parameter rejection (parse-time)
+//
+// Contract §12.8. These reach a handler's effect call through argv like any
+// parse-time error, so they share that category and are coverage-checked by
+// conformance cases.
+// ---------------------------------------------------------------------------
+
 func errEffectRunFailed(name string, method string, argv string, code int) string {
 	return fmt.Sprintf("command %q: effects.%s failed: %s exited %d", name, method, argv, code)
 }
@@ -1216,6 +1225,15 @@ func errEffectOptionNotAccepted(name string, method string, opt string) string {
 	return fmt.Sprintf("command %q: effects.%s does not accept option '%s'", name, method, opt)
 }
 
+// ---------------------------------------------------------------------------
+// effects.go — effect argument type guards and handle availability
+//
+// Contract §12.10. Registration-time in the parity taxonomy: they are argument
+// guards, not the §12.8 failure family. Go's static typing makes three of the
+// family's members inexpressible (argv is []any, mode is int, the HTTP method
+// is string), which check_error_parity.py records as exclusions.
+// ---------------------------------------------------------------------------
+
 func errEffectParamType(name string, method string, param string, got string) string {
 	return fmt.Sprintf("command %q: effects.%s parameter '%s' must be a string, a path, or a forwarded effect result; got %s", name, method, param, got)
 }
@@ -1226,13 +1244,20 @@ func errEffectArgvEmpty(name string, method string) string {
 
 const errEffectsUnavailable = "ctx.Effects() is unavailable: this Context was constructed outside a command dispatch"
 
-// --- truncation (§12.5) ---
+// ---------------------------------------------------------------------------
+// effects.go — dry-run truncation (parse-time)
+//
+// The template carries its own "error: " prefix: it is written straight to
+// stderr, not through the parse-error formatter.
+// ---------------------------------------------------------------------------
 
 func errDryRunTruncated(step int, cmd string, brand string) string {
 	return fmt.Sprintf("error: dry-run preview ends at step %d: %s branched on unsettled value %s — cannot preview past this point", step, cmd, brand)
 }
 
-// --- the confirm protocol (§12.6) ---
+// ---------------------------------------------------------------------------
+// effects.go — the confirm protocol (parse-time)
+// ---------------------------------------------------------------------------
 
 func promptConfirmMutating(name string) string {
 	return fmt.Sprintf("about to run mutating command '%s'. Proceed? [y/N] ", name)
