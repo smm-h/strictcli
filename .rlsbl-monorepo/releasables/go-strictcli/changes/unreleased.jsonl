@@ -3,3 +3,4 @@
 {"format_version":1,"id":"18c84c231c513523174d939de6d647529fb2ac124c237b23","commits":["f426101381bce895c1c27899cffb3ed6fe03afd0","e5317604e8ebb400d1a00ffd38e028c0dba5e169","a97f17a39d09a0d53ca509d83b94e51b2f62b1c9"],"user_facing":false,"packages":["go-strictcli"]}
 {"format_version":1,"id":"18c84c31798ff974c81e0980471746d284246ab2ea2e674f","commits":["1595c325d4c98eb0657260423fa20260b0b7c51d"],"user_facing":false,"packages":["go-strictcli"]}
 {"format_version":1,"id":"18c84c5bef3695ea13fd71142d854e7998ce3fb76206c20f","commits":["a47cc880d0b37874592731af3b3c13451887d2df"],"user_facing":false,"packages":["go-strictcli"]}
+{"format_version":1,"id":"18c84f8de51de46384d7100638a547fcac4d1314ffba6abb","commits":["d09b0e4cb6a7ffef840b1e5f4b2640321adffd80"],"user_facing":false,"packages":["go-strictcli"]}
