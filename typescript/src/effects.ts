@@ -963,11 +963,6 @@ export class Effects implements MutatingEffects {
 			});
 			// A Spawned has no scalar projection, so its carrier is not
 			// forwardable.
-			// The declared return type is `void`, but dry mode must hand back the
-			// carrier so a later forward of a VOID result is rejected as such
-			// (errEffectParamRejectsCarrier) instead of as a non-string. carrier()
-			// is typed `never` precisely so the settled-only surface holds.
-			// biome-ignore lint/correctness/noVoidTypeReturn: the dry-mode carrier is the value at a void-typed position
 			return this.carrier(rec.seq, false);
 		}
 		this.record({
@@ -1036,13 +1031,17 @@ export class Effects implements MutatingEffects {
 	}
 
 	mkdir(path: string | Completed | Response, opts: CommonOpts = {}): void {
-		this.pathEffect("mkdir", path, opts, (p) =>
+		// The dry-mode carrier flows out through pathEffect: a void result must
+		// still be a CARRIER so a later forward is rejected as unsettled.
+		// biome-ignore lint/correctness/noVoidTypeReturn: the dry-mode carrier is the value at a void-typed position
+		return this.pathEffect("mkdir", path, opts, (p) =>
 			mkdirSync(p, { recursive: true }),
 		);
 	}
 
 	remove(path: string | Completed | Response, opts: CommonOpts = {}): void {
-		this.pathEffect("remove", path, opts, (p) =>
+		// biome-ignore lint/correctness/noVoidTypeReturn: the dry-mode carrier is the value at a void-typed position
+		return this.pathEffect("remove", path, opts, (p) =>
 			rmSync(p, { recursive: true, force: true }),
 		);
 	}
