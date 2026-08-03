@@ -19,9 +19,11 @@ import {
 	errorCheckSpec,
 	warnCheckSpec,
 } from "../src/index.js";
-import { createTestApp as createApp } from "./helpers.js";
+import { createTestApp as createApp, EMPTY_PROJECT_ROOT } from "./helpers.js";
 
-const CTX: CheckContext = { projectRoot: "." };
+// A dedicated EMPTY root: checks that statically analyse the consumer's
+// sources (effects-bypass) walk it, so it must not be a shared scratch dir.
+const CTX: CheckContext = { projectRoot: EMPTY_PROJECT_ROOT };
 
 function bareApp(name = "t"): App {
 	return createApp({ name, version: "1", help: "h" });

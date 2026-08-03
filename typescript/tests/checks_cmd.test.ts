@@ -20,12 +20,14 @@ import {
 	formatCheckResultsJSON,
 	t,
 } from "../src/index.js";
-import { createTestApp as createApp } from "./helpers.js";
+import { createTestApp as createApp, EMPTY_PROJECT_ROOT } from "./helpers.js";
 
 /** The framework's would-do log header (dry mode's primary output). */
 const DRY_RUN_HEADER = "DRY RUN \u2014 no changes were made. Would do:\n";
 
-const CTX: CheckContext = { projectRoot: "." };
+// A dedicated EMPTY root: checks that statically analyse the consumer's
+// sources (effects-bypass) walk it, so it must not be a shared scratch dir.
+const CTX: CheckContext = { projectRoot: EMPTY_PROJECT_ROOT };
 
 /** The 4-check mirror app used to capture the Python ground-truth bytes. */
 function mirrorApp(): App {
