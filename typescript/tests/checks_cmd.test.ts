@@ -15,12 +15,15 @@ import { test } from "node:test";
 import type { CheckContext } from "../src/index.js";
 import {
 	type App,
-	createApp,
 	flag,
 	formatCheckResults,
 	formatCheckResultsJSON,
 	t,
 } from "../src/index.js";
+import { createTestApp as createApp } from "./helpers.js";
+
+/** The framework's would-do log header (dry mode's primary output). */
+const DRY_RUN_HEADER = "DRY RUN \u2014 no changes were made. Would do:\n";
 
 const CTX: CheckContext = { projectRoot: "." };
 
@@ -144,7 +147,7 @@ test("check --all: grouped problems (errors before warns), cascade skip", async 
 });
 
 test("check --all --verbose: durations, notes, and count summary", async () => {
-	const result = await mirrorApp().test(["check", "--all", "--verbose"]);
+	const result = await mirrorApp().test(["--verbose", "check", "--all"]);
 	assert.equal(result.exitCode, 1);
 	assert.match(result.stdout, /\(\d+ms\)/);
 	assert.equal(
@@ -223,38 +226,44 @@ test("check with no flags shows the command help (Python branch order)", async (
 		"  --name <str>                               Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*') [default: ]\n" +
 		"  --list, --no-list                          List all registered checks with their tags and exit without running [default: false]\n" +
 		"  --json, --no-json                          Output check results as machine-readable JSON instead of human text [default: false]\n" +
-		"  --ignore-warnings, --no-ignore-warnings    Treat warn-severity results as passing so they do not cause nonzero exit [default: false]\n" +
-		"  --verbose, --no-verbose                    Show per-check notes and durations (including on passing checks) plus a trailing pass/fail/warn/skip count summary [default: false]\n" +
-		"  --dry-run, --no-dry-run                    Show which checks would run based on current filters without executing them [default: false]\n";
+		"  --ignore-warnings, --no-ignore-warnings    Treat warn-severity results as passing so they do not cause nonzero exit [default: false]\n";
 	const bare = await mirrorApp().test(["check"]);
 	assert.equal(bare.exitCode, 0);
 	assert.equal(bare.stdout, expectedHelp);
-	// --dry-run without a filter is NOT a filter: still the help branch.
-	const dry = await mirrorApp().test(["check", "--dry-run"]);
+	// --dry-run without a filter is NOT a filter: still the help branch. It is
+	// now the FRAMEWORK flag, so the run is also a dry run and the would-do log
+	// follows -- header only, because `check` is read_only.
+	const dry = await mirrorApp().test(["--dry-run", "check"]);
 	assert.equal(dry.exitCode, 0);
-	assert.equal(dry.stdout, expectedHelp);
+	assert.equal(dry.stdout, expectedHelp + DRY_RUN_HEADER);
 });
 
 test("check --dry-run with a non-matching filter prints no-match, not a plan", async () => {
 	const result = await mirrorApp().test([
+		"--dry-run",
 		"check",
 		"--tag",
 		"nonexistent",
-		"--dry-run",
 	]);
 	assert.equal(result.exitCode, 0);
-	assert.equal(result.stdout, "No checks matched the given filters.\n");
+	assert.equal(
+		result.stdout,
+		`No checks matched the given filters.\n${DRY_RUN_HEADER}`,
+	);
 });
 
 test("check --dry-run: singular noun for a single check", async () => {
 	const result = await mirrorApp().test([
+		"--dry-run",
 		"check",
 		"--name",
 		"lint",
-		"--dry-run",
 	]);
 	assert.equal(result.exitCode, 0);
-	assert.equal(result.stdout, "Would run 1 check:\n  1. lint [pure]\n");
+	assert.equal(
+		result.stdout,
+		`Would run 1 check:\n  1. lint [pure]\n${DRY_RUN_HEADER}`,
+	);
 });
 
 test("dry-run purity annotations: pure=false and needs_network=true are impure", async () => {
@@ -284,11 +293,11 @@ depends_on = []
 	app.errorCheck("deploy", (_c, r) => r.passed("deployed"));
 	app.errorCheck("fetch", (_c, r) => r.passed("fetched"));
 	app.setCheckContext(() => CTX);
-	const result = await app.test(["check", "--all", "--dry-run"]);
+	const result = await app.test(["--dry-run", "check", "--all"]);
 	assert.equal(result.exitCode, 0);
 	assert.equal(
 		result.stdout,
-		"Would run 2 checks:\n  1. deploy [impure]\n  2. fetch [impure]\n",
+		`Would run 2 checks:\n  1. deploy [impure]\n  2. fetch [impure]\n${DRY_RUN_HEADER}`,
 	);
 });
 
@@ -361,8 +370,8 @@ test("a global flag colliding with a check flag is dropped from the command", as
 		version: "1",
 		help: "h",
 		flags: {
-			verbose: flag("verbose", t.bool, {
-				help: "Global verbosity toggle",
+			json: flag("json", t.bool, {
+				help: "Global JSON toggle",
 				default: false,
 			}),
 		},
@@ -370,13 +379,25 @@ test("a global flag colliding with a check flag is dropped from the command", as
 	});
 	app.errorCheck("a", (_c, r) => r.passed("ok"));
 	app.setCheckContext(() => CTX);
-	// The global --verbose value flows into the handler kwargs.
-	const quiet = await app.test(["check", "--all"]);
-	assert.equal(quiet.exitCode, 0);
-	assert.doesNotMatch(quiet.stdout, /passed \//);
-	const verbose = await app.test(["--verbose", "check", "--all"]);
-	assert.equal(verbose.exitCode, 0);
-	assert.match(verbose.stdout, /1 passed \/ 0 failed \/ 0 warned \/ 0 skipped/);
+	// The candidate `json` check flag is dropped; the global's value reaches
+	// the handler under the same key.
+	const human = await app.test(["check", "--all"]);
+	assert.equal(human.exitCode, 0);
+	assert.match(human.stdout, /PASS {2}a/);
+	const asJson = await app.test(["--json", "check", "--all"]);
+	assert.equal(asJson.exitCode, 0);
+	assert.match(asJson.stdout, /"name":"a"/);
+});
+
+test("check no longer declares --verbose or --dry-run", async () => {
+	// Both names are reserved by the framework, so the candidates are dropped
+	// and the handler reads ctx.verbose / ctx.dryRun instead.
+	const help = await mirrorApp().test(["check"]);
+	assert.doesNotMatch(help.stdout, /--verbose/);
+	assert.doesNotMatch(help.stdout, /--dry-run/);
+	// The framework-delivered values still drive the same behavior.
+	const verbose = await mirrorApp().test(["--verbose", "check", "--all"]);
+	assert.match(verbose.stdout, /passed \//);
 });
 
 // --- Formatter functions (public surface) ---

@@ -23,7 +23,13 @@ import {
 	parseJsonConfig,
 } from "../src/config.js";
 import { RegistrationError } from "../src/errors.js";
-import { type App, createApp, defineCommand, flag, t } from "../src/index.js";
+import {
+	type App,
+	createApp,
+	defineReadOnlyCommand,
+	flag,
+	t,
+} from "../src/index.js";
 
 // --- Environment scaffolding -------------------------------------------
 
@@ -222,7 +228,7 @@ function basicApp(extra?: Partial<AppSpec>): App {
 		...extra,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run command",
 			flags: {
 				count: flag("count", t.int, { help: "a count", default: 0n }),
@@ -246,7 +252,7 @@ function portApp(extra?: Partial<AppSpec>): App {
 		...extra,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run command",
 			flags: {
 				port: flag("port", t.int, {
@@ -285,7 +291,7 @@ test("config path uses .toml extension for toml format", async () => {
 
 test("config is unknown command when config disabled", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
-	app.command(defineCommand("run", { help: "r", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("run", { help: "r", handler: () => 0 }));
 	const r = await app.test(["config"]);
 	assert.equal(r.exitCode, 1);
 	assert.match(r.stderr, /unknown command/);
@@ -297,7 +303,7 @@ test("config group appears in help only when enabled", async () => {
 	assert.match(enabled.stdout, /Groups:/);
 	assert.match(enabled.stdout, /config/);
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
-	app.command(defineCommand("run", { help: "r", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("run", { help: "r", handler: () => 0 }));
 	const disabled = await app.test(["--help"]);
 	assert.equal(disabled.exitCode, 0);
 	assert.ok(!disabled.stdout.includes("config"));
@@ -330,7 +336,7 @@ test("TOML config loading with typed values via run + config show", async () => 
 			configFormat: "toml",
 		});
 		app.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "run command",
 				flags: {
 					count: flag("count", t.int, { help: "a count", default: 0n }),
@@ -414,7 +420,7 @@ test("config set: unknown key / bad int / bad bool errors", async () => {
 		config: true,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: { debug: flag("debug", t.bool, { help: "d", default: false }) },
 			handler: () => 0,
@@ -453,7 +459,7 @@ test("parse-time loading: late-written config is honored", async () => {
 
 test("--config on app with config disabled is a hard error", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "t" });
-	app.command(defineCommand("run", { help: "r", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("run", { help: "r", handler: () => 0 }));
 	const r = await app.test(["--config", "/tmp/fake.json", "run"]);
 	assert.equal(r.exitCode, 1);
 	assert.match(r.stderr, /--config is not available/);
@@ -572,7 +578,7 @@ function conflictApp(mode: "cli-wins" | "error"): App {
 		configConflictMode: mode,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
 				name: flag("name", t.str, {
@@ -631,7 +637,7 @@ test("per-flag conflictMode beats the app-level mode (both directions)", async (
 			configConflictMode: appMode,
 		});
 		app.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "r",
 				flags: {
 					name: flag("name", t.str, {
@@ -670,7 +676,7 @@ test("conflict equality: plain lists order-sensitive, unique flags multiset", as
 			configConflictMode: "error",
 		});
 		app.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "r",
 				flags: { tag: flag("tag", t.list(t.str), { help: "t", unique }) },
 				handler: (_args, ctx) => {
@@ -712,7 +718,7 @@ test("conflict detection covers global flags parsed after the command name", asy
 			},
 		});
 		app.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "r",
 				handler: (_args, ctx) => {
 					ctx.info("ok");
@@ -748,7 +754,7 @@ function tagsApp(unique = true): App {
 		config: true,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: { tags: flag("tags", t.list(t.str), { help: "tags", unique }) },
 			handler: (args, ctx) => {
@@ -791,7 +797,7 @@ test("repeatable: int array from config; show --plain displays the array", async
 		config: true,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
 				ports: flag("ports", t.list(t.int), { help: "p", unique: false }),
@@ -816,7 +822,7 @@ test("repeatable/dict: show --plain renders empty defaults as []/{} (Python pari
 		config: true,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
 				tags: flag("tags", t.list(t.str), { help: "tags", unique: true }),
@@ -844,7 +850,7 @@ function setApp(): App {
 		config: true,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
 				count: flag("count", t.int, { help: "c", default: 0n }),
@@ -950,7 +956,7 @@ test("config set on TOML preserves comments and layout byte-exactly (tomlkit par
 			configFormat: "toml",
 		});
 		app.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "r",
 				flags: { count: flag("count", t.int, { help: "c", default: 0n }) },
 				handler: () => 0,
@@ -1003,7 +1009,7 @@ function fieldsApp(): App {
 	app.configField("api.key", { type: t.str, help: "API key" });
 	app.configField("port", { type: t.int, help: "server port", default: 8080n });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			configFields: ["api.key", "port"],
 			handler: (_args, ctx) => {
@@ -1089,7 +1095,7 @@ function coexistApp(): App {
 		default: "prod",
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
 				target: flag("target", t.str, {
@@ -1140,7 +1146,7 @@ test("field-flag coexist: disagreeing defaults are a registration error", () => 
 	assert.throws(
 		() =>
 			app.command(
-				defineCommand("run", {
+				defineReadOnlyCommand("run", {
 					help: "r",
 					flags: {
 						target: flag("target", t.str, { help: "h", default: "stage" }),
@@ -1166,7 +1172,7 @@ test("config init: TOML template with comments, sections, and required markers (
 		configFormat: "toml",
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
 				count: flag("count", t.int, { help: "a count", default: 3n }),
@@ -1200,7 +1206,7 @@ test("config init: JSON template nests dotted fields; required fields are null (
 		config: true,
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
 				count: flag("count", t.int, { help: "a count", default: 3n }),
@@ -1273,7 +1279,7 @@ test("command configFields binding must reference a declared field", () => {
 	assert.throws(
 		() =>
 			app.command(
-				defineCommand("run", {
+				defineReadOnlyCommand("run", {
 					help: "r",
 					configFields: ["nope"],
 					handler: () => 0,

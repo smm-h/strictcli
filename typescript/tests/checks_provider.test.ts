@@ -16,10 +16,10 @@ import type { CheckContext, CheckSpec as CheckSpecType } from "../src/index.js";
 import {
 	type App,
 	CheckSpec,
-	createApp,
 	errorCheckSpec,
 	warnCheckSpec,
 } from "../src/index.js";
+import { createTestApp as createApp } from "./helpers.js";
 
 const CTX: CheckContext = { projectRoot: "." };
 

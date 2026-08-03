@@ -9,7 +9,13 @@ import { strict as assert } from "node:assert";
 import { Readable } from "node:stream";
 import { test } from "node:test";
 import type { App } from "../src/app.js";
-import { createApp, defineCommand, flag, outcome, t } from "../src/index.js";
+import {
+	createApp,
+	defineReadOnlyCommand,
+	flag,
+	outcome,
+	t,
+} from "../src/index.js";
 
 function buildApp(spec: Record<string, unknown> = {}): App {
 	return createApp({
@@ -75,7 +81,9 @@ function toolsOf(resp: Record<string, unknown>): Record<string, unknown>[] {
 }
 
 function addNoopCommand(app: App): void {
-	app.command(defineCommand("cmd", { help: "a command", handler: () => 0 }));
+	app.command(
+		defineReadOnlyCommand("cmd", { help: "a command", handler: () => 0 }),
+	);
 }
 
 // --- initialize ---
@@ -112,7 +120,7 @@ test("mcp: initialize preserves a string id", async () => {
 test("mcp: initialize reflects the app name and version", async () => {
 	const app = createApp({ name: "mytool", version: "2.5.0", help: "my tool" });
 	app.command(
-		defineCommand("run", { help: "run something", handler: () => 0 }),
+		defineReadOnlyCommand("run", { help: "run something", handler: () => 0 }),
 	);
 	const resp = await sendOne(app, {
 		jsonrpc: "2.0",
@@ -131,7 +139,7 @@ test("mcp: initialize reflects the app name and version", async () => {
 test("mcp: tools/list returns a definition for a single command", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy the app",
 			flags: { target: flag("target", t.str, { help: "deploy target" }) },
 			handler: () => 0,
@@ -158,10 +166,13 @@ test("mcp: tools/list returns a definition for a single command", async () => {
 test("mcp: tools/list covers multiple commands", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("deploy", { help: "deploy the app", handler: () => 0 }),
+		defineReadOnlyCommand("deploy", {
+			help: "deploy the app",
+			handler: () => 0,
+		}),
 	);
 	app.command(
-		defineCommand("status", { help: "show status", handler: () => 0 }),
+		defineReadOnlyCommand("status", { help: "show status", handler: () => 0 }),
 	);
 	const resp = await sendOne(app, {
 		jsonrpc: "2.0",
@@ -178,7 +189,10 @@ test("mcp: tools/list uses dotted names for grouped commands", async () => {
 	const app = buildApp();
 	const grp = app.group("db", { help: "database commands" });
 	grp.command(
-		defineCommand("migrate", { help: "run migrations", handler: () => 0 }),
+		defineReadOnlyCommand("migrate", {
+			help: "run migrations",
+			handler: () => 0,
+		}),
 	);
 	const resp = await sendOne(app, {
 		jsonrpc: "2.0",
@@ -196,10 +210,13 @@ test("mcp: tools/list uses dotted names for grouped commands", async () => {
 test("mcp: tools/list excludes hidden commands", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("visible", { help: "visible command", handler: () => 0 }),
+		defineReadOnlyCommand("visible", {
+			help: "visible command",
+			handler: () => 0,
+		}),
 	);
 	app.command(
-		defineCommand("secret", {
+		defineReadOnlyCommand("secret", {
 			help: "hidden command",
 			hidden: true,
 			handler: () => 0,
@@ -219,10 +236,13 @@ test("mcp: tools/list excludes hidden commands", async () => {
 test("mcp: tools/list excludes interactive commands", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("batch", { help: "batch operation", handler: () => 0 }),
+		defineReadOnlyCommand("batch", {
+			help: "batch operation",
+			handler: () => 0,
+		}),
 	);
 	app.command(
-		defineCommand("wizard", {
+		defineReadOnlyCommand("wizard", {
 			help: "interactive wizard",
 			interactive: true,
 			handler: () => 0,
@@ -242,13 +262,13 @@ test("mcp: tools/list excludes interactive commands", async () => {
 test("mcp: tools/list inputSchema matches jsonSchema()", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy the app",
 			flags: {
 				target: flag("target", t.str, { help: "deploy target" }),
 				count: flag("count", t.int, { help: "instance count", default: 1n }),
-				verbose: flag("verbose", t.bool, {
-					help: "verbose mode",
+				chatter: flag("chatter", t.bool, {
+					help: "chatter mode",
 					default: false,
 				}),
 			},
@@ -272,7 +292,7 @@ test("mcp: tools/list inputSchema matches jsonSchema()", async () => {
 test("mcp: tools/call returns outcome data as JSON text", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("info", {
+		defineReadOnlyCommand("info", {
 			help: "get info",
 			handler: () => outcome(0, { version: "1.0.0", status: "ok" }),
 		}),
@@ -296,7 +316,7 @@ test("mcp: tools/call passes arguments through to the handler", async () => {
 	const captured: Record<string, unknown> = {};
 	const app = buildApp();
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy",
 			flags: {
 				target: flag("target", t.str, { help: "deploy target" }),
@@ -328,7 +348,10 @@ test("mcp: tools/call passes arguments through to the handler", async () => {
 test("mcp: tools/call serializes a void handler return as null", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("noop", { help: "does nothing", handler: () => undefined }),
+		defineReadOnlyCommand("noop", {
+			help: "does nothing",
+			handler: () => undefined,
+		}),
 	);
 	const resp = await sendOne(app, {
 		jsonrpc: "2.0",
@@ -342,7 +365,7 @@ test("mcp: tools/call serializes a void handler return as null", async () => {
 test("mcp: tools/call serializes an integer handler return", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("count", { help: "count things", handler: () => 42 }),
+		defineReadOnlyCommand("count", { help: "count things", handler: () => 42 }),
 	);
 	const resp = await sendOne(app, {
 		jsonrpc: "2.0",
@@ -357,26 +380,26 @@ test("mcp: tools/call resolves dotted grouped-command names", async () => {
 	const app = buildApp();
 	const grp = app.group("db", { help: "database commands" });
 	grp.command(
-		defineCommand("migrate", {
+		defineReadOnlyCommand("migrate", {
 			help: "run migrations",
 			flags: {
-				dry_run: flag("dry-run", t.bool, {
+				sim_run: flag("sim-run", t.bool, {
 					help: "dry run mode",
 					default: false,
 				}),
 			},
-			handler: (args) => outcome(0, { migrated: true, dry_run: args.dry_run }),
+			handler: (args) => outcome(0, { migrated: true, sim_run: args.sim_run }),
 		}),
 	);
 	const resp = await sendOne(app, {
 		jsonrpc: "2.0",
 		id: 14,
 		method: "tools/call",
-		params: { name: "db.migrate", arguments: { dry_run: true } },
+		params: { name: "db.migrate", arguments: { sim_run: true } },
 	});
 	assert.deepEqual(JSON.parse(contentOf(resp)[0]?.text as string), {
 		migrated: true,
-		dry_run: true,
+		sim_run: true,
 	});
 });
 
@@ -400,7 +423,7 @@ test("mcp: unknown tool surfaces as isError content, not -32602", async () => {
 test("mcp: missing required flag surfaces as isError content", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy",
 			flags: { target: flag("target", t.str, { help: "deploy target" }) },
 			handler: () => 0,
@@ -464,7 +487,7 @@ test("mcp: tools/call with non-object arguments is -32602", async () => {
 test("mcp: omitted arguments key defaults to an empty object", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("noop", {
+		defineReadOnlyCommand("noop", {
 			help: "does nothing",
 			handler: () => outcome(0, "ok"),
 		}),
@@ -560,7 +583,7 @@ test("mcp: full conversation: initialize, notification, list, call", async () =>
 	const captured: Record<string, unknown> = {};
 	const app = buildApp();
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "greet someone",
 			flags: { name: flag("name", t.str, { help: "person to greet" }) },
 			handler: (args) => {
@@ -632,7 +655,7 @@ test("mcp: deeply nested commands list and call by dotted path", async () => {
 	const grp1 = app.group("cloud", { help: "cloud commands" });
 	const grp2 = grp1.group("storage", { help: "storage commands" });
 	grp2.command(
-		defineCommand("upload", {
+		defineReadOnlyCommand("upload", {
 			help: "upload a file",
 			flags: { bucket: flag("bucket", t.str, { help: "target bucket" }) },
 			handler: (args) => outcome(0, { uploaded_to: args.bucket }),
@@ -668,7 +691,7 @@ test("mcp: deeply nested commands list and call by dotted path", async () => {
 test("mcp: a throwing handler returns isError content", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("fail", {
+		defineReadOnlyCommand("fail", {
 			help: "always fails",
 			handler: () => {
 				throw new Error("something broke");
@@ -687,7 +710,9 @@ test("mcp: a throwing handler returns isError content", async () => {
 
 test("mcp: non-interactive config subcommands are exposed", async () => {
 	const app = buildApp({ config: true });
-	app.command(defineCommand("run", { help: "run the app", handler: () => 0 }));
+	app.command(
+		defineReadOnlyCommand("run", { help: "run the app", handler: () => 0 }),
+	);
 	const resp = await sendOne(app, {
 		jsonrpc: "2.0",
 		id: 1,
@@ -706,7 +731,7 @@ test("mcp: non-interactive config subcommands are exposed", async () => {
 test("mcp: successful calls carry no isError key", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("ok", {
+		defineReadOnlyCommand("ok", {
 			help: "always succeeds",
 			handler: () => outcome(0, "success"),
 		}),

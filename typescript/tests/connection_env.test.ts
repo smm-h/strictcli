@@ -8,8 +8,9 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { CheckContext, ConnectionEnvReader } from "../src/index.js";
-import { createApp, defineCommand, flag, t } from "../src/index.js";
+import { defineReadOnlyCommand, flag, t } from "../src/index.js";
 import { dumpSchemaCore } from "../src/schema.js";
+import { createTestApp as createApp } from "./helpers.js";
 
 async function withEnv<T>(
 	vars: Record<string, string | undefined>,
@@ -45,7 +46,7 @@ function connApp() {
 		connectionEnv: { DATABASE_URL: "conn" },
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run it",
 			flags: {
 				dsn: flag("dsn", t.str, {
@@ -73,7 +74,9 @@ test("connection: help renders the suppressed-by-hermetic line", async () => {
 		help: "t",
 		connectionEnv: { DATABASE_URL: "Postgres connection string" },
 	});
-	app.command(defineCommand("run", { help: "run it", handler: () => 0 }));
+	app.command(
+		defineReadOnlyCommand("run", { help: "run it", handler: () => 0 }),
+	);
 	const r = await app.test(["--help"]);
 	assert.ok(r.stdout.includes("Infrastructure:"));
 	assert.ok(
@@ -136,7 +139,7 @@ test("connection: infraValue and connectionEnvValue resolve live", async () => {
 			connectionEnv: { DATABASE_URL: "conn" },
 		});
 		app.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "run",
 				handler: (_args, ctx) => {
 					const [cv, cs] = ctx.connectionEnvValue("DATABASE_URL");
@@ -160,7 +163,7 @@ test("connection: hermetic makes connectionEnvValue absent", async () => {
 			connectionEnv: { DATABASE_URL: "conn" },
 		});
 		app.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "run",
 				handler: (_args, ctx) => {
 					const [cv, cs] = ctx.connectionEnvValue("DATABASE_URL");
@@ -215,7 +218,7 @@ depends_on = []
 
 test("connection: check reads the connection env", async () => {
 	await withEnv({ DATABASE_URL: "postgres://check/db" }, async () => {
-		const r = await connCheckApp().test(["check", "--tag", "db", "--verbose"]);
+		const r = await connCheckApp().test(["--verbose", "check", "--tag", "db"]);
 		assert.ok(r.stdout.includes("dsn=postgres://check/db"), r.stdout);
 		assert.ok(r.stdout.includes("PASS"), r.stdout);
 		// A non-hermetic invocation reports isHermetic()===false to the check.
@@ -226,11 +229,11 @@ test("connection: check reads the connection env", async () => {
 test("connection: check skips under hermetic", async () => {
 	await withEnv({ DATABASE_URL: "postgres://check/db" }, async () => {
 		const r = await connCheckApp().test([
+			"--verbose",
 			"--hermetic",
 			"check",
 			"--tag",
 			"db",
-			"--verbose",
 		]);
 		assert.ok(r.stdout.includes("SKIP"), r.stdout);
 		assert.ok(!r.stdout.includes("dsn="), r.stdout);
@@ -247,11 +250,11 @@ test("connection: check skips under hermetic", async () => {
 test("connection: check sees hermetic even when env is unset (conflation case)", async () => {
 	await withEnv({ DATABASE_URL: undefined }, async () => {
 		const r = await connCheckApp().test([
+			"--verbose",
 			"--hermetic",
 			"check",
 			"--tag",
 			"db",
-			"--verbose",
 		]);
 		assert.ok(r.stdout.includes("hermetic=true"), r.stdout);
 		assert.ok(r.stdout.includes("suppressed by --hermetic"), r.stdout);
@@ -263,7 +266,7 @@ test("connection: check sees hermetic even when env is unset (conflation case)",
 // is free to consult a config fallback (here reported as the plain-unset skip).
 test("connection: env unset without hermetic reports isHermetic()===false", async () => {
 	await withEnv({ DATABASE_URL: undefined }, async () => {
-		const r = await connCheckApp().test(["check", "--tag", "db", "--verbose"]);
+		const r = await connCheckApp().test(["--verbose", "check", "--tag", "db"]);
 		assert.ok(r.stdout.includes("hermetic=false"), r.stdout);
 		assert.ok(r.stdout.includes("DATABASE_URL unset"), r.stdout);
 	});
@@ -281,7 +284,7 @@ test("connection: URL-class flag with no binding is a registration error", () =>
 	assert.throws(
 		() =>
 			app.command(
-				defineCommand("run", {
+				defineReadOnlyCommand("run", {
 					help: "run",
 					flags: {
 						dsn: flag("dsn", t.str, {
@@ -307,7 +310,7 @@ test("connection: binding to an undeclared connection env is a registration erro
 	assert.throws(
 		() =>
 			app.command(
-				defineCommand("run", {
+				defineReadOnlyCommand("run", {
 					help: "run",
 					flags: {
 						dsn: flag("dsn", t.str, {
@@ -334,7 +337,7 @@ test("connection: binding without the URL marker is a registration error", () =>
 	assert.throws(
 		() =>
 			app.command(
-				defineCommand("run", {
+				defineReadOnlyCommand("run", {
 					help: "run",
 					flags: {
 						dsn: flag("dsn", t.str, {
@@ -360,7 +363,7 @@ test("connection: binding plus per-flag env is a registration error", () => {
 	assert.throws(
 		() =>
 			app.command(
-				defineCommand("run", {
+				defineReadOnlyCommand("run", {
 					help: "run",
 					flags: {
 						dsn: flag("dsn", t.str, {

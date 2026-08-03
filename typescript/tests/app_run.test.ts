@@ -8,20 +8,20 @@
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import type { Context } from "../src/context.js";
+import type { ReadOnlyContext } from "../src/context.js";
 import {
 	createApp,
-	defineCommand,
+	defineReadOnlyCommand,
 	flag,
 	outcome,
-	passthrough,
+	readOnlyPassthrough,
 	t,
 } from "../src/index.js";
 
 test("test: result surface is stdout/stderr/exitCode with optional data", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			handler: (_args, ctx) => {
 				ctx.info("out-line");
@@ -42,7 +42,7 @@ test("test: result surface is stdout/stderr/exitCode with optional data", async 
 test("test: captures console.log output from handlers", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			handler: () => {
 				console.log("via console");
@@ -57,7 +57,7 @@ test("test: captures console.log output from handlers", async () => {
 test("test: async handlers are awaited", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			handler: async (_args, ctx) => {
 				await new Promise((resolve) => setTimeout(resolve, 5));
@@ -75,7 +75,7 @@ test("test: async handlers are awaited", async () => {
 test("test: outcome data prints one compact JSON line with BigInt tokens", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			flags: { count: flag("count", t.int, { help: "count", default: 7n }) },
 			handler: (args) => outcome(0, { count: args.count, name: "x" }),
@@ -89,7 +89,7 @@ test("test: outcome data prints one compact JSON line with BigInt tokens", async
 test("test: bad handler returns are hard errors (propagate to the caller)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			handler: () => ["not-an-outcome"] as never,
 		}),
@@ -104,7 +104,7 @@ test("test: bad handler returns are hard errors (propagate to the caller)", asyn
 	});
 	const asyncBad = createApp({ name: "myapp", version: "1.0.0", help: "h" });
 	asyncBad.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			handler: async () => "nope" as never,
 		}),
@@ -122,9 +122,9 @@ test("test: bad handler returns are hard errors (propagate to the caller)", asyn
 test("test: passthrough handlers flow through the result contract", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		passthrough("exec", {
+		readOnlyPassthrough("exec", {
 			help: "exec",
-			handler: (pt, ctx: Context) => {
+			handler: (pt, ctx: ReadOnlyContext) => {
 				ctx.info(`${pt.name}:${pt.args.join(",")}`);
 				return outcome(4, { forwarded: pt.args.length });
 			},
@@ -139,24 +139,24 @@ test("test: passthrough handlers flow through the result contract", async () => 
 test("test: ctx.source works during dispatch", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			flags: {
-				dry_run: flag("dry-run", t.bool, { help: "dry", default: true }),
+				sim_run: flag("sim-run", t.bool, { help: "dry", default: true }),
 			},
 			handler: (_args, ctx) => {
-				ctx.info(`cli=${ctx.source("dry-run")}`);
+				ctx.info(`cli=${ctx.source("sim-run")}`);
 				return 0;
 			},
 		}),
 	);
-	assert.equal((await app.test(["run", "--dry-run"])).stdout, "cli=cli\n");
+	assert.equal((await app.test(["run", "--sim-run"])).stdout, "cli=cli\n");
 	assert.equal((await app.test(["run"])).stdout, "cli=default\n");
 });
 
 test("test: --mcp reports the Python in-process message", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
-	app.command(defineCommand("run", { help: "run", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("run", { help: "run", handler: () => 0 }));
 	const r = await app.test(["--mcp"]);
 	assert.equal(r.stderr, "error: --mcp requires interactive stdin/stdout\n");
 	assert.equal(r.exitCode, 1);
@@ -165,7 +165,11 @@ test("test: --mcp reports the Python in-process message", async () => {
 test("test: tag-contract violations abort dispatch with error", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("greet", { help: "greet", tags: ["json"], handler: () => 0 }),
+		defineReadOnlyCommand("greet", {
+			help: "greet",
+			tags: ["json"],
+			handler: () => 0,
+		}),
 	);
 	app.tagContract("json", "json");
 	const r = await app.test(["greet"]);
@@ -187,7 +191,7 @@ test("test: tag contracts satisfied by command or global flags pass", async () =
 		},
 	});
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "greet",
 			tags: ["json"],
 			handler: (_args, ctx) => {
@@ -206,7 +210,11 @@ test("test: tag contracts are enforced recursively; passthrough exempt", async (
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	const grp = app.group("tools", { help: "tools" });
 	grp.command(
-		defineCommand("lint", { help: "lint", tags: ["json"], handler: () => 0 }),
+		defineReadOnlyCommand("lint", {
+			help: "lint",
+			tags: ["json"],
+			handler: () => 0,
+		}),
 	);
 	app.tagContract("json", "json");
 	const r = await app.test(["tools", "lint"]);
@@ -222,7 +230,11 @@ test("test: tag contracts are enforced recursively; passthrough exempt", async (
 		help: "test app",
 	});
 	ptApp.command(
-		passthrough("raw", { help: "raw", tags: ["json"], handler: () => 0 }),
+		readOnlyPassthrough("raw", {
+			help: "raw",
+			tags: ["json"],
+			handler: () => 0,
+		}),
 	);
 	ptApp.tagContract("json", "json");
 	assert.equal((await ptApp.test(["raw"])).exitCode, 0);
@@ -231,7 +243,7 @@ test("test: tag contracts are enforced recursively; passthrough exempt", async (
 test("run: writes to process streams and sets process.exitCode", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			handler: (_args, ctx) => {
 				ctx.info("hello-from-run");
@@ -262,7 +274,7 @@ test("run: writes to process streams and sets process.exitCode", async () => {
 
 test("run: defaults argv to process.argv.slice(2)", async () => {
 	const app = createApp({ name: "myapp", version: "9.9.9", help: "test app" });
-	app.command(defineCommand("run", { help: "run", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("run", { help: "run", handler: () => 0 }));
 	const origArgv = process.argv;
 	const chunks: string[] = [];
 	const orig = process.stdout.write.bind(process.stdout);

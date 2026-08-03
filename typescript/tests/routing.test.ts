@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { AppImpl } from "../src/app.js";
-import { createApp, defineCommand, deprecated } from "../src/index.js";
+import { createApp, defineReadOnlyCommand, deprecated } from "../src/index.js";
 import { resolveCommand } from "../src/routing.js";
 
 function makeApp(): AppImpl {
@@ -11,13 +11,19 @@ function makeApp(): AppImpl {
 		help: "test app",
 	}) as AppImpl;
 	app.command(
-		defineCommand("run", { help: "run something", handler: () => undefined }),
+		defineReadOnlyCommand("run", {
+			help: "run something",
+			handler: () => undefined,
+		}),
 	);
 	app.deprecate(deprecated("old-run", "use 'run' instead"));
 	const dns = app.group("dns", { help: "manage DNS" });
 	const zone = dns.group("zone", { help: "manage zones" });
 	zone.command(
-		defineCommand("list", { help: "list all zones", handler: () => undefined }),
+		defineReadOnlyCommand("list", {
+			help: "list all zones",
+			handler: () => undefined,
+		}),
 	);
 	zone.deprecate(deprecated("dump", "use 'list' instead"));
 	return app;

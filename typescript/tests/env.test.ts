@@ -47,7 +47,7 @@ test("str env values resolve the @-prefix", () => {
 });
 
 test("bool env strings follow the strict six-string rule", () => {
-	const f = flag("verbose", t.bool, {
+	const f = flag("chatter", t.bool, {
 		help: "h",
 		env: "MYAPP_VERBOSE",
 		default: false,
@@ -69,7 +69,7 @@ test("bool env strings follow the strict six-string rule", () => {
 		assert.throws(
 			() => resolveEnvValue(f, "MYAPP_VERBOSE", s, tracker()),
 			parseError(
-				`invalid boolean value '${s}' for env var 'MYAPP_VERBOSE' (flag '--verbose')`,
+				`invalid boolean value '${s}' for env var 'MYAPP_VERBOSE' (flag '--chatter')`,
 			),
 		);
 	}

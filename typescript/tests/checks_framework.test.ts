@@ -20,12 +20,8 @@ import {
 	parseChecksToml,
 } from "../src/checks/framework.js";
 import { RegistrationError } from "../src/errors.js";
-import {
-	type App,
-	createApp,
-	ErrorReporter,
-	WarnReporter,
-} from "../src/index.js";
+import { type App, ErrorReporter, WarnReporter } from "../src/index.js";
+import { createTestApp as createApp } from "./helpers.js";
 
 const VALID_CHECK_BODY = `tags = ["release"]
 severity = "error"

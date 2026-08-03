@@ -27,19 +27,734 @@ import {
 	arg,
 	coRequired,
 	createApp,
-	defineCommand,
+	defineReadOnlyCommand,
 	flag,
 	flagSet,
 	implies,
 	mutexGroup,
-	passthrough,
+	readOnlyPassthrough,
 	relativeToRoot,
 	requires,
 	t,
 } from "../src/index.js";
 import { schemaJson } from "../src/schema.js";
 
-const EXPECTED_JSON = `{"schema_version":1,"defaults":{"schema_version":1,"app":{"env_prefix":null,"config":false,"global_flags":[],"commands":{},"groups":{},"deprecated":{},"tag_contracts":{}},"flag":{"short":null,"default":null,"env":null,"choices":null,"repeatable":false,"unique":false,"env_separator":null,"negatable":null,"hidden":false},"arg":{"type":"str","required":true,"default":null,"variadic":false,"choices":null},"command":{"passthrough":false,"flags":[],"args":[],"tags":[],"constraints":[],"hidden":false,"interactive":false},"group":{"commands":{},"groups":{},"deprecated":{},"tags":[],"hidden":false}},"name":"richapp","version":"2.5.0","help":"A comprehensive schema app","env_prefix":"RICH","config":true,"global_flags":[{"name":"verbose","type":"bool","help":"Enable verbose output","short":"V","default":false,"negatable":true},{"name":"log-level","type":"str","help":"Logging level","default":"info","env":"RICH_LOG_LEVEL","choices":["debug","info","warn","error"]},{"name":"state-file","type":"str","help":"State file relative to the infra root","default":{"relative_to_root":{"env_var":"RICH_HOME","parts":["state","app.db"]}}}],"commands":{"check":{"name":"check","help":"Run project checks registered via the check framework and report results","flags":[{"name":"all","type":"bool","help":"Run every registered check regardless of tag or name filters","default":false,"negatable":true},{"name":"tag","type":"str","help":"Tag DSL expression to select checks (e.g. 'changelog & !quality')","default":""},{"name":"name","type":"str","help":"Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')","default":""},{"name":"list","type":"bool","help":"List all registered checks with their tags and exit without running","default":false,"negatable":true},{"name":"json","type":"bool","help":"Output check results as machine-readable JSON instead of human text","default":false,"negatable":true},{"name":"ignore-warnings","type":"bool","help":"Treat warn-severity results as passing so they do not cause nonzero exit","default":false,"negatable":true},{"name":"dry-run","type":"bool","help":"Show which checks would run based on current filters without executing them","default":false,"negatable":true}]},"types":{"name":"types","help":"Test all flag types","flags":[{"name":"name","type":"str","help":"A string flag","default":"world"},{"name":"count","type":"int","help":"An integer flag","default":42},{"name":"big","type":"int","help":"A big integer flag","default":9007199254740993},{"name":"ratio","type":"float","help":"A float flag","default":3.14},{"name":"dry-run","type":"bool","help":"Dry run mode","negatable":true},{"name":"cache-file","type":"str","help":"Cache file relative to the infra root","default":{"relative_to_root":{"env_var":"RICH_HOME","parts":["cache.bin"]}}}],"args":[{"name":"target","help":"Target to process"}]},"multi":{"name":"multi","help":"Test list and dict flags","flags":[{"name":"tag","type":"list[str]","help":"Tags to apply","env":"RICH_TAGS","unique":true,"env_separator":","},{"name":"port","type":"list[int]","help":"Ports to open","default":[80,443]},{"name":"matrix","type":"dict[str,int]","help":"Named weights","default":{"alpha":1,"beta":2}}]},"output":{"name":"output","help":"Test mutex flags","flags":[{"name":"json","type":"bool","help":"JSON output","negatable":true},{"name":"yaml","type":"bool","help":"YAML output","negatable":true},{"name":"text","type":"bool","help":"Text output","negatable":true}],"constraints":[{"type":"mutex","flags":["json","yaml","text"]}]},"deploy":{"name":"deploy","help":"Test dependencies","flags":[{"name":"host","type":"str","help":"Deploy host"},{"name":"port-num","type":"int","help":"Deploy port"},{"name":"ssl","type":"bool","help":"Use SSL","negatable":true},{"name":"cert","type":"str","help":"SSL certificate path"}],"constraints":[{"type":"co_required","flags":["host","port-num"]},{"type":"requires","flag":"cert","depends_on":"ssl"}]},"notify":{"name":"notify","help":"Test implies dependency","flags":[{"name":"email","type":"bool","help":"Send email notification","negatable":true},{"name":"alert","type":"bool","help":"Enable alerts","negatable":true}],"constraints":[{"type":"implies","flag":"email","implies":"alert","value":true}]},"query":{"name":"query","help":"Test flag sets","flags":[{"name":"page","type":"int","help":"Page number","default":1},{"name":"per-page","type":"int","help":"Items per page","default":20}]},"files":{"name":"files","help":"Test args","args":[{"name":"src","help":"Source directory"},{"name":"mode","help":"Copy mode","required":false,"default":"fast"},{"name":"extra","help":"Extra files","required":false,"variadic":true}]},"exec":{"name":"exec","help":"Execute a command","passthrough":true},"lint":{"name":"lint","help":"Run linters","tags":["ci","quality"]},"level":{"name":"level","help":"Test int/float choices","flags":[{"name":"priority","type":"int","help":"Priority level","default":3,"choices":[1,2,3,4,5]},{"name":"threshold","type":"float","help":"Threshold value","default":0.5,"choices":[0.1,0.5,0.9]}]},"info":{"name":"info","help":"Show info","flags":[{"name":"format","type":"str","help":"Output format","short":"f","default":"table"},{"name":"color-off","type":"bool","help":"Disable colors","default":false,"negatable":false},{"name":"strict-mode","type":"bool","help":"Strict mode","default":false,"conflict_mode":"error","negatable":true}]},"secret":{"name":"secret","help":"Hidden maintenance command","hidden":true},"shell":{"name":"shell","help":"Interactive shell","interactive":true},"serve":{"name":"serve","help":"Start the server","config_fields":["api.key","listen_port"]}},"groups":{"config":{"name":"config","help":"Manage persistent configuration values stored in the config file","commands":{"path":{"name":"path","help":"Print the absolute path to the config file for this application"},"show":{"name":"show","help":"Show all config values with their sources (config file, env, or default)","flags":[{"name":"plain","type":"bool","help":"Display config values in a human-readable table format","default":false,"negatable":true},{"name":"json","type":"bool","help":"Display config values as a JSON object with source metadata","default":false,"negatable":true}],"constraints":[{"type":"mutex","flags":["plain","json"]}]},"set":{"name":"set","help":"Set a persistent config value that overrides the default for a flag","flags":[{"name":"clear","type":"bool","help":"Clear a repeatable flag by setting its value to an empty list","default":false,"negatable":true},{"name":"default","type":"bool","help":"Reset a key to its default value by removing it from the config file","default":false,"negatable":true}],"args":[{"name":"key","help":"The config key to set, matching a registered flag name"},{"name":"value","help":"Value to set (comma-separated for repeatable flags, use backslash to escape commas)","required":false}]},"edit":{"name":"edit","help":"Open the config file for manual editing in $EDITOR (creates if missing)","interactive":true},"init":{"name":"init","help":"Generate a template config file with documented fields and defaults"}}},"db":{"name":"db","help":"Database operations","commands":{"migrate":{"name":"migrate","help":"Run migrations","flags":[{"name":"steps","type":"int","help":"Migration steps"}],"tags":["infra"],"config_fields":["listen_port"]},"seed":{"name":"seed","help":"Seed database","tags":["infra"]}},"groups":{"cache":{"name":"cache","help":"Cache operations","commands":{"clear":{"name":"clear","help":"Clear cache","tags":["infra"]},"stats":{"name":"stats","help":"Show cache stats","flags":[{"name":"detailed","type":"bool","help":"Show detailed stats","negatable":true}],"tags":["infra"]}}}},"deprecated":{"reset":"Use 'db migrate --steps -1' instead"},"tags":["infra"]}},"deprecated":{"old-cmd":"Use 'new-cmd' instead"},"tag_contracts":{"quality":"verbose"},"checks":{"lint-clean":{"tags":["quality"],"severity":"error","fast":true,"pure":true,"needs_network":false,"depends_on":[]},"db-ping":{"tags":["infra"],"severity":"warn","fast":false,"pure":false,"needs_network":true,"depends_on":["lint-clean"],"scope":"db"}},"config_fields":{"api.key":{"type":"str","help":"API key for the service","required":true,"bound_commands":["serve"]},"listen_port":{"type":"int","help":"Port to listen on","required":false,"default":8080,"bound_commands":["serve","db migrate"]},"debug":{"type":"bool","help":"Enable debug mode","required":false,"default":false}},"infra":{"roots":[{"env_var":"RICH_HOME","default":"/var/lib/richapp"}],"handshakes":[{"env_var":"RICH_SESSION","help":"Session token from the invoking process"}]}}`;
+const EXPECTED_JSON = `{
+  "schema_version": 1,
+  "defaults": {
+    "schema_version": 1,
+    "app": {
+      "env_prefix": null,
+      "config": false,
+      "global_flags": [],
+      "commands": {},
+      "groups": {},
+      "deprecated": {},
+      "tag_contracts": {}
+    },
+    "flag": {
+      "short": null,
+      "default": null,
+      "env": null,
+      "choices": null,
+      "repeatable": false,
+      "unique": false,
+      "env_separator": null,
+      "negatable": null,
+      "hidden": false
+    },
+    "arg": {
+      "type": "str",
+      "required": true,
+      "default": null,
+      "variadic": false,
+      "choices": null
+    },
+    "command": {
+      "passthrough": false,
+      "flags": [],
+      "args": [],
+      "tags": [],
+      "constraints": [],
+      "hidden": false,
+      "interactive": false
+    },
+    "group": {
+      "commands": {},
+      "groups": {},
+      "deprecated": {},
+      "tags": [],
+      "hidden": false
+    }
+  },
+  "name": "richapp",
+  "version": "2.5.0",
+  "help": "A comprehensive schema app",
+  "env_prefix": "RICH",
+  "config": true,
+  "global_flags": [
+    {
+      "name": "chatter",
+      "type": "bool",
+      "help": "Enable chatter output",
+      "short": "V",
+      "default": false,
+      "negatable": true
+    },
+    {
+      "name": "log-level",
+      "type": "str",
+      "help": "Logging level",
+      "default": "info",
+      "env": "RICH_LOG_LEVEL",
+      "choices": [
+        "debug",
+        "info",
+        "warn",
+        "error"
+      ]
+    },
+    {
+      "name": "state-file",
+      "type": "str",
+      "help": "State file relative to the infra root",
+      "default": {
+        "relative_to_root": {
+          "env_var": "RICH_HOME",
+          "parts": [
+            "state",
+            "app.db"
+          ]
+        }
+      }
+    }
+  ],
+  "commands": {
+    "check": {
+      "name": "check",
+      "help": "Run project checks registered via the check framework and report results",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "all",
+          "type": "bool",
+          "help": "Run every registered check regardless of tag or name filters",
+          "default": false,
+          "negatable": true
+        },
+        {
+          "name": "tag",
+          "type": "str",
+          "help": "Tag DSL expression to select checks (e.g. 'changelog & !quality')",
+          "default": ""
+        },
+        {
+          "name": "name",
+          "type": "str",
+          "help": "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')",
+          "default": ""
+        },
+        {
+          "name": "list",
+          "type": "bool",
+          "help": "List all registered checks with their tags and exit without running",
+          "default": false,
+          "negatable": true
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "help": "Output check results as machine-readable JSON instead of human text",
+          "default": false,
+          "negatable": true
+        },
+        {
+          "name": "ignore-warnings",
+          "type": "bool",
+          "help": "Treat warn-severity results as passing so they do not cause nonzero exit",
+          "default": false,
+          "negatable": true
+        }
+      ],
+      "forwarding": {
+        "reason": "framework-internal: absorbs app-defined global flag values"
+      }
+    },
+    "types": {
+      "name": "types",
+      "help": "Test all flag types",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "name",
+          "type": "str",
+          "help": "A string flag",
+          "default": "world"
+        },
+        {
+          "name": "count",
+          "type": "int",
+          "help": "An integer flag",
+          "default": 42
+        },
+        {
+          "name": "big",
+          "type": "int",
+          "help": "A big integer flag",
+          "default": 9007199254740993
+        },
+        {
+          "name": "ratio",
+          "type": "float",
+          "help": "A float flag",
+          "default": 3.14
+        },
+        {
+          "name": "sim-run",
+          "type": "bool",
+          "help": "Dry run mode",
+          "negatable": true
+        },
+        {
+          "name": "cache-file",
+          "type": "str",
+          "help": "Cache file relative to the infra root",
+          "default": {
+            "relative_to_root": {
+              "env_var": "RICH_HOME",
+              "parts": [
+                "cache.bin"
+              ]
+            }
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "target",
+          "help": "Target to process"
+        }
+      ]
+    },
+    "multi": {
+      "name": "multi",
+      "help": "Test list and dict flags",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "tag",
+          "type": "list[str]",
+          "help": "Tags to apply",
+          "env": "RICH_TAGS",
+          "unique": true,
+          "env_separator": ","
+        },
+        {
+          "name": "port",
+          "type": "list[int]",
+          "help": "Ports to open",
+          "default": [
+            80,
+            443
+          ]
+        },
+        {
+          "name": "matrix",
+          "type": "dict[str,int]",
+          "help": "Named weights",
+          "default": {
+            "alpha": 1,
+            "beta": 2
+          }
+        }
+      ]
+    },
+    "output": {
+      "name": "output",
+      "help": "Test mutex flags",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "help": "JSON output",
+          "negatable": true
+        },
+        {
+          "name": "yaml",
+          "type": "bool",
+          "help": "YAML output",
+          "negatable": true
+        },
+        {
+          "name": "text",
+          "type": "bool",
+          "help": "Text output",
+          "negatable": true
+        }
+      ],
+      "constraints": [
+        {
+          "type": "mutex",
+          "flags": [
+            "json",
+            "yaml",
+            "text"
+          ]
+        }
+      ]
+    },
+    "deploy": {
+      "name": "deploy",
+      "help": "Test dependencies",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "host",
+          "type": "str",
+          "help": "Deploy host"
+        },
+        {
+          "name": "port-num",
+          "type": "int",
+          "help": "Deploy port"
+        },
+        {
+          "name": "ssl",
+          "type": "bool",
+          "help": "Use SSL",
+          "negatable": true
+        },
+        {
+          "name": "cert",
+          "type": "str",
+          "help": "SSL certificate path"
+        }
+      ],
+      "constraints": [
+        {
+          "type": "co_required",
+          "flags": [
+            "host",
+            "port-num"
+          ]
+        },
+        {
+          "type": "requires",
+          "flag": "cert",
+          "depends_on": "ssl"
+        }
+      ]
+    },
+    "notify": {
+      "name": "notify",
+      "help": "Test implies dependency",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "email",
+          "type": "bool",
+          "help": "Send email notification",
+          "negatable": true
+        },
+        {
+          "name": "alert",
+          "type": "bool",
+          "help": "Enable alerts",
+          "negatable": true
+        }
+      ],
+      "constraints": [
+        {
+          "type": "implies",
+          "flag": "email",
+          "implies": "alert",
+          "value": true
+        }
+      ]
+    },
+    "query": {
+      "name": "query",
+      "help": "Test flag sets",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "page",
+          "type": "int",
+          "help": "Page number",
+          "default": 1
+        },
+        {
+          "name": "per-page",
+          "type": "int",
+          "help": "Items per page",
+          "default": 20
+        }
+      ]
+    },
+    "files": {
+      "name": "files",
+      "help": "Test args",
+      "effect": "read_only",
+      "args": [
+        {
+          "name": "src",
+          "help": "Source directory"
+        },
+        {
+          "name": "mode",
+          "help": "Copy mode",
+          "required": false,
+          "default": "fast"
+        },
+        {
+          "name": "extra",
+          "help": "Extra files",
+          "required": false,
+          "variadic": true
+        }
+      ]
+    },
+    "exec": {
+      "name": "exec",
+      "help": "Execute a command",
+      "effect": "read_only",
+      "passthrough": true
+    },
+    "lint": {
+      "name": "lint",
+      "help": "Run linters",
+      "effect": "read_only",
+      "tags": [
+        "ci",
+        "quality"
+      ]
+    },
+    "level": {
+      "name": "level",
+      "help": "Test int/float choices",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "priority",
+          "type": "int",
+          "help": "Priority level",
+          "default": 3,
+          "choices": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "name": "threshold",
+          "type": "float",
+          "help": "Threshold value",
+          "default": 0.5,
+          "choices": [
+            0.1,
+            0.5,
+            0.9
+          ]
+        }
+      ]
+    },
+    "info": {
+      "name": "info",
+      "help": "Show info",
+      "effect": "read_only",
+      "flags": [
+        {
+          "name": "format",
+          "type": "str",
+          "help": "Output format",
+          "short": "f",
+          "default": "table"
+        },
+        {
+          "name": "color-off",
+          "type": "bool",
+          "help": "Disable colors",
+          "default": false,
+          "negatable": false
+        },
+        {
+          "name": "strict-mode",
+          "type": "bool",
+          "help": "Strict mode",
+          "default": false,
+          "conflict_mode": "error",
+          "negatable": true
+        }
+      ]
+    },
+    "secret": {
+      "name": "secret",
+      "help": "Hidden maintenance command",
+      "effect": "read_only",
+      "hidden": true
+    },
+    "shell": {
+      "name": "shell",
+      "help": "Interactive shell",
+      "effect": "read_only",
+      "interactive": true
+    },
+    "serve": {
+      "name": "serve",
+      "help": "Start the server",
+      "effect": "read_only",
+      "config_fields": [
+        "api.key",
+        "listen_port"
+      ]
+    }
+  },
+  "groups": {
+    "config": {
+      "name": "config",
+      "help": "Manage persistent configuration values stored in the config file",
+      "commands": {
+        "path": {
+          "name": "path",
+          "help": "Print the absolute path to the config file for this application",
+          "effect": "read_only",
+          "forwarding": {
+            "reason": "framework-internal: absorbs app-defined global flag values"
+          }
+        },
+        "show": {
+          "name": "show",
+          "help": "Show all config values with their sources (config file, env, or default)",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "plain",
+              "type": "bool",
+              "help": "Display config values in a human-readable table format",
+              "default": false,
+              "negatable": true
+            },
+            {
+              "name": "json",
+              "type": "bool",
+              "help": "Display config values as a JSON object with source metadata",
+              "default": false,
+              "negatable": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "mutex",
+              "flags": [
+                "plain",
+                "json"
+              ]
+            }
+          ],
+          "forwarding": {
+            "reason": "framework-internal: absorbs app-defined global flag values"
+          }
+        },
+        "set": {
+          "name": "set",
+          "help": "Set a persistent config value that overrides the default for a flag",
+          "effect": "mutating",
+          "flags": [
+            {
+              "name": "clear",
+              "type": "bool",
+              "help": "Clear a repeatable flag by setting its value to an empty list",
+              "default": false,
+              "negatable": true
+            },
+            {
+              "name": "default",
+              "type": "bool",
+              "help": "Reset a key to its default value by removing it from the config file",
+              "default": false,
+              "negatable": true
+            }
+          ],
+          "args": [
+            {
+              "name": "key",
+              "help": "The config key to set, matching a registered flag name"
+            },
+            {
+              "name": "value",
+              "help": "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
+              "required": false
+            }
+          ],
+          "forwarding": {
+            "reason": "framework-internal: absorbs app-defined global flag values"
+          }
+        },
+        "edit": {
+          "name": "edit",
+          "help": "Open the config file for manual editing in $EDITOR (creates if missing)",
+          "effect": "mutating",
+          "interactive": true,
+          "forwarding": {
+            "reason": "framework-internal: absorbs app-defined global flag values"
+          }
+        },
+        "init": {
+          "name": "init",
+          "help": "Generate a template config file with documented fields and defaults",
+          "effect": "mutating",
+          "forwarding": {
+            "reason": "framework-internal: absorbs app-defined global flag values"
+          }
+        }
+      }
+    },
+    "db": {
+      "name": "db",
+      "help": "Database operations",
+      "commands": {
+        "migrate": {
+          "name": "migrate",
+          "help": "Run migrations",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "steps",
+              "type": "int",
+              "help": "Migration steps"
+            }
+          ],
+          "tags": [
+            "infra"
+          ],
+          "config_fields": [
+            "listen_port"
+          ]
+        },
+        "seed": {
+          "name": "seed",
+          "help": "Seed database",
+          "effect": "read_only",
+          "tags": [
+            "infra"
+          ]
+        }
+      },
+      "groups": {
+        "cache": {
+          "name": "cache",
+          "help": "Cache operations",
+          "commands": {
+            "clear": {
+              "name": "clear",
+              "help": "Clear cache",
+              "effect": "read_only",
+              "tags": [
+                "infra"
+              ]
+            },
+            "stats": {
+              "name": "stats",
+              "help": "Show cache stats",
+              "effect": "read_only",
+              "flags": [
+                {
+                  "name": "detailed",
+                  "type": "bool",
+                  "help": "Show detailed stats",
+                  "negatable": true
+                }
+              ],
+              "tags": [
+                "infra"
+              ]
+            }
+          }
+        }
+      },
+      "deprecated": {
+        "reset": "Use 'db migrate --steps -1' instead"
+      },
+      "tags": [
+        "infra"
+      ]
+    }
+  },
+  "deprecated": {
+    "old-cmd": "Use 'new-cmd' instead"
+  },
+  "tag_contracts": {
+    "quality": "chatter"
+  },
+  "checks": {
+    "lint-clean": {
+      "tags": [
+        "quality"
+      ],
+      "severity": "error",
+      "fast": true,
+      "pure": true,
+      "needs_network": false,
+      "depends_on": []
+    },
+    "db-ping": {
+      "tags": [
+        "infra"
+      ],
+      "severity": "warn",
+      "fast": false,
+      "pure": false,
+      "needs_network": true,
+      "depends_on": [
+        "lint-clean"
+      ],
+      "scope": "db"
+    }
+  },
+  "config_fields": {
+    "api.key": {
+      "type": "str",
+      "help": "API key for the service",
+      "required": true,
+      "bound_commands": [
+        "serve"
+      ]
+    },
+    "listen_port": {
+      "type": "int",
+      "help": "Port to listen on",
+      "required": false,
+      "default": 8080,
+      "bound_commands": [
+        "serve",
+        "db migrate"
+      ]
+    },
+    "debug": {
+      "type": "bool",
+      "help": "Enable debug mode",
+      "required": false,
+      "default": false
+    }
+  },
+  "infra": {
+    "roots": [
+      {
+        "env_var": "RICH_HOME",
+        "default": "/var/lib/richapp"
+      }
+    ],
+    "handshakes": [
+      {
+        "env_var": "RICH_SESSION",
+        "help": "Session token from the invoking process"
+      }
+    ]
+  }
+}`;
 
 const CHECKS_TOML = `app = "richapp"
 
@@ -73,8 +788,8 @@ function buildRichApp(): App {
 		handshakeEnv: { RICH_SESSION: "Session token from the invoking process" },
 		checksEmbed: CHECKS_TOML,
 		flags: {
-			verbose: flag("verbose", t.bool, {
-				help: "Enable verbose output",
+			chatter: flag("chatter", t.bool, {
+				help: "Enable chatter output",
 				short: "V",
 				default: false,
 			}),
@@ -107,7 +822,7 @@ function buildRichApp(): App {
 	app.warnCheck("db-ping", (_ctx, r) => r.passed("pong"));
 
 	app.command(
-		defineCommand("types", {
+		defineReadOnlyCommand("types", {
 			help: "Test all flag types",
 			flags: {
 				name: flag("name", t.str, {
@@ -126,7 +841,7 @@ function buildRichApp(): App {
 					help: "A float flag",
 					default: 3.14,
 				}),
-				dry_run: flag("dry-run", t.bool, { help: "Dry run mode" }),
+				sim_run: flag("sim-run", t.bool, { help: "Dry run mode" }),
 				cache_file: flag("cache-file", t.str, {
 					help: "Cache file relative to the infra root",
 					default: relativeToRoot("RICH_HOME", "cache.bin"),
@@ -138,7 +853,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("multi", {
+		defineReadOnlyCommand("multi", {
 			help: "Test list and dict flags",
 			flags: {
 				tag: flag("tag", t.list(t.str), {
@@ -166,7 +881,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("output", {
+		defineReadOnlyCommand("output", {
 			help: "Test mutex flags",
 			mutex: [
 				mutexGroup({
@@ -180,7 +895,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "Test dependencies",
 			flags: {
 				host: flag("host", t.str, { help: "Deploy host", default: null }),
@@ -203,7 +918,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("notify", {
+		defineReadOnlyCommand("notify", {
 			help: "Test implies dependency",
 			flags: {
 				email: flag("email", t.bool, { help: "Send email notification" }),
@@ -215,7 +930,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("query", {
+		defineReadOnlyCommand("query", {
 			help: "Test flag sets",
 			flagSets: [
 				flagSet("pagination", {
@@ -231,7 +946,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("files", {
+		defineReadOnlyCommand("files", {
 			help: "Test args",
 			args: [
 				arg("src", t.str, { help: "Source directory" }),
@@ -251,11 +966,14 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		passthrough("exec", { help: "Execute a command", handler: () => 0 }),
+		readOnlyPassthrough("exec", {
+			help: "Execute a command",
+			handler: () => 0,
+		}),
 	);
 
 	app.command(
-		defineCommand("lint", {
+		defineReadOnlyCommand("lint", {
 			help: "Run linters",
 			tags: ["quality", "ci"],
 			handler: () => 0,
@@ -263,7 +981,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("level", {
+		defineReadOnlyCommand("level", {
 			help: "Test int/float choices",
 			flags: {
 				priority: flag("priority", t.int, {
@@ -282,7 +1000,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("info", {
+		defineReadOnlyCommand("info", {
 			help: "Show info",
 			flags: {
 				format: flag("format", t.str, {
@@ -306,7 +1024,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("secret", {
+		defineReadOnlyCommand("secret", {
 			help: "Hidden maintenance command",
 			hidden: true,
 			handler: () => 0,
@@ -314,7 +1032,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("shell", {
+		defineReadOnlyCommand("shell", {
 			help: "Interactive shell",
 			interactive: true,
 			handler: () => 0,
@@ -322,7 +1040,7 @@ function buildRichApp(): App {
 	);
 
 	app.command(
-		defineCommand("serve", {
+		defineReadOnlyCommand("serve", {
 			help: "Start the server",
 			configFields: ["api.key", "listen_port"],
 			handler: () => 0,
@@ -330,11 +1048,11 @@ function buildRichApp(): App {
 	);
 
 	app.deprecate(deprecated("old-cmd", "Use 'new-cmd' instead"));
-	app.tagContract("quality", "verbose");
+	app.tagContract("quality", "chatter");
 
 	const db = app.group("db", { help: "Database operations", tags: ["infra"] });
 	db.command(
-		defineCommand("migrate", {
+		defineReadOnlyCommand("migrate", {
 			help: "Run migrations",
 			flags: {
 				steps: flag("steps", t.int, {
@@ -347,16 +1065,16 @@ function buildRichApp(): App {
 		}),
 	);
 	db.command(
-		defineCommand("seed", { help: "Seed database", handler: () => 0 }),
+		defineReadOnlyCommand("seed", { help: "Seed database", handler: () => 0 }),
 	);
 	db.deprecate(deprecated("reset", "Use 'db migrate --steps -1' instead"));
 
 	const cache = db.group("cache", { help: "Cache operations" });
 	cache.command(
-		defineCommand("clear", { help: "Clear cache", handler: () => 0 }),
+		defineReadOnlyCommand("clear", { help: "Clear cache", handler: () => 0 }),
 	);
 	cache.command(
-		defineCommand("stats", {
+		defineReadOnlyCommand("stats", {
 			help: "Show cache stats",
 			flags: {
 				detailed: flag("detailed", t.bool, { help: "Show detailed stats" }),
@@ -370,7 +1088,9 @@ function buildRichApp(): App {
 
 function buildMinimalApp(): App {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
-	app.command(defineCommand("greet", { help: "say hello", handler: () => 0 }));
+	app.command(
+		defineReadOnlyCommand("greet", { help: "say hello", handler: () => 0 }),
+	);
 	return app;
 }
 

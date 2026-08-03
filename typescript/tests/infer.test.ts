@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { InferHandler } from "../src/index.js";
-import { arg, defineCommand, flag, t } from "../src/index.js";
+import { arg, defineReadOnlyCommand, flag, t } from "../src/index.js";
 
 // Exact type equality via the conditional-generic-signature trick (see
 // docs/history/_ts-port-spec.md, "Equals type-assertion technique").
@@ -13,10 +13,10 @@ type Assert<T extends true> = T;
 
 // --- Canonical 5-member example from the spec ---
 
-const build = defineCommand("build", {
+const build = defineReadOnlyCommand("build", {
 	help: "Build the project",
 	flags: {
-		dry_run: flag("dry-run", t.bool, { help: "Dry run", default: true }),
+		sim_run: flag("sim-run", t.bool, { help: "Dry run", default: true }),
 		count: flag("count", t.int, { help: "How many" }),
 		tag: flag("tag", t.list(t.str), { help: "Tags" }),
 		meta: flag("meta", t.dict(t.int), { help: "Metadata" }),
@@ -25,7 +25,7 @@ const build = defineCommand("build", {
 	handler: (args) => {
 		// Assignment checks inside the handler mirror the spike.
 		const used: [boolean, bigint, string[], Map<string, bigint>, number[]] = [
-			args.dry_run,
+			args.sim_run,
 			args.count,
 			args.tag,
 			args.meta,
@@ -37,7 +37,7 @@ const build = defineCommand("build", {
 
 type BuildArgs = InferHandler<typeof build>;
 type Expected = {
-	dry_run: boolean;
+	sim_run: boolean;
 	count: bigint;
 	tag: string[];
 	meta: Map<string, bigint>;
@@ -50,7 +50,7 @@ export type _CanonicalNegative = Assert<
 	Equals<Equals<BuildArgs, Omit<Expected, "count">>, false>
 >;
 
-test("defineCommand normalizes carrier fields", () => {
+test("defineReadOnlyCommand normalizes carrier fields", () => {
 	assert.equal(build.kind, "command");
 	assert.equal(build.name, "build");
 	assert.equal(build.help, "Build the project");
@@ -63,14 +63,17 @@ test("defineCommand normalizes carrier fields", () => {
 });
 
 test("flags and args default to empty when omitted", () => {
-	const ping = defineCommand("ping", { help: "Ping", handler: () => 0 });
+	const ping = defineReadOnlyCommand("ping", {
+		help: "Ping",
+		handler: () => 0,
+	});
 	assert.deepEqual(ping.flags, {});
 	assert.deepEqual(ping.args, []);
 });
 
 // --- True optional-key modifier for explicitly-optional scalars ---
 
-const fetchCmd = defineCommand("fetch", {
+const fetchCmd = defineReadOnlyCommand("fetch", {
 	help: "Fetch a resource",
 	flags: {
 		url: flag("url", t.str, { help: "URL", default: null }),
@@ -90,7 +93,7 @@ export type _NotUndefinedUnion = Assert<
 
 // --- Arg optionality: required present, optional-no-default gets `?:` ---
 
-const cp = defineCommand("cp", {
+const cp = defineReadOnlyCommand("cp", {
 	help: "Copy a file",
 	args: [
 		arg("src", t.str, { help: "Source" }),

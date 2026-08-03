@@ -11,8 +11,11 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { CheckContext } from "../src/index.js";
-import { type App, createApp } from "../src/index.js";
+import type { App, CheckContext } from "../src/index.js";
+import { createTestApp as createApp } from "./helpers.js";
+
+/** The framework's would-do log header (dry mode's primary output). */
+const DRY_RUN_HEADER = "DRY RUN \u2014 no changes were made. Would do:\n";
 
 const CTX: CheckContext = { projectRoot: "." };
 
@@ -94,7 +97,7 @@ scope = "changelog"
 }
 
 test("dry-run: Kahn order, dependency annotation, purity annotation", async () => {
-	const result = await mirrorApp().test(["check", "--all", "--dry-run"]);
+	const result = await mirrorApp().test(["--dry-run", "check", "--all"]);
 	assert.equal(result.exitCode, 0);
 	assert.equal(
 		result.stdout,
@@ -102,7 +105,10 @@ test("dry-run: Kahn order, dependency annotation, purity annotation", async () =
 			"  1. compile [impure]\n" +
 			"  2. format [pure]\n" +
 			"  3. lint [pure]\n" +
-			"  4. deploy-gate (depends on: compile, lint) [impure]\n",
+			"  4. deploy-gate (depends on: compile, lint) [impure]\n" +
+			// `check` is read_only, so the framework's would-do log is the
+			// header with an empty body.
+			`${DRY_RUN_HEADER}`,
 	);
 });
 

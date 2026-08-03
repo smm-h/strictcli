@@ -175,19 +175,31 @@ export type _FlagOptKeys = Assert<
 export type _ArgOptKeys = Assert<
 	Equals<KeysOfUnion<api.ArgOpts<string, "str">>, OCKeys<"arg">>
 >;
-export type _CommandSpecKeys = Assert<
+export type _ReadOnlyCommandSpecKeys = Assert<
 	Equals<
-		keyof api.CommandSpec<api.FlagMap, readonly api.AnyArg[]> & string,
-		OCKeys<"defineCommand">
+		keyof api.ReadOnlyCommandSpec<api.FlagMap, readonly api.AnyArg[]> & string,
+		OCKeys<"defineReadOnlyCommand">
+	>
+>;
+export type _MutatingCommandSpecKeys = Assert<
+	Equals<
+		keyof api.MutatingCommandSpec<api.FlagMap, readonly api.AnyArg[]> & string,
+		OCKeys<"defineMutatingCommand">
 	>
 >;
 export type _AppSpecKeys = Assert<
 	Equals<keyof api.AppSpec & string, OCKeys<"createApp">>
 >;
-export type _PassthroughSpecKeys = Assert<
+export type _ReadOnlyPassthroughSpecKeys = Assert<
 	Equals<
-		keyof Parameters<typeof api.passthrough>[1] & string,
-		OCKeys<"passthrough">
+		keyof Parameters<typeof api.readOnlyPassthrough>[1] & string,
+		OCKeys<"readOnlyPassthrough">
+	>
+>;
+export type _MutatingPassthroughSpecKeys = Assert<
+	Equals<
+		keyof Parameters<typeof api.mutatingPassthrough>[1] & string,
+		OCKeys<"mutatingPassthrough">
 	>
 >;
 export type _RequiresSpecKeys = Assert<
@@ -269,8 +281,21 @@ const typeWitness: Record<TypeName, unknown> = {
 	CoRequired: witnessType<api.CoRequired>(),
 	CommandDef:
 		witnessType<api.CommandDef<string, api.FlagMap, readonly api.AnyArg[]>>(),
-	CommandSpec:
-		witnessType<api.CommandSpec<api.FlagMap, readonly api.AnyArg[]>>(),
+	Completed: witnessType<api.Completed>(),
+	Effect: witnessType<api.Effect>(),
+	EffectKind: witnessType<api.EffectKind>(),
+	Forwarding: witnessType<api.Forwarding>(),
+	Grant: witnessType<api.Grant>(),
+	MutatingCommandSpec:
+		witnessType<api.MutatingCommandSpec<api.FlagMap, readonly api.AnyArg[]>>(),
+	MutatingContext: witnessType<api.MutatingContext>(),
+	MutatingEffects: witnessType<api.MutatingEffects>(),
+	ReadOnlyCommandSpec:
+		witnessType<api.ReadOnlyCommandSpec<api.FlagMap, readonly api.AnyArg[]>>(),
+	ReadOnlyContext: witnessType<api.ReadOnlyContext>(),
+	ReadOnlyEffects: witnessType<api.ReadOnlyEffects>(),
+	Response: witnessType<api.Response>(),
+	Spawned: witnessType<api.Spawned>(),
 	ConfigFieldSpec: witnessType<api.ConfigFieldSpec>(),
 	ConflictMode: witnessType<api.ConflictMode>(),
 	ConnectionEnvReader: witnessType<api.ConnectionEnvReader>(),
@@ -433,7 +458,7 @@ test("registry: runtime keys of factory-built carriers match declaration order",
 	assert.deepEqual(Object.keys(f), runtimeMembers("FlagDef"));
 	const a = api.arg("src", api.t.str, { help: "h" });
 	assert.deepEqual(Object.keys(a), runtimeMembers("ArgDef"));
-	const cmd = api.defineCommand("run", {
+	const cmd = api.defineReadOnlyCommand("run", {
 		help: "h",
 		handler: () => 0,
 	});
@@ -457,7 +482,7 @@ test("registry: runtime keys of factory-built carriers match declaration order",
 		Object.keys(api.implies({ flag: "a", implies: "b", value: true })),
 		runtimeMembers("Implies"),
 	);
-	const p = api.passthrough("git", { help: "h", handler: () => 0 });
+	const p = api.readOnlyPassthrough("git", { help: "h", handler: () => 0 });
 	assert.deepEqual(Object.keys(p), runtimeMembers("PassthroughDef"));
 	assert.deepEqual(
 		Object.keys(api.deprecated("old", "gone")),
@@ -529,7 +554,9 @@ test("registry: class prototypes expose the listed methods", () => {
 
 test("registry: app.test() results carry only listed Result members", async () => {
 	const app = api.createApp({ name: "myapp", version: "1.0.0", help: "demo" });
-	app.command(api.defineCommand("run", { help: "h", handler: () => 0 }));
+	app.command(
+		api.defineReadOnlyCommand("run", { help: "h", handler: () => 0 }),
+	);
 	const res = await app.test(["run"]);
 	const listed = members("Result");
 	for (const key of Object.keys(res)) {

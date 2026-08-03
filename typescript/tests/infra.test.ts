@@ -11,7 +11,7 @@
 import { strict as assert } from "node:assert";
 import { homedir } from "node:os";
 import { test } from "node:test";
-import { createApp, defineCommand, flag, t } from "../src/index.js";
+import { createApp, defineReadOnlyCommand, flag, t } from "../src/index.js";
 import {
 	buildInfraAccess,
 	expandTilde,
@@ -122,7 +122,7 @@ function infraApp() {
 		infraRoot: { MYAPP_HOME: "/var/lib/myapp" },
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "Run it",
 			flags: {
 				db: flag("db", t.str, {
@@ -165,7 +165,7 @@ test("infra: default path gets ~ expanded when the env var is unset", async () =
 		}),
 	);
 	app.command(
-		defineCommand("show", {
+		defineReadOnlyCommand("show", {
 			help: "show",
 			handler: (_args, ctx) => {
 				const [value, isSet] = ctx.infraValue("SCRATCH_HOME_X");
@@ -223,7 +223,7 @@ test("infra: hermetic suppresses the flag's env var but not the marker default",
 			infraRoot: { MYAPP_HOME: "/var/lib/myapp" },
 		});
 		app.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "run",
 				flags: {
 					db: flag("db", t.str, {
@@ -268,7 +268,7 @@ test("infra: global flag marker default resolves with source 'infra'", async () 
 			},
 		});
 		a.command(
-			defineCommand("run", {
+			defineReadOnlyCommand("run", {
 				help: "run",
 				handler: (args, ctx) => {
 					const globals = args as Record<string, unknown>;
@@ -300,7 +300,7 @@ test("infra: handshake values are read live, roots stay captured", async () => {
 			}),
 	);
 	app.command(
-		defineCommand("show", {
+		defineReadOnlyCommand("show", {
 			help: "show",
 			handler: (_args, ctx) => {
 				const [hs, hsSet] = ctx.infraValue("MYAPP_ORCHESTRATED");
@@ -334,7 +334,7 @@ test("infra: infraValue on an undeclared var throws the sibling message", async 
 		infraRoot: { MYAPP_HOME: "/var/lib/myapp" },
 	});
 	app.command(
-		defineCommand("show", {
+		defineReadOnlyCommand("show", {
 			help: "show",
 			handler: (_args, ctx) => {
 				try {
@@ -411,7 +411,7 @@ test("infra: global flag marker referencing an undeclared root is a hard error",
 
 test("infra: command flag marker referencing an undeclared root is a hard error", () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "t" });
-	const cmd = defineCommand("run", {
+	const cmd = defineReadOnlyCommand("run", {
 		help: "run",
 		flags: {
 			db: flag("db", t.str, {
@@ -434,7 +434,7 @@ test("infra: group-nested command flag markers are validated too", () => {
 	assert.throws(
 		() =>
 			grp.command(
-				defineCommand("init", {
+				defineReadOnlyCommand("init", {
 					help: "init",
 					flags: {
 						path: flag("path", t.str, {
@@ -467,7 +467,7 @@ test("infra: declared markers register cleanly at every level", () => {
 	});
 	const grp = app.group("db", { help: "db group" });
 	grp.command(
-		defineCommand("init", {
+		defineReadOnlyCommand("init", {
 			help: "init",
 			flags: {
 				path: flag("path", t.str, {
@@ -539,7 +539,9 @@ test("infra: app help renders the Infrastructure section (Go byte parity)", asyn
 			},
 			handshakeEnv: { MYAPP_ORCHESTRATED: "set by the orchestrator" },
 		});
-		a.command(defineCommand("run", { help: "Run it", handler: () => 0 }));
+		a.command(
+			defineReadOnlyCommand("run", { help: "Run it", handler: () => 0 }),
+		);
 		return a;
 	});
 	const r = await app.test(["--help"]);

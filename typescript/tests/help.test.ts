@@ -14,12 +14,12 @@ import { test } from "node:test";
 import {
 	arg,
 	createApp,
-	defineCommand,
+	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	flagSet,
 	mutexGroup,
-	passthrough,
+	readOnlyPassthrough,
 	t,
 } from "../src/index.js";
 
@@ -31,8 +31,12 @@ test("help: app help shows version and commands (help.json)", async () => {
 		version: "3.0.0",
 		help: "my cool app",
 	});
-	app.command(defineCommand("run", { help: "run something", handler: ok }));
-	app.command(defineCommand("test", { help: "run tests", handler: ok }));
+	app.command(
+		defineReadOnlyCommand("run", { help: "run something", handler: ok }),
+	);
+	app.command(
+		defineReadOnlyCommand("test", { help: "run tests", handler: ok }),
+	);
 	const r = await app.test([]);
 	assert.equal(
 		r.stdout,
@@ -45,11 +49,11 @@ test("help: app help shows version and commands (help.json)", async () => {
 test("help: command help shows flags and args (help.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy the app",
 			args: [arg("target", t.str, { help: "deploy target" })],
 			flags: {
-				dry_run: flag("dry-run", t.bool, {
+				sim_run: flag("sim-run", t.bool, {
 					help: "preview changes",
 					default: false,
 				}),
@@ -60,14 +64,16 @@ test("help: command help shows flags and args (help.json)", async () => {
 	const r = await app.test(["deploy", "--help"]);
 	assert.equal(
 		r.stdout,
-		"myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target\n\nFlags:\n  --dry-run, --no-dry-run    preview changes [default: false]\n",
+		"myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target\n\nFlags:\n  --sim-run, --no-sim-run    preview changes [default: false]\n",
 	);
 	assert.equal(r.exitCode, 0);
 });
 
 test("help: command help via -h shows only the header (help.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
-	app.command(defineCommand("deploy", { help: "deploy the app", handler: ok }));
+	app.command(
+		defineReadOnlyCommand("deploy", { help: "deploy the app", handler: ok }),
+	);
 	const r = await app.test(["deploy", "-h"]);
 	assert.equal(r.stdout, "myapp deploy -- deploy the app\n");
 });
@@ -75,7 +81,7 @@ test("help: command help via -h shows only the header (help.json)", async () => 
 test("help: str flag shows <str> and default (help.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				output: flag("output", t.str, {
@@ -96,7 +102,7 @@ test("help: str flag shows <str> and default (help.json)", async () => {
 test("help: required flag shown as [required] (help.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: { target: flag("target", t.str, { help: "the target" }) },
 			handler: ok,
@@ -112,7 +118,7 @@ test("help: required flag shown as [required] (help.json)", async () => {
 test("help: explicitly-optional flag shows [optional] (Go Default(nil) fix)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				target: flag("target", t.str, { help: "the target", default: null }),
@@ -130,7 +136,9 @@ test("help: explicitly-optional flag shows [optional] (Go Default(nil) fix)", as
 test("help: app help shows groups (help.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	const grp = app.group("config", { help: "manage configuration" });
-	grp.command(defineCommand("show", { help: "display config", handler: ok }));
+	grp.command(
+		defineReadOnlyCommand("show", { help: "display config", handler: ok }),
+	);
 	const r = await app.test([]);
 	assert.equal(
 		r.stdout,
@@ -145,7 +153,7 @@ test("help: optional arg shows default / [optional] (help.json)", async () => {
 		help: "test app",
 	});
 	withDefault.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [
 				arg("path", t.str, {
@@ -168,7 +176,7 @@ test("help: optional arg shows default / [optional] (help.json)", async () => {
 		help: "test app",
 	});
 	noDefault.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [arg("path", t.str, { help: "project dir", required: false })],
 			handler: ok,
@@ -188,7 +196,7 @@ test("help: env var and choices metadata (env.json, choices.json)", async () => 
 		envPrefix: "MYAPP",
 	});
 	envApp.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				target: flag("target", t.str, {
@@ -211,7 +219,7 @@ test("help: env var and choices metadata (env.json, choices.json)", async () => 
 		help: "test app",
 	});
 	choicesApp.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				format: flag("format", t.str, {
@@ -232,7 +240,7 @@ test("help: env var and choices metadata (env.json, choices.json)", async () => 
 test("help: int flag shows <int> (int_type.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				port: flag("port", t.int, { help: "the port", default: 8000n }),
@@ -249,7 +257,7 @@ test("help: int flag shows <int> (int_type.json)", async () => {
 test("help: repeatable list flags show [repeatable] (repeatable.json)", async () => {
 	const bare = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	bare.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				tag: flag("tag", t.list(t.str), { help: "a tag", repeatable: true }),
@@ -268,7 +276,7 @@ test("help: repeatable list flags show [repeatable] (repeatable.json)", async ()
 		help: "test app",
 	});
 	withDefault.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				tag: flag("tag", t.list(t.str), {
@@ -289,15 +297,15 @@ test("help: repeatable list flags show [repeatable] (repeatable.json)", async ()
 test("help: mutex groups render their own section (mutex.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				name: flag("name", t.str, { help: "your name", default: "anon" }),
 			},
 			mutex: [
 				mutexGroup({
-					verbose: flag("verbose", t.bool, { help: "verbose output" }),
-					quiet: flag("quiet", t.bool, { help: "quiet output" }),
+					chatter: flag("chatter", t.bool, { help: "chatter output" }),
+					muted: flag("muted", t.bool, { help: "muted output" }),
 				}),
 			],
 			handler: ok,
@@ -305,7 +313,7 @@ test("help: mutex groups render their own section (mutex.json)", async () => {
 	);
 	assert.equal(
 		(await app.test(["cmd", "--help"])).stdout,
-		"myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --verbose, --no-verbose    verbose output [required]\n  --quiet, --no-quiet        quiet output [required]\n",
+		"myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [required]\n  --muted, --no-muted        muted output [required]\n",
 	);
 });
 
@@ -315,16 +323,16 @@ test("help: global flags in command help (global_flags.json)", async () => {
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			verbose: flag("verbose", t.bool, {
-				help: "enable verbose output",
+			chatter: flag("chatter", t.bool, {
+				help: "enable chatter output",
 				default: false,
 			}),
 		},
 	});
-	app.command(defineCommand("cmd", { help: "a command", handler: ok }));
+	app.command(defineReadOnlyCommand("cmd", { help: "a command", handler: ok }));
 	assert.equal(
 		(await app.test(["cmd", "--help"])).stdout,
-		"myapp cmd -- a command\n\nGlobal flags:\n  --verbose, --no-verbose    enable verbose output [default: false]\n",
+		"myapp cmd -- a command\n\nGlobal flags:\n  --chatter, --no-chatter    enable chatter output [default: false]\n",
 	);
 });
 
@@ -332,7 +340,7 @@ test("help: nested command help shows the group prefix (nesting.json)", async ()
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	const grp = app.group("config", { help: "manage configuration" });
 	grp.command(
-		defineCommand("set", {
+		defineReadOnlyCommand("set", {
 			help: "set a config value",
 			flags: {
 				key: flag("key", t.str, { help: "config key" }),
@@ -351,12 +359,14 @@ test("help: 3-level nesting (nesting.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	const dns = app.group("dns", { help: "manage DNS" });
 	dns.command(
-		defineCommand("status", { help: "show DNS status", handler: ok }),
+		defineReadOnlyCommand("status", { help: "show DNS status", handler: ok }),
 	);
 	const zone = dns.group("zone", { help: "manage zones" });
-	zone.command(defineCommand("list", { help: "list all zones", handler: ok }));
 	zone.command(
-		defineCommand("create", {
+		defineReadOnlyCommand("list", { help: "list all zones", handler: ok }),
+	);
+	zone.command(
+		defineReadOnlyCommand("create", {
 			help: "create a zone",
 			flags: { name: flag("name", t.str, { help: "zone name" }) },
 			handler: ok,
@@ -380,9 +390,11 @@ test("help: 3-level nesting (nesting.json)", async () => {
 test("help: group help lists subcommands (nesting.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	const grp = app.group("config", { help: "manage configuration" });
-	grp.command(defineCommand("show", { help: "display config", handler: ok }));
 	grp.command(
-		defineCommand("set", { help: "set a config value", handler: ok }),
+		defineReadOnlyCommand("show", { help: "display config", handler: ok }),
+	);
+	grp.command(
+		defineReadOnlyCommand("set", { help: "set a config value", handler: ok }),
 	);
 	const expected =
 		"myapp config -- manage configuration\n\nCommands:\n  show    display config\n  set     set a config value\n\nUse 'myapp config <command> --help' for more information.\n";
@@ -394,7 +406,7 @@ test("help: group help lists subcommands (nesting.json)", async () => {
 test("help: passthrough command help is header-only (passthrough.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		passthrough("checkout", {
+		readOnlyPassthrough("checkout", {
 			help: "checkout a branch",
 			handler: () => 0,
 		}),
@@ -404,7 +416,9 @@ test("help: passthrough command help is header-only (passthrough.json)", async (
 		"myapp checkout -- checkout a branch\n",
 	);
 	// Passthrough commands appear in the app-level Commands section.
-	app.command(passthrough("status", { help: "show status", handler: () => 0 }));
+	app.command(
+		readOnlyPassthrough("status", { help: "show status", handler: () => 0 }),
+	);
 	assert.equal(
 		(await app.test([])).stdout,
 		"myapp v1.0.0 -- test app\n\nCommands:\n  checkout    checkout a branch\n  status      show status\n\nUse 'myapp <command> --help' for more information.\n",
@@ -414,7 +428,7 @@ test("help: passthrough command help is header-only (passthrough.json)", async (
 test("help: flag-set flags render in the Flags section (flag_sets.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flagSets: [
 				flagSet("diagnostics", {
@@ -440,7 +454,10 @@ test("help: flag-set flags render in the Flags section (flag_sets.json)", async 
 test("help: app help shows the Deprecated section (Python-captured)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("new-cmd", { help: "the replacement command", handler: ok }),
+		defineReadOnlyCommand("new-cmd", {
+			help: "the replacement command",
+			handler: ok,
+		}),
 	);
 	app.deprecate(deprecated("old-cmd", "use 'new-cmd' instead"));
 	assert.equal(
@@ -455,17 +472,17 @@ test("help: app help shows Global flags without meta (Python-captured)", async (
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			verbose: flag("verbose", t.bool, {
-				help: "enable verbose output",
+			chatter: flag("chatter", t.bool, {
+				help: "enable chatter output",
 				default: false,
 				short: "V",
 			}),
 		},
 	});
-	app.command(defineCommand("cmd", { help: "a command", handler: ok }));
+	app.command(defineReadOnlyCommand("cmd", { help: "a command", handler: ok }));
 	assert.equal(
 		(await app.test([])).stdout,
-		"myapp v1.0.0 -- test app\n\nCommands:\n  cmd    a command\n\nGlobal flags:\n  --verbose, -V    enable verbose output\n\nUse 'myapp <command> --help' for more information.\n",
+		"myapp v1.0.0 -- test app\n\nCommands:\n  cmd    a command\n\nGlobal flags:\n  --chatter, -V    enable chatter output\n\nUse 'myapp <command> --help' for more information.\n",
 	);
 });
 
@@ -477,7 +494,7 @@ test("help: app help shows the Infrastructure section (Python-captured)", async 
 		infraRoot: { MYAPP_ROOT: "~/.myapp" },
 		handshakeEnv: { MYAPP_ORCHESTRATED: "set by the orchestrator" },
 	});
-	app.command(defineCommand("cmd", { help: "a command", handler: ok }));
+	app.command(defineReadOnlyCommand("cmd", { help: "a command", handler: ok }));
 	assert.equal(
 		(await app.test([])).stdout,
 		"myapp v1.0.0 -- test app\n\nCommands:\n  cmd    a command\n\nInfrastructure:\n  (location/handshake env vars; not suppressed by --hermetic)\n  MYAPP_ROOT            root (default: ~/.myapp)\n  MYAPP_ORCHESTRATED    set by the orchestrator\n\nUse 'myapp <command> --help' for more information.\n",

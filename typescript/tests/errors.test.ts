@@ -36,7 +36,15 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // different wording): 12 dict-flag parse templates + 2 positional-arg
 // wrappers (values.ts), 9 registration templates (factories.ts), and 3
 // check-provider materialization guards (app.ts / checks/provider.ts).
-const EXPECTED_TEMPLATE_COUNT = 272;
+// The effects regime (5.4) adds 30: the §12 templates of the effects contract
+// (classification, guard v2 / forwarding, framework-internal verification,
+// grant declaration, effect call-time enforcement, effect failure, parameter
+// rejection, inapplicable options, truncation and the confirm protocol), plus
+// five effect argument type-guards Python raises as inline TypeErrors and one
+// TS-only guard (errEffectsUnavailable) for a Context built outside a dispatch.
+// promptConfirmMutating is deliberately NOT counted here: it is a prompt, not
+// an err* template, and the census filters on the err prefix.
+const EXPECTED_TEMPLATE_COUNT = 302;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

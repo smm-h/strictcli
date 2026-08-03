@@ -11,13 +11,13 @@ import {
 	arg,
 	coRequired,
 	createApp,
-	defineCommand,
+	defineReadOnlyCommand,
 	flag,
 	InvokeError,
 	implies,
 	mutexGroup,
 	outcome,
-	passthrough,
+	readOnlyPassthrough,
 	t,
 } from "../src/index.js";
 
@@ -29,20 +29,22 @@ function buildApp() {
 
 test("call: handler returning an integer yields that integer", async () => {
 	const app = buildApp();
-	app.command(defineCommand("run", { help: "run", handler: () => 42 }));
+	app.command(defineReadOnlyCommand("run", { help: "run", handler: () => 42 }));
 	assert.equal(await app.call("run"), 42);
 });
 
 test("call: handler returning nothing yields undefined (Python None)", async () => {
 	const app = buildApp();
-	app.command(defineCommand("run", { help: "run", handler: () => undefined }));
+	app.command(
+		defineReadOnlyCommand("run", { help: "run", handler: () => undefined }),
+	);
 	assert.equal(await app.call("run"), undefined);
 });
 
 test("call: outcome data is returned as-is", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("status", {
+		defineReadOnlyCommand("status", {
 			help: "get status",
 			handler: () => outcome(0, { healthy: true, uptime: 3600n }),
 		}),
@@ -52,7 +54,9 @@ test("call: outcome data is returned as-is", async () => {
 
 test("call: data-less outcome yields its exit code", async () => {
 	const app = buildApp();
-	app.command(defineCommand("run", { help: "run", handler: () => outcome(3) }));
+	app.command(
+		defineReadOnlyCommand("run", { help: "run", handler: () => outcome(3) }),
+	);
 	assert.equal(await app.call("run"), 3);
 });
 
@@ -62,7 +66,7 @@ test("call: pre-typed flag values reach the handler; defaults fill gaps", async 
 	const app = buildApp();
 	let captured: { name: string; count: bigint } | undefined;
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "say hello",
 			flags: {
 				name: flag("name", t.str, { help: "who to greet" }),
@@ -82,18 +86,18 @@ test("call: dashed flag names use underscored kwargs keys", async () => {
 	const app = buildApp();
 	let seen: boolean | undefined;
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy",
 			flags: {
-				dry_run: flag("dry-run", t.bool, { help: "dry run", default: false }),
+				sim_run: flag("sim-run", t.bool, { help: "dry run", default: false }),
 			},
 			handler: (args) => {
-				seen = args.dry_run;
+				seen = args.sim_run;
 				return 0;
 			},
 		}),
 	);
-	await app.call("deploy", { dry_run: true });
+	await app.call("deploy", { sim_run: true });
 	assert.equal(seen, true);
 });
 
@@ -101,7 +105,7 @@ test("call: provided kwargs report source cli; defaults report default", async (
 	const app = buildApp();
 	const sources: Record<string, string> = {};
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "say hello",
 			flags: {
 				name: flag("name", t.str, { help: "who" }),
@@ -124,13 +128,13 @@ test("call: global flags accept kwargs and fall back to defaults", async () => {
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			verbose: flag("verbose", t.bool, { help: "verbose", default: false }),
+			chatter: flag("chatter", t.bool, { help: "chatter", default: false }),
 			region: flag("region", t.str, { help: "region", default: "eu" }),
 		},
 	});
 	let captured: Record<string, unknown> | undefined;
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run",
 			handler: (args) => {
 				captured = args as Record<string, unknown>;
@@ -138,8 +142,8 @@ test("call: global flags accept kwargs and fall back to defaults", async () => {
 			},
 		}),
 	);
-	await app.call("run", { verbose: true });
-	assert.equal(captured?.verbose, true);
+	await app.call("run", { chatter: true });
+	assert.equal(captured?.chatter, true);
 	assert.equal(captured?.region, "eu");
 });
 
@@ -147,7 +151,7 @@ test("call: dict flag accepts a Map or a plain object (converted to Map)", async
 	const app = buildApp();
 	let seen: Map<string, string> | undefined;
 	app.command(
-		defineCommand("tag", {
+		defineReadOnlyCommand("tag", {
 			help: "tag",
 			flags: {
 				labels: flag("labels", t.dict(t.str), {
@@ -175,7 +179,7 @@ test("call: dict flag accepts a Map or a plain object (converted to Map)", async
 test("call: dict flag rejects non-map values with the Go-templated message", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("tag", {
+		defineReadOnlyCommand("tag", {
 			help: "tag",
 			flags: {
 				labels: flag("labels", t.dict(t.str), { help: "labels" }),
@@ -195,7 +199,7 @@ test("call: positional args are passed by declared name", async () => {
 	const app = buildApp();
 	let seen: string | undefined;
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy",
 			args: [arg("target", t.str, { help: "target" })],
 			handler: (args) => {
@@ -212,7 +216,7 @@ test("call: variadic args take an array and re-coerce elements", async () => {
 	const app = buildApp();
 	let seen: readonly bigint[] | undefined;
 	app.command(
-		defineCommand("sum", {
+		defineReadOnlyCommand("sum", {
 			help: "sum",
 			args: [arg("nums", t.int, { help: "numbers", variadic: true })],
 			handler: (args) => {
@@ -228,7 +232,7 @@ test("call: variadic args take an array and re-coerce elements", async () => {
 test("call: missing required positional arg raises InvokeError", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy",
 			args: [arg("target", t.str, { help: "target" })],
 			handler: () => 0,
@@ -244,7 +248,7 @@ test("call: missing required positional arg raises InvokeError", async () => {
 
 test("call: unknown command raises InvokeError", async () => {
 	const app = buildApp();
-	app.command(defineCommand("greet", { help: "hi", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("greet", { help: "hi", handler: () => 0 }));
 	await assert.rejects(app.call("nonexistent"), {
 		name: "InvokeError",
 		message: "unknown command 'nonexistent'",
@@ -254,7 +258,9 @@ test("call: unknown command raises InvokeError", async () => {
 test("call: group path raises InvokeError (Python message)", async () => {
 	const app = buildApp();
 	const db = app.group("db", { help: "database commands" });
-	db.command(defineCommand("migrate", { help: "migrate", handler: () => 0 }));
+	db.command(
+		defineReadOnlyCommand("migrate", { help: "migrate", handler: () => 0 }),
+	);
 	await assert.rejects(app.call("db"), {
 		name: "InvokeError",
 		message: "'db' is a group, not a command",
@@ -264,7 +270,7 @@ test("call: group path raises InvokeError (Python message)", async () => {
 test("call: unknown parameter raises InvokeError with the command path", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "hi",
 			flags: { name: flag("name", t.str, { help: "who" }) },
 			handler: () => 0,
@@ -279,7 +285,7 @@ test("call: unknown parameter raises InvokeError with the command path", async (
 test("call: missing required flag raises InvokeError", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "hi",
 			flags: { name: flag("name", t.str, { help: "who" }) },
 			handler: () => 0,
@@ -295,7 +301,7 @@ test("call: mutex violations raise InvokeError", async () => {
 	const build = () => {
 		const app = buildApp();
 		app.command(
-			defineCommand("fetch", {
+			defineReadOnlyCommand("fetch", {
 				help: "fetch",
 				mutex: [
 					mutexGroup({
@@ -321,7 +327,7 @@ test("call: mutex violations raise InvokeError", async () => {
 test("call: dependency violations raise InvokeError", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("sync", {
+		defineReadOnlyCommand("sync", {
 			help: "sync",
 			flags: {
 				user: flag("user", t.str, { help: "user", default: null }),
@@ -341,7 +347,7 @@ test("call: implies dependency injects the implied value", async () => {
 	const app = buildApp();
 	let seen: { watch?: boolean; follow?: boolean } = {};
 	app.command(
-		defineCommand("logs", {
+		defineReadOnlyCommand("logs", {
 			help: "logs",
 			flags: {
 				watch: flag("watch", t.bool, { help: "watch", default: false }),
@@ -364,7 +370,7 @@ test("call: implies dependency injects the implied value", async () => {
 test("call: choices are validated on pre-typed values", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("paint", {
+		defineReadOnlyCommand("paint", {
 			help: "paint",
 			flags: {
 				color: flag("color", t.str, {
@@ -392,7 +398,7 @@ test("call: dot-separated paths resolve nested group commands", async () => {
 	const dns = app.group("dns", { help: "dns" });
 	const zone = dns.group("zone", { help: "zones" });
 	zone.command(
-		defineCommand("create", {
+		defineReadOnlyCommand("create", {
 			help: "create zone",
 			flags: { name: flag("name", t.str, { help: "zone name" }) },
 			handler: (args) => outcome(0, { created: args.name }),
@@ -411,7 +417,7 @@ test("call: passthrough forwards _args, name, and global values", async () => {
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			verbose: flag("verbose", t.bool, { help: "verbose", default: false }),
+			chatter: flag("chatter", t.bool, { help: "chatter", default: false }),
 		},
 	});
 	let captured:
@@ -422,7 +428,7 @@ test("call: passthrough forwards _args, name, and global values", async () => {
 		  }
 		| undefined;
 	app.command(
-		passthrough("exec", {
+		readOnlyPassthrough("exec", {
 			help: "execute command",
 			handler: (pa) => {
 				captured = {
@@ -435,13 +441,13 @@ test("call: passthrough forwards _args, name, and global values", async () => {
 		}),
 	);
 	assert.equal(
-		await app.call("exec", { _args: ["ls", "-la", "/tmp"], verbose: true }),
+		await app.call("exec", { _args: ["ls", "-la", "/tmp"], chatter: true }),
 		0,
 	);
 	assert.deepEqual(captured, {
 		name: "exec",
 		args: ["ls", "-la", "/tmp"],
-		globals: { verbose: true },
+		globals: { chatter: true },
 	});
 });
 
@@ -449,7 +455,7 @@ test("call: passthrough omitted _args defaults to an empty list", async () => {
 	const app = buildApp();
 	let seen: readonly string[] | undefined;
 	app.command(
-		passthrough("exec", {
+		readOnlyPassthrough("exec", {
 			help: "execute command",
 			handler: (pa) => {
 				seen = pa.args;
@@ -464,7 +470,7 @@ test("call: passthrough omitted _args defaults to an empty list", async () => {
 test("call: passthrough _args must be a string array", async () => {
 	const app = buildApp();
 	app.command(
-		passthrough("exec", { help: "execute command", handler: () => 0 }),
+		readOnlyPassthrough("exec", { help: "execute command", handler: () => 0 }),
 	);
 	await assert.rejects(app.call("exec", { _args: [1, 2] }), {
 		name: "InvokeError",
@@ -482,14 +488,14 @@ test("call: passthrough rejects unknown kwargs", async () => {
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			verbose: flag("verbose", t.bool, { help: "verbose", default: false }),
+			chatter: flag("chatter", t.bool, { help: "chatter", default: false }),
 		},
 	});
 	app.command(
-		passthrough("exec", { help: "execute command", handler: () => 0 }),
+		readOnlyPassthrough("exec", { help: "execute command", handler: () => 0 }),
 	);
 	await assert.rejects(
-		app.call("exec", { _args: ["ls"], verbose: true, bogus_flag: "x" }),
+		app.call("exec", { _args: ["ls"], chatter: true, bogus_flag: "x" }),
 		{
 			name: "InvokeError",
 			message: 'unknown parameter "bogus_flag" for passthrough command "exec"',
@@ -504,13 +510,13 @@ test("call: passthrough missing required global flag raises InvokeError", async 
 		help: "test app",
 		flags: {
 			token: flag("token", t.str, { help: "auth token" }),
-			verbose: flag("verbose", t.bool, { help: "verbose", default: false }),
+			chatter: flag("chatter", t.bool, { help: "chatter", default: false }),
 		},
 	});
 	app.command(
-		passthrough("exec", { help: "execute command", handler: () => 0 }),
+		readOnlyPassthrough("exec", { help: "execute command", handler: () => 0 }),
 	);
-	await assert.rejects(app.call("exec", { _args: ["ls"], verbose: true }), {
+	await assert.rejects(app.call("exec", { _args: ["ls"], chatter: true }), {
 		name: "InvokeError",
 		message: "global flag '--token' is required",
 	});
@@ -526,7 +532,7 @@ test("call: passthrough missing required bool global names both forms", async ()
 		},
 	});
 	app.command(
-		passthrough("exec", { help: "execute command", handler: () => 0 }),
+		readOnlyPassthrough("exec", { help: "execute command", handler: () => 0 }),
 	);
 	await assert.rejects(app.call("exec", { _args: ["ls"] }), {
 		name: "InvokeError",
@@ -540,7 +546,7 @@ test("call: passthrough missing required bool global names both forms", async ()
 test("call: handler exceptions propagate (not wrapped in InvokeError)", async () => {
 	const app = buildApp();
 	app.command(
-		defineCommand("fail", {
+		defineReadOnlyCommand("fail", {
 			help: "always fails",
 			handler: () => {
 				throw new RangeError("something broke");

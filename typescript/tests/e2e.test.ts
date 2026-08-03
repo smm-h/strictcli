@@ -16,11 +16,11 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
 	createApp,
-	defineCommand,
+	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	outcome,
-	passthrough,
+	readOnlyPassthrough,
 	t,
 } from "../src/index.js";
 
@@ -53,7 +53,7 @@ test("e2e 1: app help", async () => {
 		help: "my cool app",
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run something",
 			handler: (_args, ctx) => {
 				ctx.info("ok");
@@ -62,7 +62,7 @@ test("e2e 1: app help", async () => {
 		}),
 	);
 	app.command(
-		defineCommand("test", {
+		defineReadOnlyCommand("test", {
 			help: "run tests",
 			handler: (_args, ctx) => {
 				ctx.info("ok");
@@ -82,7 +82,7 @@ test("e2e 1: app help", async () => {
 test("e2e 2: str flag with space syntax", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: { target: flag("target", t.str, { help: "the target" }) },
 			handler: (args, ctx) => {
@@ -102,11 +102,11 @@ test("e2e 2: str flag with space syntax", async () => {
 test("e2e 3: unknown flag", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				verbose: flag("verbose", t.bool, {
-					help: "be verbose",
+				chatter: flag("chatter", t.bool, {
+					help: "be chatter",
 					default: false,
 				}),
 			},
@@ -127,7 +127,7 @@ test("e2e 3: unknown flag", async () => {
 test("e2e 4: invalid choice", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				format: flag("format", t.str, {
@@ -153,7 +153,7 @@ test("e2e 4: invalid choice", async () => {
 test("e2e 5: required flag missing", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: { target: flag("target", t.str, { help: "the target" }) },
 			handler: (args, ctx) => {
@@ -173,22 +173,22 @@ test("e2e 5: required flag missing", async () => {
 test("e2e 6: bool negation", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				verbose: flag("verbose", t.bool, {
-					help: "be verbose",
+				chatter: flag("chatter", t.bool, {
+					help: "be chatter",
 					default: false,
 				}),
 			},
 			handler: (args, ctx) => {
-				ctx.info(`verbose=${args.verbose ? "true" : "false"}`);
+				ctx.info(`chatter=${args.chatter ? "true" : "false"}`);
 				return 0;
 			},
 		}),
 	);
-	await expectBytes(app, ["cmd", "--no-verbose"], {
-		stdout: "verbose=false\n",
+	await expectBytes(app, ["cmd", "--no-chatter"], {
+		stdout: "chatter=false\n",
 		stderr: "",
 		exitCode: 0,
 	});
@@ -203,7 +203,7 @@ test("e2e 7: str flag from env var", async () => {
 		envPrefix: "MYAPP",
 	});
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				target: flag("target", t.str, {
@@ -239,7 +239,7 @@ test("e2e 7: str flag from env var", async () => {
 test("e2e 8: unknown command", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "say hello",
 			handler: (_args, ctx) => {
 				ctx.info("hello");
@@ -259,7 +259,7 @@ test("e2e 8: unknown command", async () => {
 test("e2e 9: deprecated command", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		defineCommand("new-cmd", {
+		defineReadOnlyCommand("new-cmd", {
 			help: "the replacement command",
 			handler: (_args, ctx) => {
 				ctx.info("new");
@@ -280,7 +280,7 @@ test("e2e 9: deprecated command", async () => {
 test("e2e 10: passthrough receives raw args", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
-		passthrough("checkout", {
+		readOnlyPassthrough("checkout", {
 			help: "checkout a branch",
 			handler: (pt, ctx) => {
 				ctx.info(`${pt.name}:${pt.args.join(",")}`);
@@ -299,7 +299,7 @@ test("e2e 10: passthrough receives raw args", async () => {
 test("e2e 11: --version", async () => {
 	const app = createApp({ name: "myapp", version: "2.5.0", help: "test app" });
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "say hello",
 			handler: (_args, ctx) => {
 				ctx.info("hello");
@@ -323,7 +323,7 @@ test("e2e 12: data outcome prints one compact JSON line", async () => {
 		help: "Test the Outcome data contract",
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "Return a data-only outcome",
 			handler: () => outcome(0, { count: 3, name: "strictcli" }),
 		}),

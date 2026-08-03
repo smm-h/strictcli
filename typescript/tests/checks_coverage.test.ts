@@ -22,7 +22,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { CheckContext } from "../src/index.js";
-import { type App, createApp, defineCommand } from "../src/index.js";
+import { type App, defineReadOnlyCommand } from "../src/index.js";
+import { createTestApp as createApp } from "./helpers.js";
 
 const CTX: CheckContext = { projectRoot: "." };
 
@@ -51,7 +52,7 @@ function coverageApp(): App {
 		["build", "build the app", "built"],
 	] as const) {
 		app.command(
-			defineCommand(name, {
+			defineReadOnlyCommand(name, {
 				help,
 				handler: (_args, ctx) => {
 					ctx.info(prints);
@@ -220,7 +221,7 @@ test("group commands are covered by their dotted path", async () => {
 		});
 		const infra = app.group("infra", { help: "infra commands" });
 		infra.command(
-			defineCommand("deploy", {
+			defineReadOnlyCommand("deploy", {
 				help: "deploy infra",
 				handler: () => 0,
 			}),

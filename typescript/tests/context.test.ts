@@ -7,15 +7,16 @@ function sink(): { chunks: string[]; writer: Writer } {
 	return { chunks, writer: { write: (s: string) => chunks.push(s) } };
 }
 
-test("context: info/debug write to stdout, warn/error to stderr", () => {
+test("context: info writes to stdout, warn/error to stderr, debug is gated", () => {
 	const out = sink();
 	const err = sink();
 	const ctx = new Context(out.writer, err.writer, {}, null);
 	ctx.info("i");
+	// debug is hidden by default: it is shown only under --verbose.
 	ctx.debug("d");
 	ctx.warn("w");
 	ctx.error("e");
-	assert.deepEqual(out.chunks, ["i\n", "d\n"]);
+	assert.deepEqual(out.chunks, ["i\n"]);
 	assert.deepEqual(err.chunks, ["w\n", "e\n"]);
 });
 

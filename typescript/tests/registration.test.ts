@@ -7,13 +7,13 @@ import {
 	arg,
 	coRequired,
 	createApp,
-	defineCommand,
+	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	flagSet,
 	implies,
 	mutexGroup,
-	passthrough,
+	readOnlyPassthrough,
 	requires,
 	t,
 } from "../src/index.js";
@@ -70,11 +70,11 @@ test("flag: repeatable constraint web", () => {
 	rejects(
 		() =>
 			flag(
-				"verbose",
+				"chatter",
 				t.bool,
 				loose({ help: "h", default: false, repeatable: true }),
 			),
-		'Flag "verbose": repeatable is incompatible with type=bool',
+		'Flag "chatter": repeatable is incompatible with type=bool',
 	);
 	// TS-only: scalar repeatable flags do not exist -- list carriers ARE the
 	// repeatable flags (no sibling analog for this inexpressible state).
@@ -145,11 +145,11 @@ test("flag: choices validation", () => {
 	rejects(
 		() =>
 			flag(
-				"verbose",
+				"chatter",
 				t.bool,
 				loose({ help: "h", default: false, choices: [true] }),
 			),
-		'Flag "verbose": choices is incompatible with type=bool',
+		'Flag "chatter": choices is incompatible with type=bool',
 	);
 	rejects(
 		() => flag("fmt", t.str, loose({ help: "h", choices: [] })),
@@ -367,7 +367,7 @@ test("arg: default must be in choices (Python repr formatting)", () => {
 	);
 });
 
-// --- defineCommand validation ---
+// --- twin command factory validation ---
 
 const strFlag = (name: string) => flag(name, t.str, { help: "h" });
 const boolFlag = (name: string) =>
@@ -375,11 +375,11 @@ const boolFlag = (name: string) =>
 
 test("command: missing help", () => {
 	rejects(
-		() => defineCommand("x", { help: " ", handler: () => 0 }),
+		() => defineReadOnlyCommand("x", { help: " ", handler: () => 0 }),
 		'command "x": missing help text',
 	);
 	rejects(
-		() => passthrough("x", { help: " ", handler: () => 0 }),
+		() => readOnlyPassthrough("x", { help: " ", handler: () => 0 }),
 		'command "x": missing help text',
 	);
 });
@@ -387,18 +387,18 @@ test("command: missing help", () => {
 test("command: flag-map keys must be underscore forms (flags, flagSets, mutex)", () => {
 	rejects(
 		() =>
-			defineCommand("build", {
+			defineReadOnlyCommand("build", {
 				help: "h",
 				flags: {
-					dryRun: flag("dry-run", t.bool, { help: "h", default: false }),
+					simRun: flag("sim-run", t.bool, { help: "h", default: false }),
 				},
 				handler: () => 0,
 			}),
-		"command \"build\": flags key 'dryRun' must be the underscore form of flag 'dry-run' ('dry_run')",
+		"command \"build\": flags key 'simRun' must be the underscore form of flag 'sim-run' ('sim_run')",
 	);
 	rejects(
 		() =>
-			defineCommand("build", {
+			defineReadOnlyCommand("build", {
 				help: "h",
 				flagSets: [flagSet("fs", loose({ wrong: strFlag("right") }))],
 				handler: () => 0,
@@ -407,7 +407,7 @@ test("command: flag-map keys must be underscore forms (flags, flagSets, mutex)",
 	);
 	rejects(
 		() =>
-			defineCommand("build", {
+			defineReadOnlyCommand("build", {
 				help: "h",
 				mutex: [
 					mutexGroup(loose({ wrong: strFlag("right"), b: strFlag("b") })),
@@ -421,7 +421,7 @@ test("command: flag-map keys must be underscore forms (flags, flagSets, mutex)",
 test("command: mutex groups need at least 2 flags and no overlap", () => {
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				mutex: [mutexGroup({ a: strFlag("a") })],
 				handler: () => 0,
@@ -430,7 +430,7 @@ test("command: mutex groups need at least 2 flags and no overlap", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				mutex: [
 					mutexGroup({ a: strFlag("a"), b: strFlag("b") }),
@@ -445,7 +445,7 @@ test("command: mutex groups need at least 2 flags and no overlap", () => {
 test("command: duplicate flag and arg names", () => {
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a") },
 				flagSets: [flagSet("fs", { a: strFlag("a") })],
@@ -455,7 +455,7 @@ test("command: duplicate flag and arg names", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				args: [arg("x", t.str, { help: "h" }), arg("x", t.str, { help: "h" })],
 				handler: () => 0,
@@ -467,7 +467,7 @@ test("command: duplicate flag and arg names", () => {
 test("command: variadic arg constraints", () => {
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				args: [
 					arg("x", t.str, { help: "h", variadic: true }),
@@ -479,7 +479,7 @@ test("command: variadic arg constraints", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				args: [
 					arg("x", t.str, { help: "h", variadic: true }),
@@ -494,7 +494,7 @@ test("command: variadic arg constraints", () => {
 test("command: CoRequired reference validation", () => {
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				dependencies: [coRequired(["a"])],
 				handler: () => 0,
@@ -503,7 +503,7 @@ test("command: CoRequired reference validation", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a") },
 				dependencies: [coRequired(["a", "b"])],
@@ -513,7 +513,7 @@ test("command: CoRequired reference validation", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a"), b: strFlag("b") },
 				dependencies: [coRequired(["a", "b", "a"])],
@@ -526,7 +526,7 @@ test("command: CoRequired reference validation", () => {
 test("command: Requires reference validation (unknown reported before same-flag)", () => {
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				dependencies: [requires({ flag: "a", dependsOn: "a" })],
 				handler: () => 0,
@@ -535,7 +535,7 @@ test("command: Requires reference validation (unknown reported before same-flag)
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a") },
 				dependencies: [requires({ flag: "a", dependsOn: "a" })],
@@ -545,7 +545,7 @@ test("command: Requires reference validation (unknown reported before same-flag)
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a") },
 				dependencies: [requires({ flag: "a", dependsOn: "b" })],
@@ -558,7 +558,7 @@ test("command: Requires reference validation (unknown reported before same-flag)
 test("command: Implies reference validation", () => {
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				dependencies: [implies({ flag: "a", implies: "b", value: true })],
 				handler: () => 0,
@@ -567,7 +567,7 @@ test("command: Implies reference validation", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: boolFlag("a") },
 				dependencies: [implies({ flag: "a", implies: "a", value: true })],
@@ -577,7 +577,7 @@ test("command: Implies reference validation", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a"), b: boolFlag("b") },
 				dependencies: [implies({ flag: "a", implies: "b", value: true })],
@@ -587,7 +587,7 @@ test("command: Implies reference validation", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: boolFlag("a"), b: strFlag("b") },
 				dependencies: [implies({ flag: "a", implies: "b", value: true })],
@@ -597,7 +597,7 @@ test("command: Implies reference validation", () => {
 	);
 	rejects(
 		() =>
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: boolFlag("a"), b: boolFlag("b") },
 				dependencies: [implies(loose({ flag: "a", implies: "b", value: 5n }))],
@@ -609,10 +609,15 @@ test("command: Implies reference validation", () => {
 
 test("command: tag name validation and dedup", () => {
 	rejects(
-		() => defineCommand("cmd", { help: "h", tags: ["Bad"], handler: () => 0 }),
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				tags: ["Bad"],
+				handler: () => 0,
+			}),
 		'invalid tag name "Bad": must match [a-z][a-z0-9-]*',
 	);
-	const cmd = defineCommand("cmd", {
+	const cmd = defineReadOnlyCommand("cmd", {
 		help: "h",
 		tags: ["b", "a", "b"],
 		handler: () => 0,
@@ -670,7 +675,7 @@ test("createApp: reserved global short flags are rejected", () => {
 		() =>
 			makeApp({
 				flags: {
-					quiet: flag("quiet", t.bool, {
+					muted: flag("muted", t.bool, {
 						help: "h",
 						short: "v",
 						default: false,
@@ -686,10 +691,10 @@ test("createApp: global flag map keys must be underscore forms", () => {
 		() =>
 			makeApp({
 				flags: {
-					dryRun: flag("dry-run", t.bool, { help: "h", default: false }),
+					simRun: flag("sim-run", t.bool, { help: "h", default: false }),
 				},
 			}),
-		"App.flags key 'dryRun' must be the underscore form of flag 'dry-run' ('dry_run')",
+		"App.flags key 'simRun' must be the underscore form of flag 'sim-run' ('sim_run')",
 	);
 });
 
@@ -742,17 +747,17 @@ test("createApp: infra roots resolve eagerly (env override, tilde expansion)", (
 // --- App-level registration ---
 
 test("app.command: command flags may not collide with global flags", () => {
-	const app = makeApp({ flags: { verbose: boolFlag("verbose") } });
+	const app = makeApp({ flags: { chatter: boolFlag("chatter") } });
 	rejects(
 		() =>
 			app.command(
-				defineCommand("cmd", {
+				defineReadOnlyCommand("cmd", {
 					help: "h",
-					flags: { verbose: boolFlag("verbose") },
+					flags: { chatter: boolFlag("chatter") },
 					handler: () => 0,
 				}),
 			),
-		'command "cmd": flag "verbose" collides with a global flag',
+		'command "cmd": flag "chatter" collides with a global flag',
 	);
 });
 
@@ -761,7 +766,7 @@ test("app.command: env prefix enforcement", () => {
 	rejects(
 		() =>
 			app.command(
-				defineCommand("cmd", {
+				defineReadOnlyCommand("cmd", {
 					help: "h",
 					flags: { target: flag("target", t.str, { help: "h", env: "TGT" }) },
 					handler: () => 0,
@@ -771,7 +776,7 @@ test("app.command: env prefix enforcement", () => {
 	);
 	// prefixed: false opts out; a conforming prefix passes.
 	app.command(
-		defineCommand("ok", {
+		defineReadOnlyCommand("ok", {
 			help: "h",
 			flags: {
 				target: flag("target", t.str, {
@@ -791,9 +796,9 @@ test("app: registration order is preserved (commands, groups, global flags)", ()
 	const app = makeApp({
 		flags: { zeta: strFlag("zeta"), alpha: strFlag("alpha") },
 	});
-	app.command(defineCommand("bravo", { help: "h", handler: () => 0 }));
-	app.command(defineCommand("alpha", { help: "h", handler: () => 0 }));
-	app.command(passthrough("zulu", { help: "h", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("bravo", { help: "h", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("alpha", { help: "h", handler: () => 0 }));
+	app.command(readOnlyPassthrough("zulu", { help: "h", handler: () => 0 }));
 	app.group("mike", { help: "h" });
 	app.group("kilo", { help: "h" });
 	assert.deepEqual([...app.commands.keys()], ["bravo", "alpha", "zulu"]);
@@ -806,9 +811,13 @@ test("app: registration order is preserved (commands, groups, global flags)", ()
 
 test("app: top-level re-registration overwrites in place (sibling parity)", () => {
 	const app = makeApp();
-	app.command(defineCommand("cmd", { help: "first", handler: () => 0 }));
-	app.command(defineCommand("other", { help: "h", handler: () => 0 }));
-	app.command(defineCommand("cmd", { help: "second", handler: () => 0 }));
+	app.command(
+		defineReadOnlyCommand("cmd", { help: "first", handler: () => 0 }),
+	);
+	app.command(defineReadOnlyCommand("other", { help: "h", handler: () => 0 }));
+	app.command(
+		defineReadOnlyCommand("cmd", { help: "second", handler: () => 0 }),
+	);
 	assert.deepEqual([...app.commands.keys()], ["cmd", "other"]);
 	assert.equal(app.commands.get("cmd")?.help, "second");
 });
@@ -816,10 +825,10 @@ test("app: top-level re-registration overwrites in place (sibling parity)", () =
 test("app.command: merged flag order is flags, then flag sets, then mutex", () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "h",
 			flags: { region: strFlag("region") },
-			flagSets: [flagSet("common", { verbose: boolFlag("verbose") })],
+			flagSets: [flagSet("common", { chatter: boolFlag("chatter") })],
 			mutex: [
 				mutexGroup({
 					from_file: flag("from-file", t.str, { help: "h", default: null }),
@@ -833,7 +842,7 @@ test("app.command: merged flag order is flags, then flag sets, then mutex", () =
 	assert.ok(reg);
 	assert.deepEqual(
 		reg.flags.map((f) => f.name),
-		["region", "verbose", "from-file", "from-url"],
+		["region", "chatter", "from-file", "from-url"],
 	);
 });
 
@@ -860,10 +869,13 @@ test("group: nested collision checks", () => {
 		'group "zone" is already registered',
 	);
 	rejects(
-		() => dns.command(defineCommand("zone", { help: "h", handler: () => 0 })),
+		() =>
+			dns.command(
+				defineReadOnlyCommand("zone", { help: "h", handler: () => 0 }),
+			),
 		'command "zone" collides with an existing group',
 	);
-	dns.command(defineCommand("list", { help: "h", handler: () => 0 }));
+	dns.command(defineReadOnlyCommand("list", { help: "h", handler: () => 0 }));
 	rejects(
 		() => dns.group("list", { help: "h" }),
 		'group "list" collides with an existing command',
@@ -879,7 +891,11 @@ test("group: arbitrary nesting depth with sorted tag accumulation", () => {
 	});
 	const record = zone.group("record", { help: "Records" });
 	record.command(
-		defineCommand("create", { help: "h", tags: ["beta"], handler: () => 0 }),
+		defineReadOnlyCommand("create", {
+			help: "h",
+			tags: ["beta"],
+			handler: () => 0,
+		}),
 	);
 	const dnsImpl = app.groups.get("dns");
 	assert.ok(dnsImpl);
@@ -922,7 +938,7 @@ test("deprecated: factory validates name and message", () => {
 
 test("deprecate: collision checks at app and group level", () => {
 	const app = makeApp();
-	app.command(defineCommand("cmd", { help: "h", handler: () => 0 }));
+	app.command(defineReadOnlyCommand("cmd", { help: "h", handler: () => 0 }));
 	app.group("grp", { help: "h" });
 	rejects(
 		() => app.deprecate(deprecated("cmd", "use other")),
@@ -941,7 +957,7 @@ test("deprecate: collision checks at app and group level", () => {
 
 	const grp = app.groups.get("grp");
 	assert.ok(grp);
-	grp.command(defineCommand("sub", { help: "h", handler: () => 0 }));
+	grp.command(defineReadOnlyCommand("sub", { help: "h", handler: () => 0 }));
 	rejects(
 		() => grp.deprecate(deprecated("sub", "gone")),
 		'deprecated command "sub" collides with an existing command',
@@ -955,14 +971,14 @@ test("deprecate: collision checks at app and group level", () => {
 test("tagContract: validates the tag name and stores the contract", () => {
 	const app = makeApp();
 	rejects(
-		() => app.tagContract("Bad", "dry-run"),
+		() => app.tagContract("Bad", "sim-run"),
 		'invalid tag name "Bad": must match [a-z][a-z0-9-]*',
 	);
-	app.tagContract("release", "dry-run");
-	assert.equal(app.tagContracts.get("release"), "dry-run");
+	app.tagContract("release", "sim-run");
+	assert.equal(app.tagContracts.get("release"), "sim-run");
 });
 
-// --- Integration: inference flows through app.command(defineCommand(...)) ---
+// --- Integration: inference flows through app.command(defineReadOnlyCommand(...)) ---
 
 type Equals<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
@@ -970,7 +986,7 @@ type Equals<A, B> =
 		: false;
 type Assert<T extends true> = T;
 
-const deployCmd = defineCommand("deploy", {
+const deployCmd = defineReadOnlyCommand("deploy", {
 	help: "Deploy the service",
 	flags: {
 		region: flag("region", t.str, {
@@ -982,7 +998,7 @@ const deployCmd = defineCommand("deploy", {
 	},
 	flagSets: [
 		flagSet("common", {
-			verbose: flag("verbose", t.bool, { help: "Verbose", default: false }),
+			chatter: flag("chatter", t.bool, { help: "Chatter", default: false }),
 		}),
 	],
 	mutex: [
@@ -1000,14 +1016,14 @@ const deployCmd = defineCommand("deploy", {
 				{
 					region: string;
 					replicas: bigint;
-					verbose: boolean;
+					chatter: boolean;
 					from_file?: string;
 					from_url?: string;
 					service: string;
 				}
 			>
 		>;
-		return args.verbose ? Number(args.replicas) : 0;
+		return args.chatter ? Number(args.replicas) : 0;
 	},
 });
 
@@ -1019,7 +1035,7 @@ test("integration: precisely-typed command registers with derived data intact", 
 	assert.equal(reg.kind, "command");
 	assert.deepEqual(
 		reg.flags.map((f) => f.name),
-		["region", "replicas", "verbose", "from-file", "from-url"],
+		["region", "replicas", "chatter", "from-file", "from-url"],
 	);
 	assert.deepEqual(reg.tags, []);
 });

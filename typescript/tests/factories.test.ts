@@ -3,13 +3,13 @@ import { test } from "node:test";
 import {
 	arg,
 	coRequired,
-	defineCommand,
+	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	flagSet,
 	implies,
 	mutexGroup,
-	passthrough,
+	readOnlyPassthrough,
 	requires,
 	t,
 } from "../src/index.js";
@@ -17,9 +17,9 @@ import {
 // --- Runtime: descriptor shapes ---
 
 test("flag captures name, schema, and opts", () => {
-	const f = flag("dry-run", t.bool, { help: "Dry run", default: true });
+	const f = flag("sim-run", t.bool, { help: "Dry run", default: true });
 	assert.equal(f.kind, "flag");
-	assert.equal(f.name, "dry-run");
+	assert.equal(f.name, "sim-run");
 	assert.equal(f.schema, "bool");
 	assert.equal(f.opts.help, "Dry run");
 	assert.equal(f.opts.default, true);
@@ -68,22 +68,22 @@ test("dependency descriptors carry sibling field shapes", () => {
 		dependsOn: "user",
 	});
 
-	const im = implies({ flag: "debug", implies: "verbose", value: true });
+	const im = implies({ flag: "debug", implies: "chatter", value: true });
 	assert.deepEqual(im, {
 		kind: "implies",
 		flag: "debug",
-		implies: "verbose",
+		implies: "chatter",
 		value: true,
 	});
 });
 
 test("flagSet and mutexGroup hold keyed flag maps", () => {
 	const common = flagSet("common", {
-		verbose: flag("verbose", t.bool, { help: "Verbose", default: false }),
+		chatter: flag("chatter", t.bool, { help: "Chatter", default: false }),
 	});
 	assert.equal(common.kind, "flag-set");
 	assert.equal(common.name, "common");
-	assert.equal(common.flags.verbose.name, "verbose");
+	assert.equal(common.flags.chatter.name, "chatter");
 
 	const mg = mutexGroup({
 		file: flag("file", t.str, { help: "From file", default: null }),
@@ -93,32 +93,40 @@ test("flagSet and mutexGroup hold keyed flag maps", () => {
 	assert.equal(mg.flags.file.schema, "str");
 });
 
-test("defineCommand validates help, tags, and flag-map keys", () => {
-	assert.throws(() => defineCommand("x", { help: " ", handler: () => 0 }), {
-		message: 'command "x": missing help text',
-	});
+test("defineReadOnlyCommand validates help, tags, and flag-map keys", () => {
 	assert.throws(
-		() => defineCommand("x", { help: "h", tags: ["Bad"], handler: () => 0 }),
+		() => defineReadOnlyCommand("x", { help: " ", handler: () => 0 }),
+		{
+			message: 'command "x": missing help text',
+		},
+	);
+	assert.throws(
+		() =>
+			defineReadOnlyCommand("x", {
+				help: "h",
+				tags: ["Bad"],
+				handler: () => 0,
+			}),
 		{ message: 'invalid tag name "Bad": must match [a-z][a-z0-9-]*' },
 	);
 	assert.throws(
 		() =>
-			defineCommand("build", {
+			defineReadOnlyCommand("build", {
 				help: "h",
 				flags: {
-					dryRun: flag("dry-run", t.bool, { help: "h", default: false }),
+					simRun: flag("sim-run", t.bool, { help: "h", default: false }),
 				},
 				handler: () => 0,
 			}),
 		{
 			message:
-				"command \"build\": flags key 'dryRun' must be the underscore form of flag 'dry-run' ('dry_run')",
+				"command \"build\": flags key 'simRun' must be the underscore form of flag 'sim-run' ('sim_run')",
 		},
 	);
 });
 
 test("passthrough and deprecated carriers", () => {
-	const pt = passthrough("checkout", {
+	const pt = readOnlyPassthrough("checkout", {
 		help: "Forward to git checkout",
 		handler: (args) => (args.args.length > 0 ? 0 : 1),
 	});
@@ -147,7 +155,7 @@ void [
 	// @ts-expect-error list defaults are element arrays, not scalars
 	() => flag("tag", t.list(t.str), { help: "h", default: "x" }),
 	// @ts-expect-error choices are incompatible with bool flags
-	() => flag("verbose", t.bool, { help: "h", default: false, choices: [true] }),
+	() => flag("chatter", t.bool, { help: "h", default: false, choices: [true] }),
 	// @ts-expect-error negatable is only meaningful for bool flags
 	() => flag("target", t.str, { help: "h", negatable: false }),
 	// @ts-expect-error unique requires a list carrier

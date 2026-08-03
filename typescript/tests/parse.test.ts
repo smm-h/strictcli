@@ -20,12 +20,12 @@ import {
 	arg,
 	coRequired,
 	createApp,
-	defineCommand,
+	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	implies,
 	mutexGroup,
-	passthrough,
+	readOnlyPassthrough,
 	requires,
 	t,
 } from "../src/index.js";
@@ -197,7 +197,7 @@ test("flags: str flag with space and equals syntax", async () => {
 		const out: string[] = [];
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: { target: flag("target", t.str, { help: "the target" }) },
 				handler: (a) => {
@@ -214,20 +214,20 @@ test("flags: str flag with space and equals syntax", async () => {
 function boolApp(out: string[], negatable?: false): AppImpl {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				verbose:
+				chatter:
 					negatable === false
-						? flag("verbose", t.bool, {
-								help: "be verbose",
+						? flag("chatter", t.bool, {
+								help: "be chatter",
 								default: false,
 								negatable: false,
 							})
-						: flag("verbose", t.bool, { help: "be verbose", default: false }),
+						: flag("chatter", t.bool, { help: "be chatter", default: false }),
 			},
 			handler: (a) => {
-				out.push(`verbose=${fmt(a.verbose)}`);
+				out.push(`chatter=${fmt(a.chatter)}`);
 			},
 		}),
 	);
@@ -236,9 +236,9 @@ function boolApp(out: string[], negatable?: false): AppImpl {
 
 test("flags: bool present/absent/negation", async () => {
 	const cases: readonly [string[], string][] = [
-		[["cmd", "--verbose"], "verbose=true"],
-		[["cmd"], "verbose=false"],
-		[["cmd", "--no-verbose"], "verbose=false"],
+		[["cmd", "--chatter"], "chatter=true"],
+		[["cmd"], "chatter=false"],
+		[["cmd", "--no-chatter"], "chatter=false"],
 	];
 	for (const [argv, expected] of cases) {
 		const out: string[] = [];
@@ -252,11 +252,11 @@ test("flags: short flags for bool and str", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				verbose: flag("verbose", t.bool, {
-					help: "be verbose",
+				chatter: flag("chatter", t.bool, {
+					help: "be chatter",
 					short: "V",
 					default: false,
 				}),
@@ -267,12 +267,12 @@ test("flags: short flags for bool and str", async () => {
 				}),
 			},
 			handler: (a) => {
-				out.push(`verbose=${fmt(a.verbose)} target=${fmt(a.target)}`);
+				out.push(`chatter=${fmt(a.chatter)} target=${fmt(a.target)}`);
 			},
 		}),
 	);
 	const r = await run(app, ["cmd", "-V", "-t", "foo"], out);
-	assert.equal(r.stdout, "verbose=true target=foo");
+	assert.equal(r.stdout, "chatter=true target=foo");
 });
 
 test("flags: str flag default omitted/provided", async () => {
@@ -283,7 +283,7 @@ test("flags: str flag default omitted/provided", async () => {
 		const out: string[] = [];
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
 					format: flag("format", t.str, {
@@ -304,7 +304,7 @@ test("flags: str flag default omitted/provided", async () => {
 test("flags: required str flag missing produces exact error", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: { target: flag("target", t.str, { help: "the target" }) },
 			handler: () => undefined,
@@ -317,12 +317,12 @@ test("flags: required str flag missing produces exact error", async () => {
 
 test("flags: bool flag=value syntax is rejected", async () => {
 	const out: string[] = [];
-	const r = await run(boolApp(out), ["cmd", "--verbose=true"], out);
+	const r = await run(boolApp(out), ["cmd", "--chatter=true"], out);
 	assert.equal(r.exitCode, 1);
 	assert.equal(
 		r.stderr,
 		errOut(
-			"flag '--verbose' is a boolean flag and does not take a value",
+			"flag '--chatter' is a boolean flag and does not take a value",
 			"myapp cmd",
 		),
 	);
@@ -330,16 +330,16 @@ test("flags: bool flag=value syntax is rejected", async () => {
 
 test("flags: negatable false rejects --no-flag as unknown", async () => {
 	const out: string[] = [];
-	const r = await run(boolApp(out, false), ["cmd", "--no-verbose"], out);
+	const r = await run(boolApp(out, false), ["cmd", "--no-chatter"], out);
 	assert.equal(r.exitCode, 1);
-	assert.equal(r.stderr, errOut("unknown flag '--no-verbose'", "myapp cmd"));
+	assert.equal(r.stderr, errOut("unknown flag '--no-chatter'", "myapp cmd"));
 });
 
 test("flags: required bool must-be-passed messages", async () => {
 	// required_bools.json shapes: negatable and non-negatable required bools.
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: { watch: flag("watch", t.bool, { help: "watch mode" }) },
 			handler: () => undefined,
@@ -356,7 +356,7 @@ test("flags: required bool must-be-passed messages", async () => {
 
 	const app2 = makeApp();
 	app2.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				watch: flag("watch", t.bool, { help: "watch mode", negatable: false }),
@@ -390,7 +390,10 @@ test("errors: unknown flag (bare and equals form)", async () => {
 test("errors: unknown short flag treated as positional", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	const r = await run(app, ["cmd", "-x"]);
 	assert.equal(r.exitCode, 1);
@@ -400,7 +403,10 @@ test("errors: unknown short flag treated as positional", async () => {
 test("errors: extra positional arg", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	const r = await run(app, ["cmd", "surprise"]);
 	assert.equal(r.stderr, errOut("unexpected argument 'surprise'", "myapp cmd"));
@@ -409,7 +415,7 @@ test("errors: extra positional arg", async () => {
 test("errors: flag requires a value", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: { target: flag("target", t.str, { help: "the target" }) },
 			handler: () => undefined,
@@ -425,7 +431,10 @@ test("errors: flag requires a value", async () => {
 test("errors: unknown command uses app-level try hint", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	const r = await run(app, ["unknown"]);
 	assert.equal(r.exitCode, 1);
@@ -434,11 +443,11 @@ test("errors: unknown command uses app-level try hint", async () => {
 
 test("errors: bool negation with value is rejected", async () => {
 	const out: string[] = [];
-	const r = await run(boolApp(out), ["cmd", "--no-verbose=true"], out);
+	const r = await run(boolApp(out), ["cmd", "--no-chatter=true"], out);
 	assert.equal(
 		r.stderr,
 		errOut(
-			"flag '--no-verbose' is a boolean negation and does not take a value",
+			"flag '--no-chatter' is a boolean negation and does not take a value",
 			"myapp cmd",
 		),
 	);
@@ -448,26 +457,26 @@ test("errors: str flag consumes flag-like next token as its value", async () => 
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				target: flag("target", t.str, { help: "the target" }),
-				verbose: flag("verbose", t.bool, {
-					help: "be verbose",
+				chatter: flag("chatter", t.bool, {
+					help: "be chatter",
 					default: false,
 				}),
 			},
 			handler: (a) => {
-				out.push(`target=${fmt(a.target)} verbose=${fmt(a.verbose)}`);
+				out.push(`target=${fmt(a.target)} chatter=${fmt(a.chatter)}`);
 			},
 		}),
 	);
 	const r1 = await run(app, ["cmd", "--target", "--unknown"], out);
 	assert.equal(r1.exitCode, 0);
-	assert.equal(r1.stdout, "target=--unknown verbose=false");
+	assert.equal(r1.stdout, "target=--unknown chatter=false");
 	out.length = 0;
-	const r2 = await run(app, ["cmd", "--target", "--verbose"], out);
-	assert.equal(r2.stdout, "target=--verbose verbose=false");
+	const r2 = await run(app, ["cmd", "--target", "--chatter"], out);
+	assert.equal(r2.stdout, "target=--chatter chatter=false");
 });
 
 // =========================================================================
@@ -478,7 +487,7 @@ test("args: single required arg and missing required arg", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("greet", {
+		defineReadOnlyCommand("greet", {
 			help: "say hello",
 			args: [arg("name", t.str, { help: "who to greet" })],
 			handler: (a) => {
@@ -500,7 +509,7 @@ test("args: two positional args in order", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("copy", {
+		defineReadOnlyCommand("copy", {
 			help: "copy files",
 			args: [
 				arg("src", t.str, { help: "source file" }),
@@ -523,7 +532,7 @@ test("args: optional arg with default, provided and omitted", async () => {
 		const out: string[] = [];
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				args: [
 					arg("path", t.str, {
@@ -546,7 +555,7 @@ test("args: required first, optional second with default", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [
 				arg("src", t.str, { help: "source file" }),
@@ -569,7 +578,7 @@ test("args: optional arg without default, omitted gives None", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [arg("path", t.str, { help: "project dir", required: false })],
 			handler: (a) => {
@@ -585,29 +594,29 @@ test("args: double dash stops flag parsing", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				verbose: flag("verbose", t.bool, {
-					help: "be verbose",
+				chatter: flag("chatter", t.bool, {
+					help: "be chatter",
 					default: false,
 				}),
 			},
 			args: [arg("path", t.str, { help: "a path" })],
 			handler: (a) => {
-				out.push(`verbose=${fmt(a.verbose)} path=${fmt(a.path)}`);
+				out.push(`chatter=${fmt(a.chatter)} path=${fmt(a.path)}`);
 			},
 		}),
 	);
 	const r = await run(app, ["cmd", "--", "--not-a-flag"], out);
-	assert.equal(r.stdout, "verbose=false path=--not-a-flag");
+	assert.equal(r.stdout, "chatter=false path=--not-a-flag");
 });
 
 test("typed args: int/float/bool coercion and exact errors", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [arg("count", t.int, { help: "how many" })],
 			handler: (a) => {
@@ -626,7 +635,7 @@ test("typed args: int/float/bool coercion and exact errors", async () => {
 	const out3: string[] = [];
 	const app3 = makeApp();
 	app3.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [arg("flag", t.bool, { help: "a bool" })],
 			handler: (a) => {
@@ -644,7 +653,7 @@ test("typed args: int/float/bool coercion and exact errors", async () => {
 	const out5: string[] = [];
 	const app5 = makeApp();
 	app5.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [arg("rate", t.float, { help: "the rate" })],
 			handler: (a) => {
@@ -663,7 +672,7 @@ test("typed args: int/float/bool coercion and exact errors", async () => {
 function variadicApp(out: string[], required: boolean): AppImpl {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [
 				required
@@ -710,7 +719,7 @@ test("variadic: with preceding required arg", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [
 				arg("target", t.str, { help: "the target" }),
@@ -729,7 +738,7 @@ test("typed args: negative int after double dash", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [arg("offset", t.int, { help: "the offset" })],
 			handler: (a) => {
@@ -750,7 +759,7 @@ function nestedApp(out: string[]): AppImpl {
 	const dns = app.group("dns", { help: "manage DNS" });
 	const zone = dns.group("zone", { help: "manage zones" });
 	zone.command(
-		defineCommand("list", {
+		defineReadOnlyCommand("list", {
 			help: "list all zones",
 			handler: () => {
 				out.push("listing zones");
@@ -758,7 +767,7 @@ function nestedApp(out: string[]): AppImpl {
 		}),
 	);
 	zone.command(
-		defineCommand("create", {
+		defineReadOnlyCommand("create", {
 			help: "create a zone",
 			flags: { name: flag("name", t.str, { help: "zone name" }) },
 			handler: (a) => {
@@ -774,7 +783,7 @@ test("nesting: group command dispatch and flags", async () => {
 	const app = makeApp();
 	const config = app.group("config", { help: "manage configuration" });
 	config.command(
-		defineCommand("set", {
+		defineReadOnlyCommand("set", {
 			help: "set a config value",
 			flags: {
 				key: flag("key", t.str, { help: "config key" }),
@@ -797,7 +806,10 @@ test("nesting: unknown group subcommand error includes path", async () => {
 	const app = makeApp();
 	const config = app.group("config", { help: "manage configuration" });
 	config.command(
-		defineCommand("show", { help: "display config", handler: () => undefined }),
+		defineReadOnlyCommand("show", {
+			help: "display config",
+			handler: () => undefined,
+		}),
 	);
 	const r = await run(app, ["config", "delete"]);
 	assert.equal(r.exitCode, 1);
@@ -835,7 +847,7 @@ test("nesting: 4-level dispatch", async () => {
 		.group("compute", { help: "compute resources" })
 		.group("instance", { help: "manage instances" })
 		.command(
-			defineCommand("list", {
+			defineReadOnlyCommand("list", {
 				help: "list instances",
 				handler: () => {
 					out.push("listing instances");
@@ -869,7 +881,7 @@ test("nesting: mixed groups and commands at same level", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("version", {
+		defineReadOnlyCommand("version", {
 			help: "show version",
 			handler: () => {
 				out.push("1.0.0");
@@ -878,7 +890,7 @@ test("nesting: mixed groups and commands at same level", async () => {
 	);
 	const config = app.group("config", { help: "manage configuration" });
 	config.command(
-		defineCommand("show", {
+		defineReadOnlyCommand("show", {
 			help: "display config",
 			handler: () => {
 				out.push("showing config");
@@ -887,7 +899,7 @@ test("nesting: mixed groups and commands at same level", async () => {
 	);
 	const remote = config.group("remote", { help: "manage remotes" });
 	remote.command(
-		defineCommand("list", {
+		defineReadOnlyCommand("list", {
 			help: "list remotes",
 			handler: () => {
 				out.push("listing remotes");
@@ -905,8 +917,8 @@ test("nesting: mixed groups and commands at same level", async () => {
 function globalApp(out: string[]): AppImpl {
 	const app = makeApp({
 		flags: {
-			verbose: flag("verbose", t.bool, {
-				help: "enable verbose output",
+			chatter: flag("chatter", t.bool, {
+				help: "enable chatter output",
 				default: false,
 			}),
 			settings: flag("settings", t.str, {
@@ -916,7 +928,7 @@ function globalApp(out: string[]): AppImpl {
 		},
 	});
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			handler: (_a, _ctx) => {
 				out.push("ran");
@@ -928,25 +940,25 @@ function globalApp(out: string[]): AppImpl {
 
 test("global_flags: bool before and after the command name", async () => {
 	for (const argv of [
-		["--verbose", "cmd"],
-		["cmd", "--verbose"],
+		["--chatter", "cmd"],
+		["cmd", "--chatter"],
 	]) {
 		const out: string[] = [];
 		const app = globalApp(out);
 		const r = await run(app, argv, out);
 		assert.equal(r.exitCode, 0);
 		const o = r.outcome as Extract<ParseOutcome, { kind: "command" }>;
-		assert.equal(o.kwargs.verbose, true);
-		assert.equal(o.globalKwargs.verbose, true);
+		assert.equal(o.kwargs.chatter, true);
+		assert.equal(o.globalKwargs.chatter, true);
 	}
 });
 
 test("global_flags: negation, str value, defaults", async () => {
 	const out: string[] = [];
 	const app = globalApp(out);
-	const r = await run(app, ["--no-verbose", "cmd"], out);
+	const r = await run(app, ["--no-chatter", "cmd"], out);
 	const o = r.outcome as Extract<ParseOutcome, { kind: "command" }>;
-	assert.equal(o.kwargs.verbose, false);
+	assert.equal(o.kwargs.chatter, false);
 
 	const r2 = await run(globalApp([]), ["--settings", "/tmp", "cmd"]);
 	const o2 = r2.outcome as Extract<ParseOutcome, { kind: "command" }>;
@@ -954,7 +966,7 @@ test("global_flags: negation, str value, defaults", async () => {
 
 	const r3 = await run(globalApp([]), ["cmd"]);
 	const o3 = r3.outcome as Extract<ParseOutcome, { kind: "command" }>;
-	assert.equal(o3.kwargs.verbose, false);
+	assert.equal(o3.kwargs.chatter, false);
 	assert.equal(o3.kwargs.settings, "/etc/myapp");
 });
 
@@ -966,7 +978,7 @@ test("global_flags: global int flag coerces to bigint", async () => {
 		},
 	});
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			handler: (a) => {
 				out.push(`port=${fmt((a as { port: bigint }).port)}`);
@@ -982,20 +994,23 @@ test("global_flags: global flag from env var", async () => {
 		const app = makeApp({
 			envPrefix: "MYAPP",
 			flags: {
-				verbose: flag("verbose", t.bool, {
-					help: "enable verbose output",
+				chatter: flag("chatter", t.bool, {
+					help: "enable chatter output",
 					env: "MYAPP_VERBOSE",
 					default: false,
 				}),
 			},
 		});
 		app.command(
-			defineCommand("cmd", { help: "a command", handler: () => undefined }),
+			defineReadOnlyCommand("cmd", {
+				help: "a command",
+				handler: () => undefined,
+			}),
 		);
 		const r = await run(app, ["cmd"]);
 		const o = r.outcome as Extract<ParseOutcome, { kind: "command" }>;
-		assert.equal(o.kwargs.verbose, true);
-		assert.equal(o.sources.verbose, "env");
+		assert.equal(o.kwargs.chatter, true);
+		assert.equal(o.sources.chatter, "env");
 	});
 });
 
@@ -1003,8 +1018,8 @@ test("global_flags: global and command flags together (conformance exact)", asyn
 	const out: string[] = [];
 	const app = makeApp({
 		flags: {
-			verbose: flag("verbose", t.bool, {
-				help: "enable verbose output",
+			chatter: flag("chatter", t.bool, {
+				help: "enable chatter output",
 				default: false,
 			}),
 			settings: flag("settings", t.str, {
@@ -1014,7 +1029,7 @@ test("global_flags: global and command flags together (conformance exact)", asyn
 		},
 	});
 	app.command(
-		defineCommand("deploy", {
+		defineReadOnlyCommand("deploy", {
 			help: "deploy the app",
 			flags: {
 				force_deploy: flag("force-deploy", t.bool, {
@@ -1024,22 +1039,22 @@ test("global_flags: global and command flags together (conformance exact)", asyn
 			},
 			handler: (a) => {
 				const g = a as unknown as {
-					verbose: boolean;
+					chatter: boolean;
 					settings: string;
 					force_deploy: boolean;
 				};
 				out.push(
-					`verbose=${fmt(g.verbose)} settings=${fmt(g.settings)} force-deploy=${fmt(g.force_deploy)}`,
+					`chatter=${fmt(g.chatter)} settings=${fmt(g.settings)} force-deploy=${fmt(g.force_deploy)}`,
 				);
 			},
 		}),
 	);
 	const r = await run(
 		app,
-		["--verbose", "--settings", "/tmp/cfg", "deploy", "--force-deploy"],
+		["--chatter", "--settings", "/tmp/cfg", "deploy", "--force-deploy"],
 		out,
 	);
-	assert.equal(r.stdout, "verbose=true settings=/tmp/cfg force-deploy=true");
+	assert.equal(r.stdout, "chatter=true settings=/tmp/cfg force-deploy=true");
 });
 
 // =========================================================================
@@ -1049,17 +1064,17 @@ test("global_flags: global and command flags together (conformance exact)", asyn
 function mutexBoolApp(out: string[]): AppImpl {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			mutex: [
 				mutexGroup({
-					verbose: flag("verbose", t.bool, { help: "verbose output" }),
-					quiet: flag("quiet", t.bool, { help: "quiet output" }),
+					chatter: flag("chatter", t.bool, { help: "chatter output" }),
+					muted: flag("muted", t.bool, { help: "muted output" }),
 				}),
 			],
 			handler: (a) => {
-				const g = a as unknown as { verbose?: boolean; quiet?: boolean };
-				out.push(`verbose=${fmt(g.verbose)} quiet=${fmt(g.quiet)}`);
+				const g = a as unknown as { chatter?: boolean; muted?: boolean };
+				out.push(`chatter=${fmt(g.chatter)} muted=${fmt(g.muted)}`);
 			},
 		}),
 	);
@@ -1071,35 +1086,35 @@ test("mutex: neither provided is exact one-of-required error", async () => {
 	assert.equal(r.exitCode, 1);
 	assert.equal(
 		r.stderr,
-		errOut("one of --verbose, --quiet is required", "myapp cmd"),
+		errOut("one of --chatter, --muted is required", "myapp cmd"),
 	);
 });
 
 test("mutex: one provided is ok, unset member is None", async () => {
 	const out: string[] = [];
 	assert.equal(
-		(await run(mutexBoolApp(out), ["cmd", "--verbose"], out)).stdout,
-		"verbose=true quiet=None",
+		(await run(mutexBoolApp(out), ["cmd", "--chatter"], out)).stdout,
+		"chatter=true muted=None",
 	);
 	const out2: string[] = [];
 	assert.equal(
-		(await run(mutexBoolApp(out2), ["cmd", "--quiet"], out2)).stdout,
-		"verbose=None quiet=true",
+		(await run(mutexBoolApp(out2), ["cmd", "--muted"], out2)).stdout,
+		"chatter=None muted=true",
 	);
 });
 
 test("mutex: both provided is exact mutually-exclusive error", async () => {
-	const r = await run(mutexBoolApp([]), ["cmd", "--verbose", "--quiet"]);
+	const r = await run(mutexBoolApp([]), ["cmd", "--chatter", "--muted"]);
 	assert.equal(
 		r.stderr,
-		errOut("--verbose and --quiet are mutually exclusive", "myapp cmd"),
+		errOut("--chatter and --muted are mutually exclusive", "myapp cmd"),
 	);
 });
 
 function mutexStrApp(out: string[]): AppImpl {
 	const app = makeApp();
 	app.command(
-		defineCommand("fetch", {
+		defineReadOnlyCommand("fetch", {
 			help: "fetch data",
 			mutex: [
 				mutexGroup({
@@ -1139,7 +1154,7 @@ test("mutex: env-set members count as present (composition.json)", async () => {
 	const mk = (out: string[]): AppImpl => {
 		const app = makeApp({ envPrefix: "MYAPP" });
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				mutex: [
 					mutexGroup({
@@ -1189,7 +1204,7 @@ test("mutex: env-set members count as present (composition.json)", async () => {
 function coRequiredApp(out: string[]): AppImpl {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				output: flag("output", t.str, { help: "output file", default: "none" }),
@@ -1236,11 +1251,11 @@ test("dependencies: requires enforcement", async () => {
 	const mk = (_out: string[]): AppImpl => {
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
-					verbose: flag("verbose", t.bool, {
-						help: "verbose output",
+					chatter: flag("chatter", t.bool, {
+						help: "chatter output",
 						default: false,
 					}),
 					output: flag("output", t.str, {
@@ -1248,29 +1263,29 @@ test("dependencies: requires enforcement", async () => {
 						default: "none",
 					}),
 				},
-				dependencies: [requires({ flag: "verbose", dependsOn: "output" })],
+				dependencies: [requires({ flag: "chatter", dependsOn: "output" })],
 				handler: () => undefined,
 			}),
 		);
 		return app;
 	};
 	assert.equal(
-		(await run(mk([]), ["cmd", "--verbose", "--output", "log.txt"])).exitCode,
+		(await run(mk([]), ["cmd", "--chatter", "--output", "log.txt"])).exitCode,
 		0,
 	);
 	assert.equal((await run(mk([]), ["cmd"])).exitCode, 0);
 	assert.equal((await run(mk([]), ["cmd", "--output", "log.txt"])).exitCode, 0);
-	const r = await run(mk([]), ["cmd", "--verbose"]);
+	const r = await run(mk([]), ["cmd", "--chatter"]);
 	assert.equal(
 		r.stderr,
-		errOut("flag '--verbose' requires '--output'", "myapp cmd"),
+		errOut("flag '--chatter' requires '--output'", "myapp cmd"),
 	);
 });
 
 function impliesApp(out: string[], envPrefix?: string): AppImpl {
 	const app = makeApp(envPrefix !== undefined ? { envPrefix } : {});
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				fast:
@@ -1342,7 +1357,7 @@ test("deprecated: invoking a deprecated command prints message and exits 1", asy
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("new-cmd", {
+		defineReadOnlyCommand("new-cmd", {
 			help: "the replacement command",
 			handler: () => {
 				out.push("new");
@@ -1365,7 +1380,10 @@ test("deprecated: invoking a deprecated command prints message and exits 1", asy
 test("basic: --version and -v produce 'name version'", async () => {
 	const app = makeApp({ version: "2.5.0" });
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	for (const argv of [["--version"], ["-v"]]) {
 		const r = await run(app, argv);
@@ -1378,7 +1396,10 @@ test("basic: --version and -v produce 'name version'", async () => {
 test("basic: empty argv, --help, -h yield app help outcome", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("greet", { help: "say hello", handler: () => undefined }),
+		defineReadOnlyCommand("greet", {
+			help: "say hello",
+			handler: () => undefined,
+		}),
 	);
 	for (const argv of [[], ["--help"], ["-h"]]) {
 		const r = await run(app, argv);
@@ -1391,7 +1412,10 @@ test("basic: empty argv, --help, -h yield app help outcome", async () => {
 test("boundary: only double dash shows app help", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("greet", { help: "say hello", handler: () => undefined }),
+		defineReadOnlyCommand("greet", {
+			help: "say hello",
+			handler: () => undefined,
+		}),
 	);
 	const r = await run(app, ["--"]);
 	assert.equal(r.kind, "help");
@@ -1400,7 +1424,10 @@ test("boundary: only double dash shows app help", async () => {
 test("boundary: unknown flag with no command is an unknown command", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("greet", { help: "say hello", handler: () => undefined }),
+		defineReadOnlyCommand("greet", {
+			help: "say hello",
+			handler: () => undefined,
+		}),
 	);
 	const r = await run(app, ["--unknown-flag"]);
 	assert.equal(r.stderr, errOut("unknown command '--unknown-flag'"));
@@ -1410,7 +1437,7 @@ test("boundary: empty flag value, dash positional, bare cmd --", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: { name: flag("name", t.str, { help: "the name" }) },
 			handler: (a) => {
@@ -1423,7 +1450,7 @@ test("boundary: empty flag value, dash positional, bare cmd --", async () => {
 	const out2: string[] = [];
 	const app2 = makeApp();
 	app2.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [arg("path", t.str, { help: "the path" })],
 			handler: (a) => {
@@ -1436,7 +1463,7 @@ test("boundary: empty flag value, dash positional, bare cmd --", async () => {
 	const out3: string[] = [];
 	const app3 = makeApp();
 	app3.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			handler: () => {
 				out3.push("ok");
@@ -1450,7 +1477,7 @@ test("boundary: int forms 007, +5, overflow, 12abc", async () => {
 	const mk = (out: string[]): AppImpl => {
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: { port: flag("port", t.int, { help: "the port" }) },
 				handler: (a) => {
@@ -1484,11 +1511,11 @@ test("boundary: env var edge values", async () => {
 	const mkBool = (): AppImpl => {
 		const app = makeApp({ envPrefix: "MYAPP" });
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
-					verbose: flag("verbose", t.bool, {
-						help: "be verbose",
+					chatter: flag("chatter", t.bool, {
+						help: "be chatter",
 						env: "MYAPP_VERBOSE",
 						default: false,
 					}),
@@ -1502,7 +1529,7 @@ test("boundary: env var edge values", async () => {
 		assert.equal(
 			(await run(mkBool(), ["cmd"])).stderr,
 			errOut(
-				"invalid boolean value 'maybe' for env var 'MYAPP_VERBOSE' (flag '--verbose')",
+				"invalid boolean value 'maybe' for env var 'MYAPP_VERBOSE' (flag '--chatter')",
 				"myapp cmd",
 			),
 		);
@@ -1510,13 +1537,13 @@ test("boundary: env var edge values", async () => {
 	await withEnv({ MYAPP_VERBOSE: "TRUE" }, async () => {
 		const r = await run(mkBool(), ["cmd"]);
 		const o = r.outcome as Extract<ParseOutcome, { kind: "command" }>;
-		assert.equal(o.kwargs.verbose, true);
+		assert.equal(o.kwargs.chatter, true);
 	});
 
 	const mkInt = (): AppImpl => {
 		const app = makeApp({ envPrefix: "MYAPP" });
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
 					port: flag("port", t.int, {
@@ -1544,7 +1571,7 @@ test("boundary: env var edge values", async () => {
 	const out: string[] = [];
 	const app = makeApp({ envPrefix: "MYAPP" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				target: flag("target", t.str, {
@@ -1571,7 +1598,7 @@ test("env: str flag from env var; CLI overrides env", async () => {
 	const mk = (out: string[]): AppImpl => {
 		const app = makeApp({ envPrefix: "MYAPP" });
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
 					target: flag("target", t.str, {
@@ -1608,7 +1635,7 @@ function tagsApp(
 ): AppImpl {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				tag: flag("tag", t.list(t.str), {
@@ -1658,7 +1685,7 @@ test("repeatable: int elements coerce; invalid element errors", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				ids: flag("ids", t.list(t.int), { help: "the ids" }),
@@ -1731,7 +1758,7 @@ test("dict: key=value entries, missing equals, duplicate key", async () => {
 	const mk = (out: string[]): AppImpl => {
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
 					header: flag("header", t.dict(t.str), { help: "a header" }),
@@ -1771,7 +1798,7 @@ test("env_separator: split, escapes, unique and coercion errors", async () => {
 	const mkTags = (out: string[], unique: boolean): AppImpl => {
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
 					tag: flag("tag", t.list(t.str), {
@@ -1814,7 +1841,7 @@ test("env_separator: split, escapes, unique and coercion errors", async () => {
 	const mkCounts = (): AppImpl => {
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
 					count: flag("count", t.list(t.int), {
@@ -1848,7 +1875,7 @@ test("env_separator: split, escapes, unique and coercion errors", async () => {
 test("choices: invalid str choice rejected with exact message", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				format: flag("format", t.str, {
@@ -1875,7 +1902,7 @@ test("choices: optional arg with choices -- omitted ok, invalid rejected", async
 	const mk = (out: string[]): AppImpl => {
 		const app = makeApp();
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				args: [
 					arg("env", t.str, {
@@ -1905,7 +1932,7 @@ test("choices: optional arg with choices -- omitted ok, invalid rejected", async
 test("choices: int arg choices format values without quotes-mismatch", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [arg("level", t.int, { help: "the level", choices: [0n, 1n, 2n] })],
 			handler: () => undefined,
@@ -1925,7 +1952,7 @@ test("choices: unset mutex flag with choices is not validated", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			mutex: [
 				mutexGroup({
@@ -1954,7 +1981,7 @@ test("choices: unset mutex flag with choices is not validated", async () => {
 test("validate: rejecting validator produces --flag: message", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				port: flag("port", t.int, {
@@ -1978,7 +2005,7 @@ test("validate: rejecting validator produces --flag: message", async () => {
 test("validate: list validator runs per element", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				tag: flag("tag", t.list(t.str), {
@@ -2006,24 +2033,24 @@ test("passthrough: receives raw args and pre-command globals", async () => {
 	const out: string[] = [];
 	const app = makeApp({
 		flags: {
-			verbose: flag("verbose", t.bool, {
-				help: "enable verbose output",
+			chatter: flag("chatter", t.bool, {
+				help: "enable chatter output",
 				default: false,
 			}),
 		},
 	});
 	app.command(
-		passthrough("checkout", {
+		readOnlyPassthrough("checkout", {
 			help: "git checkout passthrough",
 			handler: (a) => {
 				out.push(`${a.name}:${a.args.join(",")}`);
-				out.push(`verbose=${fmt(a.globals.verbose)}`);
+				out.push(`chatter=${fmt(a.globals.chatter)}`);
 			},
 		}),
 	);
-	const r = await run(app, ["--verbose", "checkout", "-b", "feature"], out);
+	const r = await run(app, ["--chatter", "checkout", "-b", "feature"], out);
 	assert.equal(r.exitCode, 0);
-	assert.equal(r.stdout, "checkout:-b,feature\nverbose=true");
+	assert.equal(r.stdout, "checkout:-b,feature\nchatter=true");
 	const o = r.outcome as Extract<ParseOutcome, { kind: "passthrough" }>;
 	assert.deepEqual(o.args, ["-b", "feature"]);
 	assert.equal(o.cmdPath, "checkout");
@@ -2036,7 +2063,7 @@ test("passthrough: receives raw args and pre-command globals", async () => {
 test("handler numeric return becomes the exit code", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("fail", { help: "always fails", handler: () => 3 }),
+		defineReadOnlyCommand("fail", { help: "always fails", handler: () => 3 }),
 	);
 	const r = await run(app, ["fail"]);
 	assert.equal(r.exitCode, 3);
@@ -2045,7 +2072,7 @@ test("handler numeric return becomes the exit code", async () => {
 test("help: --help/-h recognized anywhere in command tokens, but not after --", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: { target: flag("target", t.str, { help: "the target" }) },
 			args: [arg("path", t.str, { help: "a path", required: false })],
@@ -2075,7 +2102,7 @@ test("hermetic: env vars are ignored; source is 'default'", async () => {
 	const out: string[] = [];
 	const app = makeApp({ envPrefix: "MYAPP" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run it",
 			flags: {
 				level: flag("level", t.int, {
@@ -2100,7 +2127,7 @@ test("hermetic: env vars are ignored; source is 'default'", async () => {
 test("hermetic: required flag missing errors even when env is set", async () => {
 	const app = makeApp({ envPrefix: "MYAPP" });
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run it",
 			flags: {
 				name: flag("name", t.str, { help: "the name", env: "MYAPP_NAME" }),
@@ -2117,7 +2144,7 @@ test("hermetic: required flag missing errors even when env is set", async () => 
 test("hermetic: --hermetic and --config are mutually exclusive", async () => {
 	const app = makeApp({ config: true });
 	app.command(
-		defineCommand("run", { help: "run it", handler: () => undefined }),
+		defineReadOnlyCommand("run", { help: "run it", handler: () => undefined }),
 	);
 	const r = await run(app, [
 		"--hermetic",
@@ -2135,7 +2162,10 @@ test("hermetic: --hermetic cannot be used with config commands", async () => {
 	const app = makeApp({ config: true });
 	const config = app.group("config", { help: "manage configuration" });
 	config.command(
-		defineCommand("show", { help: "display config", handler: () => undefined }),
+		defineReadOnlyCommand("show", {
+			help: "display config",
+			handler: () => undefined,
+		}),
 	);
 	const r = await run(app, ["--hermetic", "config", "show"]);
 	assert.equal(
@@ -2147,7 +2177,10 @@ test("hermetic: --hermetic cannot be used with config commands", async () => {
 test("prescan: --config on a non-config app is rejected", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	const r = await run(app, ["--config", "x.json", "cmd"]);
 	assert.equal(
@@ -2159,7 +2192,10 @@ test("prescan: --config on a non-config app is rejected", async () => {
 test("prescan: --config requires a value (bare and equals forms)", async () => {
 	const app = makeApp({ config: true });
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	assert.equal(
 		(await run(app, ["--config"])).stderr,
@@ -2174,7 +2210,10 @@ test("prescan: --config requires a value (bare and equals forms)", async () => {
 test("prescan: --dump-schema and --mcp intercept in the pre-command region only", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	assert.equal(doParse(app, ["--dump-schema"]).kind, "dump-schema");
 	assert.equal(doParse(app, ["--mcp"]).kind, "mcp");
@@ -2193,7 +2232,10 @@ test("prescan: global flag value that looks like a command name is skipped", () 
 		},
 	});
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	const pre = preScanReservedFlags(app as AppImpl, [
 		"--settings",
@@ -2219,7 +2261,7 @@ test("provenance: cli vs default; post- and pre-command global cli", async () =>
 		},
 	});
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run it",
 			flags: {
 				output: flag("output", t.str, { help: "output file", default: "none" }),
@@ -2247,7 +2289,7 @@ test("provenance: cli vs default; post- and pre-command global cli", async () =>
 test("provenance: env label; CLI overrides env with label cli", async () => {
 	const app = makeApp();
 	app.command(
-		defineCommand("run", {
+		defineReadOnlyCommand("run", {
 			help: "run it",
 			flags: {
 				level: flag("level", t.int, {
@@ -2279,7 +2321,7 @@ test("config: fills flags not set by CLI or env; CLI wins by default", async () 
 	const mk = (out: string[]): AppImpl => {
 		const app = makeApp({ config: true });
 		app.command(
-			defineCommand("cmd", {
+			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
 					mode: flag("mode", t.str, { help: "the mode", default: "normal" }),
@@ -2306,7 +2348,7 @@ test("config: fills flags not set by CLI or env; CLI wins by default", async () 
 test("config: conflict mode error rejects diverging cli+config", async () => {
 	const app = makeApp({ config: true, configConflictMode: "error" });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				mode: flag("mode", t.str, { help: "the mode", default: "normal" }),
@@ -2337,7 +2379,10 @@ test("config: post-command global conflict detection (error mode)", async () => 
 		},
 	});
 	app.command(
-		defineCommand("cmd", { help: "a command", handler: () => undefined }),
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			handler: () => undefined,
+		}),
 	);
 	const deps: DoParseDeps = { config: fakeConfig({ settings: "/cfg" }) };
 	const r = await run(app, ["cmd", "--settings", "/other"], [], deps);
@@ -2354,7 +2399,7 @@ test("config: repeatable config value overrides default", async () => {
 	const out: string[] = [];
 	const app = makeApp({ config: true });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				tag: flag("tag", t.list(t.str), { help: "a tag", default: ["x", "y"] }),
@@ -2373,7 +2418,7 @@ test("config: hermetic skips config entirely", async () => {
 	const out: string[] = [];
 	const app = makeApp({ config: true });
 	app.command(
-		defineCommand("cmd", {
+		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
 				mode: flag("mode", t.str, { help: "the mode", default: "normal" }),
@@ -2393,8 +2438,8 @@ test("config: hermetic skips config entirely", async () => {
 // =========================================================================
 
 test("flagParamName maps dashes to underscores (no Python keyword suffix)", () => {
-	assert.equal(flagParamName("dry-run"), "dry_run");
-	assert.equal(flagParamName("--dry-run"), "dry_run");
+	assert.equal(flagParamName("sim-run"), "sim_run");
+	assert.equal(flagParamName("--sim-run"), "sim_run");
 	assert.equal(flagParamName("global"), "global");
 });
 
