@@ -151,7 +151,7 @@
         "[note] scanned 5 files",
         "[note] ran deep scan",
         "[error] blocking issue",
-        "2 passed / 1 failed / 0 warned / 0 skipped"
+        "3 passed / 1 failed / 0 warned / 0 skipped"
       ],
       "stdout_matches": "\\(\\d+ms\\)"
     }

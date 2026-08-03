@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { AppImpl } from "../src/app.js";
 import { scanEffectsBypasses } from "../src/checks/effects_bypass.js";
-import { type CheckContext, createApp } from "../src/index.js";
+import { type App, type CheckContext, createApp } from "../src/index.js";
 
 function project(files: Record<string, string>): string {
 	const root = mkdtempSync(join(tmpdir(), "sc-bypass-"));
@@ -399,4 +399,69 @@ export const cmd = defineMutatingCommand("deploy", {
 `,
 	});
 	assert.deepEqual(scanEffectsBypasses(root), []);
+});
+
+// --- §6.2's hazard, surfaced as a WARNING and never as an error -------------
+//
+// procObserveAllowlist: [["git"]] makes EVERY git invocation an observe: it
+// really executes under --dry-run, is never logged, and is legal in a read_only
+// command. That may be exactly what the app wants -- the allowlist is a
+// declared, source-visible choice that authorizes real execution in dry mode --
+// so the framework says so out loud instead of inventing a specificity rule.
+
+function breadthApp(allowlist: readonly (readonly string[])[]): App {
+	const app = createApp({
+		name: "testapp",
+		version: "1.0.0",
+		help: "test app",
+		procObserveAllowlist: allowlist,
+	});
+	app.registerCheckProvider(() => []);
+	const root = mkdtempSync(join(tmpdir(), "sc-breadth-"));
+	app.setCheckContext((): CheckContext => ({ projectRoot: root }));
+	return app;
+}
+
+test("breadth: a single-token allowlist prefix warns", async () => {
+	const app = breadthApp([["git"]]);
+	const r = await app.test(["check", "--name", "observe-allowlist-breadth"]);
+	assert.ok(r.stdout.includes("WARN"), r.stdout);
+	assert.ok(
+		r.stdout.includes("EVERY 'git' invocation becomes an observe"),
+		r.stdout,
+	);
+	assert.ok(r.stdout.includes("really executes under --dry-run"), r.stdout);
+});
+
+test("breadth: the verdict is a warning, not an error", async () => {
+	const app = breadthApp([["git"]]);
+	const r = await app.test([
+		"check",
+		"--name",
+		"observe-allowlist-breadth",
+		"--ignore-warnings",
+	]);
+	assert.equal(r.exitCode, 0, r.stdout);
+});
+
+test("breadth: multi-token prefixes pass", async () => {
+	const app = breadthApp([
+		["git", "status"],
+		["gh", "release", "view"],
+	]);
+	const r = await app.test(["check", "--name", "observe-allowlist-breadth"]);
+	assert.equal(r.exitCode, 0, r.stdout);
+	assert.ok(
+		r.stdout.includes("no single-token proc_observe_allowlist prefixes"),
+		r.stdout,
+	);
+});
+
+test("breadth: the check is registered with warn severity", async () => {
+	const app = breadthApp([]);
+	const r = await app.test(["check", "--list", "--json"]);
+	const entry = (
+		JSON.parse(r.stdout.trim()) as { name: string; severity: string }[]
+	).find((e) => e.name === "observe-allowlist-breadth");
+	assert.equal(entry?.severity, "warn");
 });

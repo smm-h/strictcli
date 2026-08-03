@@ -70,11 +70,31 @@ type bypassFinding struct {
 	target string
 }
 
-// effectsBypassProvider is the built-in check provider for the effects-bypass
-// lint. It is registered whenever the check system turns on, so a consumer that
-// adopts checks at all gets the lint without a TOML declaration. It fails on any
-// direct process, filesystem-mutation or network call made from a function that
-// opted into ctx.Effects().
+// observeAllowlistBreadthWarning is the `observe-allowlist-breadth` warning
+// (contract §6.2).
+//
+// A one-token prefix is a near-blanket exemption for that binary: EVERY
+// invocation of it becomes an observe, which means it really executes under
+// --dry-run, is never written to the would-do log, and is legal inside a
+// read_only command. That may be exactly what the app wants -- the allowlist is
+// a declared, source-visible choice and it authorizes real execution in dry
+// mode -- so this is a warning, not an error.
+func observeAllowlistBreadthWarning(binary string) string {
+	return fmt.Sprintf(
+		"proc_observe_allowlist prefix ['%s'] is a single token: EVERY '%s' "+
+			"invocation becomes an observe, so it really executes under --dry-run, "+
+			"is never logged, and is legal in a read_only command. Narrow it to the "+
+			"subcommands you actually observe.", binary, binary)
+}
+
+// effectsBypassProvider is the built-in check provider for the two
+// effects-regime lints. It is registered whenever the check system turns on, so
+// a consumer that adopts checks at all gets both without a TOML declaration:
+//
+//   - effects-bypass (error) fails on any direct process, filesystem-mutation or
+//     network call REACHABLE FROM A REGISTERED COMMAND HANDLER;
+//   - observe-allowlist-breadth (warn) surfaces short proc_observe_allowlist
+//     prefixes, which authorize real execution under --dry-run.
 func (a *App) effectsBypassProvider() []CheckSpec {
 	impl := func(ctx CheckContext, reporter *ErrorReporter) CheckOutcome {
 		findings := scanEffectsBypasses(ctx.ProjectRoot())
@@ -88,6 +108,21 @@ func (a *App) effectsBypassProvider() []CheckSpec {
 		return reporter.Passed("no direct effect calls bypass ctx.Effects()")
 	}
 
+	breadth := func(ctx CheckContext, reporter *WarnReporter) CheckOutcome {
+		broad := 0
+		for _, prefix := range a.procObserveAllowlist {
+			if len(prefix) == 1 {
+				broad++
+				reporter.Warn(observeAllowlistBreadthWarning(prefix[0]))
+			}
+		}
+		if broad > 0 {
+			return reporter.Found(fmt.Sprintf(
+				"%d single-token proc_observe_allowlist prefix(es)", broad))
+		}
+		return reporter.Passed("no single-token proc_observe_allowlist prefixes")
+	}
+
 	return []CheckSpec{
 		NewErrorCheckSpec(CheckSpecMeta{
 			Name:         "effects-bypass",
@@ -98,6 +133,15 @@ func (a *App) effectsBypassProvider() []CheckSpec {
 			NeedsNetwork: false,
 			DependsOn:    []string{},
 		}, impl),
+		NewWarnCheckSpec(CheckSpecMeta{
+			Name:         "observe-allowlist-breadth",
+			Tags:         []string{"effects", "quality"},
+			Severity:     "warn",
+			Fast:         true,
+			Pure:         true,
+			NeedsNetwork: false,
+			DependsOn:    []string{},
+		}, breadth),
 	}
 }
 

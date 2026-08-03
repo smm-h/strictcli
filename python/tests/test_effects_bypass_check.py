@@ -324,3 +324,62 @@ async def deploy(ctx):
     os.remove("x")
 ''')
         assert r.exit_code == 1
+
+
+class TestObserveAllowlistBreadth:
+    """§6.2's hazard, surfaced as a WARNING and never as an error.
+
+    `proc_observe_allowlist=[["git"]]` makes EVERY git invocation an observe:
+    it really executes under --dry-run, is never logged, and is legal in a
+    read_only command. That may be exactly what the app wants -- the allowlist
+    is a declared, source-visible choice that authorizes real execution in dry
+    mode -- so the framework says so out loud instead of inventing a
+    specificity rule.
+    """
+
+    def _app(self, tmp_path, allowlist):
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(CHECKS_TOML)
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+            proc_observe_allowlist=allowlist,
+        )
+        root = tmp_path / "src"
+        root.mkdir(parents=True, exist_ok=True)
+        app.set_check_context(lambda: SimpleContext(project_root=root))
+        return app
+
+    def test_metadata_is_warn_severity(self, tmp_path):
+        app = self._app(tmp_path, [])
+        r = app.test(["check", "--list", "--json"])
+        entry = next(
+            e for e in json.loads(r.stdout.strip())
+            if e["name"] == "observe-allowlist-breadth"
+        )
+        assert entry["severity"] == "warn"
+        assert sorted(entry["tags"]) == ["effects", "quality"]
+
+    def test_a_single_token_prefix_warns(self, tmp_path):
+        app = self._app(tmp_path, [["git"]])
+        r = app.test(["check", "--name", "observe-allowlist-breadth"])
+        assert "WARN" in r.stdout
+        assert "EVERY 'git' invocation becomes an observe" in r.stdout
+        assert "really executes under --dry-run" in r.stdout
+
+    def test_a_warning_is_not_an_error(self, tmp_path):
+        """--ignore-warnings clears it; an error-severity check could not."""
+        app = self._app(tmp_path, [["git"]])
+        assert app.test([
+            "check", "--name", "observe-allowlist-breadth", "--ignore-warnings",
+        ]).exit_code == 0
+
+    def test_multi_token_prefixes_pass(self, tmp_path):
+        app = self._app(tmp_path, [["git", "status"], ["gh", "release", "view"]])
+        r = app.test(["check", "--name", "observe-allowlist-breadth"])
+        assert r.exit_code == 0
+        assert "no single-token proc_observe_allowlist prefixes" in r.stdout
+
+    def test_an_empty_allowlist_passes(self, tmp_path):
+        app = self._app(tmp_path, [])
+        assert app.test(["check", "--name", "observe-allowlist-breadth"]).exit_code == 0

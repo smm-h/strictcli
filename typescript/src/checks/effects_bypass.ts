@@ -47,7 +47,7 @@ import {
 	SyntaxKind,
 } from "typescript/unstable/ast";
 import type { AppImpl } from "../app.js";
-import { type CheckSpec, errorCheckSpec } from "./provider.js";
+import { type CheckSpec, errorCheckSpec, warnCheckSpec } from "./provider.js";
 
 /** Process starts. Matched on the called name, bare or through a receiver. */
 const BYPASS_PROCESS: ReadonlySet<string> = new Set([
@@ -717,8 +717,28 @@ export function scanEffectsBypasses(root: string): BypassFinding[] {
 }
 
 /**
+ * The `observe-allowlist-breadth` warning (contract §6.2).
+ *
+ * A one-token prefix is a near-blanket exemption for that binary: EVERY
+ * invocation of it becomes an observe, which means it really executes under
+ * `--dry-run`, is never written to the would-do log, and is legal inside a
+ * `read_only` command. That may be exactly what the app wants -- the allowlist
+ * is a declared, source-visible choice and it authorizes real execution in dry
+ * mode -- so this is a warning, not an error.
+ */
+export function observeAllowlistBreadthWarning(binary: string): string {
+	return (
+		`proc_observe_allowlist prefix ['${binary}'] is a single token: EVERY ` +
+		`'${binary}' invocation becomes an observe, so it really executes under ` +
+		"--dry-run, is never logged, and is legal in a read_only command. " +
+		"Narrow it to the subcommands you actually observe."
+	);
+}
+
+/**
  * The built-in provider. Registered whenever the check system turns on, so a
- * consumer that adopts checks at all gets the lint without a TOML declaration.
+ * consumer that adopts checks at all gets both lints without a TOML
+ * declaration: `effects-bypass` (error) and `observe-allowlist-breadth` (warn).
  */
 export function effectsBypassProvider(_app: AppImpl): () => CheckSpec[] {
 	// Named so tests can identify and drop the framework's own provider
@@ -751,6 +771,30 @@ export function effectsBypassProvider(_app: AppImpl): () => CheckSpec[] {
 					return reporter.found(
 						`${direct} direct effect call(s) bypassing ctx.effects and ` +
 							`${ceilings} untrappable carrier use(s)`,
+					);
+				},
+			}),
+			warnCheckSpec({
+				name: "observe-allowlist-breadth",
+				tags: ["effects", "quality"],
+				fast: true,
+				pure: true,
+				needsNetwork: false,
+				dependsOn: [],
+				impl: (_ctx, reporter) => {
+					const broad = _app.procObserveAllowlist.filter(
+						(prefix) => prefix.length === 1,
+					);
+					for (const prefix of broad) {
+						reporter.warn(observeAllowlistBreadthWarning(prefix[0] as string));
+					}
+					if (broad.length > 0) {
+						return reporter.found(
+							`${broad.length} single-token proc_observe_allowlist prefix(es)`,
+						);
+					}
+					return reporter.passed(
+						"no single-token proc_observe_allowlist prefixes",
 					);
 				},
 			}),

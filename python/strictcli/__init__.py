@@ -704,6 +704,24 @@ def _msg_confirm_declined() -> str:
     return "aborted"
 
 
+def _observe_allowlist_breadth_warning(binary: str) -> str:
+    """The `observe-allowlist-breadth` warning (contract §6.2).
+
+    A one-token prefix is a near-blanket exemption for that binary: EVERY
+    invocation of it becomes an observe, which means it really executes under
+    ``--dry-run``, is never written to the would-do log, and is legal inside a
+    ``read_only`` command. That may be exactly what the app wants -- the
+    allowlist is a declared, source-visible choice and it authorizes real
+    execution in dry mode -- so this is a warning, not an error.
+    """
+    return (
+        f"proc_observe_allowlist prefix ['{binary}'] is a single token: EVERY "
+        f"'{binary}' invocation becomes an observe, so it really executes under "
+        f"--dry-run, is never logged, and is legal in a read_only command. "
+        f"Narrow it to the subcommands you actually observe."
+    )
+
+
 def _msg_effects_unavailable() -> str:
     return (
         "ctx.effects is unavailable: this Context was constructed "
@@ -4653,12 +4671,17 @@ class App:
         ]
 
     def _effects_bypass_provider(self) -> list[CheckSpec]:
-        """Built-in check provider for the ``effects-bypass`` lint.
+        """Built-in check provider for the two effects-regime lints.
 
         Registered whenever the check system turns on, so a consumer that
-        adopts checks at all gets the lint without a TOML declaration. It fails
-        on any direct process, filesystem-mutation or network call made from a
-        handler that opted into ``ctx.effects``.
+        adopts checks at all gets both without a TOML declaration:
+
+        - ``effects-bypass`` (error) fails on any direct process,
+          filesystem-mutation or network call REACHABLE FROM A REGISTERED
+          COMMAND HANDLER;
+        - ``observe-allowlist-breadth`` (warn) surfaces short
+          ``proc_observe_allowlist`` prefixes, which authorize real execution
+          under ``--dry-run``.
         """
         def impl(ctx: CheckContext, reporter: "ErrorReporter") -> "_CheckOutcome":
             findings = _scan_effects_bypasses(Path(ctx.project_root))
@@ -4673,6 +4696,22 @@ class App:
                 )
             return reporter.passed("no direct effect calls bypass ctx.effects")
 
+        def breadth_impl(ctx: CheckContext,
+                         reporter: "WarnReporter") -> "_CheckOutcome":
+            broad = [
+                prefix for prefix in self._proc_observe_allowlist
+                if len(prefix) == 1
+            ]
+            for prefix in broad:
+                reporter.warn(_observe_allowlist_breadth_warning(prefix[0]))
+            if broad:
+                return reporter.found(
+                    f"{len(broad)} single-token proc_observe_allowlist prefix(es)"
+                )
+            return reporter.passed(
+                "no single-token proc_observe_allowlist prefixes"
+            )
+
         return [
             error_check_spec(
                 name="effects-bypass",
@@ -4682,6 +4721,15 @@ class App:
                 needs_network=False,
                 depends_on=[],
                 impl=impl,
+            ),
+            warn_check_spec(
+                name="observe-allowlist-breadth",
+                tags=["effects", "quality"],
+                fast=True,
+                pure=True,
+                needs_network=False,
+                depends_on=[],
+                impl=breadth_impl,
             ),
         ]
 

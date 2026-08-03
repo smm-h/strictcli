@@ -178,18 +178,63 @@ func TestBypassCheckMetadataMatchesTheContract(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
 	app.RegisterCheckProvider(func() []CheckSpec { return nil })
 	specs := app.effectsBypassProvider()
-	if len(specs) != 1 {
-		t.Fatalf("expected exactly one spec, got %d", len(specs))
+	if len(specs) != 2 {
+		t.Fatalf("expected exactly two specs, got %d", len(specs))
 	}
-	m := specs[0].meta
-	if m.Name != "effects-bypass" || m.Severity != "error" || !m.Fast || !m.Pure || m.NeedsNetwork {
-		t.Fatalf("metadata = %#v", m)
+	want := []struct {
+		name     string
+		severity string
+	}{
+		{"effects-bypass", "error"},
+		{"observe-allowlist-breadth", "warn"},
 	}
-	if len(m.Tags) != 2 || m.Tags[0] != "effects" || m.Tags[1] != "quality" {
-		t.Fatalf("tags = %v", m.Tags)
+	for i, w := range want {
+		m := specs[i].meta
+		if m.Name != w.name || m.Severity != w.severity || !m.Fast || !m.Pure || m.NeedsNetwork {
+			t.Fatalf("metadata = %#v", m)
+		}
+		if len(m.Tags) != 2 || m.Tags[0] != "effects" || m.Tags[1] != "quality" {
+			t.Fatalf("tags = %v", m.Tags)
+		}
+		if len(m.DependsOn) != 0 {
+			t.Fatalf("depends_on = %v", m.DependsOn)
+		}
 	}
-	if len(m.DependsOn) != 0 {
-		t.Fatalf("depends_on = %v", m.DependsOn)
+}
+
+// §6.2's hazard, surfaced as a WARNING and never as an error.
+//
+// proc_observe_allowlist=[["git"]] makes EVERY git invocation an observe: it
+// really executes under --dry-run, is never logged, and is legal in a read_only
+// command. That may be exactly what the app wants -- the allowlist is a
+// declared, source-visible choice that authorizes real execution in dry mode --
+// so the framework says so out loud instead of inventing a specificity rule.
+func TestObserveAllowlistBreadthWarnsOnSingleTokenPrefixes(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app",
+		WithProcObserveAllowlist([][]string{{"git"}}))
+	app.RegisterCheckProvider(func() []CheckSpec { return nil })
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: t.TempDir()} })
+	r := app.Test([]string{"check", "--name", "observe-allowlist-breadth"})
+	if !strings.Contains(r.Stdout, "WARN") {
+		t.Fatalf("expected a WARN verdict, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "EVERY 'git' invocation becomes an observe") {
+		t.Fatalf("expected the breadth warning, got %q", r.Stdout)
+	}
+	// A warning, not an error: --ignore-warnings clears it.
+	if r2 := app.Test([]string{"check", "--name", "observe-allowlist-breadth", "--ignore-warnings"}); r2.ExitCode != 0 {
+		t.Fatalf("expected --ignore-warnings to clear the warning, got %d", r2.ExitCode)
+	}
+}
+
+func TestObserveAllowlistBreadthPassesOnNarrowPrefixes(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app",
+		WithProcObserveAllowlist([][]string{{"git", "status"}, {"gh", "release", "view"}}))
+	app.RegisterCheckProvider(func() []CheckSpec { return nil })
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: t.TempDir()} })
+	r := app.Test([]string{"check", "--name", "observe-allowlist-breadth"})
+	if r.ExitCode != 0 || !strings.Contains(r.Stdout, "no single-token proc_observe_allowlist prefixes") {
+		t.Fatalf("exit=%d stdout=%q", r.ExitCode, r.Stdout)
 	}
 }
 
