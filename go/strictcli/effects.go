@@ -1161,22 +1161,42 @@ func stdinIsInteractive() bool {
 // A mutating PASSTHROUGH is not exempt: the framework knows LESS about what is
 // about to happen, not more.
 func (a *App) confirmMutating(cmd *Command, cmdPath string) {
-	if cmd.Effect != EffectMutating {
-		return
-	}
-	if a.lastDryRun || a.lastYes {
-		return
-	}
-	if !stdinIsInteractive() {
+	switch a.confirmDecision(cmd, cmdPath, stdinIsInteractive(), os.Stdin, os.Stderr) {
+	case confirmNonInteractive:
 		fmt.Fprintln(os.Stderr, errConfirmNonInteractive)
 		os.Exit(1)
-	}
-	fmt.Fprint(os.Stderr, promptConfirmMutating(cmdPath))
-	answer, _ := readConfirmLine(os.Stdin)
-	if answer != "y" && answer != "Y" {
+	case confirmDeclined:
 		fmt.Fprintln(os.Stderr, errConfirmDeclined)
 		os.Exit(1)
 	}
+}
+
+// confirmDecision is the confirm protocol's testable core: it decides, prompts
+// when a decision is needed, and never exits.
+type confirmOutcome int
+
+const (
+	confirmProceed confirmOutcome = iota
+	confirmNonInteractive
+	confirmDeclined
+)
+
+func (a *App) confirmDecision(cmd *Command, cmdPath string, interactive bool, in io.Reader, prompt io.Writer) confirmOutcome {
+	if cmd.Effect != EffectMutating {
+		return confirmProceed
+	}
+	if a.lastDryRun || a.lastYes {
+		return confirmProceed
+	}
+	if !interactive {
+		return confirmNonInteractive
+	}
+	fmt.Fprint(prompt, promptConfirmMutating(cmdPath))
+	answer, _ := readConfirmLine(in)
+	if answer != "y" && answer != "Y" {
+		return confirmDeclined
+	}
+	return confirmProceed
 }
 
 // readConfirmLine reads one line from r. Exactly "y" or "Y" proceeds; anything
