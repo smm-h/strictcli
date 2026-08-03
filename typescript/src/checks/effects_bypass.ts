@@ -29,7 +29,11 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { computeLineStarts, createScanner, SyntaxKind } from "typescript/unstable/ast";
+import {
+	computeLineStarts,
+	createScanner,
+	SyntaxKind,
+} from "typescript/unstable/ast";
 import type { AppImpl } from "../app.js";
 import { type CheckSpec, errorCheckSpec } from "./provider.js";
 
@@ -176,16 +180,40 @@ interface Tok {
 	readonly start: number;
 }
 
-/** Tokenizes with the compiler's scanner, dropping trivia. */
+/**
+ * Tokenizes with the compiler's scanner, dropping trivia.
+ *
+ * The scanner is a pure lexer: it cannot leave a template-substitution state on
+ * its own, because in a real compile the PARSER decides when a `}` closes a
+ * `${` and calls back into `reScanTemplateToken`. Without that cooperation the
+ * scanner stalls at the closing brace, returning a zero-width token forever.
+ * Progress is therefore asserted explicitly: on a stall, re-scan as a template
+ * continuation, and if even that does not advance, step one character and carry
+ * on. Both recoveries are lossless for this analyser, which reads names,
+ * punctuation and brace depth -- never template contents.
+ */
 function tokenize(text: string): Tok[] {
 	const scanner = createScanner(/* skipTrivia */ true);
 	scanner.setText(text);
 	const toks: Tok[] = [];
+	let lastEnd = -1;
 	for (;;) {
-		const kind = scanner.scan();
+		let kind = scanner.scan();
 		if (kind === SyntaxKind.EndOfFile) {
 			break;
 		}
+		if (scanner.getTokenEnd() <= lastEnd) {
+			kind = scanner.reScanTemplateToken(/* isTaggedTemplate */ false);
+			if (scanner.getTokenEnd() <= lastEnd) {
+				if (lastEnd + 1 >= text.length) {
+					break;
+				}
+				scanner.resetTokenState(lastEnd + 1);
+				lastEnd += 1;
+				continue;
+			}
+		}
+		lastEnd = scanner.getTokenEnd();
 		toks.push({
 			kind,
 			text: scanner.getTokenText(),
@@ -222,7 +250,11 @@ function isNameToken(t: Tok | undefined): boolean {
  * Scans one tokenized file. A call is a finding when some brace block contains
  * both the call site and an `.effects` mention.
  */
-export function scanTokens(toks: readonly Tok[], text: string, rel: string): BypassFinding[] {
+export function scanTokens(
+	toks: readonly Tok[],
+	text: string,
+	rel: string,
+): BypassFinding[] {
 	const lineStarts = computeLineStarts(text);
 	const findings: BypassFinding[] = [];
 
@@ -238,7 +270,8 @@ export function scanTokens(toks: readonly Tok[], text: string, rel: string): Byp
 		if (t.kind === SyntaxKind.CloseBraceToken) {
 			openStack.pop();
 		}
-		const current = openStack.length > 0 ? (openStack[openStack.length - 1] as number) : -1;
+		const current =
+			openStack.length > 0 ? (openStack[openStack.length - 1] as number) : -1;
 		blockOfToken[i] = current;
 		if (t.kind === SyntaxKind.OpenBraceToken) {
 			const id = blockOpenIdx.length;
@@ -265,7 +298,8 @@ export function scanTokens(toks: readonly Tok[], text: string, rel: string): Byp
 			}
 		}
 	}
-	const inOptedInScope = (i: number): boolean => optedIn.has(blockOfToken[i] as number);
+	const inOptedInScope = (i: number): boolean =>
+		optedIn.has(blockOfToken[i] as number);
 	if (optedIn.size === 0) {
 		return findings;
 	}
@@ -338,8 +372,11 @@ export function scanTokens(toks: readonly Tok[], text: string, rel: string): Byp
 			isNameToken(t) &&
 			(toks[i + 1] as Tok | undefined)?.kind === SyntaxKind.OpenParenToken
 		) {
-			const prevDot = (toks[i - 1] as Tok | undefined)?.kind === SyntaxKind.DotToken;
-			const receiver = prevDot ? (toks[i - 2] as Tok | undefined)?.text : undefined;
+			const prevDot =
+				(toks[i - 1] as Tok | undefined)?.kind === SyntaxKind.DotToken;
+			const receiver = prevDot
+				? (toks[i - 2] as Tok | undefined)?.text
+				: undefined;
 			// Anything reached through `.effects.` is exactly what we want.
 			const throughEffects = prevDot && receiver === "effects";
 			if (!throughEffects) {
@@ -366,10 +403,12 @@ export function scanTokens(toks: readonly Tok[], text: string, rel: string): Byp
 		// --- Proxy ceiling 1: truthiness ---
 		const truthyHere =
 			// if (C) / while (C)
-			((t.kind === SyntaxKind.IfKeyword || t.kind === SyntaxKind.WhileKeyword) &&
+			((t.kind === SyntaxKind.IfKeyword ||
+				t.kind === SyntaxKind.WhileKeyword) &&
 				(toks[i + 1] as Tok | undefined)?.kind === SyntaxKind.OpenParenToken &&
 				isCarrierAt(i + 2) &&
-				(toks[i + 3] as Tok | undefined)?.kind === SyntaxKind.CloseParenToken) ||
+				(toks[i + 3] as Tok | undefined)?.kind ===
+					SyntaxKind.CloseParenToken) ||
 			// !C
 			(t.kind === SyntaxKind.ExclamationToken && isCarrierAt(i + 1)) ||
 			// C ? / C && / C ||
@@ -400,7 +439,10 @@ export function scanTokens(toks: readonly Tok[], text: string, rel: string): Byp
 			SyntaxKind.EqualsEqualsToken,
 			SyntaxKind.ExclamationEqualsToken,
 		];
-		if (identityKinds.includes(t.kind) && (isCarrierAt(i - 1) || isCarrierAt(i + 1))) {
+		if (
+			identityKinds.includes(t.kind) &&
+			(isCarrierAt(i - 1) || isCarrierAt(i + 1))
+		) {
 			push(
 				i,
 				"ceiling",
@@ -450,34 +492,39 @@ export function scanEffectsBypasses(root: string): BypassFinding[] {
  * consumer that adopts checks at all gets the lint without a TOML declaration.
  */
 export function effectsBypassProvider(_app: AppImpl): () => CheckSpec[] {
-	return () => [
-		errorCheckSpec({
-			name: "effects-bypass",
-			tags: ["effects", "quality"],
-			fast: true,
-			pure: true,
-			needsNetwork: false,
-			dependsOn: [],
-			impl: (ctx, reporter) => {
-				const findings = scanEffectsBypasses(ctx.projectRoot);
-				for (const f of findings) {
-					reporter.error(`${f.file}:${f.line}: ${f.text}`);
-				}
-				if (findings.length === 0) {
-					return reporter.passed("no direct effect calls bypass ctx.effects");
-				}
-				const direct = findings.filter((f) => f.kind === "call").length;
-				const ceilings = findings.length - direct;
-				if (ceilings === 0) {
+	// Named so tests can identify and drop the framework's own provider
+	// (tests/helpers.ts dropBuiltinCheckProviders), mirroring Python's
+	// conftest helper which filters on the provider function's __name__.
+	return function effectsBypassCheckProvider(): CheckSpec[] {
+		return [
+			errorCheckSpec({
+				name: "effects-bypass",
+				tags: ["effects", "quality"],
+				fast: true,
+				pure: true,
+				needsNetwork: false,
+				dependsOn: [],
+				impl: (ctx, reporter) => {
+					const findings = scanEffectsBypasses(ctx.projectRoot);
+					for (const f of findings) {
+						reporter.error(`${f.file}:${f.line}: ${f.text}`);
+					}
+					if (findings.length === 0) {
+						return reporter.passed("no direct effect calls bypass ctx.effects");
+					}
+					const direct = findings.filter((f) => f.kind === "call").length;
+					const ceilings = findings.length - direct;
+					if (ceilings === 0) {
+						return reporter.found(
+							`${direct} direct effect call(s) bypassing ctx.effects`,
+						);
+					}
 					return reporter.found(
-						`${direct} direct effect call(s) bypassing ctx.effects`,
+						`${direct} direct effect call(s) bypassing ctx.effects and ` +
+							`${ceilings} untrappable carrier use(s)`,
 					);
-				}
-				return reporter.found(
-					`${direct} direct effect call(s) bypassing ctx.effects and ` +
-						`${ceilings} untrappable carrier use(s)`,
-				);
-			},
-		}),
-	];
+				},
+			}),
+		];
+	};
 }

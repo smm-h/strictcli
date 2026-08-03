@@ -12,6 +12,13 @@
  * App-context checks (global-flag collisions, env prefixes) live in app.ts.
  */
 
+import type { MutatingContext, ReadOnlyContext } from "./context.js";
+import {
+	type Effect,
+	type Forwarding,
+	type Grant,
+	isGrantableKind,
+} from "./effects.js";
 import {
 	errArgBoolDefaultTypeMismatch,
 	errArgChoicesEmpty,
@@ -76,13 +83,6 @@ import {
 	errRequiredArgCannotHaveDefault,
 	RegistrationError,
 } from "./errors.js";
-import type { MutatingContext, ReadOnlyContext } from "./context.js";
-import {
-	type Effect,
-	type Forwarding,
-	type Grant,
-	isGrantableKind,
-} from "./effects.js";
 import type { HandlerArgs } from "./infer.js";
 import { type InfraRootPath, isInfraRootPath } from "./infra.js";
 import type {

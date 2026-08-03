@@ -261,7 +261,7 @@ export class Context implements MutatingContext {
 	connectionEnvValue(
 		envVar: string,
 	): [value: string | undefined, present: boolean] {
-		if (this.infra !== null && this.infra.connections.has(envVar)) {
+		if (this.infra?.connections.has(envVar) === true) {
 			if (this.infra.hermetic) {
 				return [undefined, false];
 			}

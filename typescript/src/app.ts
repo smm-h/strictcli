@@ -59,6 +59,7 @@ import {
 } from "./context.js";
 import { type Effect, EffectLog, Effects, type Grant } from "./effects.js";
 import {
+	DryRunTruncated,
 	errAppConfigConflictModeBad,
 	errAppConfigFormatBad,
 	errAppHelpEmpty,
@@ -68,9 +69,9 @@ import {
 	errChecksPathNotExist,
 	errChecksTomlAppMismatch,
 	errCommandCollidesWithGroup,
+	errCommandConfigFieldsUnknownField,
 	errCommandEffectInvalid,
 	errCommandEffectMissing,
-	errCommandConfigFieldsUnknownField,
 	errCommandEnvVarPrefix,
 	errCommandFlagCollidesGlobal,
 	errConnectionEnvIsAlreadyHandshake,
@@ -85,7 +86,6 @@ import {
 	errDeprecatedCommandEffect,
 	errDeprecatedMessageEmpty,
 	errDeprecatedNameEmpty,
-	DryRunTruncated,
 	errFlagConnectionEnvUndeclared,
 	errFlagNameReservedByFramework,
 	errFrameworkInternalHandlerForeign,
@@ -106,16 +106,16 @@ import {
 	type AnyFlag,
 	type AnyMutexGroup,
 	type ConflictMode,
+	type DeprecatedDef,
 	defineMutatingCommand,
 	defineReadOnlyCommand,
-	type DeprecatedDef,
 	type FlagMap,
 	flagOpts,
 	type MutatingCommandSpec,
 	type PassthroughDef,
 	pyRepr,
-	type ReadOnlyCommandSpec,
 	RESERVED_FRAMEWORK_FLAG_NAMES,
+	type ReadOnlyCommandSpec,
 	validateAndDedupTags,
 } from "./factories.js";
 import { formatAppHelp, formatCommandHelp, formatGroupHelp } from "./help.js";
@@ -452,17 +452,15 @@ export function defineFrameworkCommand(
 		...spec,
 		forwarding: { reason: FRAMEWORK_INTERNAL_FORWARDING_REASON },
 	} as unknown as MutatingCommandSpec<FlagMap, readonly AnyArg[]>;
-	const def = (
-		effect === "read_only"
-			? defineReadOnlyCommand(
-					name,
-					withForwarding as unknown as ReadOnlyCommandSpec<
-						FlagMap,
-						readonly AnyArg[]
-					>,
-				)
-			: defineMutatingCommand(name, withForwarding)
-	) as unknown as AnyCommand;
+	const def = (effect === "read_only"
+		? defineReadOnlyCommand(
+				name,
+				withForwarding as unknown as ReadOnlyCommandSpec<
+					FlagMap,
+					readonly AnyArg[]
+				>,
+			)
+		: defineMutatingCommand(name, withForwarding)) as unknown as AnyCommand;
 	return { ...def, frameworkInternal: true } as AnyCommand;
 }
 
@@ -591,9 +589,7 @@ function registerCommand(
 	// monkey-patching, prototype tampering, reflection -- fails loudly here.
 	if ((def as MaybeFrameworkInternal).frameworkInternal === true) {
 		if (!FRAMEWORK_HANDLERS.has(def.handler as unknown as object)) {
-			throw new RegistrationError(
-				errFrameworkInternalHandlerForeign(def.name),
-			);
+			throw new RegistrationError(errFrameworkInternalHandlerForeign(def.name));
 		}
 	}
 	if (def.kind === "passthrough") {
@@ -1279,7 +1275,11 @@ export class AppImpl implements App {
 					{},
 					this.infraAccess(outcome.hermetic),
 					outcome.reserved,
-					this.armEffects(outcome.cmd, outcome.cmdPath, outcome.reserved.dryRun),
+					this.armEffects(
+						outcome.cmd,
+						outcome.cmdPath,
+						outcome.reserved.dryRun,
+					),
 				);
 				const def = outcome.cmd.def as PassthroughDef<string>;
 				const declined = this.runConfirm(mode, outcome.cmd, outcome, err);
@@ -1313,7 +1313,11 @@ export class AppImpl implements App {
 					outcome.sources,
 					this.infraAccess(outcome.hermetic),
 					outcome.reserved,
-					this.armEffects(outcome.cmd, outcome.cmdPath, outcome.reserved.dryRun),
+					this.armEffects(
+						outcome.cmd,
+						outcome.cmdPath,
+						outcome.reserved.dryRun,
+					),
 				);
 				const def = outcome.cmd.def as AnyCommand;
 				const declined = this.runConfirm(mode, outcome.cmd, outcome, err);

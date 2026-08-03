@@ -24,8 +24,8 @@
 
 import { spawnSync } from "node:child_process";
 import {
-	type MessagePort,
 	MessageChannel,
+	type MessagePort,
 	receiveMessageOnPort,
 	Worker,
 } from "node:worker_threads";
@@ -121,7 +121,9 @@ export function spawnConcurrent(
 		| undefined;
 	if (started === undefined || started.error !== undefined) {
 		void worker.terminate();
-		throw new Error(started?.error ?? "spawn failed: worker produced no result");
+		throw new Error(
+			started?.error ?? "spawn failed: worker produced no result",
+		);
 	}
 	const pid = started.pid as number;
 

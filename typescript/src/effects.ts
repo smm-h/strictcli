@@ -407,7 +407,13 @@ const CANONICAL_OPTION_NAMES: Readonly<Record<string, string>> = {
 };
 
 const COMMON_OPTION_KEYS = ["resource", "skipIfCurrent", "grant"] as const;
-const RUN_OPTION_KEYS = [...COMMON_OPTION_KEYS, "cwd", "env", "check", "stream"];
+const RUN_OPTION_KEYS = [
+	...COMMON_OPTION_KEYS,
+	"cwd",
+	"env",
+	"check",
+	"stream",
+];
 const SPAWN_OPTION_KEYS = [...COMMON_OPTION_KEYS, "cwd", "env"];
 const PATH_OPTION_KEYS = [...COMMON_OPTION_KEYS];
 const HTTP_OPTION_KEYS = [...COMMON_OPTION_KEYS, "body", "headers", "check"];
@@ -738,12 +744,7 @@ export class Effects implements MutatingEffects {
 		}
 		if (declared.kind !== kind) {
 			throw new Error(
-				errEffectGrantKindMismatch(
-					this.cmdPath,
-					grant,
-					declared.kind,
-					kind,
-				),
+				errEffectGrantKindMismatch(this.cmdPath, grant, declared.kind, kind),
 			);
 		}
 		return declared;
@@ -828,11 +829,7 @@ export class Effects implements MutatingEffects {
 		return [runtime, rendered];
 	}
 
-	private settled(
-		value: string | null,
-		method: string,
-		param: string,
-	): string {
+	private settled(value: string | null, method: string, param: string): string {
 		if (value === null) {
 			// Unreachable: an unsettled operand only survives in dry mode, where
 			// nothing executes. Kept as a fail-closed backstop.
@@ -966,6 +963,11 @@ export class Effects implements MutatingEffects {
 			});
 			// A Spawned has no scalar projection, so its carrier is not
 			// forwardable.
+			// The declared return type is `void`, but dry mode must hand back the
+			// carrier so a later forward of a VOID result is rejected as such
+			// (errEffectParamRejectsCarrier) instead of as a non-string. carrier()
+			// is typed `never` precisely so the settled-only surface holds.
+			// biome-ignore lint/correctness/noVoidTypeReturn: the dry-mode carrier is the value at a void-typed position
 			return this.carrier(rec.seq, false);
 		}
 		this.record({
@@ -1011,6 +1013,11 @@ export class Effects implements MutatingEffects {
 				bytes,
 				recorded: true,
 			});
+			// The declared return type is `void`, but dry mode must hand back the
+			// carrier so a later forward of a VOID result is rejected as such
+			// (errEffectParamRejectsCarrier) instead of as a non-string. carrier()
+			// is typed `never` precisely so the settled-only surface holds.
+			// biome-ignore lint/correctness/noVoidTypeReturn: the dry-mode carrier is the value at a void-typed position
 			return this.carrier(rec.seq, false);
 		}
 		this.record({
@@ -1065,6 +1072,11 @@ export class Effects implements MutatingEffects {
 				grant: declared,
 				recorded: true,
 			});
+			// The declared return type is `void`, but dry mode must hand back the
+			// carrier so a later forward of a VOID result is rejected as such
+			// (errEffectParamRejectsCarrier) instead of as a non-string. carrier()
+			// is typed `never` precisely so the settled-only surface holds.
+			// biome-ignore lint/correctness/noVoidTypeReturn: the dry-mode carrier is the value at a void-typed position
 			return this.carrier(rec.seq, false);
 		}
 		this.record({
@@ -1109,6 +1121,11 @@ export class Effects implements MutatingEffects {
 				grant: declared,
 				recorded: true,
 			});
+			// The declared return type is `void`, but dry mode must hand back the
+			// carrier so a later forward of a VOID result is rejected as such
+			// (errEffectParamRejectsCarrier) instead of as a non-string. carrier()
+			// is typed `never` precisely so the settled-only surface holds.
+			// biome-ignore lint/correctness/noVoidTypeReturn: the dry-mode carrier is the value at a void-typed position
 			return this.carrier(rec.seq, false);
 		}
 		this.record({
@@ -1200,6 +1217,11 @@ export class Effects implements MutatingEffects {
 				grant: declared,
 				recorded: true,
 			});
+			// The declared return type is `void`, but dry mode must hand back the
+			// carrier so a later forward of a VOID result is rejected as such
+			// (errEffectParamRejectsCarrier) instead of as a non-string. carrier()
+			// is typed `never` precisely so the settled-only surface holds.
+			// biome-ignore lint/correctness/noVoidTypeReturn: the dry-mode carrier is the value at a void-typed position
 			return this.carrier(rec.seq, false);
 		}
 		this.record({
