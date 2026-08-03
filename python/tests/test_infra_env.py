@@ -50,7 +50,7 @@ def _make_flag_app(monkeypatch):
               infra_root={"MYAPP_HOME": "/var/lib/myapp"})
     captured = {}
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("db", help="db path", default=RelativeToRoot("MYAPP_HOME", "db.sqlite"))
     def run(ctx, db):
         captured["db"] = db
@@ -109,7 +109,7 @@ def test_undeclared_root_marker_raises(monkeypatch):
     app = App(name="myapp", version="1.0.0", help="t",
               infra_root={"MYAPP_HOME": "/var/lib/myapp"})
     with pytest.raises(ValueError, match="undeclared infra root"):
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("db", help="db path", default=RelativeToRoot("NOPE", "x"))
         def run(ctx, db):
             return 0
@@ -133,7 +133,7 @@ def test_infra_value_root_and_handshake_live(monkeypatch):
               handshake_env={"CI_TOKEN": "CI auth token"})
     captured = {}
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx: Context):
         captured["root"] = ctx.infra_value("MYAPP_HOME")
         captured["hs"] = ctx.infra_value("CI_TOKEN")
@@ -153,7 +153,7 @@ def test_infra_value_handshake_unset(monkeypatch):
               handshake_env={"CI_TOKEN": "CI auth token"})
     captured = {}
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx: Context):
         captured["hs"] = ctx.infra_value("CI_TOKEN")
         return 0
@@ -169,7 +169,7 @@ def test_infra_value_undeclared_raises(monkeypatch):
               infra_root={"MYAPP_HOME": "/var/lib/myapp"})
     captured = {}
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx: Context):
         try:
             ctx.infra_value("UNDECLARED_VAR")
@@ -223,7 +223,7 @@ def test_infra_help_surface(monkeypatch):
               infra_root={"MYAPP_HOME": "/var/lib/myapp"},
               handshake_env={"CI_TOKEN": "CI auth token"})
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx):
         return 0
 

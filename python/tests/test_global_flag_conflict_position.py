@@ -34,7 +34,7 @@ def _app(conflict_mode="error", flag_conflict_mode=strictcli._MISSING,
         **kwargs,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx, settings):
         print(f"settings={settings}")
 

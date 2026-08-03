@@ -47,7 +47,7 @@ class TestMcpInitialize:
     def test_basic_initialize(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -65,7 +65,7 @@ class TestMcpInitialize:
     def test_initialize_preserves_id(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -78,7 +78,7 @@ class TestMcpInitialize:
     def test_initialize_reflects_app_name_and_version(self):
         app = strictcli.App(name="mytool", version="2.5.0", help="my tool")
 
-        @app.command("run", help="run something")
+        @app.command("run", effect="read_only", help="run something")
         def run(ctx):
             pass
 
@@ -100,7 +100,7 @@ class TestMcpToolsList:
     def test_single_command(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         @strictcli.flag("target", type=str, help="deploy target")
         def deploy(ctx, target):
             pass
@@ -119,11 +119,11 @@ class TestMcpToolsList:
     def test_multiple_commands(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
-        @app.command("status", help="show status")
+        @app.command("status", effect="read_only", help="show status")
         def status(ctx):
             pass
 
@@ -139,7 +139,7 @@ class TestMcpToolsList:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations")
         def migrate(ctx):
             pass
 
@@ -153,11 +153,11 @@ class TestMcpToolsList:
     def test_hidden_commands_excluded(self):
         app = _build_app()
 
-        @app.command("visible", help="visible command")
+        @app.command("visible", effect="read_only", help="visible command")
         def visible(ctx):
             pass
 
-        @app.command("secret", help="hidden command", hidden=True)
+        @app.command("secret", effect="read_only", help="hidden command", hidden=True)
         def secret(ctx):
             pass
 
@@ -172,11 +172,11 @@ class TestMcpToolsList:
     def test_interactive_commands_excluded(self):
         app = _build_app()
 
-        @app.command("batch", help="batch operation")
+        @app.command("batch", effect="read_only", help="batch operation")
         def batch(ctx):
             pass
 
-        @app.command("wizard", help="interactive wizard", interactive=True)
+        @app.command("wizard", effect="read_only", help="interactive wizard", interactive=True)
         def wizard(ctx):
             pass
 
@@ -192,7 +192,7 @@ class TestMcpToolsList:
         """The inputSchema in tools/list matches json_schema() output."""
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         @strictcli.flag("loud", type=bool, default=False, help="loud mode")
@@ -218,7 +218,7 @@ class TestMcpToolsCall:
     def test_call_returns_result(self):
         app = _build_app()
 
-        @app.command("info", help="get info")
+        @app.command("info", effect="read_only", help="get info")
         def info(ctx):
             return strictcli.outcome(data={"version": "1.0.0", "status": "ok"})
 
@@ -236,7 +236,7 @@ class TestMcpToolsCall:
         captured = {}
         app = _build_app()
 
-        @app.command("deploy", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         def deploy(ctx, target, count):
@@ -256,7 +256,7 @@ class TestMcpToolsCall:
     def test_call_returns_none(self):
         app = _build_app()
 
-        @app.command("noop", help="does nothing")
+        @app.command("noop", effect="read_only", help="does nothing")
         def noop(ctx):
             pass
 
@@ -270,7 +270,7 @@ class TestMcpToolsCall:
     def test_call_returns_int(self):
         app = _build_app()
 
-        @app.command("count", help="count things")
+        @app.command("count", effect="read_only", help="count things")
         def count(ctx):
             return 42
 
@@ -285,7 +285,7 @@ class TestMcpToolsCall:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations")
         @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
         def migrate(ctx, sim_run):
             return strictcli.outcome(data={"migrated": True, "sim_run": sim_run})
@@ -306,7 +306,7 @@ class TestMcpToolsCall:
         """
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -324,7 +324,7 @@ class TestMcpToolsCall:
     def test_call_missing_required_flag(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target")
         def deploy(ctx, target):
             pass
@@ -342,7 +342,7 @@ class TestMcpToolsCall:
     def test_call_missing_name(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -356,7 +356,7 @@ class TestMcpToolsCall:
     def test_call_non_string_name(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -370,7 +370,7 @@ class TestMcpToolsCall:
     def test_call_non_object_arguments(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -385,7 +385,7 @@ class TestMcpToolsCall:
         """When 'arguments' is omitted, defaults to empty dict."""
         app = _build_app()
 
-        @app.command("noop", help="does nothing")
+        @app.command("noop", effect="read_only", help="does nothing")
         def noop(ctx):
             return strictcli.outcome(data="ok")
 
@@ -408,7 +408,7 @@ class TestMcpNotifications:
     def test_initialized_notification_no_response(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -421,7 +421,7 @@ class TestMcpNotifications:
         """Notifications are silently consumed; requests get responses."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -445,7 +445,7 @@ class TestMcpProtocolErrors:
     def test_malformed_json(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -462,7 +462,7 @@ class TestMcpProtocolErrors:
     def test_unknown_method(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -482,7 +482,7 @@ class TestMcpProtocolErrors:
         """
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -498,7 +498,7 @@ class TestMcpProtocolErrors:
         """Blank lines are silently skipped."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -528,7 +528,7 @@ class TestMcpConversation:
         captured = {}
         app = _build_app()
 
-        @app.command("greet", help="greet someone")
+        @app.command("greet", effect="read_only", help="greet someone")
         @strictcli.flag("name", type=str, help="person to greet")
         def greet(ctx, name):
             captured["name"] = name
@@ -573,7 +573,7 @@ class TestMcpFlag:
         """test(['--mcp']) returns an error since test mode can't do MCP."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -585,7 +585,7 @@ class TestMcpFlag:
         """--mcp is detected regardless of position in argv."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -607,7 +607,7 @@ class TestMcpEdgeCases:
         grp1 = app.group("cloud", help="cloud commands")
         grp2 = grp1.group("storage", help="storage commands")
 
-        @grp2.command("upload", help="upload a file")
+        @grp2.command("upload", effect="read_only", help="upload a file")
         @strictcli.flag("bucket", type=str, help="target bucket")
         def upload(ctx, bucket):
             return strictcli.outcome(data={"uploaded_to": bucket})
@@ -634,7 +634,7 @@ class TestMcpEdgeCases:
         """If a handler raises, tools/call returns isError content."""
         app = _build_app()
 
-        @app.command("fail", help="always fails")
+        @app.command("fail", effect="read_only", help="always fails")
         def fail(ctx):
             raise RuntimeError("something broke")
 
@@ -649,7 +649,7 @@ class TestMcpEdgeCases:
         """Non-interactive config subcommands appear in tools/list."""
         app = _build_app(config=True)
 
-        @app.command("run", help="run the app")
+        @app.command("run", effect="read_only", help="run the app")
         def run(ctx):
             pass
 
@@ -668,7 +668,7 @@ class TestMcpEdgeCases:
         """Successful calls do not have isError in the result."""
         app = _build_app()
 
-        @app.command("ok", help="always succeeds")
+        @app.command("ok", effect="read_only", help="always succeeds")
         def ok(ctx):
             return strictcli.outcome(data="success")
 

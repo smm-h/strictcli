@@ -30,7 +30,7 @@ class TestFrozenCommand:
     def test_command_flags_is_tuple(self):
         app = _make_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("loud", type=bool, default=False, help="be loud")
         def cmd(ctx, loud):
             pass
@@ -41,7 +41,7 @@ class TestFrozenCommand:
     def test_command_args_is_tuple(self):
         app = _make_app()
 
-        @app.command("cmd", help="a command", args=[strictcli.Arg(name="name", help="a name")])
+        @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="name", help="a name")])
         def cmd(ctx, name):
             pass
 
@@ -51,7 +51,7 @@ class TestFrozenCommand:
     def test_command_frozen_assignment(self):
         app = _make_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -71,7 +71,7 @@ class TestTagStorageAndValidation:
     def test_command_tags_frozenset(self):
         app = _make_app()
 
-        @app.command("cmd", help="a command", tags={"json"})
+        @app.command("cmd", effect="read_only", help="a command", tags={"json"})
         def cmd(ctx):
             pass
 
@@ -82,7 +82,7 @@ class TestTagStorageAndValidation:
         app = _make_app()
         with pytest.raises(ValueError, match="invalid tag name"):
 
-            @app.command("cmd", help="a command", tags={"JSON"})
+            @app.command("cmd", effect="read_only", help="a command", tags={"JSON"})
             def cmd(ctx):
                 pass
 
@@ -90,7 +90,7 @@ class TestTagStorageAndValidation:
         app = _make_app()
         with pytest.raises(ValueError, match="invalid tag name"):
 
-            @app.command("cmd", help="a command", tags={"my_tag"})
+            @app.command("cmd", effect="read_only", help="a command", tags={"my_tag"})
             def cmd(ctx):
                 pass
 
@@ -98,7 +98,7 @@ class TestTagStorageAndValidation:
         app = _make_app()
         with pytest.raises(ValueError, match="invalid tag name"):
 
-            @app.command("cmd", help="a command", tags={"1abc"})
+            @app.command("cmd", effect="read_only", help="a command", tags={"1abc"})
             def cmd(ctx):
                 pass
 
@@ -107,7 +107,7 @@ class TestTagStorageAndValidation:
         app = _make_app()
         with pytest.raises(ValueError, match="invalid tag name"):
 
-            @app.command("cmd", help="a command", tags={"json\n"})
+            @app.command("cmd", effect="read_only", help="a command", tags={"json\n"})
             def cmd(ctx):
                 pass
 
@@ -115,7 +115,7 @@ class TestTagStorageAndValidation:
         app = _make_app()
         with pytest.raises(ValueError, match="invalid tag name"):
 
-            @app.command("cmd", help="a command", tags={""})
+            @app.command("cmd", effect="read_only", help="a command", tags={""})
             def cmd(ctx):
                 pass
 
@@ -123,7 +123,7 @@ class TestTagStorageAndValidation:
         app = _make_app()
         with pytest.raises(ValueError, match="invalid tag name"):
 
-            @app.command("cmd", help="a command", tags={"-abc"})
+            @app.command("cmd", effect="read_only", help="a command", tags={"-abc"})
             def cmd(ctx):
                 pass
 
@@ -131,19 +131,19 @@ class TestTagStorageAndValidation:
         """Several valid tag names should register without error."""
         app = _make_app()
 
-        @app.command("c1", help="h", tags={"json"})
+        @app.command("c1", effect="read_only", help="h", tags={"json"})
         def c1(ctx):
             pass
 
-        @app.command("c2", help="h", tags={"a"})
+        @app.command("c2", effect="read_only", help="h", tags={"a"})
         def c2(ctx):
             pass
 
-        @app.command("c3", help="h", tags={"my-tag"})
+        @app.command("c3", effect="read_only", help="h", tags={"my-tag"})
         def c3(ctx):
             pass
 
-        @app.command("c4", help="h", tags={"a1"})
+        @app.command("c4", effect="read_only", help="h", tags={"a1"})
         def c4(ctx):
             pass
 
@@ -165,7 +165,7 @@ class TestGroupTagInheritance:
         app = _make_app()
         grp = app.group("grp", help="a group", tags={"json"})
 
-        @grp.command("cmd", help="a command")
+        @grp.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -177,7 +177,7 @@ class TestGroupTagInheritance:
         parent = app.group("parent", help="parent group", tags={"a"})
         child = parent.group("child", help="child group", tags={"b"})
 
-        @child.command("cmd", help="a command")
+        @child.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -189,7 +189,7 @@ class TestGroupTagInheritance:
         app = _make_app()
         grp = app.group("grp", help="a group", tags={"json"})
 
-        @grp.command("cmd", help="a command", tags={"loud"})
+        @grp.command("cmd", effect="read_only", help="a command", tags={"loud"})
         def cmd(ctx):
             pass
 
@@ -200,7 +200,7 @@ class TestGroupTagInheritance:
         app = _make_app()
         grp = app.group("grp", help="a group", tags={"json"})
 
-        @grp.command("cmd", help="a command")
+        @grp.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -220,11 +220,11 @@ class TestGroupTagInheritance:
         grp_a = app.group("alpha", help="group a", tags={"fast"})
         grp_b = app.group("beta", help="group b", tags={"slow"})
 
-        @grp_a.command("cmd", help="a command")
+        @grp_a.command("cmd", effect="read_only", help="a command")
         def cmd_a(ctx):
             pass
 
-        @grp_b.command("cmd", help="a command")
+        @grp_b.command("cmd", effect="read_only", help="a command")
         def cmd_b(ctx):
             pass
 
@@ -244,7 +244,7 @@ class TestTagContracts:
         app = _make_app()
         app.tag_contract("json", requires_flag="json")
 
-        @app.command("cmd", help="a command", tags={"json"})
+        @app.command("cmd", effect="read_only", help="a command", tags={"json"})
         @strictcli.flag("json", type=bool, default=False, help="output json")
         def cmd(ctx, json):
             pass
@@ -256,7 +256,7 @@ class TestTagContracts:
         app = _make_app()
         app.tag_contract("json", requires_flag="json")
 
-        @app.command("foo", help="a command", tags={"json"})
+        @app.command("foo", effect="read_only", help="a command", tags={"json"})
         def foo(ctx):
             pass
 
@@ -268,7 +268,7 @@ class TestTagContracts:
         app = _make_app()
         app.tag_contract("json", requires_flag="json")
 
-        @app.command("foo", help="a command", tags={"json"})
+        @app.command("foo", effect="read_only", help="a command", tags={"json"})
         def foo(ctx):
             pass
 
@@ -281,7 +281,7 @@ class TestTagContracts:
         app.tag_contract("json", requires_flag="json")
         grp = app.group("grp", help="a group", tags={"json"})
 
-        @grp.command("cmd", help="a command")
+        @grp.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -293,7 +293,7 @@ class TestTagContracts:
         app = _make_app()
         app.tag_contract("json", requires_flag="json")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -305,7 +305,7 @@ class TestTagContracts:
         app.tag_contract("json", requires_flag="json")
         grp = app.group("grp", help="a group", tags={"json"})
 
-        @grp.command("run", help="run something",
+        @grp.command("run", effect="read_only", help="run something",
                      passthrough=strictcli.Passthrough(
                          handler=lambda ctx, name, args, globals: 0))
         def run():
@@ -318,7 +318,7 @@ class TestTagContracts:
         """Registering commands before calling tag_contract still catches violations."""
         app = _make_app()
 
-        @app.command("foo", help="a command", tags={"json"})
+        @app.command("foo", effect="read_only", help="a command", tags={"json"})
         def foo(ctx):
             pass
 
@@ -334,7 +334,7 @@ class TestTagContracts:
         )
         app.tag_contract("json", requires_flag="json")
 
-        @app.command("cmd", help="a command", tags={"json"})
+        @app.command("cmd", effect="read_only", help="a command", tags={"json"})
         def cmd(ctx, json):
             pass
 
@@ -347,7 +347,7 @@ class TestTagContracts:
         app_good.tag_contract("json", requires_flag="json")
         app_good.tag_contract("loud", requires_flag="loud")
 
-        @app_good.command("good", help="has both flags", tags={"json", "loud"})
+        @app_good.command("good", effect="read_only", help="has both flags", tags={"json", "loud"})
         @strictcli.flag("json", type=bool, default=False, help="output json")
         @strictcli.flag("loud", type=bool, default=False, help="be loud")
         def good(ctx, json, loud):
@@ -361,7 +361,7 @@ class TestTagContracts:
         app_bad.tag_contract("json", requires_flag="json")
         app_bad.tag_contract("loud", requires_flag="loud")
 
-        @app_bad.command("bad", help="missing loud flag", tags={"json", "loud"})
+        @app_bad.command("bad", effect="read_only", help="missing loud flag", tags={"json", "loud"})
         @strictcli.flag("json", type=bool, default=False, help="output json")
         def bad(ctx, json):
             pass
@@ -389,7 +389,7 @@ class TestSchemaTagOutput:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="a command", tags={"beta", "admin"})
+        @app.command("cmd", effect="read_only", help="a command", tags={"beta", "admin"})
         def cmd(ctx):
             pass
 
@@ -402,7 +402,7 @@ class TestSchemaTagOutput:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -416,7 +416,7 @@ class TestSchemaTagOutput:
         app = _make_app()
         grp = app.group("admin", help="admin group", tags={"admin"})
 
-        @grp.command("cmd", help="a command")
+        @grp.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -429,7 +429,7 @@ class TestSchemaTagOutput:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 

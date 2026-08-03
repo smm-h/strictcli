@@ -7,7 +7,7 @@ def _make_app():
     """Helper: app with a command that has a required flag."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
-    @app.command("stream", help="stream data")
+    @app.command("stream", effect="read_only", help="stream data")
     @strictcli.flag("target", type=str, help="the target")
     def stream(ctx, target):
         print(f"target={target}")
@@ -20,7 +20,7 @@ def _make_group_app():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
     grp = app.group("config", help="manage configuration")
 
-    @grp.command("set", help="set a value")
+    @grp.command("set", effect="read_only", help="set a value")
     @strictcli.flag("key", type=str, help="config key")
     def set_(ctx, key):
         print(f"key={key}")

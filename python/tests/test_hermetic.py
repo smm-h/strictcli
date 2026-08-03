@@ -29,7 +29,7 @@ def test_hermetic_skips_env(monkeypatch):
 
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", env="MYAPP_LEVEL", default=0)
     def run(ctx, level):
         print(f"level={level}")
@@ -49,7 +49,7 @@ def test_hermetic_skips_env_global_flags(monkeypatch):
         flags=[strictcli.Flag(name="loud", type=bool, help="loud", env="MYAPP_VERBOSE", default=False)],
     )
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx, loud):
         print(f"loud={'true' if loud else 'false'}")
         return 0
@@ -65,7 +65,7 @@ def test_hermetic_cli_flag_still_works(monkeypatch):
 
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", env="MYAPP_LEVEL", default=0)
     def run(ctx, level):
         print(f"level={level}")
@@ -88,7 +88,7 @@ def test_hermetic_skips_config():
             config=True, config_path=config_path,
         )
 
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag(name="level", type=int, help="verbosity", default=0)
         def run(ctx, level):
             print(f"level={level}")
@@ -105,7 +105,7 @@ def test_hermetic_config_mutual_exclusion():
     """--hermetic + --config together is a hard error."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", config=True)
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx):
         return 0
 
@@ -118,7 +118,7 @@ def test_hermetic_config_subcommand_error():
     """--hermetic + config subcommand is a hard error."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", config=True)
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx):
         return 0
 
@@ -133,7 +133,7 @@ def test_hermetic_required_flag_missing_env_set(monkeypatch):
 
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag(name="name", type=str, help="name", env="MYAPP_NAME")
     def run(ctx, name):
         return 0
@@ -149,7 +149,7 @@ def test_hermetic_on_app_without_config(monkeypatch):
 
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", env="MYAPP_LEVEL", default=0)
     def run(ctx, level):
         print(f"level={level}")
@@ -164,7 +164,7 @@ def test_hermetic_required_bool_missing():
     """Under --hermetic, a required bool with no CLI value is an error."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag(name="loud", type=bool, help="loud mode")
     def run(ctx, loud):
         return 0
@@ -180,7 +180,7 @@ def test_hermetic_source_is_default_when_env_set(monkeypatch):
 
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", env="MYAPP_LEVEL", default=0)
     def run(ctx, level):
         return 0
@@ -194,7 +194,7 @@ def test_hermetic_source_is_cli_for_passed_flag():
     """Under --hermetic, a flag passed on CLI gets source 'cli'."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag(name="level", type=int, help="verbosity", default=0)
     def run(ctx, level):
         return 0

@@ -15,7 +15,7 @@ def test_corequired_both_provided_ok():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
@@ -39,7 +39,7 @@ def test_corequired_neither_provided_ok():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
     @strictcli.flag("output", type=str, help="output path", default="")
@@ -63,7 +63,7 @@ def test_corequired_one_provided_error():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
@@ -83,7 +83,7 @@ def test_corequired_second_provided_without_first_error():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
@@ -106,7 +106,7 @@ def test_corequired_env_sets_one_cli_sets_another_ok(monkeypatch):
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
     @strictcli.flag("output", type=str, help="output path", default=None,
@@ -128,7 +128,7 @@ def test_corequired_env_sets_one_not_other_error(monkeypatch):
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
     @strictcli.flag("output", type=str, help="output path", default=None,
@@ -154,7 +154,7 @@ def test_requires_both_provided_ok():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Requires(flag="format", depends_on="output")],
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
@@ -178,7 +178,7 @@ def test_requires_flag_not_provided_ok():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Requires(flag="format", depends_on="output")],
     )
     @strictcli.flag("output", type=str, help="output path", default="")
@@ -202,7 +202,7 @@ def test_requires_depends_on_alone_ok():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Requires(flag="format", depends_on="output")],
     )
     @strictcli.flag("output", type=str, help="output path", default="")
@@ -226,7 +226,7 @@ def test_requires_flag_without_depends_on_error():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Requires(flag="format", depends_on="output")],
     )
     @strictcli.flag("output", type=str, help="output path", default=None)
@@ -253,7 +253,7 @@ def test_corequired_fewer_than_2_flags_error():
     with pytest.raises(ValueError, match="at least 2 flags"):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.CoRequired(flags=["output"])],
         )
         @strictcli.flag("output", type=str, help="output path", default=None)
@@ -273,7 +273,7 @@ def test_corequired_unknown_flag_error():
     with pytest.raises(ValueError, match="unknown flag"):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.CoRequired(flags=["output", "nonexistent"])],
         )
         @strictcli.flag("output", type=str, help="output path", default=None)
@@ -293,7 +293,7 @@ def test_requires_unknown_flag_error():
     with pytest.raises(ValueError, match="unknown flag"):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Requires(flag="format", depends_on="nonexistent")],
         )
         @strictcli.flag("format", type=str, help="output format", default=None)
@@ -308,7 +308,7 @@ def test_requires_unknown_depends_on_error():
     with pytest.raises(ValueError, match="unknown flag"):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Requires(flag="nonexistent", depends_on="format")],
         )
         @strictcli.flag("format", type=str, help="output format", default=None)
@@ -328,7 +328,7 @@ def test_requires_same_flag_error():
     with pytest.raises(ValueError, match="cannot be the same"):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Requires(flag="output", depends_on="output")],
         )
         @strictcli.flag("output", type=str, help="output path", default=None)
@@ -354,7 +354,7 @@ def test_dependency_with_mutex_interaction():
     # --output requires that one of the format flags is set (tested via
     # Requires on --json). The mutex ensures only one format flag is used.
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         mutex=[mg],
         dependencies=[strictcli.Requires(flag="output", depends_on="json")],
     )
@@ -392,7 +392,7 @@ def test_corequired_duplicate_flag_error():
     with pytest.raises(ValueError, match="duplicate flag"):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.CoRequired(flags=["output", "output"])],
         )
         @strictcli.flag("output", type=str, help="output path", default=None)
@@ -415,7 +415,7 @@ def test_implies_trigger_set_target_auto_set():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
@@ -439,7 +439,7 @@ def test_implies_trigger_not_set_target_gets_default():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
@@ -463,7 +463,7 @@ def test_implies_explicit_conflict_error():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
@@ -489,7 +489,7 @@ def test_implies_explicit_agreement_ok():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
@@ -515,7 +515,7 @@ def test_implies_unknown_trigger_flag_error():
     with pytest.raises(ValueError, match='Implies references unknown flag "nonexistent"'):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Implies(flag="nonexistent", implies="embeddings", value=False)],
         )
         @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
@@ -535,7 +535,7 @@ def test_implies_unknown_target_flag_error():
     with pytest.raises(ValueError, match='Implies references unknown flag "nonexistent"'):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Implies(flag="fast", implies="nonexistent", value=False)],
         )
         @strictcli.flag("fast", type=bool, default=False, help="fast mode")
@@ -555,7 +555,7 @@ def test_implies_self_implication_error():
     with pytest.raises(ValueError, match="cannot be the same"):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Implies(flag="fast", implies="fast", value=True)],
         )
         @strictcli.flag("fast", type=bool, default=False, help="fast mode")
@@ -575,7 +575,7 @@ def test_implies_trigger_not_bool_error():
     with pytest.raises(ValueError, match='trigger flag "name" must be a bool flag'):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Implies(flag="name", implies="embeddings", value=False)],
         )
         @strictcli.flag("name", type=str, help="a name", default="")
@@ -596,7 +596,7 @@ def test_implies_target_not_bool_error():
     with pytest.raises(ValueError, match='target flag "name" must be a bool flag'):
 
         @app.command(
-            "cmd", help="a command",
+            "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Implies(flag="fast", implies="name", value=False)],
         )
         @strictcli.flag("fast", type=bool, default=False, help="fast mode")
@@ -615,7 +615,7 @@ def test_implies_env_var_trigger(monkeypatch):
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Implies(flag="fast", implies="embeddings", value=False)],
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode",
@@ -641,7 +641,7 @@ def test_implies_with_requires_interaction():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "cmd", help="a command",
+        "cmd", effect="read_only", help="a command",
         dependencies=[
             strictcli.Implies(flag="fast", implies="embeddings", value=False),
             strictcli.Requires(flag="output", depends_on="fast"),

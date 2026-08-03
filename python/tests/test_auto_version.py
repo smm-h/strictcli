@@ -27,7 +27,7 @@ def test_version_output_with_explicit_version():
     """--version shows the explicit version string."""
     app = strictcli.App(name="myapp", version="5.6.7", help="test app")
 
-    @app.command("noop", help="does nothing")
+    @app.command("noop", effect="read_only", help="does nothing")
     def noop(ctx):
         pass
 
@@ -40,7 +40,7 @@ def test_help_shows_explicit_version():
     """Help output includes the explicit version."""
     app = strictcli.App(name="mytool", version="3.2.1", help="a great tool")
 
-    @app.command("noop", help="does nothing")
+    @app.command("noop", effect="read_only", help="does nothing")
     def noop(ctx):
         pass
 

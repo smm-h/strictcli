@@ -29,7 +29,7 @@ def test_config_set_writes_typed_values(tmp_path):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("count", type=int, help="how many", default=0)
     @strictcli.flag("loud", type=bool, help="be loud", default=False)
     @strictcli.flag("rate", type=float, help="the rate", default=0.0)
@@ -71,7 +71,7 @@ def test_config_set_rejects_unknown_key(tmp_path):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("name", type=str, help="the name", default="")
     def run(ctx, name):
         pass
@@ -92,7 +92,7 @@ def _make_app(tmp_path, **extra_flags):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("debug", type=bool, help="debug mode", default=False)
     @strictcli.flag("count", type=int, help="how many", default=0)
     @strictcli.flag("rate", type=float, help="the rate", default=0.0)
@@ -242,7 +242,7 @@ def test_config_set_round_trip_typed(tmp_path):
 
     received = {}
 
-    @app2.command("run", help="run something")
+    @app2.command("run", effect="read_only", help="run something")
     @strictcli.flag("debug", type=bool, help="debug mode", default=False)
     @strictcli.flag("count", type=int, help="how many", default=0)
     @strictcli.flag("rate", type=float, help="the rate", default=0.0)

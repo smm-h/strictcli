@@ -7,14 +7,14 @@ def _make_full_app():
     """Helper: app with commands, a group, and flags."""
     app = strictcli.App(name="myapp", version="2.0.0", help="a great app")
 
-    @app.command("init", help="initialize the project")
+    @app.command("init", effect="read_only", help="initialize the project")
     @strictcli.flag("force-overwrite", type=bool, default=False, help="overwrite existing files")
     def init(ctx, force_overwrite):
         pass
 
     @app.command(
         "build",
-        help="build the project",
+        effect="read_only", help="build the project",
         args=[strictcli.Arg(name="target", help="build target")],
     )
     @strictcli.flag("output", short="o", type=str, help="output directory", default="dist")
@@ -23,11 +23,11 @@ def _make_full_app():
 
     grp = app.group("config", help="manage configuration")
 
-    @grp.command("show", help="show current config")
+    @grp.command("show", effect="read_only", help="show current config")
     def show(ctx):
         pass
 
-    @grp.command("set", help="set a config value")
+    @grp.command("set", effect="read_only", help="set a config value")
     @strictcli.flag("key", type=str, help="config key")
     def set_(ctx, key):
         pass
@@ -51,7 +51,7 @@ def test_app_level_help_skips_empty_sections():
     """App-level help skips empty sections when no commands or groups."""
     app = strictcli.App(name="empty", version="0.0.1", help="empty app")
 
-    @app.command("only", help="the only command")
+    @app.command("only", effect="read_only", help="the only command")
     def only(ctx):
         pass
 
@@ -133,7 +133,7 @@ def test_help_after_flags():
     """--help recognized after other flags, not just as the sole token."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("loud", type=bool, default=False, help="enable loud output")
     def cmd(ctx, loud):
         pass
@@ -150,7 +150,7 @@ def test_help_not_after_separator():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="items", help="items to process", variadic=True)],
     )
     def cmd(ctx, items):

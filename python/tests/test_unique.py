@@ -7,7 +7,7 @@ def _make_app_with_unique_flag(**flag_kwargs):
     """Helper: app with a single command that has one unique repeatable flag."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("tag", help="a tag", repeatable=True, unique=True, **flag_kwargs)
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -35,7 +35,7 @@ def test_unique_int_dedup():
     """--count 1 --count 1 on unique int flag produces error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("count", type=int, help="a count", repeatable=True, unique=True)
     def cmd(ctx, count):
         print(f"count={count!r}")
@@ -58,7 +58,7 @@ def test_unique_global_flag_duplicate():
         ],
     )
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
@@ -83,7 +83,7 @@ def test_unique_false_not_in_help():
     """unique=False does not show [unique] in help."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("tag", help="a tag", repeatable=True, unique=False)
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -106,7 +106,7 @@ def test_unique_float_dedup():
     """Duplicate float values on unique flag produce error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("val", type=float, help="a value", repeatable=True, unique=True)
     def cmd(ctx, val):
         print(f"val={val!r}")

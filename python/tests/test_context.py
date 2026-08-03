@@ -57,7 +57,7 @@ class TestContextAlwaysInjected:
         app = _build_app()
         captured = {}
 
-        @app.command("greet", help="greet someone")
+        @app.command("greet", effect="read_only", help="greet someone")
         @strictcli.flag("name", type=str, help="person to greet")
         def greet(ctx, name):
             captured["ctx"] = ctx
@@ -75,7 +75,7 @@ class TestContextAlwaysInjected:
         app = _build_app()
         captured = {}
 
-        @app.command("ping", help="ping")
+        @app.command("ping", effect="read_only", help="ping")
         def ping(c):
             captured["c"] = c
             c.info("pong")
@@ -89,7 +89,7 @@ class TestContextAlwaysInjected:
         app = _build_app()
         captured = {}
 
-        @app.command("ping", help="ping")
+        @app.command("ping", effect="read_only", help="ping")
         def ping(ctx):
             captured["ctx"] = ctx
             ctx.info("pong")
@@ -103,7 +103,7 @@ class TestContextAlwaysInjected:
         """A flag with no handler parameter (first slot consumed by ctx) errors."""
         app = _build_app()
         with pytest.raises(ValueError, match='missing parameter "name"'):
-            @app.command("greet", help="greet")
+            @app.command("greet", effect="read_only", help="greet")
             @strictcli.flag("name", type=str, help="name")
             def greet(name):  # noqa: only ctx slot, flag 'name' unbound
                 pass
@@ -134,7 +134,7 @@ class TestOutcomeDataViaTest:
     def test_outcome_data_captured_and_printed(self):
         app = _build_app()
 
-        @app.command("data", help="return data")
+        @app.command("data", effect="read_only", help="return data")
         def data(ctx):
             return strictcli.outcome(data={"result": 42})
 
@@ -146,7 +146,7 @@ class TestOutcomeDataViaTest:
     def test_outcome_exit_code_only(self):
         app = _build_app()
 
-        @app.command("fail", help="fail")
+        @app.command("fail", effect="read_only", help="fail")
         def fail(ctx):
             return strictcli.outcome(exit_code=3)
 
@@ -158,7 +158,7 @@ class TestOutcomeDataViaTest:
     def test_outcome_exit_code_and_data(self):
         app = _build_app()
 
-        @app.command("both", help="both")
+        @app.command("both", effect="read_only", help="both")
         def both(ctx):
             return strictcli.outcome(exit_code=1, data=[1, 2, 3])
 
@@ -170,7 +170,7 @@ class TestOutcomeDataViaTest:
     def test_outcome_data_none_not_printed(self):
         app = _build_app()
 
-        @app.command("empty", help="empty outcome")
+        @app.command("empty", effect="read_only", help="empty outcome")
         def empty(ctx):
             return strictcli.outcome()
 
@@ -186,7 +186,7 @@ class TestIntAndNoneReturns:
     def test_int_return_is_exit_code(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             return 7
 
@@ -197,7 +197,7 @@ class TestIntAndNoneReturns:
     def test_none_return_is_exit_zero(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             ctx.info("done")
 
@@ -212,7 +212,7 @@ class TestBadReturnIsHardError:
     def test_raw_dict_return_raises(self):
         app = _build_app()
 
-        @app.command("bad", help="bad")
+        @app.command("bad", effect="read_only", help="bad")
         def bad(ctx):
             return {"nope": True}
 
@@ -222,7 +222,7 @@ class TestBadReturnIsHardError:
     def test_raw_string_return_raises(self):
         app = _build_app()
 
-        @app.command("bad", help="bad")
+        @app.command("bad", effect="read_only", help="bad")
         def bad(ctx):
             return "nope"
 
@@ -232,7 +232,7 @@ class TestBadReturnIsHardError:
     def test_bad_return_names_type(self):
         app = _build_app()
 
-        @app.command("bad", help="bad")
+        @app.command("bad", effect="read_only", help="bad")
         def bad(ctx):
             return 3.14
 
@@ -246,7 +246,7 @@ class TestOutcomeViaCall:
     def test_call_returns_outcome_data(self):
         app = _build_app()
 
-        @app.command("compute", help="compute")
+        @app.command("compute", effect="read_only", help="compute")
         @strictcli.flag("x", type=int, help="value")
         def compute(ctx, x):
             return strictcli.outcome(data={"squared": x * x})
@@ -256,7 +256,7 @@ class TestOutcomeViaCall:
     def test_call_returns_int(self):
         app = _build_app()
 
-        @app.command("compute", help="compute")
+        @app.command("compute", effect="read_only", help="compute")
         @strictcli.flag("x", type=int, help="value")
         def compute(ctx, x):
             return x * 2
@@ -266,7 +266,7 @@ class TestOutcomeViaCall:
     def test_call_returns_none_for_exit_only_outcome(self):
         app = _build_app()
 
-        @app.command("noop", help="noop")
+        @app.command("noop", effect="read_only", help="noop")
         def noop(ctx):
             return strictcli.outcome(exit_code=0)
 
@@ -275,7 +275,7 @@ class TestOutcomeViaCall:
     def test_call_bad_return_raises(self):
         app = _build_app()
 
-        @app.command("bad", help="bad")
+        @app.command("bad", effect="read_only", help="bad")
         def bad(ctx):
             return {"nope": True}
 
@@ -291,7 +291,7 @@ class TestContextWithGroups:
         grp = app.group("svc", help="service commands")
         captured = {}
 
-        @grp.command("status", help="show status")
+        @grp.command("status", effect="read_only", help="show status")
         def status(ctx):
             captured["ctx"] = ctx
             ctx.info("running")
@@ -309,7 +309,7 @@ class TestContextWithInvoke:
         app = _build_app()
         captured = {}
 
-        @app.command("cmd", help="test")
+        @app.command("cmd", effect="read_only", help="test")
         @strictcli.flag("x", type=int, help="value")
         def cmd(ctx, x):
             captured["x"] = x
@@ -322,7 +322,7 @@ class TestContextWithInvoke:
     def test_invoke_returns_int(self):
         app = _build_app()
 
-        @app.command("cmd", help="test")
+        @app.command("cmd", effect="read_only", help="test")
         @strictcli.flag("x", type=int, help="value")
         def cmd(ctx, x):
             return x + 1

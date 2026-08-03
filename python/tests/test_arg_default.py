@@ -11,7 +11,7 @@ def test_optional_arg_with_default_value_provided():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
     )
     def cmd(ctx, path):
@@ -28,7 +28,7 @@ def test_optional_arg_with_default_value_omitted():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
     )
     def cmd(ctx, path):
@@ -45,7 +45,7 @@ def test_optional_arg_without_default_omitted():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False)],
     )
     def cmd(ctx, path=None):
@@ -68,7 +68,7 @@ def test_default_shown_in_help():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
     )
     def cmd(ctx, path):
@@ -86,7 +86,7 @@ def test_optional_arg_without_default_shows_optional_in_help():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False)],
     )
     def cmd(ctx, path=None):
@@ -104,7 +104,7 @@ def test_multiple_args_first_required_second_optional_with_default():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[
             strictcli.Arg(name="src", help="source file"),
             strictcli.Arg(name="dst", help="destination", required=False, default="out"),
@@ -133,7 +133,7 @@ def test_handler_receives_default_when_arg_omitted():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
     )
     def cmd(ctx, path):
@@ -147,7 +147,7 @@ def test_arg_decorator_with_default():
     """The arg() decorator passes default through to Arg."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.arg("path", help="project directory", required=False, default=".")
     def cmd(ctx, path):
         print(f"path={path}")
@@ -162,7 +162,7 @@ def test_arg_decorator_required_with_default_raises():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     with pytest.raises(ValueError, match="required arg cannot have a default"):
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.arg("path", help="project directory", required=True, default=".")
         def cmd(ctx, path):
             pass

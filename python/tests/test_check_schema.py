@@ -55,7 +55,7 @@ class TestSchemaWithChecks:
         def deps_impl(ctx, reporter):
             return pass_outcome("ok")
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -84,7 +84,7 @@ class TestSchemaWithChecks:
         def deps_impl(ctx, reporter):
             return pass_outcome("ok")
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -116,7 +116,7 @@ class TestSchemaWithoutChecks:
 
         app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -169,7 +169,7 @@ class TestSchemaWithScope:
         def unscoped_impl(ctx, reporter):
             return pass_outcome("ok")
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 

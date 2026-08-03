@@ -17,7 +17,7 @@ def test_mutex_default_source_not_present_cli():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("out", help="output command", mutex=[mg])
+    @app.command("out", effect="read_only", help="output command", mutex=[mg])
     def out(ctx, json, text):
         print(f"json={json} text={text}")
 
@@ -37,7 +37,7 @@ def test_mutex_default_source_not_present_invoke():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("out", help="output command", mutex=[mg])
+    @app.command("out", effect="read_only", help="output command", mutex=[mg])
     def out(ctx, json, text):
         print(f"json={json} text={text}")
 
@@ -62,7 +62,7 @@ def test_mutex_implied_source_not_present():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "out", help="output command", mutex=[mg],
+        "out", effect="read_only", help="output command", mutex=[mg],
         dependencies=[
             # --loud implies --text=true
             strictcli.Implies(flag="loud", implies="text", value=True),
@@ -98,7 +98,7 @@ def test_mutex_cli_and_config_both_present():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("out", help="output command", mutex=[mg])
+    @app.command("out", effect="read_only", help="output command", mutex=[mg])
     def out(ctx, json, text):
         print(f"json={json} text={text}")
 
@@ -119,7 +119,7 @@ def test_requires_implied_source_counts_as_present():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "deploy", help="deploy",
+        "deploy", effect="read_only", help="deploy",
         dependencies=[
             # --all implies --loud=true
             strictcli.Implies(flag="all", implies="loud", value=True),
@@ -148,7 +148,7 @@ def test_requires_default_source_not_present():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "deploy", help="deploy",
+        "deploy", effect="read_only", help="deploy",
         dependencies=[
             # --target requires --loud
             strictcli.Requires(flag="target", depends_on="loud"),
@@ -180,7 +180,7 @@ def test_invoke_mutex_provided_kwarg_is_cli_source():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("out", help="output command", mutex=[mg])
+    @app.command("out", effect="read_only", help="output command", mutex=[mg])
     def out(ctx, json, text):
         print(f"json={json} text={text}")
 
@@ -193,7 +193,7 @@ def test_invoke_defaulted_not_present_for_requires():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command(
-        "deploy", help="deploy",
+        "deploy", effect="read_only", help="deploy",
         dependencies=[
             strictcli.Requires(flag="target", depends_on="loud"),
         ],

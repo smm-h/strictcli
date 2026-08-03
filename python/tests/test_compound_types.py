@@ -19,7 +19,7 @@ class TestListFlagRegistration:
         """list[int] flag is internally repeatable with item_type=int."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="list of ids")
         def cmd(ctx, ids):
             pass
@@ -35,7 +35,7 @@ class TestListFlagRegistration:
         """list[str] is a valid compound type."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("names", type=list[str], help="names")
         def cmd(ctx, names):
             pass
@@ -49,7 +49,7 @@ class TestListFlagRegistration:
         """list[float] is a valid compound type."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("values", type=list[float], help="values")
         def cmd(ctx, values):
             pass
@@ -73,7 +73,7 @@ class TestListFlagRegistration:
         """list[int] + repeatable=True is allowed (redundant but not error)."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "ids", type=list[int], help="ids", repeatable=True, unique=False,
         )
@@ -89,7 +89,7 @@ class TestListFlagRegistration:
         """list[T] with unique=True works."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids", unique=True)
         def cmd(ctx, ids):
             pass
@@ -119,7 +119,7 @@ class TestListFlagParsing:
         """Multiple --flag val occurrences produce a list."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
         def cmd(ctx, ids):
             print(f"ids={ids!r}")
@@ -132,7 +132,7 @@ class TestListFlagParsing:
         """list[str] collects string values."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("tags", type=list[str], help="tags")
         def cmd(ctx, tags):
             print(f"tags={tags!r}")
@@ -145,7 +145,7 @@ class TestListFlagParsing:
         """list[float] coerces values to float."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("weights", type=list[float], help="weights")
         def cmd(ctx, weights):
             print(f"weights={weights!r}")
@@ -158,7 +158,7 @@ class TestListFlagParsing:
         """Invalid int in list[int] produces an error."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
         def cmd(ctx, ids):
             pass
@@ -171,7 +171,7 @@ class TestListFlagParsing:
         """No occurrences produce an empty list."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
         def cmd(ctx, ids):
             print(f"ids={ids!r}")
@@ -184,7 +184,7 @@ class TestListFlagParsing:
         """--flag=value form works for list flags."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
         def cmd(ctx, ids):
             print(f"ids={ids!r}")
@@ -197,7 +197,7 @@ class TestListFlagParsing:
         """unique=True with list[int] rejects duplicate values."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids", unique=True)
         def cmd(ctx, ids):
             pass
@@ -210,7 +210,7 @@ class TestListFlagParsing:
         """list[T] with choices validates each element."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "level", type=list[str], help="levels",
             choices=["debug", "info", "error"],
@@ -233,7 +233,7 @@ class TestListFlagEnv:
         """list[T] with env + env_separator splits env value."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "ids", type=list[int], help="ids",
             env="TEST_IDS", env_separator=",",
@@ -258,7 +258,7 @@ class TestListFlagCall:
         app = strictcli.App(name="test", version="1.0.0", help="test app")
         result = {}
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
         def cmd(ctx, ids):
             result["ids"] = ids
@@ -293,7 +293,7 @@ class TestListArgRegistration:
         """list[int] variadic arg coerces values."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command", args=[
+        @app.command("cmd", effect="read_only", help="a command", args=[
             strictcli.Arg(
                 name="nums", type=list[int], help="numbers", variadic=True,
             ),
@@ -446,7 +446,7 @@ class TestDictDisplayCanonicalSorted:
         """A dict flag's default renders sorted key=value in command help."""
         app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "labels", type=dict[str, int], help="labels",
             default={"zebra": 3, "apple": 1, "mango": 2},
@@ -466,7 +466,7 @@ class TestDictFlagParsing:
         """Single --flag key=value stores one entry."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             print(f"headers={headers!r}")
@@ -479,7 +479,7 @@ class TestDictFlagParsing:
         """Multiple --flag key=value occurrences build up a dict."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             # Sort for deterministic output
@@ -498,7 +498,7 @@ class TestDictFlagParsing:
         """dict[str, int] coerces values to int."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="counts")
         def cmd(ctx, counts):
             print(f"counts={counts!r}")
@@ -512,7 +512,7 @@ class TestDictFlagParsing:
         """dict[str, float] coerces values to float."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("weights", type=dict[str, float], help="weights")
         def cmd(ctx, weights):
             print(f"weights={weights!r}")
@@ -526,7 +526,7 @@ class TestDictFlagParsing:
         """Invalid int value in dict[str, int] produces an error."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="counts")
         def cmd(ctx, counts):
             pass
@@ -539,7 +539,7 @@ class TestDictFlagParsing:
         """Missing = in key=value produces an error."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             pass
@@ -552,7 +552,7 @@ class TestDictFlagParsing:
         """Empty key in =value produces an error."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             pass
@@ -565,7 +565,7 @@ class TestDictFlagParsing:
         """Duplicate keys in --flag key=val are rejected."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             pass
@@ -578,7 +578,7 @@ class TestDictFlagParsing:
         """JSON string starting with { is parsed as dict."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             print(f"headers={dict(sorted(headers.items()))!r}")
@@ -594,7 +594,7 @@ class TestDictFlagParsing:
         """JSON with int values coerced correctly."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="counts")
         def cmd(ctx, counts):
             print(f"counts={counts!r}")
@@ -608,7 +608,7 @@ class TestDictFlagParsing:
         """JSON value type mismatch produces an error."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="counts")
         def cmd(ctx, counts):
             pass
@@ -621,7 +621,7 @@ class TestDictFlagParsing:
         """Invalid JSON produces an error."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             pass
@@ -638,7 +638,7 @@ class TestDictFlagParsing:
         """
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             pass
@@ -652,7 +652,7 @@ class TestDictFlagParsing:
         """No occurrences produce an empty dict."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             print(f"headers={headers!r}")
@@ -665,7 +665,7 @@ class TestDictFlagParsing:
         """--flag=key=value form works (splits on first = for flag, rest is value)."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             print(f"headers={headers!r}")
@@ -678,7 +678,7 @@ class TestDictFlagParsing:
         """Value containing = is preserved (split on first = only)."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("env", type=dict[str, str], help="env vars")
         def cmd(ctx, env):
             print(f"env={env!r}")
@@ -691,7 +691,7 @@ class TestDictFlagParsing:
         """Dict flag with short form works."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "headers", short="H", type=dict[str, str], help="headers",
         )
@@ -706,7 +706,7 @@ class TestDictFlagParsing:
         """JSON and key=value can be mixed for the same dict flag."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             print(f"count={len(headers)}")
@@ -723,7 +723,7 @@ class TestDictFlagParsing:
         """Duplicate key between JSON and key=value is rejected."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             pass
@@ -744,7 +744,7 @@ class TestDictFlagEnv:
         """Dict flags parse env vars as JSON objects."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "headers", type=dict[str, str], help="headers",
             env="TEST_HEADERS",
@@ -764,7 +764,7 @@ class TestDictFlagEnv:
         """Invalid JSON in env var produces an error."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "headers", type=dict[str, str], help="headers",
             env="TEST_HEADERS",
@@ -784,7 +784,7 @@ class TestDictFlagEnv:
         """Non-object JSON in env var produces an error."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "headers", type=dict[str, str], help="headers",
             env="TEST_HEADERS",
@@ -804,7 +804,7 @@ class TestDictFlagEnv:
         """CLI values override env var for dict flags."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "headers", type=dict[str, str], help="headers",
             env="TEST_HEADERS",
@@ -829,7 +829,7 @@ class TestDictFlagCall:
         app = strictcli.App(name="test", version="1.0.0", help="test app")
         result = {}
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             result["headers"] = headers
@@ -842,7 +842,7 @@ class TestDictFlagCall:
         app = strictcli.App(name="test", version="1.0.0", help="test app")
         result = {}
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             result["headers"] = headers
@@ -1003,7 +1003,7 @@ class TestCompoundGlobalFlags:
             ],
         )
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx, tags):
             print(f"tags={tags!r}")
 
@@ -1020,7 +1020,7 @@ class TestCompoundGlobalFlags:
             ],
         )
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx, meta):
             print(f"meta={meta!r}")
 
@@ -1041,7 +1041,7 @@ class TestCompoundEdgeCases:
         """A command can have both list[T] and dict[str, T] flags."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="ids")
         @strictcli.flag("meta", type=dict[str, str], help="metadata")
         def cmd(ctx, ids, meta):
@@ -1064,7 +1064,7 @@ class TestCompoundEdgeCases:
 
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "headers", type=dict[str, str], help="headers",
             validate=check_headers,
@@ -1083,7 +1083,7 @@ class TestCompoundEdgeCases:
         """--flag='{json}' works (JSON starts at the right of first =)."""
         app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("headers", type=dict[str, str], help="headers")
         def cmd(ctx, headers):
             print(f"count={len(headers)}")

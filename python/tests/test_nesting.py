@@ -8,11 +8,11 @@ def _make_group_app():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
     grp = app.group("config", help="manage configuration")
 
-    @grp.command("show", help="display current config")
+    @grp.command("show", effect="read_only", help="display current config")
     def show(ctx):
         print("showing config")
 
-    @grp.command("set", help="set a config value")
+    @grp.command("set", effect="read_only", help="set a config value")
     @strictcli.flag("key", type=str, help="config key")
     @strictcli.flag("value", type=str, help="config value")
     def set_(ctx, key, value):

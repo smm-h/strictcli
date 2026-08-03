@@ -37,7 +37,7 @@ class TestReservedNameBan:
     def test_banned_as_a_command_flag(self, name):
         app = strictcli.App(name="app", version="1.0.0", help="app")
         with pytest.raises(ValueError) as exc:
-            @app.command("run", help="run")
+            @app.command("run", effect="read_only", help="run")
             @strictcli.flag(name, type=bool, default=False, help="nope")
             def _run(ctx, **kw):
                 return 0
@@ -74,7 +74,7 @@ class TestReservedNameBan:
 def _quartet_app():
     app = strictcli.App(name="app", version="1.0.0", help="app")
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def _run(ctx):
         return strictcli.outcome(data={
             "dry_run": ctx.dry_run,
@@ -118,7 +118,7 @@ class TestDelivery:
         app = strictcli.App(name="app", version="1.0.0", help="app")
         seen = {}
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def _run(ctx):
             seen["ok"] = True
             return 0
@@ -143,7 +143,7 @@ class TestDelivery:
             seen["args"] = args
             return 0
 
-        @app.command("exec", help="exec",
+        @app.command("exec", effect="read_only", help="exec",
                      passthrough=strictcli.Passthrough(handler=_pt))
         def _exec(ctx, **kw):
             return 0
@@ -159,7 +159,7 @@ class TestGating:
     def _run(self, argv):
         app = strictcli.App(name="app", version="1.0.0", help="app")
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def _r(ctx):
             ctx.debug("D")
             ctx.info("I")
@@ -192,7 +192,7 @@ class TestGating:
     def test_quiet_never_suppresses_structured_data(self):
         app = strictcli.App(name="app", version="1.0.0", help="app")
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def _r(ctx):
             return strictcli.outcome(data={"k": 1})
 

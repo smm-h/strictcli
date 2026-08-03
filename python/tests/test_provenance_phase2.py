@@ -19,7 +19,7 @@ def test_env_source_label(monkeypatch):
     app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                         env_prefix="MYAPP")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("level", type=int, env="MYAPP_LEVEL", help="level")
     def run(ctx, level):
         return 0
@@ -39,7 +39,7 @@ def test_config_source_label():
         app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                             config=True, config_path=config_path)
 
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("level", type=int, default=0, help="level")
         def run(ctx, level):
             return 0
@@ -61,7 +61,7 @@ def test_cli_overrides_config():
         app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                             config=True, config_path=config_path)
 
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("level", type=int, default=0, help="level")
         def run(ctx, level):
             return 0
@@ -80,7 +80,7 @@ def test_cli_overrides_env(monkeypatch):
     app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                         env_prefix="MYAPP")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("level", type=int, env="MYAPP_LEVEL", help="level")
     def run(ctx, level):
         return 0
@@ -103,7 +103,7 @@ def test_env_overrides_config(monkeypatch):
                             env_prefix="MYAPP", config=True,
                             config_path=config_path)
 
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("level", type=int, env="MYAPP_LEVEL", default=0,
                         help="level")
         def run(ctx, level):
@@ -126,7 +126,7 @@ def test_default_with_config_available_but_absent():
         app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                             config=True, config_path=config_path)
 
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("level", type=int, default=0, help="level")
         def run(ctx, level):
             return 0
@@ -156,7 +156,7 @@ def test_global_flag_env_source(monkeypatch):
         ],
     )
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx, **kw):
         return 0
 
@@ -181,7 +181,7 @@ def test_global_flag_config_source():
             ],
         )
 
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         def run(ctx, **kw):
             return 0
 
@@ -202,7 +202,7 @@ def test_global_flag_cli_source():
         ],
     )
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx, **kw):
         return 0
 
@@ -221,7 +221,7 @@ def test_global_flag_default_source():
         ],
     )
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx, **kw):
         return 0
 
@@ -242,7 +242,7 @@ def test_config_show_reports_env(monkeypatch):
     app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                         env_prefix="MYAPP", config=True)
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("level", type=int, env="MYAPP_LEVEL", default=0,
                     help="level")
     def run(ctx, level):
@@ -264,7 +264,7 @@ def test_config_show_reports_config():
         app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                             config=True, config_path=config_path)
 
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("level", type=int, default=0, help="level")
         def run(ctx, level):
             return 0
@@ -282,7 +282,7 @@ def test_config_show_reports_default():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                         config=True)
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("level", type=int, default=0, help="level")
     def run(ctx, level):
         return 0
@@ -302,7 +302,7 @@ def test_invoke_provided_kwarg_source_is_cli():
     """A kwarg provided via invoke/call gets source 'cli'."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("level", type=int, default=0, help="level")
     def run(ctx, level):
         return 0
@@ -316,7 +316,7 @@ def test_invoke_absent_kwarg_source_is_default():
     """A kwarg not provided via invoke (and thus defaulted) gets source 'default'."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("level", type=int, default=0, help="level")
     def run(ctx, level):
         return 0
@@ -336,7 +336,7 @@ def test_config_show_plain_format():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app",
                         config=True)
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("level", type=int, default=0, help="level")
     def run(ctx, level):
         return 0

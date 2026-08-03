@@ -7,7 +7,7 @@ def _make_app_with_str_flag(**flag_kwargs):
     """Helper: app with a single command that has one str flag."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("target", type=str, help="the target", **flag_kwargs)
     def cmd(ctx, target):
         print(f"target={target}")
@@ -19,7 +19,7 @@ def _make_app_with_bool_flag():
     """Helper: app with a single command that has one bool flag."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("loud", type=bool, default=False, help="be loud")
     def cmd(ctx, loud):
         print(f"loud={loud}")
@@ -71,7 +71,7 @@ def test_short_flag_bool():
     """Short flag -x for a bool flag."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("loud", short="v", type=bool, default=False, help="be loud")
     def cmd(ctx, loud):
         print(f"loud={loud}")
@@ -85,7 +85,7 @@ def test_short_flag_with_value():
     """Short flag -x value for a str flag."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("target", short="t", type=str, help="the target")
     def cmd(ctx, target):
         print(f"target={target}")
@@ -115,7 +115,7 @@ def test_double_dash_separator():
     """-- separator stops flag parsing; remaining tokens become positional."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", args=[strictcli.Arg(name="path", help="a path")])
+    @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="path", help="a path")])
     @strictcli.flag("loud", type=bool, default=False, help="be loud")
     def cmd(ctx, loud, path):
         print(f"loud={loud} path={path}")
@@ -132,7 +132,7 @@ def test_positional_args_in_order():
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="src", help="source"), strictcli.Arg(name="dst", help="dest")],
     )
     def cmd(ctx, src, dst):
@@ -148,7 +148,7 @@ def test_missing_required_positional_arg():
     """Missing required positional arg raises error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", args=[strictcli.Arg(name="path", help="a path")])
+    @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="path", help="a path")])
     def cmd(ctx, path):
         pass
 
@@ -161,7 +161,7 @@ def test_extra_positional_arg():
     """Extra positional arg raises error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     def cmd(ctx):
         pass
 
@@ -182,7 +182,7 @@ def test_str_flag_value_starting_with_hyphen():
     """Str flag accepts a value that starts with a hyphen (e.g. --offset -5)."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("offset", short="o", type=str, help="the offset")
     def cmd(ctx, offset):
         print(f"offset={offset}")

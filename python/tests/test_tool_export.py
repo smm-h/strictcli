@@ -22,7 +22,7 @@ class TestJsonSchemaBasicTypes:
     def test_str_flag(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("name", type=str, help="a name")
         def cmd(ctx, name):
             pass
@@ -33,7 +33,7 @@ class TestJsonSchemaBasicTypes:
     def test_int_flag(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("count", type=int, help="a count")
         def cmd(ctx, count):
             pass
@@ -44,7 +44,7 @@ class TestJsonSchemaBasicTypes:
     def test_float_flag(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("factor", type=float, help="a factor")
         def cmd(ctx, factor):
             pass
@@ -55,7 +55,7 @@ class TestJsonSchemaBasicTypes:
     def test_bool_flag(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("loud", type=bool, default=False, help="loud mode")
         def cmd(ctx, loud):
             pass
@@ -66,7 +66,7 @@ class TestJsonSchemaBasicTypes:
     def test_all_types_together(self):
         app = _build_app()
 
-        @app.command("cmd", help="multi-type command")
+        @app.command("cmd", effect="read_only", help="multi-type command")
         @strictcli.flag("name", type=str, help="string flag")
         @strictcli.flag("count", type=int, help="integer flag")
         @strictcli.flag("factor", type=float, help="number flag")
@@ -90,7 +90,7 @@ class TestJsonSchemaRequired:
         """Scalar str flag with no default is required."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("name", type=str, help="required name")
         def cmd(ctx, name):
             pass
@@ -102,7 +102,7 @@ class TestJsonSchemaRequired:
         """Scalar str flag with a default is optional."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("name", type=str, default="world", help="optional name")
         def cmd(ctx, name):
             pass
@@ -114,7 +114,7 @@ class TestJsonSchemaRequired:
         """Bool flags always have a default (False), so never required."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("loud", type=bool, default=False, help="loud mode")
         def cmd(ctx, loud):
             pass
@@ -126,7 +126,7 @@ class TestJsonSchemaRequired:
         """Repeatable (list) flags have default [], so never required."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("items", type=list[int], help="item list", unique=False)
         def cmd(ctx, items):
             pass
@@ -138,7 +138,7 @@ class TestJsonSchemaRequired:
         """Dict flags have default {}, so never required."""
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("labels", type=dict[str, str], help="label map")
         def cmd(ctx, labels):
             pass
@@ -150,7 +150,7 @@ class TestJsonSchemaRequired:
         """A required positional arg appears in 'required'."""
         app = _build_app()
 
-        @app.command("cmd", help="a command", args=[strictcli.Arg(name="target", help="the target")])
+        @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="target", help="the target")])
         def cmd(ctx, target):
             pass
 
@@ -161,7 +161,7 @@ class TestJsonSchemaRequired:
         """An optional positional arg does not appear in 'required'."""
         app = _build_app()
 
-        @app.command("cmd", help="a command", args=[
+        @app.command("cmd", effect="read_only", help="a command", args=[
             strictcli.Arg(name="target", help="the target", required=False),
         ])
         def cmd(ctx, target):
@@ -177,7 +177,7 @@ class TestJsonSchemaChoices:
     def test_flag_choices(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("env", type=str, choices=["dev", "staging", "prod"], help="environment")
         def cmd(ctx, env):
             pass
@@ -188,7 +188,7 @@ class TestJsonSchemaChoices:
     def test_arg_choices(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command", args=[
+        @app.command("cmd", effect="read_only", help="a command", args=[
             strictcli.Arg(name="level", help="log level", choices=["debug", "info", "warn"]),
         ])
         def cmd(ctx, level):
@@ -200,7 +200,7 @@ class TestJsonSchemaChoices:
     def test_no_choices_no_enum(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("name", type=str, help="a name")
         def cmd(ctx, name):
             pass
@@ -215,7 +215,7 @@ class TestJsonSchemaDescription:
     def test_flag_description(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("name", type=str, help="the person's name")
         def cmd(ctx, name):
             pass
@@ -226,7 +226,7 @@ class TestJsonSchemaDescription:
     def test_arg_description(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command", args=[
+        @app.command("cmd", effect="read_only", help="a command", args=[
             strictcli.Arg(name="target", help="deployment target"),
         ])
         def cmd(ctx, target):
@@ -242,7 +242,7 @@ class TestJsonSchemaPositionalArgs:
     def test_single_arg(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command", args=[
+        @app.command("cmd", effect="read_only", help="a command", args=[
             strictcli.Arg(name="filename", help="file to process"),
         ])
         def cmd(ctx, filename):
@@ -255,7 +255,7 @@ class TestJsonSchemaPositionalArgs:
     def test_typed_arg(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command", args=[
+        @app.command("cmd", effect="read_only", help="a command", args=[
             strictcli.Arg(name="port", help="port number", type=int),
         ])
         def cmd(ctx, port):
@@ -268,7 +268,7 @@ class TestJsonSchemaPositionalArgs:
         """Both flags and args appear in properties."""
         app = _build_app()
 
-        @app.command("cmd", help="a command", args=[
+        @app.command("cmd", effect="read_only", help="a command", args=[
             strictcli.Arg(name="target", help="the target"),
         ])
         @strictcli.flag("loud", type=bool, default=False, help="loud mode")
@@ -286,7 +286,7 @@ class TestJsonSchemaListFlag:
     def test_list_int(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("ids", type=list[int], help="list of ids", unique=False)
         def cmd(ctx, ids):
             pass
@@ -299,7 +299,7 @@ class TestJsonSchemaListFlag:
     def test_list_str(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("tags", type=list[str], help="tag list", unique=False)
         def cmd(ctx, tags):
             pass
@@ -312,7 +312,7 @@ class TestJsonSchemaListFlag:
     def test_list_float(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("weights", type=list[float], help="weight list", unique=False)
         def cmd(ctx, weights):
             pass
@@ -329,7 +329,7 @@ class TestJsonSchemaDictFlag:
     def test_dict_str_str(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("labels", type=dict[str, str], help="label map")
         def cmd(ctx, labels):
             pass
@@ -342,7 +342,7 @@ class TestJsonSchemaDictFlag:
     def test_dict_str_int(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("counts", type=dict[str, int], help="count map")
         def cmd(ctx, counts):
             pass
@@ -360,7 +360,7 @@ class TestJsonSchemaNestedPath:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations")
         @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
         def migrate(ctx, sim_run):
             pass
@@ -374,7 +374,7 @@ class TestJsonSchemaNestedPath:
         grp1 = app.group("cloud", help="cloud commands")
         grp2 = grp1.group("storage", help="storage commands")
 
-        @grp2.command("upload", help="upload a file")
+        @grp2.command("upload", effect="read_only", help="upload a file")
         @strictcli.flag("bucket", type=str, help="target bucket")
         def upload(ctx, bucket):
             pass
@@ -390,7 +390,7 @@ class TestJsonSchemaInvalidPath:
     def test_unknown_command(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
             pass
 
@@ -402,7 +402,7 @@ class TestJsonSchemaInvalidPath:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations")
         def migrate(ctx):
             pass
 
@@ -416,7 +416,7 @@ class TestJsonSchemaFlagNameConversion:
     def test_dashed_flag(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
         def cmd(ctx, sim_run):
             pass
@@ -432,7 +432,7 @@ class TestJsonSchemaVariadicArg:
     def test_variadic_list_int(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command", args=[
+        @app.command("cmd", effect="read_only", help="a command", args=[
             strictcli.Arg(name="numbers", help="numbers to sum", type=list[int], variadic=True),
         ])
         def cmd(ctx, numbers):
@@ -450,7 +450,7 @@ class TestJsonSchemaStructure:
     def test_top_level_keys(self):
         app = _build_app()
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("name", type=str, help="a name")
         def cmd(ctx, name):
             pass
@@ -465,7 +465,7 @@ class TestJsonSchemaStructure:
         """Command with no flags or args produces empty properties."""
         app = _build_app()
 
-        @app.command("noop", help="does nothing")
+        @app.command("noop", effect="read_only", help="does nothing")
         def noop(ctx):
             pass
 
@@ -486,7 +486,7 @@ class TestAsToolsCount:
         """One command produces 2 tools (1 command + 1 router)."""
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
@@ -497,15 +497,15 @@ class TestAsToolsCount:
         """N commands produce N+1 tools."""
         app = _build_app()
 
-        @app.command("deploy", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy")
         def deploy(ctx):
             pass
 
-        @app.command("status", help="show status")
+        @app.command("status", effect="read_only", help="show status")
         def status(ctx):
             pass
 
-        @app.command("rollback", help="rollback")
+        @app.command("rollback", effect="read_only", help="rollback")
         def rollback(ctx):
             pass
 
@@ -517,11 +517,11 @@ class TestAsToolsCount:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations")
         def migrate(ctx):
             pass
 
-        @grp.command("seed", help="seed data")
+        @grp.command("seed", effect="read_only", help="seed data")
         def seed(ctx):
             pass
 
@@ -535,11 +535,11 @@ class TestAsToolsHiddenExcluded:
     def test_hidden_command_excluded(self):
         app = _build_app()
 
-        @app.command("visible", help="a visible command")
+        @app.command("visible", effect="read_only", help="a visible command")
         def visible(ctx):
             pass
 
-        @app.command("secret", help="a hidden command", hidden=True)
+        @app.command("secret", effect="read_only", help="a hidden command", hidden=True)
         def secret(ctx):
             pass
 
@@ -552,13 +552,13 @@ class TestAsToolsHiddenExcluded:
         """All commands in a hidden group are excluded."""
         app = _build_app()
 
-        @app.command("visible", help="a visible command")
+        @app.command("visible", effect="read_only", help="a visible command")
         def visible(ctx):
             pass
 
         grp = app.group("internal", help="internal commands", hidden=True)
 
-        @grp.command("debug", help="debug command")
+        @grp.command("debug", effect="read_only", help="debug command")
         def debug(ctx):
             pass
 
@@ -574,11 +574,11 @@ class TestAsToolsInteractiveExcluded:
     def test_interactive_command_excluded(self):
         app = _build_app()
 
-        @app.command("batch", help="batch operation")
+        @app.command("batch", effect="read_only", help="batch operation")
         def batch(ctx):
             pass
 
-        @app.command("wizard", help="interactive wizard", interactive=True)
+        @app.command("wizard", effect="read_only", help="interactive wizard", interactive=True)
         def wizard(ctx):
             pass
 
@@ -594,7 +594,7 @@ class TestAsToolsConfigCommands:
     def test_config_edit_excluded_others_included(self):
         app = _build_app(config=True)
 
-        @app.command("run", help="run the app")
+        @app.command("run", effect="read_only", help="run the app")
         def run(ctx):
             pass
 
@@ -617,7 +617,7 @@ class TestAsToolsToolAttributes:
     def test_tool_has_name(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
@@ -628,7 +628,7 @@ class TestAsToolsToolAttributes:
     def test_tool_has_description(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
@@ -639,7 +639,7 @@ class TestAsToolsToolAttributes:
     def test_tool_has_parameters(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         @strictcli.flag("target", type=str, help="deploy target")
         def deploy(ctx, target):
             pass
@@ -652,7 +652,7 @@ class TestAsToolsToolAttributes:
     def test_tool_has_execute(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
@@ -670,7 +670,7 @@ class TestAsToolsExecuteIsAsync:
 
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
@@ -686,7 +686,7 @@ class TestAsToolsGroupedPaths:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations")
         def migrate(ctx):
             pass
 
@@ -699,7 +699,7 @@ class TestAsToolsGroupedPaths:
         grp1 = app.group("cloud", help="cloud commands")
         grp2 = grp1.group("storage", help="storage commands")
 
-        @grp2.command("upload", help="upload a file")
+        @grp2.command("upload", effect="read_only", help="upload a file")
         def upload(ctx):
             pass
 
@@ -720,7 +720,7 @@ class TestRouterTool:
         """Router tool is the last tool in the list."""
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
@@ -731,7 +731,7 @@ class TestRouterTool:
     def test_router_description(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
@@ -743,11 +743,11 @@ class TestRouterTool:
         """Router execute with no command returns the list of available commands."""
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
-        @app.command("status", help="show status")
+        @app.command("status", effect="read_only", help="show status")
         def status(ctx):
             pass
 
@@ -763,7 +763,7 @@ class TestRouterTool:
         captured = {}
         app = _build_app()
 
-        @app.command("greet", help="greet someone")
+        @app.command("greet", effect="read_only", help="greet someone")
         @strictcli.flag("name", type=str, help="person to greet")
         def greet(ctx, name):
             captured["name"] = name
@@ -779,11 +779,11 @@ class TestRouterTool:
         """Router has a well-formed parameters schema with command enum."""
         app = _build_app()
 
-        @app.command("deploy", help="deploy the app")
+        @app.command("deploy", effect="read_only", help="deploy the app")
         def deploy(ctx):
             pass
 
-        @app.command("status", help="show status")
+        @app.command("status", effect="read_only", help="show status")
         def status(ctx):
             pass
 
@@ -809,7 +809,7 @@ class TestToolExecute:
     def test_execute_returns_handler_result(self):
         app = _build_app()
 
-        @app.command("info", help="get info")
+        @app.command("info", effect="read_only", help="get info")
         def info(ctx):
             return strictcli.outcome(data={"version": "1.0.0", "status": "ok"})
 
@@ -822,7 +822,7 @@ class TestToolExecute:
         captured = {}
         app = _build_app()
 
-        @app.command("deploy", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         def deploy(ctx, target, count):
@@ -839,7 +839,7 @@ class TestToolExecute:
     def test_execute_returns_none(self):
         app = _build_app()
 
-        @app.command("noop", help="does nothing")
+        @app.command("noop", effect="read_only", help="does nothing")
         def noop(ctx):
             pass
 
@@ -851,7 +851,7 @@ class TestToolExecute:
     def test_execute_returns_int(self):
         app = _build_app()
 
-        @app.command("count", help="count things")
+        @app.command("count", effect="read_only", help="count things")
         def count(ctx):
             return 42
 
@@ -867,7 +867,7 @@ class TestToolExecuteErrors:
     def test_missing_required_flag(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy")
         @strictcli.flag("target", type=str, help="deploy target")
         def deploy(ctx, target):
             pass
@@ -880,7 +880,7 @@ class TestToolExecuteErrors:
     def test_unknown_kwarg(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy")
         def deploy(ctx):
             pass
 
@@ -892,7 +892,7 @@ class TestToolExecuteErrors:
     def test_router_dispatch_unknown_command(self):
         app = _build_app()
 
-        @app.command("deploy", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy")
         def deploy(ctx):
             pass
 
@@ -910,7 +910,7 @@ class TestToolExecuteGroupedCommand:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations")
         @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
         def migrate(ctx, sim_run):
             captured["sim_run"] = sim_run

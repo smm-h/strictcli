@@ -31,7 +31,7 @@ class TestDumpSchemaBasic:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("greet", help="Say hello")
+        @app.command("greet", effect="read_only", help="Say hello")
         def greet(ctx):
             pass
 
@@ -46,7 +46,7 @@ class TestDumpSchemaBasic:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("greet", help="Say hello")
+        @app.command("greet", effect="read_only", help="Say hello")
         def greet(ctx):
             pass
 
@@ -63,7 +63,7 @@ class TestSchemaContent:
         monkeypatch.chdir(tmp_path)
         app = _make_app(name="myapp", version="2.3.4", help="My great app")
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -77,7 +77,7 @@ class TestSchemaContent:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -89,7 +89,7 @@ class TestSchemaContent:
         monkeypatch.chdir(tmp_path)
         app = _make_app(env_prefix="MYAPP")
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -101,7 +101,7 @@ class TestSchemaContent:
         monkeypatch.chdir(tmp_path)
         app_no_config = _make_app(config=False)
 
-        @app_no_config.command("noop", help="Does nothing")
+        @app_no_config.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -117,7 +117,7 @@ class TestSchemaCommands:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("deploy", help="Deploy the app")
+        @app.command("deploy", effect="read_only", help="Deploy the app")
         @strictcli.flag("target", type=str, help="Deploy target", short="t",
                         choices=["prod", "staging"])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
@@ -150,7 +150,7 @@ class TestSchemaCommands:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("greet", help="Greet someone",
+        @app.command("greet", effect="read_only", help="Greet someone",
                      args=[strictcli.Arg(name="name", help="Who to greet")])
         def greet(ctx, name):
             pass
@@ -169,7 +169,7 @@ class TestSchemaCommands:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("run", help="Run a command",
+        @app.command("run", effect="read_only", help="Run a command",
                      passthrough=strictcli.Passthrough(
                          handler=lambda ctx, name, args, globals: 0))
         def run():
@@ -184,7 +184,7 @@ class TestSchemaCommands:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("greet", help="Say hello")
+        @app.command("greet", effect="read_only", help="Say hello")
         def greet(ctx):
             pass
 
@@ -202,11 +202,11 @@ class TestSchemaGroups:
         app = _make_app()
         dns = app.group("dns", help="DNS management")
 
-        @dns.command("list", help="List DNS records")
+        @dns.command("list", effect="read_only", help="List DNS records")
         def dns_list(ctx):
             pass
 
-        @dns.command("add", help="Add a DNS record")
+        @dns.command("add", effect="read_only", help="Add a DNS record")
         @strictcli.flag("type", type=str, help="Record type")
         def dns_add(ctx, type):
             pass
@@ -227,7 +227,7 @@ class TestSchemaGroups:
         dns = app.group("dns", help="DNS management")
         zone = dns.group("zone", help="Zone management")
 
-        @zone.command("list", help="List zones")
+        @zone.command("list", effect="read_only", help="List zones")
         def zone_list(ctx):
             pass
 
@@ -245,7 +245,7 @@ class TestSchemaGroups:
         app = _make_app()
         dns = app.group("dns", help="DNS management")
 
-        @dns.command("list", help="List DNS records")
+        @dns.command("list", effect="read_only", help="List DNS records")
         def dns_list(ctx):
             pass
 
@@ -271,7 +271,7 @@ class TestSchemaGlobalFlags:
             ]
         )
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx, loud, output):
             pass
 
@@ -299,7 +299,7 @@ class TestSchemaDeprecated:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("new-cmd", help="The new command")
+        @app.command("new-cmd", effect="read_only", help="The new command")
         def new_cmd(ctx):
             pass
 
@@ -319,7 +319,7 @@ class TestSchemaDirectoryCreation:
         assert not (tmp_path / ".strictcli").exists()
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -336,7 +336,7 @@ class TestSchemaDirectoryCreation:
 
         app = _make_app(version="3.0.0")
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -368,7 +368,7 @@ class TestSchemaFlagTypes:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command")
+        @app.command("cmd", effect="read_only", help="A command")
         @strictcli.flag("count", type=int, help="How many", default=5)
         def cmd(ctx, count):
             pass
@@ -383,7 +383,7 @@ class TestSchemaFlagTypes:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command")
+        @app.command("cmd", effect="read_only", help="A command")
         @strictcli.flag("ratio", type=float, help="The ratio", default=0.5)
         def cmd(ctx, ratio):
             pass
@@ -398,7 +398,7 @@ class TestSchemaFlagTypes:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command")
+        @app.command("cmd", effect="read_only", help="A command")
         @strictcli.flag("tag", type=str, help="A tag", repeatable=True, unique=False)
         def cmd(ctx, tag):
             pass
@@ -413,7 +413,7 @@ class TestSchemaFlagTypes:
         monkeypatch.chdir(tmp_path)
         app = _make_app(env_prefix="MYAPP")
 
-        @app.command("cmd", help="A command")
+        @app.command("cmd", effect="read_only", help="A command")
         @strictcli.flag("token", type=str, help="Auth token", env="MYAPP_TOKEN")
         def cmd(ctx, token):
             pass
@@ -427,7 +427,7 @@ class TestSchemaFlagTypes:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command")
+        @app.command("cmd", effect="read_only", help="A command")
         @strictcli.flag("force-it", type=bool, default=False, help="Force it", negatable=False)
         def cmd(ctx, force_it):
             pass
@@ -445,7 +445,7 @@ class TestDumpSchemaWithOtherArgs:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("greet", help="Say hello")
+        @app.command("greet", effect="read_only", help="Say hello")
         def greet(ctx):
             pass
 
@@ -458,7 +458,7 @@ class TestDumpSchemaWithOtherArgs:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("greet", help="Say hello")
+        @app.command("greet", effect="read_only", help="Say hello")
         def greet(ctx):
             pass
 
@@ -471,7 +471,7 @@ class TestDumpSchemaWithOtherArgs:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("greet", help="Say hello")
+        @app.command("greet", effect="read_only", help="Say hello")
         def greet(ctx):
             pass
 
@@ -487,7 +487,7 @@ class TestSchemaDefaults:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -500,7 +500,7 @@ class TestSchemaDefaults:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -554,7 +554,7 @@ class TestSchemaOmitsDefaults:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command")
+        @app.command("cmd", effect="read_only", help="A command")
         @strictcli.flag("name", type=str, help="A name")
         def cmd(ctx, name):
             pass
@@ -579,7 +579,7 @@ class TestSchemaOmitsDefaults:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -596,7 +596,7 @@ class TestSchemaOmitsDefaults:
         app = _make_app()
         grp = app.group("stuff", help="Stuff management")
 
-        @grp.command("do", help="Do stuff")
+        @grp.command("do", effect="read_only", help="Do stuff")
         def do_stuff(ctx):
             pass
 
@@ -612,7 +612,7 @@ class TestSchemaOmitsDefaults:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command",
+        @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="target", help="The target")])
         def cmd(ctx, target):
             pass
@@ -633,7 +633,7 @@ class TestSchemaNonDefaultValues:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command",
+        @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
                                          required=False)])
         def cmd(ctx, target):
@@ -648,7 +648,7 @@ class TestSchemaNonDefaultValues:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command",
+        @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="files", help="Files to process",
                                          variadic=True)])
         def cmd(ctx, files):
@@ -663,7 +663,7 @@ class TestSchemaNonDefaultValues:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("run", help="Run a command",
+        @app.command("run", effect="read_only", help="Run a command",
                      passthrough=strictcli.Passthrough(
                          handler=lambda ctx, name, args, globals: 0))
         def run():
@@ -678,7 +678,7 @@ class TestSchemaNonDefaultValues:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command")
+        @app.command("cmd", effect="read_only", help="A command")
         @strictcli.flag("level", type=int, help="Level", short="l",
                         default=3, env="MY_LEVEL", choices=[1, 2, 3])
         def cmd(ctx, level):
@@ -696,7 +696,7 @@ class TestSchemaNonDefaultValues:
         monkeypatch.chdir(tmp_path)
         app = _make_app(config=True)
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -712,7 +712,7 @@ class TestSchemaProjectId:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -727,7 +727,7 @@ class TestSchemaProjectId:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -740,7 +740,7 @@ class TestSchemaProjectId:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -753,7 +753,7 @@ class TestSchemaProjectId:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -769,7 +769,7 @@ class TestSchemaVersion:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -782,7 +782,7 @@ class TestSchemaVersion:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -800,7 +800,7 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -815,7 +815,7 @@ class TestSchemaConstraints:
         json_flag = strictcli.Flag(name="json", type=bool, default=False, help="JSON output")
         text_flag = strictcli.Flag(name="text", type=bool, default=False, help="Text output")
 
-        @app.command("show", help="Show data",
+        @app.command("show", effect="read_only", help="Show data",
                      mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])])
         def show(ctx, json, text):
             pass
@@ -833,7 +833,7 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("deploy", help="Deploy",
+        @app.command("deploy", effect="read_only", help="Deploy",
                      dependencies=[strictcli.CoRequired(flags=["host", "port"])])
         @strictcli.flag("host", type=str, help="Hostname")
         @strictcli.flag("port", type=int, help="Port number")
@@ -852,7 +852,7 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("deploy", help="Deploy",
+        @app.command("deploy", effect="read_only", help="Deploy",
                      dependencies=[strictcli.Requires(flag="port", depends_on="host")])
         @strictcli.flag("host", type=str, help="Hostname")
         @strictcli.flag("port", type=int, help="Port number")
@@ -872,7 +872,7 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("deploy", help="Deploy",
+        @app.command("deploy", effect="read_only", help="Deploy",
                      dependencies=[strictcli.Implies(
                          flag="force-deploy", implies="agree", value=True)])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
@@ -898,7 +898,7 @@ class TestSchemaConstraints:
         json_flag = strictcli.Flag(name="json", type=bool, default=False, help="JSON output")
         text_flag = strictcli.Flag(name="text", type=bool, default=False, help="Text output")
 
-        @app.command("deploy", help="Deploy",
+        @app.command("deploy", effect="read_only", help="Deploy",
                      mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])],
                      dependencies=[
                          strictcli.CoRequired(flags=["host", "port"]),
@@ -921,7 +921,7 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("deploy", help="Deploy",
+        @app.command("deploy", effect="read_only", help="Deploy",
                      dependencies=[strictcli.CoRequired(
                          flags=["sim-run", "skip-confirm"])])
         @strictcli.flag("sim-run", type=bool, default=False, help="Dry run")
@@ -943,7 +943,7 @@ class TestSchemaTagContracts:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -956,7 +956,7 @@ class TestSchemaTagContracts:
         app = _make_app()
         app.tag_contract("dangerous", requires_flag="force-deploy")
 
-        @app.command("deploy", help="Deploy", tags=["dangerous"])
+        @app.command("deploy", effect="read_only", help="Deploy", tags=["dangerous"])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force it")
         def deploy(ctx, force_deploy):
             pass
@@ -972,7 +972,7 @@ class TestSchemaTagContracts:
         app.tag_contract("dangerous", requires_flag="force-deploy")
         app.tag_contract("slow", requires_flag="timeout")
 
-        @app.command("deploy", help="Deploy", tags=["dangerous", "slow"])
+        @app.command("deploy", effect="read_only", help="Deploy", tags=["dangerous", "slow"])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force it")
         @strictcli.flag("timeout", type=int, help="Timeout", default=30)
         def deploy(ctx, force_deploy, timeout):
@@ -994,7 +994,7 @@ class TestSchemaArgDefaults:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command",
+        @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="target", help="The target")])
         def cmd(ctx, target):
             pass
@@ -1008,7 +1008,7 @@ class TestSchemaArgDefaults:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command",
+        @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
                                          required=False, default="localhost")])
         def cmd(ctx, target):
@@ -1024,7 +1024,7 @@ class TestSchemaArgDefaults:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        @app.command("cmd", help="A command",
+        @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
                                          required=False, default=None)])
         def cmd(ctx, target):
@@ -1049,7 +1049,7 @@ class TestSchemaProjectIdMismatch:
         )
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -1069,7 +1069,7 @@ class TestSchemaProjectIdMismatch:
         )
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -1082,7 +1082,7 @@ class TestSchemaProjectIdMismatch:
         assert not (tmp_path / ".strictcli" / "schema.json").exists()
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -1097,7 +1097,7 @@ class TestSchemaProjectIdMismatch:
         (schema_dir / "schema.json").write_text("not valid json {{{")
         app = _make_app()
 
-        @app.command("noop", help="Does nothing")
+        @app.command("noop", effect="read_only", help="Does nothing")
         def noop(ctx):
             pass
 
@@ -1115,7 +1115,7 @@ class TestDumpSchemaDict:
         monkeypatch.chdir(empty)
         app = _make_app()
 
-        @app.command("greet", help="Say hello")
+        @app.command("greet", effect="read_only", help="Say hello")
         def greet(ctx):
             pass
 
@@ -1141,7 +1141,7 @@ class TestDumpSchemaDict:
         monkeypatch.chdir(tmp_path)
         app = _make_app(env_prefix="TESTAPP")
 
-        @app.command("greet", help="Say hello")
+        @app.command("greet", effect="read_only", help="Say hello")
         @strictcli.flag("loud", type=bool, help="be loud", default=False)
         def greet(ctx, loud):
             pass
@@ -1185,7 +1185,7 @@ class TestSchemaMarkerDefault:
             ],
         )
 
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag(
             "db",
             help="db path",

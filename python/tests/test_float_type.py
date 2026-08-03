@@ -9,7 +9,7 @@ def _make_app_with_float_flag(**flag_kwargs):
     """Helper: app with a single command that has one float flag."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", **flag_kwargs)
     def cmd(ctx, rate):
         print(f"rate={rate}")
@@ -29,7 +29,7 @@ def test_float_flag_value_is_float():
     """Float flag value is actually a float, not a string."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate")
     def cmd(ctx, rate):
         print(f"type={type(rate).__name__}")
@@ -59,7 +59,7 @@ def test_float_flag_from_env(monkeypatch):
     """Float flag value from env var is coerced to float."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
     def cmd(ctx, rate):
         print(f"rate={rate} type={type(rate).__name__}")
@@ -84,7 +84,7 @@ def test_float_flag_bad_env_value(monkeypatch):
     """Non-numeric env var for float flag -> exit 1, stderr says expected float."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
     def cmd(ctx, rate):
         print(f"rate={rate}")
@@ -116,7 +116,7 @@ def test_float_flag_negative_value():
     """Float flag with negative value --rate -2.5 -> receives -2.5."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate")
     def cmd(ctx, rate):
         print(f"rate={rate}")
@@ -182,7 +182,7 @@ def test_float_flag_reject_overflow_env_value(monkeypatch):
     """Overflowing float env var is rejected with the env suffix."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
     def cmd(ctx, rate):
         print(f"rate={rate}")
@@ -228,7 +228,7 @@ def test_float_flag_short_form():
     """Float flag via short flag -r 3.14 works."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", short="r", type=float, help="the rate")
     def cmd(ctx, rate):
         print(f"rate={rate}")
@@ -250,7 +250,7 @@ def test_float_flag_choices():
     """Float flag with choices validates correctly."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", choices=[0.5, 1.0, 2.0])
     def cmd(ctx, rate):
         print(f"rate={rate}")
@@ -270,7 +270,7 @@ def test_float_flag_repeatable():
     """Float repeatable flag collects multiple values."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("weight", type=float, help="a weight", repeatable=True, unique=False)
     def cmd(ctx, weight):
         print(f"weight={weight}")
@@ -300,7 +300,7 @@ def test_float_flag_nan_from_env_includes_env_suffix(monkeypatch):
     """NaN from env var includes '(from env var ...)' suffix in error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
     def cmd(ctx, rate):
         print(f"rate={rate}")
@@ -316,7 +316,7 @@ def test_float_flag_inf_from_env_includes_env_suffix(monkeypatch):
     """Inf from env var includes '(from env var ...)' suffix in error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", default=1.0, env="MYAPP_RATE")
     def cmd(ctx, rate):
         print(f"rate={rate}")

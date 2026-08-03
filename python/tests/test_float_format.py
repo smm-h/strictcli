@@ -144,7 +144,7 @@ def test_toml_config_set_writes_canonical_float(tmp_path):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("big", type=float, help="a big rate", default=0.0)
     @strictcli.flag("tiny", type=float, help="a tiny rate", default=0.0)
     def run(ctx, big, tiny):
@@ -190,7 +190,7 @@ def test_config_show_plain_renders_canonical(tmp_path):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("big", type=float, help="a big rate", default=0.0)
     @strictcli.flag("tiny", type=float, help="a tiny rate", default=0.0)
     def run(ctx, big, tiny):
@@ -207,7 +207,7 @@ def test_help_float_default_is_canonical():
     """Help text renders float defaults in canonical form."""
     app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("big", type=float, help="a big rate", default=1e16)
     @strictcli.flag("tiny", type=float, help="a tiny rate", default=1e-7)
     def cmd(ctx, big, tiny):
@@ -224,7 +224,7 @@ def test_choices_error_echoes_canonical():
     """An invalid float choice echoes the attempted value canonically."""
     app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="the rate", choices=[1.5, 2.5])
     def cmd(ctx, rate):
         pass

@@ -11,7 +11,7 @@ def test_flag_set_with_single_flag():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", flag_sets=[verbose_flag_set])
+    @app.command("cmd", effect="read_only", help="a command", flag_sets=[verbose_flag_set])
     def cmd(ctx, loud):
         print(f"loud={loud}")
 
@@ -31,7 +31,7 @@ def test_flag_set_with_multiple_flags():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", flag_sets=[output_flag_set])
+    @app.command("cmd", effect="read_only", help="a command", flag_sets=[output_flag_set])
     def cmd(ctx, format, color):
         print(f"format={format} color={color}")
 
@@ -49,7 +49,7 @@ def test_flag_set_flags_in_command_flags():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", flag_sets=[flag_set])
+    @app.command("cmd", effect="read_only", help="a command", flag_sets=[flag_set])
     def cmd(ctx, debug):
         pass
 
@@ -65,7 +65,7 @@ def test_flag_set_flags_in_help():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", flag_sets=[flag_set])
+    @app.command("cmd", effect="read_only", help="a command", flag_sets=[flag_set])
     def cmd(ctx, debug):
         pass
 
@@ -86,7 +86,7 @@ def test_flag_set_flag_values_parsed():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("deploy", help="deploy the app", flag_sets=[auth_flag_set])
+    @app.command("deploy", effect="read_only", help="deploy the app", flag_sets=[auth_flag_set])
     def deploy(ctx, token, insecure):
         print(f"token={token} insecure={insecure}")
 

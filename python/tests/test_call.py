@@ -21,7 +21,7 @@ class TestCallReturnsInt:
     def test_call_returns_int(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             return 42
 
@@ -30,7 +30,7 @@ class TestCallReturnsInt:
     def test_test_data_is_none_for_int_return(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             return 42
 
@@ -41,7 +41,7 @@ class TestCallReturnsInt:
     def test_test_data_is_none_for_zero(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             return 0
 
@@ -56,7 +56,7 @@ class TestCallReturnsNone:
     def test_call_returns_none(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             pass
 
@@ -65,7 +65,7 @@ class TestCallReturnsNone:
     def test_test_data_is_none(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             pass
 
@@ -80,7 +80,7 @@ class TestCallReturnsDict:
     def test_call_returns_dict(self):
         app = _build_app()
 
-        @app.command("status", help="get status")
+        @app.command("status", effect="read_only", help="get status")
         def status(ctx):
             return strictcli.outcome(data={"healthy": True, "uptime": 3600})
 
@@ -90,7 +90,7 @@ class TestCallReturnsDict:
     def test_test_data_is_dict(self):
         app = _build_app()
 
-        @app.command("status", help="get status")
+        @app.command("status", effect="read_only", help="get status")
         def status(ctx):
             return strictcli.outcome(data={"healthy": True, "uptime": 3600})
 
@@ -101,7 +101,7 @@ class TestCallReturnsDict:
     def test_call_with_flags(self):
         app = _build_app()
 
-        @app.command("status", help="get status")
+        @app.command("status", effect="read_only", help="get status")
         @strictcli.flag("loud", type=bool, default=False, help="include details")
         def status(ctx, loud):
             data = {"healthy": True}
@@ -119,7 +119,7 @@ class TestCallReturnsList:
     def test_call_returns_list(self):
         app = _build_app()
 
-        @app.command("list-users", help="list users")
+        @app.command("list-users", effect="read_only", help="list users")
         def list_users(ctx):
             return strictcli.outcome(data=["alice", "bob", "charlie"])
 
@@ -129,7 +129,7 @@ class TestCallReturnsList:
     def test_test_data_is_list(self):
         app = _build_app()
 
-        @app.command("list-users", help="list users")
+        @app.command("list-users", effect="read_only", help="list users")
         def list_users(ctx):
             return strictcli.outcome(data=["alice", "bob", "charlie"])
 
@@ -149,7 +149,7 @@ class TestCallReturnsDataclass:
 
         app = _build_app()
 
-        @app.command("status", help="get status")
+        @app.command("status", effect="read_only", help="get status")
         def status(ctx):
             return strictcli.outcome(data=Status(healthy=True, uptime=3600))
 
@@ -166,7 +166,7 @@ class TestCallReturnsDataclass:
 
         app = _build_app()
 
-        @app.command("status", help="get status")
+        @app.command("status", effect="read_only", help="get status")
         def status(ctx):
             return strictcli.outcome(data=Status(healthy=True, uptime=3600))
 
@@ -183,7 +183,7 @@ class TestCallReturnsString:
     def test_call_returns_string(self):
         app = _build_app()
 
-        @app.command("greet", help="greet")
+        @app.command("greet", effect="read_only", help="greet")
         def greet(ctx):
             return strictcli.outcome(data="hello world")
 
@@ -193,7 +193,7 @@ class TestCallReturnsString:
     def test_test_data_is_string(self):
         app = _build_app()
 
-        @app.command("greet", help="greet")
+        @app.command("greet", effect="read_only", help="greet")
         def greet(ctx):
             return strictcli.outcome(data="hello world")
 
@@ -208,7 +208,7 @@ class TestCallErrorCases:
     def test_unknown_command(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             pass
 
@@ -218,7 +218,7 @@ class TestCallErrorCases:
     def test_missing_required_flag(self):
         app = _build_app()
 
-        @app.command("greet", help="greet")
+        @app.command("greet", effect="read_only", help="greet")
         @strictcli.flag("name", type=str, help="name")
         def greet(ctx, name):
             pass
@@ -230,7 +230,7 @@ class TestCallErrorCases:
         app = _build_app()
 
         @app.command(
-            "deploy", help="deploy",
+            "deploy", effect="read_only", help="deploy",
             args=[strictcli.Arg(name="target", help="deploy target")],
         )
         def deploy(ctx, target):
@@ -242,7 +242,7 @@ class TestCallErrorCases:
     def test_unknown_kwarg(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             pass
 
@@ -253,7 +253,7 @@ class TestCallErrorCases:
         app = _build_app()
 
         @app.command(
-            "fmt", help="format",
+            "fmt", effect="read_only", help="format",
             mutex=[strictcli.MutexGroup(
                 flags=[
                     strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
@@ -272,7 +272,7 @@ class TestCallErrorCases:
         app = _build_app()
         grp = app.group("config", help="config management")
 
-        @grp.command("show", help="show config")
+        @grp.command("show", effect="read_only", help="show config")
         def show(ctx):
             pass
 
@@ -287,7 +287,7 @@ class TestCallErrorCases:
         """InvokeError.__cause__ is the original _ParseError."""
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             pass
 
@@ -299,7 +299,7 @@ class TestCallErrorCases:
         """A raw structured return (not via outcome()) is a hard error."""
         app = _build_app()
 
-        @app.command("bad", help="bad")
+        @app.command("bad", effect="read_only", help="bad")
         def bad(ctx):
             return {"nope": True}
 
@@ -313,7 +313,7 @@ class TestRunWithStructuredData:
     def test_prints_json_for_dict(self):
         app = _build_app()
 
-        @app.command("status", help="get status")
+        @app.command("status", effect="read_only", help="get status")
         def status(ctx):
             return strictcli.outcome(data={"healthy": True, "count": 5})
 
@@ -325,7 +325,7 @@ class TestRunWithStructuredData:
     def test_prints_json_for_list(self):
         app = _build_app()
 
-        @app.command("list-items", help="list items")
+        @app.command("list-items", effect="read_only", help="list items")
         def list_items(ctx):
             return strictcli.outcome(data=[1, 2, 3])
 
@@ -343,7 +343,7 @@ class TestRunWithStructuredData:
 
         app = _build_app()
 
-        @app.command("status", help="get status")
+        @app.command("status", effect="read_only", help="get status")
         def status(ctx):
             return strictcli.outcome(data=Status(healthy=True, uptime=3600))
 
@@ -358,7 +358,7 @@ class TestRunWithStructuredData:
         """Non-serializable values nested in data use default=str on stdout."""
         app = _build_app()
 
-        @app.command("info", help="get info")
+        @app.command("info", effect="read_only", help="get info")
         def info(ctx):
             return strictcli.outcome(data={
                 "timestamp": datetime(2025, 1, 15, 10, 30, 0),
@@ -376,7 +376,7 @@ class TestRunWithStructuredData:
         """String data produces a JSON string on stdout."""
         app = _build_app()
 
-        @app.command("greet", help="greet")
+        @app.command("greet", effect="read_only", help="greet")
         def greet(ctx):
             return strictcli.outcome(data="hello world")
 
@@ -390,7 +390,7 @@ class TestAcall:
     def test_acall_returns_dict(self):
         app = _build_app()
 
-        @app.command("status", help="get status")
+        @app.command("status", effect="read_only", help="get status")
         def status(ctx):
             return strictcli.outcome(data={"healthy": True})
 
@@ -400,7 +400,7 @@ class TestAcall:
     def test_acall_returns_int(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             return 42
 
@@ -410,7 +410,7 @@ class TestAcall:
     def test_acall_returns_none(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             pass
 
@@ -420,7 +420,7 @@ class TestAcall:
     def test_acall_raises_invoke_error(self):
         app = _build_app()
 
-        @app.command("run", help="run")
+        @app.command("run", effect="read_only", help="run")
         def run(ctx):
             pass
 
@@ -430,7 +430,7 @@ class TestAcall:
     def test_acall_with_kwargs(self):
         app = _build_app()
 
-        @app.command("greet", help="greet")
+        @app.command("greet", effect="read_only", help="greet")
         @strictcli.flag("name", type=str, help="person to greet")
         def greet(ctx, name):
             return strictcli.outcome(data={"greeting": f"hello {name}"})
@@ -445,7 +445,7 @@ class TestBackwardCompat:
     def test_int_return_sets_exit_code(self):
         app = _build_app()
 
-        @app.command("fail", help="fail")
+        @app.command("fail", effect="read_only", help="fail")
         def fail(ctx):
             return 1
 
@@ -456,7 +456,7 @@ class TestBackwardCompat:
     def test_none_return_exit_code_zero(self):
         app = _build_app()
 
-        @app.command("ok", help="ok")
+        @app.command("ok", effect="read_only", help="ok")
         def ok(ctx):
             pass
 
@@ -468,7 +468,7 @@ class TestBackwardCompat:
         """Handler print() still captured in result.stdout."""
         app = _build_app()
 
-        @app.command("hello", help="hello")
+        @app.command("hello", effect="read_only", help="hello")
         def hello(ctx):
             print("hello world")
             return strictcli.outcome(data={"done": True})
@@ -487,7 +487,7 @@ class TestBackwardCompat:
         """On parse errors, data remains None."""
         app = _build_app()
 
-        @app.command("greet", help="greet")
+        @app.command("greet", effect="read_only", help="greet")
         @strictcli.flag("name", type=str, help="name")
         def greet(ctx, name):
             return strictcli.outcome(data={"greeting": f"hello {name}"})
@@ -504,7 +504,7 @@ class TestCallNestedCommands:
         app = _build_app()
         grp = app.group("config", help="config management")
 
-        @grp.command("show", help="show config")
+        @grp.command("show", effect="read_only", help="show config")
         def show(ctx):
             return strictcli.outcome(data={"key": "value"})
 
@@ -516,7 +516,7 @@ class TestCallNestedCommands:
         g1 = app.group("infra", help="infrastructure")
         g2 = g1.group("dns", help="DNS management")
 
-        @g2.command("list", help="list DNS records")
+        @g2.command("list", effect="read_only", help="list DNS records")
         def list_records(ctx):
             return strictcli.outcome(data=["a.example.com", "b.example.com"])
 

@@ -20,7 +20,7 @@ def test_bool_mutex_neither_provided_error():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     def cmd(ctx, loud, hushed):
         print(f"loud={loud} hushed={hushed}")
 
@@ -40,7 +40,7 @@ def test_bool_mutex_one_provided():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     def cmd(ctx, loud, hushed):
         print(f"loud={loud} hushed={hushed}")
 
@@ -60,7 +60,7 @@ def test_bool_mutex_both_provided_error():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     def cmd(ctx, loud, hushed):
         pass
 
@@ -86,7 +86,7 @@ def test_required_mutex_none_provided_error():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     def cmd(ctx, loud, hushed):
         pass
 
@@ -107,7 +107,7 @@ def test_required_mutex_one_provided_ok():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     def cmd(ctx, loud, hushed):
         print(f"loud={loud} hushed={hushed}")
 
@@ -132,7 +132,7 @@ def test_str_mutex_one_provided_ok():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("fetch", help="fetch data", mutex=[mg])
+    @app.command("fetch", effect="read_only", help="fetch data", mutex=[mg])
     def fetch(ctx, file, url):
         print(f"file={file} url={url}")
 
@@ -151,7 +151,7 @@ def test_str_mutex_both_provided_error():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("fetch", help="fetch data", mutex=[mg])
+    @app.command("fetch", effect="read_only", help="fetch data", mutex=[mg])
     def fetch(ctx, file, url):
         pass
 
@@ -177,7 +177,7 @@ def test_mixed_type_mutex():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("run", help="run something", mutex=[mg])
+    @app.command("run", effect="read_only", help="run something", mutex=[mg])
     def run(ctx, interactive, script):
         print(f"interactive={interactive} script={script}")
 
@@ -207,7 +207,7 @@ def test_mutex_shown_in_help():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     @strictcli.flag("name", help="your name", default="anon")
     def cmd(ctx, name, loud, hushed):
         pass
@@ -232,7 +232,7 @@ def test_required_mutex_shown_in_help():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     def cmd(ctx, loud, hushed):
         pass
 
@@ -262,7 +262,7 @@ def test_mutex_env_sets_one_cli_sets_another_error(monkeypatch):
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("fetch", help="fetch data", mutex=[mg])
+    @app.command("fetch", effect="read_only", help="fetch data", mutex=[mg])
     def fetch(ctx, file, url):
         pass
 
@@ -288,7 +288,7 @@ def test_mutex_env_sets_one_only_ok(monkeypatch):
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("fetch", help="fetch data", mutex=[mg])
+    @app.command("fetch", effect="read_only", help="fetch data", mutex=[mg])
     def fetch(ctx, file, url):
         print(f"file={file} url={url}")
 
@@ -315,7 +315,7 @@ def test_mutex_flags_overlap_with_regular_flags_error():
 
     with pytest.raises(ValueError, match="duplicate flag name"):
 
-        @app.command("cmd", help="a command", mutex=[mg])
+        @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
         @strictcli.flag("loud", type=bool, default=False, help="loud output")
         def cmd(ctx, loud, hushed):
             pass
@@ -332,7 +332,7 @@ def test_mutex_group_fewer_than_2_flags_error():
 
     with pytest.raises(ValueError, match="at least 2 flags"):
 
-        @app.command("cmd", help="a command", mutex=[mg])
+        @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
         def cmd(ctx, loud):
             pass
 
@@ -344,7 +344,7 @@ def test_mutex_group_empty_error():
 
     with pytest.raises(ValueError, match="at least 2 flags"):
 
-        @app.command("cmd", help="a command", mutex=[mg])
+        @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
         def cmd(ctx):
             pass
 
@@ -370,7 +370,7 @@ def test_two_separate_mutex_groups():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg1, mg2])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg1, mg2])
     def cmd(ctx, loud, hushed, json, csv):
         print(f"loud={loud} hushed={hushed} json={json} csv={csv}")
 
@@ -410,7 +410,7 @@ def test_overlapping_mutex_groups_error():
 
     with pytest.raises(ValueError, match="multiple mutex groups"):
 
-        @app.command("cmd", help="a command", mutex=[mg1, mg2])
+        @app.command("cmd", effect="read_only", help="a command", mutex=[mg1, mg2])
         def cmd(ctx, loud, hushed, debug):
             pass
 
@@ -431,7 +431,7 @@ def test_group_command_with_mutex():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     grp = app.group("config", help="configuration commands")
 
-    @grp.command("show", help="show config", mutex=[mg])
+    @grp.command("show", effect="read_only", help="show config", mutex=[mg])
     def show(ctx, loud, hushed):
         print(f"loud={loud} hushed={hushed}")
 

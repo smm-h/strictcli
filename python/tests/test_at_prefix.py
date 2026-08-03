@@ -9,7 +9,7 @@ def _make_app():
     """Helper: app with a str flag on a command."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("msg", type=str, help="message")
     def cmd(ctx, msg):
         print(f"msg={msg}")
@@ -21,7 +21,7 @@ def _make_two_str_flags_app():
     """Helper: app with two str flags on a command."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("first", type=str, help="first value")
     @strictcli.flag("second", type=str, help="second value")
     def cmd(ctx, first, second):
@@ -38,7 +38,7 @@ def _make_global_and_cmd_str_app():
         flags=[strictcli.Flag(name="token", type=str, help="auth token", default="none")],
     )
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("msg", type=str, help="message")
     def cmd(ctx, msg, token):
         print(f"msg={msg}")
@@ -214,7 +214,7 @@ def test_int_flag_ignores_at_prefix():
     """@5 with int flag does NOT try to read a file -- it fails as invalid int."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("count", type=int, help="count")
     def cmd(ctx, count):
         print(f"count={count}")
@@ -228,7 +228,7 @@ def test_float_flag_ignores_at_prefix():
     """@1.5 with float flag does NOT try to read a file."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("rate", type=float, help="rate")
     def cmd(ctx, rate):
         print(f"rate={rate}")
@@ -242,7 +242,7 @@ def test_bool_flag_ignores_at_prefix():
     """Bool flags are unaffected by @ prefix (they don't take values)."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("loud", type=bool, default=False, help="loud")
     def cmd(ctx, loud):
         print(f"loud={loud}")
@@ -260,7 +260,7 @@ def test_env_var_at_file(tmp_path, monkeypatch):
     f.write_text("env-secret-value\n")
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("msg", type=str, help="message", default="fallback", env="TEST_MSG")
     def cmd(ctx, msg):
         print(f"msg={msg}")
@@ -276,7 +276,7 @@ def test_env_var_at_stdin(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("from-stdin-env"))
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("msg", type=str, help="message", default="fallback", env="TEST_MSG")
     def cmd(ctx, msg):
         print(f"msg={msg}")
@@ -291,7 +291,7 @@ def test_env_var_at_escape(monkeypatch):
     """Env var value @@literal becomes @literal."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("msg", type=str, help="message", default="fallback", env="TEST_MSG")
     def cmd(ctx, msg):
         print(f"msg={msg}")
@@ -310,7 +310,7 @@ def test_at_file_short_flag(tmp_path):
     f.write_text("short-form-value")
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("msg", type=str, short="m", help="message")
     def cmd(ctx, msg):
         print(f"msg={msg}")
@@ -347,7 +347,7 @@ def test_default_value_not_resolved():
     """Default values are NOT subject to @-prefix resolution."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("msg", type=str, help="message", default="@some-file")
     def cmd(ctx, msg):
         print(f"msg={msg}")

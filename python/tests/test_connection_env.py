@@ -26,7 +26,7 @@ def test_connection_env_help_rendering():
     app = App(name="myapp", version="1.0.0", help="t",
               connection_env={"DATABASE_URL": "Postgres connection string"})
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx):
         return 0
 
@@ -40,7 +40,7 @@ def test_connection_env_schema_dump():
     app = App(name="myapp", version="1.0.0", help="t",
               connection_env={"DATABASE_URL": "Postgres connection string"})
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx):
         return 0
 
@@ -59,7 +59,7 @@ def _make_conn_app():
               connection_env={"DATABASE_URL": "conn"})
     captured = {}
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     @strictcli.flag("dsn", help="connection string", default="",
                     connection_url=True, connection_env="DATABASE_URL")
     def run(ctx, dsn):
@@ -105,7 +105,7 @@ def test_connection_env_infra_value_live(monkeypatch):
               connection_env={"DATABASE_URL": "conn"})
     captured = {}
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx):
         captured["conn"] = ctx.connection_env_value("DATABASE_URL")
         captured["infra"] = ctx.infra_value("DATABASE_URL")
@@ -122,7 +122,7 @@ def test_connection_env_hermetic_suppresses_infra_value(monkeypatch):
               connection_env={"DATABASE_URL": "conn"})
     captured = {}
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx):
         captured["conn"] = ctx.connection_env_value("DATABASE_URL")
         return 0
@@ -137,7 +137,7 @@ def test_connection_env_undeclared_value_raises(monkeypatch):
               connection_env={"DATABASE_URL": "conn"})
     captured = {}
 
-    @app.command("run", help="run it")
+    @app.command("run", effect="read_only", help="run it")
     def run(ctx):
         try:
             ctx.connection_env_value("NOPE")
@@ -245,7 +245,7 @@ def test_connection_url_flag_unbound_raises():
     app = App(name="myapp", version="1.0.0", help="t",
               connection_env={"DATABASE_URL": "conn"})
     with pytest.raises(ValueError, match="must bind to a declared connection env"):
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("dsn", help="dsn", default=None, connection_url=True)
         def run(ctx, dsn):
             return 0
@@ -255,7 +255,7 @@ def test_connection_url_flag_undeclared_binding_raises():
     app = App(name="myapp", version="1.0.0", help="t",
               connection_env={"DATABASE_URL": "conn"})
     with pytest.raises(ValueError, match="undeclared connection env"):
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("dsn", help="dsn", default=None,
                         connection_url=True, connection_env="OTHER_URL")
         def run(ctx, dsn):
@@ -266,7 +266,7 @@ def test_connection_env_binding_without_url_marker_raises():
     app = App(name="myapp", version="1.0.0", help="t",
               connection_env={"DATABASE_URL": "conn"})
     with pytest.raises(ValueError, match="requires the flag to be marked as a connection-URL flag"):
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("dsn", help="dsn", default=None, connection_env="DATABASE_URL")
         def run(ctx, dsn):
             return 0
@@ -276,7 +276,7 @@ def test_connection_env_binding_plus_per_flag_env_raises():
     app = App(name="myapp", version="1.0.0", help="t",
               connection_env={"DATABASE_URL": "conn"})
     with pytest.raises(ValueError, match="cannot be combined with a per-flag env var"):
-        @app.command("run", help="run it")
+        @app.command("run", effect="read_only", help="run it")
         @strictcli.flag("dsn", help="dsn", default=None, env="SOMETHING_ELSE",
                         connection_url=True, connection_env="DATABASE_URL")
         def run(ctx, dsn):

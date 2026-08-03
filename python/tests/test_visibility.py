@@ -29,11 +29,11 @@ class TestHiddenCommand:
     def test_hidden_command_not_in_help(self):
         app = _make_app()
 
-        @app.command("visible", help="A visible command")
+        @app.command("visible", effect="read_only", help="A visible command")
         def visible(ctx):
             pass
 
-        @app.command("secret", help="A secret command", hidden=True)
+        @app.command("secret", effect="read_only", help="A secret command", hidden=True)
         def secret(ctx):
             pass
 
@@ -44,7 +44,7 @@ class TestHiddenCommand:
     def test_hidden_command_still_routable(self):
         app = _make_app()
 
-        @app.command("secret", help="A secret command", hidden=True)
+        @app.command("secret", effect="read_only", help="A secret command", hidden=True)
         def secret(ctx):
             print("secret output")
 
@@ -55,7 +55,7 @@ class TestHiddenCommand:
         """Requesting --help on a hidden command should still show its help."""
         app = _make_app()
 
-        @app.command("secret", help="A secret command", hidden=True)
+        @app.command("secret", effect="read_only", help="A secret command", hidden=True)
         @strictcli.flag("loud", type=bool, default=False, help="be loud")
         def secret(ctx, loud):
             pass
@@ -66,7 +66,7 @@ class TestHiddenCommand:
     def test_hidden_false_is_default(self):
         app = _make_app()
 
-        @app.command("normal", help="A normal command")
+        @app.command("normal", effect="read_only", help="A normal command")
         def normal(ctx):
             pass
 
@@ -76,7 +76,7 @@ class TestHiddenCommand:
     def test_hidden_true_stored(self):
         app = _make_app()
 
-        @app.command("secret", help="A secret command", hidden=True)
+        @app.command("secret", effect="read_only", help="A secret command", hidden=True)
         def secret(ctx):
             pass
 
@@ -87,11 +87,11 @@ class TestHiddenCommand:
         """If all commands are hidden, the Commands section should not appear."""
         app = _make_app()
 
-        @app.command("a", help="cmd a", hidden=True)
+        @app.command("a", effect="read_only", help="cmd a", hidden=True)
         def a(ctx):
             pass
 
-        @app.command("b", help="cmd b", hidden=True)
+        @app.command("b", effect="read_only", help="cmd b", hidden=True)
         def b(ctx):
             pass
 
@@ -112,11 +112,11 @@ class TestHiddenGroup:
         visible_grp = app.group("public", help="Public group")
         hidden_grp = app.group("internal", help="Internal group", hidden=True)
 
-        @visible_grp.command("cmd", help="Public command")
+        @visible_grp.command("cmd", effect="read_only", help="Public command")
         def pub_cmd(ctx):
             pass
 
-        @hidden_grp.command("cmd", help="Internal command")
+        @hidden_grp.command("cmd", effect="read_only", help="Internal command")
         def int_cmd(ctx):
             pass
 
@@ -128,7 +128,7 @@ class TestHiddenGroup:
         app = _make_app()
         hidden_grp = app.group("internal", help="Internal group", hidden=True)
 
-        @hidden_grp.command("run", help="Run internal")
+        @hidden_grp.command("run", effect="read_only", help="Run internal")
         def run(ctx):
             print("internal run")
 
@@ -140,7 +140,7 @@ class TestHiddenGroup:
         app = _make_app()
         hidden_grp = app.group("internal", help="Internal group", hidden=True)
 
-        @hidden_grp.command("run", help="Run internal")
+        @hidden_grp.command("run", effect="read_only", help="Run internal")
         def run(ctx):
             pass
 
@@ -154,11 +154,11 @@ class TestHiddenGroup:
         visible_sub = grp.group("visible", help="Visible subgroup")
         hidden_sub = grp.group("hidden", help="Hidden subgroup", hidden=True)
 
-        @visible_sub.command("a", help="cmd a")
+        @visible_sub.command("a", effect="read_only", help="cmd a")
         def a(ctx):
             pass
 
-        @hidden_sub.command("b", help="cmd b")
+        @hidden_sub.command("b", effect="read_only", help="cmd b")
         def b(ctx):
             pass
 
@@ -171,11 +171,11 @@ class TestHiddenGroup:
         app = _make_app()
         grp = app.group("mygroup", help="My group")
 
-        @grp.command("visible", help="Visible command")
+        @grp.command("visible", effect="read_only", help="Visible command")
         def visible(ctx):
             pass
 
-        @grp.command("secret", help="Secret command", hidden=True)
+        @grp.command("secret", effect="read_only", help="Secret command", hidden=True)
         def secret(ctx):
             pass
 
@@ -204,7 +204,7 @@ class TestInteractiveCommand:
     def test_interactive_command_in_help(self):
         app = _make_app()
 
-        @app.command("edit", help="Edit interactively", interactive=True)
+        @app.command("edit", effect="read_only", help="Edit interactively", interactive=True)
         def edit(ctx):
             pass
 
@@ -214,7 +214,7 @@ class TestInteractiveCommand:
     def test_interactive_false_is_default(self):
         app = _make_app()
 
-        @app.command("normal", help="A normal command")
+        @app.command("normal", effect="read_only", help="A normal command")
         def normal(ctx):
             pass
 
@@ -224,7 +224,7 @@ class TestInteractiveCommand:
     def test_interactive_true_stored(self):
         app = _make_app()
 
-        @app.command("edit", help="Edit interactively", interactive=True)
+        @app.command("edit", effect="read_only", help="Edit interactively", interactive=True)
         def edit(ctx):
             pass
 
@@ -235,7 +235,7 @@ class TestInteractiveCommand:
         """A command can be both hidden and interactive."""
         app = _make_app()
 
-        @app.command("secret-edit", help="Secret edit", hidden=True, interactive=True)
+        @app.command("secret-edit", effect="read_only", help="Secret edit", hidden=True, interactive=True)
         def secret_edit(ctx):
             print("secret edit output")
 
@@ -294,7 +294,7 @@ class TestVisibilitySchema:
 
         app = _make_app()
 
-        @app.command("secret", help="A secret command", hidden=True)
+        @app.command("secret", effect="read_only", help="A secret command", hidden=True)
         def secret(ctx):
             pass
 
@@ -309,7 +309,7 @@ class TestVisibilitySchema:
 
         app = _make_app()
 
-        @app.command("edit", help="Edit stuff", interactive=True)
+        @app.command("edit", effect="read_only", help="Edit stuff", interactive=True)
         def edit(ctx):
             pass
 
@@ -324,7 +324,7 @@ class TestVisibilitySchema:
 
         app = _make_app()
 
-        @app.command("normal", help="Normal command")
+        @app.command("normal", effect="read_only", help="Normal command")
         def normal(ctx):
             pass
 
@@ -340,7 +340,7 @@ class TestVisibilitySchema:
         app = _make_app()
         grp = app.group("internal", help="Internal group", hidden=True)
 
-        @grp.command("cmd", help="A command")
+        @grp.command("cmd", effect="read_only", help="A command")
         def cmd(ctx):
             pass
 
@@ -355,7 +355,7 @@ class TestVisibilitySchema:
         app = _make_app()
         grp = app.group("public", help="Public group")
 
-        @grp.command("cmd", help="A command")
+        @grp.command("cmd", effect="read_only", help="A command")
         def cmd(ctx):
             pass
 
@@ -369,7 +369,7 @@ class TestVisibilitySchema:
 
         app = _make_app()
 
-        @app.command("x", help="x cmd")
+        @app.command("x", effect="read_only", help="x cmd")
         def x(ctx):
             pass
 
@@ -404,11 +404,11 @@ class TestGroupCommandVisibility:
         app = _make_app()
         grp = app.group("mygroup", help="My group")
 
-        @grp.command("visible", help="Visible command")
+        @grp.command("visible", effect="read_only", help="Visible command")
         def visible(ctx):
             pass
 
-        @grp.command("hidden", help="Hidden command", hidden=True)
+        @grp.command("hidden", effect="read_only", help="Hidden command", hidden=True)
         def hidden(ctx):
             pass
 
@@ -420,7 +420,7 @@ class TestGroupCommandVisibility:
         app = _make_app()
         grp = app.group("mygroup", help="My group")
 
-        @grp.command("hidden", help="Hidden command", hidden=True)
+        @grp.command("hidden", effect="read_only", help="Hidden command", hidden=True)
         def hidden(ctx):
             print("hidden output")
 
@@ -431,7 +431,7 @@ class TestGroupCommandVisibility:
         app = _make_app()
         grp = app.group("mygroup", help="My group")
 
-        @grp.command("edit", help="Edit command", interactive=True)
+        @grp.command("edit", effect="read_only", help="Edit command", interactive=True)
         def edit(ctx):
             pass
 

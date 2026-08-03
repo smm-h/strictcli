@@ -9,7 +9,7 @@ def test_register_command_with_flags_and_args():
     """Register a command successfully with flags and args."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("greet", help="say hello", args=[strictcli.Arg(name="name", help="who to greet")])
+    @app.command("greet", effect="read_only", help="say hello", args=[strictcli.Arg(name="name", help="who to greet")])
     @strictcli.flag("loud", type=bool, default=False, help="shout it")
     def greet(ctx, name, loud):
         pass
@@ -28,7 +28,7 @@ def test_missing_help_on_command():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     with pytest.raises(ValueError, match="missing help text"):
 
-        @app.command("bad", help="")
+        @app.command("bad", effect="read_only", help="")
         def bad(ctx):
             pass
 
@@ -50,7 +50,7 @@ def test_handler_missing_param():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     with pytest.raises(ValueError, match="handler missing parameter"):
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("loud", type=bool, default=False, help="be loud")
         def cmd(ctx):
             pass
@@ -61,7 +61,7 @@ def test_handler_extra_param():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     with pytest.raises(ValueError, match="handler has extra parameter"):
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx, extra):
             pass
 
@@ -71,7 +71,7 @@ def test_duplicate_flag_name():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     with pytest.raises(ValueError, match="duplicate flag name"):
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("loud", type=bool, default=False, help="be loud")
         @strictcli.flag("loud", type=bool, default=False, help="also loud")
         def cmd(ctx, loud):
@@ -83,7 +83,7 @@ def test_env_prefix_without_prefix():
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
     with pytest.raises(ValueError, match='must start with "MYAPP_'):
 
-        @app.command("cmd", help="a command")
+        @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag("target", type=str, help="target", default="x", env="WRONG_TARGET")
         def cmd(ctx, target):
             pass
@@ -93,7 +93,7 @@ def test_env_prefix_with_prefixed_false():
     """prefixed=False bypasses env prefix check."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "target", type=str, help="target", default="x", env="SPECIAL_TARGET", prefixed=False
     )
@@ -107,7 +107,7 @@ def test_env_prefix_correct():
     """Correct env prefix passes validation."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("target", type=str, help="target", default="x", env="MYAPP_TARGET")
     def cmd(ctx, target):
         pass
@@ -122,7 +122,7 @@ def test_flag_set_merging():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", flag_sets=[verbose_flag_set])
+    @app.command("cmd", effect="read_only", help="a command", flag_sets=[verbose_flag_set])
     def cmd(ctx, loud):
         pass
 
@@ -135,7 +135,7 @@ def test_group_registration():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     grp = app.group("config", help="config commands")
 
-    @grp.command("show", help="show config")
+    @grp.command("show", effect="read_only", help="show config")
     def show(ctx):
         pass
 
@@ -150,7 +150,7 @@ def test_group_env_prefix_propagation():
 
     with pytest.raises(ValueError, match='must start with "MYAPP_'):
 
-        @grp.command("show", help="show config")
+        @grp.command("show", effect="read_only", help="show config")
         @strictcli.flag("path", type=str, help="path", default="/etc", env="BAD_PATH")
         def show(ctx, path):
             pass

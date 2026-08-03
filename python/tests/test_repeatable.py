@@ -10,7 +10,7 @@ def _make_app_with_repeatable(**flag_kwargs):
     flag_kwargs.setdefault("unique", False)
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("record", help="a record", repeatable=True, **flag_kwargs)
     def cmd(ctx, record):
         print(f"record={record!r}")
@@ -46,7 +46,7 @@ def test_repeatable_with_type_int():
     """Repeatable with type=int coerces each value to int."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False)
     def cmd(ctx, port):
         print(f"port={port!r}")
@@ -78,7 +78,7 @@ def test_repeatable_bad_int_value():
     """Repeatable with type=int: a non-integer value produces an error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False)
     def cmd(ctx, port):
         print(f"port={port!r}")
@@ -136,7 +136,7 @@ def test_repeatable_with_env_var(monkeypatch):
     """An env var value for a repeatable flag becomes a single-element list."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "record", help="a record", repeatable=True, unique=False,
         env="MYAPP_RECORD", env_separator=",",
@@ -195,7 +195,7 @@ def test_repeatable_env_var_with_type_int(monkeypatch):
     """An env var for a repeatable int flag produces a single-element int list."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "port", type=int, help="a port", repeatable=True, unique=False,
         env="MYAPP_PORT", env_separator=",",
@@ -261,7 +261,7 @@ def test_env_separator_shown_in_help():
     """Help text shows [env: MY_TAGS (sep: ,)] for repeatable flag with env_separator."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tags", help="tags to apply", repeatable=True, unique=False,
         env="MY_TAGS", env_separator=",",
@@ -281,7 +281,7 @@ def test_env_separator_splits_value(monkeypatch):
     """TAGS=a,b,c with env_separator=',' produces ['a', 'b', 'c']."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
@@ -299,7 +299,7 @@ def test_env_separator_escaped_separator(monkeypatch):
     r"""TAGS=a\,b,c produces ['a,b', 'c'] (escaped separator)."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
@@ -317,7 +317,7 @@ def test_env_separator_single_value(monkeypatch):
     """TAGS=a with env_separator=',' produces ['a'] (no separator in value)."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
@@ -335,7 +335,7 @@ def test_env_separator_int_coercion(monkeypatch):
     """COUNTS=1,2,3 with int type and env_separator=',' produces [1, 2, 3]."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "count", type=int, help="a count", repeatable=True, unique=False,
         env="COUNTS", env_separator=",",
@@ -353,7 +353,7 @@ def test_env_separator_int_coercion_error(monkeypatch):
     """COUNTS=1,abc,3 with int type produces per-element coercion error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "count", type=int, help="a count", repeatable=True, unique=False,
         env="COUNTS", env_separator=",",
@@ -371,7 +371,7 @@ def test_env_separator_unique_duplicate_error(monkeypatch):
     """TAGS=a,b,a with unique=True produces duplicate error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=True,
         env="TAGS", env_separator=",",
@@ -389,7 +389,7 @@ def test_env_separator_unique_no_duplicate(monkeypatch):
     """TAGS=a,b,c with unique=True succeeds when all values are distinct."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=True,
         env="TAGS", env_separator=",",
@@ -407,7 +407,7 @@ def test_env_separator_cli_overrides_env(monkeypatch):
     """CLI value completely replaces env (first source wins, no merging)."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
@@ -425,7 +425,7 @@ def test_env_separator_colon_separator(monkeypatch):
     """Test with env_separator=':' to verify it's not hardcoded to comma."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "path", help="a path", repeatable=True, unique=False,
         env="PATHS", env_separator=":",
@@ -446,7 +446,7 @@ def test_env_separator_at_prefix_per_element(monkeypatch, tmp_path):
 
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
         env="TAGS", env_separator=",",
@@ -472,7 +472,7 @@ def test_env_separator_global_flag(monkeypatch):
         ],
     )
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
@@ -486,7 +486,7 @@ def test_env_separator_float_coercion(monkeypatch):
     """RATES=1.5,2.5,3.5 with float type and env_separator=',' produces [1.5, 2.5, 3.5]."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "rate", type=float, help="a rate", repeatable=True, unique=False,
         env="RATES", env_separator=",",
@@ -504,7 +504,7 @@ def test_env_separator_float_coercion_error(monkeypatch):
     """RATES=1.5,abc with float type produces per-element coercion error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "rate", type=float, help="a rate", repeatable=True, unique=False,
         env="RATES", env_separator=",",
@@ -522,7 +522,7 @@ def test_env_separator_float_nan_error(monkeypatch):
     """RATES=1.5,NaN with float type produces NaN error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "rate", type=float, help="a rate", repeatable=True, unique=False,
         env="RATES", env_separator=",",
@@ -570,7 +570,7 @@ def test_repeatable_default_int_coerced_to_float():
     """Repeatable float flag with default=[1, 2] coerces to [1.0, 2.0]."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("val", type=float, help="a value", repeatable=True, unique=False,
                     default=[1, 2])
     def cmd(ctx, val):
@@ -594,7 +594,7 @@ def test_repeatable_default_applied():
     """Regression guard: repeatable flag default is applied when no CLI/env value."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("tag", help="a tag", repeatable=True, unique=False,
                     default=["a", "b"])
     def cmd(ctx, tag):

@@ -28,7 +28,7 @@ def _mutex_choices_app():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     def cmd(ctx, format, output):
         print(f"format={format} output={output}")
 
@@ -69,7 +69,7 @@ def _arg_choices_app(**arg_kwargs):
 
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(
             name="env", help="target env", required=False,
             choices=["dev", "staging", "prod"], **arg_kwargs,
@@ -140,7 +140,7 @@ def _mutex_validate_app():
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command", mutex=[mg])
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
     def cmd(ctx, name, id):
         print(f"name={name} id={id}")
 

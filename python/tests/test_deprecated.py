@@ -9,7 +9,7 @@ def _make_app():
     """Create a test app with a normal command and a deprecated command."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx):
         return 0
 
@@ -40,7 +40,7 @@ def test_group_help_shows_deprecated_section():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     grp = app.group("config", help="config commands")
 
-    @grp.command("show", help="show config")
+    @grp.command("show", effect="read_only", help="show config")
     def show(ctx):
         return 0
 
@@ -58,7 +58,7 @@ def test_invoke_deprecated_group_subcommand():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     grp = app.group("config", help="config commands")
 
-    @grp.command("show", help="show config")
+    @grp.command("show", effect="read_only", help="show config")
     def show(ctx):
         return 0
 
@@ -88,7 +88,7 @@ def test_registration_error_duplicate_with_command():
     """Registering a deprecated command that collides with an existing command raises ValueError."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx):
         return 0
 
@@ -135,7 +135,7 @@ def test_group_registration_error_duplicate_with_command():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     grp = app.group("config", help="config commands")
 
-    @grp.command("show", help="show config")
+    @grp.command("show", effect="read_only", help="show config")
     def show(ctx):
         return 0
 

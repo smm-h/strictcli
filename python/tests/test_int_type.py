@@ -9,7 +9,7 @@ def _make_app_with_int_flag(**flag_kwargs):
     """Helper: app with a single command that has one int flag."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="the port", **flag_kwargs)
     def cmd(ctx, port):
         print(f"port={port}")
@@ -29,7 +29,7 @@ def test_int_flag_value_is_int():
     """Int flag value is actually an int, not a string."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="the port")
     def cmd(ctx, port):
         print(f"type={type(port).__name__}")
@@ -51,7 +51,7 @@ def test_int_flag_from_env(monkeypatch):
     """Int flag value from env var is coerced to int."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="the port", default=80, env="MYAPP_PORT")
     def cmd(ctx, port):
         print(f"port={port} type={type(port).__name__}")
@@ -76,7 +76,7 @@ def test_int_flag_bad_env_value(monkeypatch):
     """Non-integer env var for int flag -> exit 1, stderr says expected integer."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="the port", default=80, env="MYAPP_PORT")
     def cmd(ctx, port):
         print(f"port={port}")
@@ -101,7 +101,7 @@ def test_int_flag_reject_underscore_env_value(monkeypatch):
     """Underscore-separated int env var is rejected."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="the port", default=80, env="MYAPP_PORT")
     def cmd(ctx, port):
         print(f"port={port}")
@@ -133,7 +133,7 @@ def test_int_flag_negative_value():
     """Int flag with negative value --offset -5 -> receives -5."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("offset", type=int, help="the offset")
     def cmd(ctx, offset):
         print(f"offset={offset}")
@@ -161,7 +161,7 @@ def test_int_flag_short_form():
     """Int flag via short flag -p 8080 works."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", short="p", type=int, help="the port")
     def cmd(ctx, port):
         print(f"port={port}")

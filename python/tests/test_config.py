@@ -19,7 +19,7 @@ def _make_config_app(config=True, flags=None):
         flags=flags or [],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
     @strictcli.flag("loud", type=bool, default=False, help="be loud")
@@ -101,7 +101,7 @@ def test_env_overrides_config(tmp_path, monkeypatch):
         env_prefix="TESTAPP",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val",
                      env="TESTAPP_TARGET")
     def run(ctx, target):
@@ -279,7 +279,7 @@ def test_config_with_global_flags(tmp_path, monkeypatch):
         flags=[strictcli.Flag(name="output", type=str, help="output format", default="text")],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx, output):
         print(f"output={output}")
 
@@ -319,7 +319,7 @@ def test_config_choices_validation(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("format", type=str, help="output format",
                      choices=["json", "yaml", "text"], default="text")
     def run(ctx, format):
@@ -348,7 +348,7 @@ def test_config_validate_function(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("port", type=int, help="port number", default=8080,
                      validate=validate_port)
     def run(ctx, port):
@@ -373,7 +373,7 @@ def test_config_float_value(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("ratio", type=float, help="ratio value", default=1.0)
     def run(ctx, ratio):
         print(f"ratio={ratio}")
@@ -397,7 +397,7 @@ def test_config_int_as_float(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("ratio", type=float, help="ratio value", default=1.0)
     def run(ctx, ratio):
         print(f"ratio={ratio}")
@@ -422,7 +422,7 @@ def test_custom_config_path(tmp_path, monkeypatch):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     def run(ctx, target):
         print(f"target={target}")
@@ -448,7 +448,7 @@ def test_custom_config_path_tilde_expansion(tmp_path, monkeypatch):
         config_path="~/.myapp/settings.json",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     def run(ctx, target):
         print(f"target={target}")
@@ -471,7 +471,7 @@ def test_custom_config_path_config_path_command(tmp_path):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx):
         pass
 
@@ -492,7 +492,7 @@ def test_custom_config_path_config_set(tmp_path):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     def run(ctx, target):
         print(f"target={target}")
@@ -520,7 +520,7 @@ def test_toml_format_reads_correctly(tmp_path):
         config_format="toml",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
     @strictcli.flag("loud", type=bool, default=False, help="be loud")
@@ -547,7 +547,7 @@ def test_toml_format_set_writes_correctly(tmp_path):
         config_format="toml",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     def run(ctx, target):
         print(f"target={target}")
@@ -576,7 +576,7 @@ def test_toml_format_set_preserves_existing(tmp_path):
         config_format="toml",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     def run(ctx, target):
         print(f"target={target}")
@@ -605,7 +605,7 @@ def test_toml_format_config_path_command(tmp_path):
         config_format="toml",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx):
         pass
 
@@ -626,7 +626,7 @@ def test_toml_format_xdg_default_path(tmp_path, monkeypatch):
         config_format="toml",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx):
         pass
 
@@ -650,7 +650,7 @@ def test_invalid_toml_hard_error(tmp_path):
         config_format="toml",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     def run(ctx, target):
         print(f"target={target}")
@@ -696,7 +696,7 @@ def test_toml_config_show(tmp_path):
         config_format="toml",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="default-val")
     @strictcli.flag("count", type=int, help="how many", default=1)
     def run(ctx, target, count):
@@ -722,7 +722,7 @@ def test_toml_float_value(tmp_path):
         config_format="toml",
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("ratio", type=float, help="ratio value", default=1.0)
     def run(ctx, ratio):
         print(f"ratio={ratio}")
@@ -801,7 +801,7 @@ def _make_repeatable_config_app(tmp_path, monkeypatch, config_data,
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag(flag_name, type=flag_type, help="the flag",
                      repeatable=True, unique=False)
     def run(ctx, **kwargs):
@@ -851,7 +851,7 @@ def test_config_array_for_non_repeatable_error(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="the target", default="x")
     def run(ctx, target):
         print(f"target={target}")
@@ -922,7 +922,7 @@ def _make_unique_config_app(tmp_path, monkeypatch, config_data,
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag(flag_name, type=flag_type, help="the flag",
                      repeatable=True, unique=unique)
     def run(ctx, **kwargs):
@@ -962,7 +962,7 @@ def test_config_show_plain_array(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("tags", type=str, help="the tags",
                      repeatable=True, unique=False)
     def run(ctx, **kwargs):
@@ -985,7 +985,7 @@ def test_config_show_json_array(tmp_path, monkeypatch):
         config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("tags", type=str, help="the tags",
                      repeatable=True, unique=False)
     def run(ctx, **kwargs):
@@ -1016,7 +1016,7 @@ def test_config_unique_enforcement_global_flag(tmp_path, monkeypatch):
         ],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx, **kwargs):
         print(f"tags={kwargs['tags']}")
 
@@ -1106,7 +1106,7 @@ def _make_config_set_app(config_path=None, config_format="json"):
         **kwargs,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("tags", type=str, help="tags", repeatable=True, unique=False)
     @strictcli.flag("counts", type=int, help="counts", repeatable=True,
                     unique=False)
@@ -1316,7 +1316,7 @@ def test_config_flag_selects_file(tmp_path, monkeypatch):
 
     app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
 
-    @app.command("serve", help="start server")
+    @app.command("serve", effect="read_only", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
     def serve(ctx, port):
         print(f"port={port}")
@@ -1335,7 +1335,7 @@ def test_config_flag_equals_form(tmp_path, monkeypatch):
 
     app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
 
-    @app.command("serve", help="start server")
+    @app.command("serve", effect="read_only", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
     def serve(ctx, port):
         print(f"port={port}")
@@ -1360,7 +1360,7 @@ def test_config_flag_overrides_constructed_path(tmp_path, monkeypatch):
         config=True, config_path=constructed_path,
     )
 
-    @app.command("serve", help="start server")
+    @app.command("serve", effect="read_only", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
     def serve(ctx, port):
         print(f"port={port}")
@@ -1374,7 +1374,7 @@ def test_config_flag_on_disabled_app_is_error():
     """--config on an app with config disabled is a hard error."""
     app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx):
         pass
 
@@ -1387,7 +1387,7 @@ def test_config_flag_after_command_is_unknown():
     """--config after the command name is an unknown flag error."""
     app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx):
         pass
 
@@ -1400,7 +1400,7 @@ def test_config_flag_after_double_dash():
     """--config after -- is not intercepted."""
     app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx):
         pass
 
@@ -1416,7 +1416,7 @@ def test_config_flag_not_in_schema(tmp_path, monkeypatch):
 
     app = strictcli.App(name="testapp", version="1.0.0", help="test app", config=True)
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx):
         pass
 
@@ -1444,7 +1444,7 @@ def test_no_default_config_path(tmp_path, monkeypatch):
         config=True, no_default_config_path=True,
     )
 
-    @app.command("serve", help="start server")
+    @app.command("serve", effect="read_only", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
     def serve(ctx, port):
         print(f"port={port}")
@@ -1466,7 +1466,7 @@ def test_no_default_config_path_with_config_flag(tmp_path, monkeypatch):
         config=True, no_default_config_path=True,
     )
 
-    @app.command("serve", help="start server")
+    @app.command("serve", effect="read_only", help="start server")
     @strictcli.flag("port", type=int, help="port number", default=8080)
     def serve(ctx, port):
         print(f"port={port}")
@@ -1487,7 +1487,7 @@ def test_malformed_toml_hard_error(tmp_path):
         config=True, config_path=str(config_file), config_format="toml",
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     @strictcli.flag("name", type=str, help="a name", default="")
     def run(ctx, name):
         print(f"name={name}")
@@ -1515,7 +1515,7 @@ def test_missing_via_runtime_flag():
     """--config pointing at missing file is a hard error."""
     app = strictcli.App(name="testapp", version="1.0.0", help="test", config=True)
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx):
         pass
 
@@ -1531,7 +1531,7 @@ def test_missing_via_config_path_is_soft():
         config=True, config_path="/nonexistent/path/config.json",
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     @strictcli.flag("name", type=str, help="a name", default="default")
     def run(ctx, name):
         print(f"name={name}")
@@ -1581,7 +1581,7 @@ def test_duplicate_key_toml_hard_error(tmp_path):
         config=True, config_path=str(config_file), config_format="toml",
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     @strictcli.flag("name", type=str, help="a name", default="")
     def run(ctx, name):
         print(f"name={name}")
@@ -1616,7 +1616,7 @@ def test_conflict_mode_error_cli(tmp_path, monkeypatch):
         config=True, config_conflict_mode="error",
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     @strictcli.flag("target", type=str, help="target", default="default-val")
     def run(ctx, target):
         print(f"target={target}")
@@ -1640,7 +1640,7 @@ def test_conflict_mode_error_env(tmp_path, monkeypatch):
         config=True, config_conflict_mode="error",
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     @strictcli.flag("target", type=str, help="target", default="default-val",
                     env="MY_TARGET")
     def run(ctx, target):
@@ -1662,7 +1662,7 @@ def test_conflict_mode_implied_excluded(tmp_path, monkeypatch):
         config=True, config_conflict_mode="error",
     )
 
-    @app.command("run", help="run",
+    @app.command("run", effect="read_only", help="run",
                  dependencies=[strictcli.Implies(flag="debug", implies="loud", value=True)])
     @strictcli.flag("debug", type=bool, help="enable debug", default=False)
     @strictcli.flag("loud", type=bool, help="be loud", default=False)
@@ -1695,7 +1695,7 @@ def test_conflict_mode_fires_before_mutex(tmp_path, monkeypatch):
     format_yaml = strictcli.Flag(name="format-yaml", type=bool, default=False,
                                   help="output as YAML")
 
-    @app.command("run", help="run", mutex=[strictcli.MutexGroup(flags=[format_json, format_yaml])])
+    @app.command("run", effect="read_only", help="run", mutex=[strictcli.MutexGroup(flags=[format_json, format_yaml])])
     def run(ctx, format_json, format_yaml):
         pass
 
@@ -1716,7 +1716,7 @@ def _conflict_app(conflict_mode="error", flag_conflict_mode=strictcli._MISSING,
         config=True, config_conflict_mode=conflict_mode,
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     @strictcli.flag("target", type=flag_type, help="target", default=default,
                     repeatable=repeatable, unique=unique,
                     conflict_mode=flag_conflict_mode)
@@ -1834,7 +1834,7 @@ def test_config_set_toml_preserves_comments_and_order(tmp_path):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("zeta", type=str, help="a string", default="")
     @strictcli.flag("alpha", type=int, help="a number", default=0)
     @strictcli.flag("beta", type=bool, help="a bool", default=False)
@@ -1878,7 +1878,7 @@ def test_config_set_toml_unset_preserves_comments(tmp_path):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("alpha", type=int, help="a number", default=0)
     @strictcli.flag("beta", type=int, help="another number", default=0)
     def run(ctx, alpha, beta):
@@ -1906,7 +1906,7 @@ def _make_config_edit_app(config_file):
         config_path=str(config_file),
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("opt", type=str, help="an option", default="")
     def run(ctx, opt):
         pass

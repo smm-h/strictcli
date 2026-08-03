@@ -26,13 +26,13 @@ def _build_rlsbl_app():
     )
 
     # Top-level commands
-    @app.command("status", help="show release status", flag_sets=[auth_flag_set])
+    @app.command("status", effect="read_only", help="show release status", flag_sets=[auth_flag_set])
     def status(ctx, token):
         print(f"status: token={'set' if token else 'unset'}")
 
     @app.command(
         "release",
-        help="create a new release",
+        effect="read_only", help="create a new release",
         args=[strictcli.Arg(name="bump", help="version bump type")],
         flag_sets=[auth_flag_set],
     )
@@ -50,7 +50,7 @@ def _build_rlsbl_app():
 
     @app.command(
         "watch",
-        help="monitor CI for a commit",
+        effect="read_only", help="monitor CI for a commit",
         args=[strictcli.Arg(name="sha", help="commit SHA")],
     )
     def watch(ctx, sha):
@@ -59,12 +59,12 @@ def _build_rlsbl_app():
     # Group: config
     config = app.group("config", help="manage rlsbl configuration")
 
-    @config.command("show", help="display current config")
+    @config.command("show", effect="read_only", help="display current config")
     @strictcli.flag("format", type=str, help="output format", default="text", env="RLSBL_FORMAT")
     def config_show(ctx, format):
         print(f"config format={format}")
 
-    @config.command("set", help="set a config value")
+    @config.command("set", effect="read_only", help="set a config value")
     @strictcli.flag("key", type=str, help="config key")
     @strictcli.flag("value", type=str, help="config value")
     def config_set(ctx, key, value):
@@ -229,7 +229,7 @@ def _build_kwargs_app():
 
     @app.command(
         "deploy",
-        help="deploy the app",
+        effect="read_only", help="deploy the app",
         args=[strictcli.Arg(name="target", help="deploy target")],
     )
     @strictcli.flag("sim-run", type=bool, default=False, help="preview without making changes")
@@ -275,7 +275,7 @@ def test_e2e_kwargs_handler_with_flag_sets():
 
     app = strictcli.App(name="kw", version="1.0.0", help="kwargs test app")
 
-    @app.command("push", help="push changes", flag_sets=[auth_flag_set])
+    @app.command("push", effect="read_only", help="push changes", flag_sets=[auth_flag_set])
     def push_handler(ctx, **kwargs):
         print(f"token={kwargs['token']}")
         return 0
@@ -296,7 +296,7 @@ def test_e2e_kwargs_handler_with_global_flags():
         ],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run_handler(ctx, **kwargs):
         print(f"loud={kwargs['loud']}")
         return 0
@@ -313,7 +313,7 @@ def test_e2e_kwargs_handler_registration_no_error():
     # This should not raise ValueError even though the handler has no named params
     @app.command(
         "cmd",
-        help="a command",
+        effect="read_only", help="a command",
         args=[strictcli.Arg(name="name", help="a name")],
     )
     @strictcli.flag("count", type=int, help="a count", default=0)

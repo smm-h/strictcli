@@ -107,7 +107,7 @@ class TestCheckCommandBasic:
         monkeypatch.chdir(tmp_path)
         app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
-        @app.command("hello", help="say hello")
+        @app.command("hello", effect="read_only", help="say hello")
         def hello(ctx, **kw):
             print("hello")
 
@@ -124,7 +124,7 @@ class TestCheckCommandBasic:
         """check command appears in help when TOML exists."""
         app = _setup_checks_app(tmp_path, monkeypatch, TWO_CHECKS_TOML)
 
-        @app.command("hello", help="say hello")
+        @app.command("hello", effect="read_only", help="say hello")
         def hello(ctx, **kw):
             print("hello")
 

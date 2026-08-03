@@ -32,15 +32,15 @@ def _make_app(tmp_path):
         test_coverage=True,
     )
 
-    @app.command(name="deploy", help="deploy the app")
+    @app.command(name="deploy", effect="read_only", help="deploy the app")
     def cmd_deploy(ctx, **_kw):
         pass
 
-    @app.command(name="status", help="show status")
+    @app.command(name="status", effect="read_only", help="show status")
     def cmd_status(ctx, **_kw):
         pass
 
-    @app.command(name="build", help="build the app")
+    @app.command(name="build", effect="read_only", help="build the app")
     def cmd_build(ctx, **_kw):
         pass
 
@@ -58,15 +58,15 @@ def _make_grouped_app(tmp_path):
 
     grp = app.group("infra", help="infrastructure commands")
 
-    @grp.command(name="deploy", help="deploy infra")
+    @grp.command(name="deploy", effect="read_only", help="deploy infra")
     def cmd_infra_deploy(ctx, **_kw):
         pass
 
-    @grp.command(name="teardown", help="tear down infra")
+    @grp.command(name="teardown", effect="read_only", help="tear down infra")
     def cmd_infra_teardown(ctx, **_kw):
         pass
 
-    @app.command(name="status", help="show status")
+    @app.command(name="status", effect="read_only", help="show status")
     def cmd_status(ctx, **_kw):
         pass
 
@@ -366,7 +366,7 @@ class TestCoverageDisabled:
             name="nocover", version="1.0.0", help="no coverage",
         )
 
-        @app.command(name="greet", help="say hello")
+        @app.command(name="greet", effect="read_only", help="say hello")
         def cmd_greet(ctx, **_kw):
             pass
 

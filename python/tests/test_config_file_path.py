@@ -51,7 +51,7 @@ def test_matches_config_path_command(tmp_path, monkeypatch):
         name="testapp", version="1.0.0", help="test app", config=True,
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx):
         pass
 

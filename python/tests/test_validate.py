@@ -12,7 +12,7 @@ def _make_app_with_validate(**flag_kwargs):
     """Helper: app with a single command that has one flag with validate."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="the port", **flag_kwargs)
     def cmd(ctx, port):
         print(f"port={port}")
@@ -41,7 +41,7 @@ def test_validate_runs_on_env_var(monkeypatch):
     """Validation runs on values sourced from env vars."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "port", type=int, help="the port",
         env="MYAPP_PORT", validate=_positive_int,
@@ -89,7 +89,7 @@ def test_validate_runs_after_choices():
 
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "port", type=int, help="the port",
         choices=[80, 443], validate=tracking_validator,
@@ -120,7 +120,7 @@ def test_validate_with_str_flag():
 
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("name", help="the name", validate=no_spaces)
     def cmd(ctx, name):
         print(f"name={name}")

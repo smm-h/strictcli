@@ -8,7 +8,7 @@ import strictcli
 def _make_app(handler):
     """Build a minimal app with a single command wired to the given handler."""
     app = strictcli.App(name="testapp", version="0.1.0", help="test app")
-    app.command("run", help="run handler")(handler)
+    app.command("run", effect="read_only", help="run handler")(handler)
     return app
 
 

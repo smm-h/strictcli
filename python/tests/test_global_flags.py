@@ -14,7 +14,7 @@ def _make_app_with_global_verbose():
         flags=[strictcli.Flag(name="loud", type=bool, default=False, help="enable loud output")],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="build target", default="all")
     def run(ctx, target, loud):
         if loud:
@@ -51,7 +51,7 @@ def test_global_str_flag_with_value():
         flags=[strictcli.Flag(name="settings", type=str, help="settings file path", default="default.toml")],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx, settings):
         print(f"settings={settings}")
 
@@ -69,7 +69,7 @@ def test_global_int_flag_with_value():
         flags=[strictcli.Flag(name="jobs", type=int, help="parallel jobs", default=1)],
     )
 
-    @app.command("build", help="build something")
+    @app.command("build", effect="read_only", help="build something")
     def build(ctx, jobs):
         print(f"jobs={jobs}")
 
@@ -87,7 +87,7 @@ def test_global_flag_default():
         flags=[strictcli.Flag(name="settings", type=str, help="settings path", default="app.toml")],
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx, settings):
         print(f"settings={settings}")
 
@@ -105,7 +105,7 @@ def test_global_flag_from_env(monkeypatch):
         flags=[strictcli.Flag(name="token", type=str, help="auth token", env="MYAPP_TOKEN", default="")],
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx, token):
         print(f"token={token}")
 
@@ -124,7 +124,7 @@ def test_global_flag_cli_overrides_env(monkeypatch):
         flags=[strictcli.Flag(name="token", type=str, help="auth token", env="MYAPP_TOKEN", default="")],
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx, token):
         print(f"token={token}")
 
@@ -162,7 +162,7 @@ def test_collision_between_global_and_command_flag():
 
     with pytest.raises(ValueError, match="collides with a global flag"):
 
-        @app.command("run", help="run something")
+        @app.command("run", effect="read_only", help="run something")
         @strictcli.flag("loud", type=bool, default=False, help="also loud")
         def run(ctx, loud):
             pass
@@ -177,7 +177,7 @@ def test_global_flag_with_double_dash_separator():
         flags=[strictcli.Flag(name="loud", type=bool, default=False, help="loud output")],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("target", type=str, help="build target", default="all")
     def run(ctx, target, loud):
         print(f"loud={loud} target={target}")
@@ -202,7 +202,7 @@ def test_global_flag_negation():
         flags=[strictcli.Flag(name="loud", type=bool, help="loud output", default=True)],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx, loud):
         print(f"loud={loud}")
 
@@ -220,7 +220,7 @@ def test_global_flag_short_form():
         flags=[strictcli.Flag(name="loud", short="V", type=bool, default=False, help="loud output")],
     )
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx, loud):
         print(f"loud={loud}")
 
@@ -240,7 +240,7 @@ def test_global_flag_with_group():
 
     grp = app.group("config", help="manage config")
 
-    @grp.command("show", help="show config")
+    @grp.command("show", effect="read_only", help="show config")
     def show(ctx, loud):
         print(f"loud={loud}")
 
@@ -260,7 +260,7 @@ def test_global_flag_with_group_and_command_flags():
 
     grp = app.group("config", help="manage config")
 
-    @grp.command("set", help="set a value")
+    @grp.command("set", effect="read_only", help="set a value")
     @strictcli.flag("key", type=str, help="config key")
     @strictcli.flag("value", type=str, help="config value")
     def set_(ctx, key, value, loud):
@@ -287,7 +287,7 @@ def test_global_flag_collision_in_group():
 
     with pytest.raises(ValueError, match="collides with a global flag"):
 
-        @grp.command("show", help="show config")
+        @grp.command("show", effect="read_only", help="show config")
         @strictcli.flag("loud", type=bool, default=False, help="also loud")
         def show(ctx, loud):
             pass
@@ -302,7 +302,7 @@ def test_global_flag_equals_form():
         flags=[strictcli.Flag(name="settings", type=str, help="settings path", default="default.toml")],
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx, settings):
         print(f"settings={settings}")
 
@@ -323,7 +323,7 @@ def test_multiple_global_flags():
         ],
     )
 
-    @app.command("run", help="run")
+    @app.command("run", effect="read_only", help="run")
     def run(ctx, loud, settings):
         print(f"loud={loud} settings={settings}")
 
@@ -337,7 +337,7 @@ def test_no_global_flags_works():
     """App without global flags works as before."""
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
-    @app.command("run", help="run something")
+    @app.command("run", effect="read_only", help="run something")
     def run(ctx):
         print("running")
 

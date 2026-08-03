@@ -23,7 +23,7 @@ class TestPassthroughReceivesRawArgs:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -39,7 +39,7 @@ class TestPassthroughNoArgs:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -57,7 +57,7 @@ class TestPassthroughWithGlobalFlags:
             flags=[strictcli.Flag(name="debug", type=bool, default=False, help="enable debug")]
         )
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -73,7 +73,7 @@ class TestPassthroughWithGlobalFlags:
             flags=[strictcli.Flag(name="debug", type=bool, default=False, help="enable debug")]
         )
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -88,7 +88,7 @@ class TestPassthroughExitCode:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -100,7 +100,7 @@ class TestPassthroughExitCode:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -114,11 +114,11 @@ class TestPassthroughInAppHelp:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="run external tool", passthrough=pt)
+        @app.command("exec", effect="read_only", help="run external tool", passthrough=pt)
         def exec_cmd():
             pass
 
-        @app.command("status", help="show status")
+        @app.command("status", effect="read_only", help="show status")
         def status(ctx):
             pass
 
@@ -134,7 +134,7 @@ class TestPassthroughCommandHelp:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="run external tool", passthrough=pt)
+        @app.command("exec", effect="read_only", help="run external tool", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -150,7 +150,7 @@ class TestPassthroughWithFlagsRaisesValueError:
         pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
         app = _build_app()
         try:
-            @app.command("exec", help="run", passthrough=pt)
+            @app.command("exec", effect="read_only", help="run", passthrough=pt)
             @strictcli.flag("loud", type=bool, default=False, help="loud output")
             def exec_cmd(loud):
                 pass
@@ -166,7 +166,7 @@ class TestPassthroughWithArgsRaisesValueError:
         app = _build_app()
         try:
             @app.command(
-                "exec", help="run", passthrough=pt,
+                "exec", effect="read_only", help="run", passthrough=pt,
                 args=[strictcli.Arg(name="target", help="target")],
             )
             def exec_cmd(target):
@@ -180,7 +180,7 @@ class TestPassthroughWithArgsRaisesValueError:
         pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
         app = _build_app()
         try:
-            @app.command("exec", help="run", passthrough=pt)
+            @app.command("exec", effect="read_only", help="run", passthrough=pt)
             @strictcli.arg("target", help="target")
             def exec_cmd(target):
                 pass
@@ -199,7 +199,7 @@ class TestPassthroughWithFlagSetsRaisesValueError:
         )
         app = _build_app()
         try:
-            @app.command("exec", help="run", passthrough=pt, flag_sets=[flag_set])
+            @app.command("exec", effect="read_only", help="run", passthrough=pt, flag_sets=[flag_set])
             def exec_cmd(token):
                 pass
             assert False, "should have raised ValueError"
@@ -217,7 +217,7 @@ class TestPassthroughWithMutexRaisesValueError:
         ])
         app = _build_app()
         try:
-            @app.command("exec", help="run", passthrough=pt, mutex=[mg])
+            @app.command("exec", effect="read_only", help="run", passthrough=pt, mutex=[mg])
             def exec_cmd(json, yaml):
                 pass
             assert False, "should have raised ValueError"
@@ -232,11 +232,11 @@ class TestMultiplePassthroughSameHandler:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
-        @app.command("run", help="run something", passthrough=pt)
+        @app.command("run", effect="read_only", help="run something", passthrough=pt)
         def run_cmd():
             pass
 
@@ -255,7 +255,7 @@ class TestPassthroughNonzeroExitCode:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -267,7 +267,7 @@ class TestPassthroughNonzeroExitCode:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 
@@ -281,7 +281,7 @@ class TestPassthroughDoubleDash:
         pt = strictcli.Passthrough(handler=_make_passthrough_handler(capture))
         app = _build_app()
 
-        @app.command("exec", help="execute something", passthrough=pt)
+        @app.command("exec", effect="read_only", help="execute something", passthrough=pt)
         def exec_cmd():
             pass
 

@@ -11,7 +11,7 @@ def _make_env_app(prefixed=True):
 
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix=prefix)
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "target",
         type=str,
@@ -48,7 +48,7 @@ def _make_bool_env_app():
     """Helper: app with a bool flag backed by an env var."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("loud", type=bool, default=False, help="be loud", env="MYAPP_VERBOSE")
     def cmd(ctx, loud):
         print(f"loud={loud}")

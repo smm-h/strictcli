@@ -9,7 +9,7 @@ def _make_app_with_choices(**flag_kwargs):
     """Helper: app with a single command that has one flag with choices."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("format", help="output format", **flag_kwargs)
     def cmd(ctx, format):
         print(f"format={format}")
@@ -48,7 +48,7 @@ def test_choices_with_int_type():
     """Choices work with type=int."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="the port", choices=[80, 443, 8080])
     def cmd(ctx, port):
         print(f"port={port}")
@@ -62,7 +62,7 @@ def test_invalid_int_choice_rejected():
     """An int value not in choices is rejected."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag("port", type=int, help="the port", choices=[80, 443, 8080])
     def cmd(ctx, port):
         print(f"port={port}")
@@ -80,7 +80,7 @@ def test_choices_with_env_var_valid(monkeypatch):
     """A valid env var value that is in choices is accepted."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "format", help="output format", choices=["text", "json"],
         default="text", env="MYAPP_FORMAT",
@@ -98,7 +98,7 @@ def test_choices_with_env_var_invalid(monkeypatch):
     """An env var value not in choices is rejected."""
     app = strictcli.App(name="test", version="1.0.0", help="test app", env_prefix="MYAPP")
 
-    @app.command("cmd", help="a command")
+    @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "format", help="output format", choices=["text", "json"],
         default="text", env="MYAPP_FORMAT",

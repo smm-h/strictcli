@@ -11,11 +11,11 @@ def _make_3level_app():
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage DNS zones")
 
-    @zone.command("list", help="list all zones")
+    @zone.command("list", effect="read_only", help="list all zones")
     def list_zones(ctx):
         print("listing zones")
 
-    @zone.command("create", help="create a zone")
+    @zone.command("create", effect="read_only", help="create a zone")
     @strictcli.flag("name", type=str, help="zone name")
     def create_zone(ctx, name):
         print(f"creating zone {name}")
@@ -30,7 +30,7 @@ def _make_4level_app():
     g2 = g1.group("level2", help="second level")
     g3 = g2.group("level3", help="third level")
 
-    @g3.command("action", help="do the thing")
+    @g3.command("action", effect="read_only", help="do the thing")
     def action(ctx):
         print("action executed")
 
@@ -185,13 +185,13 @@ def test_mixed_groups_and_commands():
     app = strictcli.App(name="mix", version="1.0.0", help="mixed app")
     grp = app.group("infra", help="infrastructure")
 
-    @grp.command("status", help="show status")
+    @grp.command("status", effect="read_only", help="show status")
     def status(ctx):
         print("status ok")
 
     sub = grp.group("network", help="network management")
 
-    @sub.command("list", help="list networks")
+    @sub.command("list", effect="read_only", help="list networks")
     def list_nets(ctx):
         print("networks listed")
 
@@ -223,7 +223,7 @@ def test_deprecated_command_in_subgroup():
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage zones")
 
-    @zone.command("list", help="list zones")
+    @zone.command("list", effect="read_only", help="list zones")
     def list_zones(ctx):
         print("listing")
 
@@ -240,7 +240,7 @@ def test_deprecated_shown_in_subgroup_help():
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage zones")
 
-    @zone.command("list", help="list zones")
+    @zone.command("list", effect="read_only", help="list zones")
     def list_zones(ctx):
         print("listing")
 
@@ -264,7 +264,7 @@ def test_global_flags_with_deep_nesting():
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage zones")
 
-    @zone.command("list", help="list zones")
+    @zone.command("list", effect="read_only", help="list zones")
     def list_zones(ctx, loud):
         if loud:
             print("loud listing")
@@ -289,7 +289,7 @@ def test_global_flags_after_command_deep_nesting():
     dns = app.group("dns", help="manage DNS")
     zone = dns.group("zone", help="manage zones")
 
-    @zone.command("list", help="list zones")
+    @zone.command("list", effect="read_only", help="list zones")
     def list_zones(ctx, loud):
         if loud:
             print("loud listing")
@@ -311,7 +311,7 @@ def test_name_collision_command_and_subgroup_raises():
     grp.group("network", help="network subgroup")
 
     with pytest.raises(ValueError, match='command "network" collides with an existing group'):
-        @grp.command("network", help="this conflicts")
+        @grp.command("network", effect="read_only", help="this conflicts")
         def network(ctx):
             pass
 
@@ -321,7 +321,7 @@ def test_name_collision_subgroup_and_command_raises():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
     grp = app.group("infra", help="infra group")
 
-    @grp.command("network", help="a command")
+    @grp.command("network", effect="read_only", help="a command")
     def network(ctx):
         pass
 

@@ -2274,6 +2274,35 @@ class DeprecatedCommand:
     message: str
 
 
+# The two legal command classifications. There is no default: every command
+# declares one, and a command registered without it is a registration-time
+# hard error. Deprecated commands are exempt (they have no handler).
+EFFECT_READ_ONLY = "read_only"
+EFFECT_MUTATING = "mutating"
+_EFFECT_VALUES = (EFFECT_READ_ONLY, EFFECT_MUTATING)
+
+
+def _err_command_effect_missing(name: str) -> str:
+    return (
+        f'command "{name}": effect classification is required '
+        f'(effect="read_only" or effect="mutating")'
+    )
+
+
+def _err_command_effect_invalid(name: str, value: object) -> str:
+    return (
+        f'command "{name}": invalid effect "{value}": '
+        f'must be "read_only" or "mutating"'
+    )
+
+
+def _err_deprecated_command_effect(name: str) -> str:
+    return (
+        f'deprecated command "{name}": effect classification does not apply '
+        f'(a deprecated command has no handler)'
+    )
+
+
 @dataclass(frozen=True)
 class Command:
     """A leaf command with a handler."""
@@ -2281,6 +2310,7 @@ class Command:
     name: str
     help: str
     handler: Callable | None
+    effect: str
     flags: tuple[Flag, ...] = ()
     args: tuple[Arg, ...] = ()
     flag_sets: tuple[FlagSet, ...] = ()
@@ -2294,6 +2324,8 @@ class Command:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Command")
+        if self.effect not in _EFFECT_VALUES:
+            raise ValueError(_err_command_effect_invalid(self.name, self.effect))
         for tag in self.tags:
             if not _IDENTIFIER_RE.fullmatch(tag):
                 raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
@@ -2346,8 +2378,15 @@ class Group:
         self._groups[name] = grp
         return grp
 
-    def deprecate(self, name: str, *, message: str) -> None:
-        """Register a deprecated subcommand in this group."""
+    def deprecate(self, name: str, *, message: str,
+                  effect: str | None = None) -> None:
+        """Register a deprecated subcommand in this group.
+
+        Deprecated entries are classification-EXEMPT: they have no handler and
+        execute nothing, so passing ``effect=`` is a registration-time error.
+        """
+        if effect is not None:
+            raise ValueError(_err_deprecated_command_effect(name))
         if not name or not name.strip():
             raise ValueError("deprecated command name must be a non-empty string")
         if not message or not message.strip():
@@ -2371,6 +2410,7 @@ class Group:
         name: str,
         *,
         help: str,
+        effect: str | None = None,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -2389,7 +2429,8 @@ class Group:
                     f'command "{name}" collides with an existing group'
                 )
             cmd = _build_and_validate_command(
-                name, help=help, handler=func, args=args, flag_sets=flag_sets, mutex=mutex,
+                name, help=help, effect=effect,
+                handler=func, args=args, flag_sets=flag_sets, mutex=mutex,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
@@ -3828,26 +3869,22 @@ class App:
             Flag(name="ignore-warnings", type=bool, default=False, help="Treat warn-severity results as passing so they do not cause nonzero exit"),
         ]
         extra_flags = [f for f in candidate_extra_flags if f.name not in global_flag_names]
-        check_cmd = _build_and_validate_command(
+        # read_only: the check command's only writes are framework-blessed
+        # CACHE_WRITEs (the coverage manifest), which never trip enforcement.
+        self._commands["check"] = self._build_framework_command(
             "check",
             help="Run project checks registered via the check framework and report results",
+            effect=EFFECT_READ_ONLY,
             handler=_check_handler,
-            args=None,
-            flag_sets=None,
-            mutex=None,
-            dependencies=None,
-            env_prefix=self.env_prefix,
-            global_flags=self._global_flags,
-            passthrough=None,
             extra_flags=extra_flags,
         )
-        self._commands["check"] = check_cmd
 
     def command(
         self,
         name: str,
         *,
         help: str,
+        effect: str | None = None,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -3864,6 +3901,7 @@ class App:
             cmd = _build_and_validate_command(
                 name,
                 help=help,
+                effect=effect,
                 handler=func,
                 args=args,
                 flag_sets=flag_sets,
@@ -3901,8 +3939,15 @@ class App:
         self._groups[name] = grp
         return grp
 
-    def deprecate(self, name: str, *, message: str) -> None:
-        """Register a deprecated top-level command."""
+    def deprecate(self, name: str, *, message: str,
+                  effect: str | None = None) -> None:
+        """Register a deprecated top-level command.
+
+        Deprecated entries are classification-EXEMPT: they have no handler and
+        execute nothing, so passing ``effect=`` is a registration-time error.
+        """
+        if effect is not None:
+            raise ValueError(_err_deprecated_command_effect(name))
         if not name or not name.strip():
             raise ValueError("deprecated command name must be a non-empty string")
         if not message or not message.strip():
@@ -3962,6 +4007,45 @@ class App:
             if name in flag_params
         }
 
+    def _build_framework_command(
+        self,
+        name: str,
+        *,
+        help: str,
+        effect: str,
+        handler: Callable,
+        args: list[Arg] | None = None,
+        mutex: list[MutexGroup] | None = None,
+        extra_flags: list[Flag] | None = None,
+        interactive: bool = False,
+    ) -> Command:
+        """Build one of strictcli's own auto-registered commands.
+
+        Framework-internal commands (``check`` and the five ``config``
+        subcommands) go through the same single validated registration path as
+        every consumer command -- there is no direct-``Command``-construction
+        bypass left. Their handlers absorb the app's app-defined global flag
+        values through ``**kwargs``, which is legal only because they declare
+        forwarding, and the private ``_framework_internal`` marker (unreachable
+        from any public factory) makes the framework verify that the handler is
+        actually defined in this module.
+        """
+        return _build_and_validate_command(
+            name,
+            help=help,
+            effect=effect,
+            handler=handler,
+            args=args,
+            flag_sets=None,
+            mutex=mutex,
+            dependencies=None,
+            env_prefix=self.env_prefix,
+            global_flags=self._global_flags,
+            passthrough=None,
+            extra_flags=extra_flags,
+            interactive=interactive,
+        )
+
     def _register_config_group(self) -> None:
         """Register the auto-generated 'config' command group."""
         config_grp = Group(
@@ -3974,14 +4058,18 @@ class App:
         app_ref = self  # capture for closures
 
         # config path
-        config_grp.commands["path"] = Command(
-            name="path",
-            help="Print the absolute path to the config file for this application",
-            handler=lambda ctx, **_kw: print(_config_path(
+        def _config_path_handler(ctx, **_kw) -> None:
+            print(_config_path(
                 app_ref.name,
                 override=app_ref.config_path,
                 config_format=app_ref.config_format,
-            )),
+            ))
+
+        config_grp.commands["path"] = self._build_framework_command(
+            "path",
+            help="Print the absolute path to the config file for this application",
+            effect=EFFECT_READ_ONLY,
+            handler=_config_path_handler,
         )
 
         # config show
@@ -4120,12 +4208,12 @@ class App:
             Flag(name="json", type=bool, default=False, help="Display config values as a JSON object with source metadata"),
         ]
         config_show_mutex = [MutexGroup(flags=config_show_flags)]
-        config_grp.commands["show"] = Command(
-            name="show",
+        config_grp.commands["show"] = self._build_framework_command(
+            "show",
             help="Show all config values with their sources (config file, env, or default)",
+            effect=EFFECT_READ_ONLY,
             handler=_config_show_handler,
-            flags=tuple(config_show_flags),
-            mutex=tuple(config_show_mutex),
+            mutex=config_show_mutex,
         )
 
         # config set
@@ -4292,22 +4380,23 @@ class App:
             _write_config_set(existing, path, app_ref.config_format, key, typed_value)
             return 0
 
-        config_grp.commands["set"] = Command(
-            name="set",
+        config_grp.commands["set"] = self._build_framework_command(
+            "set",
             help="Set a persistent config value that overrides the default for a flag",
+            effect=EFFECT_MUTATING,
             handler=_config_set_handler,
-            args=(
+            args=[
                 Arg(name="key", help="The config key to set, matching a registered flag name"),
                 Arg(name="value",
                     help="Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
                     required=False),
-            ),
-            flags=(
+            ],
+            extra_flags=[
                 Flag(name="clear", type=bool, default=False,
                      help="Clear a repeatable flag by setting its value to an empty list"),
                 Flag(name="default", type=bool, default=False,
                      help="Reset a key to its default value by removing it from the config file"),
-            ),
+            ],
         )
 
         # config edit
@@ -4340,9 +4429,10 @@ class App:
                 return 1
             return 0
 
-        config_grp.commands["edit"] = Command(
-            name="edit",
+        config_grp.commands["edit"] = self._build_framework_command(
+            "edit",
             help="Open the config file for manual editing in $EDITOR (creates if missing)",
+            effect=EFFECT_MUTATING,
             handler=_config_edit_handler,
             interactive=True,
         )
@@ -4377,9 +4467,10 @@ class App:
             print(cfg_path)
             return 0
 
-        config_grp.commands["init"] = Command(
-            name="init",
+        config_grp.commands["init"] = self._build_framework_command(
+            "init",
             help="Generate a template config file with documented fields and defaults",
+            effect=EFFECT_MUTATING,
             handler=_config_init_handler,
         )
 
@@ -6345,6 +6436,7 @@ def _build_and_validate_command(
     name: str,
     *,
     help: str,
+    effect: str | None,
     handler: Callable,
     args: list[Arg] | None,
     flag_sets: list[FlagSet] | None,
@@ -6363,9 +6455,21 @@ def _build_and_validate_command(
     infra_root_names: frozenset[str] | None = None,
     connection_env_names: frozenset[str] | None = None,
 ) -> Command:
-    """Build a Command from a decorated handler, validate everything."""
+    """Build a Command from a decorated handler, validate everything.
+
+    This is the single registration path: every command in every app -- including
+    strictcli's own framework-internal ``check`` and ``config`` commands -- is
+    built here, so classification, signature validation and flag validation are
+    unbypassable.
+    """
     if not help or not help.strip():
         raise ValueError(f'command "{name}": missing help text')
+
+    # Classification is mandatory and has no default.
+    if effect is None:
+        raise ValueError(_err_command_effect_missing(name))
+    if effect not in _EFFECT_VALUES:
+        raise ValueError(_err_command_effect_invalid(name, effect))
 
     effective_tags = (inherited_tags or frozenset()) | frozenset(tags or set())
 
@@ -6408,6 +6512,7 @@ def _build_and_validate_command(
             name=name,
             help=help,
             handler=None,
+            effect=effect,
             passthrough=passthrough,
             tags=effective_tags,
             hidden=hidden,
@@ -6664,6 +6769,7 @@ def _build_and_validate_command(
         name=name,
         help=help,
         handler=handler,
+        effect=effect,
         flags=tuple(all_flags),
         args=tuple(all_args),
         flag_sets=tuple(resolved_flag_sets),
@@ -7712,6 +7818,9 @@ def _serialize_command(cmd: Command) -> dict:
     d: dict = {
         "name": cmd.name,
         "help": cmd.help,
+        # Always emitted: classification is mandatory, so there is no default
+        # to omit against.
+        "effect": cmd.effect,
     }
     if cmd.passthrough is not None:
         d["passthrough"] = True
