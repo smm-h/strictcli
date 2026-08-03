@@ -1862,6 +1862,19 @@ export function errEffectHTTPMethodNotString(
 }
 
 // ---------------------------------------------------------------------------
+// effects.go — effects handle availability (TS-only)
+//
+// Python raises RuntimeError from the ctx.effects property; Go's Effects()
+// method is only reachable from a dispatched Context. The TS Context class is
+// exported, so a consumer can construct one outside a dispatch and reach the
+// getter -- this names that state instead of returning a half-armed handle.
+// ---------------------------------------------------------------------------
+
+export function errEffectsUnavailable(): string {
+	return "ctx.effects is unavailable: this Context was constructed outside a command dispatch";
+}
+
+// ---------------------------------------------------------------------------
 // effects.go — dry-run truncation (parse-time)
 //
 // The template carries its own "error: " prefix: it is written straight to
