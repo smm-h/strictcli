@@ -1422,26 +1422,175 @@ def _call_target_name(node) -> tuple:
     return None, None
 
 
-def _reaches_effects_handle(node) -> bool:
-    """True when a callee's receiver chain goes through ``.effects``."""
+def _reaches_effects_handle(node, aliases=frozenset()) -> bool:
+    """True when a callee's receiver chain goes through ``.effects``.
+
+    ``aliases`` are local names bound to the handle (``e = ctx.effects``), which
+    is an ordinary way to write a handler and must not read as a bypass.
+    """
     cur = node
     while isinstance(cur, ast.Attribute):
         if cur.attr == "effects":
             return True
         cur = cur.value
-    return False
+    return isinstance(cur, ast.Name) and cur.id in aliases
+
+
+def _bypass_effects_aliases(tree) -> frozenset:
+    """Names bound to the effects handle anywhere in the module.
+
+    ``e = ctx.effects`` then ``e.write(...)`` is the same call as
+    ``ctx.effects.write(...)``; without this the lint would report the handle
+    itself as a bypass.
+    """
+    names: set = set()
+    for node in ast.walk(tree):
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+        else:
+            continue
+        if node.value is None or not _reaches_effects_handle(node.value):
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                names.add(target.id)
+    return frozenset(names)
 
 
 def _function_opts_into_effects(fn) -> bool:
     """True when a function body reaches for an ``.effects`` handle at all.
 
-    Opting in is the trigger: a function that uses the effects handle must
+    One of the two root conditions: a function that uses the effects handle must
     route ALL of its effects through it, or the preview it promises is a lie.
     """
     for node in ast.walk(fn):
         if isinstance(node, ast.Attribute) and node.attr == "effects":
             return True
     return False
+
+
+# Decorator leaf names that register a command handler. `@app.command(...)` and
+# `@group.command(...)` are the whole registration surface; `passthrough` is
+# listed because a consumer may spell a passthrough wrapper the same way.
+_BYPASS_HANDLER_DECORATORS = frozenset({"command", "passthrough"})
+
+
+def _decorator_leaf(node) -> str | None:
+    """The last dotted component of a decorator expression, call or not."""
+    if isinstance(node, ast.Call):
+        node = node.func
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Name):
+        return node.id
+    return None
+
+
+def _bypass_handler_names(tree) -> set:
+    """Function names passed as ``handler=`` anywhere in the module.
+
+    The second way a handler is registered: `Passthrough(handler=_pt)`,
+    `app.command(..., handler=deploy)`. Name-based, because that is all a
+    single-module AST can honestly resolve.
+    """
+    names: set = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for kw in node.keywords:
+            if kw.arg == "handler" and isinstance(kw.value, ast.Name):
+                names.add(kw.value.id)
+    return names
+
+
+def _is_registered_handler(fn, handler_names: set) -> bool:
+    """True when this function is a registered command handler."""
+    for dec in fn.decorator_list:
+        if _decorator_leaf(dec) in _BYPASS_HANDLER_DECORATORS:
+            return True
+    return fn.name in handler_names
+
+
+def _bypass_direct_call_names(fn) -> set:
+    """Bare ``name(...)`` callees inside a function's subtree."""
+    names: set = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            names.add(node.func.id)
+    return names
+
+
+def _bypass_reachable_functions(tree) -> set:
+    """The ids of every function REACHABLE FROM A REGISTERED COMMAND HANDLER.
+
+    §11's scope is reachability, not "a function whose own body mentions
+    ``.effects``" -- a handler that never touches the handle, and a bypass one
+    helper-call away, are both trivial escapes from the narrower reading, and
+    this lint is the sole stated mitigation for the accepted no-sandbox ceiling.
+
+    Roots are registered handlers (a `.command` / `.passthrough` decorator, or a
+    name passed as `handler=`) plus, as before, any function that reaches for
+    `.effects` itself. From each root the closure follows DIRECT calls to
+    MODULE-LEVEL functions, transitively, within this one module -- the most a
+    single-file AST can resolve without a symbol table.
+    """
+    module_funcs: dict = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            module_funcs.setdefault(node.name, node)
+
+    handler_names = _bypass_handler_names(tree)
+    queue = [
+        fn for fn in ast.walk(tree)
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and (_is_registered_handler(fn, handler_names)
+             or _function_opts_into_effects(fn))
+    ]
+    reachable: set = set()
+    while queue:
+        fn = queue.pop()
+        if id(fn) in reachable:
+            continue
+        reachable.add(id(fn))
+        for name in _bypass_direct_call_names(fn):
+            target = module_funcs.get(name)
+            if target is not None and id(target) not in reachable:
+                queue.append(target)
+    return reachable
+
+
+def _bypass_call_is_banned(node, target: str, receiver) -> bool:
+    leaf = target.rsplit(".", 1)[-1]
+    if leaf == "open" and receiver is None:
+        return _open_is_write_mode(node)
+    return (
+        (leaf in _BYPASS_PROCESS and receiver is not None)
+        or leaf in _BYPASS_FILESYSTEM
+        or (leaf in _BYPASS_NETWORK and receiver in _BYPASS_NETWORK_RECEIVERS)
+    )
+
+
+def _bypass_walk(node, stack: list, reachable: set, findings: list, rel: str,
+                 aliases: frozenset) -> None:
+    """Walk one subtree, carrying the enclosing-function stack.
+
+    A banned call is reported once, at the INNERMOST enclosing function, when
+    any enclosing function is reachable -- so a bypass inside a nested closure
+    is one finding, not one per enclosing scope.
+    """
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        stack = stack + [node]
+    elif isinstance(node, ast.Call):
+        if stack and any(id(fn) in reachable for fn in stack):
+            if not _reaches_effects_handle(node.func, aliases):
+                target, receiver = _call_target_name(node.func)
+                if target is not None and _bypass_call_is_banned(node, target, receiver):
+                    findings.append((rel, node.lineno, stack[-1].name, target))
+    for child in ast.iter_child_nodes(node):
+        _bypass_walk(child, stack, reachable, findings, rel, aliases)
 
 
 def _open_is_write_mode(node) -> bool:
@@ -1458,10 +1607,10 @@ def _open_is_write_mode(node) -> bool:
 
 
 def _scan_effects_bypasses(root: Path) -> list[tuple]:
-    """Find direct effect calls inside functions that opted into ctx.effects.
+    """Find direct effect calls REACHABLE FROM a registered command handler.
 
     Returns ``(relative_path, lineno, function_name, target)`` tuples, in file
-    then line order.
+    then line order. See :func:`_bypass_reachable_functions` for the scope rule.
     """
     findings: list[tuple] = []
     if not root.is_dir():
@@ -1481,31 +1630,11 @@ def _scan_effects_bypasses(root: Path) -> list[tuple]:
                 # A file the analyser cannot read is not evidence of a bypass.
                 continue
             rel = os.path.relpath(path, root)
-            for fn in ast.walk(tree):
-                if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    continue
-                if not _function_opts_into_effects(fn):
-                    continue
-                for node in ast.walk(fn):
-                    if not isinstance(node, ast.Call):
-                        continue
-                    if _reaches_effects_handle(node.func):
-                        continue
-                    target, receiver = _call_target_name(node.func)
-                    if target is None:
-                        continue
-                    leaf = target.rsplit(".", 1)[-1]
-                    if leaf == "open" and receiver is None:
-                        banned = _open_is_write_mode(node)
-                    else:
-                        banned = (
-                            (leaf in _BYPASS_PROCESS and receiver is not None)
-                            or leaf in _BYPASS_FILESYSTEM
-                            or (leaf in _BYPASS_NETWORK
-                                and receiver in _BYPASS_NETWORK_RECEIVERS)
-                        )
-                    if banned:
-                        findings.append((rel, node.lineno, fn.name, target))
+            reachable = _bypass_reachable_functions(tree)
+            if not reachable:
+                continue
+            _bypass_walk(tree, [], reachable, findings, rel,
+                         _bypass_effects_aliases(tree))
     return findings
 
 

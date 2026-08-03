@@ -163,6 +163,160 @@ def deploy(ctx):
 ''')
         assert app.test(["check", "--name", "effects-bypass"]).exit_code == 0
 
+    def test_a_handler_that_never_mentions_effects_is_analysed(self, tmp_path):
+        """Escape shape 1: opting in cannot be the trigger.
+
+        §11 scopes the lint to calls REACHABLE FROM A REGISTERED COMMAND
+        HANDLER. A handler that mentions the handle nowhere is the easiest
+        possible bypass, and a lint that only looked at effects-using functions
+        would wave it straight through.
+        """
+        r = self._run(tmp_path, '''
+import os
+import shutil
+import subprocess
+
+import strictcli
+
+app = strictcli.App(name="a", version="1.0.0", help="a")
+
+
+@app.command("deploy", help="deploy", effect="mutating")
+def deploy(ctx):
+    subprocess.run(["git", "push"])
+    os.makedirs("build")
+    shutil.rmtree("stale")
+    return 0
+''')
+        assert r.exit_code == 1
+        assert "3 direct effect call(s) bypassing ctx.effects" in r.stdout
+        assert "deploy calls subprocess.run directly" in r.stdout
+        assert "deploy calls os.makedirs directly" in r.stdout
+        assert "deploy calls shutil.rmtree directly" in r.stdout
+
+    def test_a_bypass_one_helper_call_away_is_analysed(self, tmp_path):
+        """Escape shape 2: reachability, not the immediate body."""
+        r = self._run(tmp_path, '''
+import subprocess
+
+import strictcli
+
+app = strictcli.App(name="a", version="1.0.0", help="a")
+
+
+def _publish(path):
+    subprocess.run(["rsync", path, "remote:/srv"])
+
+
+@app.command("deploy", help="deploy", effect="mutating")
+def deploy(ctx):
+    ctx.effects.run(["make", "build"])
+    _publish("build")
+    return 0
+''')
+        assert r.exit_code == 1
+        assert "1 direct effect call(s) bypassing ctx.effects" in r.stdout
+        assert "_publish calls subprocess.run directly" in r.stdout
+
+    def test_reachability_is_transitive(self, tmp_path):
+        r = self._run(tmp_path, '''
+import os
+
+import strictcli
+
+app = strictcli.App(name="a", version="1.0.0", help="a")
+
+
+def _inner():
+    os.remove("x")
+
+
+def _outer():
+    _inner()
+
+
+@app.command("deploy", help="deploy", effect="mutating")
+def deploy(ctx):
+    _outer()
+    return 0
+''')
+        assert r.exit_code == 1
+        assert "_inner calls os.remove directly" in r.stdout
+
+    def test_a_handler_named_through_the_handler_keyword_is_a_root(self, tmp_path):
+        r = self._run(tmp_path, '''
+import subprocess
+
+
+def _pt(ctx, name, args, globals):
+    subprocess.run(["docker"] + args)
+    return 0
+
+
+spec = Passthrough(handler=_pt)
+''')
+        assert r.exit_code == 1
+        assert "_pt calls subprocess.run directly" in r.stdout
+
+    def test_a_local_alias_of_the_handle_is_not_a_bypass(self, tmp_path):
+        r = self._run(tmp_path, '''
+import strictcli
+
+app = strictcli.App(name="a", version="1.0.0", help="a")
+
+
+@app.command("deploy", help="deploy", effect="mutating")
+def deploy(ctx):
+    e = ctx.effects
+    e.mkdir("build")
+    e.remove("stale")
+    return 0
+''')
+        assert r.exit_code == 0
+
+    def test_an_unreachable_helper_is_still_not_analysed(self, tmp_path):
+        """The scope is reachability, not "every function in the tree"."""
+        r = self._run(tmp_path, '''
+import subprocess
+
+import strictcli
+
+app = strictcli.App(name="a", version="1.0.0", help="a")
+
+
+def _never_called():
+    subprocess.run(["anything"])
+
+
+@app.command("deploy", help="deploy", effect="mutating")
+def deploy(ctx):
+    ctx.effects.run(["make"])
+    return 0
+''')
+        assert r.exit_code == 0
+
+    def test_a_bypass_is_reported_once_per_call_site(self, tmp_path):
+        r = self._run(tmp_path, '''
+import os
+
+import strictcli
+
+app = strictcli.App(name="a", version="1.0.0", help="a")
+
+
+@app.command("deploy", help="deploy", effect="mutating")
+def deploy(ctx):
+    ctx.effects.run(["make"])
+
+    def _nested():
+        os.remove("x")
+
+    _nested()
+    return 0
+''')
+        assert r.exit_code == 1
+        assert "1 direct effect call(s) bypassing ctx.effects" in r.stdout
+
     def test_async_handlers_are_analysed(self, tmp_path):
         r = self._run(tmp_path, '''
 async def deploy(ctx):
