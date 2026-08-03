@@ -2,3 +2,4 @@
 {"format_version":1,"id":"18c8491a5b33efaf1fc6c664edfa423a8d1ebc65a70108a3","commits":["45e9f5f6c58839e2d6f99ee8e68701ef770ff13c","33158041e065aeaa7a84990588a2146aec8be09b","dc432c0e42d33b69a22ee8e135c49fccf4e6d08c","f84f71cec5a4314cfc51fa1519e62083741fa4a5"],"user_facing":false,"packages":["strictcli"]}
 {"format_version":1,"id":"18c8491f77b829e663094e47d78b4ae9abf47fcafe8c2aed","commits":["6fc4da2dc21c3066fa21a11d77d2b6dd825b8f3a"],"user_facing":false,"packages":["strictcli"]}
 {"format_version":1,"id":"18c84a6f87410d552d83c6fcd1c342d4b276b2bf249fb177","commits":["7781a5cb42b982667bece963c3aae82be31cab34"],"user_facing":false,"packages":["strictcli"]}
+{"format_version":1,"id":"18c84b61ef50636be6884bf0565a414399df163444de3c00","commits":["f7b80a5cf4be4140a0a666c5ba600c6023defbf5"],"user_facing":false,"packages":["strictcli"]}
