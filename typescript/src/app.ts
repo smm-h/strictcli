@@ -76,6 +76,7 @@ import {
 	errDeprecatedMessageEmpty,
 	errDeprecatedNameEmpty,
 	errFlagConnectionEnvUndeclared,
+	errFlagNameReservedByFramework,
 	errGlobalFlagNameReserved,
 	errGlobalShortFlagReserved,
 	errGroupAlreadyRegistered,
@@ -96,6 +97,7 @@ import {
 	flagOpts,
 	type PassthroughDef,
 	pyRepr,
+	RESERVED_FRAMEWORK_FLAG_NAMES,
 	validateAndDedupTags,
 } from "./factories.js";
 import { formatAppHelp, formatCommandHelp, formatGroupHelp } from "./help.js";
@@ -341,7 +343,12 @@ export function createApp(spec: AppSpec): App {
 
 // --- Internals (not re-exported through index.ts) ---
 
-export const RESERVED_GLOBAL_FLAG_NAMES: ReadonlySet<string> = new Set([
+/**
+ * Names reserved by the framework for global flags. The pre-existing set is
+ * also what a SHORT flag name is checked against (the effects-regime quartet
+ * bans long names only -- it has no short forms).
+ */
+export const RESERVED_GLOBAL_SHORT_NAMES: ReadonlySet<string> = new Set([
 	"help",
 	"h",
 	"version",
@@ -350,6 +357,11 @@ export const RESERVED_GLOBAL_FLAG_NAMES: ReadonlySet<string> = new Set([
 	"mcp",
 	"config",
 	"hermetic",
+]);
+
+export const RESERVED_GLOBAL_FLAG_NAMES: ReadonlySet<string> = new Set([
+	...RESERVED_GLOBAL_SHORT_NAMES,
+	...RESERVED_FRAMEWORK_FLAG_NAMES,
 ]);
 
 /** A registered command: the carrier plus registration-time derived data. */
@@ -649,11 +661,17 @@ export class AppImpl implements App {
 					`App.flags key '${key}' must be the underscore form of flag '${f.name}' ('${expected}')`,
 				);
 			}
+			if (RESERVED_FRAMEWORK_FLAG_NAMES.has(f.name)) {
+				// Unreachable through flag() (validateFlagConfig bans the quartet
+				// first); kept so the global-flag validation path carries the same
+				// message for any other construction route.
+				throw new RegistrationError(errFlagNameReservedByFramework(f.name));
+			}
 			if (RESERVED_GLOBAL_FLAG_NAMES.has(f.name)) {
 				throw new RegistrationError(errGlobalFlagNameReserved(f.name));
 			}
 			const short = flagOpts(f).short;
-			if (short !== undefined && RESERVED_GLOBAL_FLAG_NAMES.has(short)) {
+			if (short !== undefined && RESERVED_GLOBAL_SHORT_NAMES.has(short)) {
 				throw new RegistrationError(errGlobalShortFlagReserved(short));
 			}
 			globals.push(f);
@@ -1094,6 +1112,7 @@ export class AppImpl implements App {
 					err,
 					{},
 					this.infraAccess(outcome.hermetic),
+					outcome.reserved,
 				);
 				const def = outcome.cmd.def as PassthroughDef<string>;
 				const result = await def.handler(
@@ -1116,6 +1135,7 @@ export class AppImpl implements App {
 					err,
 					outcome.sources,
 					this.infraAccess(outcome.hermetic),
+					outcome.reserved,
 				);
 				const def = outcome.cmd.def as AnyCommand;
 				const result = await def.handler(outcome.kwargs as never, ctx);

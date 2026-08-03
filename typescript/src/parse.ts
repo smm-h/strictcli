@@ -14,6 +14,7 @@
 
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import { newStdinTracker, type StdinTracker } from "./atprefix.js";
+import type { ReservedFlags } from "./context.js";
 import { resolveEnvValue } from "./env.js";
 import {
 	errBoolFlagNoValue,
@@ -997,15 +998,37 @@ export interface PreScanResult {
 	readonly hermetic: boolean;
 	readonly configPath: string | undefined;
 	readonly err: string | undefined;
-	/** argv with --config/--config=value/--hermetic stripped out. */
+	/** The effects-regime reserved quartet, delivered on the Context. */
+	readonly dryRun: boolean;
+	readonly yes: boolean;
+	readonly quiet: boolean;
+	readonly verbose: boolean;
+	/** argv with --config/--config=value/--hermetic/the quartet stripped out. */
 	readonly cleanedArgv: readonly string[];
 }
 
+/** argv token -> pre-scan result key for the reserved quartet. */
+const RESERVED_QUARTET_TOKENS: ReadonlyMap<
+	string,
+	"dryRun" | "yes" | "quiet" | "verbose"
+> = new Map([
+	["--dry-run", "dryRun" as const],
+	["--yes", "yes" as const],
+	["--quiet", "quiet" as const],
+	["--verbose", "verbose" as const],
+]);
+
 /**
- * Position-aware pre-scan for --dump-schema, --mcp, --config, and --hermetic
- * in the pre-command region only (before the first non-flag token, before
- * "--"). Known global flags and their values are skipped so a global-flag
- * value that looks like a command name does not end the region early.
+ * Position-aware pre-scan for --dump-schema, --mcp, --config, --hermetic and
+ * the effects-regime quartet (--dry-run/--yes/--quiet/--verbose) in the
+ * pre-command region only (before the first non-flag token, before "--"). Known
+ * global flags and their values are skipped so a global-flag value that looks
+ * like a command name does not end the region early.
+ *
+ * The quartet is stripped from argv here and delivered on the Context, never as
+ * handler kwargs -- injecting four mandatory parameters into every handler
+ * would contradict guard v2, and the Context needs the values for its own
+ * output gating regardless.
  */
 export function preScanReservedFlags(
 	app: AppImpl,
@@ -1026,6 +1049,7 @@ export function preScanReservedFlags(
 
 	let hermetic = false;
 	let configPath: string | undefined;
+	const quartet = { dryRun: false, yes: false, quiet: false, verbose: false };
 	const excludeIndices = new Set<number>();
 	const done = (err?: string): PreScanResult => {
 		const cleanedArgv =
@@ -1038,6 +1062,7 @@ export function preScanReservedFlags(
 			hermetic,
 			configPath,
 			err,
+			...quartet,
 			cleanedArgv,
 		};
 	};
@@ -1063,6 +1088,15 @@ export function preScanReservedFlags(
 		}
 		if (tok === "--hermetic") {
 			hermetic = true;
+			excludeIndices.add(i);
+			i++;
+			continue;
+		}
+		// The reserved quartet: booleans, no values, stripped from argv and
+		// delivered on the Context (never as handler kwargs).
+		const quartetKey = RESERVED_QUARTET_TOKENS.get(tok);
+		if (quartetKey !== undefined) {
+			quartet[quartetKey] = true;
 			excludeIndices.add(i);
 			i++;
 			continue;
@@ -1121,6 +1155,16 @@ export function preScanReservedFlags(
 	return done();
 }
 
+/** Narrows a pre-scan result to the four Context-delivered flag values. */
+export function reservedFlagsOf(pre: PreScanResult): ReservedFlags {
+	return {
+		dryRun: pre.dryRun,
+		yes: pre.yes,
+		quiet: pre.quiet,
+		verbose: pre.verbose,
+	};
+}
+
 // --- doParse ---
 
 export type HelpTarget =
@@ -1154,6 +1198,7 @@ export type ParseOutcome =
 			readonly globalKwargs: Record<string, unknown>;
 			readonly sources: Record<string, string>;
 			readonly hermetic: boolean;
+			readonly reserved: ReservedFlags;
 	  }
 	| {
 			readonly kind: "passthrough";
@@ -1162,6 +1207,7 @@ export type ParseOutcome =
 			readonly args: readonly string[];
 			readonly globalKwargs: Record<string, unknown>;
 			readonly hermetic: boolean;
+			readonly reserved: ReservedFlags;
 	  };
 
 export interface DoParseDeps {
@@ -1346,6 +1392,7 @@ export function doParse(
 			args: cmdRest,
 			globalKwargs: globals.values,
 			hermetic: pre.hermetic,
+			reserved: reservedFlagsOf(pre),
 		};
 	}
 
@@ -1390,6 +1437,7 @@ export function doParse(
 		globalKwargs,
 		sources,
 		hermetic: pre.hermetic,
+		reserved: reservedFlagsOf(pre),
 	};
 }
 

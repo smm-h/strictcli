@@ -62,6 +62,7 @@ import {
 	errFlagForceReserved,
 	errFlagHelpEmpty,
 	errFlagIntDefaultTypeMismatch,
+	errFlagNameReservedByFramework,
 	errFlagNoPrefixReserved,
 	errFlagRepeatableEnvRequiresSeparator,
 	errFlagRepeatableIncompatibleBool,
@@ -264,6 +265,25 @@ export function elemSchemaOf(carrier: Carrier<unknown, Schema>): ScalarSchema {
 	return (carrier.elem?.schema ?? carrier.schema) as ScalarSchema;
 }
 
+/**
+ * The four flag names the effects regime reserves for the framework. The ban is
+ * UNCONDITIONAL and applies at every level -- command flags, flag-set flags,
+ * mutex-group flags and app global flags -- because the framework extracts
+ * them in the position-aware pre-scan and delivers them on the Context.
+ *
+ * Declared here rather than in app.ts so factories.ts can enforce the ban
+ * without importing app.ts (which imports this module); app.ts folds this set
+ * into its own RESERVED_GLOBAL_FLAG_NAMES.
+ *
+ * The four have NO short forms, so short-flag names are unaffected.
+ */
+export const RESERVED_FRAMEWORK_FLAG_NAMES: ReadonlySet<string> = new Set([
+	"dry-run",
+	"yes",
+	"quiet",
+	"verbose",
+]);
+
 // Mirrors Python Flag.__post_init__ (the divergence ground truth), with the
 // TS carrier model: list carriers ARE the repeatable flags, dict carriers are
 // Map-backed, int is bigint, float is number.
@@ -277,6 +297,9 @@ function validateFlagConfig(
 	}
 	if (name === "force") {
 		throw new RegistrationError(errFlagForceReserved());
+	}
+	if (RESERVED_FRAMEWORK_FLAG_NAMES.has(name)) {
+		throw new RegistrationError(errFlagNameReservedByFramework(name));
 	}
 	if (name.startsWith("no-")) {
 		throw new RegistrationError(errFlagNoPrefixReserved(name));

@@ -80,15 +80,13 @@ function registerCheckCommand(app: AppImpl): void {
 			help: "Treat warn-severity results as passing so they do not cause nonzero exit",
 			default: false,
 		}),
-		flag("verbose", t.bool, {
-			help: "Show per-check notes and durations (including on passing checks) plus a trailing pass/fail/warn/skip count summary",
-			default: false,
-		}),
-		flag("dry-run", t.bool, {
-			help: "Show which checks would run based on current filters without executing them",
-			default: false,
-		}),
 	];
+	// `verbose` and `dry-run` are NOT in the candidate list: both names are
+	// reserved by the framework (two flags cannot share a spelling), so the
+	// handler reads ctx.verbose and ctx.dryRun instead. The dropped flags'
+	// behavior is unchanged -- but `check --dry-run` now also puts the whole run
+	// in dry mode, so the framework emits the would-do header after the
+	// handler's listing output.
 	// Candidates colliding with global flags are dropped -- the handler
 	// receives the global flag's value for that key instead (Python parity).
 	const flags: Record<string, AnyFlag> = {};
@@ -167,8 +165,9 @@ async function checkHandler(
 	const listMode = kwargs.list === true;
 	const jsonOut = kwargs.json === true;
 	const ignoreWarnings = kwargs.ignore_warnings === true;
-	const verbose = kwargs.verbose === true;
-	const dryRun = kwargs.dry_run === true;
+	// Framework-delivered, not command flags (both names are reserved).
+	const verbose = ctx.verbose;
+	const dryRun = ctx.dryRun;
 	// Treat empty strings as "not provided".
 	const tagRaw = typeof kwargs.tag === "string" ? kwargs.tag : "";
 	const nameRaw = typeof kwargs.name === "string" ? kwargs.name : "";

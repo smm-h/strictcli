@@ -7,8 +7,10 @@
  * every infraValue() call throws the not-declared error.
  */
 
+import type { MutatingEffects } from "./effects.js";
 import {
 	errConnectionValueUndeclared,
+	errEffectsUnavailable,
 	errInfraValueUndeclared,
 	errNoSourceInfo,
 } from "./errors.js";
@@ -58,40 +60,106 @@ export interface ConnectionEnvReader {
 	isHermetic(): boolean;
 }
 
+/**
+ * The effects-regime reserved flag quartet, extracted by the position-aware
+ * pre-scan and delivered on the Context (never as handler kwargs).
+ */
+export interface ReservedFlags {
+	readonly dryRun: boolean;
+	readonly yes: boolean;
+	readonly quiet: boolean;
+	readonly verbose: boolean;
+}
+
+/** The quartet's all-false value: the programmatic dispatch paths' state. */
+export const NO_RESERVED_FLAGS: ReservedFlags = {
+	dryRun: false,
+	yes: false,
+	quiet: false,
+	verbose: false,
+};
+
 export class Context {
 	private readonly stdout: Writer;
 	private readonly stderr: Writer;
 	private readonly sources: Readonly<Record<string, string>>;
 	private readonly infra: InfraAccess | null;
+	private readonly reserved: ReservedFlags;
+	private readonly effectsHandle: MutatingEffects | null;
 
 	constructor(
 		stdout: Writer,
 		stderr: Writer,
 		sources: Readonly<Record<string, string>>,
 		infra: InfraAccess | null,
+		reserved: ReservedFlags = NO_RESERVED_FLAGS,
+		effects: MutatingEffects | null = null,
 	) {
 		this.stdout = stdout;
 		this.stderr = stderr;
 		this.sources = sources;
 		this.infra = infra;
+		this.reserved = reserved;
+		this.effectsHandle = effects;
 	}
 
-	/** Writes an informational message to stdout. */
+	/** True when the framework-owned --dry-run flag was passed. */
+	get dryRun(): boolean {
+		return this.reserved.dryRun;
+	}
+
+	/** True when the framework-owned --yes flag was passed. */
+	get yes(): boolean {
+		return this.reserved.yes;
+	}
+
+	/** True when the framework-owned --quiet flag was passed. */
+	get quiet(): boolean {
+		return this.reserved.quiet;
+	}
+
+	/** True when the framework-owned --verbose flag was passed. */
+	get verbose(): boolean {
+		return this.reserved.verbose;
+	}
+
+	/**
+	 * The effects handle for this run: the eight recorded operations. Under
+	 * --dry-run they are recorded instead of executed. Throws when the Context
+	 * was constructed outside a command dispatch.
+	 */
+	get effects(): MutatingEffects {
+		if (this.effectsHandle === null) {
+			throw new Error(errEffectsUnavailable());
+		}
+		return this.effectsHandle;
+	}
+
+	/** Writes an informational message to stdout (hidden under --quiet). */
 	info(msg: string): void {
+		if (this.reserved.quiet) {
+			return;
+		}
 		this.stdout.write(`${msg}\n`);
 	}
 
-	/** Writes a warning message to stderr. */
+	/** Writes a warning message to stderr (never suppressed). */
 	warn(msg: string): void {
 		this.stderr.write(`${msg}\n`);
 	}
 
-	/** Writes a debug message to stdout. */
+	/**
+	 * Writes a debug message to stdout, shown only under --verbose.
+	 * --quiet DOMINATES --verbose: passing both hides debug output.
+	 */
 	debug(msg: string): void {
+		if (this.reserved.quiet || !this.reserved.verbose) {
+			return;
+		}
 		this.stdout.write(`${msg}\n`);
 	}
 
-	/** Writes an error message to stderr. */
+	/** Writes an error message to stderr (never suppressed). */
 	error(msg: string): void {
 		this.stderr.write(`${msg}\n`);
 	}

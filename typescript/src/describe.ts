@@ -354,6 +354,13 @@ export const SURFACE = {
 		{ receiver: "Group", name: "command" },
 		{ receiver: "Group", name: "group" },
 		{ receiver: "Group", name: "deprecate" },
+		// The reserved quartet and the effects handle are prototype accessors
+		// (Go spells them as methods: ctx.DryRun(), ctx.Effects()).
+		{ receiver: "Context", name: "dryRun" },
+		{ receiver: "Context", name: "yes" },
+		{ receiver: "Context", name: "quiet" },
+		{ receiver: "Context", name: "verbose" },
+		{ receiver: "Context", name: "effects" },
 		{ receiver: "Context", name: "info" },
 		{ receiver: "Context", name: "warn" },
 		{ receiver: "Context", name: "debug" },
