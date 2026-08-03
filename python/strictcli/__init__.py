@@ -697,6 +697,27 @@ def _msg_effect_http_method_not_str(name: str, got: str) -> str:
     )
 
 
+def _msg_effect_option_not_accepted(name: str, method: str, opt: str) -> str:
+    """An option the receiving method does not accept (contract §12.8).
+
+    Python reaches this through each method's `**_options` catch-all rather than
+    through CPython's native `unexpected keyword argument` TypeError, so the
+    rendered text is byte-identical to Go's and TypeScript's.  `<opt>` is the
+    canonical snake_case option name, which is what makes that identity hold.
+    """
+    return f'command "{name}": effects.{method} does not accept option \'{opt}\''
+
+
+def _reject_unaccepted_options(name: str, method: str, options: dict) -> None:
+    """Raise on the first unaccepted option, in the caller's declaration order.
+
+    A `TypeError`, matching every other call-time argument guard on the handle
+    (and what CPython itself raises for an unexpected keyword).
+    """
+    for opt in options:
+        raise TypeError(_msg_effect_option_not_accepted(name, method, opt))
+
+
 def _raise_effect_mutating_in_read_only(name: str, method: str):
     raise ValueError(
         f'command "{name}" is classified read_only; effects.{method} is a '
@@ -952,8 +973,9 @@ class _Effects:
 
     def run(self, argv: Sequence[str | Completed | Response], *, cwd=None,
             env=None, check=True, stream=False, resource=None,
-            skip_if_current=None, grant=None) -> Completed:
+            skip_if_current=None, grant=None, **_options) -> Completed:
         """Run a subprocess to completion (PROC_MUTATE, or an observe)."""
+        _reject_unaccepted_options(self._cmd_path, "run", _options)
         self._reject_carrier_params("run", {
             "cwd": cwd, "env": env, "resource": resource,
             "skip_if_current": skip_if_current, "grant": grant,
@@ -989,12 +1011,13 @@ class _Effects:
 
     def spawn(self, argv: Sequence[str | Completed | Response], *, cwd=None,
               env=None, resource=None, skip_if_current=None,
-              grant=None) -> Spawned:
+              grant=None, **_options) -> Spawned:
         """Start a subprocess without waiting (PROC_SPAWN).
 
         Spawning is itself an effect: a dry run RECORDS the spawn instead of
         performing it, which is why no cross-process mode token exists.
         """
+        _reject_unaccepted_options(self._cmd_path, "spawn", _options)
         self._reject_carrier_params("spawn", {
             "cwd": cwd, "env": env, "resource": resource,
             "skip_if_current": skip_if_current, "grant": grant,
@@ -1020,10 +1043,11 @@ class _Effects:
         )
         return Spawned(pid=proc.pid, _proc=proc, _cmd_path=self._cmd_path)
 
-    def write(self, path: str | Completed | Response,
+    def write(self, path: str | os.PathLike[str] | Completed | Response,
               content: str | bytes | Completed | Response, *, resource=None,
-              skip_if_current=None, grant=None) -> None:
+              skip_if_current=None, grant=None, **_options) -> None:
         """Write bytes to a path (FILE_WRITE)."""
+        _reject_unaccepted_options(self._cmd_path, "write", _options)
         self._reject_carrier_params("write", {
             "resource": resource, "skip_if_current": skip_if_current,
             "grant": grant,
@@ -1051,25 +1075,31 @@ class _Effects:
             fh.write(data)
         return None
 
-    def mkdir(self, path: str | Completed | Response, *, resource=None,
-              skip_if_current=None, grant=None) -> None:
+    def mkdir(self, path: str | os.PathLike[str] | Completed | Response, *,
+              resource=None, skip_if_current=None, grant=None,
+              **_options) -> None:
         """Create a directory, parents included; an existing one is not an error."""
+        _reject_unaccepted_options(self._cmd_path, "mkdir", _options)
         return self._path_effect(
             "mkdir", path, resource, skip_if_current, grant,
             lambda p: os.makedirs(p, exist_ok=True),
         )
 
-    def remove(self, path: str | Completed | Response, *, resource=None,
-               skip_if_current=None, grant=None) -> None:
+    def remove(self, path: str | os.PathLike[str] | Completed | Response, *,
+               resource=None, skip_if_current=None, grant=None,
+               **_options) -> None:
         """Remove a file, symlink or directory tree; a missing path is not an error."""
+        _reject_unaccepted_options(self._cmd_path, "remove", _options)
         return self._path_effect(
             "remove", path, resource, skip_if_current, grant, _remove_path,
         )
 
-    def rename(self, src: str | Completed | Response,
-               dst: str | Completed | Response, *, resource=None,
-               skip_if_current=None, grant=None) -> None:
+    def rename(self, src: str | os.PathLike[str] | Completed | Response,
+               dst: str | os.PathLike[str] | Completed | Response, *,
+               resource=None, skip_if_current=None, grant=None,
+               **_options) -> None:
         """Move/rename a path (FILE_WRITE)."""
+        _reject_unaccepted_options(self._cmd_path, "rename", _options)
         self._reject_carrier_params("rename", {
             "resource": resource, "skip_if_current": skip_if_current,
             "grant": grant,
@@ -1096,9 +1126,11 @@ class _Effects:
         )
         return None
 
-    def chmod(self, path: str | Completed | Response, mode, *, resource=None,
-              skip_if_current=None, grant=None) -> None:
+    def chmod(self, path: str | os.PathLike[str] | Completed | Response, mode,
+              *, resource=None, skip_if_current=None, grant=None,
+              **_options) -> None:
         """Change a path's mode (FILE_WRITE)."""
+        _reject_unaccepted_options(self._cmd_path, "chmod", _options)
         self._reject_carrier_params("chmod", {
             "mode": mode, "resource": resource,
             "skip_if_current": skip_if_current, "grant": grant,
@@ -1125,10 +1157,11 @@ class _Effects:
         os.chmod(self._settled(rt_path, "chmod", "path"), mode)
         return None
 
-    def http(self, method, url: str | Completed | Response, *, body=None,
-             headers=None, check=True, resource=None, skip_if_current=None,
-             grant=None) -> Response:
+    def http(self, method, url: str | os.PathLike[str] | Completed | Response,
+             *, body=None, headers=None, check=True, resource=None,
+             skip_if_current=None, grant=None, **_options) -> Response:
         """Perform a network request (NET_MUTATE)."""
+        _reject_unaccepted_options(self._cmd_path, "http", _options)
         self._reject_carrier_params("http", {
             "method": method, "body": body, "headers": headers,
             "resource": resource, "skip_if_current": skip_if_current,

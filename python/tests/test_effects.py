@@ -442,17 +442,23 @@ class TestDeclaredSignatures:
 
     # (method, parameter, declared annotation) for the six carrier-accepting
     # positions. Everything else is deliberately unannotated.
+    #
+    # The `path`/`src`/`dst`/`url` row of contract §2.5.5 carries
+    # `os.PathLike[str]` as well: `_operand` resolves those four through
+    # `os.fspath`, so a PEP 561 consumer passing `Path("out.txt")` must not
+    # type-error on a value the runtime has always accepted. `argv` elements and
+    # `content` are not path positions and keep their pinned unions.
     PARAMS = [
         ("run", "argv", "Sequence[str | Completed | Response]"),
         ("spawn", "argv", "Sequence[str | Completed | Response]"),
-        ("write", "path", "str | Completed | Response"),
+        ("write", "path", "str | os.PathLike[str] | Completed | Response"),
         ("write", "content", "str | bytes | Completed | Response"),
-        ("mkdir", "path", "str | Completed | Response"),
-        ("remove", "path", "str | Completed | Response"),
-        ("rename", "src", "str | Completed | Response"),
-        ("rename", "dst", "str | Completed | Response"),
-        ("chmod", "path", "str | Completed | Response"),
-        ("http", "url", "str | Completed | Response"),
+        ("mkdir", "path", "str | os.PathLike[str] | Completed | Response"),
+        ("remove", "path", "str | os.PathLike[str] | Completed | Response"),
+        ("rename", "src", "str | os.PathLike[str] | Completed | Response"),
+        ("rename", "dst", "str | os.PathLike[str] | Completed | Response"),
+        ("chmod", "path", "str | os.PathLike[str] | Completed | Response"),
+        ("http", "url", "str | os.PathLike[str] | Completed | Response"),
     ]
 
     @pytest.mark.parametrize("method,expected", RETURNS)
@@ -1093,6 +1099,47 @@ class TestParameterValidation:
 
         with pytest.raises(TypeError, match="check"):
             app.test(["--dry-run", "rel"])
+
+    @pytest.mark.parametrize("method,call", [
+        ("run", lambda e: e.run(["true"], body=b"x")),
+        ("spawn", lambda e: e.spawn(["true"], check=False)),
+        ("write", lambda e: e.write("f", "c", stream=True)),
+        ("mkdir", lambda e: e.mkdir("d", stream=True)),
+        ("remove", lambda e: e.remove("d", check=False)),
+        ("rename", lambda e: e.rename("a", "b", cwd=".")),
+        ("chmod", lambda e: e.chmod("f", 0o755, headers={})),
+        ("http", lambda e: e.http("GET", "http://x", stream=True)),
+    ])
+    def test_option_not_accepted_message_is_the_pinned_template(self, method, call):
+        """Every one of the eight methods rejects an option it does not accept,
+        with the byte-identical template of contract §12.8 -- not CPython's
+        native `unexpected keyword argument` wording."""
+        app = _app()
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            call(ctx.effects)
+            return 0
+
+        with pytest.raises(TypeError) as excinfo:
+            app.test(["--dry-run", "rel"])
+        assert str(excinfo.value).startswith(
+            f'command "rel": effects.{method} does not accept option \''
+        )
+
+    def test_option_not_accepted_names_the_canonical_option(self):
+        app = _app()
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            ctx.effects.mkdir("d", stream=True)
+            return 0
+
+        with pytest.raises(TypeError) as excinfo:
+            app.test(["--dry-run", "rel"])
+        assert str(excinfo.value) == (
+            'command "rel": effects.mkdir does not accept option \'stream\''
+        )
 
     def test_no_shell_parameter_anywhere(self):
         app = _app()
