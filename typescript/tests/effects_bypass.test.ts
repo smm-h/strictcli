@@ -260,3 +260,143 @@ test("bypass: the provider is identifiable so tests can drop it", () => {
 		["effectsBypassCheckProvider"],
 	);
 });
+
+// --- §11's scope: reachability from a registered command handler -----------
+//
+// TypeScript's ceiling is real and recorded in §17: `typescript@7` ships the
+// scanner but NO in-process parser, and this check is declared `fast` + `pure`,
+// so building a real syntax tree (which means spawning the native language
+// server against a resolved tsconfig) is off the table. What the scanner CAN
+// give is brace structure plus token adjacency, and that is enough for a
+// token-level function table and an intra-FILE call graph rooted at
+// `handler:` properties. Cross-file reachability and any form of scope or type
+// resolution are the residual gap.
+
+test("bypass: a handler property that never mentions effects is analysed", () => {
+	// Escape shape 1: opting in cannot be the trigger.
+	const root = project({
+		"cli.ts": `
+import { spawnSync } from "node:child_process";
+import { mkdirSync, rmSync } from "node:fs";
+
+export const cmd = defineMutatingCommand("deploy", {
+	help: "h",
+	handler: (args, ctx) => {
+		spawnSync("git", ["push"]);
+		mkdirSync("build");
+		rmSync("stale");
+		return 0;
+	},
+});
+`,
+	});
+	const findings = scanEffectsBypasses(root);
+	assert.equal(findings.length, 3, JSON.stringify(findings));
+	assert.ok(findings.every((f) => f.kind === "call"));
+});
+
+test("bypass: a bypass one helper-call away from a handler is analysed", () => {
+	// Escape shape 2: reachability, not the immediate block.
+	const root = project({
+		"cli.ts": `
+import { spawnSync } from "node:child_process";
+
+function publish(path) {
+	spawnSync("rsync", [path, "remote:/srv"]);
+}
+
+export const cmd = defineMutatingCommand("deploy", {
+	help: "h",
+	handler: (args, ctx) => {
+		ctx.effects.run(["make", "build"]);
+		publish("build");
+		return 0;
+	},
+});
+`,
+	});
+	const findings = scanEffectsBypasses(root);
+	assert.equal(findings.length, 1, JSON.stringify(findings));
+	assert.match(findings[0]?.text ?? "", /calls spawnSync directly/);
+});
+
+test("bypass: helper reachability is transitive", () => {
+	const root = project({
+		"cli.ts": `
+import { rmSync } from "node:fs";
+
+const inner = () => {
+	rmSync("x");
+};
+
+function outer() {
+	inner();
+}
+
+export const cmd = defineMutatingCommand("deploy", {
+	help: "h",
+	handler: (args, ctx) => {
+		outer();
+		return 0;
+	},
+});
+`,
+	});
+	const findings = scanEffectsBypasses(root);
+	assert.equal(findings.length, 1, JSON.stringify(findings));
+});
+
+test("bypass: a named function referenced as handler: is a root", () => {
+	const root = project({
+		"cli.ts": `
+import { spawnSync } from "node:child_process";
+
+function deploy(args, ctx) {
+	spawnSync("docker", ["build", "."]);
+	return 0;
+}
+
+export const cmd = defineMutatingCommand("deploy", { help: "h", handler: deploy });
+`,
+	});
+	const findings = scanEffectsBypasses(root);
+	assert.equal(findings.length, 1, JSON.stringify(findings));
+});
+
+test("bypass: an unreachable helper is still not analysed", () => {
+	const root = project({
+		"cli.ts": `
+import { rmSync } from "node:fs";
+
+function neverCalled() {
+	rmSync("x");
+}
+
+export const cmd = defineMutatingCommand("deploy", {
+	help: "h",
+	handler: (args, ctx) => {
+		ctx.effects.run(["make"]);
+		return 0;
+	},
+});
+`,
+	});
+	assert.deepEqual(scanEffectsBypasses(root), []);
+});
+
+test("bypass: a local alias of the effects handle is not a bypass", () => {
+	const root = project({
+		"cli.ts": `
+export const cmd = defineMutatingCommand("deploy", {
+	help: "h",
+	handler: (args, ctx) => {
+		const e = ctx.effects;
+		e.mkdir("build");
+		e.rm("stale");
+		return 0;
+	},
+});
+`,
+	});
+	assert.deepEqual(scanEffectsBypasses(root), []);
+});

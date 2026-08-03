@@ -2,10 +2,8 @@
  * The built-in `effects-bypass` check provider.
  *
  * It statically analyses the consumer's own sources and fails on any direct
- * process, filesystem-mutation or network call reachable from a handler that
- * opted into `ctx.effects`. Opting in is the trigger: a function that uses the
- * effects handle must route ALL of its effects through it, or the preview it
- * promises is a lie.
+ * process, filesystem-mutation or network call REACHABLE FROM A REGISTERED
+ * COMMAND HANDLER (§11).
  *
  * Additionally -- and this part is TypeScript-specific -- it flags the two
  * accepted Proxy ceilings: a bare truthiness test and an identity comparison
@@ -20,11 +18,25 @@
  * version 7 is the native port: it ships the scanner, the SyntaxKind enum and
  * the AST node predicates, but NO in-process parser -- building a syntax tree
  * there means spawning the native language server against a resolved tsconfig,
- * which a check declared `fast` and `pure` must not do. The scope rule below is
- * therefore expressed over brace blocks rather than function nodes: a call is a
- * finding when some brace block contains BOTH the call and an `.effects`
- * mention, which is the token-level reading of "reachable from a handler that
- * opted in".
+ * which a check declared `fast` and `pure` must not do.
+ *
+ * WHAT THE SCANNER DELIVERS, and what it cannot. Brace depth gives real
+ * containment, and token adjacency gives a serviceable function table
+ * (`function f(...) {}`, `const f = (...) => {}`) plus handler roots (the
+ * `handler:` property of a factory options object, inline or naming a declared
+ * function). On top of those the check builds an intra-FILE call graph and
+ * follows it transitively from every root, which is what closes the two shapes
+ * that escape the narrower "a block that mentions `.effects`" reading: a
+ * handler that never mentions the handle, and a bypass one helper-call away.
+ *
+ * The residual gap is recorded as an accepted ceiling in §17 rather than
+ * papered over: without a parser there is no import resolution (a helper in
+ * ANOTHER FILE is not followed), no scope or shadowing resolution (a name is
+ * matched as a name), no method-call resolution (`this.helper()` and
+ * `obj.helper()` are not followed), and handler roots are recognized only
+ * through the literal `handler:` spelling or an `.effects` mention. Python and
+ * Go, which have real in-process parsers, deliver intra-module reachability;
+ * TypeScript delivers intra-file.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -247,8 +259,8 @@ function isNameToken(t: Tok | undefined): boolean {
 }
 
 /**
- * Scans one tokenized file. A call is a finding when some brace block contains
- * both the call site and an `.effects` mention.
+ * Scans one tokenized file. A call is a finding when it sits in a scope
+ * reachable from a registered command handler (or from an `.effects` mention).
  */
 export function scanTokens(
 	toks: readonly Tok[],
@@ -282,10 +294,116 @@ export function scanTokens(
 		}
 	}
 
-	// Blocks that (transitively) contain an `.effects` mention: for each
-	// occurrence, every enclosing block opts in -- the token-level reading of
-	// "every enclosing function opts in".
-	const optedIn = new Set<number>();
+	// The block a given open-brace token opens.
+	const blockIdByOpenTok = new Map<number, number>();
+	for (let b = 0; b < blockOpenIdx.length; b++) {
+		blockIdByOpenTok.set(blockOpenIdx[b] as number, b);
+	}
+
+	/**
+	 * The body block of the function whose declaration starts at `from`, or -1.
+	 *
+	 * Scans forward at the DECLARATION's own bracket depth: an `=>` or a
+	 * `function` keyword found there introduces the body, and the next `{` opens
+	 * it. Depth matters -- in `const cmd = defineCommand("x", { handler: (a) =>
+	 * {...} })` the arrow belongs to the handler, not to `cmd`, and lives one
+	 * paren deeper.
+	 */
+	const bodyBlockAfter = (
+		from: number,
+		stopAtComma: boolean,
+		introduced = false,
+	): number => {
+		let depth = 0;
+		let sawIntroducer = introduced;
+		for (let j = from; j < toks.length; j++) {
+			const tj = toks[j] as Tok;
+			switch (tj.kind) {
+				case SyntaxKind.OpenParenToken:
+				case SyntaxKind.OpenBracketToken:
+					depth += 1;
+					continue;
+				case SyntaxKind.CloseParenToken:
+				case SyntaxKind.CloseBracketToken:
+					depth -= 1;
+					if (depth < 0) {
+						return -1;
+					}
+					continue;
+				case SyntaxKind.OpenBraceToken:
+					if (depth === 0 && sawIntroducer) {
+						return blockIdByOpenTok.get(j) ?? -1;
+					}
+					depth += 1;
+					continue;
+				case SyntaxKind.CloseBraceToken:
+					depth -= 1;
+					if (depth < 0) {
+						return -1;
+					}
+					continue;
+				case SyntaxKind.EqualsGreaterThanToken:
+				case SyntaxKind.FunctionKeyword:
+					if (depth === 0) {
+						sawIntroducer = true;
+					}
+					continue;
+				case SyntaxKind.SemicolonToken:
+					if (depth === 0) {
+						return -1;
+					}
+					continue;
+				case SyntaxKind.CommaToken:
+					if (depth === 0 && stopAtComma) {
+						return -1;
+					}
+					continue;
+				default:
+					continue;
+			}
+		}
+		return -1;
+	};
+
+	// The token-level function table: declared name -> body block. This is what
+	// makes an intra-file call graph possible at all; there is no symbol table
+	// and no type information, so a name is matched as a name.
+	const funcBlocks = new Map<string, number>();
+	for (let i = 0; i < toks.length; i++) {
+		const t = toks[i] as Tok;
+		if (t.kind === SyntaxKind.FunctionKeyword && isNameToken(toks[i + 1])) {
+			// The `function` keyword at `i` IS the introducer.
+			const block = bodyBlockAfter(
+				i + 2,
+				/* stopAtComma */ false,
+				/* introduced */ true,
+			);
+			if (block !== -1) {
+				funcBlocks.set((toks[i + 1] as Tok).text, block);
+			}
+			continue;
+		}
+		if (
+			(t.kind === SyntaxKind.ConstKeyword ||
+				t.kind === SyntaxKind.LetKeyword ||
+				t.kind === SyntaxKind.VarKeyword) &&
+			isNameToken(toks[i + 1]) &&
+			(toks[i + 2] as Tok | undefined)?.kind === SyntaxKind.EqualsToken
+		) {
+			const block = bodyBlockAfter(i + 3, /* stopAtComma */ true);
+			if (block !== -1) {
+				funcBlocks.set((toks[i + 1] as Tok).text, block);
+			}
+		}
+	}
+
+	// Roots. TWO conditions, and the first is what §11 actually asks for:
+	//   1. a registered command handler -- token-level, the `handler:` property
+	//      of a factory options object, either an inline function or a named one;
+	//   2. as before, any scope that reaches for `.effects` at all.
+	// Condition 2 alone let two shapes escape completely: a handler that never
+	// mentions the handle, and a bypass one helper-call away.
+	const reachable = new Set<number>();
 	for (let i = 1; i < toks.length; i++) {
 		if (
 			(toks[i] as Tok).text === "effects" &&
@@ -293,15 +411,123 @@ export function scanTokens(
 		) {
 			let b = blockOfToken[i] as number;
 			while (b !== -1) {
-				optedIn.add(b);
+				reachable.add(b);
 				b = blockEnclosing[b] as number;
 			}
 		}
 	}
-	const inOptedInScope = (i: number): boolean =>
-		optedIn.has(blockOfToken[i] as number);
-	if (optedIn.size === 0) {
+	for (let i = 0; i + 1 < toks.length; i++) {
+		const t = toks[i] as Tok;
+		if (
+			t.text !== "handler" ||
+			(toks[i + 1] as Tok).kind !== SyntaxKind.ColonToken
+		) {
+			continue;
+		}
+		const named = toks[i + 2] as Tok | undefined;
+		if (named !== undefined && funcBlocks.has(named.text)) {
+			reachable.add(funcBlocks.get(named.text) as number);
+		}
+		// An inline handler: the first `{` in the property's value opens it,
+		// whether it is written bare (`handler: (a, c) => {}`) or through a
+		// wrapper (`handler: mark((a, c) => {})`).
+		for (let j = i + 2, depth = 0; j < toks.length; j++) {
+			const tj = toks[j] as Tok;
+			if (tj.kind === SyntaxKind.OpenBraceToken) {
+				reachable.add(blockIdByOpenTok.get(j) as number);
+				break;
+			}
+			if (
+				tj.kind === SyntaxKind.OpenParenToken ||
+				tj.kind === SyntaxKind.OpenBracketToken
+			) {
+				depth += 1;
+			} else if (
+				tj.kind === SyntaxKind.CloseParenToken ||
+				tj.kind === SyntaxKind.CloseBracketToken
+			) {
+				depth -= 1;
+			} else if (
+				depth <= 0 &&
+				(tj.kind === SyntaxKind.CommaToken ||
+					tj.kind === SyntaxKind.SemicolonToken ||
+					tj.kind === SyntaxKind.CloseBraceToken)
+			) {
+				break;
+			}
+		}
+	}
+
+	const inReachableScope = (i: number): boolean => {
+		let b = blockOfToken[i] as number;
+		while (b !== -1) {
+			if (reachable.has(b)) {
+				return true;
+			}
+			b = blockEnclosing[b] as number;
+		}
+		return false;
+	};
+
+	// Reachability closure: a bare `name(` inside a reachable scope pulls that
+	// function's body in, transitively.
+	for (let changed = true; changed; ) {
+		changed = false;
+		for (let i = 0; i < toks.length; i++) {
+			const t = toks[i] as Tok;
+			if (
+				!isNameToken(t) ||
+				(toks[i + 1] as Tok | undefined)?.kind !== SyntaxKind.OpenParenToken ||
+				(toks[i - 1] as Tok | undefined)?.kind === SyntaxKind.DotToken
+			) {
+				continue;
+			}
+			const block = funcBlocks.get(t.text);
+			if (block === undefined || reachable.has(block)) {
+				continue;
+			}
+			if (inReachableScope(i)) {
+				reachable.add(block);
+				changed = true;
+			}
+		}
+	}
+
+	if (reachable.size === 0) {
 		return findings;
+	}
+
+	// Identifiers bound to the effects handle (`const e = ctx.effects;`), so the
+	// handle itself never reads as a bypass.
+	const handleAliases = new Set<string>();
+	for (let i = 0; i + 4 < toks.length; i++) {
+		const t = toks[i] as Tok;
+		if (
+			(t.kind !== SyntaxKind.ConstKeyword &&
+				t.kind !== SyntaxKind.LetKeyword &&
+				t.kind !== SyntaxKind.VarKeyword) ||
+			!isNameToken(toks[i + 1]) ||
+			(toks[i + 2] as Tok).kind !== SyntaxKind.EqualsToken
+		) {
+			continue;
+		}
+		for (let j = i + 3; j < toks.length; j++) {
+			const tj = toks[j] as Tok;
+			if (
+				tj.kind === SyntaxKind.SemicolonToken ||
+				tj.kind === SyntaxKind.CommaToken
+			) {
+				break;
+			}
+			if (
+				tj.text === "effects" &&
+				(toks[j - 1] as Tok).kind === SyntaxKind.DotToken &&
+				(toks[j + 1] as Tok | undefined)?.kind !== SyntaxKind.DotToken
+			) {
+				handleAliases.add((toks[i + 1] as Tok).text);
+				break;
+			}
+		}
 	}
 
 	// Identifiers bound to an effects-handle return, so the Proxy-ceiling
@@ -363,7 +589,7 @@ export function scanTokens(
 
 	for (let i = 0; i < toks.length; i++) {
 		const t = toks[i] as Tok;
-		if (!inOptedInScope(i)) {
+		if (!inReachableScope(i)) {
 			continue;
 		}
 
@@ -378,7 +604,10 @@ export function scanTokens(
 				? (toks[i - 2] as Tok | undefined)?.text
 				: undefined;
 			// Anything reached through `.effects.` is exactly what we want.
-			const throughEffects = prevDot && receiver === "effects";
+			const throughEffects =
+				prevDot &&
+				receiver !== undefined &&
+				(receiver === "effects" || handleAliases.has(receiver));
 			if (!throughEffects) {
 				const leaf = t.text;
 				const target = receiver !== undefined ? `${receiver}.${leaf}` : leaf;
