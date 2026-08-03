@@ -505,7 +505,7 @@ _UNSETTLED_POISONED_DUNDERS = (
     "__hash__", "__len__", "__iter__", "__contains__", "__getitem__",
     "__getattr__", "__int__", "__float__", "__index__", "__str__",
     "__format__", "__bytes__", "__add__", "__radd__", "__mod__", "__rmod__",
-    "__call__",
+    "__call__", "__setattr__",
 )
 
 
@@ -522,18 +522,26 @@ class Unsettled:
 
     def __init__(self, brand: str, log: "_EffectLog", cmd_path: str,
                  forwardable: bool) -> None:
-        self._brand = brand
-        self._log = log
-        self._cmd_path = cmd_path
+        # ``__setattr__`` is poisoned like every other extraction dunder, so the
+        # constructor writes its own slots through ``object`` -- otherwise a
+        # carrier could not be built at all. Poisoning the write side is what
+        # stops ``u._brand = "«forged»"`` from minting a fake preview line and
+        # ``u._forwardable = True`` from making a void carrier forwardable,
+        # which is the same seal Go gets from unexported fields and TypeScript
+        # from the Proxy's `set` trap.
+        _set = object.__setattr__
+        _set(self, "_brand", brand)
+        _set(self, "_log", log)
+        _set(self, "_cmd_path", cmd_path)
         # Void results (write/mkdir/remove/rename/chmod) and spawn results have
         # no scalar projection, so they are never forwardable -- in either mode.
-        self._forwardable = forwardable
+        _set(self, "_forwardable", forwardable)
 
     def __repr__(self) -> str:
         return f"Unsettled({self._brand})"
 
     def _truncate(self) -> "_DryRunTruncated":
-        step = len(self._log.records) + 1
+        step = self._log.next_seq()
         return _DryRunTruncated(
             _msg_dry_run_truncated(step, self._cmd_path, self._brand),
             self._log,
@@ -605,18 +613,37 @@ _DRY_RUN_HEADER = "DRY RUN — no changes were made. Would do:"
 
 
 class _EffectLog:
-    """The ordered effect records produced by one dispatch."""
+    """The ordered effect records produced by one dispatch.
 
-    __slots__ = ("records",)
+    TWO counters, deliberately. Would-do numbering is the numbering of the
+    RENDERED lines: it feeds the log's ``<N>.`` prefix, the ``«step N output»``
+    brand and the truncation error's "ends at step N". CACHE_WRITEs are never
+    rendered, so they must never consume one of those numbers -- otherwise a
+    coverage-instrumented run would silently start its preview at ``2.``. They
+    get their own sequence instead, so every record still carries a ``seq``.
+    """
+
+    __slots__ = ("records", "_rendered", "_cached")
 
     def __init__(self) -> None:
         self.records: list[_EffectRecord] = []
+        self._rendered = 0
+        self._cached = 0
 
     def append(self, rec: _EffectRecord) -> None:
         self.records.append(rec)
+        if rec.kind == CACHE_WRITE:
+            self._cached += 1
+        else:
+            self._rendered += 1
 
     def next_seq(self) -> int:
-        return len(self.records) + 1
+        """The next would-do number. Pure: callers may ask without appending."""
+        return self._rendered + 1
+
+    def next_cache_seq(self) -> int:
+        """The next CACHE_WRITE number, on its own counter."""
+        return self._cached + 1
 
     def render(self) -> str:
         """Render the would-do log. CACHE_WRITEs are never written to it."""
@@ -977,7 +1004,8 @@ class _Effects:
         """Run a subprocess to completion (PROC_MUTATE, or an observe)."""
         _reject_unaccepted_options(self._cmd_path, "run", _options)
         self._reject_carrier_params("run", {
-            "cwd": cwd, "env": env, "resource": resource,
+            "cwd": cwd, "env": env, "check": check, "stream": stream,
+            "resource": resource,
             "skip_if_current": skip_if_current, "grant": grant,
         })
         runtime, rendered = self._resolve_argv(argv, "run")
@@ -1164,8 +1192,8 @@ class _Effects:
         _reject_unaccepted_options(self._cmd_path, "http", _options)
         self._reject_carrier_params("http", {
             "method": method, "body": body, "headers": headers,
-            "resource": resource, "skip_if_current": skip_if_current,
-            "grant": grant,
+            "check": check, "resource": resource,
+            "skip_if_current": skip_if_current, "grant": grant,
         })
         if not isinstance(method, str):
             raise TypeError(_msg_effect_http_method_not_str(
@@ -5276,7 +5304,7 @@ class App:
         """
         log = self._effect_log
         log.append(_EffectRecord(
-            seq=log.next_seq(),
+            seq=log.next_cache_seq(),
             kind=CACHE_WRITE,
             verb="cache",
             detail=path,

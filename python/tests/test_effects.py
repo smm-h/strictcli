@@ -416,6 +416,82 @@ class TestCarriers:
         with pytest.raises(ValueError, match=r"parameter 'resource' does not accept"):
             app.test(["--dry-run", "rel"])
 
+    @pytest.mark.parametrize("param", ["check", "stream"])
+    def test_carrier_rejected_by_run_check_and_stream(self, param):
+        """`check` and `stream` sit on §2.5.5's EXCLUDING side.
+
+        Silently ignoring a carrier there is exactly what declare-everything
+        forbids: in dry mode the handler's declaration would vanish, and in live
+        mode the carrier would be read as truthy and flip the option.
+        """
+        app = _app()
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            c = ctx.effects.run(["make"])
+            ctx.effects.run(["echo"], **{param: c})
+            return 0
+
+        with pytest.raises(ValueError) as exc:
+            app.test(["--dry-run", "rel"])
+        assert (
+            f"command \"rel\": effects.run parameter '{param}' does not accept "
+            "an unsettled value"
+        ) == str(exc.value)
+
+    def test_carrier_rejected_by_http_check(self):
+        app = _app()
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            c = ctx.effects.run(["make"])
+            ctx.effects.http("POST", "https://x.test", check=c)
+            return 0
+
+        with pytest.raises(ValueError) as exc:
+            app.test(["--dry-run", "rel"])
+        assert (
+            'command "rel": effects.http parameter \'check\' does not accept '
+            "an unsettled value"
+        ) == str(exc.value)
+
+
+class TestCarrierSeal:
+    """The seal covers attribute WRITES, not just reads (§4.4)."""
+
+    def _carrier(self, app=None):
+        app = app or _app()
+        holder = {}
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            holder["c"] = ctx.effects.run(["git", "tag", "v1"])
+            holder["void"] = ctx.effects.mkdir("build")
+            return 0
+
+        app.test(["--dry-run", "rel"])
+        return holder
+
+    def test_forging_the_brand_is_poisoned(self):
+        h = self._carrier()
+        with pytest.raises(BaseException) as exc:
+            h["c"]._brand = "«forged»"
+        assert "dry-run preview ends at step" in str(exc.value)
+        assert repr(h["c"]) == "Unsettled(«step 1 output»)"
+
+    def test_forging_forwardability_is_poisoned(self):
+        """A void carrier cannot be talked into being forwardable."""
+        h = self._carrier()
+        with pytest.raises(BaseException) as exc:
+            h["void"]._forwardable = True
+        assert "dry-run preview ends at step" in str(exc.value)
+
+    def test_setting_a_new_attribute_is_poisoned(self):
+        h = self._carrier()
+        with pytest.raises(BaseException) as exc:
+            h["c"].stdout = "forged"
+        assert "dry-run preview ends at step" in str(exc.value)
+
 
 class TestDeclaredSignatures:
     """The surface declares the SETTLED types only.
@@ -890,6 +966,54 @@ class TestCacheWrites:
         r = app.test(["--dry-run", "run"])
         assert r.stdout == "DRY RUN — no changes were made. Would do:\n"
         assert any(rec["kind"] == "cache_write" for rec in app.effect_log())
+
+    def test_cache_writes_do_not_consume_would_do_numbers(self, tmp_path,
+                                                          monkeypatch):
+        """A cache write is never rendered, so it must never take a number.
+
+        The same counter feeds the log lines, the «step N output» brand and the
+        truncation error's "ends at step N": an invisible record shifting it
+        would move user-visible numbering for no visible reason.
+        """
+        monkeypatch.chdir(tmp_path)
+        app = _app(test_coverage=True)
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            c = ctx.effects.run(["git", "tag", "v1"])
+            ctx.effects.run(["push", c])
+            return 0
+
+        r = app.test(["--dry-run", "rel"])
+        assert any(rec["kind"] == "cache_write" for rec in app.effect_log())
+        assert r.stdout == (
+            "DRY RUN — no changes were made. Would do:\n"
+            "  1. run: git tag v1\n"
+            "  2. run: push «step 1 output»\n"
+        )
+        app_effects = [
+            rec for rec in app.effect_log() if rec["kind"] != "cache_write"
+        ]
+        assert [rec["seq"] for rec in app_effects] == [1, 2]
+
+    def test_cache_writes_do_not_shift_the_truncation_step(self, tmp_path,
+                                                           monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _app(test_coverage=True)
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            c = ctx.effects.run(["git", "tag", "v1"])
+            if c:
+                return 1
+            return 0
+
+        r = app.test(["--dry-run", "rel"])
+        assert r.exit_code == 1
+        assert (
+            "error: dry-run preview ends at step 2: rel branched on unsettled "
+            "value «step 1 output» — cannot preview past this point"
+        ) in r.stderr
 
     def test_no_public_way_to_mint_a_cache_write(self):
         app = _app()
