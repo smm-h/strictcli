@@ -766,3 +766,51 @@ test("effects: --quiet dominates --verbose in the gating table", async () => {
 		assert.deepEqual(seen, expected, flags.join(" "));
 	}
 });
+
+// --- Framework-blessed CACHE_WRITEs (§9.2) ---
+
+test("effects: a coverage shard is a CACHE_WRITE that executes even in dry mode", async () => {
+	const dir = tmp();
+	const cwd = process.cwd();
+	process.chdir(dir);
+	try {
+		const app = createApp({
+			name: "t",
+			version: "1",
+			help: "h",
+			testCoverage: true,
+		});
+		app.command(defineReadOnlyCommand("look", { help: "h", handler: () => 0 }));
+		const r = await app.test(["--dry-run", "look"]);
+		const records = log(app);
+		assert.equal(records.length, 1);
+		assert.equal(records[0]?.kind, "cache_write");
+		assert.equal(records[0]?.verb, "cache");
+		// It EXECUTED (recorded: false) even though the run was a dry run...
+		assert.equal(records[0]?.recorded, false);
+		assert.ok(existsSync(String(records[0]?.detail)));
+		// ...and it is never written to the would-do log.
+		assert.equal(r.stdout, HEADER);
+	} finally {
+		process.chdir(cwd);
+	}
+});
+
+test("effects: a CACHE_WRITE never trips read-only enforcement", async () => {
+	const dir = tmp();
+	const cwd = process.cwd();
+	process.chdir(dir);
+	try {
+		const app = createApp({
+			name: "t",
+			version: "1",
+			help: "h",
+			testCoverage: true,
+		});
+		app.command(defineReadOnlyCommand("look", { help: "h", handler: () => 0 }));
+		// A read_only command whose dispatch writes a coverage shard: no error.
+		assert.equal((await app.test(["look"])).exitCode, 0);
+	} finally {
+		process.chdir(cwd);
+	}
+});
