@@ -1130,8 +1130,16 @@ must name them explicitly.
 New templates land **identically in all three implementations**, in the three catalog files that
 `conformance/check_error_parity.py` extracts from:
 
-- Python -- `python/strictcli/__init__.py` (inline `raise ValueError(...)` / `_ParseError(...)`
-  strings; the extractor reads the source)
+- Python -- `python/strictcli/__init__.py`; the extractor reads the source, and sees a template in
+  exactly two shapes. First, inline `raise ValueError(...)` / `_ParseError(...)` / `EffectFailed(...)`
+  strings. Second, a `_msg_*` function returning the finished string -- one function per template,
+  the shape that mirrors Go's `err*` / `prompt*` functions. The second shape is what any template
+  the raise-scan cannot see must use: the confirm protocol's three (§12.6), which are *printed*
+  rather than raised; the truncation error (§12.5), which rides `_DryRunTruncated`; and the
+  effect-parameter type guards, which raise `TypeError`. `TypeError` and `RuntimeError` are
+  deliberately outside the raise-scan (`check_error_parity.py`'s manifest carries exclusion
+  rationales that depend on it), so a template carried on one of them is invisible until it has a
+  `_msg_*` function.
 - Go -- `go/strictcli/errors.go` (an `err*` function per template)
 - TypeScript -- `typescript/src/errors.ts` (an `err*` function per template, one-to-one with Go,
   under the same Go-source-file section headers the extractor keys on)
