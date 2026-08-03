@@ -32,6 +32,7 @@ func (a *App) recordCoverage(cmdPath string) {
 	data, _ := json.Marshal(map[string]string{"command": cmdPath})
 	f.Write(data)
 	f.Write([]byte("\n"))
+	a.recordCacheWrite(path)
 }
 
 // collectAllCommandPaths enumerates all non-deprecated leaf command paths
@@ -173,6 +174,7 @@ func (a *App) testCoverageProvider() []CheckSpec {
 			if !bytes.Equal(existing, newContent) {
 				os.MkdirAll(filepath.Dir(manifestPath), 0o755)
 				os.WriteFile(manifestPath, newContent, 0o644)
+				a.recordCacheWrite(manifestPath)
 			}
 		}
 

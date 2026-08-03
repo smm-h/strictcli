@@ -150,6 +150,9 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 	m := map[string]interface{}{
 		"name": cmd.Name,
 		"help": cmd.Help,
+		// Always emitted: classification is mandatory, so there is no default
+		// to omit against.
+		"effect": cmd.Effect,
 	}
 	// passthrough: default false (omit when false)
 	if cmd.Passthrough {
@@ -202,6 +205,23 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 			cfList[i] = f
 		}
 		m["config_fields"] = cfList
+	}
+	// grants: omitted when empty; entries in declaration order.
+	if len(cmd.Grants) > 0 {
+		grants := make([]interface{}, 0, len(cmd.Grants))
+		for _, g := range cmd.Grants {
+			grants = append(grants, map[string]interface{}{
+				"name":   g.Name,
+				"reason": g.Reason,
+				"kind":   g.Kind,
+			})
+		}
+		m["grants"] = grants
+	}
+	// forwarding: omitted when absent. The private framework-internal marker is
+	// NOT emitted.
+	if cmd.Forwarding != nil {
+		m["forwarding"] = map[string]interface{}{"reason": cmd.Forwarding.Reason}
 	}
 	return m
 }
@@ -395,6 +415,19 @@ func dumpSchemaCore(app *App) map[string]interface{} {
 	// config: default false (omit when false)
 	if app.configEnabled {
 		schema["config"] = true
+	}
+
+	// proc_observe_allowlist: omitted when empty; prefixes in declaration order.
+	if len(app.procObserveAllowlist) > 0 {
+		allowlist := make([]interface{}, 0, len(app.procObserveAllowlist))
+		for _, prefix := range app.procObserveAllowlist {
+			entry := make([]interface{}, len(prefix))
+			for i, p := range prefix {
+				entry[i] = p
+			}
+			allowlist = append(allowlist, entry)
+		}
+		schema["proc_observe_allowlist"] = allowlist
 	}
 
 	// global_flags: default [] (omit when empty)
@@ -642,6 +675,9 @@ func writeSchema(app *App) (string, error) {
 	if err := os.WriteFile(filePath, append(data, '\n'), 0o644); err != nil {
 		return "", err
 	}
+	// Framework-blessed CACHE_WRITE: recorded in the structured effect log,
+	// never in the would-do log, and performed even in dry mode.
+	app.recordCacheWrite(filePath)
 	// Return absolute path for output
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
