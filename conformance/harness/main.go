@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	tomledit "github.com/smm-h/go-toml-edit"
@@ -74,6 +75,17 @@ func main() {
 	}
 	if v, ok := appDef["test_coverage"]; ok && v.(bool) {
 		appOpts = append(appOpts, strictcli.WithTestCoverage())
+	}
+	if v, ok := appDef["proc_observe_allowlist"]; ok {
+		var prefixes [][]string
+		for _, p := range v.([]interface{}) {
+			var prefix []string
+			for _, e := range p.([]interface{}) {
+				prefix = append(prefix, e.(string))
+			}
+			prefixes = append(prefixes, prefix)
+		}
+		appOpts = append(appOpts, strictcli.WithProcObserveAllowlist(prefixes))
 	}
 
 	app := strictcli.NewApp(
@@ -244,6 +256,28 @@ func main() {
 			}
 			app.Test(argv)
 		}
+	}
+
+	// The structured effect-log side channel (§14.3): the same env-var file
+	// handoff as CONFORMANCE_APP_DEF. App.Run ends in os.Exit, so the write
+	// rides SetExitHook -- the Go counterpart of the Python ref's atexit and
+	// the TS harness's process.on("exit").
+	if logPath := os.Getenv("CONFORMANCE_EFFECT_LOG"); logPath != "" {
+		app.SetExitHook(func() {
+			records := app.EffectLog()
+			if records == nil {
+				records = []map[string]interface{}{}
+			}
+			// encoding/json sorts map keys, which is what §14.3 asks for.
+			data, err := json.Marshal(records)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to marshal effect log: %v\n", err)
+				return
+			}
+			if err := os.WriteFile(logPath, data, 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to write effect log: %v\n", err)
+			}
+		})
 	}
 
 	app.Run()
@@ -704,7 +738,178 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 		opts = append(opts, strictcli.WithInteractive())
 	}
 
+	// The effects regime: classification (§1.1), grants (§6.1) and declared
+	// forwarding (§10.2). A case that omits `effect` is asserting the
+	// registration hard error, so the option is only appended when declared.
+	if v, ok := cmdDef["effect"]; ok {
+		opts = append(opts, strictcli.WithEffect(v.(string)))
+	}
+	if v, ok := cmdDef["grants"]; ok {
+		var grants []strictcli.Grant
+		for _, item := range v.([]interface{}) {
+			g := item.(map[string]interface{})
+			grants = append(grants, strictcli.Grant{
+				Name:   g["name"].(string),
+				Reason: g["reason"].(string),
+				Kind:   g["kind"].(string),
+			})
+		}
+		opts = append(opts, strictcli.WithGrants(grants...))
+	}
+	if v, ok := cmdDef["forwarding"]; ok {
+		opts = append(opts, strictcli.WithForwarding(
+			v.(map[string]interface{})["reason"].(string),
+		))
+	}
+
 	return opts
+}
+
+// --- the effects vocabulary (effects contract §14.4) ---------------------
+//
+// `handler_effects` is materialized identically by all three harnesses:
+// iterate the array in order, call the named method with EXACTLY the keys the
+// entry declares (no per-method filtering -- a case declaring a key the method
+// does not accept is asserting the error), and keep the returned carrier in a
+// per-run map indexed by position so `forward_from` / `extract_from` can
+// reference it.
+//
+// Go's carriers have no exported method in common (§2.5.3), so the map holds
+// them as `any`: forwarding passes the value straight into the effects API's
+// `any` parameter, and extraction type-switches to the shape's own extractor.
+
+// effectOptions builds the option variadic from the keys the entry declares,
+// in the harnesses' shared order.
+func effectOptions(e map[string]interface{}) []strictcli.EffectOption {
+	var opts []strictcli.EffectOption
+	if v, ok := e["stream"]; ok {
+		opts = append(opts, strictcli.Stream(v.(bool)))
+	}
+	if v, ok := e["resource"]; ok {
+		opts = append(opts, strictcli.Resource(v.(string)))
+	}
+	if v, ok := e["skip_if_current"]; ok {
+		opts = append(opts, strictcli.SkipIfCurrent(v.(string)))
+	}
+	if v, ok := e["grant"]; ok {
+		opts = append(opts, strictcli.UseGrant(v.(string)))
+	}
+	return opts
+}
+
+// extractCarrier reads a concrete value out of a carrier -- the illegal use
+// that trips the runtime seal and truncates the preview (§4.4). Each shape has
+// its own extractor; all four panic with the truncation error when unsettled.
+func extractCarrier(c interface{}) {
+	switch v := c.(type) {
+	case strictcli.Completed:
+		_ = v.Stdout()
+	case strictcli.Response:
+		_ = v.Body()
+	case strictcli.Spawned:
+		_ = v.PID()
+	case strictcli.Unsettled:
+		_ = v.Bool()
+	}
+}
+
+// runHandlerEffects issues the declared effect calls, in order.
+func runHandlerEffects(ctx *strictcli.Context, entries []interface{}) {
+	eff := map[int]interface{}{}
+	for i, item := range entries {
+		e := item.(map[string]interface{})
+		method := e["method"].(string)
+
+		if v, ok := e["extract_from"]; ok {
+			// Terminal by construction: the extraction truncates the run.
+			extractCarrier(eff[int(v.(float64))])
+			return
+		}
+
+		var fwd interface{}
+		hasFwd := false
+		if v, ok := e["forward_from"]; ok {
+			fwd = eff[int(v.(float64))]
+			hasFwd = true
+		}
+		opts := effectOptions(e)
+
+		var carrier interface{}
+		var err error
+		switch method {
+		case "run", "spawn":
+			var argv []any
+			if v, ok := e["argv"]; ok {
+				for _, a := range v.([]interface{}) {
+					argv = append(argv, a.(string))
+				}
+			}
+			if hasFwd {
+				argv = append(argv, fwd)
+			}
+			if method == "run" {
+				carrier, err = ctx.Effects().Run(argv, opts...)
+			} else {
+				carrier, err = ctx.Effects().Spawn(argv, opts...)
+			}
+		case "write":
+			var path any = e["path"].(string)
+			var content any
+			if hasFwd {
+				content = fwd
+			} else {
+				content = e["content"].(string)
+			}
+			carrier, err = ctx.Effects().Write(path, content, opts...)
+		case "mkdir", "remove":
+			var path any
+			if hasFwd {
+				path = fwd
+			} else {
+				path = e["path"].(string)
+			}
+			if method == "mkdir" {
+				carrier, err = ctx.Effects().Mkdir(path, opts...)
+			} else {
+				carrier, err = ctx.Effects().Remove(path, opts...)
+			}
+		case "rename":
+			var dst any
+			if hasFwd {
+				dst = fwd
+			} else {
+				dst = e["to"].(string)
+			}
+			carrier, err = ctx.Effects().Rename(e["path"].(string), dst, opts...)
+		case "chmod":
+			var path any
+			if hasFwd {
+				path = fwd
+			} else {
+				path = e["path"].(string)
+			}
+			mode, perr := strconv.ParseInt(e["mode"].(string), 8, 32)
+			if perr != nil {
+				panic(perr)
+			}
+			carrier, err = ctx.Effects().Chmod(path, int(mode), opts...)
+		case "http":
+			var url any
+			if hasFwd {
+				url = fwd
+			} else {
+				url = e["url"].(string)
+			}
+			carrier, err = ctx.Effects().HTTP(e["http_method"].(string), url, opts...)
+		}
+		if err != nil {
+			// The Go idiom for what Python and TypeScript raise (§2.5.4, §17).
+			// The harness surfaces it the same way the siblings' uncaught
+			// exception surfaces: "error: <msg>" on stderr, exit 1.
+			panic(err.Error())
+		}
+		eff[i+1] = carrier
+	}
 }
 
 // collectAllFlagDefs gathers all flag definitions for a command (global + direct + flag sets + mutex).
@@ -757,7 +962,9 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 			code = int(v.(float64))
 		}
 		data := hr["data"]
+		effects, _ := cmdDef["handler_effects"].([]interface{})
 		return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
+			runHandlerEffects(ctx, effects)
 			switch kind {
 			case "data":
 				return strictcli.ExitData(0, data)
@@ -769,7 +976,15 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 		}
 	}
 
-	template := cmdDef["handler_prints"].(string)
+	// handler_effects runs BEFORE the handler_prints path and does not replace
+	// it (§14.4). A handler_effects-only command declares no template.
+	handlerEffects, _ := cmdDef["handler_effects"].([]interface{})
+	template := ""
+	hasTemplate := false
+	if v, ok := cmdDef["handler_prints"]; ok {
+		template = v.(string)
+		hasTemplate = true
+	}
 	exitCode := 0
 	if v, ok := cmdDef["handler_exit_code"]; ok {
 		exitCode = int(v.(float64))
@@ -789,6 +1004,10 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 	ec := exitCode
 
 	return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
+		runHandlerEffects(ctx, handlerEffects)
+		if !hasTemplate {
+			return strictcli.Exit(ec)
+		}
 		out := template
 
 		// Substitute {source:name} provenance references via ctx.Source().

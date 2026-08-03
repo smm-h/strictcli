@@ -23,15 +23,17 @@ import {
 	arg,
 	coRequired,
 	createApp,
-	defineCommand,
+	defineMutatingCommand,
+	defineReadOnlyCommand,
 	deprecated,
 	errorCheckSpec,
 	flag,
 	flagSet,
 	implies,
+	mutatingPassthrough,
 	mutexGroup,
 	outcome,
-	passthrough,
+	readOnlyPassthrough,
 	relativeToRoot,
 	requires,
 	t,
@@ -291,7 +293,118 @@ function collectAllFlagDefs(cmdDef, globalFlags) {
 	return all;
 }
 
+// ---------------------------------------------------------------------------
+// The effects vocabulary (effects contract §14.4)
+//
+// `handler_effects` is materialized identically by all three harnesses: iterate
+// the array in order, call the named method with EXACTLY the keys the entry
+// declares (no per-method filtering -- a case declaring a key the method does
+// not accept is asserting the error), and keep the returned carrier in a
+// per-run map indexed by position so `forward_from` / `extract_from` can
+// reference it.
+// ---------------------------------------------------------------------------
+
+/** The option keys the vocabulary carries, in the harnesses' shared order. */
+function effectOptions(e) {
+	const opts = {};
+	if ("stream" in e) {
+		opts.stream = e.stream;
+	}
+	if ("resource" in e) {
+		opts.resource = e.resource;
+	}
+	if ("skip_if_current" in e) {
+		opts.skipIfCurrent = e.skip_if_current;
+	}
+	if ("grant" in e) {
+		opts.grant = e.grant;
+	}
+	return opts;
+}
+
+/**
+ * Reads a concrete value out of a carrier -- the illegal use that trips the
+ * runtime seal and truncates the preview (§4.4). `String(...)` reaches the
+ * Proxy's get trap through Symbol.toPrimitive / toString, neither of which is
+ * exempt; a bare truthiness test would not, and is the accepted TS ceiling
+ * (§17) that lint, not the seal, is responsible for.
+ */
+function extractCarrier(c) {
+	return String(c);
+}
+
+function runHandlerEffects(ctx, entries) {
+	const eff = {};
+	for (let i = 0; i < entries.length; i++) {
+		const e = entries[i];
+		const method = e.method;
+
+		if ("extract_from" in e) {
+			// Terminal by construction: the extraction truncates the run.
+			extractCarrier(eff[e.extract_from]);
+			return;
+		}
+
+		const hasFwd = "forward_from" in e;
+		const fwd = hasFwd ? eff[e.forward_from] : undefined;
+		const opts = effectOptions(e);
+
+		let carrier;
+		switch (method) {
+			case "run":
+			case "spawn": {
+				const argv = [...(e.argv ?? [])];
+				if (hasFwd) {
+					argv.push(fwd);
+				}
+				carrier =
+					method === "run"
+						? ctx.effects.run(argv, opts)
+						: ctx.effects.spawn(argv, opts);
+				break;
+			}
+			case "write":
+				carrier = ctx.effects.write(
+					e.path,
+					hasFwd ? fwd : e.content,
+					opts,
+				);
+				break;
+			case "mkdir":
+				carrier = ctx.effects.mkdir(hasFwd ? fwd : e.path, opts);
+				break;
+			case "remove":
+				carrier = ctx.effects.remove(hasFwd ? fwd : e.path, opts);
+				break;
+			case "rename":
+				carrier = ctx.effects.rename(e.path, hasFwd ? fwd : e.to, opts);
+				break;
+			case "chmod":
+				carrier = ctx.effects.chmod(
+					hasFwd ? fwd : e.path,
+					Number.parseInt(e.mode, 8),
+					opts,
+				);
+				break;
+			case "http":
+				carrier = ctx.effects.http(
+					e.http_method,
+					hasFwd ? fwd : e.url,
+					opts,
+				);
+				break;
+			default:
+				throw new Error(`unknown handler_effects method: ${method}`);
+		}
+		eff[i + 1] = carrier;
+	}
+}
+
 function makeHandler(cmdDef, globalFlags) {
+	// handler_effects runs BEFORE the handler_prints / handler_returns path and
+	// does not replace it (§14.4).
+	const handlerEffects = cmdDef.handler_effects ?? [];
+
 	// handler_returns pins an explicit return (survivor-contract cases): the
 	// template-printing path is skipped entirely. Kinds mirror ref_python's
 	// _emit_handler_return; "bad" returns a non-outcome to trigger the
@@ -299,7 +412,8 @@ function makeHandler(cmdDef, globalFlags) {
 	if ("handler_returns" in cmdDef) {
 		const hr = cmdDef.handler_returns;
 		const code = hr.code ?? 0;
-		return () => {
+		return (_args, ctx) => {
+			runHandlerEffects(ctx, handlerEffects);
 			switch (hr.kind) {
 				case "data":
 					return outcome(0, hr.data);
@@ -321,6 +435,12 @@ function makeHandler(cmdDef, globalFlags) {
 	const argDefs = cmdDef.args ?? [];
 
 	return (args, ctx) => {
+		runHandlerEffects(ctx, handlerEffects);
+		// A handler_effects-only command declares no template and prints
+		// nothing; the effect calls above are its whole body.
+		if (template === undefined) {
+			return exitCode;
+		}
 		let out = template;
 
 		// {source:name} provenance references resolve via ctx.source().
@@ -409,7 +529,17 @@ function registerCommand(cmdDef, target, globalFlags) {
 		if (cmdDef.hidden === true) {
 			spec.hidden = true;
 		}
-		target.command(passthrough(name, spec));
+		if ("grants" in cmdDef) {
+			spec.grants = cmdDef.grants;
+		}
+		// Classification is spliced into the factory name (§1.2): the twins are
+		// the sole mint, so an unclassified passthrough is inexpressible in TS
+		// and such a case restricts itself to the other two targets.
+		target.command(
+			classificationOf(cmdDef, name) === "mutating"
+				? mutatingPassthrough(name, spec)
+				: readOnlyPassthrough(name, spec),
+		);
 		return;
 	}
 
@@ -454,7 +584,34 @@ function registerCommand(cmdDef, target, globalFlags) {
 	if (cmdDef.interactive === true) {
 		spec.interactive = true;
 	}
-	target.command(defineCommand(name, spec));
+	if ("grants" in cmdDef) {
+		spec.grants = cmdDef.grants;
+	}
+	if ("forwarding" in cmdDef) {
+		spec.forwarding = cmdDef.forwarding;
+	}
+	target.command(
+		classificationOf(cmdDef, name) === "mutating"
+			? defineMutatingCommand(name, spec)
+			: defineReadOnlyCommand(name, spec),
+	);
+}
+
+/**
+ * The command's classification (§1.1). TS bakes it into the factory name, so
+ * there is no unclassified state to represent: a case that omits `effect` is
+ * asserting a registration hard error the twin factories make inexpressible,
+ * and restricts itself to the Python and Go targets. Failing loudly here keeps
+ * a case that merely FORGOT the field from silently running as read-only.
+ */
+function classificationOf(cmdDef, name) {
+	if (!("effect" in cmdDef)) {
+		throw new Error(
+			`conformance harness: command "${name}" declares no effect; ` +
+				"the TS twin factories cannot express an unclassified command",
+		);
+	}
+	return cmdDef.effect;
 }
 
 function buildGroup(groupDef, parent, globalFlags) {
@@ -569,6 +726,9 @@ async function main() {
 	if (appDef.test_coverage === true) {
 		spec.testCoverage = true;
 	}
+	if ("proc_observe_allowlist" in appDef) {
+		spec.procObserveAllowlist = appDef.proc_observe_allowlist;
+	}
 
 	// Global flags go into the createApp spec (TS has no post-construction
 	// global-flag registration; the framework replays the same validations).
@@ -671,7 +831,32 @@ async function main() {
 		await app.test(argv);
 	}
 
+	// The structured effect-log side channel (§14.3): the same env-var file
+	// handoff as CONFORMANCE_APP_DEF. app.run() ends in process.exit, so the
+	// write rides process.on("exit") -- the TS counterpart of the Python ref's
+	// atexit and the Go harness's SetExitHook.
+	const effectLogPath = process.env.CONFORMANCE_EFFECT_LOG;
+	if (effectLogPath !== undefined && effectLogPath !== "") {
+		process.on("exit", () => {
+			writeFileSync(effectLogPath, stableJson(app.effectLog()));
+		});
+	}
+
 	await app.run();
+}
+
+/** Compact JSON with sorted object keys, matching the sibling harnesses. */
+function stableJson(value) {
+	return JSON.stringify(value, (_k, v) => {
+		if (v === null || typeof v !== "object" || Array.isArray(v)) {
+			return v;
+		}
+		return Object.fromEntries(
+			Object.keys(v)
+				.sort()
+				.map((k) => [k, v[k]]),
+		);
+	});
 }
 
 main().catch((e) => {
