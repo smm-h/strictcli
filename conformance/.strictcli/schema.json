@@ -54,6 +54,7 @@
     "check": {
       "name": "check",
       "help": "Run project checks registered via the check framework and report results",
+      "effect": "read_only",
       "flags": [
         {
           "name": "all",
@@ -94,22 +95,11 @@
           "help": "Treat warn-severity results as passing so they do not cause nonzero exit",
           "default": false,
           "negatable": true
-        },
-        {
-          "name": "verbose",
-          "type": "bool",
-          "help": "Show per-check notes and durations (including on passing checks) plus a trailing pass/fail/warn/skip count summary",
-          "default": false,
-          "negatable": true
-        },
-        {
-          "name": "dry-run",
-          "type": "bool",
-          "help": "Show which checks would run based on current filters without executing them",
-          "default": false,
-          "negatable": true
         }
-      ]
+      ],
+      "forwarding": {
+        "reason": "framework-internal: absorbs app-defined global flag values"
+      }
     }
   },
   "checks": {
