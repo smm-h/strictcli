@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -212,9 +213,15 @@ type PassthroughHandler func(ctx *Context, name string, args []string, globals m
 
 // Command is a leaf command with a handler.
 type Command struct {
-	Name               string
-	Help               string
-	Handler            func(ctx *Context, kwargs map[string]interface{}) Outcome
+	Name    string
+	Help    string
+	Handler func(ctx *Context, kwargs map[string]interface{}) Outcome
+	// Effect is the mandatory classification: EffectReadOnly or EffectMutating.
+	// There is no default -- a command registered without WithEffect is a
+	// registration-time hard error.
+	Effect             string
+	Grants             []Grant
+	Forwarding         *Forwarding
 	flags              []Flag
 	args               []Arg
 	flagSets           []FlagSet
@@ -226,6 +233,13 @@ type Command struct {
 	PassthroughHandler PassthroughHandler
 	Hidden             bool
 	Interactive        bool
+	// effectSet records that WithEffect was applied, so a deliberate
+	// WithEffect("") is told apart from an absent declaration.
+	effectSet bool
+	// frameworkInternal is a private marker, set ONLY by strictcli's own
+	// registration paths. It is not reachable from any public option, and is
+	// not emitted in the schema.
+	frameworkInternal bool
 }
 
 // deprecatedCmd is a declaration-only command that prints a message and exits 1.
@@ -354,6 +368,25 @@ type App struct {
 	coverageShardPath    string // "<root>/.strictcli/coverage/<pid>.jsonl"
 	coverageDir          string // "<root>/.strictcli/coverage" (construction-anchored)
 	coverageManifestPath string // "<root>/.strictcli/test-coverage.json" (construction-anchored)
+
+	// The effects regime. procObserveAllowlist is app-level observe
+	// authorization: a list of argv PREFIXES, matched element-wise by string
+	// equality. A ctx.Effects().Run whose argv matches one is an observe: it
+	// executes even in dry mode, returns a real value, and is never written to
+	// the would-do log.
+	procObserveAllowlist [][]string
+
+	// effects is the structured effect log for the most recent dispatch.
+	// Populated in BOTH modes: recorded entries in dry mode, executed entries
+	// (with recorded: false) in live mode, plus framework-blessed CACHE_WRITEs.
+	effects *effectLog
+
+	// The framework-owned reserved quartet, extracted by the position-aware
+	// pre-scan and delivered on the Context (never as handler kwargs).
+	lastDryRun  bool
+	lastYes     bool
+	lastQuiet   bool
+	lastVerbose bool
 }
 
 // --- Option types ---
@@ -487,6 +520,22 @@ func WithChecks(path string) AppOption {
 func WithChecksEmbed(data []byte) AppOption {
 	return func(a *App) {
 		a.checksEmbed = data
+	}
+}
+
+// WithProcObserveAllowlist declares app-level observe authorization: a list of
+// argv PREFIXES, matched element-wise against the leading elements of an
+// effect's argv by string equality. A ctx.Effects().Run whose argv matches any
+// listed prefix is an observe -- it executes even in dry mode, returns a real
+// value, and is never written to the would-do log.
+func WithProcObserveAllowlist(prefixes [][]string) AppOption {
+	return func(a *App) {
+		for _, prefix := range prefixes {
+			if len(prefix) == 0 {
+				panic(errProcObserveAllowlistEmptyPrefix)
+			}
+			a.procObserveAllowlist = append(a.procObserveAllowlist, append([]string{}, prefix...))
+		}
 	}
 }
 
@@ -708,6 +757,42 @@ func WithHidden() CmdOption {
 func WithInteractive() CmdOption {
 	return func(c *Command) {
 		c.Interactive = true
+	}
+}
+
+// WithEffect declares a command's mandatory effect classification: either
+// EffectReadOnly or EffectMutating. There is no default and nothing is
+// inferred -- a command registered without it is a registration-time hard
+// error, and so is a value that is neither constant.
+//
+// A mutating command is subject to the confirm protocol, participates in dry
+// mode, and may call the mutating members of ctx.Effects(). A read_only command
+// never prompts, and calling any mutating member is a hard error at call time.
+func WithEffect(effect string) CmdOption {
+	return func(c *Command) {
+		c.Effect = effect
+		c.effectSet = true
+	}
+}
+
+// WithGrants declares per-effect-kind authorizations for a command. A grant is
+// not permission to do something otherwise forbidden; it is a labelled reason
+// that surfaces in the preview so a reviewer reading a dry run sees why a
+// dangerous step is there.
+func WithGrants(grants ...Grant) CmdOption {
+	return func(c *Command) {
+		c.Grants = append(c.Grants, grants...)
+	}
+}
+
+// WithForwarding declares that a handler deliberately accepts and forwards the
+// app's global flag values. The reason is mandatory and non-empty, and is
+// emitted in the schema so a consumer's audit gate can review every forwarding
+// site. In Go the declaration is inert beyond the schema emission -- guard v2's
+// enforcement is Python-only.
+func WithForwarding(reason string) CmdOption {
+	return func(c *Command) {
+		c.Forwarding = &Forwarding{Reason: reason}
 	}
 }
 
@@ -1065,6 +1150,12 @@ func validateFlagConfig(f *Flag) {
 	}
 	if f.Name == "force" {
 		panic(errFlagForceReserved)
+	}
+	// The reserved quartet. The ban is UNCONDITIONAL and applies at every level
+	// -- command flags, flag-set flags, mutex-group flags and app global flags.
+	// Short names and positional arg names are unaffected.
+	if reservedFrameworkFlagNames[f.Name] {
+		panic(errFlagNameReservedByFramework(f.Name))
 	}
 	if strings.HasPrefix(f.Name, "no-") {
 		panic(errFlagNoPrefixReserved(f.Name))
@@ -1761,48 +1852,32 @@ func (a *App) Command(name, help string, handler func(ctx *Context, kwargs map[s
 
 // Passthrough registers a passthrough command (raw args, no parsing).
 // Accepts CmdOptions for validation purposes (e.g., to detect invalid passthrough+flags).
+//
+// It routes through the same single validated registration path as every other
+// command -- there is no direct-Command-construction bypass left -- so a
+// passthrough is classified with WithEffect like everything else.
 func (a *App) Passthrough(name, help string, handler PassthroughHandler, opts ...CmdOption) {
-	if strings.TrimSpace(help) == "" {
-		panic(errCommandMissingHelp(name))
-	}
-	cmd := &Command{
-		Name:               name,
-		Help:               help,
-		Passthrough:        true,
-		PassthroughHandler: handler,
-	}
-	for _, opt := range opts {
-		opt(cmd)
-	}
-	// Passthrough commands cannot have flags, args, flag sets, or mutex
-	if len(cmd.flags) > 0 || len(cmd.args) > 0 || len(cmd.flagSets) > 0 || len(cmd.mutex) > 0 {
-		var parts []string
-		if len(cmd.flags) > 0 {
-			parts = append(parts, "flags")
-		}
-		if len(cmd.args) > 0 {
-			parts = append(parts, "args")
-		}
-		if len(cmd.flagSets) > 0 {
-			parts = append(parts, "flag sets")
-		}
-		if len(cmd.mutex) > 0 {
-			parts = append(parts, "mutex groups")
-		}
-		panic(errCommandPassthroughCannotHave(name, strings.Join(parts, ", ")))
-	}
-	cmd.tags = mergeTags(nil, cmd.tags)
+	cmd := buildAndValidateCommand(name, help, nil, a.EnvPrefix, a.globalFlags, nil,
+		append([]CmdOption{WithPassthrough(handler)}, opts...))
 	a.commands[name] = cmd
 	a.cmdOrder = append(a.cmdOrder, name)
 }
 
 // GlobalFlag registers a global flag on the app.
 func (a *App) GlobalFlag(f Flag) {
+	// The reserved quartet carries its own message on the global-flag path too.
+	// Unreachable through the flag constructors (validateFlagConfig bans the
+	// quartet first); kept so any other construction route says the same thing.
+	if reservedFrameworkFlagNames[f.Name] {
+		panic(errFlagNameReservedByFramework(f.Name))
+	}
 	// Check reserved names
 	if reservedGlobalFlagNames[f.Name] {
 		panic(errGlobalFlagNameReserved(f.Name))
 	}
-	if f.Short != "" && reservedGlobalFlagNames[f.Short] {
+	// Short names are checked against the pre-existing reserved set only: the
+	// framework quartet bans long names, and the four have no short forms.
+	if f.Short != "" && reservedGlobalShortNames[f.Short] {
 		panic(errGlobalShortFlagReserved(f.Short))
 	}
 	// Check for collisions with existing global flags
@@ -1885,7 +1960,8 @@ func (g *Group) Command(name, help string, handler func(ctx *Context, kwargs map
 
 // Deprecated registers a deprecated command on the app.
 // Invoking a deprecated command prints the message to stderr and exits 1.
-func (a *App) Deprecated(name, message string) {
+func (a *App) Deprecated(name, message string, opts ...CmdOption) {
+	rejectDeprecatedEffect(name, opts)
 	if strings.TrimSpace(name) == "" {
 		panic(errDeprecatedNameEmpty)
 	}
@@ -1907,7 +1983,8 @@ func (a *App) Deprecated(name, message string) {
 
 // Deprecated registers a deprecated subcommand on the group.
 // Invoking a deprecated subcommand prints the message to stderr and exits 1.
-func (g *Group) Deprecated(name, message string) {
+func (g *Group) Deprecated(name, message string, opts ...CmdOption) {
+	rejectDeprecatedEffect(name, opts)
 	if strings.TrimSpace(name) == "" {
 		panic(errDeprecatedNameEmpty)
 	}
@@ -2000,23 +2077,75 @@ func (a *App) Run() {
 		os.Exit(1)
 	}
 
+	a.beginDispatch()
+	reserved := a.reservedFlagState()
+
 	if pr.cmd.Passthrough {
-		ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic))
-		code := pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
+		ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic),
+			reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
+		// The confirm protocol fires only on the real CLI path -- and a mutating
+		// PASSTHROUGH is not exempt.
+		a.confirmMutating(pr.cmd, pr.cmdPath)
+		code, truncated := a.runSealed(os.Stdout, os.Stderr, func() int {
+			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
+		})
+		if reserved.dryRun && !truncated {
+			fmt.Fprintln(os.Stdout, a.renderWouldDoLog())
+		}
 		os.Exit(code)
 	}
 
-	ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic))
-	outcome := pr.cmd.Handler(ctx, pr.kwargs)
-	if outcome.data != nil {
-		data, err := json.Marshal(outcome.data)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: failed to marshal result data: %s\n", err)
-			os.Exit(1)
+	ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic),
+		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
+	a.confirmMutating(pr.cmd, pr.cmdPath)
+	code, truncated := a.runSealed(os.Stdout, os.Stderr, func() int {
+		outcome := pr.cmd.Handler(ctx, pr.kwargs)
+		if outcome.data != nil {
+			data, err := json.Marshal(outcome.data)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: failed to marshal result data: %s\n", err)
+				os.Exit(1)
+			}
+			fmt.Println(string(data))
 		}
-		fmt.Println(string(data))
+		return outcome.code
+	})
+	if reserved.dryRun && !truncated {
+		fmt.Fprintln(os.Stdout, a.renderWouldDoLog())
 	}
-	os.Exit(outcome.code)
+	os.Exit(code)
+}
+
+// reservedFlagState snapshots the framework-owned quartet for one dispatch.
+func (a *App) reservedFlagState() reservedFlags {
+	return reservedFlags{
+		dryRun:  a.lastDryRun,
+		yes:     a.lastYes,
+		quiet:   a.lastQuiet,
+		verbose: a.lastVerbose,
+	}
+}
+
+// runSealed runs a handler under the runtime seal: a carrier extraction panics
+// with a dryRunTruncation, which ends the preview by printing the
+// already-recorded log to stdout and the pinned error to stderr, exiting 1.
+// Any other panic is re-raised untouched.
+func (a *App) runSealed(stdout, stderr io.Writer, fn func() int) (code int, truncated bool) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		t, ok := r.(dryRunTruncation)
+		if !ok {
+			panic(r)
+		}
+		fmt.Fprintln(stdout, t.log.render())
+		fmt.Fprintln(stderr, t.message)
+		code = 1
+		truncated = true
+	}()
+	return fn(), false
 }
 
 // Test runs the CLI with the given argv, capturing output and exit code.
@@ -2059,6 +2188,8 @@ func (a *App) Test(argv []string) Result {
 		return Result{Stderr: stderr, ExitCode: 1}
 	}
 
+	a.beginDispatch()
+
 	// Record test-coverage hit (command-level only).
 	if a.testCoverage && pr.cmdPath != "" {
 		a.recordCoverage(pr.cmdPath)
@@ -2084,16 +2215,17 @@ func (a *App) Test(argv []string) Result {
 	go func() { defer drainWG.Done(); io.Copy(&stderrBuf, stderrR) }()
 
 	// Context is constructed unconditionally for every dispatch, writing to the
-	// capture pipes.
-	ctx := newContext(stdoutW, stderrW, pr.sources, a.infraAccess(pr.hermetic))
+	// capture pipes. Test() behaves as if --yes were passed: it never prompts.
+	reserved := a.reservedFlagState()
+	ctx := newContext(stdoutW, stderrW, pr.sources, a.infraAccess(pr.hermetic),
+		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
 
-	var exitCode int
 	var resultData interface{}
-	if pr.cmd.Passthrough {
-		exitCode = pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
-	} else {
+	exitCode, truncated := a.runSealed(stdoutW, stderrW, func() int {
+		if pr.cmd.Passthrough {
+			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
+		}
 		outcome := pr.cmd.Handler(ctx, pr.kwargs)
-		exitCode = outcome.code
 		resultData = outcome.data
 		if outcome.data != nil {
 			data, err := json.Marshal(outcome.data)
@@ -2103,6 +2235,10 @@ func (a *App) Test(argv []string) Result {
 				fmt.Fprintln(stdoutW, string(data))
 			}
 		}
+		return outcome.code
+	})
+	if reserved.dryRun && !truncated {
+		fmt.Fprintln(stdoutW, a.renderWouldDoLog())
 	}
 
 	stdoutW.Close()
@@ -2147,10 +2283,22 @@ type parseResult struct {
 type preScanResult struct {
 	dumpSchema  bool
 	serveMCP    bool
-	hermetic    bool     // --hermetic: skip config loading and env var resolution
-	configPath  string   // value from --config <path> or --config=<path>
-	err         string   // non-empty on error (e.g. missing value, config on disabled app)
-	cleanedArgv []string // argv with --config/--config=value/--hermetic stripped out
+	hermetic    bool          // --hermetic: skip config loading and env var resolution
+	reserved    reservedFlags // --dry-run/--yes/--quiet/--verbose
+	configPath  string        // value from --config <path> or --config=<path>
+	err         string        // non-empty on error (e.g. missing value, config on disabled app)
+	cleanedArgv []string      // argv with the reserved tokens stripped out
+}
+
+// reservedQuartetTokens maps an argv token to the preScanResult field it sets.
+// The quartet is parsed in the PRE-COMMAND region only, exactly like
+// --hermetic: `app --dry-run cmd` works, `app cmd --dry-run` is an unknown-flag
+// error.
+var reservedQuartetTokens = map[string]func(*reservedFlags){
+	"--dry-run": func(r *reservedFlags) { r.dryRun = true },
+	"--yes":     func(r *reservedFlags) { r.yes = true },
+	"--quiet":   func(r *reservedFlags) { r.quiet = true },
+	"--verbose": func(r *reservedFlags) { r.verbose = true },
 }
 
 // preScanReservedFlags scans argv for --dump-schema, --mcp, and --config
@@ -2213,6 +2361,15 @@ func (a *App) preScanReservedFlags(argv []string) preScanResult {
 		// --hermetic (boolean, no value)
 		if tok == "--hermetic" {
 			result.hermetic = true
+			excludeIndices[i] = true
+			i++
+			continue
+		}
+
+		// The reserved quartet: booleans, no values, stripped from argv and
+		// delivered on the Context (never as handler kwargs).
+		if set, ok := reservedQuartetTokens[tok]; ok {
+			set(&result.reserved)
 			excludeIndices[i] = true
 			i++
 			continue
@@ -2321,6 +2478,12 @@ func (a *App) doParse(argv []string) parseResult {
 	if preScan.err != "" {
 		return parseResult{parseErr: preScan.err}
 	}
+
+	// Record the reserved quartet for the dispatch ctx.
+	a.lastDryRun = preScan.reserved.dryRun
+	a.lastYes = preScan.reserved.yes
+	a.lastQuiet = preScan.reserved.quiet
+	a.lastVerbose = preScan.reserved.verbose
 
 	// --hermetic + --config mutual exclusion
 	if preScan.hermetic && preScan.configPath != "" {
@@ -2849,6 +3012,33 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		opt(cmd)
 	}
 
+	// Classification is MANDATORY and nothing is inferred. Passthrough commands
+	// are classified the same way, through the same scheme, so this runs before
+	// the passthrough early-return below.
+	if !cmd.effectSet {
+		panic(errCommandEffectMissing(name))
+	}
+	if cmd.Effect != EffectReadOnly && cmd.Effect != EffectMutating {
+		panic(errCommandEffectInvalid(name, cmd.Effect))
+	}
+	cmd.Grants = validateGrants(name, cmd.Grants)
+	if cmd.Forwarding != nil && strings.TrimSpace(cmd.Forwarding.Reason) == "" {
+		panic(errForwardingReasonEmpty(name))
+	}
+	// The framework-internal marker is unreachable from any public option. When
+	// it is set, verify the handler really is defined in this package, so a
+	// consumer that reaches the marker by any route fails loudly here rather
+	// than silently inheriting a framework exemption.
+	if cmd.frameworkInternal {
+		var h interface{} = handler
+		if cmd.Passthrough {
+			h = cmd.PassthroughHandler
+		}
+		if !handlerIsFrameworkDefined(h) {
+			panic(errFrameworkInternalHandlerForeign(name))
+		}
+	}
+
 	// Passthrough commands cannot have flags, args, flag sets, or mutex
 	if cmd.Passthrough {
 		if len(cmd.flags) > 0 || len(cmd.args) > 0 || len(cmd.flagSets) > 0 || len(cmd.mutex) > 0 {
@@ -3015,6 +3205,61 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	cmd.tags = mergeTags(inheritedTags, cmd.tags)
 
 	return cmd
+}
+
+// withFrameworkInternal sets the private framework-internal marker. It is
+// UNEXPORTED on purpose: there is no public factory, option or spec that can
+// reach it, so only strictcli's own registration paths can claim the
+// declared-forwarding exemption -- and even they are verified (§10.4).
+func withFrameworkInternal() CmdOption {
+	return func(c *Command) {
+		c.frameworkInternal = true
+	}
+}
+
+// strictcliPkgPrefix is this package's runtime function-name prefix, derived
+// from a function that is by construction defined here.
+var strictcliPkgPrefix = func() string {
+	name := runtime.FuncForPC(reflect.ValueOf(newEffects).Pointer()).Name()
+	slash := strings.LastIndex(name, "/")
+	dot := strings.Index(name[slash+1:], ".")
+	if dot < 0 {
+		return ""
+	}
+	return name[:slash+1+dot+1]
+}()
+
+// handlerIsFrameworkDefined reports whether a handler's function pointer
+// resolves into the strictcli package.
+func handlerIsFrameworkDefined(handler interface{}) bool {
+	if handler == nil {
+		return false
+	}
+	v := reflect.ValueOf(handler)
+	if v.Kind() != reflect.Func || v.IsNil() {
+		return false
+	}
+	fn := runtime.FuncForPC(v.Pointer())
+	if fn == nil {
+		return false
+	}
+	return strictcliPkgPrefix != "" && strings.HasPrefix(fn.Name(), strictcliPkgPrefix)
+}
+
+// rejectDeprecatedEffect enforces §1.1's classification exemption in the one
+// direction that can be enforced: a caller passing WithEffect to Deprecated is
+// wrong, because a deprecated entry has no handler and executes nothing.
+func rejectDeprecatedEffect(name string, opts []CmdOption) {
+	if len(opts) == 0 {
+		return
+	}
+	probe := &Command{}
+	for _, opt := range opts {
+		opt(probe)
+	}
+	if probe.effectSet {
+		panic(errDeprecatedCommandEffect(name))
+	}
 }
 
 // flagParamName converts a flag name like "dry-run" to a parameter key "dry_run".

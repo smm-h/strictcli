@@ -62,6 +62,11 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 
 	cmd := route.cmd
 
+	// Programmatic dispatch: --dry-run is not reachable (argv parsing is
+	// bypassed entirely) and the confirm protocol never fires -- these paths
+	// have no TTY contract and a prompt there would hang the caller.
+	a.beginDispatch()
+
 	// Record test-coverage hit (command-level only).
 	if a.testCoverage {
 		a.recordCoverage(commandPath)
@@ -108,8 +113,14 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 				globalKwargs[paramName] = val
 			}
 		}
-		ctx := newContext(io.Discard, io.Discard, nil, a.infraAccess(false))
-		code := cmd.PassthroughHandler(ctx, cmd.Name, args, globalKwargs)
+		ctx := newContext(io.Discard, io.Discard, nil, a.infraAccess(false),
+			reservedFlags{}, a.armEffects(cmd, commandPath, false))
+		code, truncErr := a.invokeSealed(func() int {
+			return cmd.PassthroughHandler(ctx, cmd.Name, args, globalKwargs)
+		})
+		if truncErr != "" {
+			return invokeResult{exitCode: 1, err: truncErr}
+		}
 		return invokeResult{exitCode: code}
 	}
 
@@ -238,11 +249,38 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 
 	// Context is constructed unconditionally. For invoke, stdout/stderr are
 	// discarded -- structured data flows back through the Outcome, not stdout.
-	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess(false))
+	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess(false),
+		reservedFlags{}, a.armEffects(cmd, commandPath, false))
 
-	// Call the handler
-	outcome := cmd.Handler(ctx, validatedKwargs)
+	// Call the handler under the runtime seal.
+	var outcome Outcome
+	_, truncErr := a.invokeSealed(func() int {
+		outcome = cmd.Handler(ctx, validatedKwargs)
+		return outcome.code
+	})
+	if truncErr != "" {
+		return invokeResult{exitCode: 1, err: truncErr}
+	}
 	return invokeResult{exitCode: outcome.code, data: outcome.data}
+}
+
+// invokeSealed runs a handler on the programmatic path under the runtime seal.
+// A carrier extraction surfaces as an InvokeError carrying the pinned
+// truncation text; any other panic is re-raised untouched.
+func (a *App) invokeSealed(fn func() int) (code int, truncErr string) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		t, ok := r.(dryRunTruncation)
+		if !ok {
+			panic(r)
+		}
+		code = 1
+		truncErr = t.message
+	}()
+	return fn(), ""
 }
 
 // coerceInvokeValue converts a Go-native value to the internal representation
