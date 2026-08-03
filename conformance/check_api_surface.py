@@ -303,6 +303,11 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     "config_content_late",
     "config_fields_def",
     "handler_returns",
+    # The effects-regime handler vocabulary (effects contract §14.4): the
+    # effect calls a *generated* handler issues. Like the handler_prints
+    # family it describes the harness's synthetic handler body, not a field
+    # any implementation's Command carries.
+    "handler_effects",
     "default_relative_to_root",
     "pre_test",
     "coverage_manifest",
@@ -524,6 +529,9 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "app.connection_env": "connectionEnvs",
                 "app.tag_contracts": "tagContracts",
                 "app.test_coverage": "testCoverage",
+                # Effects contract §13. Go stores the allowlist unexported,
+                # as it does every other App-level declaration above.
+                "app.proc_observe_allowlist": "procObserveAllowlist",
             },
             schema_python_runtime={
                 "app.tag_contracts": "_tag_contracts (set in __post_init__, not a dataclass field)",
@@ -793,6 +801,11 @@ KNOWN_OPTION_FUNCS: set[str] = {
     # ConfigFieldOption constructors (from describe_go, not matched by old regex)
     "ConfigFieldDefault", "ConfigFieldHelp", "ConfigFieldType",
     "WithTestCoverage",
+    # Effects regime (contract §1.2, §6.1, §6.2, §10.2). The per-effect-call
+    # EffectOption constructors (Resource, SkipIfCurrent, UseGrant, Cwd,
+    # EffectEnv, Check, Stream, Body, Header) are not CmdOption/AppOption
+    # constructors and so are not part of this catalog.
+    "WithEffect", "WithGrants", "WithForwarding", "WithProcObserveAllowlist",
 }
 
 
@@ -814,19 +827,24 @@ def check_option_funcs_coverage(go_fields: dict[str, set[str]]) -> list[str]:
 # Must be updated when the TS public surface changes.
 KNOWN_TS_PUBLIC_NAMES: set[str] = {
     # Values: factories, functions, classes, constants
-    "arg", "coRequired", "createApp", "defineCommand", "deprecated",
+    "arg", "coRequired", "createApp", "deprecated",
     "errorCheckSpec", "flag", "flagSet", "implies", "mutexGroup",
-    "outcome", "passthrough", "relativeToRoot", "requires", "warnCheckSpec",
+    "outcome", "relativeToRoot", "requires", "warnCheckSpec",
     "formatCheckResults", "formatCheckResultsJSON",
     "CheckRunResult", "CheckSpec", "Context", "ErrorReporter",
     "InvokeError", "WarnReporter",
     "VERSION", "t",
+    # Effects regime: the twin command and passthrough factories that replace
+    # `defineCommand` / `passthrough` (contract §1.2), plus the failure class.
+    "defineReadOnlyCommand", "defineMutatingCommand",
+    "readOnlyPassthrough", "mutatingPassthrough",
+    "EffectFailed",
     # Type-only exports
     "AnyArg", "AnyCommand", "AnyFlag", "AnyFlagSet", "AnyMutexGroup",
     "App", "AppSpec", "ArgDef", "ArgOpts", "Carrier",
     "CheckContext", "CheckOutcome", "CheckProblem", "CheckSeverity",
     "ConnectionEnvReader",
-    "CheckStatus", "CoRequired", "CommandDef", "CommandSpec",
+    "CheckStatus", "CoRequired", "CommandDef",
     "ConfigFieldSpec", "ConflictMode", "Dependency", "DeprecatedDef",
     "DictSchema", "ElemSchema", "ElementOf", "ErrorCheckSpecInit",
     "FlagDef", "FlagMap", "FlagOpts", "FlagSet", "Group", "GroupSpec",
@@ -836,6 +854,16 @@ KNOWN_TS_PUBLIC_NAMES: set[str] = {
     "PassthroughArgs", "PassthroughDef", "PassthroughHandler",
     "Requires", "Result", "RunChecksOptions", "RunChecksResult",
     "ScalarSchema", "Schema", "Tool", "WarnCheckSpecInit", "Writer",
+    # Effects regime type-only exports (contract §1.2, §2.4, §2.5.1, §6.1,
+    # §10.2). `CommandSpec` is replaced by the twins' two spec types, whose
+    # only difference is the Context their handler's ctx narrows to. The
+    # `Unsettled` carrier is deliberately absent: neither the declared returns
+    # nor the carrier-accepting parameter unions ever name it (§2.5.3).
+    "ReadOnlyCommandSpec", "MutatingCommandSpec",
+    "ReadOnlyContext", "MutatingContext",
+    "ReadOnlyEffects", "MutatingEffects",
+    "Completed", "Spawned", "Response",
+    "Effect", "EffectKind", "Grant", "Forwarding",
 }
 
 
