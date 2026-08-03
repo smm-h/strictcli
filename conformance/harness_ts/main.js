@@ -461,7 +461,12 @@ function makeHandler(cmdDef, globalFlags) {
 			out = subst(out, `{${ad.name}}`, render(args[ad.name]));
 		}
 
-		ctx.info(out);
+		// console.log, NOT ctx.info: `handler_prints` means the handler writes
+		// to stdout unconditionally, which is what Python's `print` and Go's
+		// fmt.Println do. ctx.info is gated by --quiet (effects contract §7.4),
+		// so routing through it would make every handler_prints case diverge
+		// under --quiet in TypeScript alone.
+		console.log(out);
 		return exitCode;
 	};
 }
@@ -469,18 +474,19 @@ function makeHandler(cmdDef, globalFlags) {
 function makePassthroughHandler(cmdDef, globalFlags) {
 	const exitCode = cmdDef.handler_exit_code ?? 0;
 	return (pt, ctx) => {
-		// Print global flag values (name=value lines) first.
+		// Print global flag values (name=value lines) first. console.log, not
+		// ctx.info -- see makeHandler above.
 		for (const gf of globalFlags) {
-			ctx.info(`${gf.name}=${render(pt.globals[underscore(gf.name)])}`);
+			console.log(`${gf.name}=${render(pt.globals[underscore(gf.name)])}`);
 		}
 		// Then the passthrough_handler_prints template, or the default format.
 		const template = cmdDef.passthrough_handler_prints;
 		if (template !== undefined) {
 			let out = subst(template, "{name}", pt.name);
 			out = subst(out, "{args}", pt.args.join(","));
-			ctx.info(out);
+			console.log(out);
 		} else {
-			ctx.info(`${pt.name}:${pt.args.join(",")}`);
+			console.log(`${pt.name}:${pt.args.join(",")}`);
 		}
 		return exitCode;
 	};
