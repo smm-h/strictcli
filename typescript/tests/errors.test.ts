@@ -44,7 +44,7 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // TS-only guard (errEffectsUnavailable) for a Context built outside a dispatch.
 // promptConfirmMutating is deliberately NOT counted here: it is a prompt, not
 // an err* template, and the census filters on the err prefix.
-const EXPECTED_TEMPLATE_COUNT = 302;
+const EXPECTED_TEMPLATE_COUNT = 304;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

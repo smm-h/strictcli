@@ -57,7 +57,13 @@ import {
 	type ReservedFlags,
 	type Writer,
 } from "./context.js";
-import { type Effect, EffectLog, Effects, type Grant } from "./effects.js";
+import {
+	type Effect,
+	EffectLog,
+	Effects,
+	effectTypeName,
+	type Grant,
+} from "./effects.js";
 import {
 	DryRunTruncated,
 	errAppConfigConflictModeBad,
@@ -97,6 +103,8 @@ import {
 	errHandshakeEnvVarEmptyHelp,
 	errHandshakeIsAlreadyInfraRoot,
 	errInvalidTagName,
+	errProcObserveAllowlistEmptyPrefix,
+	errProcObserveAllowlistNotStrings,
 	errTagContractViolation,
 	RegistrationError,
 } from "./errors.js";
@@ -495,18 +503,16 @@ function validateProcObserveAllowlist(
 	for (const prefix of prefixes ?? []) {
 		if (!Array.isArray(prefix)) {
 			throw new RegistrationError(
-				"proc_observe_allowlist entries must be lists of strings",
+				errProcObserveAllowlistNotStrings(effectTypeName(prefix)),
 			);
 		}
 		if (prefix.length === 0) {
-			throw new RegistrationError(
-				"proc_observe_allowlist entries must not be empty",
-			);
+			throw new RegistrationError(errProcObserveAllowlistEmptyPrefix());
 		}
 		for (const element of prefix) {
 			if (typeof element !== "string") {
 				throw new RegistrationError(
-					"proc_observe_allowlist entries must be lists of strings",
+					errProcObserveAllowlistNotStrings(effectTypeName(element)),
 				);
 			}
 		}

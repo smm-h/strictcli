@@ -1749,6 +1749,22 @@ export function errGrantKindInvalid(
 }
 
 // ---------------------------------------------------------------------------
+// effects.go — proc_observe_allowlist declaration (registration-time)
+//
+// The empty-prefix ban is shared with Go (a const there) and Python. The
+// element-type guard is Python-and-TS: Go's WithProcObserveAllowlist takes
+// [][]string, so a non-string element is inexpressible there.
+// ---------------------------------------------------------------------------
+
+export function errProcObserveAllowlistNotStrings(gotType: string): string {
+	return `proc_observe_allowlist entries must be lists of strings, got ${gotType}`;
+}
+
+export function errProcObserveAllowlistEmptyPrefix(): string {
+	return "proc_observe_allowlist entries must not be empty";
+}
+
+// ---------------------------------------------------------------------------
 // effects.go — effect call-time errors
 // ---------------------------------------------------------------------------
 
@@ -1781,7 +1797,11 @@ export function errEffectGrantOnObserve(name: string, grant: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// effects.go — effect failure and parameter rejection (call-time)
+// effects.go — effect failure and parameter rejection (parse-time)
+//
+// Contract §12.8. These reach a handler's effect call through argv like any
+// parse-time error, so they share that category and are coverage-checked by
+// conformance cases.
 // ---------------------------------------------------------------------------
 
 export function errEffectRunFailed(

@@ -460,7 +460,10 @@ test("allowlist: entries must be non-empty lists of strings", () => {
 				help: "h",
 				procObserveAllowlist: [[1 as never]],
 			}),
-		{ message: "proc_observe_allowlist entries must be lists of strings" },
+		{
+			message:
+				"proc_observe_allowlist entries must be lists of strings, got number",
+		},
 	);
 });
 

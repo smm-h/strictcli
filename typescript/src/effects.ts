@@ -471,7 +471,7 @@ function decodeEffectOutput(
 }
 
 /** Runtime type name for the effect argument type-guard messages. */
-function effectTypeName(v: unknown): string {
+export function effectTypeName(v: unknown): string {
 	if (v === null) {
 		return "null";
 	}
