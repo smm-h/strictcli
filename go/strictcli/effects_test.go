@@ -1139,3 +1139,207 @@ func TestDeprecatedCommandsCarryNoEffectInTheSchema(t *testing.T) {
 		}
 	}
 }
+
+// --- check-command subsumption (§7.5) ---------------------------------------
+
+func TestCheckDryRunEmitsTheFrameworkWouldDoHeader(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.RegisterCheckProvider(func() []CheckSpec {
+		return []CheckSpec{NewErrorCheckSpec(
+			CheckSpecMeta{Name: "prov-a", Tags: []string{"t"}, Severity: "error"},
+			func(ctx CheckContext, r *ErrorReporter) CheckOutcome { return r.Passed("ok") },
+		)}
+	})
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
+	r := app.Test([]string{"--dry-run", "check", "--all"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "Would run") {
+		t.Fatalf("the check handler's own listing must still print, got %q", r.Stdout)
+	}
+	// check is read_only, so the would-do body is always empty -- but the header
+	// is still emitted, because --dry-run is now the framework flag.
+	if !strings.HasSuffix(r.Stdout, "DRY RUN — no changes were made. Would do:\n") {
+		t.Fatalf("expected a trailing header-only would-do log, got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommandDropsTheReservedFlagsAndFiltersGlobalCollisions(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app")
+	app.GlobalFlag(BoolFlag("json", "app-level json output", Default(false)))
+	app.RegisterCheckProvider(func() []CheckSpec { return nil })
+	cmd := app.commands["check"]
+	names := make(map[string]bool, len(cmd.flags))
+	for _, f := range cmd.flags {
+		names[f.Name] = true
+	}
+	for _, banned := range []string{"verbose", "dry-run"} {
+		if names[banned] {
+			t.Fatalf("check must not declare a %q flag", banned)
+		}
+	}
+	if names["json"] {
+		t.Fatal("a candidate colliding with a global flag must be filtered out")
+	}
+	for _, kept := range []string{"all", "tag", "name", "list", "ignore-warnings"} {
+		if !names[kept] {
+			t.Fatalf("check lost its %q flag", kept)
+		}
+	}
+}
+
+// --- execution details (§2.5.2, §2.5.4) -------------------------------------
+
+func TestEnvMergesOverTheInheritedEnvironment(t *testing.T) {
+	os.Setenv("STRICTCLI_MERGE_KEEP", "kept")
+	defer os.Unsetenv("STRICTCLI_MERGE_KEEP")
+	merged := mergedEnv(map[string]string{"STRICTCLI_MERGE_ADD": "added"})
+	var sawKeep, sawAdd bool
+	for _, entry := range merged {
+		if entry == "STRICTCLI_MERGE_KEEP=kept" {
+			sawKeep = true
+		}
+		if entry == "STRICTCLI_MERGE_ADD=added" {
+			sawAdd = true
+		}
+	}
+	if !sawKeep || !sawAdd {
+		t.Fatalf("env must merge over, not replace: keep=%v add=%v", sawKeep, sawAdd)
+	}
+	if mergedEnv(nil) != nil {
+		t.Fatal("no env option means inherit unchanged")
+	}
+}
+
+func TestEnvOverridesAnInheritedValue(t *testing.T) {
+	os.Setenv("STRICTCLI_MERGE_OVERRIDE", "old")
+	defer os.Unsetenv("STRICTCLI_MERGE_OVERRIDE")
+	merged := mergedEnv(map[string]string{"STRICTCLI_MERGE_OVERRIDE": "new"})
+	count := 0
+	for _, entry := range merged {
+		if strings.HasPrefix(entry, "STRICTCLI_MERGE_OVERRIDE=") {
+			count++
+			if entry != "STRICTCLI_MERGE_OVERRIDE=new" {
+				t.Fatalf("expected the override to win, got %q", entry)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly one entry for the overridden var, got %d", count)
+	}
+}
+
+func TestDecodeEffectOutputIsStrictUTF8AndTrimsOneNewline(t *testing.T) {
+	got, err := decodeEffectOutput([]byte("hello\n"), "go", "run")
+	if err != nil || got != "hello" {
+		t.Fatalf("got %q err=%v", got, err)
+	}
+	got, err = decodeEffectOutput([]byte("a\n\n"), "go", "run")
+	if err != nil || got != "a\n" {
+		t.Fatalf("exactly one trailing newline is removed, got %q", got)
+	}
+	_, err = decodeEffectOutput([]byte{0xff, 0xfe}, "go", "run")
+	want := `command "go": effects.run produced output that is not valid UTF-8`
+	if err == nil || err.Error() != want {
+		t.Fatalf("got %v want %q", err, want)
+	}
+}
+
+func TestSpawnRunsAndWaitCarriesTheExitCode(t *testing.T) {
+	var pid int
+	var code int
+	var waitErr error
+	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
+		s, err := ctx.Effects().Spawn(echoArgv(),
+			EffectEnv(map[string]string{echoActiveEnv: "1", echoOutEnv: "spawned"}))
+		if err != nil {
+			ctx.Error(err.Error())
+			return Exit(1)
+		}
+		pid = s.PID()
+		var done Completed
+		done, waitErr = s.Wait()
+		if waitErr == nil {
+			code = done.ExitCode()
+		}
+		return Exit(0)
+	})
+	r := app.Test([]string{"go"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if pid <= 0 || waitErr != nil || code != 0 {
+		t.Fatalf("pid=%d code=%d err=%v", pid, code, waitErr)
+	}
+	log := app.EffectLog()
+	if len(log) != 1 || log[0]["kind"] != ProcSpawn || log[0]["recorded"] != false {
+		t.Fatalf("live spawn record = %#v", log)
+	}
+}
+
+func TestSpawnWaitFailureIsAnErrorAndCheckFalseOptsOut(t *testing.T) {
+	var failErr error
+	var optedOutCode int
+	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
+		failEnv := EffectEnv(map[string]string{echoActiveEnv: "1", echoOutEnv: "", echoCodeEnv: "1"})
+		s, _ := ctx.Effects().Spawn(echoArgv(), failEnv)
+		_, failErr = s.Wait()
+		s2, _ := ctx.Effects().Spawn(echoArgv(), failEnv)
+		done, _ := s2.Wait(Check(false))
+		optedOutCode = done.ExitCode()
+		return Exit(0)
+	})
+	app.Test([]string{"go"})
+	if failErr == nil || !strings.Contains(failErr.Error(), "effects.spawn failed:") {
+		t.Fatalf("a nonzero spawned exit must be an error, got %v", failErr)
+	}
+	if optedOutCode != 1 {
+		t.Fatalf("Check(false) must return the real exit code, got %d", optedOutCode)
+	}
+}
+
+func TestExtractingFromAnUnsettledSpawnedTruncates(t *testing.T) {
+	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
+		s, _ := ctx.Effects().Spawn([]interface{}{"daemon"})
+		_ = s.PID()
+		return Exit(0)
+	})
+	r := app.Test([]string{"--dry-run", "go"})
+	if r.ExitCode != 1 || !strings.Contains(r.Stderr, "«step 1 output»") {
+		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestWaitingOnAnUnsettledSpawnedTruncates(t *testing.T) {
+	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
+		s, _ := ctx.Effects().Spawn([]interface{}{"daemon"})
+		s.Wait()
+		return Exit(0)
+	})
+	r := app.Test([]string{"--dry-run", "go"})
+	if r.ExitCode != 1 || !strings.Contains(r.Stderr, "dry-run preview ends at step 2") {
+		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestCoverageShardRecordsACacheWrite(t *testing.T) {
+	dir := t.TempDir()
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(cwd)
+	app := NewApp("app", "1.0.0", "h", WithTestCoverage())
+	app.Command("go", "h",
+		func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
+		WithEffect(EffectReadOnly))
+	app.Test([]string{"go"})
+	log := app.EffectLog()
+	if len(log) != 1 || log[0]["kind"] != CacheWrite || log[0]["recorded"] != false {
+		t.Fatalf("expected one recorded:false cache write, got %#v", log)
+	}
+	if !strings.HasSuffix(log[0]["detail"].(string), ".jsonl") {
+		t.Fatalf("expected the coverage shard path, got %#v", log[0])
+	}
+}
