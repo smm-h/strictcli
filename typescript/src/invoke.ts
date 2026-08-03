@@ -14,7 +14,7 @@
 import type { AppImpl, RegisteredCommand } from "./app.js";
 import { recordCoverage } from "./checks/coverage.js";
 import { validateCheckRegistrations } from "./checks/framework.js";
-import { Context, type Writer } from "./context.js";
+import { Context, NO_RESERVED_FLAGS, type Writer } from "./context.js";
 import {
 	errCallPathIsGroup,
 	errDictFlagExpectedMapType,
@@ -156,6 +156,9 @@ export async function invokeApp(
 	}
 	const cmd = route.cmd;
 
+	// Start a new dispatch BEFORE coverage recording so pre-handler
+	// CACHE_WRITEs land in this dispatch's effect log.
+	app.beginDispatch();
 	// Record test-coverage hit (command-level only).
 	if (app.testCoverage) {
 		recordCoverage(app, commandPath);
@@ -250,6 +253,12 @@ export async function invokeApp(
 
 	// Stdout/stderr are discarded for invoke (Go io.Discard): structured data
 	// flows back through the return value, not the streams.
+	//
+	// Programmatic dispatch behaves AS IF --yes were passed: it never prompts
+	// and never emits the non-TTY error. --dry-run is likewise not reachable
+	// here (argv parsing is bypassed entirely), so the effects handle is armed
+	// in live mode -- but it IS armed, because the seal is mandatory at every
+	// ctx-construction site.
 	const ctx = new Context(
 		discard,
 		discard,
@@ -260,6 +269,8 @@ export async function invokeApp(
 			app.connectionEnvs,
 			false,
 		),
+		NO_RESERVED_FLAGS,
+		app.armEffects(cmd, commandPath, false),
 	);
 	const result = await def.handler(validated as never, ctx);
 	return interpretForCall(result);
@@ -321,6 +332,8 @@ async function invokePassthrough(
 			app.connectionEnvs,
 			false,
 		),
+		NO_RESERVED_FLAGS,
+		app.armEffects(cmd, commandPath, false),
 	);
 	const def = cmd.def as PassthroughDef<string>;
 	const result = await def.handler({ name: cmd.name, args, globals }, ctx);

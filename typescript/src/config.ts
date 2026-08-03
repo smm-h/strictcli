@@ -23,7 +23,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AppImpl, RegisteredCommand } from "./app.js";
-import { GroupImpl } from "./app.js";
+import {
+	defineFrameworkCommand,
+	GroupImpl,
+	markFrameworkHandler,
+} from "./app.js";
 import type { Context } from "./context.js";
 import {
 	errConfigDictKeyTypeMismatch,
@@ -57,7 +61,6 @@ import {
 	type AnyCommand,
 	type AnyFlag,
 	arg,
-	defineCommand,
 	elemSchemaOf,
 	flag,
 	flagOpts,
@@ -1666,33 +1669,30 @@ export function registerConfigGroup(app: AppImpl): void {
 	);
 	app.groups.set("config", grp);
 
+	// The five subcommands go through the SINGLE validated registration path,
+	// exactly like every consumer command: there is no direct-carrier
+	// construction bypass left. Their handlers absorb the app's app-defined
+	// global flag values, which is legal only because they declare forwarding,
+	// and the framework-internal marker makes registration verify that each
+	// handler is one strictcli itself minted.
 	const install = (def: AnyCommand): void => {
-		grp.commands.set(def.name, {
-			kind: "command",
-			name: def.name,
-			help: def.help,
-			def,
-			flags: def.allFlags,
-			tags: [],
-			hidden: false,
-			configFields: [],
-		});
+		grp.command(def);
 	};
 
 	install(
-		defineCommand("path", {
+		defineFrameworkCommand("path", "read_only", {
 			help: "Print the absolute path to the config file for this application",
-			handler: (_args, ctx) => {
+			handler: markFrameworkHandler((_args: unknown, ctx: Context) => {
 				ctx.info(
 					configFilePath(app.name, app.configPathOverride, app.configFormat),
 				);
 				return 0;
-			},
-		}) as AnyCommand,
+			}) as never,
+		}),
 	);
 
 	install(
-		defineCommand("show", {
+		defineFrameworkCommand("show", "read_only", {
 			help: "Show all config values with their sources (config file, env, or default)",
 			mutex: [
 				mutexGroup({
@@ -1706,12 +1706,14 @@ export function registerConfigGroup(app: AppImpl): void {
 					}),
 				}),
 			],
-			handler: (args, ctx) => configShowHandler(app, args.json, ctx),
-		}) as AnyCommand,
+			handler: markFrameworkHandler((args: { json: boolean }, ctx: Context) =>
+				configShowHandler(app, args.json, ctx),
+			) as never,
+		}),
 	);
 
 	install(
-		defineCommand("set", {
+		defineFrameworkCommand("set", "mutating", {
 			help: "Set a persistent config value that overrides the default for a flag",
 			args: [
 				arg("key", t.str, {
@@ -1732,15 +1734,17 @@ export function registerConfigGroup(app: AppImpl): void {
 					default: false,
 				}),
 			},
-			handler: (args, ctx) => configSetDispatch(app, args, ctx),
-		}) as AnyCommand,
+			handler: markFrameworkHandler((args: ConfigSetArgs, ctx: Context) =>
+				configSetDispatch(app, args, ctx),
+			) as never,
+		}),
 	);
 
 	install(
-		defineCommand("edit", {
+		defineFrameworkCommand("edit", "mutating", {
 			help: "Open the config file for manual editing in $EDITOR (creates if missing)",
 			interactive: true,
-			handler: (_args, ctx) => {
+			handler: markFrameworkHandler((_args: unknown, ctx: Context) => {
 				const path = configFilePath(
 					app.name,
 					app.configPathOverride,
@@ -1761,14 +1765,14 @@ export function registerConfigGroup(app: AppImpl): void {
 					return 1;
 				}
 				return 0;
-			},
-		}) as AnyCommand,
+			}) as never,
+		}),
 	);
 
 	install(
-		defineCommand("init", {
+		defineFrameworkCommand("init", "mutating", {
 			help: "Generate a template config file with documented fields and defaults",
-			handler: (_args, ctx) => {
+			handler: markFrameworkHandler((_args: unknown, ctx: Context) => {
 				const path = configFilePath(
 					app.name,
 					app.configPathOverride,
@@ -1786,8 +1790,8 @@ export function registerConfigGroup(app: AppImpl): void {
 				writeFileSync(path, content);
 				ctx.info(path);
 				return 0;
-			},
-		}) as AnyCommand,
+			}) as never,
+		}),
 	);
 }
 

@@ -13,14 +13,13 @@
  * they surface as ValueError to the caller.
  */
 
-import type { AppImpl } from "../app.js";
-import { type Context, contextIsHermetic } from "../context.js";
 import {
-	type AnyCommand,
-	type AnyFlag,
-	defineCommand,
-	flag,
-} from "../factories.js";
+	type AppImpl,
+	defineFrameworkCommand,
+	markFrameworkHandler,
+} from "../app.js";
+import { type Context, contextIsHermetic } from "../context.js";
+import { type AnyFlag, flag } from "../factories.js";
 import { formatCommandHelp } from "../help.js";
 import { t } from "../types.js";
 import type {
@@ -96,23 +95,21 @@ function registerCheckCommand(app: AppImpl): void {
 		}
 	}
 
-	const def = defineCommand("check", {
-		help: "Run project checks registered via the check framework and report results",
-		flags,
-		handler: (args, ctx) =>
-			checkHandler(app, args as Record<string, unknown>, ctx),
-	}) as AnyCommand;
-
-	app.commands.set("check", {
-		kind: "command",
-		name: "check",
-		help: def.help,
-		def,
-		flags: def.allFlags,
-		tags: [],
-		hidden: false,
-		configFields: [],
-	});
+	// The handler identity is registered in the framework-handler WeakSet at
+	// the moment it is created: the marker on the carrier is only honored for
+	// handlers strictcli itself minted.
+	const handler = markFrameworkHandler((args: unknown, ctx: Context) =>
+		checkHandler(app, args as Record<string, unknown>, ctx),
+	);
+	// `check` classifies as read_only: its coverage-shard writes are
+	// CACHE_WRITEs, which never trip read-only enforcement.
+	app.command(
+		defineFrameworkCommand("check", "read_only", {
+			help: "Run project checks registered via the check framework and report results",
+			flags,
+			handler: handler as never,
+		}),
+	);
 }
 
 /**

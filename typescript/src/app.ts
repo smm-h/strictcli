@@ -50,7 +50,14 @@ import {
 	registerConfigField,
 	registerConfigGroup,
 } from "./config.js";
-import { Context, type InfraAccess, type Writer } from "./context.js";
+import { confirmMutating } from "./confirm.js";
+import {
+	Context,
+	type InfraAccess,
+	type ReservedFlags,
+	type Writer,
+} from "./context.js";
+import { type Effect, EffectLog, Effects, type Grant } from "./effects.js";
 import {
 	errAppConfigConflictModeBad,
 	errAppConfigFormatBad,
@@ -61,6 +68,8 @@ import {
 	errChecksPathNotExist,
 	errChecksTomlAppMismatch,
 	errCommandCollidesWithGroup,
+	errCommandEffectInvalid,
+	errCommandEffectMissing,
 	errCommandConfigFieldsUnknownField,
 	errCommandEnvVarPrefix,
 	errCommandFlagCollidesGlobal,
@@ -73,10 +82,13 @@ import {
 	errDeprecatedAlreadyRegistered,
 	errDeprecatedCollidesCommand,
 	errDeprecatedCollidesGroup,
+	errDeprecatedCommandEffect,
 	errDeprecatedMessageEmpty,
 	errDeprecatedNameEmpty,
+	DryRunTruncated,
 	errFlagConnectionEnvUndeclared,
 	errFlagNameReservedByFramework,
+	errFrameworkInternalHandlerForeign,
 	errGlobalFlagNameReserved,
 	errGlobalShortFlagReserved,
 	errGroupAlreadyRegistered,
@@ -89,14 +101,20 @@ import {
 	RegistrationError,
 } from "./errors.js";
 import {
+	type AnyArg,
 	type AnyCommand,
 	type AnyFlag,
+	type AnyMutexGroup,
 	type ConflictMode,
+	defineMutatingCommand,
+	defineReadOnlyCommand,
 	type DeprecatedDef,
 	type FlagMap,
 	flagOpts,
+	type MutatingCommandSpec,
 	type PassthroughDef,
 	pyRepr,
+	type ReadOnlyCommandSpec,
 	RESERVED_FRAMEWORK_FLAG_NAMES,
 	validateAndDedupTags,
 } from "./factories.js";
@@ -115,6 +133,7 @@ import { interpretHandlerReturn, jsonCompact } from "./outcome.js";
 import { doParse, flagParamName, formatParseErrorOutput } from "./parse.js";
 import { dumpSchemaCore, writeSchema } from "./schema.js";
 import { asToolsForApp, jsonSchemaForApp, type Tool } from "./tool.js";
+import type { HandlerReturn } from "./types.js";
 
 // --- Public surface ---
 
@@ -150,6 +169,13 @@ export interface AppSpec {
 	readonly checksEmbed?: string;
 	/** Enables CLI test-coverage instrumentation (shards + built-in check). */
 	readonly testCoverage?: boolean;
+	/**
+	 * Argv PREFIXES that make an `effects.run` an OBSERVE: it executes even in
+	 * dry mode, returns a real value, is never written to the would-do log, and
+	 * is legal in a read_only command. Matching is element-wise string equality
+	 * against the leading argv elements -- no normalization of any kind.
+	 */
+	readonly procObserveAllowlist?: readonly (readonly string[])[];
 }
 
 /** Configuration for creating a command group via app.group() or group.group(). */
@@ -364,6 +390,82 @@ export const RESERVED_GLOBAL_FLAG_NAMES: ReadonlySet<string> = new Set([
 	...RESERVED_FRAMEWORK_FLAG_NAMES,
 ]);
 
+/**
+ * The identities of handlers strictcli itself minted. This is the TS spelling
+ * of the framework-internal module verification: the marker on a command
+ * carrier is only honored when the handler is one of ours.
+ *
+ * It keys on FUNCTION IDENTITY, not on handler.name, Function.prototype
+ * .toString() output or a marker property, because each of those is forgeable
+ * and identity is not; and it is a WeakSet rather than a Set so a handler that
+ * goes out of scope remains collectible. It is package-internal and NEVER
+ * re-exported from index.ts, exactly as the marker itself is.
+ */
+const FRAMEWORK_HANDLERS = new WeakSet<object>();
+
+/** Records a handler as framework-minted. Package-internal. */
+export function markFrameworkHandler<T extends object>(fn: T): T {
+	FRAMEWORK_HANDLERS.add(fn);
+	return fn;
+}
+
+/**
+ * The one reason string strictcli's own auto-registered commands use. Their
+ * handlers must absorb the app's app-defined global flag values, which a
+ * framework-authored handler cannot name.
+ */
+export const FRAMEWORK_INTERNAL_FORWARDING_REASON =
+	"framework-internal: absorbs app-defined global flag values";
+
+/**
+ * The internal carrier shape: the framework-internal marker rides here, never
+ * on the public CommandDef/AnyCommand types. It is not reachable from any
+ * public factory, option or spec -- there is no `frameworkInternal` key in any
+ * options object -- and it is not emitted in the schema.
+ */
+interface MaybeFrameworkInternal {
+	readonly frameworkInternal?: boolean;
+}
+
+/**
+ * Builds one of strictcli's own auto-registered commands (`check` and the five
+ * `config` subcommands). They go through the same single validated
+ * registration path as every consumer command -- there is no direct-carrier
+ * construction bypass left.
+ */
+export function defineFrameworkCommand(
+	name: string,
+	effect: Effect,
+	spec: {
+		readonly help: string;
+		readonly flags?: FlagMap;
+		readonly args?: readonly AnyArg[];
+		readonly mutex?: readonly AnyMutexGroup[];
+		readonly interactive?: boolean;
+		readonly handler: (
+			args: never,
+			ctx: never,
+		) => HandlerReturn | Promise<HandlerReturn>;
+	},
+): AnyCommand {
+	const withForwarding = {
+		...spec,
+		forwarding: { reason: FRAMEWORK_INTERNAL_FORWARDING_REASON },
+	} as unknown as MutatingCommandSpec<FlagMap, readonly AnyArg[]>;
+	const def = (
+		effect === "read_only"
+			? defineReadOnlyCommand(
+					name,
+					withForwarding as unknown as ReadOnlyCommandSpec<
+						FlagMap,
+						readonly AnyArg[]
+					>,
+				)
+			: defineMutatingCommand(name, withForwarding)
+	) as unknown as AnyCommand;
+	return { ...def, frameworkInternal: true } as AnyCommand;
+}
+
 /** A registered command: the carrier plus registration-time derived data. */
 export interface RegisteredCommand {
 	readonly kind: "command" | "passthrough";
@@ -385,6 +487,34 @@ function mergeTags(
 	b: readonly string[],
 ): readonly string[] {
 	return [...new Set([...a, ...b])].sort();
+}
+
+/** Validates the app-level observe allowlist (lists of non-empty strings). */
+function validateProcObserveAllowlist(
+	prefixes: readonly (readonly string[])[] | undefined,
+): readonly (readonly string[])[] {
+	const out: (readonly string[])[] = [];
+	for (const prefix of prefixes ?? []) {
+		if (!Array.isArray(prefix)) {
+			throw new RegistrationError(
+				"proc_observe_allowlist entries must be lists of strings",
+			);
+		}
+		if (prefix.length === 0) {
+			throw new RegistrationError(
+				"proc_observe_allowlist entries must not be empty",
+			);
+		}
+		for (const element of prefix) {
+			if (typeof element !== "string") {
+				throw new RegistrationError(
+					"proc_observe_allowlist entries must be lists of strings",
+				);
+			}
+		}
+		out.push([...prefix]);
+	}
+	return out;
 }
 
 function requireNonEmpty(value: unknown, label: string): void {
@@ -439,6 +569,33 @@ function registerCommand(
 	app: AppImpl,
 	inheritedTags: readonly string[],
 ): void {
+	if (def.kind !== "command" && def.kind !== "passthrough") {
+		// TS-only guard for hand-forged carriers from untyped callers.
+		throw new RegistrationError(
+			"command() requires a command or passthrough carrier",
+		);
+	}
+	// Classification is mandatory and has no default. Re-validated here (not
+	// just in the factories) so hand-forged carriers from untyped callers
+	// cannot bypass it.
+	if (def.effect === undefined || def.effect === null) {
+		throw new RegistrationError(errCommandEffectMissing(def.name));
+	}
+	if (def.effect !== "read_only" && def.effect !== "mutating") {
+		throw new RegistrationError(
+			errCommandEffectInvalid(def.name, String(def.effect)),
+		);
+	}
+	// The framework-internal marker is only honored for handlers strictcli
+	// itself minted. A consumer that reaches the marker by any route --
+	// monkey-patching, prototype tampering, reflection -- fails loudly here.
+	if ((def as MaybeFrameworkInternal).frameworkInternal === true) {
+		if (!FRAMEWORK_HANDLERS.has(def.handler as unknown as object)) {
+			throw new RegistrationError(
+				errFrameworkInternalHandlerForeign(def.name),
+			);
+		}
+	}
 	if (def.kind === "passthrough") {
 		into.set(def.name, {
 			kind: "passthrough",
@@ -451,12 +608,6 @@ function registerCommand(
 			configFields: [],
 		});
 		return;
-	}
-	if (def.kind !== "command") {
-		// TS-only guard for hand-forged carriers from untyped callers.
-		throw new RegistrationError(
-			"command() requires a command or passthrough carrier",
-		);
 	}
 	// Config-field bindings must reference declared fields (Python validates
 	// them first in _build_and_validate_command).
@@ -534,6 +685,11 @@ function registerDeprecated(
 	}
 	if (groups.has(def.name)) {
 		throw new RegistrationError(errDeprecatedCollidesGroup(def.name));
+	}
+	// Deprecated commands are classification-EXEMPT: they have no handler and
+	// execute nothing, so carrying an effect is a registration-time error.
+	if ((def as { effect?: unknown }).effect !== undefined) {
+		throw new RegistrationError(errDeprecatedCommandEffect(def.name));
 	}
 	if (deprecated.has(def.name)) {
 		throw new RegistrationError(errDeprecatedAlreadyRegistered(def.name));
@@ -635,6 +791,10 @@ export class AppImpl implements App {
 	// parity: tests which chdir still record into the repo, and a check
 	// evaluated from a foreign cwd reads the app's own repo state).
 	readonly testCoverage: boolean;
+	/** App-level observe allowlist, validated and frozen at construction. */
+	readonly procObserveAllowlist: readonly (readonly string[])[];
+	/** The structured effect log of the most recent dispatch. */
+	effectLogState: EffectLog = new EffectLog();
 	/** Absolute shard-file path (<coverageDir>/<pid>.jsonl, append semantics). */
 	coverageShardPath: string | undefined;
 	/** Absolute .strictcli/coverage/ directory. */
@@ -758,6 +918,9 @@ export class AppImpl implements App {
 		this.checksPath = spec.checksPath;
 		this.checksEmbed = spec.checksEmbed;
 		this.testCoverage = spec.testCoverage ?? false;
+		this.procObserveAllowlist = validateProcObserveAllowlist(
+			spec.procObserveAllowlist,
+		);
 
 		// Enable the check system when checksPath or checksEmbed was provided.
 		if (this.checksPath !== undefined && this.checksEmbed !== undefined) {
@@ -1103,6 +1266,9 @@ export class AppImpl implements App {
 				);
 				return { exitCode: 1, hasData: false, data: undefined };
 			case "passthrough": {
+				// beginDispatch runs BEFORE coverage recording so pre-handler
+				// CACHE_WRITEs land in this dispatch's log.
+				this.beginDispatch();
 				// Record test-coverage hit (command-level only, test mode only).
 				if (mode === "test" && this.testCoverage) {
 					recordCoverage(this, outcome.cmdPath);
@@ -1113,19 +1279,30 @@ export class AppImpl implements App {
 					{},
 					this.infraAccess(outcome.hermetic),
 					outcome.reserved,
+					this.armEffects(outcome.cmd, outcome.cmdPath, outcome.reserved.dryRun),
 				);
 				const def = outcome.cmd.def as PassthroughDef<string>;
-				const result = await def.handler(
-					{
-						name: outcome.cmd.name,
-						args: outcome.args,
-						globals: outcome.globalKwargs,
-					},
-					ctx,
+				const declined = this.runConfirm(mode, outcome.cmd, outcome, err);
+				if (declined !== undefined) {
+					return declined;
+				}
+				return await this.runHandler(
+					() =>
+						def.handler(
+							{
+								name: outcome.cmd.name,
+								args: outcome.args,
+								globals: outcome.globalKwargs,
+							},
+							ctx,
+						),
+					outcome.reserved.dryRun,
+					out,
+					err,
 				);
-				return this.emitInterpreted(result, out);
 			}
 			case "command": {
+				this.beginDispatch();
 				// Record test-coverage hit (command-level only, test mode only).
 				if (mode === "test" && this.testCoverage) {
 					recordCoverage(this, outcome.cmdPath);
@@ -1136,12 +1313,141 @@ export class AppImpl implements App {
 					outcome.sources,
 					this.infraAccess(outcome.hermetic),
 					outcome.reserved,
+					this.armEffects(outcome.cmd, outcome.cmdPath, outcome.reserved.dryRun),
 				);
 				const def = outcome.cmd.def as AnyCommand;
-				const result = await def.handler(outcome.kwargs as never, ctx);
-				return this.emitInterpreted(result, out);
+				const declined = this.runConfirm(mode, outcome.cmd, outcome, err);
+				if (declined !== undefined) {
+					return declined;
+				}
+				return await this.runHandler(
+					() => def.handler(outcome.kwargs as never, ctx),
+					outcome.reserved.dryRun,
+					out,
+					err,
+				);
 			}
 		}
+	}
+
+	/**
+	 * The confirm protocol, on the real CLI path only. Returns a dispatch
+	 * result when the run was declined, or undefined to proceed.
+	 */
+	private runConfirm(
+		mode: "run" | "test",
+		cmd: RegisteredCommand,
+		outcome: { readonly reserved: ReservedFlags; readonly cmdPath: string },
+		err: Writer,
+	): DispatchResult | undefined {
+		if (mode !== "run") {
+			// test/call/invoke/MCP behave as if --yes were passed.
+			return undefined;
+		}
+		const def = cmd.def as { readonly effect?: Effect };
+		if (def.effect !== "mutating") {
+			return undefined;
+		}
+		if (outcome.reserved.dryRun || outcome.reserved.yes) {
+			return undefined;
+		}
+		if (confirmMutating(outcome.cmdPath, err)) {
+			return undefined;
+		}
+		return { exitCode: 1, hasData: false, data: undefined };
+	}
+
+	/**
+	 * Runs the handler under the runtime seal: an extraction from an Unsettled
+	 * carrier truncates the preview honestly instead of inventing a value. The
+	 * post-return check on the log's `truncated` record is the TS-specific
+	 * backstop -- unlike Python's BaseException-derived twin, a handler's
+	 * `catch (e)` here CAN swallow the throw, and the run still fails closed.
+	 */
+	private async runHandler(
+		invoke: () => unknown,
+		dryRun: boolean,
+		out: Writer,
+		err: Writer,
+	): Promise<DispatchResult> {
+		let result: unknown;
+		try {
+			result = await invoke();
+		} catch (e) {
+			if (e instanceof DryRunTruncated) {
+				return this.emitTruncated(e, out, err);
+			}
+			throw e;
+		}
+		const swallowed = this.effectLogState.truncated;
+		if (swallowed !== null) {
+			return this.emitTruncated(swallowed, out, err);
+		}
+		const interpreted = this.emitInterpreted(result, out);
+		if (dryRun) {
+			// The would-do log is dry mode's primary output and is NEVER
+			// suppressed by --quiet.
+			out.write(`${this.effectLogState.render()}\n`);
+		}
+		return interpreted;
+	}
+
+	/** Prints the already-recorded log to stdout and the error to stderr. */
+	private emitTruncated(
+		trunc: DryRunTruncated,
+		out: Writer,
+		err: Writer,
+	): DispatchResult {
+		out.write(`${this.effectLogState.render()}\n`);
+		err.write(`${trunc.message}\n`);
+		return { exitCode: 1, hasData: false, data: undefined };
+	}
+
+	/** Starts a new dispatch: resets the structured effect log. */
+	beginDispatch(): void {
+		this.effectLogState = new EffectLog();
+	}
+
+	/**
+	 * Arms the effects handle for one dispatch (the runtime seal). Called at
+	 * EVERY ctx-construction site that dispatches a handler, so there is no
+	 * path on which ctx.effects is missing or a carrier escapes unpoisoned.
+	 */
+	armEffects(
+		cmd: RegisteredCommand,
+		cmdPath: string,
+		dryRun: boolean,
+	): Effects {
+		const def = cmd.def as {
+			readonly effect: Effect;
+			readonly grants?: readonly Grant[];
+		};
+		return new Effects(
+			{ cmdPath, effect: def.effect, grants: def.grants ?? [] },
+			dryRun,
+			this.effectLogState,
+			this.procObserveAllowlist,
+		);
+	}
+
+	/**
+	 * Records a framework-blessed CACHE_WRITE. The closed list of sites is
+	 * exactly three: the schema dump, the test-coverage shards, and the
+	 * test-coverage manifest. CACHE_WRITEs have no public method, never appear
+	 * in the would-do log, never trip read-only enforcement, and EXECUTE even in
+	 * dry mode -- which is why they always carry `recorded: false`.
+	 */
+	recordCacheWrite(path: string): void {
+		this.effectLogState.recordCacheWrite(path);
+	}
+
+	/**
+	 * The structured effect records of the most recent dispatch, in either
+	 * mode. Test-only surface (beside test()); deliberately NOT on the public
+	 * App interface, so it stays out of the api-surface catalog.
+	 */
+	effectLog(): Record<string, unknown>[] {
+		return this.effectLogState.toList();
 	}
 
 	/** Snapshots infra data for a Context (Go infraAccess): null when none declared. */
