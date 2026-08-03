@@ -67,10 +67,22 @@ import {
 	errFlagRepeatableEnvRequiresSeparator,
 	errFlagRepeatableIncompatibleBool,
 	errFlagUniqueRequiresRepeatable,
+	errForwardingReasonEmpty,
+	errGrantDuplicate,
+	errGrantKindInvalid,
+	errGrantNameInvalid,
+	errGrantReasonEmpty,
 	errInvalidTagName,
 	errRequiredArgCannotHaveDefault,
 	RegistrationError,
 } from "./errors.js";
+import type { MutatingContext, ReadOnlyContext } from "./context.js";
+import {
+	type Effect,
+	type Forwarding,
+	type Grant,
+	isGrantableKind,
+} from "./effects.js";
 import type { HandlerArgs } from "./infer.js";
 import { type InfraRootPath, isInfraRootPath } from "./infra.js";
 import type {
@@ -729,28 +741,41 @@ export type Dependency = CoRequired | Requires | Implies;
 /** A keyed map of flags where the key is the underscore form of the flag name (also the handler arg key). */
 export type FlagMap = Readonly<Record<string, AnyFlag>>;
 
-/** A command handler function receiving typed args and a Context. */
+/**
+ * A command handler function receiving typed args and a Context.
+ *
+ * `C` is the classification-narrowed context type: `defineReadOnlyCommand`
+ * binds it to ReadOnlyContext (whose `effects` exposes only `run`), and
+ * `defineMutatingCommand` to the full MutatingContext. A `.write()` inside a
+ * read-only command is therefore a COMPILE error, on top of the runtime seal
+ * every implementation carries regardless (plain-JS consumers bypass the type
+ * system entirely).
+ */
 export type Handler<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
 	FS extends readonly AnyFlagSet[] = readonly [],
 	M extends readonly AnyMutexGroup[] = readonly [],
+	C = MutatingContext,
 > = (
 	args: HandlerArgs<F, A, FS, M>,
-	ctx: Context,
+	ctx: C,
 ) => HandlerReturn | Promise<HandlerReturn>;
 
-/** A fully validated command descriptor produced by defineCommand(). */
+/** A fully validated command descriptor produced by the twin factories. */
 export interface CommandDef<
 	N extends string,
 	F extends FlagMap,
 	A extends readonly AnyArg[],
 	FS extends readonly AnyFlagSet[] = readonly [],
 	M extends readonly AnyMutexGroup[] = readonly [],
+	C = MutatingContext,
 > {
 	readonly kind: "command";
 	readonly name: N;
 	readonly help: string;
+	/** Mandatory classification. There is no default and no inference. */
+	readonly effect: Effect;
 	readonly flags: F;
 	readonly args: A;
 	readonly flagSets: FS;
@@ -758,12 +783,15 @@ export interface CommandDef<
 	readonly dependencies: readonly Dependency[];
 	/** Merged flag list (flags, then flag-set flags, then mutex flags), in declaration order. */
 	readonly allFlags: readonly AnyFlag[];
-	readonly handler: Handler<F, A, FS, M>;
-	// Typed but unwired until later subphases.
+	readonly handler: Handler<F, A, FS, M, C>;
 	readonly tags: readonly string[];
 	readonly hidden: boolean;
 	readonly interactive: boolean;
 	readonly configFields: readonly string[];
+	/** Per-effect-kind authorizations with mandatory human reasons. */
+	readonly grants: readonly Grant[];
+	/** Declared forwarding (inert in TS beyond the schema emission). */
+	readonly forwarding: Forwarding | undefined;
 }
 
 /** Structural supertype of every CommandDef instantiation. */
@@ -771,6 +799,7 @@ export interface AnyCommand {
 	readonly kind: "command";
 	readonly name: string;
 	readonly help: string;
+	readonly effect: Effect;
 	readonly flags: FlagMap;
 	readonly args: readonly AnyArg[];
 	readonly flagSets: readonly AnyFlagSet[];
@@ -785,10 +814,16 @@ export interface AnyCommand {
 	readonly hidden: boolean;
 	readonly interactive: boolean;
 	readonly configFields: readonly string[];
+	readonly grants: readonly Grant[];
+	readonly forwarding: Forwarding | undefined;
 }
 
-/** Configuration passed to defineCommand() to create a CommandDef. */
-export interface CommandSpec<
+/**
+ * Configuration passed to defineReadOnlyCommand(). Identical to
+ * MutatingCommandSpec except for the context type the handler's `ctx`
+ * parameter is narrowed to (§2.4).
+ */
+export interface ReadOnlyCommandSpec<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
 	FS extends readonly AnyFlagSet[] = readonly [],
@@ -800,11 +835,87 @@ export interface CommandSpec<
 	readonly flagSets?: FS;
 	readonly mutex?: M;
 	readonly dependencies?: readonly Dependency[];
-	readonly handler: Handler<F, A, FS, M>;
+	readonly handler: Handler<F, A, FS, M, ReadOnlyContext>;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
 	readonly configFields?: readonly string[];
+	readonly grants?: readonly Grant[];
+	readonly forwarding?: Forwarding;
+}
+
+/** Configuration passed to defineMutatingCommand(). */
+export interface MutatingCommandSpec<
+	F extends FlagMap,
+	A extends readonly AnyArg[],
+	FS extends readonly AnyFlagSet[] = readonly [],
+	M extends readonly AnyMutexGroup[] = readonly [],
+> {
+	readonly help: string;
+	readonly flags?: F;
+	readonly args?: A;
+	readonly flagSets?: FS;
+	readonly mutex?: M;
+	readonly dependencies?: readonly Dependency[];
+	readonly handler: Handler<F, A, FS, M, MutatingContext>;
+	readonly tags?: readonly string[];
+	readonly hidden?: boolean;
+	readonly interactive?: boolean;
+	readonly configFields?: readonly string[];
+	readonly grants?: readonly Grant[];
+	readonly forwarding?: Forwarding;
+}
+
+const GRANT_NAME_RE = /^[a-z][a-z0-9-]*$/;
+
+/** Validates a command's grant declarations at registration time. */
+export function validateGrants(
+	cmdName: string,
+	grants: readonly Grant[] | undefined,
+): readonly Grant[] {
+	const resolved: Grant[] = [];
+	const seen = new Set<string>();
+	for (const g of grants ?? []) {
+		if (typeof g !== "object" || g === null) {
+			throw new RegistrationError(
+				`command "${cmdName}": grants must be grant objects, got ${typeof g}`,
+			);
+		}
+		if (typeof g.name !== "string" || !GRANT_NAME_RE.test(g.name)) {
+			throw new RegistrationError(errGrantNameInvalid(cmdName, String(g.name)));
+		}
+		if (seen.has(g.name)) {
+			throw new RegistrationError(errGrantDuplicate(cmdName, g.name));
+		}
+		if (typeof g.reason !== "string" || g.reason.trim() === "") {
+			throw new RegistrationError(errGrantReasonEmpty(cmdName, g.name));
+		}
+		if (!isGrantableKind(g.kind)) {
+			throw new RegistrationError(
+				errGrantKindInvalid(cmdName, g.name, String(g.kind)),
+			);
+		}
+		seen.add(g.name);
+		resolved.push(g);
+	}
+	return resolved;
+}
+
+/** Validates a declared-forwarding declaration at registration time. */
+export function validateForwarding(
+	cmdName: string,
+	forwarding: Forwarding | undefined,
+): Forwarding | undefined {
+	if (forwarding === undefined) {
+		return undefined;
+	}
+	if (
+		typeof forwarding.reason !== "string" ||
+		forwarding.reason.trim() === ""
+	) {
+		throw new RegistrationError(errForwardingReasonEmpty(cmdName));
+	}
+	return forwarding;
 }
 
 const TAG_RE = /^[a-z][a-z0-9-]*$/;
@@ -837,16 +948,22 @@ function validateFlagMapKeys(cmdName: string, flags: FlagMap): void {
 }
 
 /**
- * Creates a command descriptor with typed flags, args, flag sets, mutex
- * groups, and dependencies. Validates all constraints at construction time.
+ * The shared body of the twin factories. `effect` is not a spec key: it is
+ * spliced in by whichever factory was called, which is what makes
+ * classification mandatory and inference impossible.
  */
-export function defineCommand<
-	const N extends string,
-	const F extends FlagMap = Record<never, never>,
-	const A extends readonly AnyArg[] = readonly [],
-	const FS extends readonly AnyFlagSet[] = readonly [],
-	const M extends readonly AnyMutexGroup[] = readonly [],
->(name: N, spec: CommandSpec<F, A, FS, M>): CommandDef<N, F, A, FS, M> {
+function buildCommandDef<
+	N extends string,
+	F extends FlagMap,
+	A extends readonly AnyArg[],
+	FS extends readonly AnyFlagSet[],
+	M extends readonly AnyMutexGroup[],
+	C,
+>(
+	name: N,
+	spec: ReadOnlyCommandSpec<F, A, FS, M> | MutatingCommandSpec<F, A, FS, M>,
+	effect: Effect,
+): CommandDef<N, F, A, FS, M, C> {
 	if (typeof spec.help !== "string" || spec.help.trim() === "") {
 		throw new RegistrationError(errCommandMissingHelp(name));
 	}
@@ -998,18 +1115,72 @@ export function defineCommand<
 		kind: "command",
 		name,
 		help: spec.help,
+		effect,
 		flags,
 		args,
 		flagSets,
 		mutex,
 		dependencies,
 		allFlags,
-		handler: spec.handler,
+		handler: spec.handler as Handler<F, A, FS, M, C>,
 		tags,
 		hidden: spec.hidden ?? false,
 		interactive: spec.interactive ?? false,
 		configFields: spec.configFields ?? [],
+		grants: validateGrants(name, spec.grants),
+		forwarding: validateForwarding(name, spec.forwarding),
 	};
+}
+
+/**
+ * Creates a `read_only` command descriptor with typed flags, args, flag sets,
+ * mutex groups, and dependencies. Validates all constraints at construction
+ * time.
+ *
+ * A read_only command never prompts (§8), and calling any mutating member of
+ * the effects handle is a hard error at call time. Its handler's `ctx` is
+ * narrowed to ReadOnlyContext, so `ctx.effects.write(...)` does not compile.
+ */
+export function defineReadOnlyCommand<
+	const N extends string,
+	const F extends FlagMap = Record<never, never>,
+	const A extends readonly AnyArg[] = readonly [],
+	const FS extends readonly AnyFlagSet[] = readonly [],
+	const M extends readonly AnyMutexGroup[] = readonly [],
+>(
+	name: N,
+	spec: ReadOnlyCommandSpec<F, A, FS, M>,
+): CommandDef<N, F, A, FS, M, ReadOnlyContext> {
+	return buildCommandDef<N, F, A, FS, M, ReadOnlyContext>(
+		name,
+		spec,
+		"read_only",
+	);
+}
+
+/**
+ * Creates a `mutating` command descriptor with typed flags, args, flag sets,
+ * mutex groups, and dependencies. Validates all constraints at construction
+ * time.
+ *
+ * A mutating command is subject to the confirm protocol (§8), participates in
+ * dry mode, and may call every member of the effects handle.
+ */
+export function defineMutatingCommand<
+	const N extends string,
+	const F extends FlagMap = Record<never, never>,
+	const A extends readonly AnyArg[] = readonly [],
+	const FS extends readonly AnyFlagSet[] = readonly [],
+	const M extends readonly AnyMutexGroup[] = readonly [],
+>(
+	name: N,
+	spec: MutatingCommandSpec<F, A, FS, M>,
+): CommandDef<N, F, A, FS, M, MutatingContext> {
+	return buildCommandDef<N, F, A, FS, M, MutatingContext>(
+		name,
+		spec,
+		"mutating",
+	);
 }
 
 // --- Passthrough and deprecated command carriers ---
@@ -1022,34 +1193,38 @@ export interface PassthroughArgs {
 }
 
 /** Handler function for passthrough commands (receives raw args, no parsing). */
-export type PassthroughHandler = (
+export type PassthroughHandler<C = MutatingContext> = (
 	args: PassthroughArgs,
-	ctx: Context,
+	ctx: C,
 ) => HandlerReturn | Promise<HandlerReturn>;
 
-/** A passthrough command descriptor produced by the passthrough() factory. */
-export interface PassthroughDef<N extends string> {
+/** A passthrough command descriptor produced by the passthrough twins. */
+export interface PassthroughDef<N extends string, C = MutatingContext> {
 	readonly kind: "passthrough";
 	readonly name: N;
 	readonly help: string;
-	readonly handler: PassthroughHandler;
+	/** Mandatory classification, exactly as on an ordinary command. */
+	readonly effect: Effect;
+	readonly handler: PassthroughHandler<C>;
 	readonly tags: readonly string[];
 	readonly hidden: boolean;
+	readonly grants: readonly Grant[];
 }
 
-/**
- * Creates a passthrough command that bypasses all flag/arg parsing. The
- * handler receives the raw argument list and global flag values.
- */
-export function passthrough<const N extends string>(
+/** The options object both passthrough twins take. */
+interface PassthroughSpec<C> {
+	readonly help: string;
+	readonly handler: PassthroughHandler<C>;
+	readonly tags?: readonly string[];
+	readonly hidden?: boolean;
+	readonly grants?: readonly Grant[];
+}
+
+function buildPassthroughDef<N extends string, C>(
 	name: N,
-	spec: {
-		readonly help: string;
-		readonly handler: PassthroughHandler;
-		readonly tags?: readonly string[];
-		readonly hidden?: boolean;
-	},
-): PassthroughDef<N> {
+	spec: PassthroughSpec<C>,
+	effect: Effect,
+): PassthroughDef<N, C> {
 	if (typeof spec.help !== "string" || spec.help.trim() === "") {
 		throw new RegistrationError(errCommandMissingHelp(name));
 	}
@@ -1058,10 +1233,38 @@ export function passthrough<const N extends string>(
 		kind: "passthrough",
 		name,
 		help: spec.help,
+		effect,
 		handler: spec.handler,
 		tags,
 		hidden: spec.hidden ?? false,
+		grants: validateGrants(name, spec.grants),
 	};
+}
+
+/**
+ * Creates a `read_only` passthrough command that bypasses all flag/arg
+ * parsing. The handler receives the raw argument list and global flag values,
+ * and never prompts.
+ */
+export function readOnlyPassthrough<const N extends string>(
+	name: N,
+	spec: PassthroughSpec<ReadOnlyContext>,
+): PassthroughDef<N, ReadOnlyContext> {
+	return buildPassthroughDef(name, spec, "read_only");
+}
+
+/**
+ * Creates a `mutating` passthrough command that bypasses all flag/arg parsing.
+ *
+ * A mutating passthrough is NOT exempt from the confirm protocol: that its
+ * args are opaque to the framework is a reason to confirm, not a reason to
+ * skip -- the framework knows less about what is about to happen, not more.
+ */
+export function mutatingPassthrough<const N extends string>(
+	name: N,
+	spec: PassthroughSpec<MutatingContext>,
+): PassthroughDef<N, MutatingContext> {
+	return buildPassthroughDef(name, spec, "mutating");
 }
 
 /** A deprecated command descriptor produced by the deprecated() factory. */

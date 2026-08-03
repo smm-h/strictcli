@@ -7,7 +7,7 @@
  * every infraValue() call throws the not-declared error.
  */
 
-import type { MutatingEffects } from "./effects.js";
+import type { MutatingEffects, ReadOnlyEffects } from "./effects.js";
 import {
 	errConnectionValueUndeclared,
 	errEffectsUnavailable,
@@ -79,7 +79,47 @@ export const NO_RESERVED_FLAGS: ReservedFlags = {
 	verbose: false,
 };
 
-export class Context {
+/**
+ * Everything a handler's context carries except the effects handle. The two
+ * classification-narrowed context types differ in that one member and in
+ * nothing else.
+ */
+interface ContextBase {
+	/** True when the framework-owned --dry-run flag was passed. */
+	readonly dryRun: boolean;
+	/** True when the framework-owned --yes flag was passed. */
+	readonly yes: boolean;
+	/** True when the framework-owned --quiet flag was passed. */
+	readonly quiet: boolean;
+	/** True when the framework-owned --verbose flag was passed. */
+	readonly verbose: boolean;
+	info(msg: string): void;
+	warn(msg: string): void;
+	debug(msg: string): void;
+	error(msg: string): void;
+	source(name: string): string;
+	infraValue(envVar: string): [value: string | undefined, isSet: boolean];
+	connectionEnvValue(
+		envVar: string,
+	): [value: string | undefined, present: boolean];
+}
+
+/**
+ * The context a `read_only` command's handler receives: its effects handle
+ * exposes only `run`, so a `.write()` inside a read-only command is a COMPILE
+ * error. The runtime seal fires regardless, because plain-JS consumers bypass
+ * the type system entirely.
+ */
+export interface ReadOnlyContext extends ContextBase {
+	readonly effects: ReadOnlyEffects;
+}
+
+/** The context a `mutating` command's handler receives: the full handle. */
+export interface MutatingContext extends ContextBase {
+	readonly effects: MutatingEffects;
+}
+
+export class Context implements MutatingContext {
 	private readonly stdout: Writer;
 	private readonly stderr: Writer;
 	private readonly sources: Readonly<Record<string, string>>;

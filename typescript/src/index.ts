@@ -46,13 +46,26 @@ export type { ConfigFieldSpec } from "./config.js";
 export type {
 	ConnectionEnvReader,
 	InfraAccess,
+	MutatingContext,
+	ReadOnlyContext,
 	Writer,
 } from "./context.js";
 export { Context } from "./context.js";
+export type {
+	Completed,
+	Effect,
+	EffectKind,
+	Forwarding,
+	Grant,
+	MutatingEffects,
+	ReadOnlyEffects,
+	Response,
+	Spawned,
+} from "./effects.js";
 // ParseError and RegistrationError stay internal (sibling parity: Python's
 // __all__ and Go both export only InvokeError -- registration failures are
 // Go panics / Python ValueError, parse failures print to stderr and exit 1).
-export { InvokeError } from "./errors.js";
+export { EffectFailed, InvokeError } from "./errors.js";
 export type {
 	AnyArg,
 	AnyCommand,
@@ -62,7 +75,6 @@ export type {
 	ArgDef,
 	ArgOpts,
 	CommandDef,
-	CommandSpec,
 	ConflictMode,
 	CoRequired,
 	Dependency,
@@ -74,22 +86,26 @@ export type {
 	FlagSet,
 	Handler,
 	Implies,
+	MutatingCommandSpec,
 	MutexGroup,
 	PassthroughArgs,
 	PassthroughDef,
 	PassthroughHandler,
+	ReadOnlyCommandSpec,
 	Requires,
 } from "./factories.js";
 export {
 	arg,
 	coRequired,
-	defineCommand,
+	defineMutatingCommand,
+	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	flagSet,
 	implies,
+	mutatingPassthrough,
 	mutexGroup,
-	passthrough,
+	readOnlyPassthrough,
 	requires,
 } from "./factories.js";
 export type { HandlerArgs, InferHandler, InferHandlerArgs } from "./infer.js";
