@@ -482,13 +482,33 @@ func (r effectRecord) render() string {
 const dryRunHeader = "DRY RUN — no changes were made. Would do:"
 
 // effectLog is the ordered effect records produced by one dispatch.
+//
+// TWO counters, deliberately. Would-do numbering is the numbering of the
+// RENDERED lines: it feeds the log's "<N>." prefix, the «step N output» brand
+// and the truncation error's "ends at step N". CacheWrites are never rendered,
+// so they must never consume one of those numbers -- otherwise a
+// coverage-instrumented run would silently start its preview at "2.". They get
+// their own sequence instead, so every record still carries a seq.
 type effectLog struct {
-	records []effectRecord
+	records  []effectRecord
+	rendered int
+	cached   int
 }
 
-func (l *effectLog) append(r effectRecord) { l.records = append(l.records, r) }
+func (l *effectLog) append(r effectRecord) {
+	l.records = append(l.records, r)
+	if r.kind == CacheWrite {
+		l.cached++
+	} else {
+		l.rendered++
+	}
+}
 
-func (l *effectLog) nextSeq() int { return len(l.records) + 1 }
+// nextSeq is the next would-do number. Pure: callers may ask without appending.
+func (l *effectLog) nextSeq() int { return l.rendered + 1 }
+
+// nextCacheSeq is the next CACHE_WRITE number, on its own counter.
+func (l *effectLog) nextCacheSeq() int { return l.cached + 1 }
 
 // render renders the would-do log. CacheWrites are never written to it.
 func (l *effectLog) render() string {
@@ -1250,7 +1270,7 @@ func (a *App) recordCacheWrite(path string) {
 		a.effects = &effectLog{}
 	}
 	a.effects.append(effectRecord{
-		seq:      a.effects.nextSeq(),
+		seq:      a.effects.nextCacheSeq(),
 		kind:     CacheWrite,
 		verb:     "cache",
 		detail:   path,

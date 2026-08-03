@@ -1344,6 +1344,81 @@ func TestCoverageShardRecordsACacheWrite(t *testing.T) {
 	}
 }
 
+// A cache write is never rendered, so it must never take a would-do number.
+// The same counter feeds the log lines, the «step N output» brand and the
+// truncation error's "ends at step N": an invisible record shifting it would
+// move user-visible numbering for no visible reason.
+func TestCacheWritesDoNotConsumeWouldDoNumbers(t *testing.T) {
+	dir := t.TempDir()
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(cwd)
+	app := NewApp("app", "1.0.0", "h", WithTestCoverage())
+	app.Command("rel", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		c, _ := ctx.Effects().Run([]any{"git", "tag", "v1"})
+		ctx.Effects().Run([]any{"push", c})
+		return Exit(0)
+	}, WithEffect(EffectMutating))
+	r := app.Test([]string{"--dry-run", "rel"})
+	want := "DRY RUN — no changes were made. Would do:\n" +
+		"  1. run: git tag v1\n" +
+		"  2. run: push «step 1 output»\n"
+	if r.Stdout != want {
+		t.Fatalf("stdout = %q, want %q", r.Stdout, want)
+	}
+	sawCache := false
+	var appSeqs []int
+	for _, rec := range app.EffectLog() {
+		if rec["kind"] == CacheWrite {
+			sawCache = true
+			continue
+		}
+		appSeqs = append(appSeqs, rec["seq"].(int))
+	}
+	if !sawCache {
+		t.Fatal("expected a cache write in the log")
+	}
+	if len(appSeqs) != 2 || appSeqs[0] != 1 || appSeqs[1] != 2 {
+		t.Fatalf("application effect seqs = %v, want [1 2]", appSeqs)
+	}
+}
+
+func TestCacheWritesDoNotShiftTheTruncationStep(t *testing.T) {
+	dir := t.TempDir()
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(cwd)
+	app := NewApp("app", "1.0.0", "h", WithTestCoverage())
+	app.Command("rel", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		c, _ := ctx.Effects().Run([]any{"git", "tag", "v1"})
+		_ = c.Stdout() // extraction: truncates
+		return Exit(0)
+	}, WithEffect(EffectMutating))
+	r := app.Test([]string{"--dry-run", "rel"})
+	want := "error: dry-run preview ends at step 2: rel branched on unsettled " +
+		"value «step 1 output» — cannot preview past this point"
+	if r.ExitCode != 1 || !strings.Contains(r.Stderr, want) {
+		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+// Go is immune to a carrier reaching `check` or `stream` (§2.5.5's excluding
+// side) by construction: both options are minted by constructors typed
+// func(bool) EffectOption, so a carrier there does not compile. Python and
+// TypeScript, whose options are keyword arguments / an options object, need a
+// runtime guard; this test pins the reason Go does not.
+func TestCheckAndStreamOptionsAreStaticallyBool(t *testing.T) {
+	var check func(bool) EffectOption = Check
+	var stream func(bool) EffectOption = Stream
+	if check(true).name != "check" || stream(true).name != "stream" {
+		t.Fatal("expected the canonical snake_case option names")
+	}
+}
+
 // The exit hook is the Go counterpart of Python's atexit and Node's
 // process.on("exit"): Run ends in os.Exit, so a caller that needs to read a
 // post-dispatch diagnostic (EffectLog above all) has no other seam. Run itself
