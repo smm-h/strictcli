@@ -268,24 +268,25 @@ Python and TypeScript return the **real result** in live mode and an `Unsettled`
 mode (per §4.1: every recorded mutation, and every post-mutation observe). Void methods return
 `None` / `undefined` in live mode.
 
-**TypeScript declares the settled types only.** Every effect method's declared return type is its
-settled shape and nothing else: `run` and `Spawned.wait` return `Completed`, `spawn` returns
-`Spawned`, `http` returns `Response`, and the five path-mutating methods return `void`. There is
-**no `| Unsettled` union** anywhere in the surface and **no narrowing predicate** -- no
-`isUnsettled()`, no type guard, no discriminant member. In dry mode the runtime value sitting at
-those positions is the `Unsettled` Proxy (§4.4), which the static type deliberately does not
+**Python and TypeScript declare the settled types only.** Every effect method's declared return
+type is its settled shape and nothing else: `run` and `Spawned.wait` return `Completed`, `spawn`
+returns `Spawned`, `http` returns `Response`, and the five path-mutating methods return
+`None` / `void`. There is **no `| Unsettled` union** anywhere in either surface and **no narrowing
+predicate** -- no `isUnsettled()`, no `is_unsettled()`, no type guard, no discriminant member. In
+dry mode the runtime value sitting at those positions is the `Unsettled` carrier -- Python's
+poisoned-dunder object, TypeScript's Proxy (§4.4) -- which the static type deliberately does not
 mention: a handler that only forwards it never notices, and a handler that extracts from it or
 branches on it trips the runtime seal and truncates the preview (§3.3). This is exactly the
 Go-parity **one body, both modes** model -- the same handler source is the correct source in live
 and in dry mode, and the mismatch surfaces at runtime, where it is honest, instead of being
 papered over at compile time by a narrowing branch.
 
-There is no `isUnsettled()` because **branching on unsettledness is mode-branching.** A predicate
-would let a handler take one path in live mode and another in dry mode, at which point the preview
-stops describing the run that will actually happen -- precisely what the truncation mechanism
-exists to make impossible to do silently. A handler that legitimately needs to know the mode for
-some non-effect reason reads `ctx.dryRun` (§7.2); no property of a *carrier* answers that question,
-by construction.
+There is no `isUnsettled()` / `is_unsettled()` because **branching on unsettledness is
+mode-branching.** A predicate would let a handler take one path in live mode and another in dry
+mode, at which point the preview stops describing the run that will actually happen -- precisely
+what the truncation mechanism exists to make impossible to do silently. A handler that legitimately
+needs to know the mode for some non-effect reason reads `ctx.dry_run` / `ctx.dryRun` (§7.2); no
+property of a *carrier* answers that question, by construction.
 
 Go has no union type, so **every Go effect method returns a carrier type, always** -- settled in
 live mode (its extractors return real values) and unsettled in dry mode (its extractors panic with
@@ -310,6 +311,9 @@ for the void carrier, to recognize it there and reject it.
 | `spawn` | `Spawned` | `Unsettled` | `(Spawned, error)` |
 | `write` / `mkdir` / `remove` / `rename` / `chmod` | `None` / `undefined` | `Unsettled` | `(Unsettled, error)` |
 | `http` | `Response` | `Unsettled` | `(Response, error)` |
+
+The Python / TS columns are the **runtime** values. Both languages *declare* only the settled
+column (§2.5.6): the dry-mode carrier is a runtime phenomenon their static types never name.
 
 #### 2.5.4 Error semantics -- one rule
 
@@ -381,43 +385,50 @@ carrier and hard-erroring at call time on anything else. This is a Go-specific c
 common all-literal case reads acceptably (`[]any{"git", "tag", "v1.2.3"}`) and matches the repo's
 existing `map[string]interface{}` handler-args idiom.
 
-TypeScript types the same six positions as unions of exactly the shapes that project, which the
-declared-settled returns of §2.5.3 make precise:
+Python and TypeScript type the same six positions as unions of exactly the shapes that project,
+which the declared-settled returns of §2.5.3 make precise:
 
-| Position | TypeScript type |
-|----------|-----------------|
-| `argv` element | `string \| Completed \| Response` |
-| `path`, `src`, `dst`, `url` | `string \| Completed \| Response` |
-| `content` | `string \| Uint8Array \| Completed \| Response` |
+| Position | Python type | TypeScript type |
+|----------|-------------|-----------------|
+| `argv` element | `str \| Completed \| Response` | `string \| Completed \| Response` |
+| `path`, `src`, `dst`, `url` | `str \| Completed \| Response` | `string \| Completed \| Response` |
+| `content` | `str \| bytes \| Completed \| Response` | `string \| Uint8Array \| Completed \| Response` |
 
-`Spawned` is a member of none of them (it has no projection), `void` is a member of none of them
-(void results are not forwardable), and `Unsettled` appears in none of them either -- in dry mode
-the runtime carrier arrives at a position statically typed `Completed` or `Response`, which is
-exactly what lets one handler body typecheck once and be correct in both modes. The unions are
-written inline in the method signatures; they mint no new exported type and therefore no new
+Python spells `argv` itself `Sequence[str | Completed | Response]`; TypeScript's `argv` is an array
+of the element type. The two rows differ only in each language's native byte-string spelling
+(`bytes` / `Uint8Array`).
+
+`Spawned` is a member of none of them (it has no projection), the void return is a member of none
+of them (void results are not forwardable), and `Unsettled` appears in none of them either -- in
+dry mode the runtime carrier arrives at a position statically typed `Completed` or `Response`,
+which is exactly what lets one handler body typecheck once and be correct in both modes. The unions
+are written inline in the method signatures; they mint no new exported type and therefore no new
 `describe.ts` entity (§1.2).
 
 #### 2.5.6 Cross-language parity table
 
 | Method | Python | Go | TypeScript |
 |--------|--------|-----|-----------|
-| `run` | `ctx.effects.run(argv, *, cwd=None, env=None, check=True, stream=False, resource=None, skip_if_current=None, grant=None) -> Completed \| Unsettled` | `ctx.Effects().Run(argv []any, opts ...EffectOption) (Completed, error)` | `ctx.effects.run(argv, opts?) => Completed` |
-| `spawn` | `ctx.effects.spawn(argv, *, cwd=None, env=None, ...) -> Spawned \| Unsettled` | `ctx.Effects().Spawn(argv []any, opts ...EffectOption) (Spawned, error)` | `ctx.effects.spawn(argv, opts?) => Spawned` |
-| `write` | `ctx.effects.write(path, content, ...) -> None \| Unsettled` | `ctx.Effects().Write(path any, content any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.write(path, content, opts?) => void` |
-| `mkdir` | `ctx.effects.mkdir(path, ...) -> None \| Unsettled` | `ctx.Effects().Mkdir(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.mkdir(path, opts?) => void` |
-| `remove` | `ctx.effects.remove(path, ...) -> None \| Unsettled` | `ctx.Effects().Remove(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.remove(path, opts?) => void` |
-| `rename` | `ctx.effects.rename(src, dst, ...) -> None \| Unsettled` | `ctx.Effects().Rename(src, dst any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.rename(src, dst, opts?) => void` |
-| `chmod` | `ctx.effects.chmod(path, mode, ...) -> None \| Unsettled` | `ctx.Effects().Chmod(path any, mode int, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.chmod(path, mode, opts?) => void` |
-| `http` | `ctx.effects.http(method, url, *, body=None, headers=None, check=True, ...) -> Response \| Unsettled` | `ctx.Effects().HTTP(method string, url any, opts ...EffectOption) (Response, error)` | `ctx.effects.http(method, url, opts?) => Response` |
+| `run` | `ctx.effects.run(argv: Sequence[str \| Completed \| Response], *, cwd=None, env=None, check=True, stream=False, resource=None, skip_if_current=None, grant=None) -> Completed` | `ctx.Effects().Run(argv []any, opts ...EffectOption) (Completed, error)` | `ctx.effects.run(argv, opts?) => Completed` |
+| `spawn` | `ctx.effects.spawn(argv: Sequence[str \| Completed \| Response], *, cwd=None, env=None, ...) -> Spawned` | `ctx.Effects().Spawn(argv []any, opts ...EffectOption) (Spawned, error)` | `ctx.effects.spawn(argv, opts?) => Spawned` |
+| `write` | `ctx.effects.write(path: str \| Completed \| Response, content: str \| bytes \| Completed \| Response, ...) -> None` | `ctx.Effects().Write(path any, content any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.write(path, content, opts?) => void` |
+| `mkdir` | `ctx.effects.mkdir(path: str \| Completed \| Response, ...) -> None` | `ctx.Effects().Mkdir(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.mkdir(path, opts?) => void` |
+| `remove` | `ctx.effects.remove(path: str \| Completed \| Response, ...) -> None` | `ctx.Effects().Remove(path any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.remove(path, opts?) => void` |
+| `rename` | `ctx.effects.rename(src: str \| Completed \| Response, dst: str \| Completed \| Response, ...) -> None` | `ctx.Effects().Rename(src, dst any, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.rename(src, dst, opts?) => void` |
+| `chmod` | `ctx.effects.chmod(path: str \| Completed \| Response, mode, ...) -> None` | `ctx.Effects().Chmod(path any, mode int, opts ...EffectOption) (Unsettled, error)` | `ctx.effects.chmod(path, mode, opts?) => void` |
+| `http` | `ctx.effects.http(method, url: str \| Completed \| Response, *, body=None, headers=None, check=True, ...) -> Response` | `ctx.Effects().HTTP(method string, url any, opts ...EffectOption) (Response, error)` | `ctx.effects.http(method, url, opts?) => Response` |
 | `Spawned.wait` | `spawned.wait(*, check=True) -> Completed` | `spawned.Wait(opts ...EffectOption) (Completed, error)` | `spawned.wait(opts?) => Completed` |
 
 TypeScript parameter and member names camelCase (`skipIfCurrent`, `exitCode`); the options object
 carries every keyword-style parameter. Go's second result is the §2.5.4 error in every case.
 
-The TypeScript column carries **no `| Unsettled`**: TS declares the settled types only (§2.5.3),
-and its carrier-accepting parameter positions are typed as the unions of §2.5.5. `url` is typed
-`any` in Go and `string | Completed | Response` in TypeScript because it is one of the six
-carrier-accepting positions; `method` and `body` are not, and keep their concrete types.
+Neither the Python nor the TypeScript column carries `| Unsettled`: both declare the settled types
+only (§2.5.3), and their carrier-accepting parameter positions are typed as the unions of §2.5.5.
+Python annotates exactly those six positions and leaves every other parameter unannotated -- the
+annotations exist to pin the forwarding boundary, not to retype the whole surface. `url` is typed
+`any` in Go and `str | Completed | Response` / `string | Completed | Response` in Python and
+TypeScript because it is one of the six carrier-accepting positions; `method` and `body` are not,
+and keep their concrete types.
 `Spawned.wait` is listed for completeness -- it is not a ninth method on the handle (§2.2), it is
 the one member `Spawned` exposes besides `pid`, and it never yields a carrier: reaching it at all
 means the `Spawned` was settled, since calling `.wait()` on an unsettled `Spawned` is extraction
@@ -561,7 +572,9 @@ The type is named `Unsettled` in all three implementations.
 - Every post-mutation observe in dry mode returns one.
 - Nothing else ever produces an *unsettled* one. Outside dry mode, and for pre-mutation observes,
   callers get real values -- in Python and TypeScript literally so (`None` / `undefined` from the
-  void methods).
+  void methods). Neither language's *declared* types ever mention `Unsettled` (§2.5.3): there the
+  carrier is a runtime phenomenon only, which is precisely what lets one handler body be written
+  once and be correct in both modes.
 - **Go's carrier-always model is the one carve-out, and it is a spelling, not a semantic.** Every
   Go effect method returns a carrier type in every mode (§2.5.3), so a Go caller in live mode
   holds a *settled* `Completed` / `Spawned` / `Response` whose extractors return the real values;
@@ -1908,6 +1921,25 @@ oversight. They are recorded here so §18 is exhaustive; neither is new.
 69. **Absent optional keys and explicit nulls are equivalent under `effects_equals`** (§14.1).
     Now superseded for `recorded`, which item 66 makes required and therefore never absent; the
     equivalence continues to govern every other optional key, `bytes` (item 60) above all.
+
+The following pin was **ratified by the user** at the closing round (2026-08-03), after the
+execution of the Python implementation surfaced that items 55-57 had been written for TypeScript
+alone.
+
+70. **Python declares the settled return types only, and pins its carrier-accepting parameter
+    annotations** (§2.5.3, §2.5.5, §2.5.6). Ratified: exactly the ruling items 55 and 56 made for
+    TypeScript, applied to Python for exactly the same reason. A declared
+    `-> Completed | Unsettled` obliges a type-checked caller to narrow before touching `.stdout`,
+    and narrowing on unsettledness is mode-branching -- the thing the truncation mechanism exists
+    to make honest. The declared returns are therefore `Completed`, `Spawned`, `Response` and
+    `None`, with no `| Unsettled` union and no `is_unsettled()` predicate; the six
+    carrier-accepting positions are annotated `str | Completed | Response`
+    (`Sequence[str | Completed | Response]` for `argv`, `str | bytes | Completed | Response` for
+    `content`), mirroring item 57's TypeScript unions. Runtime behavior is unchanged: dry-mode
+    post-mutation calls still return the `Unsettled` carrier and its poisoned dunders still fire on
+    extraction. Every other parameter stays unannotated -- the annotations pin the forwarding
+    boundary and the return shape, which are the two things a caller could otherwise be misled
+    about, and nothing else.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
