@@ -1,4 +1,26 @@
 {
   "changelog_format_version_enforced": true,
-  "publish_mode": "ci"
+  "publish_mode": "ci",
+  "batch_limits": {
+    "exclusions": [
+      {
+        "reason": "**Breaking: the effects regime.** Every command must now be registered through the twin factories `defineReadOnlyCommand` / `defineMutatingCommand` (and passthroughs through `readOnlyPassthrough` / `mutatingPassthrough`) \u2014 `defineCommand` and `passthrough` are removed, because classification is mandatory and has no default. `--dry-run`, `--yes`, `--quiet` and `--verbose` are reserved framework flag names, delivered on the Context (`ctx.dryRun`, `ctx.yes`, `ctx.quiet`, `ctx.verbose`) and gating `ctx.info`/`ctx.debug`. `ctx.effects` mints the eight recorded operations (`run`, `spawn`, `write`, `mkdir`, `remove`, `rename`, `chmod`, `http`); under `--dry-run` they are recorded, not executed, and rendered as a would-do log, with `Unsettled` carriers that forward into later effects and truncate honestly when extracted from. A read-only command's handler `ctx` is narrowed so a `.write()` inside one is a compile error. Mutating commands prompt for confirmation unless `--yes` is passed. A built-in `effects-bypass` check fails on direct process, filesystem or network calls inside effects-using handlers.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 1
+          }
+        ]
+      },
+      {
+        "reason": "test sweep, lint cleanups and the new effects-regime test suites",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 3
+          }
+        ]
+      }
+    ]
+  }
 }
