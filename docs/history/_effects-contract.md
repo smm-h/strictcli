@@ -883,8 +883,8 @@ Positional arg names are unaffected (an arg has no `--` spelling).
 
 ### 7.2 Delivery
 
-The four flags are extracted by the position-aware pre-scan that already handles `--dump-schema`,
-`--mcp`, `--config` and `--hermetic` (Python `App._pre_scan_reserved_flags`; Go's equivalent in
+The four flags are extracted by the pre-scan that already handles `--dump-schema`, `--mcp`,
+`--config` and `--hermetic` (Python `App._pre_scan_reserved_flags`; Go's equivalent in
 `strictcli.go`; TypeScript's in `parse.ts`), and are **removed from argv** before command
 parsing.
 
@@ -901,6 +901,78 @@ contradict guard v2 (§10), which is simultaneously *tightening* signature valid
 break every handler in the fleet for no benefit. `Context` must carry `quiet`/`verbose` anyway
 (they gate its own output methods) and must carry `dry_run` anyway (it gates `ctx.effects`), so
 the Context is the only coherent home.
+
+#### The quartet is recognized ANYWHERE in argv (amended 2026-08-04, adoption ruling A1)
+
+The draft pinned the quartet to the **pre-command region only** -- the pre-scan stopped at the
+first non-flag token, so `app --dry-run cmd` worked and `app cmd --dry-run` was
+`error: unknown flag '--dry-run'`. Python's recorded interpretation mirrored that to Go and TS and
+the conformance cases asserted it. **Adoption falsified it.** Every documented invocation in this
+ecosystem writes these flags *after* the command name, and the first consumer to migrate had to
+rewrite argv before handing it to the framework -- a workaround that would have had to ship to
+every consumer in the fleet. Where adoption contradicts the draft, adoption wins.
+
+The precedent was already in the framework: **`--help` / `-h` is recognized anywhere in argv**,
+not only at token boundaries. The quartet now behaves the same way. Semantically this is the
+correct shape and the draft had it backwards: `--dry-run`'s applicability is *per-command* (a
+`mutating` command accepts it, §3.1; a `read_only` command accepts it with an empty would-do body),
+so requiring it before the command name asked the user to declare a per-command fact before naming
+the command.
+
+Everything else about §7.2 is unchanged, and the pre-scan now has two regions with two rulesets:
+
+| Region | What it recognizes |
+|--------|--------------------|
+| pre-command (before the first non-flag token) | every reserved flag: `--dump-schema`, `--mcp`, `--config`, `--hermetic` **and** the quartet. Known global flags and their values are skipped so a global-flag value that looks like a command name does not end the region early. |
+| command region | the **quartet only**. `--hermetic`, `--config`, `--dump-schema` and `--mcp` stay pre-command-only and remain unknown-flag errors after the command token. |
+
+The quartet is still stripped from argv before command parsing; delivery is still on the Context
+and never as handler kwargs; per-command applicability is unchanged (§3.1, §12.4 fire identically
+whether `--dry-run` appeared before or after the command name). Repetition and mixing positions
+are a union, not an error: `app --dry-run cmd --verbose` sets both.
+
+The command-region scan stops for good at exactly two boundaries:
+
+- **a bare `--`.** Every token after it is positional data, never a reserved flag.
+  `app cmd -- --dry-run` passes the literal string `--dry-run` to the command. This matches
+  `--help`, which is likewise not recognized after `--`.
+- **a passthrough command's name** (§7.2.1).
+
+The scan walks routing tokens through the group/command tree, so a quartet token may sit anywhere
+among them: `app grp sub --dry-run` and `app grp --dry-run sub` both work. The walk never raises --
+unknown, deprecated and mis-nested command tokens are the real parse's business, and the pre-scan
+simply stops routing and keeps scanning for quartet tokens.
+
+The one cost is the one `--help` already pays: a flag *value* spelled exactly like a quartet token
+is eaten. `app cmd --message --dry-run` sets dry mode and leaves `--message` without a value.
+`--message=--dry-run` and `--` both express the literal. This is the pinned, accepted cost of
+anywhere-recognition, and it is not new machinery -- it is the identical hazard on the identical
+scan shape.
+
+#### 7.2.1 Passthrough args stay opaque
+
+A **passthrough** command's args are the exception. When the routing walk resolves a passthrough
+command, the scan stops at that command's token and every token after it is forwarded to the
+handler byte-for-byte:
+
+```
+app exec --verbose child    ->  args = ["--verbose", "child"], ctx.verbose == false
+app --verbose exec --verbose child  ->  args = ["--verbose", "child"], ctx.verbose == true
+```
+
+This is not an inconsistency with anywhere-recognition; it is what a passthrough *is* (§1.2: all
+tokens after the command name are forwarded raw, bypassing parsing). Eating a passthrough's
+`--verbose` would silently change what the child process does *and* strip the flag from the child's
+argv -- a lossy, invisible corruption of another program's input. A framework that cannot see what
+the child does must not edit what the child receives.
+
+The **pre-command position is the escape hatch** and it is lossless: `app --verbose exec ...` sets
+`ctx.verbose` for the passthrough's own dispatch while leaving the child's identically-spelled
+argument untouched. Nothing is unreachable.
+
+`--help` is deliberately *not* being brought into line here: it is intercepted for a passthrough
+today, that behavior is pinned elsewhere and separately, and printing help is visible and harmless
+where silently rewriting a child's argv is neither.
 
 ### 7.3 `--yes`
 
@@ -2346,6 +2418,41 @@ the alternative it rejected.
 is not a new decision -- the classification was already pinned and the handlers simply did not obey
 it -- but it is recorded there because the previous text stated the classification without stating
 that the mutations must ride the handle, and that gap is exactly what the implementations fell into.
+
+### 18.6 Amendments made at the adoption round (2026-08-04)
+
+The regime shipped, and the first consumer migrated onto it. Migration falsified one pin. This
+round is governed by the same precedence rule item 71 established for implementations, extended
+one step further: **where adoption contradicts this document's draft, adoption wins.** A pin whose
+only evidence was the draft author's intuition does not outrank the first real invocation that
+exercises it.
+
+84. **The reserved quartet is recognized anywhere in argv (§7.2, ruling A1).** The draft pinned it
+    to the pre-command region only, so `app cmd --dry-run` was `unknown flag '--dry-run'`. Every
+    documented invocation in this ecosystem -- including the release protocol the consumer's own
+    docs prescribe -- writes these flags *after* the command name, and the consumer had to rewrite
+    argv before handing it to the framework to make its own documented commands work. That
+    workaround would have had to ship to every consumer in the fleet. The precedent for the fix was
+    already in the framework: `--help` / `-h` has always been recognized anywhere in argv, and the
+    quartet now uses the identical scan shape with the identical accepted cost (a flag *value*
+    spelled like a reserved token is eaten; `--flag=--dry-run` and `--` express the literal). The
+    draft also had the semantics backwards: `--dry-run`'s applicability is per-command, so
+    requiring it before the command name asked the user to declare a per-command fact before naming
+    the command. Rejected alternatives: keeping the pin and shipping the argv-rewriting shim to
+    ~23 consumers (a framework defect paid for by every consumer, forever); and making the quartet
+    an ordinary auto-registered command flag (it would then appear in every command's help, collide
+    with guard v2's signature validation, and reach handlers as kwargs, all of which §7.2 forbids
+    for stated reasons that did not change).
+85. **A passthrough command's args are the one boundary the quartet does not cross (§7.2.1,
+    ruling A1).** The pre-command region's old stopping rule kept passthrough args opaque as a side
+    effect; making the quartet position-free removed that side effect, so opacity is now stated
+    directly and enforced by the routing walk. A passthrough is *defined* as forwarding its args
+    raw (§1.2), and eating a child process's own `--verbose` would both change what the child does
+    and strip the flag from its argv -- a silent, lossy edit of another program's input by a
+    framework that cannot see what that program does. The pre-command position remains a lossless
+    escape hatch, so nothing became unreachable. `--help`'s interception on the passthrough path is
+    deliberately left alone: it is pinned separately, and printing help is visible and harmless
+    where rewriting a child's argv is neither.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.

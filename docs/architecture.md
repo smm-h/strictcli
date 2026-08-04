@@ -44,23 +44,48 @@ identical by the conformance test suite.
 
 ### Stage 1: reserved flag pre-scan
 
-Before any global flag or command parsing begins, a position-aware pre-scan
-examines the pre-command region of argv (everything before the first non-flag
-token or a `--` separator) for four framework-reserved flags:
+Before any global flag or command parsing begins, a pre-scan examines argv for
+the framework-reserved flags. It has two regions with two different rulesets.
+
+**The pre-command region** -- everything before the first non-flag token or a
+`--` separator -- recognizes every reserved flag:
 
 - `--dump-schema`: triggers schema generation and exits immediately.
 - `--mcp`: starts the MCP JSON-RPC server on stdin/stdout.
 - `--hermetic`: enables hermetic mode (suppresses env vars and config file
   loading for the rest of the parse).
 - `--config <path>`: overrides the config file path.
+- The effects-regime quartet `--dry-run`, `--yes`, `--quiet`, `--verbose`.
 
-The pre-scan does not consume these tokens from argv for `--hermetic` and
-`--config`; instead it records their presence and builds a "cleaned argv" with
-them stripped out. `--dump-schema` and `--mcp` cause an immediate return (no
-further parsing occurs).
+The pre-scan does not consume these tokens from argv for `--hermetic`,
+`--config` and the quartet; instead it records their presence and builds a
+"cleaned argv" with them stripped out. `--dump-schema` and `--mcp` cause an
+immediate return (no further parsing occurs).
 
 The pre-scan also skips over known global flags (long, short, and negation
-forms) so it can correctly identify where the command name begins.
+forms) so a global-flag value that happens to look like a command name does not
+end the region early.
+
+**The command region** -- from the command token onward -- recognizes the
+**quartet only**, anywhere, exactly like `--help` / `-h`. `myapp deploy --dry-run`
+and `myapp --dry-run deploy` are equivalent; `myapp dns zone create --dry-run`
+works at any nesting depth. `--hermetic`, `--config`, `--dump-schema` and `--mcp`
+are *not* recognized here and become unknown-flag errors after the command token.
+
+The command-region scan stops for good at two boundaries:
+
+- **A bare `--`.** Every token after it is positional data, never a reserved
+  flag: `myapp cmd -- --dry-run` passes the literal string `--dry-run` to the
+  command.
+- **A passthrough command's name.** A passthrough's args belong to the child
+  process and are forwarded byte-for-byte, so `myapp exec --verbose child` gives
+  the handler `["--verbose", "child"]` and leaves `ctx.verbose` false. The
+  pre-command position is the escape hatch: `myapp --verbose exec --verbose child`
+  sets `ctx.verbose` *and* still forwards the child's own `--verbose` untouched.
+
+Anywhere-recognition costs exactly what `--help` already costs: a flag *value*
+spelled like a quartet token is eaten. Write `--message=--dry-run` or use `--`
+to pass one literally.
 
 **Go**: `App.preScanReservedFlags()` in `strictcli.go`.
 **Python**: `App._pre_scan_reserved_flags()` in `__init__.py`.
