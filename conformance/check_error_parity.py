@@ -748,20 +748,17 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
 
     # -- Effects regime: templates whose trigger the conformance runner cannot
     #    reach (effects contract §14.5) --
-    'about to run mutating command *. Proceed? [y/N] ': {
-        "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
-        "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
-        "typescript": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+    'about to run consequential command *. Proceed? [y/N] ': {
+        "python": "coverage_deferred:Requires an INTERACTIVE stdin; the conformance runner pins stdin to the null device so cases never depend on the operator's terminal",
+        "go": "coverage_deferred:Requires an INTERACTIVE stdin; the conformance runner pins stdin to the null device so cases never depend on the operator's terminal",
+        "typescript": "coverage_deferred:Requires an INTERACTIVE stdin; the conformance runner pins stdin to the null device so cases never depend on the operator's terminal",
     },
-    'error: stdin is not interactive; pass --yes to confirm': {
-        "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
-        "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
-        "typescript": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
-    },
+    # The non-interactive branch IS covered now: the runner pins stdin to the
+    # null device, which makes §8.3's outcome deterministic in every target.
     'aborted': {
-        "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
-        "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
-        "typescript": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
+        "python": "coverage_deferred:Requires an INTERACTIVE stdin; a decline needs an answer typed at a terminal",
+        "go": "coverage_deferred:Requires an INTERACTIVE stdin; a decline needs an answer typed at a terminal",
+        "typescript": "coverage_deferred:Requires an INTERACTIVE stdin; a decline needs an answer typed at a terminal",
     },
     'command *: effects.http failed: * * returned *': {
         "python": "coverage_deferred:Requires issuing a real network request, which conformance cases must not do",

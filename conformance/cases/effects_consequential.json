@@ -1,0 +1,246 @@
+[
+  {
+    "name": "effects_consequential: a consequential command prompts, and a non-TTY stdin is a hard error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["release"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: stdin is not interactive; pass --approve-consequential to confirm\n"
+    }
+  },
+  {
+    "name": "effects_consequential: a mutating command that is not consequential never prompts",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "build",
+          "help": "a mutating command",
+          "effect": "mutating",
+          "handler_prints": "built"
+        }
+      ]
+    },
+    "argv": ["build"],
+    "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_consequential: an explicit consequential false never prompts",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "build",
+          "help": "a mutating command",
+          "effect": "mutating",
+          "consequential": false,
+          "handler_prints": "built"
+        }
+      ]
+    },
+    "argv": ["build"],
+    "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_consequential: approve-consequential before the command name skips the prompt",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["--approve-consequential", "release"],
+    "expect": {"exit_code": 0, "stdout_equals": "released\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_consequential: approve-consequential after the command name skips the prompt",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["release", "--approve-consequential"],
+    "expect": {"exit_code": 0, "stdout_equals": "released\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_consequential: approve-consequential between a group and its subcommand skips the prompt",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "look",
+          "help": "a read_only command",
+          "effect": "read_only",
+          "handler_prints": "looked"
+        }
+      ],
+      "groups": [
+        {
+          "name": "release",
+          "help": "release operations",
+          "commands": [
+            {
+              "name": "run",
+              "help": "a consequential command",
+              "effect": "mutating",
+              "consequential": true,
+              "handler_prints": "released"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["release", "--approve-consequential", "run"],
+    "expect": {"exit_code": 0, "stdout_equals": "released\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_consequential: dry-run skips the prompt",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_effects": [{"method": "mkdir", "path": "build/out"}]
+        }
+      ]
+    },
+    "argv": ["release", "--dry-run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build/out\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "effects_consequential: a consequential passthrough is not exempt",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "a consequential passthrough",
+          "effect": "mutating",
+          "consequential": true,
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["exec", "rm", "-rf", "/"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: stdin is not interactive; pass --approve-consequential to confirm\n"
+    }
+  },
+  {
+    "name": "effects_consequential: a mutating passthrough that is not consequential never prompts",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "a mutating passthrough",
+          "effect": "mutating",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["exec", "ls", "-la"],
+    "expect": {"exit_code": 0, "stdout_equals": "exec:ls,-la\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_consequential: a read_only command cannot be consequential",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "look",
+          "help": "a read_only command",
+          "effect": "read_only",
+          "consequential": true,
+          "handler_prints": "looked"
+        }
+      ]
+    },
+    "argv": ["look"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"look\": a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)"
+    }
+  },
+  {
+    "name": "effects_consequential: a read_only passthrough cannot be consequential",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "show",
+          "help": "a read_only passthrough",
+          "effect": "read_only",
+          "consequential": true,
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["show", "x"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"show\": a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)"
+    }
+  }
+]

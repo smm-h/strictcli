@@ -325,8 +325,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "--local"
     ],
@@ -374,8 +373,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "--local",
       "--system"

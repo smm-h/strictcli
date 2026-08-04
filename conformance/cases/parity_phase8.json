@@ -38,8 +38,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "alpha",
       "42"

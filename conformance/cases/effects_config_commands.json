@@ -131,7 +131,7 @@
         }
       ]
     },
-    "argv": ["--yes", "config", "set", "opt", "after"],
+    "argv": ["config", "set", "opt", "after"],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",

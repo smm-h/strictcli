@@ -748,6 +748,11 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 	if v, ok := cmdDef["effect"]; ok {
 		opts = append(opts, strictcli.WithEffect(v.(string)))
 	}
+	// `consequential` is NOT mandatory (§8.1): absence means "not
+	// consequential", so the option is only appended when declared.
+	if v, ok := cmdDef["consequential"]; ok && v.(bool) {
+		opts = append(opts, strictcli.WithConsequential())
+	}
 	if v, ok := cmdDef["grants"]; ok {
 		var grants []strictcli.Grant
 		for _, item := range v.([]interface{}) {

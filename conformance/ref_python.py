@@ -301,7 +301,7 @@ def _deprecated_effect_arg(cmd_def: dict) -> str:
 
 
 def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
-    """Emit the effects-regime registration keywords: effect, grants, forwarding.
+    """Emit the effects-regime keywords: effect, consequential, grants, forwarding.
 
     `effect` is mandatory on every non-deprecated command (§1.1), so it is
     emitted whenever the case declares it and omitted when it does not -- a case
@@ -310,6 +310,10 @@ def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
     lines: list[str] = []
     if "effect" in cmd_def:
         lines.append(f"{indent}effect={cmd_def['effect']!r},")
+    # `consequential` is NOT mandatory (§8.1): absence means "not
+    # consequential", so it is emitted only when the case declares it.
+    if "consequential" in cmd_def:
+        lines.append(f"{indent}consequential={cmd_def['consequential']!r},")
     if cmd_def.get("grants"):
         exprs = [
             f"strictcli.Grant(name={g['name']!r}, reason={g['reason']!r}, "

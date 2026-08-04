@@ -806,7 +806,8 @@ KNOWN_OPTION_FUNCS: set[str] = {
     # EffectOption constructors (Resource, SkipIfCurrent, UseGrant, Cwd,
     # EffectEnv, Check, Stream, Body, Header) are not CmdOption/AppOption
     # constructors and so are not part of this catalog.
-    "WithEffect", "WithGrants", "WithForwarding", "WithProcObserveAllowlist",
+    "WithEffect", "WithConsequential", "WithGrants", "WithForwarding",
+    "WithProcObserveAllowlist",
 }
 
 

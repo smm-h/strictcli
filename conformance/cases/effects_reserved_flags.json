@@ -18,11 +18,33 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "flag name 'dry-run' is reserved by the framework (dry-run, yes, quiet, verbose)"
+      "stderr_contains": "flag name 'dry-run' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
     }
   },
   {
-    "name": "effects_reserved_flags: a command flag named yes is rejected",
+    "name": "effects_reserved_flags: a command flag named approve-consequential is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [{"name": "approve-consequential", "type": "bool", "help": "should be rejected"}]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'approve-consequential' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a command flag named yes is banned outright",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -40,7 +62,29 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "flag name 'yes' is reserved by the framework (dry-run, yes, quiet, verbose)"
+      "stderr_contains": "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a global flag named yes is banned outright",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [{"name": "yes", "type": "bool", "help": "should be rejected"}],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential"
     }
   },
   {
@@ -62,7 +106,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "flag name 'quiet' is reserved by the framework (dry-run, yes, quiet, verbose)"
+      "stderr_contains": "flag name 'quiet' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
     }
   },
   {
@@ -84,7 +128,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "flag name 'verbose' is reserved by the framework (dry-run, yes, quiet, verbose)"
+      "stderr_contains": "flag name 'verbose' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
     }
   },
   {
@@ -101,7 +145,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "flag name 'dry-run' is reserved by the framework (dry-run, yes, quiet, verbose)"
+      "stderr_contains": "flag name 'dry-run' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
     }
   },
   {
@@ -128,7 +172,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "flag name 'quiet' is reserved by the framework (dry-run, yes, quiet, verbose)"
+      "stderr_contains": "flag name 'quiet' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
     }
   },
   {
@@ -157,7 +201,7 @@
     "argv": ["cmd"],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "flag name 'verbose' is reserved by the framework (dry-run, yes, quiet, verbose)"
+      "stderr_contains": "flag name 'verbose' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
     }
   },
   {
@@ -239,7 +283,7 @@
     }
   },
   {
-    "name": "effects_reserved_flags: yes after the command name skips the confirm prompt",
+    "name": "effects_reserved_flags: approve-consequential after the command name skips the confirm prompt",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -248,14 +292,15 @@
       "commands": [
         {
           "name": "build",
-          "help": "a mutating command",
+          "help": "a consequential command",
           "effect": "mutating",
+          "consequential": true,
           "handler_prints": "built",
           "handler_effects": [{"method": "run", "argv": ["echo", "observed"]}]
         }
       ]
     },
-    "argv": ["build", "--yes"],
+    "argv": ["build", "--approve-consequential"],
     "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
   },
   {
@@ -397,7 +442,7 @@
         }
       ]
     },
-    "argv": ["cmd", "--quiet", "positional", "--verbose", "--yes"],
+    "argv": ["cmd", "--quiet", "positional", "--verbose", "--approve-consequential"],
     "expect": {"exit_code": 0, "stdout_equals": "name=positional\n"}
   },
   {
@@ -477,8 +522,8 @@
         }
       ]
     },
-    "argv": ["exec", "--dry-run", "--yes"],
-    "expect": {"exit_code": 0, "stdout_equals": "exec:--dry-run,--yes\n"}
+    "argv": ["exec", "--dry-run", "--approve-consequential"],
+    "expect": {"exit_code": 0, "stdout_equals": "exec:--dry-run,--approve-consequential\n"}
   },
   {
     "name": "effects_reserved_flags: a passthrough under a group keeps the quartet opaque",
@@ -591,11 +636,11 @@
         }
       ]
     },
-    "argv": ["--quiet", "--verbose", "--yes", "cmd", "positional"],
+    "argv": ["--quiet", "--verbose", "--approve-consequential", "cmd", "positional"],
     "expect": {"exit_code": 0, "stdout_equals": "name=positional\n"}
   },
   {
-    "name": "effects_reserved_flags: yes skips the confirm prompt for a mutating command",
+    "name": "effects_reserved_flags: approve-consequential skips the confirm prompt for a consequential command",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -604,14 +649,33 @@
       "commands": [
         {
           "name": "build",
-          "help": "a mutating command",
+          "help": "a consequential command",
           "effect": "mutating",
+          "consequential": true,
           "handler_prints": "built",
           "handler_effects": [{"method": "run", "argv": ["echo", "observed"]}]
         }
       ]
     },
-    "argv": ["--yes", "build"],
+    "argv": ["--approve-consequential", "build"],
     "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_reserved_flags: yes is no longer a framework token",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--yes"],
+    "expect": {"exit_code": 1, "stderr_contains": "unknown flag '--yes'"}
   }
 ]

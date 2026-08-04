@@ -26,8 +26,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "tags",
       "a,a"
@@ -64,8 +63,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "tags",
       "--clear"
@@ -100,8 +98,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "count",
       "--clear"
@@ -137,8 +134,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "count",
       "--default"
@@ -175,8 +171,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "tags",
       "a,b",
@@ -213,8 +208,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "count",
       "42",
@@ -252,8 +246,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "tags",
       "--clear",

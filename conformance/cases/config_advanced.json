@@ -314,8 +314,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "nonexistent",
       "value"
@@ -352,8 +351,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "count",
       "abc"
@@ -390,8 +388,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "debug",
       "maybe"

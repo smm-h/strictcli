@@ -474,6 +474,11 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             env=env,
             cwd=run_cwd,
             timeout=10,
+            # A case must never depend on the operator's terminal. /dev/null is
+            # definitively not a TTY, which is what makes the confirm
+            # protocol's non-interactive branch (effects contract §8.3) a
+            # pinnable, deterministic outcome instead of a hang.
+            stdin=subprocess.DEVNULL,
         )
         raw_result = result
 

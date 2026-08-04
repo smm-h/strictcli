@@ -575,6 +575,11 @@ function registerCommand(cmdDef, target, globalFlags) {
 		if ("grants" in cmdDef) {
 			spec.grants = cmdDef.grants;
 		}
+		// `consequential` is NOT mandatory (§8.1): absence means "not
+		// consequential", so it is spliced only when the case declares it.
+		if (cmdDef.consequential === true) {
+			spec.consequential = true;
+		}
 		// Classification is spliced into the factory name (§1.2): the twins are
 		// the sole mint, so an unclassified passthrough is inexpressible in TS
 		// and such a case restricts itself to the other two targets.
@@ -629,6 +634,9 @@ function registerCommand(cmdDef, target, globalFlags) {
 	}
 	if ("grants" in cmdDef) {
 		spec.grants = cmdDef.grants;
+	}
+	if (cmdDef.consequential === true) {
+		spec.consequential = true;
 	}
 	if ("forwarding" in cmdDef) {
 		spec.forwarding = cmdDef.forwarding;

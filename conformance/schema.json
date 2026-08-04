@@ -330,6 +330,11 @@
           "enum": ["read_only", "mutating"],
           "description": "The mandatory command classification (effects contract §1.1). Deliberately NOT in the top-level 'required' list: a top-level required applies conjunctively with the deprecated branch's 'then', which would make classification mandatory on deprecated entries too -- the opposite of §1.1's exemption. The 'else' branch below is what makes it mandatory on every non-deprecated entry."
         },
+        "consequential": {
+          "type": "boolean",
+          "default": false,
+          "description": "Declares that the command's effects are worth interrupting someone for (effects contract §8.1). The framework prompts for exactly these commands and for no others. NOT mandatory -- absence means 'not consequential' -- so it is neither in 'required' nor in the 'else' branch. Declaring it on a read_only command is a registration-time hard error."
+        },
         "grants": {
           "type": "array",
           "items": { "$ref": "#/$defs/grant" },
@@ -440,6 +445,7 @@
           "handler_effects": false,
           "handler_diagnostics": false,
           "effect": false,
+          "consequential": false,
           "grants": false,
           "forwarding": false,
           "flags": false,

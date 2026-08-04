@@ -287,8 +287,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "build"
+            "build"
     ],
     "expect": {
       "exit_code": 1,

@@ -65,8 +65,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "--key",
       "name",
@@ -254,8 +253,7 @@
       ]
     },
     "argv": [
-      "--yes",
-      "config",
+            "config",
       "set",
       "--help"
     ],

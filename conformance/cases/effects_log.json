@@ -213,7 +213,7 @@
         }
       ]
     },
-    "argv": ["--yes", "build"],
+    "argv": ["build"],
     "expect": {
       "exit_code": 0,
       "effects_equals": [
@@ -245,7 +245,7 @@
         }
       ]
     },
-    "argv": ["--yes", "clean"],
+    "argv": ["clean"],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "cleaned\n",
