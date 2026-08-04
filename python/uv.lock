@@ -232,7 +232,7 @@ wheels = [
 
 [[package]]
 name = "strictcli"
-version = "0.35.4"
+version = "0.36.0"
 source = { editable = "." }
 dependencies = [
     { name = "tomlkit" },
