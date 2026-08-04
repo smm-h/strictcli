@@ -127,13 +127,107 @@ class TestDelivery:
         assert r.exit_code == 0
         assert seen == {"ok": True}
 
-    def test_pre_scan_is_position_aware(self):
-        """The quartet is extracted from the pre-command region only, which is
-        what keeps a passthrough command's args opaque to the framework."""
+    @pytest.mark.parametrize("token,key", [
+        ("--dry-run", "dry_run"),
+        ("--yes", "yes"),
+        ("--quiet", "quiet"),
+        ("--verbose", "verbose"),
+    ])
+    def test_each_flag_is_recognized_after_the_command(self, token, key):
+        """The quartet is recognized anywhere in argv, exactly like --help."""
+        r = _quartet_app().test(["run", token])
+        assert r.exit_code == 0
+        assert r.data[key] is True
+
+    def test_all_four_together_after_the_command(self):
+        r = _quartet_app().test(["run", "--dry-run", "--yes", "--quiet", "--verbose"])
+        assert r.exit_code == 0
+        assert r.data == {"dry_run": True, "yes": True, "quiet": True, "verbose": True}
+
+    def test_mixed_positions_are_unioned(self):
+        r = _quartet_app().test(["--dry-run", "run", "--verbose"])
+        assert r.exit_code == 0
+        assert r.data["dry_run"] is True
+        assert r.data["verbose"] is True
+
+    def test_recognized_after_a_nested_group_subcommand(self):
+        app = strictcli.App(name="app", version="1.0.0", help="app")
+        outer = app.group("outer", help="outer")
+        inner = outer.group("inner", help="inner")
+
+        @inner.command("run", effect="read_only", help="run")
+        def _run(ctx):
+            return strictcli.outcome(data={"dry_run": ctx.dry_run})
+
+        r = app.test(["outer", "inner", "run", "--dry-run"])
+        assert r.exit_code == 0
+        assert r.data == {"dry_run": True}
+
+    def test_recognized_between_a_group_and_its_subcommand(self):
+        app = strictcli.App(name="app", version="1.0.0", help="app")
+        grp = app.group("grp", help="grp")
+
+        @grp.command("run", effect="read_only", help="run")
+        def _run(ctx):
+            return strictcli.outcome(data={"dry_run": ctx.dry_run})
+
+        r = app.test(["grp", "--dry-run", "run"])
+        assert r.exit_code == 0
+        assert r.data == {"dry_run": True}
+
+    def test_stripped_from_argv_after_the_command(self):
+        """The quartet never reaches the command parser as an argument."""
+        app = strictcli.App(name="app", version="1.0.0", help="app")
+
+        @app.command("run", effect="read_only", help="run",
+                     args=[strictcli.Arg(name="name", help="a positional")])
+        def _run(ctx, name):
+            return strictcli.outcome(data={"name": name, "quiet": ctx.quiet})
+
+        r = app.test(["run", "--quiet", "value"])
+        assert r.exit_code == 0
+        assert r.data == {"name": "value", "quiet": True}
+
+    def test_a_token_after_double_dash_is_data(self):
+        """A bare -- ends the scan: what follows is positional data."""
+        app = strictcli.App(name="app", version="1.0.0", help="app")
+
+        @app.command("run", effect="read_only", help="run",
+                     args=[strictcli.Arg(name="rest", help="trailing args",
+                                         variadic=True)])
+        def _run(ctx, rest):
+            return strictcli.outcome(data={"rest": rest, "dry_run": ctx.dry_run})
+
+        r = app.test(["run", "--", "--dry-run"])
+        assert r.exit_code == 0
+        assert r.data == {"rest": ["--dry-run"], "dry_run": False}
+
+    def test_hermetic_stays_pre_command_only(self):
+        """Only the quartet moved; --hermetic is still pre-command-only."""
+        app = _quartet_app()
+        r = app.test(["run", "--hermetic"])
+        assert r.exit_code == 1
+        assert "unknown flag '--hermetic'" in r.stderr
+
+    def test_read_only_accepts_a_post_command_dry_run(self):
         app = _quartet_app()
         r = app.test(["run", "--dry-run"])
-        assert r.exit_code == 1
-        assert "unknown flag '--dry-run'" in r.stderr
+        assert r.exit_code == 0
+        assert "DRY RUN — no changes were made. Would do:" in r.stdout
+
+    def test_read_only_still_rejects_a_mutating_effect_post_command(self):
+        """Per-command applicability is unchanged, wherever --dry-run appeared."""
+        app = strictcli.App(name="app", version="1.0.0", help="app")
+
+        @app.command("look", effect="read_only", help="look")
+        def _look(ctx):
+            ctx.effects.mkdir("d")
+            return 0
+
+        with pytest.raises(ValueError) as exc:
+            app.test(["look", "--dry-run"])
+        assert ('command "look" is classified read_only; '
+                "effects.mkdir is a mutating operation") in str(exc.value)
 
     def test_passthrough_args_stay_opaque(self):
         app = strictcli.App(name="app", version="1.0.0", help="app")
@@ -151,6 +245,46 @@ class TestDelivery:
         r = app.test(["exec", "--quiet", "--verbose"])
         assert r.exit_code == 0
         assert seen["args"] == ["--quiet", "--verbose"]
+
+    def test_passthrough_under_a_group_stays_opaque(self):
+        app = strictcli.App(name="app", version="1.0.0", help="app")
+        seen = {}
+
+        def _pt(ctx, name, args, globals):
+            seen["args"] = args
+            seen["verbose"] = ctx.verbose
+            return 0
+
+        grp = app.group("grp", help="grp")
+
+        @grp.command("exec", effect="read_only", help="exec",
+                     passthrough=strictcli.Passthrough(handler=_pt))
+        def _exec(ctx, **kw):
+            return 0
+
+        r = app.test(["grp", "exec", "--verbose", "child"])
+        assert r.exit_code == 0
+        assert seen == {"args": ["--verbose", "child"], "verbose": False}
+
+    def test_pre_command_position_is_the_passthrough_escape_hatch(self):
+        """A pre-command quartet token reaches the Context AND leaves the
+        child's identically-spelled argument untouched."""
+        app = strictcli.App(name="app", version="1.0.0", help="app")
+        seen = {}
+
+        def _pt(ctx, name, args, globals):
+            seen["args"] = args
+            seen["verbose"] = ctx.verbose
+            return 0
+
+        @app.command("exec", effect="read_only", help="exec",
+                     passthrough=strictcli.Passthrough(handler=_pt))
+        def _exec(ctx, **kw):
+            return 0
+
+        r = app.test(["--verbose", "exec", "--verbose", "child"])
+        assert r.exit_code == 0
+        assert seen == {"args": ["--verbose", "child"], "verbose": True}
 
 
 class TestGating:

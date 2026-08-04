@@ -6004,17 +6004,20 @@ class App:
         self._groups["config"] = config_grp
 
     def _pre_scan_reserved_flags(self, argv: list[str]) -> dict:
-        """Position-aware pre-scan for the framework-owned reserved flags.
+        """Pre-scan for the framework-owned reserved flags.
 
         Handles --dump-schema, --mcp, --config, --hermetic and the effects-regime
         quartet --dry-run/--yes/--quiet/--verbose.
 
-        Scans the pre-command region of argv (before the first non-flag
-        token, before ``--``).  Known global flags and their values are
-        skipped so that a global-flag value matching a command name does
-        not terminate the scan early. Everything at or after the command token
-        is left untouched -- which is what keeps a passthrough command's args
-        opaque to the framework.
+        Two regions, two rulesets (contract §7.2, amended):
+
+        - The **pre-command region** (before the first non-flag token, before
+          ``--``) recognizes every reserved flag. Known global flags and their
+          values are skipped so that a global-flag value matching a command name
+          does not terminate the region early.
+        - The **command region** recognizes ONLY the quartet, anywhere, exactly
+          like --help/-h. --hermetic/--config/--dump-schema/--mcp stay
+          pre-command-only. See _scan_command_region_quartet.
 
         Returns a dict with keys: dump_schema, serve_mcp, hermetic, config_path,
         dry_run, yes, quiet, verbose, err, cleaned_argv.
@@ -6030,16 +6033,20 @@ class App:
 
         result: dict = {}
         exclude_indices: set[int] = set()
+        # Index where the command region begins; -1 means "never reached one"
+        # (a bare -- or an unknown flag-like token ended the scan for good).
+        command_region_from = -1
         i = 0
         while i < len(argv):
             tok = argv[i]
 
-            # -- terminates the pre-command region
+            # -- terminates the whole scan: everything after it is data
             if tok == "--":
                 break
 
-            # Non-flag token = command name: stop scanning
+            # Non-flag token = the command token: the command region starts here
             if not tok.startswith("-") or tok == "-":
+                command_region_from = i
                 break
 
             # --dump-schema
@@ -6120,6 +6127,11 @@ class App:
             # Unknown flag-like token: stop
             break
 
+        if command_region_from >= 0:
+            self._scan_command_region_quartet(
+                argv, command_region_from, result, exclude_indices,
+            )
+
         if exclude_indices:
             result["cleaned_argv"] = [
                 tok for j, tok in enumerate(argv) if j not in exclude_indices
@@ -6128,6 +6140,66 @@ class App:
             result["cleaned_argv"] = argv
 
         return result
+
+    def _scan_command_region_quartet(
+        self,
+        argv: list[str],
+        start: int,
+        result: dict,
+        exclude_indices: set[int],
+    ) -> None:
+        """Recognize the reserved quartet in the command region of argv.
+
+        Contract §7.2 (amended 2026-08-04): --dry-run/--yes/--quiet/--verbose are
+        recognized ANYWHERE in argv, exactly like --help/-h, because their
+        applicability is per-command -- requiring them before the command name
+        was backwards. Only the quartet is recognized here; --hermetic,
+        --config, --dump-schema and --mcp remain pre-command-only.
+
+        The scan stops for good at two boundaries:
+
+        - a bare ``--``, after which every token is positional data;
+        - a **passthrough** command's name, after which every token belongs to
+          the child process and is forwarded byte-for-byte. Eating a child's own
+          --verbose would silently change what the child does.
+
+        Routing tokens are walked through the group/command tree so a quartet
+        token may sit anywhere among them. Nothing here raises: routing errors
+        are the real parse's job.
+        """
+        groups = self._groups
+        commands = self._commands
+        routing_done = False
+        i = start
+        while i < len(argv):
+            tok = argv[i]
+
+            if tok == "--":
+                return
+
+            if tok.startswith("-") and tok != "-":
+                if tok in _RESERVED_QUARTET_TOKENS:
+                    result[_RESERVED_QUARTET_TOKENS[tok]] = True
+                    exclude_indices.add(i)
+                i += 1
+                continue
+
+            # A non-flag token: a routing token until routing resolves.
+            if not routing_done:
+                grp = groups.get(tok)
+                if grp is not None:
+                    groups = grp._groups
+                    commands = grp.commands
+                    i += 1
+                    continue
+                cmd = commands.get(tok)
+                if cmd is not None and cmd.passthrough is not None:
+                    return
+                # Resolved a normal command, or hit an unknown/deprecated token
+                # the real parse will report: routing is over either way.
+                routing_done = True
+
+            i += 1
 
     def _parse(self, argv: list[str]) -> tuple[Command, dict[str, object] | list[str], dict[str, str]]:
         """Parse argv (without program name) into a resolved Command and kwargs.
