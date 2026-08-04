@@ -1125,48 +1125,35 @@ WithConfigFormat("toml") now correctly parses TOML config files (previously alwa
 
 # ts-strictcli
 
-## 0.34.0
+## 0.34.1
 
-The effects regime: twin registration factories replacing defineCommand, framework-owned --dry-run/--yes/--quiet/--verbose, and side effects that flow through ctx.effects.
+Recognize the reserved flag quartet anywhere in argv
 
 <details>
 <summary>Context</summary>
 
-A consumer command once accepted a dry-run flag, ignored it, and published to a
-public registry for real. Honoring a dry run was a convention, and conventions
-are forgettable. This release makes it structural, in lockstep with the Python
-and Go implementations.
+The quartet (--dry-run, --yes, --quiet, --verbose) was extracted by a pre-scan
+that stopped at the first non-flag token, so it was only recognized BEFORE the
+command name -- while every documented invocation in this ecosystem writes these
+flags after it. `myapp deploy --dry-run` failed with `unknown flag '--dry-run'`,
+and the first consumer to migrate onto the effects regime had to rewrite argv
+before handing it to the framework to make its own documented commands work.
 
-Classification is mandatory and has no default, so there is nothing left for
-defineCommand to mean: it is removed, along with passthrough, in favour of the
-twins defineReadOnlyCommand / defineMutatingCommand and readOnlyPassthrough /
-mutatingPassthrough. The twins pay for themselves at compile time -- a read-only
-command's ctx is narrowed to a context that has no mutating methods, so a stray
-.write() inside one is a type error, not a runtime surprise. Plain JavaScript
-consumers get the same guarantee at runtime through a mandatory seal. The
-framework owns --dry-run, --yes, --quiet and --verbose, and declaring a flag by
-one of those names is a registration error.
-
-Side effects ride ctx.effects: run, spawn, write, mkdir, remove, rename, chmod,
-http. In a dry run the handle records instead of performing and prints the
-would-do log. What a recorded mutation returns is the hard part, and the answer
-is to refuse to guess: the handle returns a branded Unsettled carrier. Forward
-it into a later effect and the preview continues with the provenance rendered
-inline; read it or branch on it and the preview truncates with a message naming
-the step and the reason.
-
-One packaging change comes with this: the built-in effects-bypass check analyses
-consumer sources through the TypeScript compiler API, so typescript moves from
-devDependencies to dependencies and is installed alongside strictcli in
-production installs. That was a deliberate trade -- full AST fidelity in
-lockstep with the Python and Go checks was worth a dependency that most
-consumers of a TypeScript CLI framework already have.
-
-This breaks every consumer at its lock bump, deliberately: a silent grace period
-would have preserved the exact bug class this regime exists to kill. The fleet
-migrates in a dedicated wave immediately after this release.
+The quartet is now recognized anywhere in argv, matching the framework's own
+existing precedent for --help/-h. Two boundaries are preserved: a bare `--`
+(everything after it is positional data) and a passthrough command's name (its
+args belong to the child process and are forwarded byte-for-byte, so a child's
+own --verbose is never eaten). --hermetic, --config, --dump-schema and --mcp
+stay pre-command-only. Effects contract §7.2 is amended accordingly (adoption
+ruling A1, §18.6).
 
 </details>
+
+### Fixes
+
+- [ts-strictcli] **The reserved flags now work after the command name.** `--dry-run`, `--yes`, `--quiet` and `--verbose` are recognized anywhere in argv, exactly like `--help` -- `myapp deploy --dry-run` used to fail with `unknown flag` and now works, at any group nesting depth. A bare `--` still ends recognition, and a passthrough command's args are still forwarded to the child untouched.
+
+## 0.34.0
 
 ### Breaking
 
