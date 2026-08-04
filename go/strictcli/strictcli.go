@@ -2319,9 +2319,9 @@ type preScanResult struct {
 }
 
 // reservedQuartetTokens maps an argv token to the preScanResult field it sets.
-// The quartet is parsed in the PRE-COMMAND region only, exactly like
-// --hermetic: `app --dry-run cmd` works, `app cmd --dry-run` is an unknown-flag
-// error.
+// The quartet is recognized ANYWHERE in argv, exactly like --help/-h:
+// both `app --dry-run cmd` and `app cmd --dry-run` work. Contrast --hermetic,
+// --config, --dump-schema and --mcp, which stay pre-command-only.
 var reservedQuartetTokens = map[string]func(*reservedFlags){
 	"--dry-run": func(r *reservedFlags) { r.dryRun = true },
 	"--yes":     func(r *reservedFlags) { r.yes = true },
@@ -2329,16 +2329,17 @@ var reservedQuartetTokens = map[string]func(*reservedFlags){
 	"--verbose": func(r *reservedFlags) { r.verbose = true },
 }
 
-// preScanReservedFlags scans argv for --dump-schema, --mcp, and --config
-// in the pre-command region only. The pre-command region ends at:
-//   - the first non-flag token (the command name)
-//   - a "--" terminator
+// preScanReservedFlags scans argv for the framework-owned reserved flags.
+// Two regions, two rulesets (contract §7.2, amended):
 //
-// Within the pre-command region, known global flags and their values are
-// skipped so that a global flag value that happens to look like a command
-// name is not treated as one. After the pre-command region, these reserved
-// flags are NOT intercepted (they become unknown-flag errors in the normal
-// parse flow).
+//   - The pre-command region -- before the first non-flag token, before a "--"
+//     terminator -- recognizes every reserved flag. Known global flags and their
+//     values are skipped so that a global flag value that happens to look like a
+//     command name is not treated as one.
+//   - The command region recognizes ONLY the quartet, anywhere, exactly like
+//     --help/-h. --hermetic, --config, --dump-schema and --mcp stay
+//     pre-command-only and become unknown-flag errors after the command token.
+//     See scanCommandRegionQuartet.
 func (a *App) preScanReservedFlags(argv []string) preScanResult {
 	// Build a set of known global flag long-names and short-names,
 	// along with whether they take a value (non-bool).
@@ -2360,17 +2361,21 @@ func (a *App) preScanReservedFlags(argv []string) preScanResult {
 	var result preScanResult
 	// Track indices to exclude from cleanedArgv (--config tokens)
 	excludeIndices := make(map[int]bool)
+	// Index where the command region begins; -1 means "never reached one"
+	// (a bare -- or an unknown flag-like token ended the scan for good).
+	commandRegionFrom := -1
 	i := 0
 	for i < len(argv) {
 		tok := argv[i]
 
-		// -- terminates the pre-command region
+		// -- terminates the whole scan: everything after it is data
 		if tok == "--" {
 			break
 		}
 
-		// Non-flag token = command name: stop scanning
+		// Non-flag token = the command token: the command region starts here
 		if !strings.HasPrefix(tok, "-") || tok == "-" {
+			commandRegionFrom = i
 			break
 		}
 
@@ -2463,6 +2468,10 @@ func (a *App) preScanReservedFlags(argv []string) preScanResult {
 		break
 	}
 
+	if commandRegionFrom >= 0 {
+		a.scanCommandRegionQuartet(argv, commandRegionFrom, &result.reserved, excludeIndices)
+	}
+
 	// Build cleaned argv with --config tokens stripped
 	if len(excludeIndices) > 0 {
 		cleaned := make([]string, 0, len(argv)-len(excludeIndices))
@@ -2477,6 +2486,66 @@ func (a *App) preScanReservedFlags(argv []string) preScanResult {
 	}
 
 	return result
+}
+
+// scanCommandRegionQuartet recognizes the reserved quartet in the command
+// region of argv.
+//
+// Contract §7.2 (amended 2026-08-04): --dry-run/--yes/--quiet/--verbose are
+// recognized ANYWHERE in argv, exactly like --help/-h, because their
+// applicability is per-command -- requiring them before the command name was
+// backwards. Only the quartet is recognized here; --hermetic, --config,
+// --dump-schema and --mcp remain pre-command-only.
+//
+// The scan stops for good at two boundaries:
+//
+//   - a bare "--", after which every token is positional data;
+//   - a passthrough command's name, after which every token belongs to the
+//     child process and is forwarded byte-for-byte. Eating a child's own
+//     --verbose would silently change what the child does.
+//
+// Routing tokens are walked through the group/command tree so a quartet token
+// may sit anywhere among them. Nothing here errors: routing failures are the
+// real parse's job.
+func (a *App) scanCommandRegionQuartet(
+	argv []string,
+	start int,
+	reserved *reservedFlags,
+	excludeIndices map[int]bool,
+) {
+	groups := a.groups
+	commands := a.commands
+	routingDone := false
+	for i := start; i < len(argv); i++ {
+		tok := argv[i]
+
+		if tok == "--" {
+			return
+		}
+
+		if strings.HasPrefix(tok, "-") && tok != "-" {
+			if set, ok := reservedQuartetTokens[tok]; ok {
+				set(reserved)
+				excludeIndices[i] = true
+			}
+			continue
+		}
+
+		// A non-flag token: a routing token until routing resolves.
+		if !routingDone {
+			if grp, ok := groups[tok]; ok {
+				groups = grp.Groups
+				commands = grp.Commands
+				continue
+			}
+			if cmd, ok := commands[tok]; ok && cmd.Passthrough {
+				return
+			}
+			// Resolved a normal command, or hit an unknown/deprecated token the
+			// real parse will report: routing is over either way.
+			routingDone = true
+		}
+	}
 }
 
 // doParse parses argv and returns a parseResult.

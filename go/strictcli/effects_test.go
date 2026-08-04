@@ -783,12 +783,173 @@ func TestQuartetIsDeliveredOnTheContextNotAsKwargs(t *testing.T) {
 	}
 }
 
-func TestQuartetIsPreCommandOnly(t *testing.T) {
+// The quartet is recognized ANYWHERE in argv, exactly like --help/-h
+// (§7.2, amended 2026-08-04).
+
+func TestQuartetIsRecognizedAfterTheCommandName(t *testing.T) {
+	for _, c := range []struct {
+		tok  string
+		read func(*Context) bool
+	}{
+		{"--dry-run", (*Context).DryRun},
+		{"--yes", (*Context).Yes},
+		{"--quiet", (*Context).Quiet},
+		{"--verbose", (*Context).Verbose},
+	} {
+		var got bool
+		app := effectsApp(EffectReadOnly, func(ctx *Context) Outcome {
+			got = c.read(ctx)
+			return Exit(0)
+		})
+		r := app.Test([]string{"go", c.tok})
+		if r.ExitCode != 0 || !got {
+			t.Fatalf("%s after the command name: exit=%d delivered=%v stderr=%q",
+				c.tok, r.ExitCode, got, r.Stderr)
+		}
+	}
+}
+
+func TestQuartetIsRecognizedAfterANestedGroupSubcommand(t *testing.T) {
+	var dry bool
+	app := NewApp("app", "1.0.0", "h")
+	inner := app.Group("outer", "outer group").Group("inner", "inner group")
+	inner.Command("go", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		dry = ctx.DryRun()
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+	r := app.Test([]string{"outer", "inner", "go", "--dry-run"})
+	if r.ExitCode != 0 || !dry {
+		t.Fatalf("exit=%d dry=%v stderr=%q", r.ExitCode, dry, r.Stderr)
+	}
+}
+
+func TestQuartetIsRecognizedBetweenAGroupAndItsSubcommand(t *testing.T) {
+	var dry bool
+	app := NewApp("app", "1.0.0", "h")
+	grp := app.Group("grp", "a group")
+	grp.Command("go", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		dry = ctx.DryRun()
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+	r := app.Test([]string{"grp", "--dry-run", "go"})
+	if r.ExitCode != 0 || !dry {
+		t.Fatalf("exit=%d dry=%v stderr=%q", r.ExitCode, dry, r.Stderr)
+	}
+}
+
+func TestQuartetIsStrippedFromArgvAfterTheCommandName(t *testing.T) {
+	var seen interface{}
+	var quiet bool
+	app := NewApp("app", "1.0.0", "h")
+	app.Command("go", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		seen = kwargs["name"]
+		quiet = ctx.Quiet()
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), WithArgs(NewArg("name", "a positional")))
+	r := app.Test([]string{"go", "--quiet", "value"})
+	if r.ExitCode != 0 || seen != "value" || !quiet {
+		t.Fatalf("exit=%d name=%v quiet=%v stderr=%q", r.ExitCode, seen, quiet, r.Stderr)
+	}
+}
+
+func TestATokenAfterDoubleDashIsDataNotAReservedFlag(t *testing.T) {
+	var seen interface{}
+	var dry bool
+	app := NewApp("app", "1.0.0", "h")
+	app.Command("go", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		seen = kwargs["rest"]
+		dry = ctx.DryRun()
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), WithArgs(NewArg("rest", "trailing args", Variadic())))
+	r := app.Test([]string{"go", "--", "--dry-run"})
+	if r.ExitCode != 0 || dry {
+		t.Fatalf("a token after -- must stay data: exit=%d dry=%v stderr=%q",
+			r.ExitCode, dry, r.Stderr)
+	}
+	rest, _ := seen.([]interface{})
+	if len(rest) != 1 || rest[0] != "--dry-run" {
+		t.Fatalf("rest=%#v", seen)
+	}
+}
+
+func TestHermeticStaysPreCommandOnly(t *testing.T) {
+	// Only the quartet moved: --hermetic/--config/--dump-schema/--mcp are still
+	// recognized in the pre-command region only.
 	app := effectsApp(EffectReadOnly, func(ctx *Context) Outcome { return Exit(0) })
-	r := app.Test([]string{"go", "--dry-run"})
-	if r.ExitCode != 1 || !strings.Contains(r.Stderr, "unknown flag '--dry-run'") {
-		t.Fatalf("post-command quartet tokens must be unknown-flag errors, got exit=%d stderr=%q",
+	r := app.Test([]string{"go", "--hermetic"})
+	if r.ExitCode != 1 || !strings.Contains(r.Stderr, "unknown flag '--hermetic'") {
+		t.Fatalf("post-command --hermetic must be an unknown-flag error, got exit=%d stderr=%q",
 			r.ExitCode, r.Stderr)
+	}
+}
+
+func TestReadOnlyStillRejectsAMutatingEffectUnderAPostCommandDryRun(t *testing.T) {
+	// Per-command applicability is unchanged, wherever --dry-run appeared.
+	var err error
+	app := effectsApp(EffectReadOnly, func(ctx *Context) Outcome {
+		_, err = ctx.Effects().Mkdir("d")
+		return Exit(0)
+	})
+	app.Test([]string{"go", "--dry-run"})
+	want := `command "go" is classified read_only; effects.mkdir is a mutating operation`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("got %v, want %q", err, want)
+	}
+}
+
+func TestPassthroughArgsKeepTheQuartetOpaque(t *testing.T) {
+	// The one boundary the quartet does not cross: a passthrough's args belong
+	// to the child process and are forwarded byte-for-byte.
+	for _, c := range []struct {
+		name     string
+		argv     []string
+		wantArgs []string
+		wantCtx  bool
+	}{
+		{"top level", []string{"exec", "--verbose", "child"},
+			[]string{"--verbose", "child"}, false},
+		{"pre-command escape hatch", []string{"--verbose", "exec", "--verbose", "child"},
+			[]string{"--verbose", "child"}, true},
+	} {
+		var gotArgs []string
+		var gotCtx bool
+		app := NewApp("app", "1.0.0", "h")
+		app.Passthrough("exec", "run something",
+			func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
+				gotArgs = args
+				gotCtx = ctx.Verbose()
+				return 0
+			}, WithEffect(EffectReadOnly))
+		r := app.Test(c.argv)
+		if r.ExitCode != 0 {
+			t.Fatalf("%s: exit=%d stderr=%q", c.name, r.ExitCode, r.Stderr)
+		}
+		if strings.Join(gotArgs, ",") != strings.Join(c.wantArgs, ",") {
+			t.Fatalf("%s: args=%#v want %#v", c.name, gotArgs, c.wantArgs)
+		}
+		if gotCtx != c.wantCtx {
+			t.Fatalf("%s: ctx.Verbose()=%v want %v", c.name, gotCtx, c.wantCtx)
+		}
+	}
+}
+
+func TestPassthroughUnderAGroupKeepsTheQuartetOpaque(t *testing.T) {
+	var gotArgs []string
+	var gotVerbose bool
+	app := NewApp("app", "1.0.0", "h")
+	grp := app.Group("grp", "a group")
+	grp.Command("exec", "run something", nil,
+		WithPassthrough(func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
+			gotArgs = args
+			gotVerbose = ctx.Verbose()
+			return 0
+		}), WithEffect(EffectReadOnly))
+	r := app.Test([]string{"grp", "exec", "--verbose", "child"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if strings.Join(gotArgs, ",") != "--verbose,child" || gotVerbose {
+		t.Fatalf("args=%#v verbose=%v", gotArgs, gotVerbose)
 	}
 }
 
