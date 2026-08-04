@@ -674,6 +674,16 @@ def _msg_dry_run_truncated(step: int, cmd: str, brand: str) -> str:
     )
 
 
+def _msg_dry_run_aborted(step: int, cmd: str) -> str:
+    """The aborted-preview marker. Same shape and prefix as the truncation
+    error above: both say the preview ended before the handler finished, and
+    they differ only in why and in what the reader may conclude."""
+    return (
+        f"error: dry-run preview ends at step {step}: {cmd} aborted — "
+        f"the preview above may be incomplete"
+    )
+
+
 def _msg_confirm_prompt(cmd_path: str) -> str:
     """The confirm prompt. A prompt, not an error, but parity is still checked."""
     return f"about to run mutating command '{cmd_path}'. Proceed? [y/N] "
@@ -5508,6 +5518,29 @@ class App:
         """Start a new dispatch: reset the structured effect log."""
         self._effect_log = _EffectLog()
 
+    def _render_dry_log(self, cmd_path: str, *, aborted: bool) -> None:
+        """Write the would-do log for a dry run. No-op outside dry mode.
+
+        Called on every exit path out of a dispatch, so a handler that leaves
+        through ``sys.exit`` or an exception still shows the preview it was
+        asked for. The log always goes to stdout and is never suppressed by
+        ``--quiet``: it is dry mode's primary output.
+
+        ``aborted`` marks a dispatch that did not finish. The log is still
+        written -- the recorded effects are owed either way -- and the marker
+        that follows it on stderr says the reader cannot assume the list is
+        the whole preview. The truncation path (which ends the preview for its
+        own pinned reason) renders itself and never comes through here.
+        """
+        if not self._last_dry_run:
+            return
+        print(self._effect_log.render())
+        if aborted:
+            print(
+                _msg_dry_run_aborted(self._effect_log.next_seq(), cmd_path),
+                file=sys.stderr,
+            )
+
     def _record_cache_write(self, path: str) -> None:
         """Record a framework-blessed CACHE_WRITE.
 
@@ -6873,20 +6906,31 @@ class App:
             )
             # The confirm protocol fires only on the real CLI path.
             self._confirm_mutating(cmd, cmd_path)
+            # The would-do log renders on EVERY exit path out of the dispatch,
+            # not just the normal return: the operator asked for a preview and
+            # the effects were recorded, so a handler that unwinds through
+            # sys.exit or an exception still owes them the list. The clause set
+            # below is exhaustive by construction -- BaseException is the root
+            # of the hierarchy, so no unwind can slip past it.
             try:
                 if cmd.passthrough is not None:
                     result = cmd.passthrough.handler(ctx, cmd.name, data, self._last_global_values)
                 else:
                     result = cmd.handler(ctx, **data)
+                exit_code, out_data = _interpret_handler_return(result)
+                if out_data is not _MISSING:
+                    print(json.dumps(out_data, default=str, separators=(",", ":")))
             except _DryRunTruncated as trunc:
                 print(trunc.log.render())
                 print(trunc.message, file=sys.stderr)
                 sys.exit(1)
-            exit_code, out_data = _interpret_handler_return(result)
-            if out_data is not _MISSING:
-                print(json.dumps(out_data, default=str, separators=(",", ":")))
-            if self._last_dry_run:
-                print(self._effect_log.render())
+            except SystemExit:
+                self._render_dry_log(cmd_path, aborted=False)
+                raise
+            except BaseException:
+                self._render_dry_log(cmd_path, aborted=True)
+                raise
+            self._render_dry_log(cmd_path, aborted=False)
             sys.exit(exit_code)
 
     def test(self, argv: list[str]) -> Result:
@@ -6945,9 +6989,9 @@ class App:
             exit_code = 1
         else:
             self._begin_dispatch()
+            cmd_path = ".".join(self._last_resolved_path + [cmd.name])
             # Record test-coverage hit (command-level only).
             if self.test_coverage:
-                cmd_path = ".".join(self._last_resolved_path + [cmd.name])
                 self._record_coverage(cmd_path)
             # Store sources for function handlers that need provenance info
             self._last_sources = sources
@@ -6959,9 +7003,7 @@ class App:
                         dry_run=self._last_dry_run, yes=self._last_yes,
                         quiet=self._last_quiet, verbose=self._last_verbose,
                         effects=self._arm_effects(
-                            cmd,
-                            ".".join(self._last_resolved_path + [cmd.name]),
-                            dry_run=self._last_dry_run,
+                            cmd, cmd_path, dry_run=self._last_dry_run,
                         ),
                     )
                     if cmd.passthrough is not None:
@@ -6974,14 +7016,17 @@ class App:
                     if out_data is not _MISSING:
                         result_data = out_data
                         print(json.dumps(out_data, default=str, separators=(",", ":")))
-                    if self._last_dry_run:
-                        print(self._effect_log.render())
+                    self._render_dry_log(cmd_path, aborted=False)
                 except _DryRunTruncated as trunc:
                     print(trunc.log.render())
                     print(trunc.message, file=sys.stderr)
                     exit_code = 1
                 except SystemExit as e:
                     exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
+                    self._render_dry_log(cmd_path, aborted=False)
+                except BaseException:
+                    self._render_dry_log(cmd_path, aborted=True)
+                    raise
 
         return Result(
             stdout=stdout_buf.getvalue(),

@@ -203,6 +203,187 @@ class TestWouldDoLog:
         assert (tmp_path / "build").is_dir()
 
 
+_EXPECTED_LOG = (
+    "DRY RUN — no changes were made. Would do:\n"
+    "  1. write: report.txt (2 bytes)\n"
+)
+
+
+class TestWouldDoLogOnEveryExitPath:
+    """The log renders on every exit path out of a dispatch, not just the
+    normal return: `sys.exit`, an uncaught exception, and a bad handler
+    return all still show the preview the operator asked for."""
+
+    @staticmethod
+    def _app_with(handler_tail):
+        app = _app()
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            ctx.effects.write("report.txt", "ok")
+            return handler_tail()
+
+        return app
+
+    def test_sys_exit_still_renders_the_log(self):
+        app = self._app_with(lambda: sys.exit(1))
+        r = app.test(["--dry-run", "rel"])
+        assert r.exit_code == 1
+        assert r.stdout == _EXPECTED_LOG
+        assert r.stderr == ""
+
+    def test_sys_exit_renders_the_same_bytes_as_an_equivalent_return(self):
+        """`sys.exit(1)` and `return 1` are the same intent; the preview must
+        not depend on which spelling the handler chose."""
+        exiting = self._app_with(lambda: sys.exit(1)).test(["--dry-run", "rel"])
+        returning = self._app_with(lambda: 1).test(["--dry-run", "rel"])
+        assert exiting.stdout == returning.stdout
+        assert exiting.stderr == returning.stderr
+        assert exiting.exit_code == returning.exit_code
+
+    def test_sys_exit_with_no_code_renders_the_log(self):
+        app = self._app_with(lambda: sys.exit())
+        r = app.test(["--dry-run", "rel"])
+        assert r.exit_code == 0
+        assert r.stdout == _EXPECTED_LOG
+
+    def test_sys_exit_renders_nothing_outside_dry_mode(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = self._app_with(lambda: sys.exit(1))
+        r = app.test(["rel"])
+        assert r.exit_code == 1
+        assert "DRY RUN" not in r.stdout
+
+    def test_sys_exit_renders_the_log_on_the_run_path(self, monkeypatch, capsys):
+        app = self._app_with(lambda: sys.exit(1))
+        monkeypatch.setattr(sys, "argv", ["app", "--dry-run", "rel"])
+        with pytest.raises(SystemExit) as exc:
+            app.run()
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert captured.out == _EXPECTED_LOG
+        assert captured.err == ""
+
+    def test_uncaught_exception_renders_the_log_marked_incomplete(
+        self, monkeypatch, capsys
+    ):
+        def _boom():
+            raise RuntimeError("kaboom")
+
+        app = self._app_with(_boom)
+        monkeypatch.setattr(sys, "argv", ["app", "--dry-run", "rel"])
+        with pytest.raises(RuntimeError, match="kaboom"):
+            app.run()
+        captured = capsys.readouterr()
+        assert captured.out == _EXPECTED_LOG
+        assert captured.err == (
+            "error: dry-run preview ends at step 2: rel aborted — "
+            "the preview above may be incomplete\n"
+        )
+
+    def test_an_aborted_preview_names_the_dotted_command_path(
+        self, monkeypatch, capsys
+    ):
+        app = _app()
+        grp = app.group("release", help="release")
+
+        @grp.command("run", help="run", effect="mutating")
+        def _run(ctx):
+            raise RuntimeError("kaboom")
+
+        monkeypatch.setattr(sys, "argv", ["app", "--dry-run", "release", "run"])
+        with pytest.raises(RuntimeError):
+            app.run()
+        captured = capsys.readouterr()
+        assert captured.out == "DRY RUN — no changes were made. Would do:\n"
+        assert "release.run aborted" in captured.err
+
+    def test_uncaught_exception_renders_nothing_outside_dry_mode(
+        self, monkeypatch, capsys, tmp_path
+    ):
+        monkeypatch.chdir(tmp_path)
+
+        def _boom():
+            raise RuntimeError("kaboom")
+
+        app = self._app_with(_boom)
+        monkeypatch.setattr(sys, "argv", ["app", "--yes", "rel"])
+        with pytest.raises(RuntimeError):
+            app.run()
+        captured = capsys.readouterr()
+        assert "DRY RUN" not in captured.out
+        assert "aborted" not in captured.err
+
+    def test_bad_handler_return_renders_the_log_marked_incomplete(
+        self, monkeypatch, capsys
+    ):
+        app = self._app_with(lambda: ["not", "an", "outcome"])
+        monkeypatch.setattr(sys, "argv", ["app", "--dry-run", "rel"])
+        with pytest.raises(TypeError, match="command handler must return"):
+            app.run()
+        captured = capsys.readouterr()
+        assert captured.out == _EXPECTED_LOG
+        assert "rel aborted" in captured.err
+
+    def test_the_abort_marker_never_reaches_stdout(self, monkeypatch, capsys):
+        """§3.4: the log is stdout's; the marker that qualifies it is stderr's,
+        exactly like the truncation error."""
+
+        def _boom():
+            raise RuntimeError("kaboom")
+
+        app = self._app_with(_boom)
+        monkeypatch.setattr(sys, "argv", ["app", "--quiet", "--dry-run", "rel"])
+        with pytest.raises(RuntimeError):
+            app.run()
+        captured = capsys.readouterr()
+        assert "aborted" not in captured.out
+        assert captured.out == _EXPECTED_LOG
+
+    def test_a_read_only_abort_still_renders_header_with_empty_body(
+        self, monkeypatch, capsys
+    ):
+        app = _app()
+
+        @app.command("look", help="look", effect="read_only")
+        def _look(ctx):
+            raise RuntimeError("kaboom")
+
+        monkeypatch.setattr(sys, "argv", ["app", "--dry-run", "look"])
+        with pytest.raises(RuntimeError):
+            app.run()
+        captured = capsys.readouterr()
+        assert captured.out == "DRY RUN — no changes were made. Would do:\n"
+        assert "look aborted" in captured.err
+
+    def test_truncation_still_owns_its_own_rendering(self, monkeypatch, capsys):
+        """The truncation path renders itself and exits 1; the abort marker
+        must not double up on it."""
+        app = _app()
+
+        @app.command("rel", help="rel", effect="mutating")
+        def _rel(ctx):
+            u = ctx.effects.run(["git", "status"])
+            if u:
+                pass
+            return 0
+
+        monkeypatch.setattr(sys, "argv", ["app", "--dry-run", "rel"])
+        with pytest.raises(SystemExit) as exc:
+            app.run()
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert captured.out == (
+            "DRY RUN — no changes were made. Would do:\n"
+            "  1. run: git status\n"
+        )
+        assert captured.err == (
+            "error: dry-run preview ends at step 2: rel branched on unsettled "
+            "value «step 1 output» — cannot preview past this point\n"
+        )
+        assert "aborted" not in captured.err
+
+
 class TestTruncation:
     def test_branching_on_a_carrier_truncates(self):
         app = _app()
