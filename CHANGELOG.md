@@ -4,50 +4,6 @@
 
 ## 0.35.0
 
-The effects regime: mandatory command classification, framework-owned --dry-run/--yes/--quiet/--verbose, and side effects that flow through ctx.effects.
-
-<details>
-<summary>Context</summary>
-
-A consumer command once accepted --dry-run into **kwargs, dropped it on the
-floor, and published a package to a public registry. Nothing in the framework
-could have caught that: honoring a dry run was a convention, and a convention is
-something a handler can forget. This release makes it structural.
-
-Every command now declares effect="read_only" or effect="mutating" at
-registration -- no default, no inference from names or tags, a hard error if you
-omit it. The four reserved flags stop being something each app spells for
-itself; the framework owns --dry-run, --yes, --quiet and --verbose, so they mean
-the same thing in every strictcli program, and declaring a flag by one of those
-names is now a registration error. Side effects ride ctx.effects: run, spawn,
-write, mkdir, remove, rename, chmod, http. In a dry run the handle records
-instead of performing and the framework prints the would-do log; in a real run
-the same handler code executes for real. Handlers never branch on a dry_run
-kwarg again, because the mode lives in the handle rather than in an argument
-somebody has to remember to read.
-
-The hard part of previewing is what a recorded mutation returns. Rather than
-guess, the handle returns an Unsettled carrier. Forward it into a later effect
-and the preview continues with the provenance rendered inline -- step-output and
-stale-value brands appear in the log line itself. Try to read it or branch on it
-and you get a hard error and a truncated preview that says exactly where the
-preview stopped and why. A short honest preview beats a long invented one, and
-no amount of inference would have made the guess trustworthy.
-
-Two shipped checks keep the seam visible: effects-bypass follows the call graph
-reachable from every registered handler and reports direct ambient effects, and
-observe-allowlist-breadth names any single-token observe prefix broad enough to
-exempt a whole binary.
-
-This is a breaking release by design: every consumer's commands are unclassified
-today and will fail registration at their lock bump. That is deliberate -- a
-silent grace period would have left exactly the bug class this regime exists to
-kill. The fleet migrates in a dedicated wave right after this release, and the
-same regime lands in the Go and TypeScript implementations in this same
-coordinated release, so the three stay in lockstep.
-
-</details>
-
 ### Breaking
 
 - [strictcli] **Breaking: the effects regime.** Every command must now declare `effect="read_only"` or `effect="mutating"` at registration. `--dry-run`, `--yes`, `--quiet` and `--verbose` are reserved framework flag names, delivered on the Context (`ctx.dry_run`, `ctx.yes`, `ctx.quiet`, `ctx.verbose`) and gating `ctx.info`/`ctx.debug`. `ctx.effects` mints the eight recorded operations (`run`, `spawn`, `write`, `mkdir`, `remove`, `rename`, `chmod`, `http`); under `--dry-run` they are recorded, not executed, and rendered as a would-do log, with `Unsettled` carriers that forward into later effects and truncate honestly when extracted from. Mutating commands prompt for confirmation unless `--yes` is passed. A `**kwargs` handler must declare `forwarding=Forwarding(reason=...)`. A built-in `effects-bypass` check fails on direct process, filesystem or network calls inside effects-using handlers.
