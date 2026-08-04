@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-04T12:27:01Z",
+  "generated_at": "2026-08-04T12:27:06Z",
   "package_count": 4,
   "packages": {
     "strictcli": {
@@ -7,7 +7,7 @@
       "targets": [
         "pypi"
       ],
-      "version": "0.35.2",
+      "version": "0.35.3",
       "description": null,
       "deps": [],
       "rdeps": [
