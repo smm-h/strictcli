@@ -92,6 +92,7 @@ import {
 	errDeprecatedCommandEffect,
 	errDeprecatedMessageEmpty,
 	errDeprecatedNameEmpty,
+	errDryRunAborted,
 	errFlagConnectionEnvUndeclared,
 	errFlagNameReservedByFramework,
 	errFrameworkInternalHandlerForeign,
@@ -1303,6 +1304,7 @@ export class AppImpl implements App {
 							ctx,
 						),
 					outcome.reserved.dryRun,
+					outcome.cmdPath,
 					out,
 					err,
 				);
@@ -1333,6 +1335,7 @@ export class AppImpl implements App {
 				return await this.runHandler(
 					() => def.handler(outcome.kwargs as never, ctx),
 					outcome.reserved.dryRun,
+					outcome.cmdPath,
 					out,
 					err,
 				);
@@ -1377,23 +1380,35 @@ export class AppImpl implements App {
 	private async runHandler(
 		invoke: () => unknown,
 		dryRun: boolean,
+		cmdPath: string,
 		out: Writer,
 		err: Writer,
 	): Promise<DispatchResult> {
-		let result: unknown;
+		let interpreted: DispatchResult;
 		try {
-			result = await invoke();
+			const result = await invoke();
+			const swallowed = this.effectLogState.truncated;
+			if (swallowed !== null) {
+				return this.emitTruncated(swallowed, out, err);
+			}
+			interpreted = this.emitInterpreted(result, out);
 		} catch (e) {
 			if (e instanceof DryRunTruncated) {
 				return this.emitTruncated(e, out, err);
 			}
+			// Every other way out of the dispatch still owes the operator the
+			// effects recorded so far: they asked for a preview and the
+			// framework has one. The marker says the list may not be all of it,
+			// because the dispatch did not finish. The throw continues
+			// untouched -- nothing here swallows it or changes the exit status.
+			if (dryRun) {
+				out.write(`${this.effectLogState.render()}\n`);
+				err.write(
+					`${errDryRunAborted(this.effectLogState.nextSeq(), cmdPath)}\n`,
+				);
+			}
 			throw e;
 		}
-		const swallowed = this.effectLogState.truncated;
-		if (swallowed !== null) {
-			return this.emitTruncated(swallowed, out, err);
-		}
-		const interpreted = this.emitInterpreted(result, out);
 		if (dryRun) {
 			// The would-do log is dry mode's primary output and is NEVER
 			// suppressed by --quiet.

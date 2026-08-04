@@ -1910,6 +1910,18 @@ export function errDryRunTruncated(
 }
 
 // ---------------------------------------------------------------------------
+// effects.go — an aborted dry-run preview (parse-time)
+//
+// Same shape and prefix as the truncation error above: both say the preview
+// ended before the handler finished, and they differ only in why and in what
+// the reader may conclude. Written straight to stderr.
+// ---------------------------------------------------------------------------
+
+export function errDryRunAborted(step: number, cmd: string): string {
+	return `error: dry-run preview ends at step ${step}: ${cmd} aborted — the preview above may be incomplete`;
+}
+
+// ---------------------------------------------------------------------------
 // effects.go — the confirm protocol (parse-time)
 // ---------------------------------------------------------------------------
 
