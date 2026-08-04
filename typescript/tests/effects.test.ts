@@ -775,6 +775,177 @@ test("effects: the quartet reaches the Context and never the handler args", asyn
 	});
 });
 
+// The quartet is recognized ANYWHERE in argv, exactly like --help/-h
+// (§7.2, amended 2026-08-04).
+
+test("effects: each quartet flag is recognized after the command name", async () => {
+	for (const [token, key] of [
+		["--dry-run", "dryRun"],
+		["--yes", "yes"],
+		["--quiet", "quiet"],
+		["--verbose", "verbose"],
+	] as const) {
+		let seen: Record<string, unknown> = {};
+		const app = roApp((ctx) => {
+			seen = {
+				dryRun: ctx.dryRun,
+				yes: ctx.yes,
+				quiet: ctx.quiet,
+				verbose: ctx.verbose,
+			};
+			return 0;
+		});
+		const r = await app.test(["look", token]);
+		assert.equal(r.exitCode, 0, `${token}: ${r.stderr}`);
+		assert.equal(seen[key], true, token);
+	}
+});
+
+test("effects: the quartet is recognized after a nested group's subcommand", async () => {
+	let dryRun: unknown;
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	const inner = app
+		.group("outer", { help: "outer group" })
+		.group("inner", { help: "inner group" });
+	inner.command(
+		defineReadOnlyCommand("look", {
+			help: "h",
+			handler: (_a, ctx) => {
+				dryRun = ctx.dryRun;
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["outer", "inner", "look", "--dry-run"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.equal(dryRun, true);
+});
+
+test("effects: the quartet is recognized between a group and its subcommand", async () => {
+	let dryRun: unknown;
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	const grp = app.group("grp", { help: "a group" });
+	grp.command(
+		defineReadOnlyCommand("look", {
+			help: "h",
+			handler: (_a, ctx) => {
+				dryRun = ctx.dryRun;
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["grp", "--dry-run", "look"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.equal(dryRun, true);
+});
+
+test("effects: the quartet is stripped from argv after the command name", async () => {
+	const { arg, t } = await import("../src/index.js");
+	let seen: Record<string, unknown> = {};
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	app.command(
+		defineReadOnlyCommand("look", {
+			help: "h",
+			args: [arg("name", t.str, { help: "a positional" })],
+			handler: (a, ctx) => {
+				seen = { name: a.name, quiet: ctx.quiet };
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["look", "--quiet", "value"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.deepEqual(seen, { name: "value", quiet: true });
+});
+
+test("effects: a token after -- is data, never a reserved flag", async () => {
+	const { arg, t } = await import("../src/index.js");
+	let seen: Record<string, unknown> = {};
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	app.command(
+		defineReadOnlyCommand("look", {
+			help: "h",
+			args: [arg("rest", t.str, { help: "trailing args", variadic: true })],
+			handler: (a, ctx) => {
+				seen = { rest: a.rest, dryRun: ctx.dryRun };
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["look", "--", "--dry-run"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.deepEqual(seen, { rest: ["--dry-run"], dryRun: false });
+});
+
+test("effects: --hermetic stays pre-command-only", async () => {
+	// Only the quartet moved; --hermetic/--config/--dump-schema/--mcp did not.
+	const app = roApp(() => 0);
+	const r = await app.test(["look", "--hermetic"]);
+	assert.equal(r.exitCode, 1);
+	assert.ok(r.stderr.includes("unknown flag '--hermetic'"), r.stderr);
+});
+
+test("effects: read_only still rejects a mutating effect under a post-command --dry-run", async () => {
+	// Per-command applicability is unchanged, wherever --dry-run appeared.
+	const app = roApp((ctx) => {
+		(ctx as unknown as MutatingContext).effects.mkdir("d");
+		return 0;
+	});
+	await assert.rejects(() => app.test(["look", "--dry-run"]), {
+		message:
+			'command "look" is classified read_only; effects.mkdir is a mutating operation',
+	});
+});
+
+test("effects: a passthrough's args keep the quartet opaque", async () => {
+	const { readOnlyPassthrough } = await import("../src/index.js");
+	// The one boundary the quartet does not cross: a passthrough's args belong
+	// to the child process and are forwarded byte-for-byte. The pre-command
+	// position stays the escape hatch for setting the flag on the Context.
+	for (const [argv, wantArgs, wantCtx] of [
+		[["exec", "--verbose", "child"], ["--verbose", "child"], false],
+		[["--verbose", "exec", "--verbose", "child"], ["--verbose", "child"], true],
+	] as const) {
+		let seen: Record<string, unknown> = {};
+		const app = createApp({ name: "t", version: "1", help: "h" });
+		app.command(
+			readOnlyPassthrough("exec", {
+				help: "run something",
+				handler: (a, ctx) => {
+					seen = { args: a.args, verbose: ctx.verbose };
+					return 0;
+				},
+			}),
+		);
+		const r = await app.test([...argv]);
+		assert.equal(r.exitCode, 0, r.stderr);
+		assert.deepEqual(
+			seen,
+			{ args: [...wantArgs], verbose: wantCtx },
+			argv.join(" "),
+		);
+	}
+});
+
+test("effects: a passthrough under a group keeps the quartet opaque", async () => {
+	const { readOnlyPassthrough } = await import("../src/index.js");
+	let seen: Record<string, unknown> = {};
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	const grp = app.group("grp", { help: "a group" });
+	grp.command(
+		readOnlyPassthrough("exec", {
+			help: "run something",
+			handler: (a, ctx) => {
+				seen = { args: a.args, verbose: ctx.verbose };
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["grp", "exec", "--verbose", "child"]);
+	assert.equal(r.exitCode, 0, r.stderr);
+	assert.deepEqual(seen, { args: ["--verbose", "child"], verbose: false });
+});
+
 test("effects: --quiet dominates --verbose in the gating table", async () => {
 	const rows: [string[], string[]][] = [
 		[[], ["i", "w", "e"]],

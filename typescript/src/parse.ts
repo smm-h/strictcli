@@ -1019,11 +1019,17 @@ const RESERVED_QUARTET_TOKENS: ReadonlyMap<
 ]);
 
 /**
- * Position-aware pre-scan for --dump-schema, --mcp, --config, --hermetic and
- * the effects-regime quartet (--dry-run/--yes/--quiet/--verbose) in the
- * pre-command region only (before the first non-flag token, before "--"). Known
- * global flags and their values are skipped so a global-flag value that looks
- * like a command name does not end the region early.
+ * Pre-scan for the framework-owned reserved flags. Two regions, two rulesets
+ * (contract §7.2, amended):
+ *
+ * - The pre-command region -- before the first non-flag token, before "--" --
+ *   recognizes every reserved flag (--dump-schema, --mcp, --config, --hermetic
+ *   and the quartet). Known global flags and their values are skipped so a
+ *   global-flag value that looks like a command name does not end it early.
+ * - The command region recognizes ONLY the quartet
+ *   (--dry-run/--yes/--quiet/--verbose), anywhere, exactly like --help/-h.
+ *   --hermetic/--config/--dump-schema/--mcp stay pre-command-only. See
+ *   scanCommandRegionQuartet.
  *
  * The quartet is stripped from argv here and delivered on the Context, never as
  * handler kwargs -- injecting four mandatory parameters into every handler
@@ -1067,16 +1073,20 @@ export function preScanReservedFlags(
 		};
 	};
 
+	// Index where the command region begins; -1 means "never reached one"
+	// (a bare -- or an unknown flag-like token ended the scan for good).
+	let commandRegionFrom = -1;
 	let i = 0;
 	while (i < argv.length) {
 		const tok = argv[i] as string;
 
-		// -- terminates the pre-command region
+		// -- terminates the whole scan: everything after it is data
 		if (tok === "--") {
 			break;
 		}
-		// Non-flag token = command name: stop scanning
+		// Non-flag token = the command token: the command region starts here
 		if (!tok.startsWith("-") || tok === "-") {
+			commandRegionFrom = i;
 			break;
 		}
 
@@ -1152,7 +1162,83 @@ export function preScanReservedFlags(
 		break; // unknown flag-like token before command name: stop
 	}
 
+	if (commandRegionFrom >= 0) {
+		scanCommandRegionQuartet(
+			app,
+			argv,
+			commandRegionFrom,
+			quartet,
+			excludeIndices,
+		);
+	}
+
 	return done();
+}
+
+/**
+ * Recognizes the reserved quartet in the command region of argv.
+ *
+ * Contract §7.2 (amended 2026-08-04): --dry-run/--yes/--quiet/--verbose are
+ * recognized ANYWHERE in argv, exactly like --help/-h, because their
+ * applicability is per-command -- requiring them before the command name was
+ * backwards. Only the quartet is recognized here; --hermetic, --config,
+ * --dump-schema and --mcp remain pre-command-only.
+ *
+ * The scan stops for good at two boundaries:
+ *
+ * - a bare "--", after which every token is positional data;
+ * - a passthrough command's name, after which every token belongs to the child
+ *   process and is forwarded byte-for-byte. Eating a child's own --verbose
+ *   would silently change what the child does.
+ *
+ * Routing tokens are walked through the group/command tree so a quartet token
+ * may sit anywhere among them. Nothing here throws: routing failures are the
+ * real parse's job.
+ */
+function scanCommandRegionQuartet(
+	app: AppImpl,
+	argv: readonly string[],
+	start: number,
+	quartet: { dryRun: boolean; yes: boolean; quiet: boolean; verbose: boolean },
+	excludeIndices: Set<number>,
+): void {
+	let groups: ReadonlyMap<string, GroupImpl> = app.groups;
+	let commands: ReadonlyMap<string, RegisteredCommand> = app.commands;
+	let routingDone = false;
+
+	for (let i = start; i < argv.length; i++) {
+		const tok = argv[i] as string;
+
+		if (tok === "--") {
+			return;
+		}
+
+		if (tok.startsWith("-") && tok !== "-") {
+			const key = RESERVED_QUARTET_TOKENS.get(tok);
+			if (key !== undefined) {
+				quartet[key] = true;
+				excludeIndices.add(i);
+			}
+			continue;
+		}
+
+		// A non-flag token: a routing token until routing resolves.
+		if (!routingDone) {
+			const grp = groups.get(tok);
+			if (grp !== undefined) {
+				groups = grp.groups;
+				commands = grp.commands;
+				continue;
+			}
+			const cmd = commands.get(tok);
+			if (cmd !== undefined && cmd.kind === "passthrough") {
+				return;
+			}
+			// Resolved a normal command, or hit an unknown/deprecated token the
+			// real parse will report: routing is over either way.
+			routingDone = true;
+		}
+	}
 }
 
 /** Narrows a pre-scan result to the four Context-delivered flag values. */
