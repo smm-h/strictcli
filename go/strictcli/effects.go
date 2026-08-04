@@ -1167,12 +1167,26 @@ func validateGrants(cmdName string, grants []Grant) []Grant {
 
 // stdinIsInteractive reports whether stdin is a TTY. Zero-dependency by
 // construction: a character device is the signal, so no golang.org/x/term.
+//
+// The null device is excluded explicitly. It IS a character device, so the mode
+// check alone reads `myapp cmd < /dev/null` -- and every subprocess launched
+// with a null stdin, which is what CI runners and test harnesses do -- as
+// interactive, where Python's isatty() and Node's isTTY both report false. That
+// divergence made the same invocation prompt on Go and hard-error on the other
+// two. os.SameFile against os.DevNull is stdlib-only and portable (the constant
+// is "NUL" on Windows), so the zero-dependency property is preserved.
 func stdinIsInteractive() bool {
 	fi, err := os.Stdin.Stat()
 	if err != nil {
 		return false
 	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	if fi.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	if nullInfo, err := os.Stat(os.DevNull); err == nil && os.SameFile(fi, nullInfo) {
+		return false
+	}
+	return true
 }
 
 // confirmConsequential is the framework-owned confirm protocol. It fires before

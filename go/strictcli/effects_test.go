@@ -1122,17 +1122,40 @@ func TestStdinIsInteractiveOnAPipeIsFalse(t *testing.T) {
 	}
 }
 
-func TestStdinIsInteractiveOnACharDeviceIsTrue(t *testing.T) {
+// The null device IS a character device, so the mode check alone read it as
+// interactive -- and every subprocess launched with a null stdin with it, which
+// is what CI runners and test harnesses do. Python's isatty() and Node's isTTY
+// both report false there, so the same invocation prompted on Go and
+// hard-errored on the other two.
+func TestStdinIsInteractiveOnTheNullDeviceIsFalse(t *testing.T) {
 	f, err := os.Open(os.DevNull)
 	if err != nil {
-		t.Skip("no /dev/null")
+		t.Skip("no null device")
 	}
 	defer f.Close()
 	old := os.Stdin
 	os.Stdin = f
 	defer func() { os.Stdin = old }()
-	if !stdinIsInteractive() {
-		t.Fatal("a character device must read as interactive")
+	if stdinIsInteractive() {
+		t.Fatal("the null device must never read as interactive")
+	}
+}
+
+func TestStdinIsInteractiveOnARegularFileIsFalse(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "in.txt")
+	if err := os.WriteFile(path, []byte("y\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	old := os.Stdin
+	os.Stdin = f
+	defer func() { os.Stdin = old }()
+	if stdinIsInteractive() {
+		t.Fatal("a regular file is not a character device")
 	}
 }
 
