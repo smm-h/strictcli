@@ -282,5 +282,97 @@
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. remove: state\n",
       "stderr_equals": ""
     }
+  },
+  {
+    "name": "effects_dry_run_log: an aborted dispatch still renders the log, marked incomplete",
+    "targets": ["python", "typescript"],
+    "acknowledged_divergence": {
+      "reason": "Python surfaces the aborted dispatch as an uncaught TypeError traceback (host paths, line numbers, Python type names); TypeScript prints the harness's one-line error. Both assert the framework's own aborted-preview marker via stderr_contains, which is the part under test.",
+      "streams": {
+        "stderr": ["python"]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "build",
+          "help": "build something",
+          "effect": "mutating",
+          "handler_effects": [
+            {"method": "mkdir", "path": "build"},
+            {"method": "write", "path": "VERSION", "content": "1.2.3"}
+          ],
+          "handler_returns": {"kind": "bad"}
+        }
+      ]
+    },
+    "argv": ["--dry-run", "build"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n  2. write: VERSION (5 bytes)\n",
+      "stdout_not_contains": "aborted",
+      "stderr_contains": "error: dry-run preview ends at step 3: build aborted — the preview above may be incomplete"
+    }
+  },
+  {
+    "name": "effects_dry_run_log: an aborted read-only preview is still header with empty body",
+    "targets": ["python", "typescript"],
+    "acknowledged_divergence": {
+      "reason": "Python surfaces the aborted dispatch as an uncaught TypeError traceback (host paths, line numbers, Python type names); TypeScript prints the harness's one-line error. Both assert the framework's own aborted-preview marker via stderr_contains, which is the part under test.",
+      "streams": {
+        "stderr": ["python"]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "show",
+          "help": "show something",
+          "effect": "read_only",
+          "handler_returns": {"kind": "bad"}
+        }
+      ]
+    },
+    "argv": ["--dry-run", "show"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n",
+      "stderr_contains": "show aborted — the preview above may be incomplete"
+    }
+  },
+  {
+    "name": "effects_dry_run_log: an aborted dispatch outside dry mode renders neither log nor marker",
+    "targets": ["python", "typescript"],
+    "acknowledged_divergence": {
+      "reason": "Python surfaces the aborted dispatch as an uncaught TypeError traceback (host paths, line numbers, Python type names); TypeScript prints the harness's one-line error. Both assert the framework's own aborted-preview marker via stderr_contains, which is the part under test.",
+      "streams": {
+        "stderr": ["python"]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "show",
+          "help": "show something",
+          "effect": "read_only",
+          "handler_returns": {"kind": "bad"}
+        }
+      ]
+    },
+    "argv": ["show"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_not_contains": "the preview above may be incomplete"
+    }
   }
 ]

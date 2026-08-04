@@ -937,6 +937,7 @@ _PY_PARSE_TIME_MSG_FUNCS = frozenset({
     "_msg_confirm_non_interactive",
     "_msg_confirm_declined",
     "_msg_dry_run_truncated",
+    "_msg_dry_run_aborted",
     # §12.8's option guard. Python raises it as a TypeError (matching every
     # other call-time argument guard on the handle), so it needs a `_msg_*`
     # function to be visible at all -- and §12.8 is a parse-time section in

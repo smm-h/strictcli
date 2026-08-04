@@ -492,8 +492,8 @@ Dry mode is entered when the framework-owned `--dry-run` flag (§7) is present. 
   `--dump-schema --dry-run` and coverage-instrumented dry runs silently lossy. They are recorded
   in the structured effect log (§14.3) with `recorded: false`, and they are never written to the
   would-do log.
-- On successful completion the framework writes the would-do log to **stdout** and exits with
-  the handler's exit code.
+- The framework writes the would-do log to **stdout** on **every** exit path out of the dispatch
+  (§3.5), and exits with the handler's exit code.
 
 `--dry-run` on a `read_only` command is accepted and never errors. Its would-do log is **always
 just the header with an empty body**: a read-only command can only produce observes and
@@ -607,6 +607,51 @@ value it cannot know.
 ### 3.4 What `--quiet` does to the log
 
 Nothing. The would-do log is dry mode's primary output and is never suppressed (§7.4).
+
+### 3.5 Every exit path renders the log
+
+**The log renders on every path that leaves a dry-mode dispatch, not only on the normal return**
+(amended 2026-08-04, D7). The operator asked for a preview and the framework recorded one;
+whether the handler returned, exited, or fell over does not change what it owes them. Silence is
+the one answer the framework must never give, because it is indistinguishable from "this command
+would do nothing".
+
+The paths, and what each renders:
+
+| Path | stdout | stderr | Exit status |
+|------|--------|--------|-------------|
+| Normal return | the log | -- | the handler's exit code |
+| Deliberate exit (Python `sys.exit(n)`) | the log | -- | `n` |
+| Carrier extraction (§3.3) | the log so far | the truncation error | `1` |
+| Any other unwind (exception / panic) | the log so far | the §12.11 marker | unchanged: the exception continues |
+
+Two rulings are folded into that table.
+
+**A deliberate exit renders exactly what an equivalent return renders.** `sys.exit(1)` and
+`return 1` are the same intent spelled two ways -- the handler is done and wants that status -- so
+they produce byte-identical output, with no marker and nothing on stderr. The preview is complete
+by construction: the handler is unwinding, and everything it recorded, it recorded.
+
+**An unexpected unwind renders the log AND marks it.** The recorded effects are still owed --
+withholding them would punish the reader for the handler's crash -- but the framework cannot know
+what the handler had left to record, so the log is followed by the §12.11 marker on **stderr**.
+That split is deliberate and matches §3.3 exactly: the log is stdout's, and the sentence that
+qualifies it is stderr's, so a caller piping stdout gets the preview and nothing else. The
+exception is **not** swallowed: it continues to propagate untouched, and the process's exit status
+and its own error report are whatever the language would have produced anyway. The framework
+annotates the crash; it does not handle it.
+
+Note what this rules out: the render is owned by the one seam every dispatch passes through
+(Python's four exception clauses around the handler call -- exhaustive because `BaseException` is
+the root; Go's `runSealed`; TypeScript's `runHandler`). It is not a list of paths that each
+remember to render, because that list is exactly what was incomplete before.
+
+**The one exit path outside this guarantee** is a handler that terminates the process itself --
+Go's `os.Exit`, TypeScript's `process.exit`. Nothing renders, because no framework code runs: Go
+skips every deferred function and Node tears the process down. This is a ceiling, not a defect
+(§17), and it is the reason Python's `sys.exit` is *in* the table above -- it raises a catchable
+`SystemExit` rather than terminating, so the framework really can honour it, and it is the
+idiomatic way a Python handler reports failure.
 
 ---
 
@@ -1406,12 +1451,14 @@ effects regime's split is pinned here, and the three catalogs' section markers m
 | Section | Category |
 |---------|----------|
 | §12.5 truncation | parse-time |
+| §12.11 aborted preview | parse-time |
 | §12.6 confirm trio | parse-time |
 | §12.8 effect failure, carrier rejection and the option guard | parse-time |
 | §12.1, §12.2, §12.3, §12.4, §12.7, §12.9, §12.10 | registration-time |
 
-§12.4's templates fire at effect-call time rather than at registration, but they take the
-registration-time category: the taxonomy's `parse` bucket is the set the coverage gate binds, and
+(§12.11 was added at the 2026-08-04 adoption round and takes the same category as §12.5, whose
+message family it belongs to.) §12.4's templates fire at effect-call time rather than at
+registration, but they take the registration-time category: the taxonomy's `parse` bucket is the set the coverage gate binds, and
 the ruling pins that bucket to the three sections above.
 
 **Go declaration form.** A template that interpolates nothing is a **`const`**, not a function --
@@ -1694,6 +1741,32 @@ proc_observe_allowlist entries must be lists of strings, got <t>
 `errProcObserveAllowlistNotStrings(t)`. Python and TypeScript. **Go-excluded**:
 `WithProcObserveAllowlist([][]string)` is statically typed.
 
+### 12.11 Aborted preview
+
+Added 2026-08-04 (D7). The marker that follows a would-do log the dispatch did not finish (§3.5):
+
+```
+error: dry-run preview ends at step N: <cmd> aborted — the preview above may be incomplete
+```
+
+`errDryRunAborted(step, cmd)` / `_msg_dry_run_aborted(step, cmd)`. All three. Written straight to
+**stderr**, which is why it carries its own `error: ` prefix, exactly like §12.5's truncation
+error. Category: **parse-time**, and it files under the same section marker family in Go's and
+TypeScript's catalogs.
+
+`N` has the same meaning it has in §12.5: the would-do number the preview reached, i.e. the number
+the next *rendered* effect would have taken (§3.2's rendered-line counter, so cache writes never
+move it). `<cmd>` is the dotted command path, not the app name.
+
+The shape is deliberately §12.5's, down to the `ends at step N: <cmd>` clause: both messages say
+the preview stopped before the handler finished, and a reader should be able to recognize them as
+one family and read only the tail to learn which happened. The tail is `may be incomplete`, not
+`is incomplete`, because that is the precise claim: an exception escaped, and the framework cannot
+know whether the handler had more to record. The message deliberately does **not** name the
+exception type or repeat its message -- the language's own crash report already carries both, and
+naming them here would put three different type vocabularies into a template that must be
+byte-identical across three languages.
+
 ---
 
 ## 13. Schema fields
@@ -1921,6 +1994,14 @@ that only `run` accepts at the call, which is exactly the shape the error covers
   rationale string verbatim so the precedent stays greppable. `errEffectHTTPFailed` (§12.8) gets
   its own deferral -- rationale: requires issuing a real network request, which conformance cases
   must not do.
+- **§3.5's aborted path is covered by `targets: ["python", "typescript"]` cases** reached through
+  the existing `handler_returns: {"kind": "bad"}` vocabulary, with `acknowledged_divergence` on
+  stderr. Go is excluded for the same reason it is excluded from the bad-return case that set the
+  precedent: its type system makes an invalid handler return unrepresentable, and the only other
+  abort a case could induce is a panic, whose exit status (2) and goroutine dump cannot be asserted
+  under a single `expect.exit_code`. Go's abort path is pinned by its own unit suite instead, on
+  the same byte-exact strings. No new handler vocabulary was added for this: an abort a case can
+  already express is preferable to a key that exists only to crash a handler.
 - The cross-process cases that would have exercised an env-mode token are **not written**: A9
   deleted that mechanism (§16). What remains is in-process spawn-record assertions -- a `spawn`
   effect appearing in `effects_equals` with `recorded: true`.
@@ -2042,6 +2123,15 @@ Recorded so implementors do not re-litigate them:
 - **Go**: effect methods return `(carrier, error)` where Python and TypeScript raise/throw
   (§2.5.4). This is an idiom divergence, not a behavioral one: the same conditions produce a
   failure in all three. `check_error_parity.py` records it with an `impl_exclusions` rationale.
+- **Go/TS**: a handler that calls `os.Exit` / `process.exit` renders no would-do log (§3.5). Both
+  terminate the process outright -- Go documents that deferred functions do not run, and Node tears
+  down without unwinding -- so there is no code the framework could place on that path. Python's
+  `sys.exit` is *not* in this ceiling: it raises a catchable `SystemExit`, and §3.5 honours it. The
+  rejected mitigation for TypeScript was a `process.on("exit")` hook that renders from the teardown
+  callback: writes to a piped stdout are asynchronous there and can be dropped, so it would trade a
+  silent miss for an intermittently truncated preview, which is worse than a documented ceiling. In
+  both languages the idiomatic spelling of "end the run with status n" is a handler *return*, which
+  renders correctly.
 - **Go/TS**: guard v2 has no enforcement surface (§10.3).
 - **The go-scope-adapter** stays parked; this contract does not touch it.
 
@@ -2421,7 +2511,7 @@ that the mutations must ride the handle, and that gap is exactly what the implem
 
 ### 18.6 Amendments made at the adoption round (2026-08-04)
 
-The regime shipped, and the first consumer migrated onto it. Migration falsified one pin. This
+The regime shipped, and the first consumer migrated onto it. Migration falsified two pins. This
 round is governed by the same precedence rule item 71 established for implementations, extended
 one step further: **where adoption contradicts this document's draft, adoption wins.** A pin whose
 only evidence was the draft author's intuition does not outrank the first real invocation that
@@ -2453,6 +2543,43 @@ exercises it.
     escape hatch, so nothing became unreachable. `--help`'s interception on the passthrough path is
     deliberately left alone: it is pinned separately, and printing help is visible and harmless
     where rewriting a child's argv is neither.
+
+86. **The would-do log renders on every exit path out of a dispatch (§3.1, §3.5, §12.11, D7).**
+    The draft pinned the render to "successful completion", and all three implementations
+    implemented exactly that: a `mutating` handler that recorded effects and then left through
+    `sys.exit(1)`, an exception or a panic printed **nothing at all** -- no header, no lines --
+    even though the effects were recorded correctly. Adoption found it on a documentation `check`
+    command that records a baseline write and then exits 1 when lints fail, which is the shape of
+    every validation handler in this ecosystem: the runs where a reader most wants the preview are
+    exactly the runs that lost it, and the silence was indistinguishable from "this command would
+    do nothing". Safety was never at risk (nothing executed); honesty was, which is the property
+    the regime exists to sell. The render is now owned by the single seam each implementation
+    already funnels every dispatch through -- Python's exhaustive `BaseException`-rooted clause set,
+    Go's `runSealed`, TypeScript's `runHandler` -- rather than by a list of paths that must each
+    remember to call it, because that list is precisely what was incomplete. Three rulings inside
+    the fix, each authored here:
+    - *A deliberate exit renders what an equivalent return renders*, byte for byte and with no
+      marker. **Rejected**: marking `sys.exit` as an abort. `sys.exit(1)` and `return 1` are one
+      intent in two spellings, and making the preview depend on which one a handler happened to
+      use would have shipped a second silent inconsistency in place of the first.
+    - *An unexpected unwind renders the log AND a marker* (§12.11), log to stdout, marker to
+      stderr, exception re-raised untouched. **Rejected**: rendering nothing on the crash path, on
+      the reasoning that a partial preview misleads. It is the inverse -- the recorded effects are
+      real and the reader is owed them; what they must not be told is that the list is complete,
+      and one stderr line says exactly that while leaving stdout a clean preview. Also
+      **rejected**: swallowing the exception to synthesize an exit code, which would have hidden a
+      crash behind a tidy status and put the framework in charge of an error it knows nothing
+      about. The marker deliberately reuses §12.5's `ends at step N: <cmd>` shape so the two
+      early-ended-preview messages read as one family, and says "may be incomplete" rather than
+      "is incomplete" because after an escaped exception that is the exact extent of what the
+      framework knows.
+    - *`os.Exit` / `process.exit` stay uncovered* and are recorded as a ceiling (§17).
+      **Rejected**: a Node `process.on("exit")` render hook, which would write to stdout from a
+      teardown callback where piped writes are asynchronous and droppable -- trading a silent miss
+      for an intermittently truncated preview. Python's `sys.exit` is not in that ceiling precisely
+      because it is an exception rather than a process teardown, so the asymmetry is a property of
+      the three languages, not a parity gap: in all three, a handler *return* renders correctly,
+      and that is the idiomatic spelling everywhere.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
