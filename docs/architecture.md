@@ -1,6 +1,6 @@
 ---
 title: Architecture and Internals
-description: "strictcli internals: the five-stage parse pipeline, its two-region reserved-flag pre-scan, registration-time validation, the schema format, and config."
+description: "strictcli internals: the five-stage parse pipeline, its two-region reserved-quartet pre-scan, registration-time validation, the schema format, and config."
 nav_group: "Guides"
 nav_order: 10
 ---
