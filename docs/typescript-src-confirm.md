@@ -1,6 +1,6 @@
 ---
 title: typescript/src/confirm
-description: "The framework-owned y/N confirmation that fires before a command declared consequential on the real CLI path, unless --dry-run or --approve-consequential was passed."
+description: "The framework-owned y/N confirmation, fired before a command declared consequential unless --dry-run or --approve-consequential was passed."
 generated: true
 nav_group: "API Reference"
 nav_order: 11
