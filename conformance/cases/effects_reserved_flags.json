@@ -218,7 +218,7 @@
     "expect": {"exit_code": 0, "stdout_equals": "terse=true\n"}
   },
   {
-    "name": "effects_reserved_flags: the pre-scan reads only the pre-command region",
+    "name": "effects_reserved_flags: the quartet is recognized after the command name",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -234,9 +234,232 @@
     },
     "argv": ["build", "--dry-run"],
     "expect": {
-      "exit_code": 1,
-      "stderr_contains": "unknown flag '--dry-run'"
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: d\n"
     }
+  },
+  {
+    "name": "effects_reserved_flags: yes after the command name skips the confirm prompt",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "proc_observe_allowlist": [["echo"]],
+      "commands": [
+        {
+          "name": "build",
+          "help": "a mutating command",
+          "effect": "mutating",
+          "handler_prints": "built",
+          "handler_effects": [{"method": "run", "argv": ["echo", "observed"]}]
+        }
+      ]
+    },
+    "argv": ["build", "--yes"],
+    "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+  },
+  {
+    "name": "effects_reserved_flags: the quartet is recognized after a nested group's subcommand",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "outer",
+          "help": "outer group",
+          "groups": [
+            {
+              "name": "inner",
+              "help": "inner group",
+              "commands": [
+                {
+                  "name": "build",
+                  "help": "a nested command",
+                  "effect": "mutating",
+                  "handler_effects": [{"method": "mkdir", "path": "n"}]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["outer", "inner", "build", "--dry-run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: n\n"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: the quartet is recognized between a group and its subcommand",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "grp",
+          "help": "a group",
+          "commands": [
+            {
+              "name": "build",
+              "help": "a nested command",
+              "effect": "mutating",
+              "handler_effects": [{"method": "mkdir", "path": "n"}]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["grp", "--dry-run", "build"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: n\n"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a token after -- is data, never a reserved flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "rest={rest}",
+          "args": [{"name": "rest", "help": "trailing args", "variadic": true}]
+        }
+      ]
+    },
+    "argv": ["cmd", "--", "--dry-run", "--verbose"],
+    "expect": {"exit_code": 0, "stdout_equals": "rest=--dry-run,--verbose\n"}
+  },
+  {
+    "name": "effects_reserved_flags: a read_only command accepts a post-command dry-run with an empty body",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "look",
+          "help": "a read-only command",
+          "effect": "read_only",
+          "handler_prints": "looked"
+        }
+      ]
+    },
+    "argv": ["look", "--dry-run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "looked\nDRY RUN — no changes were made. Would do:\n"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a read_only command still rejects a mutating effect under a post-command dry-run",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "look",
+          "help": "a read-only command",
+          "effect": "read_only",
+          "handler_effects": [{"method": "mkdir", "path": "d"}]
+        }
+      ]
+    },
+    "argv": ["look", "--dry-run"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"look\" is classified read_only; effects.mkdir is a mutating operation"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: the quartet is stripped from argv after the command name",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "name={name}",
+          "args": [{"name": "name", "help": "a positional"}]
+        }
+      ]
+    },
+    "argv": ["cmd", "--quiet", "positional", "--verbose", "--yes"],
+    "expect": {"exit_code": 0, "stdout_equals": "name=positional\n"}
+  },
+  {
+    "name": "effects_reserved_flags: quiet after the command name gates handler diagnostics",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [
+            {"level": "info", "message": "info-line"},
+            {"level": "warn", "message": "warn-line"}
+          ]
+        }
+      ]
+    },
+    "argv": ["cmd", "--quiet"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": "warn-line\n"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: verbose after the command name shows debug",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [{"level": "debug", "message": "debug-line"}]
+        }
+      ]
+    },
+    "argv": ["cmd", "--verbose"],
+    "expect": {"exit_code": 0, "stdout_equals": "debug-line\n"}
+  },
+  {
+    "name": "effects_reserved_flags: hermetic stays pre-command-only",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd", "--hermetic"],
+    "expect": {"exit_code": 1, "stderr_contains": "unknown flag '--hermetic'"}
   },
   {
     "name": "effects_reserved_flags: a passthrough command's args keep the quartet opaque",
@@ -256,6 +479,51 @@
     },
     "argv": ["exec", "--dry-run", "--yes"],
     "expect": {"exit_code": 0, "stdout_equals": "exec:--dry-run,--yes\n"}
+  },
+  {
+    "name": "effects_reserved_flags: a passthrough under a group keeps the quartet opaque",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "grp",
+          "help": "a group",
+          "commands": [
+            {
+              "name": "exec",
+              "help": "run something",
+              "effect": "read_only",
+              "passthrough": true,
+              "passthrough_handler_prints": "{name}:{args}"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["grp", "exec", "--verbose", "child"],
+    "expect": {"exit_code": 0, "stdout_equals": "exec:--verbose,child\n"}
+  },
+  {
+    "name": "effects_reserved_flags: the pre-command position is the escape hatch for a passthrough",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "run something",
+          "effect": "read_only",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["--verbose", "exec", "--verbose", "child"],
+    "expect": {"exit_code": 0, "stdout_equals": "exec:--verbose,child\n"}
   },
   {
     "name": "effects_reserved_flags: a global bool flag value does not end the pre-scan early",
