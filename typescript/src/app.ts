@@ -50,7 +50,7 @@ import {
 	registerConfigField,
 	registerConfigGroup,
 } from "./config.js";
-import { confirmMutating } from "./confirm.js";
+import { confirmConsequential } from "./confirm.js";
 import {
 	Context,
 	type InfraAccess,
@@ -95,6 +95,7 @@ import {
 	errDryRunAborted,
 	errFlagConnectionEnvUndeclared,
 	errFlagNameReservedByFramework,
+	errFlagNameYesBanned,
 	errFrameworkInternalHandlerForeign,
 	errGlobalFlagNameReserved,
 	errGlobalShortFlagReserved,
@@ -114,6 +115,7 @@ import {
 	type AnyCommand,
 	type AnyFlag,
 	type AnyMutexGroup,
+	BANNED_FLAG_NAMES,
 	type ConflictMode,
 	type DeprecatedDef,
 	defineMutatingCommand,
@@ -830,6 +832,11 @@ export class AppImpl implements App {
 				// message for any other construction route.
 				throw new RegistrationError(errFlagNameReservedByFramework(f.name));
 			}
+			if (BANNED_FLAG_NAMES.has(f.name)) {
+				// Likewise unreachable through flag(); kept for parity with the
+				// quartet's own belt-and-braces check on this path.
+				throw new RegistrationError(errFlagNameYesBanned());
+			}
 			if (RESERVED_GLOBAL_FLAG_NAMES.has(f.name)) {
 				throw new RegistrationError(errGlobalFlagNameReserved(f.name));
 			}
@@ -1354,17 +1361,21 @@ export class AppImpl implements App {
 		err: Writer,
 	): DispatchResult | undefined {
 		if (mode !== "run") {
-			// test/call/invoke/MCP behave as if --yes were passed.
+			// test/call/invoke/MCP behave as if --approve-consequential were
+			// passed.
 			return undefined;
 		}
-		const def = cmd.def as { readonly effect?: Effect };
-		if (def.effect !== "mutating") {
+		const def = cmd.def as { readonly consequential?: boolean };
+		// A plain `mutating` command never prompts: classification answers
+		// "should a dry run record rather than execute?", which is a different
+		// question from "are these effects worth interrupting someone for?".
+		if (def.consequential !== true) {
 			return undefined;
 		}
-		if (outcome.reserved.dryRun || outcome.reserved.yes) {
+		if (outcome.reserved.dryRun || outcome.reserved.approveConsequential) {
 			return undefined;
 		}
-		if (confirmMutating(outcome.cmdPath, err)) {
+		if (confirmConsequential(outcome.cmdPath, err)) {
 			return undefined;
 		}
 		return { exitCode: 1, hasData: false, data: undefined };

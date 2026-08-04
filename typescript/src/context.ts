@@ -66,7 +66,7 @@ export interface ConnectionEnvReader {
  */
 export interface ReservedFlags {
 	readonly dryRun: boolean;
-	readonly yes: boolean;
+	readonly approveConsequential: boolean;
 	readonly quiet: boolean;
 	readonly verbose: boolean;
 }
@@ -74,7 +74,7 @@ export interface ReservedFlags {
 /** The quartet's all-false value: the programmatic dispatch paths' state. */
 export const NO_RESERVED_FLAGS: ReservedFlags = {
 	dryRun: false,
-	yes: false,
+	approveConsequential: false,
 	quiet: false,
 	verbose: false,
 };
@@ -87,8 +87,8 @@ export const NO_RESERVED_FLAGS: ReservedFlags = {
 interface ContextBase {
 	/** True when the framework-owned --dry-run flag was passed. */
 	readonly dryRun: boolean;
-	/** True when the framework-owned --yes flag was passed. */
-	readonly yes: boolean;
+	/** True when the framework-owned --approve-consequential flag was passed. */
+	readonly approveConsequential: boolean;
 	/** True when the framework-owned --quiet flag was passed. */
 	readonly quiet: boolean;
 	/** True when the framework-owned --verbose flag was passed. */
@@ -148,9 +148,9 @@ export class Context implements MutatingContext {
 		return this.reserved.dryRun;
 	}
 
-	/** True when the framework-owned --yes flag was passed. */
-	get yes(): boolean {
-		return this.reserved.yes;
+	/** True when the framework-owned --approve-consequential flag was passed. */
+	get approveConsequential(): boolean {
+		return this.reserved.approveConsequential;
 	}
 
 	/** True when the framework-owned --quiet flag was passed. */

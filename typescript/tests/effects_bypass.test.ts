@@ -10,7 +10,12 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { AppImpl } from "../src/app.js";
 import { scanEffectsBypasses } from "../src/checks/effects_bypass.js";
-import { type App, type CheckContext, createApp } from "../src/index.js";
+import {
+	type App,
+	type CheckContext,
+	createApp,
+	defineMutatingCommand,
+} from "../src/index.js";
 
 function project(files: Record<string, string>): string {
 	const root = mkdtempSync(join(tmpdir(), "sc-bypass-"));
@@ -464,4 +469,165 @@ test("breadth: the check is registered with warn severity", async () => {
 		JSON.parse(r.stdout.trim()) as { name: string; severity: string }[]
 	).find((e) => e.name === "observe-allowlist-breadth");
 	assert.equal(entry?.severity, "warn");
+});
+
+// --- §8.1's declaration vs §6.1's grants ------------------------------------
+//
+// A grant exists so a reviewer reading a preview sees WHY a dangerous step is
+// there -- the same judgement `consequential` makes. The check fires only for
+// the two kinds that leave this process (proc_mutate runs another program,
+// net_mutate changes remote state); a file_write or a proc_spawn is local and
+// ordinarily recoverable, and flagging those would re-create the noise the
+// consequential declaration exists to remove.
+//
+// It is a WARNING, not an error, for the same reason: an error would push
+// consumers to declare consequential reflexively to clear a gate, which is the
+// exact reflex the redesign removed.
+
+function grantApp(
+	kind: "proc_mutate" | "proc_spawn" | "file_write" | "net_mutate",
+	consequential: boolean,
+): App {
+	const app = createApp({
+		name: "testapp",
+		version: "1.0.0",
+		help: "test app",
+	});
+	app.command(
+		defineMutatingCommand("release", {
+			help: "h",
+			...(consequential ? { consequential: true as const } : {}),
+			grants: [
+				{ name: "push", reason: "the release engine owns remote refs", kind },
+			],
+			handler: () => 0,
+		}),
+	);
+	app.registerCheckProvider(() => []);
+	const root = mkdtempSync(join(tmpdir(), "sc-grant-"));
+	app.setCheckContext((): CheckContext => ({ projectRoot: root }));
+	return app;
+}
+
+test("grant agreement: a proc_mutate grant on a non-consequential command warns", async () => {
+	const app = grantApp("proc_mutate", false);
+	const r = await app.test([
+		"check",
+		"--name",
+		"consequential-grant-agreement",
+	]);
+	assert.ok(r.stdout.includes("WARN"), r.stdout);
+	assert.ok(
+		r.stdout.includes(
+			"command 'release' declares grant 'push' (kind proc_mutate) but is not consequential",
+		),
+		r.stdout,
+	);
+});
+
+test("grant agreement: a net_mutate grant warns too", async () => {
+	const r = await grantApp("net_mutate", false).test([
+		"check",
+		"--name",
+		"consequential-grant-agreement",
+	]);
+	assert.ok(r.stdout.includes("kind net_mutate"), r.stdout);
+});
+
+test("grant agreement: the verdict is a warning, not an error", async () => {
+	const r = await grantApp("proc_mutate", false).test([
+		"check",
+		"--name",
+		"consequential-grant-agreement",
+		"--ignore-warnings",
+	]);
+	assert.equal(r.exitCode, 0, r.stdout);
+});
+
+test("grant agreement: a consequential command passes", async () => {
+	const r = await grantApp("proc_mutate", true).test([
+		"check",
+		"--name",
+		"consequential-grant-agreement",
+	]);
+	assert.equal(r.exitCode, 0, r.stdout);
+	assert.ok(
+		r.stdout.includes("every escaping grant sits on a consequential command"),
+		r.stdout,
+	);
+});
+
+test("grant agreement: the local kinds are not flagged", async () => {
+	for (const kind of ["file_write", "proc_spawn"] as const) {
+		const r = await grantApp(kind, false).test([
+			"check",
+			"--name",
+			"consequential-grant-agreement",
+		]);
+		assert.equal(r.exitCode, 0, `${kind}: ${r.stdout}`);
+	}
+});
+
+test("grant agreement: a grouped command is named by its dotted path", async () => {
+	const app = createApp({
+		name: "testapp",
+		version: "1.0.0",
+		help: "test app",
+	});
+	const grp = app.group("release", { help: "h" });
+	grp.command(
+		defineMutatingCommand("run", {
+			help: "h",
+			grants: [
+				{ name: "push", reason: "owns remote refs", kind: "proc_mutate" },
+			],
+			handler: () => 0,
+		}),
+	);
+	app.registerCheckProvider(() => []);
+	const root = mkdtempSync(join(tmpdir(), "sc-grant-"));
+	app.setCheckContext((): CheckContext => ({ projectRoot: root }));
+	const r = await app.test([
+		"check",
+		"--name",
+		"consequential-grant-agreement",
+	]);
+	assert.ok(
+		r.stdout.includes("command 'release.run' declares grant 'push'"),
+		r.stdout,
+	);
+});
+
+test("grant agreement: the check is registered with warn severity", async () => {
+	const r = await grantApp("proc_mutate", true).test([
+		"check",
+		"--list",
+		"--json",
+	]);
+	const entry = (
+		JSON.parse(r.stdout.trim()) as {
+			name: string;
+			severity: string;
+			tags: string[];
+		}[]
+	).find((e) => e.name === "consequential-grant-agreement");
+	assert.equal(entry?.severity, "warn");
+	assert.deepEqual([...(entry?.tags ?? [])].sort(), ["effects", "quality"]);
+});
+
+test("grant agreement: consequential is emitted in the schema, omitted when false", async () => {
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	app.command(defineMutatingCommand("plain", { help: "h", handler: () => 0 }));
+	app.command(
+		defineMutatingCommand("grave", {
+			help: "h",
+			consequential: true,
+			handler: () => 0,
+		}),
+	);
+	const schema = (app as unknown as AppImpl).dumpSchemaDict() as {
+		commands: Record<string, Record<string, unknown>>;
+	};
+	assert.equal(schema.commands.plain?.consequential, undefined);
+	assert.equal(schema.commands.grave?.consequential, true);
 });

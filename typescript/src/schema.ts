@@ -240,6 +240,7 @@ function serializeConstraints(def: AnyCommand): Record<string, unknown>[] {
 function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 	const carrier = rc.def as {
 		readonly effect: Effect;
+		readonly consequential?: boolean;
 		readonly grants?: readonly Grant[];
 		readonly forwarding?: Forwarding;
 	};
@@ -250,6 +251,11 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 		// to omit against.
 		effect: carrier.effect,
 	};
+	// consequential: NOT mandatory; absence means "not consequential"
+	// (contract §8.1, §13), so it is omitted when false.
+	if (carrier.consequential === true) {
+		d.consequential = true;
+	}
 	if (rc.kind === "passthrough") {
 		d.passthrough = true;
 	}

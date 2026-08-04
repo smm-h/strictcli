@@ -42,9 +42,9 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // rejection, inapplicable options, truncation, the aborted-preview marker and the confirm protocol), plus
 // five effect argument type-guards Python raises as inline TypeErrors and one
 // TS-only guard (errEffectsUnavailable) for a Context built outside a dispatch.
-// promptConfirmMutating is deliberately NOT counted here: it is a prompt, not
-// an err* template, and the census filters on the err prefix.
-const EXPECTED_TEMPLATE_COUNT = 305;
+// promptConfirmConsequential is deliberately NOT counted here: it is a prompt,
+// not an err* template, and the census filters on the err prefix.
+const EXPECTED_TEMPLATE_COUNT = 307;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

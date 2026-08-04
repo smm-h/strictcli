@@ -65,6 +65,7 @@ export const SURFACE = {
 				"name",
 				"help",
 				"effect",
+				"consequential",
 				"flags",
 				"args",
 				"flagSets",
@@ -100,6 +101,7 @@ export const SURFACE = {
 				"name",
 				"help",
 				"effect",
+				"consequential",
 				"handler",
 				"tags",
 				"hidden",
@@ -131,7 +133,7 @@ export const SURFACE = {
 			name: "ReadOnlyContext",
 			members: [
 				"dryRun",
-				"yes",
+				"approveConsequential",
 				"quiet",
 				"verbose",
 				"info",
@@ -148,7 +150,7 @@ export const SURFACE = {
 			name: "MutatingContext",
 			members: [
 				"dryRun",
-				"yes",
+				"approveConsequential",
 				"quiet",
 				"verbose",
 				"info",
@@ -308,6 +310,7 @@ export const SURFACE = {
 			option_keys: [
 				"args",
 				"configFields",
+				"consequential",
 				"dependencies",
 				"flagSets",
 				"flags",
@@ -327,6 +330,7 @@ export const SURFACE = {
 			option_keys: [
 				"args",
 				"configFields",
+				"consequential",
 				"dependencies",
 				"flagSets",
 				"flags",
@@ -366,12 +370,26 @@ export const SURFACE = {
 		{
 			name: "readOnlyPassthrough",
 			options_type: "(inline spec)",
-			option_keys: ["grants", "handler", "help", "hidden", "tags"],
+			option_keys: [
+				"consequential",
+				"grants",
+				"handler",
+				"help",
+				"hidden",
+				"tags",
+			],
 		},
 		{
 			name: "mutatingPassthrough",
 			options_type: "(inline spec)",
-			option_keys: ["grants", "handler", "help", "hidden", "tags"],
+			option_keys: [
+				"consequential",
+				"grants",
+				"handler",
+				"help",
+				"hidden",
+				"tags",
+			],
 		},
 		{
 			name: "requires",
@@ -451,7 +469,7 @@ export const SURFACE = {
 		// The reserved quartet and the effects handle are prototype accessors
 		// (Go spells them as methods: ctx.DryRun(), ctx.Effects()).
 		{ receiver: "Context", name: "dryRun" },
-		{ receiver: "Context", name: "yes" },
+		{ receiver: "Context", name: "approveConsequential" },
 		{ receiver: "Context", name: "quiet" },
 		{ receiver: "Context", name: "verbose" },
 		{ receiver: "Context", name: "effects" },

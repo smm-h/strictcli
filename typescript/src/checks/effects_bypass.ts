@@ -46,7 +46,8 @@ import {
 	createScanner,
 	SyntaxKind,
 } from "typescript/unstable/ast";
-import type { AppImpl } from "../app.js";
+import type { AppImpl, GroupImpl, RegisteredCommand } from "../app.js";
+import type { Grant } from "../effects.js";
 import { type CheckSpec, errorCheckSpec, warnCheckSpec } from "./provider.js";
 
 /** Process starts. Matched on the called name, bare or through a receiver. */
@@ -736,9 +737,61 @@ export function observeAllowlistBreadthWarning(binary: string): string {
 }
 
 /**
+ * The `consequential-grant-agreement` warning (contract §8.1, §11).
+ *
+ * A grant exists so a reviewer reading a preview sees WHY a dangerous step is
+ * there (§6.1) -- the same judgement `consequential` makes. When the grant's
+ * kind is one that leaves this process (`proc_mutate` runs another program,
+ * `net_mutate` changes remote state), the two declarations should almost
+ * always agree. They can legitimately disagree, so this is a warning: making it
+ * an error would push consumers to declare `consequential` reflexively to clear
+ * a gate, which is exactly the reflex the declaration exists to end.
+ */
+export function consequentialGrantWarning(
+	cmdPath: string,
+	grant: string,
+	kind: string,
+): string {
+	return (
+		`command '${cmdPath}' declares grant '${grant}' (kind ${kind}) but is ` +
+		`not consequential: a ${kind} effect leaves this process and the ` +
+		"framework cannot walk it back, and the grant already says the step " +
+		"is worth explaining. Declare the command consequential, or drop the " +
+		"grant if the step is routine."
+	);
+}
+
+/**
+ * Enumerates every non-deprecated leaf command with its dotted path, sorted by
+ * path so check output is deterministic.
+ */
+function collectAllCommands(
+	app: AppImpl,
+): readonly (readonly [string, RegisteredCommand])[] {
+	const out: [string, RegisteredCommand][] = [];
+	for (const [name, cmd] of app.commands) {
+		out.push([name, cmd]);
+	}
+	const walkGroup = (grp: GroupImpl, prefix: readonly string[]): void => {
+		for (const [cmdName, cmd] of grp.commands) {
+			out.push([[...prefix, cmdName].join("."), cmd]);
+		}
+		for (const [subName, subGrp] of grp.groups) {
+			walkGroup(subGrp, [...prefix, subName]);
+		}
+	};
+	for (const [groupName, grp] of app.groups) {
+		walkGroup(grp, [groupName]);
+	}
+	out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+	return out;
+}
+
+/**
  * The built-in provider. Registered whenever the check system turns on, so a
- * consumer that adopts checks at all gets both lints without a TOML
- * declaration: `effects-bypass` (error) and `observe-allowlist-breadth` (warn).
+ * consumer that adopts checks at all gets all three lints without a TOML
+ * declaration: `effects-bypass` (error), `observe-allowlist-breadth` (warn) and
+ * `consequential-grant-agreement` (warn).
  */
 export function effectsBypassProvider(_app: AppImpl): () => CheckSpec[] {
 	// Named so tests can identify and drop the framework's own provider
@@ -795,6 +848,47 @@ export function effectsBypassProvider(_app: AppImpl): () => CheckSpec[] {
 					}
 					return reporter.passed(
 						"no single-token proc_observe_allowlist prefixes",
+					);
+				},
+			}),
+			warnCheckSpec({
+				name: "consequential-grant-agreement",
+				tags: ["effects", "quality"],
+				fast: true,
+				pure: true,
+				needsNetwork: false,
+				dependsOn: [],
+				impl: (_ctx, reporter) => {
+					// Only the kinds that leave this process. A file_write or a
+					// proc_spawn is local and ordinarily recoverable; a proc_mutate
+					// runs another program and a net_mutate changes remote state,
+					// and neither can be walked back by the framework. Widening
+					// this to every grant kind would re-create the noise the
+					// consequential declaration exists to remove.
+					let found = 0;
+					for (const [path, rc] of collectAllCommands(_app)) {
+						const def = rc.def as {
+							readonly consequential?: boolean;
+							readonly grants?: readonly Grant[];
+						};
+						if (def.consequential === true) {
+							continue;
+						}
+						for (const g of def.grants ?? []) {
+							if (g.kind !== "proc_mutate" && g.kind !== "net_mutate") {
+								continue;
+							}
+							found++;
+							reporter.warn(consequentialGrantWarning(path, g.name, g.kind));
+						}
+					}
+					if (found > 0) {
+						return reporter.found(
+							`${found} grant(s) on non-consequential command(s)`,
+						);
+					}
+					return reporter.passed(
+						"every escaping grant sits on a consequential command",
 					);
 				},
 			}),

@@ -29,11 +29,16 @@ import {
 	t,
 } from "../src/index.js";
 
-const RESERVED = ["dry-run", "yes", "quiet", "verbose"];
+const RESERVED = ["dry-run", "approve-consequential", "quiet", "verbose"];
 
 function reservedMessage(name: string): string {
-	return `flag name '${name}' is reserved by the framework (dry-run, yes, quiet, verbose)`;
+	return `flag name '${name}' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)`;
 }
+
+// `yes` owns no framework flag any more, but it stays banned so nobody
+// reintroduces a private --yes meaning the same thing (§12.1).
+const YES_BAN_MESSAGE =
+	"flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential";
 
 // --- §7.1 the unconditional name ban ---
 
@@ -44,6 +49,23 @@ test("reserved quartet: flag() refuses each reserved name", () => {
 			message: reservedMessage(name),
 		});
 	}
+});
+
+test("reserved names: `yes` is banned outright", () => {
+	assert.throws(() => flag("yes", t.bool, { help: "h", default: false }), {
+		name: "RegistrationError",
+		message: YES_BAN_MESSAGE,
+	});
+	assert.throws(
+		() =>
+			createApp({
+				name: "t",
+				version: "1",
+				help: "h",
+				flags: { yes: flag("yes", t.bool, { help: "h", default: false }) },
+			}),
+		{ message: YES_BAN_MESSAGE },
+	);
 });
 
 test("reserved quartet: the ban applies at every level, not just globals", () => {

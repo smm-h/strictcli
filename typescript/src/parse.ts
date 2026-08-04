@@ -1000,7 +1000,7 @@ export interface PreScanResult {
 	readonly err: string | undefined;
 	/** The effects-regime reserved quartet, delivered on the Context. */
 	readonly dryRun: boolean;
-	readonly yes: boolean;
+	readonly approveConsequential: boolean;
 	readonly quiet: boolean;
 	readonly verbose: boolean;
 	/** argv with --config/--config=value/--hermetic/the quartet stripped out. */
@@ -1010,10 +1010,10 @@ export interface PreScanResult {
 /** argv token -> pre-scan result key for the reserved quartet. */
 const RESERVED_QUARTET_TOKENS: ReadonlyMap<
 	string,
-	"dryRun" | "yes" | "quiet" | "verbose"
+	"dryRun" | "approveConsequential" | "quiet" | "verbose"
 > = new Map([
 	["--dry-run", "dryRun" as const],
-	["--yes", "yes" as const],
+	["--approve-consequential", "approveConsequential" as const],
 	["--quiet", "quiet" as const],
 	["--verbose", "verbose" as const],
 ]);
@@ -1027,7 +1027,8 @@ const RESERVED_QUARTET_TOKENS: ReadonlyMap<
  *   and the quartet). Known global flags and their values are skipped so a
  *   global-flag value that looks like a command name does not end it early.
  * - The command region recognizes ONLY the quartet
- *   (--dry-run/--yes/--quiet/--verbose), anywhere, exactly like --help/-h.
+ *   (--dry-run/--approve-consequential/--quiet/--verbose), anywhere, exactly
+ *   like --help/-h.
  *   --hermetic/--config/--dump-schema/--mcp stay pre-command-only. See
  *   scanCommandRegionQuartet.
  *
@@ -1055,7 +1056,12 @@ export function preScanReservedFlags(
 
 	let hermetic = false;
 	let configPath: string | undefined;
-	const quartet = { dryRun: false, yes: false, quiet: false, verbose: false };
+	const quartet = {
+		dryRun: false,
+		approveConsequential: false,
+		quiet: false,
+		verbose: false,
+	};
 	const excludeIndices = new Set<number>();
 	const done = (err?: string): PreScanResult => {
 		const cleanedArgv =
@@ -1178,7 +1184,7 @@ export function preScanReservedFlags(
 /**
  * Recognizes the reserved quartet in the command region of argv.
  *
- * Contract §7.2 (amended 2026-08-04): --dry-run/--yes/--quiet/--verbose are
+ * Contract §7.2 (amended 2026-08-04): the quartet's four tokens are
  * recognized ANYWHERE in argv, exactly like --help/-h, because their
  * applicability is per-command -- requiring them before the command name was
  * backwards. Only the quartet is recognized here; --hermetic, --config,
@@ -1199,7 +1205,12 @@ function scanCommandRegionQuartet(
 	app: AppImpl,
 	argv: readonly string[],
 	start: number,
-	quartet: { dryRun: boolean; yes: boolean; quiet: boolean; verbose: boolean },
+	quartet: {
+		dryRun: boolean;
+		approveConsequential: boolean;
+		quiet: boolean;
+		verbose: boolean;
+	},
 	excludeIndices: Set<number>,
 ): void {
 	let groups: ReadonlyMap<string, GroupImpl> = app.groups;
@@ -1245,7 +1256,7 @@ function scanCommandRegionQuartet(
 export function reservedFlagsOf(pre: PreScanResult): ReservedFlags {
 	return {
 		dryRun: pre.dryRun,
-		yes: pre.yes,
+		approveConsequential: pre.approveConsequential,
 		quiet: pre.quiet,
 		verbose: pre.verbose,
 	};

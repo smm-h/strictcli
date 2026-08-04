@@ -688,7 +688,7 @@ test("effects: ctx.effects is armed on the run() path", async () => {
 		return 0;
 	});
 	// run() writes to the real process streams; --dry-run keeps it hermetic.
-	await app.run(["--dry-run", "--yes", "go"]);
+	await app.run(["--dry-run", "go"]);
 	assert.equal(process.exitCode, 0);
 	process.exitCode = 0;
 	assert.equal(log(app).length, 1);
@@ -757,7 +757,7 @@ test("effects: the quartet reaches the Context and never the handler args", asyn
 				seen = {
 					args: Object.keys(args as object),
 					dryRun: ctx.dryRun,
-					yes: ctx.yes,
+					approveConsequential: ctx.approveConsequential,
 					quiet: ctx.quiet,
 					verbose: ctx.verbose,
 				};
@@ -765,11 +765,17 @@ test("effects: the quartet reaches the Context and never the handler args", asyn
 			},
 		}),
 	);
-	await app.test(["--dry-run", "--yes", "--quiet", "--verbose", "look"]);
+	await app.test([
+		"--dry-run",
+		"--approve-consequential",
+		"--quiet",
+		"--verbose",
+		"look",
+	]);
 	assert.deepEqual(seen, {
 		args: [],
 		dryRun: true,
-		yes: true,
+		approveConsequential: true,
 		quiet: true,
 		verbose: true,
 	});
@@ -781,7 +787,7 @@ test("effects: the quartet reaches the Context and never the handler args", asyn
 test("effects: each quartet flag is recognized after the command name", async () => {
 	for (const [token, key] of [
 		["--dry-run", "dryRun"],
-		["--yes", "yes"],
+		["--approve-consequential", "approveConsequential"],
 		["--quiet", "quiet"],
 		["--verbose", "verbose"],
 	] as const) {
@@ -789,7 +795,7 @@ test("effects: each quartet flag is recognized after the command name", async ()
 		const app = roApp((ctx) => {
 			seen = {
 				dryRun: ctx.dryRun,
-				yes: ctx.yes,
+				approveConsequential: ctx.approveConsequential,
 				quiet: ctx.quiet,
 				verbose: ctx.verbose,
 			};

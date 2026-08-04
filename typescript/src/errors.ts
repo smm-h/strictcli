@@ -1688,7 +1688,17 @@ export function errRouterCommandMustBeString(): string {
 // ---------------------------------------------------------------------------
 
 export function errFlagNameReservedByFramework(name: string): string {
-	return `flag name '${name}' is reserved by the framework (dry-run, yes, quiet, verbose)`;
+	return `flag name '${name}' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)`;
+}
+
+/**
+ * The outright `yes` ban (§12.1). `yes` owns no framework flag any more --
+ * --approve-consequential replaced --yes -- but a private --yes would restate
+ * it in a spelling that IS muscle memory, which is exactly what the rename
+ * removed.
+ */
+export function errFlagNameYesBanned(): string {
+	return "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential";
 }
 
 export function errCommandEffectMissing(name: string): string {
@@ -1701,6 +1711,16 @@ export function errCommandEffectInvalid(name: string, value: string): string {
 
 export function errDeprecatedCommandEffect(name: string): string {
 	return `deprecated command ${q(name)}: effect classification does not apply (a deprecated command has no handler)`;
+}
+
+/**
+ * §8.1's declaration guard: classification answers "should a dry run record
+ * rather than execute?" and consequential answers "are these effects worth
+ * interrupting someone for?". A command that changes nothing has no effects to
+ * weigh.
+ */
+export function errCommandReadOnlyConsequential(name: string): string {
+	return `command ${q(name)}: a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1925,12 +1945,12 @@ export function errDryRunAborted(step: number, cmd: string): string {
 // effects.go — the confirm protocol (parse-time)
 // ---------------------------------------------------------------------------
 
-export function promptConfirmMutating(name: string): string {
-	return `about to run mutating command '${name}'. Proceed? [y/N] `;
+export function promptConfirmConsequential(name: string): string {
+	return `about to run consequential command '${name}'. Proceed? [y/N] `;
 }
 
 export function errConfirmNonInteractive(): string {
-	return "error: stdin is not interactive; pass --yes to confirm";
+	return "error: stdin is not interactive; pass --approve-consequential to confirm";
 }
 
 export function errConfirmDeclined(): string {

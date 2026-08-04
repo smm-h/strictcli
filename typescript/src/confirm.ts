@@ -1,16 +1,21 @@
 /**
- * The framework-owned confirm protocol for `mutating` commands.
+ * The framework-owned confirm protocol for `consequential` commands.
  *
- * Fires before dispatching a mutating command on the REAL CLI path when
- * neither --dry-run nor --yes was passed. It never fires for read_only
- * commands, and never on the programmatic paths (test/call/invoke/MCP), which
- * have no TTY contract and would hang the caller.
+ * Fires before dispatching a command that DECLARES ITSELF consequential, on
+ * the REAL CLI path, when neither --dry-run nor --approve-consequential was
+ * passed. A plain `mutating` command never prompts: classification answers
+ * "should a dry run record rather than execute?", which is a different
+ * question from "are these effects worth interrupting someone for?". It never
+ * fires on the programmatic paths (test/call/invoke/MCP), which have no TTY
+ * contract and would hang the caller.
  *
- * A mutating PASSTHROUGH is not exempt: that its args are opaque to the
+ * A consequential PASSTHROUGH is not exempt: that its args are opaque to the
  * framework is a reason to confirm, not a reason to skip -- the framework knows
  * LESS about what is about to happen, not more.
  *
- * There is no bypass. `--yes` answers the prompt; it disables nothing else.
+ * There is no bypass. `--approve-consequential` answers the prompt; it disables
+ * nothing else. The flag's unwieldiness is deliberate: a flag that cannot
+ * become muscle memory stays a decision.
  */
 
 import { readSync } from "node:fs";
@@ -18,7 +23,7 @@ import type { Writer } from "./context.js";
 import {
 	errConfirmDeclined,
 	errConfirmNonInteractive,
-	promptConfirmMutating,
+	promptConfirmConsequential,
 } from "./errors.js";
 
 /** The stdin side of the protocol, isolated so tests can drive it. */
@@ -78,13 +83,13 @@ export function setConfirmIO(io: ConfirmIO | null): void {
  * Runs the confirm protocol. Returns true to proceed, false to abort (the
  * caller exits 1 after this function has written the reason to stderr).
  */
-export function confirmMutating(cmdPath: string, err: Writer): boolean {
+export function confirmConsequential(cmdPath: string, err: Writer): boolean {
 	if (!confirmIO.isInteractive()) {
 		err.write(`${errConfirmNonInteractive()}\n`);
 		return false;
 	}
 	// The prompt carries its own trailing space and NO trailing newline.
-	err.write(promptConfirmMutating(cmdPath));
+	err.write(promptConfirmConsequential(cmdPath));
 	// readLine already dropped the trailing newline; drop exactly one trailing
 	// carriage return too. A human at a Windows console types the same 'y' as
 	// everyone else and their terminal terminates the line CRLF, so declining

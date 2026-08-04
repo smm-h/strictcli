@@ -1,6 +1,9 @@
 /**
  * The framework-owned confirm protocol (§8), byte-exact.
  *
+ * The protocol fires for commands that DECLARE THEMSELVES consequential, never
+ * for a plain `mutating` command.
+ *
  * The stdin side is driven through the package-internal setConfirmIO seam (the
  * TS analog of Python's tests monkeypatching sys.stdin): it changes WHERE the
  * answer comes from, never WHETHER the protocol runs.
@@ -66,8 +69,18 @@ function ranApp(record: string[]): App {
 	app.command(
 		defineMutatingCommand("deploy", {
 			help: "h",
+			consequential: true,
 			handler: () => {
 				record.push("ran");
+				return 0;
+			},
+		}),
+	);
+	app.command(
+		defineMutatingCommand("build", {
+			help: "h",
+			handler: () => {
+				record.push("built");
 				return 0;
 			},
 		}),
@@ -91,7 +104,7 @@ test("confirm: the prompt is byte-exact and 'y' proceeds", async () => {
 		const r = await captureRun(ranApp(ran), ["deploy"]);
 		assert.equal(
 			r.stderr,
-			"about to run mutating command 'deploy'. Proceed? [y/N] ",
+			"about to run consequential command 'deploy'. Proceed? [y/N] ",
 		);
 		assert.deepEqual(ran, ["ran"]);
 		assert.equal(r.exitCode, 0);
@@ -132,7 +145,7 @@ test("confirm: exactly 'y' or 'Y' proceeds; everything else declines", async () 
 			assert.equal(r.exitCode, 1);
 			assert.equal(
 				r.stderr,
-				"about to run mutating command 'deploy'. Proceed? [y/N] aborted\n",
+				"about to run consequential command 'deploy'. Proceed? [y/N] aborted\n",
 			);
 		} finally {
 			setConfirmIO(null);
@@ -147,7 +160,7 @@ test("confirm: a non-interactive stdin errors instead of prompting", async () =>
 		const r = await captureRun(ranApp(ran), ["deploy"]);
 		assert.equal(
 			r.stderr,
-			"error: stdin is not interactive; pass --yes to confirm\n",
+			"error: stdin is not interactive; pass --approve-consequential to confirm\n",
 		);
 		assert.equal(r.exitCode, 1);
 		assert.deepEqual(ran, []);
@@ -156,16 +169,65 @@ test("confirm: a non-interactive stdin errors instead of prompting", async () =>
 	}
 });
 
-test("confirm: --yes skips the prompt", async () => {
+test("confirm: --approve-consequential skips the prompt", async () => {
 	const ran: string[] = [];
 	setConfirmIO(io("n", /* interactive */ false));
 	try {
-		const r = await captureRun(ranApp(ran), ["--yes", "deploy"]);
+		const r = await captureRun(ranApp(ran), [
+			"--approve-consequential",
+			"deploy",
+		]);
 		assert.equal(r.stderr, "");
 		assert.deepEqual(ran, ["ran"]);
 	} finally {
 		setConfirmIO(null);
 	}
+});
+
+// The headline of the redesign: `mutating` alone never prompts. Two thirds of
+// the commands in a real fleet classify mutating; the genuinely dangerous ones
+// are a small fraction of that.
+test("confirm: never fires for a mutating command that is not consequential", async () => {
+	const ran: string[] = [];
+	setConfirmIO(io("n", /* interactive */ false));
+	try {
+		const r = await captureRun(ranApp(ran), ["build"]);
+		assert.equal(r.stderr, "");
+		assert.deepEqual(ran, ["built"]);
+		assert.equal(r.exitCode, 0);
+	} finally {
+		setConfirmIO(null);
+	}
+});
+
+// `yes` owns no framework flag any more.
+test("confirm: --yes is no longer a recognized token", async () => {
+	const r = await ranApp([]).test(["build", "--yes"]);
+	assert.equal(r.exitCode, 1);
+	assert.ok(r.stderr.includes("--yes"), r.stderr);
+});
+
+test("confirm: a read_only command cannot be declared consequential", () => {
+	assert.throws(
+		() =>
+			defineReadOnlyCommand("look", {
+				help: "h",
+				consequential: true,
+				handler: () => 0,
+			}),
+		(e: Error) =>
+			e.message ===
+			'command "look": a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)',
+	);
+	assert.throws(
+		() =>
+			readOnlyPassthrough("show", {
+				help: "h",
+				consequential: true,
+				handler: () => 0,
+			}),
+		(e: Error) => e.message.includes("cannot be consequential"),
+	);
 });
 
 test("confirm: --dry-run skips the prompt", async () => {
@@ -193,12 +255,13 @@ test("confirm: never fires for a read_only command", async () => {
 	}
 });
 
-test("confirm: a MUTATING passthrough is not exempt", async () => {
+test("confirm: a CONSEQUENTIAL passthrough is not exempt", async () => {
 	const ran: string[] = [];
 	const app = createApp({ name: "t", version: "1", help: "h" });
 	app.command(
 		mutatingPassthrough("exec", {
 			help: "h",
+			consequential: true,
 			handler: () => {
 				ran.push("ran");
 				return 0;
@@ -210,9 +273,31 @@ test("confirm: a MUTATING passthrough is not exempt", async () => {
 		const r = await captureRun(app, ["exec", "--anything"]);
 		assert.equal(
 			r.stderr,
-			"about to run mutating command 'exec'. Proceed? [y/N] aborted\n",
+			"about to run consequential command 'exec'. Proceed? [y/N] aborted\n",
 		);
 		assert.deepEqual(ran, []);
+	} finally {
+		setConfirmIO(null);
+	}
+});
+
+test("confirm: a mutating passthrough that is not consequential never prompts", async () => {
+	const ran: string[] = [];
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	app.command(
+		mutatingPassthrough("thru", {
+			help: "h",
+			handler: () => {
+				ran.push("ran");
+				return 0;
+			},
+		}),
+	);
+	setConfirmIO(io("n", /* interactive */ false));
+	try {
+		const r = await captureRun(app, ["thru", "--anything"]);
+		assert.equal(r.stderr, "");
+		assert.deepEqual(ran, ["ran"]);
 	} finally {
 		setConfirmIO(null);
 	}
@@ -244,14 +329,18 @@ test("confirm: the prompt names the DOTTED command path", async () => {
 	const app = createApp({ name: "t", version: "1", help: "h" });
 	const release = app.group("release", { help: "h" });
 	release.command(
-		defineMutatingCommand("run", { help: "h", handler: () => 0 }),
+		defineMutatingCommand("run", {
+			help: "h",
+			consequential: true,
+			handler: () => 0,
+		}),
 	);
 	setConfirmIO(io("n"));
 	try {
 		const r = await captureRun(app, ["release", "run"]);
 		assert.ok(
 			r.stderr.startsWith(
-				"about to run mutating command 'release.run'. Proceed? [y/N] ",
+				"about to run consequential command 'release.run'. Proceed? [y/N] ",
 			),
 			r.stderr,
 		);
@@ -260,7 +349,7 @@ test("confirm: the prompt names the DOTTED command path", async () => {
 	}
 });
 
-test("confirm: the programmatic paths behave as if --yes were passed", async () => {
+test("confirm: the programmatic paths behave as if --approve-consequential were passed", async () => {
 	const ran: string[] = [];
 	setConfirmIO(io("n", /* interactive */ false));
 	try {
@@ -277,14 +366,15 @@ test("confirm: the programmatic paths behave as if --yes were passed", async () 
 	}
 });
 
-test("confirm: ctx.yes reflects the actual flag, not the dispatch path", async () => {
+test("confirm: ctx.approveConsequential reflects the actual flag, not the dispatch path", async () => {
 	const seen: boolean[] = [];
 	const app = createApp({ name: "t", version: "1", help: "h" });
 	app.command(
 		defineMutatingCommand("deploy", {
 			help: "h",
+			consequential: true,
 			handler: (_a, ctx) => {
-				seen.push(ctx.yes);
+				seen.push(ctx.approveConsequential);
 				return 0;
 			},
 		}),
@@ -292,7 +382,7 @@ test("confirm: ctx.yes reflects the actual flag, not the dispatch path", async (
 	// Prompt suppression is a property of the dispatch path; the flag value is
 	// reported honestly.
 	await app.test(["deploy"]);
-	await app.test(["--yes", "deploy"]);
+	await app.test(["--approve-consequential", "deploy"]);
 	assert.deepEqual(seen, [false, true]);
 });
 

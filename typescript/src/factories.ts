@@ -44,6 +44,7 @@ import {
 	errCommandImpliesValueMustBeBool,
 	errCommandMissingHelp,
 	errCommandMutexMinFlags,
+	errCommandReadOnlyConsequential,
 	errCommandRequiresSameFlag,
 	errCommandRequiresUnknownFlag,
 	errCommandVariadicMustBeLast,
@@ -70,6 +71,7 @@ import {
 	errFlagHelpEmpty,
 	errFlagIntDefaultTypeMismatch,
 	errFlagNameReservedByFramework,
+	errFlagNameYesBanned,
 	errFlagNoPrefixReserved,
 	errFlagRepeatableEnvRequiresSeparator,
 	errFlagRepeatableIncompatibleBool,
@@ -291,10 +293,19 @@ export function elemSchemaOf(carrier: Carrier<unknown, Schema>): ScalarSchema {
  */
 export const RESERVED_FRAMEWORK_FLAG_NAMES: ReadonlySet<string> = new Set([
 	"dry-run",
-	"yes",
+	"approve-consequential",
 	"quiet",
 	"verbose",
 ]);
+
+/**
+ * Names the framework refuses outright without owning a flag of that name.
+ *
+ * `yes` is here because --approve-consequential replaced --yes (contract
+ * §7.1) and a private --yes would restate it in a spelling that IS muscle
+ * memory -- exactly what the rename removed.
+ */
+export const BANNED_FLAG_NAMES: ReadonlySet<string> = new Set(["yes"]);
 
 // Mirrors Python Flag.__post_init__ (the divergence ground truth), with the
 // TS carrier model: list carriers ARE the repeatable flags, dict carriers are
@@ -312,6 +323,9 @@ function validateFlagConfig(
 	}
 	if (RESERVED_FRAMEWORK_FLAG_NAMES.has(name)) {
 		throw new RegistrationError(errFlagNameReservedByFramework(name));
+	}
+	if (BANNED_FLAG_NAMES.has(name)) {
+		throw new RegistrationError(errFlagNameYesBanned());
 	}
 	if (name.startsWith("no-")) {
 		throw new RegistrationError(errFlagNoPrefixReserved(name));
@@ -776,6 +790,13 @@ export interface CommandDef<
 	readonly help: string;
 	/** Mandatory classification. There is no default and no inference. */
 	readonly effect: Effect;
+	/**
+	 * Declared per-command (contract §8.1) and NOT mandatory -- absence means
+	 * "not consequential". It is a property of the COMMAND, deliberately not
+	 * named after the framework's reaction to it, so other behaviours can hang
+	 * off it later. Today the framework prompts for exactly these commands.
+	 */
+	readonly consequential: boolean;
 	readonly flags: F;
 	readonly args: A;
 	readonly flagSets: FS;
@@ -800,6 +821,7 @@ export interface AnyCommand {
 	readonly name: string;
 	readonly help: string;
 	readonly effect: Effect;
+	readonly consequential: boolean;
 	readonly flags: FlagMap;
 	readonly args: readonly AnyArg[];
 	readonly flagSets: readonly AnyFlagSet[];
@@ -836,6 +858,12 @@ export interface ReadOnlyCommandSpec<
 	readonly mutex?: M;
 	readonly dependencies?: readonly Dependency[];
 	readonly handler: Handler<F, A, FS, M, ReadOnlyContext>;
+	/**
+	 * Declaring this on a read_only command is a registration-time hard error:
+	 * a command that changes nothing has nothing to confirm. The member exists
+	 * on this spec so that error is reachable rather than silently dropped.
+	 */
+	readonly consequential?: boolean;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
@@ -858,6 +886,12 @@ export interface MutatingCommandSpec<
 	readonly mutex?: M;
 	readonly dependencies?: readonly Dependency[];
 	readonly handler: Handler<F, A, FS, M, MutatingContext>;
+	/**
+	 * Declares that this command's effects are worth interrupting someone for.
+	 * It is the ONLY thing that makes the framework prompt (§8.1): a plain
+	 * mutating command never does.
+	 */
+	readonly consequential?: boolean;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
@@ -966,6 +1000,11 @@ function buildCommandDef<
 ): CommandDef<N, F, A, FS, M, C> {
 	if (typeof spec.help !== "string" || spec.help.trim() === "") {
 		throw new RegistrationError(errCommandMissingHelp(name));
+	}
+	// A read_only command cannot be consequential: it changes nothing, so
+	// there is nothing to interrupt anyone for (contract §8.1).
+	if (spec.consequential === true && effect === "read_only") {
+		throw new RegistrationError(errCommandReadOnlyConsequential(name));
 	}
 	// The empty fallbacks are safe: the type params only default when the
 	// corresponding spec properties are absent.
@@ -1116,6 +1155,7 @@ function buildCommandDef<
 		name,
 		help: spec.help,
 		effect,
+		consequential: spec.consequential ?? false,
 		flags,
 		args,
 		flagSets,
@@ -1137,9 +1177,10 @@ function buildCommandDef<
  * mutex groups, and dependencies. Validates all constraints at construction
  * time.
  *
- * A read_only command never prompts (§8), and calling any mutating member of
- * the effects handle is a hard error at call time. Its handler's `ctx` is
- * narrowed to ReadOnlyContext, so `ctx.effects.write(...)` does not compile.
+ * A read_only command never prompts (§8) and cannot be declared consequential;
+ * calling any mutating member of the effects handle is a hard error at call
+ * time. Its handler's `ctx` is narrowed to ReadOnlyContext, so
+ * `ctx.effects.write(...)` does not compile.
  */
 export function defineReadOnlyCommand<
 	const N extends string,
@@ -1163,8 +1204,9 @@ export function defineReadOnlyCommand<
  * mutex groups, and dependencies. Validates all constraints at construction
  * time.
  *
- * A mutating command is subject to the confirm protocol (§8), participates in
- * dry mode, and may call every member of the effects handle.
+ * A mutating command participates in dry mode and may call every member of the
+ * effects handle. It does NOT prompt unless it also declares
+ * `consequential: true` (§8.1).
  */
 export function defineMutatingCommand<
 	const N extends string,
@@ -1205,6 +1247,8 @@ export interface PassthroughDef<N extends string, C = MutatingContext> {
 	readonly help: string;
 	/** Mandatory classification, exactly as on an ordinary command. */
 	readonly effect: Effect;
+	/** Declared exactly as on an ordinary command (contract §8.1). */
+	readonly consequential: boolean;
 	readonly handler: PassthroughHandler<C>;
 	readonly tags: readonly string[];
 	readonly hidden: boolean;
@@ -1215,6 +1259,7 @@ export interface PassthroughDef<N extends string, C = MutatingContext> {
 interface PassthroughSpec<C> {
 	readonly help: string;
 	readonly handler: PassthroughHandler<C>;
+	readonly consequential?: boolean;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly grants?: readonly Grant[];
@@ -1228,12 +1273,16 @@ function buildPassthroughDef<N extends string, C>(
 	if (typeof spec.help !== "string" || spec.help.trim() === "") {
 		throw new RegistrationError(errCommandMissingHelp(name));
 	}
+	if (spec.consequential === true && effect === "read_only") {
+		throw new RegistrationError(errCommandReadOnlyConsequential(name));
+	}
 	const tags = validateAndDedupTags(spec.tags ?? []);
 	return {
 		kind: "passthrough",
 		name,
 		help: spec.help,
 		effect,
+		consequential: spec.consequential ?? false,
 		handler: spec.handler,
 		tags,
 		hidden: spec.hidden ?? false,
@@ -1244,7 +1293,7 @@ function buildPassthroughDef<N extends string, C>(
 /**
  * Creates a `read_only` passthrough command that bypasses all flag/arg
  * parsing. The handler receives the raw argument list and global flag values,
- * and never prompts.
+ * and never prompts. It cannot be declared consequential.
  */
 export function readOnlyPassthrough<const N extends string>(
 	name: N,
@@ -1256,9 +1305,10 @@ export function readOnlyPassthrough<const N extends string>(
 /**
  * Creates a `mutating` passthrough command that bypasses all flag/arg parsing.
  *
- * A mutating passthrough is NOT exempt from the confirm protocol: that its
- * args are opaque to the framework is a reason to confirm, not a reason to
- * skip -- the framework knows less about what is about to happen, not more.
+ * A mutating passthrough is NOT exempt from the confirm protocol when it
+ * declares `consequential: true`: that its args are opaque to the framework is
+ * a reason to confirm, not a reason to skip -- the framework knows less about
+ * what is about to happen, not more.
  */
 export function mutatingPassthrough<const N extends string>(
 	name: N,
