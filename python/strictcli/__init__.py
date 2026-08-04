@@ -248,7 +248,8 @@ class Context:
     """
 
     def __init__(self, stdout=None, stderr=None, sources=None, infra=None,
-                 *, dry_run: bool = False, yes: bool = False,
+                 *, dry_run: bool = False,
+                 approve_consequential: bool = False,
                  quiet: bool = False, verbose: bool = False,
                  effects: "_Effects | None" = None):
         self._stdout = stdout or sys.stdout
@@ -256,7 +257,7 @@ class Context:
         self._sources = sources or {}  # flag-name -> source label (cli/env/config/default/implied/infra)
         self._infra = infra  # _InfraAccess | None
         self._dry_run = dry_run
-        self._yes = yes
+        self._approve_consequential = approve_consequential
         self._quiet = quiet
         self._verbose = verbose
         self._effects = effects
@@ -267,9 +268,9 @@ class Context:
         return self._dry_run
 
     @property
-    def yes(self) -> bool:
-        """True when the framework-owned ``--yes`` flag was passed."""
-        return self._yes
+    def approve_consequential(self) -> bool:
+        """True when the framework-owned ``--approve-consequential`` flag was passed."""
+        return self._approve_consequential
 
     @property
     def quiet(self) -> bool:
@@ -686,7 +687,7 @@ def _msg_dry_run_aborted(step: int, cmd: str) -> str:
 
 def _msg_confirm_prompt(cmd_path: str) -> str:
     """The confirm prompt. A prompt, not an error, but parity is still checked."""
-    return f"about to run mutating command '{cmd_path}'. Proceed? [y/N] "
+    return f"about to run consequential command '{cmd_path}'. Proceed? [y/N] "
 
 
 def _strip_confirm_line(answer: str) -> str:
@@ -707,11 +708,33 @@ def _strip_confirm_line(answer: str) -> str:
 
 
 def _msg_confirm_non_interactive() -> str:
-    return "error: stdin is not interactive; pass --yes to confirm"
+    return (
+        "error: stdin is not interactive; pass --approve-consequential to confirm"
+    )
 
 
 def _msg_confirm_declined() -> str:
     return "aborted"
+
+
+def _consequential_grant_warning(cmd_path: str, grant: str, kind: str) -> str:
+    """The `consequential-grant-agreement` warning (contract §8.1, §11).
+
+    A grant exists so a reviewer reading a preview sees WHY a dangerous step is
+    there (§6.1) -- the same judgement ``consequential`` makes. When the grant's
+    kind is one that leaves this process (``proc_mutate`` runs another program,
+    ``net_mutate`` changes remote state), the two declarations should almost
+    always agree. They can legitimately disagree, so this is a warning: making
+    it an error would push consumers to declare ``consequential`` reflexively
+    to clear a gate, which is exactly the reflex the declaration exists to end.
+    """
+    return (
+        f"command '{cmd_path}' declares grant '{grant}' (kind {kind}) but is "
+        f"not consequential: a {kind} effect leaves this process and the "
+        f"framework cannot walk it back, and the grant already says the step "
+        f"is worth explaining. Declare the command consequential, or drop the "
+        f"grant if the step is routine."
+    )
 
 
 def _observe_allowlist_breadth_warning(binary: str) -> str:
@@ -3005,8 +3028,14 @@ _NON_BOOL_SCALAR_TYPES = (str, int, float)
 # names are unaffected by this ban, and the four flags themselves have no short
 # forms.
 _RESERVED_FRAMEWORK_FLAG_NAMES = frozenset({
-    "dry-run", "yes", "quiet", "verbose",
+    "dry-run", "approve-consequential", "quiet", "verbose",
 })
+
+# `yes` is NOT a framework flag any more -- it was replaced by
+# --approve-consequential (contract §7.1) -- but it stays banned so nobody
+# reintroduces a private --yes meaning the same thing. Its ban message points
+# at the replacement.
+_BANNED_FLAG_NAMES = frozenset({"yes"})
 
 # Names reserved by the framework for global flags. The pre-existing set is
 # also what a SHORT flag name is checked against (the framework quartet bans
@@ -3020,7 +3049,7 @@ _RESERVED_GLOBAL_FLAG_NAMES = _RESERVED_GLOBAL_SHORT_NAMES | _RESERVED_FRAMEWORK
 # argv token -> pre-scan result key for the reserved quartet.
 _RESERVED_QUARTET_TOKENS = {
     "--dry-run": "dry_run",
-    "--yes": "yes",
+    "--approve-consequential": "approve_consequential",
     "--quiet": "quiet",
     "--verbose": "verbose",
 }
@@ -3030,7 +3059,20 @@ def _raise_flag_name_reserved_by_framework(name: str):
     """Message template: a flag name collides with the reserved quartet."""
     raise ValueError(
         f"flag name '{name}' is reserved by the framework "
-        f"(dry-run, yes, quiet, verbose)"
+        f"(dry-run, approve-consequential, quiet, verbose)"
+    )
+
+
+def _raise_flag_name_yes_banned():
+    """Message template: a flag named `yes` is banned outright.
+
+    `yes` owns no framework flag any more, but a private --yes would restate
+    --approve-consequential in a spelling that IS muscle memory -- which is
+    exactly what the rename removed.
+    """
+    raise ValueError(
+        "flag name 'yes' is banned by the framework: "
+        "the confirmation skip is --approve-consequential"
     )
 
 
@@ -3181,6 +3223,8 @@ class Flag:
             )
         if self.name in _RESERVED_FRAMEWORK_FLAG_NAMES:
             _raise_flag_name_reserved_by_framework(self.name)
+        if self.name in _BANNED_FLAG_NAMES:
+            _raise_flag_name_yes_banned()
         if self.name.startswith("no-"):
             raise ValueError(
                 f"flag '{self.name}': names starting with 'no-' are "
@@ -3650,6 +3694,20 @@ def _raise_deprecated_command_effect(name: str):
     )
 
 
+def _raise_command_read_only_consequential(name: str):
+    """A read_only command cannot be consequential (contract §8.1).
+
+    Classification answers "should a dry run record rather than execute?";
+    ``consequential`` answers "are these effects worth interrupting someone
+    for?". A command that changes nothing has no effects to weigh, so the two
+    declarations cannot both hold.
+    """
+    raise ValueError(
+        f'command "{name}": a read_only command cannot be consequential '
+        f'(a command that changes nothing has nothing to confirm)'
+    )
+
+
 @dataclass(frozen=True)
 class Command:
     """A leaf command with a handler."""
@@ -3658,6 +3716,11 @@ class Command:
     help: str
     handler: Callable | None
     effect: str
+    # Declared per-command (contract §8.1). NOT mandatory -- absence means
+    # "not consequential". It is a property of the COMMAND, deliberately not
+    # named after the framework's reaction to it, so other behaviours can hang
+    # off it later. Today the framework prompts for exactly these commands.
+    consequential: bool = False
     flags: tuple[Flag, ...] = ()
     args: tuple[Arg, ...] = ()
     flag_sets: tuple[FlagSet, ...] = ()
@@ -3679,6 +3742,8 @@ class Command:
         _require_non_empty_str(self.help, "help", "Command")
         if self.effect not in _EFFECT_VALUES:
             _raise_command_effect_invalid(self.name, self.effect)
+        if self.consequential and self.effect == EFFECT_READ_ONLY:
+            _raise_command_read_only_consequential(self.name)
         for tag in self.tags:
             if not _IDENTIFIER_RE.fullmatch(tag):
                 raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
@@ -3764,6 +3829,7 @@ class Group:
         *,
         help: str,
         effect: str | None = None,
+        consequential: bool = False,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -3785,6 +3851,7 @@ class Group:
                 )
             cmd = _build_and_validate_command(
                 name, help=help, effect=effect,
+                consequential=consequential,
                 handler=func, args=args, flag_sets=flag_sets, mutex=mutex,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
@@ -4322,6 +4389,10 @@ class App:
                 # bans the quartet first); kept so the global-flag validation
                 # path carries the same message for any other construction route.
                 _raise_flag_name_reserved_by_framework(f.name)
+            if f.name in _BANNED_FLAG_NAMES:
+                # Likewise unreachable through Flag(); kept for parity with the
+                # quartet's own belt-and-braces check on this path.
+                _raise_flag_name_yes_banned()
             if f.name in _RESERVED_GLOBAL_FLAG_NAMES:
                 raise ValueError(
                     f'global flag name "{f.name}" is reserved'
@@ -4338,7 +4409,7 @@ class App:
         # Framework-owned reserved quartet, extracted by the pre-scan and
         # delivered on the Context (never as handler kwargs).
         self._last_dry_run: bool = False
-        self._last_yes: bool = False
+        self._last_approve_consequential: bool = False
         self._last_quiet: bool = False
         self._last_verbose: bool = False
 
@@ -4557,6 +4628,24 @@ class App:
 
         return paths
 
+    def _collect_all_commands(self) -> list[tuple[str, "Command"]]:
+        """Enumerate (dotted path, Command) pairs in registration order."""
+        out: list[tuple[str, Command]] = []
+
+        for name, cmd in self._commands.items():
+            out.append((name, cmd))
+
+        def _walk_group(group: Group, prefix: list[str]) -> None:
+            for cmd_name, cmd in group.commands.items():
+                out.append((".".join(prefix + [cmd_name]), cmd))
+            for sub_name, sub_group in group._groups.items():
+                _walk_group(sub_group, prefix + [sub_name])
+
+        for group_name, group in self._groups.items():
+            _walk_group(group, [group_name])
+
+        return out
+
     def _test_coverage_provider(self) -> list[CheckSpec]:
         """Built-in check provider for cli-test-coverage.
 
@@ -4681,17 +4770,20 @@ class App:
         ]
 
     def _effects_bypass_provider(self) -> list[CheckSpec]:
-        """Built-in check provider for the two effects-regime lints.
+        """Built-in check provider for the three effects-regime lints.
 
         Registered whenever the check system turns on, so a consumer that
-        adopts checks at all gets both without a TOML declaration:
+        adopts checks at all gets all three without a TOML declaration:
 
         - ``effects-bypass`` (error) fails on any direct process,
           filesystem-mutation or network call REACHABLE FROM A REGISTERED
           COMMAND HANDLER;
         - ``observe-allowlist-breadth`` (warn) surfaces short
           ``proc_observe_allowlist`` prefixes, which authorize real execution
-          under ``--dry-run``.
+          under ``--dry-run``;
+        - ``consequential-grant-agreement`` (warn) surfaces commands that
+          declare a process- or network-mutating grant but do not declare
+          themselves consequential.
         """
         def impl(ctx: CheckContext, reporter: "ErrorReporter") -> "_CheckOutcome":
             findings = _scan_effects_bypasses(Path(ctx.project_root))
@@ -4722,6 +4814,34 @@ class App:
                 "no single-token proc_observe_allowlist prefixes"
             )
 
+        def grant_agreement_impl(ctx: CheckContext,
+                                 reporter: "WarnReporter") -> "_CheckOutcome":
+            # Only the kinds that leave this process. A file_write or a
+            # proc_spawn is local and ordinarily recoverable; a proc_mutate
+            # runs another program and a net_mutate changes remote state, and
+            # neither can be walked back by the framework. Widening this to
+            # every grant kind would re-create the noise the consequential
+            # declaration exists to remove.
+            escaping = (PROC_MUTATE, NET_MUTATE)
+            found = 0
+            for cmd_path, cmd in self._collect_all_commands():
+                if cmd.consequential:
+                    continue
+                for grant in cmd.grants:
+                    if grant.kind not in escaping:
+                        continue
+                    found += 1
+                    reporter.warn(_consequential_grant_warning(
+                        cmd_path, grant.name, grant.kind,
+                    ))
+            if found:
+                return reporter.found(
+                    f"{found} grant(s) on non-consequential command(s)"
+                )
+            return reporter.passed(
+                "every escaping grant sits on a consequential command"
+            )
+
         return [
             error_check_spec(
                 name="effects-bypass",
@@ -4740,6 +4860,15 @@ class App:
                 needs_network=False,
                 depends_on=[],
                 impl=breadth_impl,
+            ),
+            warn_check_spec(
+                name="consequential-grant-agreement",
+                tags=["effects", "quality"],
+                fast=True,
+                pure=True,
+                needs_network=False,
+                depends_on=[],
+                impl=grant_agreement_impl,
             ),
         ]
 
@@ -5343,6 +5472,7 @@ class App:
         *,
         help: str,
         effect: str | None = None,
+        consequential: bool = False,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -5362,6 +5492,7 @@ class App:
                 name,
                 help=help,
                 effect=effect,
+                consequential=consequential,
                 handler=func,
                 args=args,
                 flag_sets=flag_sets,
@@ -5469,20 +5600,23 @@ class App:
             if name in flag_params
         }
 
-    def _confirm_mutating(self, cmd: "Command", cmd_path: str) -> None:
+    def _confirm_consequential(self, cmd: "Command", cmd_path: str) -> None:
         """The framework-owned confirm protocol.
 
-        Fires before dispatching a ``mutating`` command on the real CLI path
-        when neither --dry-run nor --yes was passed. Never fires for read_only
-        commands, and never on the programmatic paths (test/call/_invoke/MCP),
-        which have no TTY contract and would hang.
+        Fires before dispatching a command that DECLARES ITSELF consequential,
+        on the real CLI path, when neither --dry-run nor
+        --approve-consequential was passed. A plain ``mutating`` command never
+        prompts: classification answers "should a dry run record rather than
+        execute?", which is a different question from "are these effects worth
+        interrupting someone for?". Never fires on the programmatic paths
+        (test/call/_invoke/MCP), which have no TTY contract and would hang.
 
-        A mutating PASSTHROUGH is not exempt: the framework knows LESS about
-        what is about to happen, not more.
+        A consequential PASSTHROUGH is not exempt: the framework knows LESS
+        about what is about to happen, not more.
         """
-        if cmd.effect != EFFECT_MUTATING:
+        if not cmd.consequential:
             return
-        if self._last_dry_run or self._last_yes:
+        if self._last_dry_run or self._last_approve_consequential:
             return
         if not sys.stdin.isatty():
             print(_msg_confirm_non_interactive(), file=sys.stderr)
@@ -6040,7 +6174,7 @@ class App:
         """Pre-scan for the framework-owned reserved flags.
 
         Handles --dump-schema, --mcp, --config, --hermetic and the effects-regime
-        quartet --dry-run/--yes/--quiet/--verbose.
+        quartet --dry-run/--approve-consequential/--quiet/--verbose.
 
         Two regions, two rulesets (contract §7.2, amended):
 
@@ -6053,7 +6187,7 @@ class App:
           pre-command-only. See _scan_command_region_quartet.
 
         Returns a dict with keys: dump_schema, serve_mcp, hermetic, config_path,
-        dry_run, yes, quiet, verbose, err, cleaned_argv.
+        dry_run, approve_consequential, quiet, verbose, err, cleaned_argv.
         """
         # Build a set of known global flag tokens with value-taking info
         known_flags: dict[str, bool] = {}  # token -> takes_value
@@ -6183,7 +6317,7 @@ class App:
     ) -> None:
         """Recognize the reserved quartet in the command region of argv.
 
-        Contract §7.2 (amended 2026-08-04): --dry-run/--yes/--quiet/--verbose are
+        Contract §7.2 (amended 2026-08-04): the quartet's four tokens are
         recognized ANYWHERE in argv, exactly like --help/-h, because their
         applicability is per-command -- requiring them before the command name
         was backwards. Only the quartet is recognized here; --hermetic,
@@ -6268,7 +6402,9 @@ class App:
 
         # Record the reserved quartet for the dispatch ctx.
         self._last_dry_run = bool(pre_scan.get("dry_run"))
-        self._last_yes = bool(pre_scan.get("yes"))
+        self._last_approve_consequential = bool(
+            pre_scan.get("approve_consequential")
+        )
         self._last_quiet = bool(pre_scan.get("quiet"))
         self._last_verbose = bool(pre_scan.get("verbose"))
 
@@ -6900,12 +7036,13 @@ class App:
             ctx = Context(
                 stdout=sys.stdout, stderr=sys.stderr, sources=sources,
                 infra=self._infra_access(self._last_hermetic),
-                dry_run=self._last_dry_run, yes=self._last_yes,
+                dry_run=self._last_dry_run,
+                approve_consequential=self._last_approve_consequential,
                 quiet=self._last_quiet, verbose=self._last_verbose,
                 effects=effects,
             )
             # The confirm protocol fires only on the real CLI path.
-            self._confirm_mutating(cmd, cmd_path)
+            self._confirm_consequential(cmd, cmd_path)
             # The would-do log renders on EVERY exit path out of the dispatch,
             # not just the normal return: the operator asked for a preview and
             # the effects were recorded, so a handler that unwinds through
@@ -7000,7 +7137,8 @@ class App:
                     ctx = Context(
                         stdout=stdout_buf, stderr=stderr_buf, sources=sources,
                         infra=self._infra_access(self._last_hermetic),
-                        dry_run=self._last_dry_run, yes=self._last_yes,
+                        dry_run=self._last_dry_run,
+                        approve_consequential=self._last_approve_consequential,
                         quiet=self._last_quiet, verbose=self._last_verbose,
                         effects=self._arm_effects(
                             cmd, cmd_path, dry_run=self._last_dry_run,
@@ -8119,6 +8257,7 @@ def _build_and_validate_command(
     *,
     help: str,
     effect: str | None,
+    consequential: bool = False,
     handler: Callable,
     args: list[Arg] | None,
     flag_sets: list[FlagSet] | None,
@@ -8155,6 +8294,11 @@ def _build_and_validate_command(
         _raise_command_effect_missing(name)
     if effect not in _EFFECT_VALUES:
         _raise_command_effect_invalid(name, effect)
+
+    # A read_only command cannot be consequential: it changes nothing, so
+    # there is nothing to interrupt anyone for (contract §8.1).
+    if consequential and effect == EFFECT_READ_ONLY:
+        _raise_command_read_only_consequential(name)
 
     resolved_grants = _validate_grants(name, grants)
 
@@ -8213,6 +8357,7 @@ def _build_and_validate_command(
             help=help,
             handler=None,
             effect=effect,
+            consequential=consequential,
             passthrough=passthrough,
             tags=effective_tags,
             hidden=hidden,
@@ -8478,6 +8623,7 @@ def _build_and_validate_command(
         help=help,
         handler=handler,
         effect=effect,
+        consequential=consequential,
         flags=tuple(all_flags),
         args=tuple(all_args),
         flag_sets=tuple(resolved_flag_sets),
@@ -9533,6 +9679,10 @@ def _serialize_command(cmd: Command) -> dict:
         # to omit against.
         "effect": cmd.effect,
     }
+    # Omitted when false: consequential is NOT mandatory, and absence means
+    # "not consequential" (contract §8.1, §13).
+    if cmd.consequential:
+        d["consequential"] = True
     if cmd.passthrough is not None:
         d["passthrough"] = True
     flags = [_serialize_flag(f) for f in cmd.flags]

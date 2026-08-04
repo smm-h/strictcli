@@ -307,7 +307,7 @@ class TestWouldDoLogOnEveryExitPath:
             raise RuntimeError("kaboom")
 
         app = self._app_with(_boom)
-        monkeypatch.setattr(sys, "argv", ["app", "--yes", "rel"])
+        monkeypatch.setattr(sys, "argv", ["app", "rel"])
         with pytest.raises(RuntimeError):
             app.run()
         captured = capsys.readouterr()

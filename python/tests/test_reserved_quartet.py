@@ -1,6 +1,7 @@
 """Tests for the framework-owned reserved flag quartet.
 
-Covers the unconditional name ban (--dry-run/--yes/--quiet/--verbose), the
+Covers the unconditional name ban (--dry-run/--approve-consequential/
+--quiet/--verbose) plus the outright `yes` ban, the
 position-aware pre-scan extraction, Context delivery, and the --quiet/--verbose
 output gating table.
 """
@@ -9,8 +10,11 @@ import pytest
 
 import strictcli
 
-QUARTET = ["dry-run", "yes", "quiet", "verbose"]
-BAN_MESSAGE = "is reserved by the framework (dry-run, yes, quiet, verbose)"
+QUARTET = ["dry-run", "approve-consequential", "quiet", "verbose"]
+BAN_MESSAGE = (
+    "is reserved by the framework "
+    "(dry-run, approve-consequential, quiet, verbose)"
+)
 
 
 class TestReservedNameBan:
@@ -22,7 +26,7 @@ class TestReservedNameBan:
             strictcli.Flag(name=name, type=bool, default=False, help="nope")
         assert str(exc.value) == (
             f"flag name '{name}' is reserved by the framework "
-            f"(dry-run, yes, quiet, verbose)"
+            f"(dry-run, approve-consequential, quiet, verbose)"
         )
 
     @pytest.mark.parametrize("name", QUARTET)
@@ -60,6 +64,41 @@ class TestReservedNameBan:
             ])
         assert BAN_MESSAGE in str(exc.value)
 
+    def test_yes_is_banned_outright(self):
+        """`yes` owns no framework flag any more, but it stays banned.
+
+        A private --yes would restate --approve-consequential in a spelling
+        that IS muscle memory -- exactly what the rename removed.
+        """
+        with pytest.raises(ValueError) as exc:
+            strictcli.Flag(name="yes", type=bool, default=False, help="nope")
+        assert str(exc.value) == (
+            "flag name 'yes' is banned by the framework: "
+            "the confirmation skip is --approve-consequential"
+        )
+
+    def test_yes_is_banned_as_a_global_flag(self):
+        with pytest.raises(ValueError) as exc:
+            strictcli.App(
+                name="app", version="1.0.0", help="app",
+                flags=[strictcli.Flag(name="yes", type=bool, default=False,
+                                      help="nope")],
+            )
+        assert "banned by the framework" in str(exc.value)
+
+    def test_yes_is_banned_in_a_flag_set(self):
+        with pytest.raises(ValueError) as exc:
+            strictcli.FlagSet(flags=[
+                strictcli.Flag(name="yes", type=bool, default=False,
+                               help="nope"),
+            ])
+        assert "banned by the framework" in str(exc.value)
+
+    def test_yes_is_no_longer_a_recognized_token(self):
+        r = _quartet_app().test(["run", "--yes"])
+        assert r.exit_code == 1
+        assert "unknown flag '--yes'" in r.stderr
+
     def test_short_names_are_unaffected(self):
         """The ban covers long flag names only."""
         f = strictcli.Flag(name="loud", short="q", type=bool, default=False, help="loud")
@@ -78,7 +117,7 @@ def _quartet_app():
     def _run(ctx):
         return strictcli.outcome(data={
             "dry_run": ctx.dry_run,
-            "yes": ctx.yes,
+            "approve_consequential": ctx.approve_consequential,
             "quiet": ctx.quiet,
             "verbose": ctx.verbose,
         })
@@ -92,11 +131,12 @@ class TestDelivery:
     def test_defaults_all_false(self):
         r = _quartet_app().test(["run"])
         assert r.exit_code == 0
-        assert r.data == {"dry_run": False, "yes": False, "quiet": False, "verbose": False}
+        assert r.data == {"dry_run": False, "approve_consequential": False,
+                          "quiet": False, "verbose": False}
 
     @pytest.mark.parametrize("token,key", [
         ("--dry-run", "dry_run"),
-        ("--yes", "yes"),
+        ("--approve-consequential", "approve_consequential"),
         ("--quiet", "quiet"),
         ("--verbose", "verbose"),
     ])
@@ -104,14 +144,16 @@ class TestDelivery:
         r = _quartet_app().test([token, "run"])
         assert r.exit_code == 0
         assert r.data[key] is True
-        for other in ("dry_run", "yes", "quiet", "verbose"):
+        for other in ("dry_run", "approve_consequential", "quiet", "verbose"):
             if other != key:
                 assert r.data[other] is False
 
     def test_all_four_together(self):
-        r = _quartet_app().test(["--dry-run", "--yes", "--quiet", "--verbose", "run"])
+        r = _quartet_app().test(["--dry-run", "--approve-consequential", "--quiet",
+                                 "--verbose", "run"])
         assert r.exit_code == 0
-        assert r.data == {"dry_run": True, "yes": True, "quiet": True, "verbose": True}
+        assert r.data == {"dry_run": True, "approve_consequential": True,
+                          "quiet": True, "verbose": True}
 
     def test_not_passed_as_handler_kwargs(self):
         """A handler that names no quartet parameter still dispatches."""
@@ -129,7 +171,7 @@ class TestDelivery:
 
     @pytest.mark.parametrize("token,key", [
         ("--dry-run", "dry_run"),
-        ("--yes", "yes"),
+        ("--approve-consequential", "approve_consequential"),
         ("--quiet", "quiet"),
         ("--verbose", "verbose"),
     ])
@@ -140,9 +182,11 @@ class TestDelivery:
         assert r.data[key] is True
 
     def test_all_four_together_after_the_command(self):
-        r = _quartet_app().test(["run", "--dry-run", "--yes", "--quiet", "--verbose"])
+        r = _quartet_app().test(["run", "--dry-run", "--approve-consequential",
+                                 "--quiet", "--verbose"])
         assert r.exit_code == 0
-        assert r.data == {"dry_run": True, "yes": True, "quiet": True, "verbose": True}
+        assert r.data == {"dry_run": True, "approve_consequential": True,
+                          "quiet": True, "verbose": True}
 
     def test_mixed_positions_are_unioned(self):
         r = _quartet_app().test(["--dry-run", "run", "--verbose"])

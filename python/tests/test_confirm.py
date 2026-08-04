@@ -1,6 +1,11 @@
-"""Tests for the framework-owned confirm protocol."""
+"""Tests for the framework-owned confirm protocol.
 
-import io
+The protocol fires for commands that DECLARE THEMSELVES consequential, never
+for a plain ``mutating`` command. Classification answers "should a dry run
+record rather than execute?"; ``consequential`` answers "are these effects
+worth interrupting someone for?".
+"""
+
 import sys
 
 import pytest
@@ -24,7 +29,7 @@ class FakeStdin:
         return self._answer
 
 
-def _app(effect="mutating", passthrough=False):
+def _app(effect="mutating", passthrough=False, consequential=True):
     app = sc.App(name="app", version="1.0.0", help="app")
     if passthrough:
         def _pt(ctx, name, args, globals):
@@ -32,11 +37,13 @@ def _app(effect="mutating", passthrough=False):
             return 0
 
         @app.command("deploy", help="deploy", effect=effect,
+                     consequential=consequential,
                      passthrough=sc.Passthrough(handler=_pt))
         def _d(ctx, **kw):
             return 0
     else:
-        @app.command("deploy", help="deploy", effect=effect)
+        @app.command("deploy", help="deploy", effect=effect,
+                     consequential=consequential)
         def _deploy(ctx):
             print("ran")
             return 0
@@ -60,7 +67,9 @@ class TestPrompt:
         assert code == 0
         out = capsys.readouterr()
         assert "ran" in out.out
-        assert out.err == "about to run mutating command 'deploy'. Proceed? [y/N] "
+        assert out.err == (
+            "about to run consequential command 'deploy'. Proceed? [y/N] "
+        )
 
     @pytest.mark.parametrize("answer", ["y\r\n", "Y\r\n", "y\r", "Y\r"])
     def test_a_crlf_terminated_answer_proceeds(self, answer, monkeypatch,
@@ -85,21 +94,22 @@ class TestPrompt:
         out = capsys.readouterr()
         assert "ran" not in out.out
         assert out.err == (
-            "about to run mutating command 'deploy'. Proceed? [y/N] aborted\n"
+            "about to run consequential command 'deploy'. "
+            "Proceed? [y/N] aborted\n"
         )
 
     def test_prompt_names_the_dotted_command_path(self, monkeypatch, capsys):
         app = sc.App(name="app", version="1.0.0", help="app")
         grp = app.group("release", help="release")
 
-        @grp.command("run", help="run", effect="mutating")
+        @grp.command("run", help="run", effect="mutating", consequential=True)
         def _run_cmd(ctx):
             return 0
 
         code = _run(app, ["release", "run"], FakeStdin("y\n"), monkeypatch)
         assert code == 0
         assert capsys.readouterr().err == (
-            "about to run mutating command 'release.run'. Proceed? [y/N] "
+            "about to run consequential command 'release.run'. Proceed? [y/N] "
         )
 
 
@@ -110,12 +120,16 @@ class TestNonInteractive:
         assert code == 1
         out = capsys.readouterr()
         assert "ran" not in out.out
-        assert out.err == "error: stdin is not interactive; pass --yes to confirm\n"
+        assert out.err == (
+            "error: stdin is not interactive; "
+            "pass --approve-consequential to confirm\n"
+        )
         assert stdin.read_count == 0
 
-    def test_non_tty_with_yes_proceeds(self, monkeypatch, capsys):
+    def test_non_tty_with_approval_proceeds(self, monkeypatch, capsys):
         stdin = FakeStdin(answer="", tty=False)
-        code = _run(_app(), ["--yes", "deploy"], stdin, monkeypatch)
+        code = _run(_app(), ["--approve-consequential", "deploy"], stdin,
+                    monkeypatch)
         assert code == 0
         out = capsys.readouterr()
         assert "ran" in out.out
@@ -123,9 +137,42 @@ class TestNonInteractive:
 
 
 class TestWhenItDoesNotFire:
-    def test_yes_skips_the_prompt(self, monkeypatch, capsys):
+    def test_a_mutating_command_that_is_not_consequential_never_prompts(
+            self, monkeypatch, capsys):
+        """The headline of the redesign: `mutating` alone never prompts.
+
+        Two thirds of the commands in a real fleet classify `mutating`; the
+        genuinely dangerous ones are a small fraction of that. Inferring the
+        prompt from classification made the guardrail noise.
+        """
         stdin = FakeStdin(answer="n\n", tty=True)
-        code = _run(_app(), ["--yes", "deploy"], stdin, monkeypatch)
+        code = _run(_app(consequential=False), ["deploy"], stdin, monkeypatch)
+        assert code == 0
+        assert stdin.read_count == 0
+        out = capsys.readouterr()
+        assert "ran" in out.out
+        assert out.err == ""
+
+    def test_a_mutating_non_consequential_command_runs_without_a_tty(
+            self, monkeypatch, capsys):
+        stdin = FakeStdin(answer="", tty=False)
+        code = _run(_app(consequential=False), ["deploy"], stdin, monkeypatch)
+        assert code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_approve_consequential_skips_the_prompt(self, monkeypatch, capsys):
+        stdin = FakeStdin(answer="n\n", tty=True)
+        code = _run(_app(), ["--approve-consequential", "deploy"], stdin,
+                    monkeypatch)
+        assert code == 0
+        assert stdin.read_count == 0
+        assert capsys.readouterr().err == ""
+
+    def test_approve_consequential_is_recognized_after_the_command_name(
+            self, monkeypatch, capsys):
+        stdin = FakeStdin(answer="n\n", tty=True)
+        code = _run(_app(), ["deploy", "--approve-consequential"], stdin,
+                    monkeypatch)
         assert code == 0
         assert stdin.read_count == 0
         assert capsys.readouterr().err == ""
@@ -141,12 +188,13 @@ class TestWhenItDoesNotFire:
 
     def test_read_only_never_prompts(self, monkeypatch, capsys):
         stdin = FakeStdin(answer="n\n", tty=False)
-        code = _run(_app(effect="read_only"), ["deploy"], stdin, monkeypatch)
+        code = _run(_app(effect="read_only", consequential=False), ["deploy"],
+                    stdin, monkeypatch)
         assert code == 0
         assert capsys.readouterr().err == ""
 
     def test_test_dispatch_never_prompts(self, monkeypatch):
-        """Programmatic dispatch behaves as if --yes were passed."""
+        """Programmatic dispatch behaves as if --approve-consequential were passed."""
         monkeypatch.setattr(sys, "stdin", FakeStdin(answer="n\n", tty=False))
         r = _app().test(["deploy"])
         assert r.exit_code == 0
@@ -158,26 +206,136 @@ class TestWhenItDoesNotFire:
 
 
 class TestPassthroughIsNotExempt:
-    def test_mutating_passthrough_prompts(self, monkeypatch, capsys):
+    def test_consequential_passthrough_prompts(self, monkeypatch, capsys):
         stdin = FakeStdin(answer="n\n", tty=True)
-        code = _run(_app(passthrough=True), ["deploy", "--anything"], stdin, monkeypatch)
+        code = _run(_app(passthrough=True), ["deploy", "--anything"], stdin,
+                    monkeypatch)
         assert code == 1
         out = capsys.readouterr()
         assert "ran" not in out.out
-        assert out.err.startswith("about to run mutating command 'deploy'.")
+        assert out.err.startswith("about to run consequential command 'deploy'.")
 
-    def test_yes_skips_the_passthrough_prompt(self, monkeypatch, capsys):
+    def test_approval_skips_the_passthrough_prompt(self, monkeypatch, capsys):
         stdin = FakeStdin(answer="n\n", tty=True)
-        code = _run(_app(passthrough=True), ["--yes", "deploy", "-x"], stdin, monkeypatch)
+        code = _run(_app(passthrough=True),
+                    ["--approve-consequential", "deploy", "-x"], stdin,
+                    monkeypatch)
+        assert code == 0
+        assert "ran" in capsys.readouterr().out
+
+    def test_a_mutating_passthrough_that_is_not_consequential_never_prompts(
+            self, monkeypatch, capsys):
+        stdin = FakeStdin(answer="n\n", tty=False)
+        code = _run(_app(passthrough=True, consequential=False), ["deploy"],
+                    stdin, monkeypatch)
         assert code == 0
         assert "ran" in capsys.readouterr().out
 
     def test_read_only_passthrough_never_prompts(self, monkeypatch, capsys):
         stdin = FakeStdin(answer="n\n", tty=False)
-        code = _run(_app(effect="read_only", passthrough=True), ["deploy"],
-                    stdin, monkeypatch)
+        code = _run(_app(effect="read_only", passthrough=True,
+                         consequential=False),
+                    ["deploy"], stdin, monkeypatch)
         assert code == 0
         assert capsys.readouterr().err == ""
+
+
+class TestDeclaration:
+    def test_read_only_cannot_be_consequential(self):
+        app = sc.App(name="app", version="1.0.0", help="app")
+        with pytest.raises(ValueError) as exc:
+            @app.command("cmd", help="c", effect="read_only",
+                         consequential=True)
+            def _c(ctx):
+                return 0
+        assert str(exc.value) == (
+            'command "cmd": a read_only command cannot be consequential '
+            '(a command that changes nothing has nothing to confirm)'
+        )
+
+    def test_read_only_passthrough_cannot_be_consequential(self):
+        app = sc.App(name="app", version="1.0.0", help="app")
+
+        def _pt(ctx, name, args, globals):
+            return 0
+
+        with pytest.raises(ValueError) as exc:
+            @app.command("cmd", help="c", effect="read_only",
+                         consequential=True,
+                         passthrough=sc.Passthrough(handler=_pt))
+            def _c(ctx, **kw):
+                return 0
+        assert "cannot be consequential" in str(exc.value)
+
+    def test_consequential_is_not_mandatory(self):
+        """Unlike classification, absence simply means "not consequential"."""
+        app = sc.App(name="app", version="1.0.0", help="app")
+
+        @app.command("cmd", help="c", effect="mutating")
+        def _c(ctx):
+            return 0
+
+        assert app._commands["cmd"].consequential is False
+
+    def test_consequential_is_emitted_in_the_schema(self):
+        app = sc.App(name="app", version="1.0.0", help="app")
+
+        @app.command("plain", help="c", effect="mutating")
+        def _p(ctx):
+            return 0
+
+        @app.command("grave", help="c", effect="mutating", consequential=True)
+        def _g(ctx):
+            return 0
+
+        cmds = app.dump_schema_dict()["commands"]
+        assert "consequential" not in cmds["plain"]
+        assert cmds["grave"]["consequential"] is True
+
+
+class TestReservedNames:
+    def test_approve_consequential_is_a_reserved_flag_name(self):
+        with pytest.raises(ValueError) as exc:
+            sc.Flag(name="approve-consequential", type=bool, help="no")
+        assert str(exc.value) == (
+            "flag name 'approve-consequential' is reserved by the framework "
+            "(dry-run, approve-consequential, quiet, verbose)"
+        )
+
+    def test_yes_stays_banned(self):
+        """`yes` owns no framework flag, but a private --yes would restate
+        --approve-consequential in a spelling that IS muscle memory."""
+        with pytest.raises(ValueError) as exc:
+            sc.Flag(name="yes", type=bool, help="no")
+        assert str(exc.value) == (
+            "flag name 'yes' is banned by the framework: "
+            "the confirmation skip is --approve-consequential"
+        )
+
+    def test_yes_is_no_longer_a_framework_token(self, monkeypatch, capsys):
+        stdin = FakeStdin(answer="y\n", tty=True)
+        monkeypatch.setattr(sys, "argv", ["app", "--yes", "deploy"])
+        monkeypatch.setattr(sys, "stdin", stdin)
+        with pytest.raises(SystemExit) as exc:
+            _app().run()
+        assert exc.value.code == 1
+        assert "unknown" in capsys.readouterr().err.lower()
+
+
+class TestContextAccessor:
+    def test_ctx_exposes_approve_consequential(self):
+        app = sc.App(name="app", version="1.0.0", help="app")
+        seen = {}
+
+        @app.command("cmd", help="c", effect="mutating", consequential=True)
+        def _c(ctx):
+            seen["v"] = ctx.approve_consequential
+            return 0
+
+        app.test(["--approve-consequential", "cmd"])
+        assert seen["v"] is True
+        app.test(["cmd"])
+        assert seen["v"] is False
 
 
 class TestNoBypass:

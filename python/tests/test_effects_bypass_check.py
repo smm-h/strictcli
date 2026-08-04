@@ -383,3 +383,135 @@ class TestObserveAllowlistBreadth:
     def test_an_empty_allowlist_passes(self, tmp_path):
         app = self._app(tmp_path, [])
         assert app.test(["check", "--name", "observe-allowlist-breadth"]).exit_code == 0
+
+
+class TestConsequentialGrantAgreement:
+    """§8.1's declaration and §6.1's grants should almost always agree.
+
+    A grant exists so a reviewer reading a preview sees WHY a dangerous step is
+    there -- the same judgement `consequential` makes. The check fires only for
+    the two kinds that leave this process (`proc_mutate` runs another program,
+    `net_mutate` changes remote state); a `file_write` or a `proc_spawn` is
+    local and ordinarily recoverable, and flagging those would re-create the
+    noise the `consequential` declaration exists to remove.
+
+    It is a WARNING, not an error, for the same reason: an error would push
+    consumers to declare `consequential` reflexively to clear a gate, which is
+    the exact reflex the redesign removed.
+    """
+
+    def _app(self, tmp_path, *, kind, consequential):
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(CHECKS_TOML)
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+
+        @app.command("release", help="release", effect="mutating",
+                     consequential=consequential,
+                     grants=[strictcli.Grant(
+                         name="push",
+                         reason="the release engine owns remote refs",
+                         kind=kind,
+                     )])
+        def _release(ctx):
+            return 0
+
+        root = tmp_path / "src"
+        root.mkdir(parents=True, exist_ok=True)
+        app.set_check_context(lambda: SimpleContext(project_root=root))
+        return app
+
+    def test_metadata_is_warn_severity(self, tmp_path):
+        app = self._app(tmp_path, kind=strictcli.PROC_MUTATE,
+                        consequential=True)
+        r = app.test(["check", "--list", "--json"])
+        entry = next(
+            e for e in json.loads(r.stdout.strip())
+            if e["name"] == "consequential-grant-agreement"
+        )
+        assert entry["severity"] == "warn"
+        assert sorted(entry["tags"]) == ["effects", "quality"]
+
+    def test_a_proc_mutate_grant_without_consequential_warns(self, tmp_path):
+        app = self._app(tmp_path, kind=strictcli.PROC_MUTATE,
+                        consequential=False)
+        r = app.test(["check", "--name", "consequential-grant-agreement"])
+        assert "WARN" in r.stdout
+        assert (
+            "command 'release' declares grant 'push' (kind proc_mutate) but "
+            "is not consequential"
+        ) in r.stdout
+
+    def test_a_net_mutate_grant_without_consequential_warns(self, tmp_path):
+        app = self._app(tmp_path, kind=strictcli.NET_MUTATE,
+                        consequential=False)
+        r = app.test(["check", "--name", "consequential-grant-agreement"])
+        assert "WARN" in r.stdout
+        assert "kind net_mutate" in r.stdout
+
+    def test_a_warning_is_not_an_error(self, tmp_path):
+        app = self._app(tmp_path, kind=strictcli.PROC_MUTATE,
+                        consequential=False)
+        assert app.test([
+            "check", "--name", "consequential-grant-agreement",
+            "--ignore-warnings",
+        ]).exit_code == 0
+
+    def test_a_consequential_command_passes(self, tmp_path):
+        app = self._app(tmp_path, kind=strictcli.PROC_MUTATE,
+                        consequential=True)
+        r = app.test(["check", "--name", "consequential-grant-agreement"])
+        assert r.exit_code == 0
+        assert "every escaping grant sits on a consequential command" in r.stdout
+
+    def test_a_file_write_grant_is_not_flagged(self, tmp_path):
+        app = self._app(tmp_path, kind=strictcli.FILE_WRITE,
+                        consequential=False)
+        assert app.test([
+            "check", "--name", "consequential-grant-agreement",
+        ]).exit_code == 0
+
+    def test_a_proc_spawn_grant_is_not_flagged(self, tmp_path):
+        app = self._app(tmp_path, kind=strictcli.PROC_SPAWN,
+                        consequential=False)
+        assert app.test([
+            "check", "--name", "consequential-grant-agreement",
+        ]).exit_code == 0
+
+    def test_a_grouped_command_is_named_by_its_dotted_path(self, tmp_path):
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(CHECKS_TOML)
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+        grp = app.group("release", help="release")
+
+        @grp.command("run", help="run", effect="mutating",
+                     grants=[strictcli.Grant(
+                         name="push", reason="owns remote refs",
+                         kind=strictcli.PROC_MUTATE)])
+        def _run(ctx):
+            return 0
+
+        root = tmp_path / "src"
+        root.mkdir(parents=True, exist_ok=True)
+        app.set_check_context(lambda: SimpleContext(project_root=root))
+        r = app.test(["check", "--name", "consequential-grant-agreement"])
+        assert "command 'release.run' declares grant 'push'" in r.stdout
+
+    def test_an_app_with_no_grants_passes(self, tmp_path):
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(CHECKS_TOML)
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+        root = tmp_path / "src"
+        root.mkdir(parents=True, exist_ok=True)
+        app.set_check_context(lambda: SimpleContext(project_root=root))
+        assert app.test([
+            "check", "--name", "consequential-grant-agreement",
+        ]).exit_code == 0
