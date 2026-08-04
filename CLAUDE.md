@@ -58,7 +58,7 @@ Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface
 - **typescript/src/app** (`typescript/src/app.ts`): Registration and validation: createApp plus the App and Group classes storing commands, groups, deprecated entries, and global flags in insertion order.
 - **typescript/src/atprefix** (`typescript/src/atprefix.ts`): @-prefix resolution for string flag values, mirroring Go resolveAtPrefix (parse.go) and Python _resolve_at_prefix across the three supported @-forms.
 - **typescript/src/config** (`typescript/src/config.ts`): Config subsystem: file loading (JSON + TOML), value coercion, config fields, the --config/XDG path model, and five auto-registered `config` subcommands.
-- **typescript/src/confirm** (`typescript/src/confirm.ts`): The framework-owned confirm protocol for `mutating` commands.
+- **typescript/src/confirm** (`typescript/src/confirm.ts`): The framework-owned confirm protocol for `consequential` commands.
 - **typescript/src/context** (`typescript/src/context.ts`): Structured output context for command handlers, mirroring Go's Context (context.go) with Python's Context as the divergence ground truth.
 - **typescript/src/describe** (`typescript/src/describe.ts`): describe.ts -- dev-only self-dump of the TS public API surface, shape- aligned with the conformance/describe_go/main.go reference dumper's output.
 - **typescript/src/effects** (`typescript/src/effects.ts`): The effects regime: the `ctx.effects` handle, `Unsettled` carriers, dry mode's would-do log, and the runtime seal that makes a preview honest.
@@ -141,7 +141,7 @@ When adding a feature to one implementation, add it to all implementations and a
 - Config file support -- `App(config=True)` (Python) / `WithConfig()` (Go). Format is JSON (default) or TOML (`config_format="toml"` / `WithConfigFormat("toml")`). Reads `~/.config/{name}/config.json` (or `.toml`). Precedence: CLI > env > config > default. Auto-registers `config show/set/path/edit/init` subcommands.
 - `--dump-schema` -- auto-injected flag on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups).
 - `--help` / `-h` is recognized anywhere in argv, not just at token boundaries.
-- The reserved quartet (`--dry-run`, `--yes`, `--quiet`, `--verbose`) is likewise recognized anywhere in argv -- `myapp cmd --dry-run` and `myapp --dry-run cmd` are equivalent -- with two boundaries: a bare `--` (everything after it is data) and a passthrough command's name (its args are forwarded to the child byte-for-byte). `--hermetic`, `--config`, `--dump-schema` and `--mcp` stay pre-command-only.
+- The reserved quartet (`--dry-run`, `--approve-consequential`, `--quiet`, `--verbose`) is likewise recognized anywhere in argv -- `myapp cmd --dry-run` and `myapp --dry-run cmd` are equivalent -- with two boundaries: a bare `--` (everything after it is data) and a passthrough command's name (its args are forwarded to the child byte-for-byte). `--hermetic`, `--config`, `--dump-schema` and `--mcp` stay pre-command-only.
 - `Default(nil)` fix (Go only) -- flags with `Default(nil)` display `[optional]` in help instead of `[default: <nil>]`.
 - Check system -- first-class check/validation framework with double-entry security. See below.
 
