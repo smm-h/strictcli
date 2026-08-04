@@ -1,6 +1,6 @@
 ---
 title: Architecture and Internals
-description: "How strictcli works internally: parsing pipeline, registration-time validation, schema format, config system, flag negation, and error handling."
+description: "strictcli internals: the five-stage parse pipeline, its two-region reserved-flag pre-scan, registration-time validation, the schema format, and config."
 nav_group: "Guides"
 nav_order: 10
 ---
@@ -45,7 +45,11 @@ identical by the conformance test suite.
 ### Stage 1: reserved flag pre-scan
 
 Before any global flag or command parsing begins, a pre-scan examines argv for
-the framework-reserved flags. It has two regions with two different rulesets.
+the 8 framework-reserved flags and removes the ones it consumes. The scan splits
+argv into 2 regions with 2 different rulesets: the pre-command region recognizes
+all 8, while the command region recognizes only the 4 flags of the effects-regime
+quartet. Both regions stop at a bare `--`, and the command region also stops at a
+passthrough command's name.
 
 **The pre-command region** -- everything before the first non-flag token or a
 `--` separator -- recognizes every reserved flag:
