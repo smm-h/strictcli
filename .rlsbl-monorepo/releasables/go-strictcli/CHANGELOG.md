@@ -2,43 +2,35 @@
 
 # Changelog
 
-## 0.28.0
+## 0.28.1
 
-The effects regime: mandatory WithEffect classification, framework-owned --dry-run/--yes/--quiet/--verbose, and side effects that flow through ctx.Effects().
+Recognize the reserved flag quartet anywhere in argv
 
 <details>
 <summary>Context</summary>
 
-A consumer command once accepted a dry-run flag, ignored it, and published to a
-public registry for real. Honoring a dry run was a convention, and conventions
-are forgettable. This release makes it structural, in lockstep with the Python
-and TypeScript implementations.
+The quartet (--dry-run, --yes, --quiet, --verbose) was extracted by a pre-scan
+that stopped at the first non-flag token, so it was only recognized BEFORE the
+command name -- while every documented invocation in this ecosystem writes these
+flags after it. `myapp deploy --dry-run` failed with `unknown flag '--dry-run'`,
+and the first consumer to migrate onto the effects regime had to rewrite argv
+before handing it to the framework to make its own documented commands work.
 
-Every command now declares WithEffect(EffectReadOnly) or
-WithEffect(EffectMutating) at registration -- no default, no inference, a panic
-if you omit it. The framework owns --dry-run, --yes, --quiet and --verbose, so
-they mean the same thing in every strictcli program, and declaring a flag by one
-of those names is a registration error. Side effects ride ctx.Effects(): Run,
-Spawn, Write, Mkdir, Remove, Rename, Chmod, HTTP. In a dry run the handle
-records instead of performing and the framework prints the would-do log; in a
-real run the same handler code executes for real.
-
-What a recorded mutation returns is the hard part, and the answer here is to
-refuse to guess. The handle returns an Unsettled carrier -- a non-comparable
-struct whose extractors panic. Forward it into a later effect and the preview
-continues with the provenance rendered inline; read it or branch on it and the
-preview truncates with a message naming the step and the reason. A short honest
-preview beats a long invented one.
-
-The effects-bypass check follows the call graph reachable from every registered
-handler and reports direct ambient effects; observe-allowlist-breadth names any
-observe prefix broad enough to exempt a whole binary.
-
-This breaks every consumer at its lock bump, deliberately: a silent grace period
-would have preserved the exact bug class this regime exists to kill. The fleet
-migrates in a dedicated wave immediately after this release.
+The quartet is now recognized anywhere in argv, matching the framework's own
+existing precedent for --help/-h. Two boundaries are preserved: a bare `--`
+(everything after it is positional data) and a passthrough command's name (its
+args belong to the child process and are forwarded byte-for-byte, so a child's
+own --verbose is never eaten). --hermetic, --config, --dump-schema and --mcp
+stay pre-command-only. Effects contract §7.2 is amended accordingly (adoption
+ruling A1, §18.6).
 
 </details>
+
+### Fixes
+
+- [go-strictcli] **The reserved flags now work after the command name.** `--dry-run`, `--yes`, `--quiet` and `--verbose` are recognized anywhere in argv, exactly like `--help` -- `myapp deploy --dry-run` used to fail with `unknown flag` and now works, at any group nesting depth. A bare `--` still ends recognition, and a passthrough command's args are still forwarded to the child untouched.
+
+## 0.28.0
 
 ### Breaking
 
