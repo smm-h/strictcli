@@ -59,7 +59,8 @@ passthrough command's name.
 - `--hermetic`: enables hermetic mode (suppresses env vars and config file
   loading for the rest of the parse).
 - `--config <path>`: overrides the config file path.
-- The effects-regime quartet `--dry-run`, `--yes`, `--quiet`, `--verbose`.
+- The effects-regime quartet `--dry-run`, `--approve-consequential`, `--quiet`,
+  `--verbose`.
 
 The pre-scan does not consume these tokens from argv for `--hermetic`,
 `--config` and the quartet; instead it records their presence and builds a

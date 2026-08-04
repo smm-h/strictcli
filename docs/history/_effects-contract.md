@@ -33,6 +33,14 @@ document was right and the code was fixed. The exceptions are recorded: §11's s
 in code *and* narrowed in text where TypeScript provably cannot deliver it (§17), §8.2 and §3.2
 pin readings this document had left silent, and §8.4 corrects a claim that was simply false.
 
+Amended a sixth time 2026-08-04 at the **consequence round** (§18.7), which rewrites §8. The
+confirm protocol no longer infers the prompt from classification; commands declare themselves
+`consequential` and the framework prompts for those and no others. `--yes` becomes
+`--approve-consequential` in the reserved quartet, and `yes` stays banned. Adoption across six
+consumers is the evidence: 63% of commands classified `mutating`, against ~5-10% that are
+genuinely dangerous. §1's classification is unchanged -- it answers a different question, and it
+answers it well.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -91,7 +99,8 @@ headline entry of the coordinated release.
 TS `DeprecatedDef`)
 registers a retired name that has **no handler** and executes nothing: it prints its message to
 stderr and exits 1. It therefore carries no `effect`, and passing one is a registration-time hard
-error (`errDeprecatedCommandEffect`, §12.2). Deprecated entries never prompt (§8), never reach
+error (`errDeprecatedCommandEffect`, §12.2). Deprecated entries never prompt (§8) -- they carry no
+`consequential` declaration either -- never reach
 dispatch, and never appear in the would-do log. They are also not command entries in
 `--dump-schema` output -- they serialize into the separate top-level `deprecated` list -- so §13's
 "`effect` is always emitted on every command entry" rule is unaffected. §14's conformance-schema
@@ -126,7 +135,8 @@ factory name; `defineCommand` -> `defineReadOnlyCommand` / `defineMutatingComman
 `readonly effect: "read_only" | "mutating"` member. Python and Go need no new spelling: a
 passthrough is an ordinary command registration there (`passthrough=Passthrough(...)` /
 `WithPassthrough(...)`), so it takes `effect=` / `WithEffect(...)` like everything else.
-A `mutating` passthrough prompts like any other mutating command (§8.1).
+A passthrough declares `consequential` like any other command and prompts on exactly the same
+terms (§8.1).
 
 **`typescript/src/describe.ts` outcome** (the dev-only API-surface dumper that
 `conformance/check_api_surface.py` reads):
@@ -143,11 +153,13 @@ everything else in `ReadOnlyCommandSpec` and `MutatingCommandSpec` is identical.
 
 ### 1.3 What classification buys
 
-- **`mutating`** -- the command is subject to the confirm protocol (§8), participates in dry mode
-  (§3), and may call the mutating members of the effects handle.
-- **`read_only`** -- the command never prompts, and calling any mutating member of the effects
-  handle is a hard error at call time (§9.1). It may call `ctx.effects.run(...)` only for argv
-  prefixes on the app-level `proc_observe_allowlist` (§6.2).
+- **`mutating`** -- the command participates in dry mode (§3) and may call the mutating members of
+  the effects handle. It does **not** prompt: the confirm protocol keys on the separate
+  `consequential` declaration (§8.1), not on classification.
+- **`read_only`** -- the command never prompts (and cannot be declared consequential at all,
+  §8.1), and calling any mutating member of the effects handle is a hard error at call time (§9.1).
+  It may call `ctx.effects.run(...)` only for argv prefixes on the app-level
+  `proc_observe_allowlist` (§6.2).
 
 Classification is a property of the command, not of the invocation. It is emitted in the schema
 (§13) and is what consumers' `check` gates assert against.
@@ -911,7 +923,7 @@ mechanism behind the warning: no specificity rule, no per-subcommand table, no r
 
 ### 7.1 The four names
 
-`dry-run`, `yes`, `quiet`, `verbose`. They join the existing reserved set
+`dry-run`, `approve-consequential`, `quiet`, `verbose`. They join the existing reserved set
 (`help`, `h`, `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`) in all three
 implementations:
 
@@ -926,6 +938,20 @@ mutex-group flags and app global flags -- not only to global flags. `--output` i
 The four flags have **no short forms**. Short-flag names are unaffected by this ban.
 Positional arg names are unaffected (an arg has no `--` spelling).
 
+#### `approve-consequential` replaced `yes` (amended 2026-08-04, §18.7)
+
+The skip flag was `--yes`. It is now `--approve-consequential`, and **its unwieldiness is the
+point**: `--yes` is three keystrokes and a word every shell user already types reflexively, so it
+was destined to become muscle memory and to be appended to every invocation without a thought. A
+flag that cannot become muscle memory stays a decision. There is no short form, and there will
+never be one.
+
+**`yes` stays on the banned-names list.** It owns no framework flag any more, so it could have been
+released back to consumers -- and that is exactly why it is kept banned: a consumer's private
+`--yes` would restate `--approve-consequential` in the very spelling this rename removed, and the
+framework would have no way to tell the two apart at the call site. The ban is a separate template
+from the quartet's, and it names the replacement (`errFlagNameYesBanned`, §12.1).
+
 ### 7.2 Delivery
 
 The four flags are extracted by the pre-scan that already handles `--dump-schema`, `--mcp`,
@@ -937,9 +963,9 @@ Their values are delivered **on the Context, never as handler kwargs**:
 
 | Impl | Accessors |
 |------|-----------|
-| Python | `ctx.dry_run`, `ctx.yes`, `ctx.quiet`, `ctx.verbose` (read-only properties) |
-| Go | `ctx.DryRun()`, `ctx.Yes()`, `ctx.Quiet()`, `ctx.Verbose()` |
-| TypeScript | `ctx.dryRun`, `ctx.yes`, `ctx.quiet`, `ctx.verbose` (getters) |
+| Python | `ctx.dry_run`, `ctx.approve_consequential`, `ctx.quiet`, `ctx.verbose` (read-only properties) |
+| Go | `ctx.DryRun()`, `ctx.ApproveConsequential()`, `ctx.Quiet()`, `ctx.Verbose()` |
+| TypeScript | `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet`, `ctx.verbose` (getters) |
 
 Kwargs delivery is forbidden: injecting four mandatory parameters into every handler would
 contradict guard v2 (§10), which is simultaneously *tightening* signature validation, and would
@@ -1019,7 +1045,7 @@ argument untouched. Nothing is unreachable.
 today, that behavior is pinned elsewhere and separately, and printing help is visible and harmless
 where silently rewriting a child's argv is neither.
 
-### 7.3 `--yes`
+### 7.3 `--approve-consequential`
 
 Consumed entirely by the framework's confirm protocol (§8). Exposed on the Context for symmetry
 and for apps that want to propagate it to a child process; handlers are not expected to read it.
@@ -1085,30 +1111,98 @@ ruling: two flags cannot share a spelling.
 
 ## 8. The confirm protocol
 
-### 8.1 When it fires
+Rewritten 2026-08-04 at the consequence round (§18.7). The regime originally **inferred** the
+prompt from classification -- `mutating` ⇒ must confirm -- and that inference is now deleted.
+The framework prompts for commands that **declare themselves consequential**, and for no others.
 
-Before dispatching a command classified `mutating`, when **all** of the following hold:
+### 8.1 The declaration, and why classification could not be it
+
+Every command may declare:
+
+```
+consequential = true
+```
+
+| Impl | Spelling |
+|------|----------|
+| Python | `consequential=True` keyword on `app.command(...)` / `group.command(...)`, beside `effect=`; the `Command` dataclass carries `consequential: bool = False` |
+| Go | `WithConsequential()` -- a `CmdOption`, registered in `go/strictcli/strictcli.go` beside `WithEffect`; the `Command` struct carries `Consequential bool` |
+| TypeScript | `consequential: true` on the twin-factory options object (`ReadOnlyCommandSpec`, `MutatingCommandSpec`, and both passthrough specs); `CommandDef` and `PassthroughDef` carry `readonly consequential: boolean` |
+
+Unlike classification (§1.1) it is **not mandatory**. There is no `errCommandConsequentialMissing`,
+and absence means "not consequential" -- the default is false in all three. Classification is
+mandatory because the framework cannot act correctly without it (dry mode does not know whether to
+record or execute); consequence is a human judgement about a small minority of commands, and making
+it mandatory would force every registration to answer it, which is how a declaration becomes a
+reflex.
+
+**Declaring it on a `read_only` command is a registration-time hard error**
+(`errCommandReadOnlyConsequential`, §12.2). A command that changes nothing has no effects to weigh.
+`consequential` therefore implies `mutating`, and the confirm gate needs to read only the one field.
+
+**The name is deliberately not the framework's reaction.** It is not `confirm`, not `prompt`, not
+`requires_approval`. It states a property of the COMMAND -- *these effects are consequential* --
+which is a fact the command's author knows and the framework never could. Today exactly one
+behaviour hangs off it (the prompt); naming it after that behaviour would have welded the
+declaration to one reaction and made every later use of the same fact a second, redundant
+declaration.
+
+#### Why the inference was wrong
+
+The shipped regime inferred "mutating ⇒ must confirm". Adoption across six consumers falsified it:
+
+- **391 of 624 commands (63%) classify `mutating`.** Two thirds of every CLI in the fleet prompted.
+- The commands caught included `safegit commit`, `rlsbl changelog add`, `selfdoc gen`,
+  `saferm delete` -- the *safe*, undoable deletion tool -- and `claudewheel launch`, which had to be
+  special-cased or every session would have opened with a `Proceed? [y/N]`.
+- The genuinely dangerous commands are roughly 5-10% of that set: a **~1:10 signal-to-noise ratio.**
+
+A guardrail at 1:10 guarantees the skip flag is passed reflexively, and the guardrail becomes dead
+code while still appearing present -- which is worse than not having it, because the appearance is
+what a reviewer sees.
+
+The diagnosis is that **one field was answering two questions**:
+
+| Question | Answered by | Almost everything answers |
+|----------|-------------|---------------------------|
+| Should a dry run *record* this rather than execute it? | `effect` (§1.1) | yes -- correctly, and this is working and unchanged |
+| Are these effects worth *interrupting someone* for? | `consequential` (§8.1) | no |
+
+`effect` answers the first well and is not touched by this round. It never answered the second; it
+was only ever a proxy for it, and the proxy is off by an order of magnitude.
+
+### 8.1.1 When it fires
+
+Before dispatching a command whose `consequential` is true, when **all** of the following hold:
 
 - the dispatch path is the real CLI (`App.run` / `App.Run` / `App.run()`);
 - `--dry-run` was not passed;
-- `--yes` was not passed.
+- `--approve-consequential` was not passed.
 
-It never fires for `read_only` commands, or on the `test()` / `call()` / `_invoke` / MCP paths
-(§8.4).
+A plain `mutating` command **never prompts**. It never fires for `read_only` commands (which cannot
+be consequential at all), or on the `test()` / `call()` / `_invoke` / MCP paths (§8.4).
 
-**Passthrough commands are not exempt.** A passthrough is classified like any other command
-(§1.2); a `mutating` passthrough prompts exactly like any other mutating command, `--yes` skips
-the prompt exactly as elsewhere, and a `read_only` passthrough never prompts. That the
-passthrough's args are opaque to the framework is a reason to confirm, not a reason to skip: the
-framework knows less about what is about to happen, not more. The prompt names the passthrough's
-dotted command path like any other.
+**Passthrough commands are not exempt.** A passthrough declares `consequential` like any other
+command (§1.2); a consequential passthrough prompts exactly like any other consequential command,
+`--approve-consequential` skips the prompt exactly as elsewhere, and a passthrough that does not
+declare it never prompts. That the passthrough's args are opaque to the framework is a reason to
+confirm, not a reason to skip: the framework knows less about what is about to happen, not more.
+The prompt names the passthrough's dotted command path like any other.
+
+**The `interactive=True` confirm suppression is walked back** (§18.7, item 89). An earlier ruling
+carved out `interactive` commands from the confirm protocol so that a command whose whole purpose
+is to talk to the user did not open with an unrelated prompt. That carve-out is unnecessary under
+the declaration: `claudewheel launch` is `mutating` and not consequential, so it simply never
+prompts, with no exemption anywhere. `interactive`'s other, unrelated meaning -- visible in help,
+excluded from tool export (§13, the MCP surface) -- is untouched. No suppression logic keyed on
+`interactive` exists in any of the three implementations and none is to be added.
 
 ### 8.2 The prompt
 
 Written to **stderr**, without a trailing newline:
 
 ```
-about to run mutating command '<name>'. Proceed? [y/N] 
+about to run consequential command '<name>'. Proceed? [y/N] 
 ```
 
 (Note the single trailing space. `<name>` is the dotted command path.)
@@ -1132,20 +1226,29 @@ replaced by the exactly-one rule.
 If stdin is not a TTY, the framework does not prompt. It writes to stderr:
 
 ```
-error: stdin is not interactive; pass --yes to confirm
+error: stdin is not interactive; pass --approve-consequential to confirm
 ```
 
 and exits `1`. TTY detection is net-new in all three implementations (no `isatty` /
 `IsTerminal` / `isTTY` call exists anywhere in the current sources): Python `sys.stdin.isatty()`,
-Go `term.IsTerminal(int(os.Stdin.Fd()))` via a `golang.org/x/term`-free `os.Stdin.Stat()` mode
-check (Go stays zero-dependency: `fi.Mode() & os.ModeCharDevice != 0`), TypeScript
+Go a `golang.org/x/term`-free `os.Stdin.Stat()` mode check (Go stays zero-dependency), TypeScript
 `process.stdin.isTTY === true`.
+
+**Go excludes the null device explicitly** (amended 2026-08-04, §18.7 item 90). The draft pinned
+Go's check to `fi.Mode() & os.ModeCharDevice != 0` alone, and `/dev/null` *is* a character device.
+`myapp cmd < /dev/null` -- and every subprocess launched with a null stdin, which is what CI
+runners and test harnesses do -- therefore read as **interactive** on Go and non-interactive on the
+other two: the same invocation prompted in one implementation and hard-errored in the other two.
+Go now additionally rejects a stdin that `os.SameFile`s `os.DevNull`, which is stdlib-only and
+portable (the constant is `NUL` on Windows), so the zero-dependency property is preserved. The
+residual gap -- another character device such as `/dev/zero` used as stdin still reads as
+interactive on Go -- is pathological and is left as an accepted ceiling.
 
 ### 8.4 Programmatic dispatch
 
-`test()`, `call()` / `Call()` / `invoke`, and the MCP server behave **as if `--yes` were
-passed**: they never prompt and never emit the non-TTY error. These paths have no TTY contract,
-and a prompt there would hang the caller.
+`test()`, `call()` / `Call()` / `invoke`, and the MCP server behave **as if
+`--approve-consequential` were passed**: they never prompt and never emit the non-TTY error. These
+paths have no TTY contract, and a prompt there would hang the caller.
 
 **`--dry-run` reachability splits along the argv boundary, not the dispatch boundary** (amended
 2026-08-03, D1; the previous text said `--dry-run` was unreachable through all of them "because
@@ -1206,12 +1309,16 @@ write. Specifically, the five auto-registered `config` subcommands classify as:
 | `config init` | `mutating` |
 | `config edit` | `mutating` (already `interactive=True`) |
 
+**None of the five declares `consequential`** (§8.1). Rewriting a config file and opening an editor
+are reversible, routine operations; a framework that prompted on its own `config set` would be the
+first and loudest demonstration of the 1:10 problem the declaration exists to fix.
+
 Those five, and the `check` command, are the framework-internal commands of §10.4; their
 classification only becomes enforceable once the `config` group's direct-`Command`-construction
 bypass is closed, which §10.4 requires.
 
 **Classifying the three mutating `config` subcommands is not enough: their mutations must ride
-`ctx.effects`** (amended 2026-08-03, A4). Classification alone bought the confirm prompt and put
+`ctx.effects`** (amended 2026-08-03, A4). Classification alone put
 the run in dry mode, but the handlers wrote through bare `open` / `os.WriteFile` / `writeFileSync`
 and launched `$EDITOR` through bare `subprocess.run` / `exec.Command` / `spawnSync`, so a dry run
 printed `DRY RUN — no changes were made.` while rewriting the user's config file and opening their
@@ -1339,25 +1446,63 @@ callers left outside it.
 
 ## 11. Bypass lint as check providers
 
-Each implementation ships one **built-in check provider** registering **two** checks (amended
-2026-08-03, D4/D5):
+Each implementation ships one **built-in check provider** registering **three** checks (amended
+2026-08-03, D4/D5; a third added 2026-08-04, §18.7):
 
-| Field | `effects-bypass` | `observe-allowlist-breadth` |
-|-------|------------------|-----------------------------|
-| tags | `["effects", "quality"]` | `["effects", "quality"]` |
-| severity | `error` | `warn` |
-| fast | `true` | `true` |
-| pure | `true` | `true` |
-| needs_network | `false` | `false` |
-| depends_on | `[]` | `[]` |
+| Field | `effects-bypass` | `observe-allowlist-breadth` | `consequential-grant-agreement` |
+|-------|------------------|-----------------------------|---------------------------------|
+| tags | `["effects", "quality"]` | `["effects", "quality"]` | `["effects", "quality"]` |
+| severity | `error` | `warn` | `warn` |
+| fast | `true` | `true` | `true` |
+| pure | `true` | `true` | `true` |
+| needs_network | `false` | `false` | `false` |
+| depends_on | `[]` | `[]` | `[]` |
 
 `effects-bypass` statically analyses the consumer's own sources and fails on any direct process,
 filesystem-mutation or network call **reachable from a registered command handler** that does not
 go through `ctx.effects`. `observe-allowlist-breadth` reads the app's own declared
-`proc_observe_allowlist` and warns on every single-token prefix (§6.2). Both are registered through
-the existing provider hook (`App.register_check_provider` / `(*App).RegisterCheckProvider` / the TS
-provider module), the same mechanism the built-in `cli-test-coverage` check already uses, so a
-TOML-less app still gets working checks.
+`proc_observe_allowlist` and warns on every single-token prefix (§6.2). All three are registered
+through the existing provider hook (`App.register_check_provider` /
+`(*App).RegisterCheckProvider` / the TS provider module), the same mechanism the built-in
+`cli-test-coverage` check already uses, so a TOML-less app still gets working checks.
+
+#### 11.0 `consequential-grant-agreement`
+
+Reads the app's own registered commands -- no source analysis -- and warns for every command that
+declares a grant of kind `proc_mutate` or `net_mutate` and does **not** declare itself
+`consequential` (§8.1). The message is one line per finding, naming the command's dotted path, the
+grant and the kind:
+
+```
+command '<path>' declares grant '<g>' (kind <k>) but is not consequential: a <k> effect leaves this process and the framework cannot walk it back, and the grant already says the step is worth explaining. Declare the command consequential, or drop the grant if the step is routine.
+```
+
+The pass message is `every escaping grant sits on a consequential command`; the found message is
+`<n> grant(s) on non-consequential command(s)`.
+
+**Why grants at all.** §6.1 says a grant exists "so that a reviewer reading a dry run sees why a
+dangerous step is there." That is the same judgement `consequential` makes, stated per-effect
+instead of per-command. When both are present they should almost always agree, and a disagreement
+is worth saying out loud.
+
+**Why only two of the four kinds.** `proc_mutate` runs another program and `net_mutate` changes
+remote state; neither can be walked back by the framework, and remote state is the least
+recoverable thing the regime can touch. `file_write` and `proc_spawn` are local and ordinarily
+recoverable -- a written file is in the working tree, a spawned child's own effects ride its own
+grants -- and flagging every one of them would re-create, inside the lint, exactly the 1:10 noise
+ratio §8.1 exists to remove. Rejected: flagging any grant at all (too broad, for that reason), and
+inferring irreversibility from the effect's arguments (§0's zero-inference rule forbids it, and
+there is no irreversibility field to read).
+
+**Why `warn` and not `error`.** The two declarations *can* legitimately disagree: a command may
+declare a `proc_mutate` grant for a step that is genuinely routine (`git add`), and `consequential`
+is deliberately not mandatory. An error-severity check would make the declaration mandatory
+through the back door -- consumers would add `consequential` to clear a red gate rather than
+because they judged the command consequential, which is precisely the reflex this whole round
+removed, re-created one layer up. `effects-bypass` is `error` because a bypass is provably wrong;
+this finding is provably *suspicious*, and the precedent for that severity is already set by
+`observe-allowlist-breadth` (§18.5 item 81), which is likewise a "these declarations disagree and
+either could be right" finding cleared by `--ignore-warnings`.
 
 Analyser per language, all **regular dependencies** (no optional imports, no soft degradation):
 
@@ -1473,12 +1618,21 @@ identical either way. Among the templates below this affects `errConfirmNonInter
 ### 12.1 Reserved-name ban
 
 ```
-flag name '<x>' is reserved by the framework (dry-run, yes, quiet, verbose)
+flag name '<x>' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)
 ```
 
 Function name: `errFlagNameReservedByFramework(name)`. Raised from the same
 `validateFlagConfig` / `Flag.__post_init__` sites as the `force` ban, and additionally from the
 global-flag validation path so app globals are covered by the same message.
+
+```
+flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential
+```
+
+`errFlagNameYesBanned()` (Go: a parameterless `const`, per this section's Go declaration form).
+Registration-time, raised from the same two sites. `yes` names no framework flag any more, so this
+is a separate template from the quartet's and it states the reason plus the replacement rather than
+listing a set the name is not in (§7.1).
 
 ### 12.2 Classification
 
@@ -1500,6 +1654,14 @@ deprecated command "<name>": effect classification does not apply (a deprecated 
 
 `errDeprecatedCommandEffect(name)`. Registration-time. Enforces §1.1's exemption in the one
 direction that can be enforced -- a caller passing `effect=` to `deprecate(...)` is wrong.
+
+```
+command "<name>": a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)
+```
+
+`errCommandReadOnlyConsequential(name)`. Registration-time, all three. Enforces §8.1: the two
+declarations answer different questions, and the read-only answer to the first makes the second
+unanswerable.
 
 ### 12.3 Guard v2 and forwarding
 
@@ -1566,17 +1728,21 @@ section of the catalogs.
 ### 12.6 Confirm
 
 ```
-about to run mutating command '<name>'. Proceed? [y/N] 
+about to run consequential command '<name>'. Proceed? [y/N] 
 ```
 
-`promptConfirmMutating(name)` -- a prompt, not an error, but it lives in the same catalog files so
-parity is checked.
+`promptConfirmConsequential(name)` -- a prompt, not an error, but it lives in the same catalog files
+so parity is checked. Renamed from `promptConfirmMutating` at the consequence round (§18.7): the
+prompt names what the command declared, not what it was classified.
 
 ```
-error: stdin is not interactive; pass --yes to confirm
+error: stdin is not interactive; pass --approve-consequential to confirm
 ```
 
-`errConfirmNonInteractive()`.
+`errConfirmNonInteractive()`. **This one is now conformance-covered**: the runner pins each case's
+stdin to the null device (§14.5), so §8.3's branch is a deterministic outcome in all three targets
+rather than a template whose trigger the runner could not reach. The prompt itself and
+`errConfirmDeclined` stay `coverage_deferred` -- they need an answer typed at a terminal.
 
 ```
 aborted
@@ -1778,6 +1944,7 @@ byte-identical across three languages.
 | Key | Type | Emission |
 |-----|------|----------|
 | `effect` | `"read_only"` \| `"mutating"` | **always** -- classification is mandatory, so there is no default to omit against |
+| `consequential` | `true` | omitted when false -- unlike classification it is NOT mandatory, and absence means "not consequential" (§8.1). It follows `hidden` / `interactive`'s omit-when-false shape, not `effect`'s always-emitted one |
 | `grants` | array of `{"name": str, "reason": str, "kind": str}` | omitted when empty; entries in declaration order; `kind` uses the lowercase kind name (`proc_mutate`, `proc_spawn`, `file_write`, `net_mutate`) |
 | `forwarding` | `{"reason": str}` | omitted when absent |
 
@@ -1798,6 +1965,10 @@ The conformance case schema (`conformance/schema.json`) mirrors these under `$de
 mandatory on deprecated commands too -- the opposite of §1.1. The concrete change, exactly:
 
 - add `effect` (`{"enum": ["read_only", "mutating"]}`) to `$defs/command`'s `properties`;
+- add `consequential` (`{"type": "boolean", "default": false}`) to the same `properties`, and to
+  the deprecated branch's `then.properties` as `false`. It is deliberately **not** added to the
+  `else` branch's `required`: it is not mandatory, and a schema that demanded it would re-impose
+  exactly the per-registration answer §8.1 removed;
 - leave the top-level `required` as `["name", "help"]`;
 - add `"effect": false` to the deprecated branch's `then.properties`, alongside the existing
   `"handler_prints": false` / `"flags": false` / ... entries, so a deprecated case declaring
@@ -1988,10 +2159,13 @@ that only `run` accepts at the call, which is exactly the shape the error covers
   (the `'--*: cannot read stdin'` and `'--*: stdin (@-) can only be used once per invocation'` rows
   already carry
   `"coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner"`).
-  The confirm-protocol templates are exactly that case -- `promptConfirmMutating`,
-  `errConfirmNonInteractive` and `errConfirmDeclined` (§12.6) all require driving stdin and/or
-  faking TTY-ness of a subprocess, which the conformance runner does not do. Use the existing
-  rationale string verbatim so the precedent stays greppable. `errEffectHTTPFailed` (§12.8) gets
+  Two of the three confirm-protocol templates are that case -- `promptConfirmConsequential` and
+  `errConfirmDeclined` (§12.6) require an answer typed at a terminal, which the conformance runner
+  cannot supply. `errConfirmNonInteractive` is **no longer deferred**: `run.py` pins every case's
+  stdin to `subprocess.DEVNULL`, so §8.3's non-interactive branch is a deterministic outcome in all
+  three targets and is covered by an ordinary case. Pinning stdin is itself required, not
+  incidental -- a case must never depend on whether the operator happened to run the suite from a
+  terminal. `errEffectHTTPFailed` (§12.8) gets
   its own deferral -- rationale: requires issuing a real network request, which conformance cases
   must not do.
 - **§3.5's aborted path is covered by `targets: ["python", "typescript"]` cases** reached through
@@ -2082,7 +2256,7 @@ already funnel through; the per-site work is passing the effects/reserved-flag s
 - **No partial preview fallback.** When the preview cannot continue it truncates loudly (§3.3);
   it never degrades to a best-effort guess.
 - **No bypass flag.** There is no `--no-confirm`, no `--force-effects`, no way to disable the seal.
-  `--yes` answers the prompt; it does not disable anything else.
+  `--approve-consequential` answers the prompt; it does not disable anything else.
 - **No compatibility shim** for pre-classification commands. Every consumer classifies at its
   lock bump.
 
@@ -2157,6 +2331,10 @@ document after its adversarial audit, and they override anything that contradict
 2. **Mutating passthrough commands prompt** (§8.1). The earlier passthrough exemption from the
    confirm protocol is deleted. A `mutating` passthrough prompts exactly like any other mutating
    command; `--yes` skips it; a `read_only` passthrough never prompts.
+   *(Superseded in part by item 87: the prompt keys on `consequential`, not on classification, so
+   a passthrough prompts on exactly the same terms as any other command -- which is what this item
+   was really asserting -- and the skip flag is `--approve-consequential`. The no-exemption
+   principle stands verbatim.)*
 3. **Confirmed forced consequences** (ratified as forced, i.e. the user accepted that no
    alternative existed): TS `defineCommand` is removed and the twins are the sole registration
    surface (§1.2); the four additional `FILE_WRITE` log verbs stand (§3.2); `config set` is
@@ -2213,8 +2391,12 @@ spelling the pin list left open.
 19. **Programmatic dispatch behaves as if `--yes`** (§8.4) -- `test`, `call`/`Call`/`invoke` and
     the MCP server never prompt and never emit the non-TTY error, and `--dry-run` is not reachable
     through them. The only non-hanging option for callers with no TTY contract.
+    *(Flag renamed by item 88 to `--approve-consequential`; the behaviour is unchanged. Also
+    corrected by item 78 on `--dry-run` reachability through `test()`.)*
 20. **Go's TTY check uses `os.Stdin.Stat()` + `os.ModeCharDevice`**, keeping the Go package
-    zero-dependency.
+    zero-dependency. *(Narrowed by item 90: the mode check alone reads the null device as
+    interactive, so the check additionally excludes a stdin that `os.SameFile`s `os.DevNull`. Still
+    zero-dependency.)*
 21. **Python's `__repr__` is the single non-poisoned dunder**, and `__class__` stays intact so
     `isinstance` works at the forwarding boundary; `__str__` and `__format__` ARE poisoned
     (stringifying a carrier in handler code is extraction, not forwarding).
@@ -2580,6 +2762,95 @@ exercises it.
       because it is an exception rather than a process teardown, so the asymmetry is a property of
       the three languages, not a parity gap: in all three, a handler *return* renders correctly,
       and that is the idiomatic spelling everywhere.
+
+### 18.7 Amendments made at the consequence round (2026-08-04)
+
+The regime shipped, six consumers adopted it, and adoption falsified the confirm protocol's
+central inference. This round is governed by the same precedence rule item 84 established:
+**where adoption contradicts this document's draft, adoption wins.** The rulings below are
+**user-ratified**, not authored here, except where marked.
+
+87. **The confirm protocol keys on a declared `consequential`, not on classification (§8, ruling
+    C1).** The shipped regime inferred "mutating ⇒ must confirm". The evidence against it is
+    counted, not felt: **391 of 624 commands across six consumers (63%) classify `mutating`**, so
+    two thirds of every CLI in the fleet prompted -- including `safegit commit`,
+    `rlsbl changelog add`, `selfdoc gen`, `saferm delete` (the *safe*, undoable deletion) and
+    `claudewheel launch`, which had to be special-cased or every session would have opened with a
+    `Proceed? [y/N]`. The genuinely dangerous commands are ~5-10% of that set: a **~1:10
+    signal-to-noise ratio**, which guarantees the skip flag is passed reflexively and leaves the
+    guardrail dead while it still *looks* present -- worse than absent, because the appearance is
+    what a reviewer sees.
+
+    The diagnosis is that **one field was answering two questions.** `effect` correctly answers
+    *"should a dry run record rather than execute?"* -- almost everything that touches anything
+    answers yes, which is right, and that machinery is working and untouched. Consequence asks
+    *"are these effects worth interrupting someone for?"* -- almost nothing answers yes. `effect`
+    was never an answer to the second, only a proxy, and the proxy is off by an order of magnitude.
+
+    **Rejected alternatives**, each recorded so the ruling is reversible:
+    - *Keep blanket confirmation and let consumers live with it.* This is the status quo whose
+      failure the numbers describe; the reflex it trains is the failure.
+    - *Name the declaration `confirm=True`.* Rejected because it names the framework's REACTION,
+      not a property of the command. Consequence is a fact the author knows and the framework never
+      could; the prompt is one thing the framework currently chooses to do about it. Naming the
+      field after the reaction would weld them together and make every later use of the same fact a
+      second, redundant declaration.
+    - *App-level opt-in* (`createApp({confirmMutating: true})`), keeping the inference but letting
+      an app turn it off wholesale. Rejected because it moves the decision to the wrong grain: the
+      1:10 ratio is a property of the command set, not of the app, and an app-wide switch means
+      either every command prompts or none does -- which is the same failure with an extra flag.
+    - *Accept the break but keep a short skip flag.* Rejected: see item 88.
+
+88. **The skip flag is `--approve-consequential`, and `yes` stays banned (§7.1, §7.3, §12.1,
+    ruling C1).** The quartet becomes `dry-run`, `approve-consequential`, `quiet`, `verbose`.
+    **The unwieldiness is deliberate and is pinned here so a later round does not "fix" it**:
+    `--yes` is short, familiar and already reflexive in every shell, so it was destined to become
+    muscle memory and be appended without thought. A flag that cannot become muscle memory stays a
+    decision. There is no short form and there will never be one. `yes` is kept on the banned-names
+    list -- it names no framework flag any more, which is exactly why releasing it would be a
+    mistake: a consumer's private `--yes` would restate `--approve-consequential` in the very
+    spelling this rename removed. Its ban message is its own template and points at the
+    replacement (`errFlagNameYesBanned`). Context accessors move with it:
+    `ctx.approve_consequential` / `ctx.ApproveConsequential()` / `ctx.approveConsequential`.
+
+89. **The `interactive=True` confirm-suppression ruling is walked back (§8.1.1, ruling C1).** An
+    earlier ruling exempted `interactive` commands from the confirm protocol so a command whose
+    whole purpose is to talk to the user would not open with an unrelated prompt. Under the
+    declaration the carve-out is unnecessary and therefore wrong to keep: `claudewheel launch` is
+    `mutating` and not consequential, so it never prompts, with no exemption anywhere. It was never
+    implemented in any of the three sources -- the walk-back is documentary, and its point is that
+    no such suppression is to be added. `interactive`'s other, unrelated meaning (visible in help,
+    excluded from tool export) is untouched.
+
+90. **Go's TTY check excludes the null device (§8.3, authored at this round).** Surfaced by the
+    new conformance coverage, not by the redesign. §8.3 pinned Go to
+    `fi.Mode() & os.ModeCharDevice != 0` alone, and `/dev/null` *is* a character device, so
+    `myapp cmd < /dev/null` -- and every subprocess launched with a null stdin, which is what CI
+    runners and test harnesses do -- read as **interactive** on Go and non-interactive on Python
+    and TypeScript: one invocation, two behaviours, invisible because no case had ever run with a
+    non-TTY stdin. Go now also rejects a stdin that `os.SameFile`s `os.DevNull` -- stdlib-only and
+    portable (`NUL` on Windows), so zero-dependency is preserved. **Rejected**: giving the
+    conformance runner a pipe instead of the null device, which would have made the suite pass
+    while leaving the divergence shipped; and adding `golang.org/x/term`, which trades a real
+    dependency for a pathological residual case (`/dev/zero` as stdin still reads as interactive on
+    Go, and is recorded as an accepted ceiling instead).
+
+91. **The bypass provider gains `consequential-grant-agreement` at `warn` (§11.0, authored at this
+    round).** A grant exists so a reviewer sees why a dangerous step is there (§6.1) -- the same
+    judgement `consequential` makes, at per-effect grain. It fires only for `proc_mutate` and
+    `net_mutate`, the two kinds that leave the process and cannot be walked back. **Rejected**:
+    flagging every grant kind, which would rebuild the 1:10 noise ratio inside the lint;
+    and `error` severity, which would make the declaration mandatory through the back door --
+    consumers would add `consequential` to clear a red gate rather than because they judged the
+    command consequential, re-creating the exact reflex this round removed one layer up. The
+    severity precedent is `observe-allowlist-breadth` (item 81): a "these declarations disagree and
+    either could be right" finding, cleared by `--ignore-warnings`.
+
+92. **Conformance pins every case's stdin to the null device (§14.5, authored at this round).** A
+    case must never depend on whether the operator ran the suite from a terminal. The immediate
+    payoff is that `errConfirmNonInteractive` stops being `coverage_deferred` and becomes an
+    ordinary covered template in all three targets; the immediate cost was item 90, which the
+    pinning is what found.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
