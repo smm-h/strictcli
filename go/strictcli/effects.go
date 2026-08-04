@@ -1294,3 +1294,13 @@ func (a *App) renderWouldDoLog() string {
 	}
 	return a.effects.render()
 }
+
+// wouldDoSeq is the would-do number the preview reached: the number the next
+// rendered effect would have taken. It is the step the truncation error and the
+// aborted-preview marker both name.
+func (a *App) wouldDoSeq() int {
+	if a.effects == nil {
+		return 1
+	}
+	return a.effects.nextSeq()
+}

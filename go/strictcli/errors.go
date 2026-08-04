@@ -1256,6 +1256,18 @@ func errDryRunTruncated(step int, cmd string, brand string) string {
 }
 
 // ---------------------------------------------------------------------------
+// effects.go — an aborted dry-run preview (parse-time)
+//
+// Same shape and prefix as the truncation error above: both say the preview
+// ended before the handler finished, and they differ only in why and in what
+// the reader may conclude. Written straight to stderr.
+// ---------------------------------------------------------------------------
+
+func errDryRunAborted(step int, cmd string) string {
+	return fmt.Sprintf("error: dry-run preview ends at step %d: %s aborted — the preview above may be incomplete", step, cmd)
+}
+
+// ---------------------------------------------------------------------------
 // effects.go — the confirm protocol (parse-time)
 // ---------------------------------------------------------------------------
 

@@ -2112,12 +2112,9 @@ func (a *App) Run() {
 		// The confirm protocol fires only on the real CLI path -- and a mutating
 		// PASSTHROUGH is not exempt.
 		a.confirmMutating(pr.cmd, pr.cmdPath)
-		code, truncated := a.runSealed(os.Stdout, os.Stderr, func() int {
+		code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, func() int {
 			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		})
-		if reserved.dryRun && !truncated {
-			fmt.Fprintln(os.Stdout, a.renderWouldDoLog())
-		}
 		a.runExitHook()
 		os.Exit(code)
 	}
@@ -2125,7 +2122,7 @@ func (a *App) Run() {
 	ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic),
 		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
 	a.confirmMutating(pr.cmd, pr.cmdPath)
-	code, truncated := a.runSealed(os.Stdout, os.Stderr, func() int {
+	code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, func() int {
 		outcome := pr.cmd.Handler(ctx, pr.kwargs)
 		if outcome.data != nil {
 			data, err := json.Marshal(outcome.data)
@@ -2137,9 +2134,6 @@ func (a *App) Run() {
 		}
 		return outcome.code
 	})
-	if reserved.dryRun && !truncated {
-		fmt.Fprintln(os.Stdout, a.renderWouldDoLog())
-	}
 	a.runExitHook()
 	os.Exit(code)
 }
@@ -2154,26 +2148,43 @@ func (a *App) reservedFlagState() reservedFlags {
 	}
 }
 
-// runSealed runs a handler under the runtime seal: a carrier extraction panics
-// with a dryRunTruncation, which ends the preview by printing the
-// already-recorded log to stdout and the pinned error to stderr, exiting 1.
-// Any other panic is re-raised untouched.
-func (a *App) runSealed(stdout, stderr io.Writer, fn func() int) (code int, truncated bool) {
+// runSealed runs a handler under the runtime seal AND owns the would-do log's
+// rendering, so the log reaches stdout on every exit path out of the handler
+// rather than only on the normal return:
+//
+//   - normal return -- the log, after whatever the handler emitted;
+//   - a carrier extraction -- the truncation path (dryRunTruncation) prints the
+//     already-recorded log to stdout and its own pinned error to stderr, and
+//     exits 1;
+//   - any other panic -- the log, then the aborted-preview marker on stderr,
+//     and then the panic continues untouched.
+//
+// A handler that calls os.Exit is outside this guarantee and outside Go: the
+// process is gone before any deferred function runs.
+func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, fn func() int) (code int) {
 	defer func() {
 		r := recover()
 		if r == nil {
+			if dryRun {
+				fmt.Fprintln(stdout, a.renderWouldDoLog())
+			}
 			return
 		}
-		t, ok := r.(dryRunTruncation)
-		if !ok {
-			panic(r)
+		if t, ok := r.(dryRunTruncation); ok {
+			fmt.Fprintln(stdout, t.log.render())
+			fmt.Fprintln(stderr, t.message)
+			code = 1
+			return
 		}
-		fmt.Fprintln(stdout, t.log.render())
-		fmt.Fprintln(stderr, t.message)
-		code = 1
-		truncated = true
+		// An unexpected unwind. The recorded effects are still owed to whoever
+		// asked for the preview; the marker says the list may not be all of it.
+		if dryRun {
+			fmt.Fprintln(stdout, a.renderWouldDoLog())
+			fmt.Fprintln(stderr, errDryRunAborted(a.wouldDoSeq(), cmdPath))
+		}
+		panic(r)
 	}()
-	return fn(), false
+	return fn()
 }
 
 // Test runs the CLI with the given argv, capturing output and exit code.
@@ -2249,7 +2260,7 @@ func (a *App) Test(argv []string) Result {
 		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
 
 	var resultData interface{}
-	exitCode, truncated := a.runSealed(stdoutW, stderrW, func() int {
+	exitCode := a.runSealed(stdoutW, stderrW, reserved.dryRun, pr.cmdPath, func() int {
 		if pr.cmd.Passthrough {
 			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		}
@@ -2265,9 +2276,6 @@ func (a *App) Test(argv []string) Result {
 		}
 		return outcome.code
 	})
-	if reserved.dryRun && !truncated {
-		fmt.Fprintln(stdoutW, a.renderWouldDoLog())
-	}
 
 	stdoutW.Close()
 	stderrW.Close()
