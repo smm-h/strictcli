@@ -2,6 +2,75 @@
 
 # Changelog
 
+## 0.35.3
+
+Recognize the reserved flag quartet anywhere in argv
+
+<details>
+<summary>Context</summary>
+
+The quartet (--dry-run, --yes, --quiet, --verbose) was extracted by a pre-scan
+that stopped at the first non-flag token, so it was only recognized BEFORE the
+command name -- while every documented invocation in this ecosystem writes these
+flags after it. `myapp deploy --dry-run` failed with `unknown flag '--dry-run'`,
+and the first consumer to migrate onto the effects regime had to rewrite argv
+before handing it to the framework to make its own documented commands work.
+
+The quartet is now recognized anywhere in argv, matching the framework's own
+existing precedent for --help/-h. Two boundaries are preserved: a bare `--`
+(everything after it is positional data) and a passthrough command's name (its
+args belong to the child process and are forwarded byte-for-byte, so a child's
+own --verbose is never eaten). --hermetic, --config, --dump-schema and --mcp
+stay pre-command-only. Effects contract §7.2 is amended accordingly (adoption
+ruling A1, §18.6).
+
+</details>
+
+### Fixes
+
+- [strictcli] **The reserved flags now work after the command name.** `--dry-run`, `--yes`, `--quiet` and `--verbose` are recognized anywhere in argv, exactly like `--help` -- `myapp deploy --dry-run` used to fail with `unknown flag` and now works, at any group nesting depth. A bare `--` still ends recognition, and a passthrough command's args are still forwarded to the child untouched.
+
+## 0.35.2
+
+Ship the 0.35.0 library content to PyPI, which neither 0.35.0 nor 0.35.1 reached.
+
+<details>
+<summary>Context</summary>
+
+0.35.0 and 0.35.1 are both phantom versions: each has a git tag and a GitHub
+Release, and neither has an artifact on PyPI. This release ships that same
+library content -- unchanged since 0.35.0 -- to the registry.
+
+0.35.0 failed because it was released as a three-releasable batch that pushed
+three separate candidate commits, and all three tags ended up on the final
+candidate. That commit changed nothing under `python/`, so the CI Router's paths
+filter skipped `strictcli-ci`, and the publish gate refused: a skipped check
+proves nothing about the commit. The batch defect is fixed upstream in rlsbl,
+which now commits every member and pushes exactly once.
+
+0.35.1 failed differently. Its candidate was pushed and CI went green on it, but
+a commit from a concurrent session landed on the branch during the CI wait and
+the release aborted at its foreign-commit guard -- correctly. Resuming that
+release then tagged the branch tip instead of the CI-verified candidate it had
+recorded, so the tag pointed at a commit that had never produced any CI check
+runs at all, and the gate refused again. Both refusals were the gate working as
+designed; nothing was relaxed or bypassed.
+
+This release is a clean single-releasable run from a quiet branch. Its version
+bump touches `python/`, so `strictcli-ci` runs on the tagged candidate and the
+gate can pass honestly.
+
+There are no user-facing changes. 0.35.0's user-facing entries are already
+finalized into its own changelog, and the library code is byte-identical to what
+0.35.0 and 0.35.1 would have shipped. This is infrastructure only: its sole
+purpose is getting that content to the registry.
+
+</details>
+
+### Infrastructure
+
+- Ship the 0.35.0 library content to PyPI, which neither 0.35.0 nor 0.35.1 reached.
+
 ## 0.35.1
 
 Republish 0.35.0's library content to PyPI after the 0.35.0 tag was published but never reached the registry.
