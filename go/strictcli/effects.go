@@ -1175,15 +1175,17 @@ func stdinIsInteractive() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-// confirmMutating is the framework-owned confirm protocol. It fires before
-// dispatching a mutating command on the real CLI path when neither --dry-run nor
-// --yes was passed. It never fires for read_only commands, and never on the
-// programmatic paths (Test/Call/invoke/MCP), which have no TTY contract and
-// would hang.
+// confirmConsequential is the framework-owned confirm protocol. It fires before
+// dispatching a command that DECLARES ITSELF consequential, on the real CLI
+// path, when neither --dry-run nor --approve-consequential was passed. A plain
+// mutating command never prompts: classification answers "should a dry run
+// record rather than execute?", which is a different question from "are these
+// effects worth interrupting someone for?". It never fires on the programmatic
+// paths (Test/Call/invoke/MCP), which have no TTY contract and would hang.
 //
-// A mutating PASSTHROUGH is not exempt: the framework knows LESS about what is
-// about to happen, not more.
-func (a *App) confirmMutating(cmd *Command, cmdPath string) {
+// A consequential PASSTHROUGH is not exempt: the framework knows LESS about
+// what is about to happen, not more.
+func (a *App) confirmConsequential(cmd *Command, cmdPath string) {
 	switch a.confirmDecision(cmd, cmdPath, stdinIsInteractive(), os.Stdin, os.Stderr) {
 	case confirmNonInteractive:
 		fmt.Fprintln(os.Stderr, errConfirmNonInteractive)
@@ -1205,16 +1207,16 @@ const (
 )
 
 func (a *App) confirmDecision(cmd *Command, cmdPath string, interactive bool, in io.Reader, prompt io.Writer) confirmOutcome {
-	if cmd.Effect != EffectMutating {
+	if !cmd.Consequential {
 		return confirmProceed
 	}
-	if a.lastDryRun || a.lastYes {
+	if a.lastDryRun || a.lastApproveConsequential {
 		return confirmProceed
 	}
 	if !interactive {
 		return confirmNonInteractive
 	}
-	fmt.Fprint(prompt, promptConfirmMutating(cmdPath))
+	fmt.Fprint(prompt, promptConfirmConsequential(cmdPath))
 	answer, _ := readConfirmLine(in)
 	if answer != "y" && answer != "Y" {
 		return confirmDeclined

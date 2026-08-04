@@ -27,10 +27,10 @@ type Context struct {
 // reservedFlags carries the values of the framework-owned reserved quartet for
 // one dispatch.
 type reservedFlags struct {
-	dryRun  bool
-	yes     bool
-	quiet   bool
-	verbose bool
+	dryRun               bool
+	approveConsequential bool
+	quiet                bool
+	verbose              bool
 }
 
 // infraAccess carries a Context's view of infrastructure env vars: resolved root
@@ -71,8 +71,11 @@ func newContext(stdout, stderr io.Writer, sources map[string]string, infra *infr
 // DryRun reports whether the framework-owned --dry-run flag was passed.
 func (c *Context) DryRun() bool { return c.reserved.dryRun }
 
-// Yes reports whether the framework-owned --yes flag was passed.
-func (c *Context) Yes() bool { return c.reserved.yes }
+// ApproveConsequential reports whether the framework-owned
+// --approve-consequential flag was passed.
+func (c *Context) ApproveConsequential() bool {
+	return c.reserved.approveConsequential
+}
 
 // Quiet reports whether the framework-owned --quiet flag was passed.
 func (c *Context) Quiet() bool { return c.reserved.quiet }
@@ -190,10 +193,18 @@ func (c *Context) Source(name string) string {
 // flags, flag-set flags, mutex-group flags and app global flags. The four have
 // no short forms, and short-flag names are unaffected by this ban.
 var reservedFrameworkFlagNames = map[string]bool{
-	"dry-run": true,
-	"yes":     true,
-	"quiet":   true,
-	"verbose": true,
+	"dry-run":               true,
+	"approve-consequential": true,
+	"quiet":                 true,
+	"verbose":               true,
+}
+
+// bannedFlagNames are names the framework refuses outright without owning a
+// flag of that name. `yes` is here because --approve-consequential replaced
+// --yes (contract §7.1) and a private --yes would restate it in a spelling
+// that IS muscle memory -- exactly what the rename removed.
+var bannedFlagNames = map[string]bool{
+	"yes": true,
 }
 
 // reservedGlobalShortNames are the pre-existing reserved names; they are also

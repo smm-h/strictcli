@@ -23,9 +23,14 @@ func TestConfirmRunHelper(t *testing.T) {
 		t.Skip("helper process; armed only when re-invoked by a confirm test")
 	}
 	app := NewApp("app", "1.0.0", "confirm fixture")
-	app.Command("deploy", "a mutating command",
+	app.Command("deploy", "a consequential command",
 		func(ctx *Context, kwargs map[string]interface{}) Outcome {
 			ctx.Info("deployed")
+			return Exit(0)
+		}, WithEffect(EffectMutating), WithConsequential())
+	app.Command("build", "a mutating command that is not consequential",
+		func(ctx *Context, kwargs map[string]interface{}) Outcome {
+			ctx.Info("built")
 			return Exit(0)
 		}, WithEffect(EffectMutating))
 	app.Command("status", "a read_only command",
@@ -33,9 +38,14 @@ func TestConfirmRunHelper(t *testing.T) {
 			ctx.Info("status ok")
 			return Exit(0)
 		}, WithEffect(EffectReadOnly))
-	app.Passthrough("wrap", "a mutating passthrough",
+	app.Passthrough("wrap", "a consequential passthrough",
 		func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 			ctx.Info("wrapped")
+			return 0
+		}, WithEffect(EffectMutating), WithConsequential())
+	app.Passthrough("thru", "a mutating passthrough that is not consequential",
+		func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
+			ctx.Info("forwarded")
 			return 0
 		}, WithEffect(EffectMutating))
 
@@ -69,7 +79,7 @@ func TestConfirmNonInteractiveStdinIsAHardError(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("expected exit 1, got %d (stdout=%q stderr=%q)", code, stdout, stderr)
 	}
-	if stderr != "error: stdin is not interactive; pass --yes to confirm\n" {
+	if stderr != "error: stdin is not interactive; pass --approve-consequential to confirm\n" {
 		t.Fatalf("stderr=%q", stderr)
 	}
 	if strings.Contains(stdout, "deployed") {
@@ -77,8 +87,8 @@ func TestConfirmNonInteractiveStdinIsAHardError(t *testing.T) {
 	}
 }
 
-func TestConfirmYesSkipsThePrompt(t *testing.T) {
-	stdout, stderr, code := runConfirmHelper(t, "--yes deploy")
+func TestConfirmApprovalSkipsThePrompt(t *testing.T) {
+	stdout, stderr, code := runConfirmHelper(t, "--approve-consequential deploy")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", code, stderr)
 	}
@@ -86,7 +96,34 @@ func TestConfirmYesSkipsThePrompt(t *testing.T) {
 		t.Fatalf("the handler must have run, stdout=%q", stdout)
 	}
 	if strings.Contains(stderr, "Proceed?") || strings.Contains(stderr, "not interactive") {
-		t.Fatalf("--yes must suppress both the prompt and the non-TTY error, stderr=%q", stderr)
+		t.Fatalf("--approve-consequential must suppress both the prompt and the non-TTY error, stderr=%q", stderr)
+	}
+}
+
+// The headline of the redesign: `mutating` alone never prompts. Two thirds of
+// the commands in a real fleet classify mutating; the genuinely dangerous ones
+// are a small fraction of that.
+func TestConfirmNeverFiresForAMutatingCommandThatIsNotConsequential(t *testing.T) {
+	stdout, stderr, code := runConfirmHelper(t, "build")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr=%q)", code, stderr)
+	}
+	if !strings.Contains(stdout, "built") {
+		t.Fatalf("the handler must have run, stdout=%q", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("a mutating command that is not consequential never prompts, stderr=%q", stderr)
+	}
+}
+
+// `yes` owns no framework flag any more.
+func TestYesIsNoLongerARecognizedToken(t *testing.T) {
+	_, stderr, code := runConfirmHelper(t, "--yes build")
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d (stderr=%q)", code, stderr)
+	}
+	if !strings.Contains(stderr, "--yes") {
+		t.Fatalf("expected an unknown-token error naming --yes, stderr=%q", stderr)
 	}
 }
 
@@ -116,16 +153,26 @@ func TestConfirmNeverFiresForReadOnly(t *testing.T) {
 	}
 }
 
-func TestConfirmFiresForAMutatingPassthrough(t *testing.T) {
+func TestConfirmFiresForAConsequentialPassthrough(t *testing.T) {
 	stdout, stderr, code := runConfirmHelper(t, "wrap --anything")
 	if code != 1 {
 		t.Fatalf("expected exit 1, got %d (stdout=%q stderr=%q)", code, stdout, stderr)
 	}
-	if stderr != "error: stdin is not interactive; pass --yes to confirm\n" {
-		t.Fatalf("a mutating passthrough is not exempt, stderr=%q", stderr)
+	if stderr != "error: stdin is not interactive; pass --approve-consequential to confirm\n" {
+		t.Fatalf("a consequential passthrough is not exempt, stderr=%q", stderr)
 	}
 	if strings.Contains(stdout, "wrapped") {
 		t.Fatal("the passthrough handler must not have run")
+	}
+}
+
+func TestConfirmNeverFiresForAMutatingPassthroughThatIsNotConsequential(t *testing.T) {
+	stdout, stderr, code := runConfirmHelper(t, "thru --anything")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr=%q)", code, stderr)
+	}
+	if !strings.Contains(stdout, "forwarded") {
+		t.Fatalf("the passthrough handler must have run, stdout=%q", stdout)
 	}
 }
 

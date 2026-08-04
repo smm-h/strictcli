@@ -48,9 +48,9 @@ func effectsApp(effect string, fn func(ctx *Context) Outcome, opts ...CmdOption)
 // --- reserved-name bans (§12.1) --------------------------------------------
 
 func TestReservedQuartetBannedOnCommandFlags(t *testing.T) {
-	for _, name := range []string{"dry-run", "yes", "quiet", "verbose"} {
+	for _, name := range []string{"dry-run", "approve-consequential", "quiet", "verbose"} {
 		got := mustPanic(t, func() { BoolFlag(name, "help text", Default(false)) })
-		want := "flag name '" + name + "' is reserved by the framework (dry-run, yes, quiet, verbose)"
+		want := "flag name '" + name + "' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
 		if got != want {
 			t.Fatalf("%s: got %q want %q", name, got, want)
 		}
@@ -61,7 +61,7 @@ func TestReservedQuartetBannedOnEveryFlagConstructor(t *testing.T) {
 	cases := []func(){
 		func() { StringFlag("verbose", "h") },
 		func() { IntFlag("quiet", "h") },
-		func() { FloatFlag("yes", "h") },
+		func() { FloatFlag("approve-consequential", "h") },
 		func() { ListFlag(TypeStr, "dry-run", "h", Unique(true), Repeatable()) },
 		func() { DictFlag(TypeStr, "verbose", "h") },
 	}
@@ -78,8 +78,21 @@ func TestReservedQuartetBannedOnGlobalFlags(t *testing.T) {
 	// The flag constructors ban the quartet first, so reach the global-flag
 	// path with a hand-built Flag.
 	got := mustPanic(t, func() { app.GlobalFlag(Flag{Name: "verbose", Type: TypeBool, Help: "h"}) })
-	if got != "flag name 'verbose' is reserved by the framework (dry-run, yes, quiet, verbose)" {
+	if got != "flag name 'verbose' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// `yes` owns no framework flag any more, but it stays banned so nobody
+// reintroduces a private --yes meaning the same thing (§12.1).
+func TestYesIsBannedOutright(t *testing.T) {
+	want := "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential"
+	if got := mustPanic(t, func() { BoolFlag("yes", "h", Default(false)) }); got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	app := NewApp("app", "1.0.0", "h")
+	if got := mustPanic(t, func() { app.GlobalFlag(Flag{Name: "yes", Type: TypeBool, Help: "h"}) }); got != want {
+		t.Fatalf("global flag: got %q want %q", got, want)
 	}
 }
 
@@ -765,21 +778,21 @@ func TestRemoveToleratesAMissingPathAndMkdirAnExistingDir(t *testing.T) {
 
 func TestQuartetIsDeliveredOnTheContextNotAsKwargs(t *testing.T) {
 	var seen map[string]interface{}
-	var dry, yes, quiet, verbose bool
+	var dry, approve, quiet, verbose bool
 	app := NewApp("app", "1.0.0", "h")
 	app.Command("go", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		seen = kwargs
-		dry, yes, quiet, verbose = ctx.DryRun(), ctx.Yes(), ctx.Quiet(), ctx.Verbose()
+		dry, approve, quiet, verbose = ctx.DryRun(), ctx.ApproveConsequential(), ctx.Quiet(), ctx.Verbose()
 		return Exit(0)
 	}, WithEffect(EffectReadOnly))
-	app.Test([]string{"--dry-run", "--yes", "--quiet", "--verbose", "go"})
-	for _, k := range []string{"dry_run", "yes", "quiet", "verbose"} {
+	app.Test([]string{"--dry-run", "--approve-consequential", "--quiet", "--verbose", "go"})
+	for _, k := range []string{"dry_run", "approve_consequential", "quiet", "verbose"} {
 		if _, present := seen[k]; present {
 			t.Fatalf("the quartet must never reach handler kwargs, got %#v", seen)
 		}
 	}
-	if !dry || !yes || !quiet || !verbose {
-		t.Fatalf("quartet not delivered: %v %v %v %v", dry, yes, quiet, verbose)
+	if !dry || !approve || !quiet || !verbose {
+		t.Fatalf("quartet not delivered: %v %v %v %v", dry, approve, quiet, verbose)
 	}
 }
 
@@ -792,7 +805,7 @@ func TestQuartetIsRecognizedAfterTheCommandName(t *testing.T) {
 		read func(*Context) bool
 	}{
 		{"--dry-run", (*Context).DryRun},
-		{"--yes", (*Context).Yes},
+		{"--approve-consequential", (*Context).ApproveConsequential},
 		{"--quiet", (*Context).Quiet},
 		{"--verbose", (*Context).Verbose},
 	} {
@@ -994,38 +1007,42 @@ func TestQuietDominatesVerbose(t *testing.T) {
 
 func TestConfirmDecisionGrammar(t *testing.T) {
 	app := NewApp("app", "1.0.0", "h")
-	mutating := &Command{Name: "deploy", Effect: EffectMutating}
+	grave := &Command{Name: "deploy", Effect: EffectMutating, Consequential: true}
+	plain := &Command{Name: "build", Effect: EffectMutating}
 	readOnly := &Command{Name: "status", Effect: EffectReadOnly}
 
 	if got := app.confirmDecision(readOnly, "status", true, strings.NewReader(""), discardWriter()); got != confirmProceed {
 		t.Fatal("read_only commands never prompt")
 	}
-	if got := app.confirmDecision(mutating, "deploy", false, strings.NewReader(""), discardWriter()); got != confirmNonInteractive {
+	if got := app.confirmDecision(plain, "build", false, strings.NewReader(""), discardWriter()); got != confirmProceed {
+		t.Fatal("a mutating command that is not consequential never prompts")
+	}
+	if got := app.confirmDecision(grave, "deploy", false, strings.NewReader(""), discardWriter()); got != confirmNonInteractive {
 		t.Fatal("a non-TTY stdin must produce the non-interactive outcome")
 	}
 	proceed := []string{"y\n", "Y\n", "y"}
 	for _, in := range proceed {
-		if got := app.confirmDecision(mutating, "deploy", true, strings.NewReader(in), discardWriter()); got != confirmProceed {
+		if got := app.confirmDecision(grave, "deploy", true, strings.NewReader(in), discardWriter()); got != confirmProceed {
 			t.Fatalf("%q must proceed", in)
 		}
 	}
 	decline := []string{"\n", "n\n", "yes\n", "Yes\n", "", "no\n"}
 	for _, in := range decline {
-		if got := app.confirmDecision(mutating, "deploy", true, strings.NewReader(in), discardWriter()); got != confirmDeclined {
+		if got := app.confirmDecision(grave, "deploy", true, strings.NewReader(in), discardWriter()); got != confirmDeclined {
 			t.Fatalf("%q must decline", in)
 		}
 	}
 }
 
-func TestConfirmIsSkippedByYesAndByDryRun(t *testing.T) {
+func TestConfirmIsSkippedByApprovalAndByDryRun(t *testing.T) {
 	app := NewApp("app", "1.0.0", "h")
-	mutating := &Command{Name: "deploy", Effect: EffectMutating}
-	app.lastYes = true
-	if got := app.confirmDecision(mutating, "deploy", false, strings.NewReader(""), discardWriter()); got != confirmProceed {
-		t.Fatal("--yes must skip the prompt and the non-TTY error")
+	grave := &Command{Name: "deploy", Effect: EffectMutating, Consequential: true}
+	app.lastApproveConsequential = true
+	if got := app.confirmDecision(grave, "deploy", false, strings.NewReader(""), discardWriter()); got != confirmProceed {
+		t.Fatal("--approve-consequential must skip the prompt and the non-TTY error")
 	}
-	app.lastYes, app.lastDryRun = false, true
-	if got := app.confirmDecision(mutating, "deploy", false, strings.NewReader(""), discardWriter()); got != confirmProceed {
+	app.lastApproveConsequential, app.lastDryRun = false, true
+	if got := app.confirmDecision(grave, "deploy", false, strings.NewReader(""), discardWriter()); got != confirmProceed {
 		t.Fatal("--dry-run must skip the prompt")
 	}
 }
@@ -1033,30 +1050,35 @@ func TestConfirmIsSkippedByYesAndByDryRun(t *testing.T) {
 func TestConfirmPromptIsByteExact(t *testing.T) {
 	app := NewApp("app", "1.0.0", "h")
 	var buf strings.Builder
-	app.confirmDecision(&Command{Name: "run", Effect: EffectMutating}, "release.run", true,
+	app.confirmDecision(&Command{Name: "run", Effect: EffectMutating, Consequential: true}, "release.run", true,
 		strings.NewReader("y\n"), &buf)
-	want := "about to run mutating command 'release.run'. Proceed? [y/N] "
+	want := "about to run consequential command 'release.run'. Proceed? [y/N] "
 	if buf.String() != want {
 		t.Fatalf("got %q want %q", buf.String(), want)
 	}
 }
 
-func TestMutatingPassthroughIsNotExemptFromConfirm(t *testing.T) {
+func TestConsequentialPassthroughIsNotExemptFromConfirm(t *testing.T) {
 	app := NewApp("app", "1.0.0", "h")
-	pt := &Command{Name: "pt", Effect: EffectMutating, Passthrough: true}
+	pt := &Command{Name: "pt", Effect: EffectMutating, Passthrough: true, Consequential: true}
 	if got := app.confirmDecision(pt, "pt", false, strings.NewReader(""), discardWriter()); got != confirmNonInteractive {
-		t.Fatal("a mutating passthrough prompts like any other mutating command")
+		t.Fatal("a consequential passthrough prompts like any other consequential command")
+	}
+	plain := &Command{Name: "pt", Effect: EffectMutating, Passthrough: true}
+	if got := app.confirmDecision(plain, "pt", false, strings.NewReader(""), discardWriter()); got != confirmProceed {
+		t.Fatal("a mutating passthrough that is not consequential never prompts")
 	}
 }
 
 func TestProgrammaticDispatchNeverPrompts(t *testing.T) {
-	// Test() and Call() behave as if --yes were passed: a mutating command runs
-	// straight through with no prompt and no non-TTY error.
+	// Test() and Call() behave as if --approve-consequential were passed: a
+	// consequential command runs straight through with no prompt and no
+	// non-TTY error.
 	ran := false
 	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
 		ran = true
 		return Exit(0)
-	})
+	}, WithConsequential())
 	if r := app.Test([]string{"go"}); r.ExitCode != 0 || !ran {
 		t.Fatalf("Test() must not prompt: exit=%d ran=%v stderr=%q", r.ExitCode, ran, r.Stderr)
 	}
@@ -1066,21 +1088,22 @@ func TestProgrammaticDispatchNeverPrompts(t *testing.T) {
 	}
 }
 
-func TestCtxYesReflectsTheActualFlag(t *testing.T) {
-	// Prompt suppression is a property of the dispatch path, not of ctx.Yes():
-	// Test() never prompts, but ctx.Yes() still reports whether --yes was passed.
-	var yes bool
+func TestCtxApproveConsequentialReflectsTheActualFlag(t *testing.T) {
+	// Prompt suppression is a property of the dispatch path, not of
+	// ctx.ApproveConsequential(): Test() never prompts, but the accessor still
+	// reports whether --approve-consequential was passed.
+	var approved bool
 	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
-		yes = ctx.Yes()
+		approved = ctx.ApproveConsequential()
 		return Exit(0)
-	})
+	}, WithConsequential())
 	app.Test([]string{"go"})
-	if yes {
-		t.Fatal("ctx.Yes() must be false when --yes was not passed")
+	if approved {
+		t.Fatal("ctx.ApproveConsequential() must be false when the flag was not passed")
 	}
-	app.Test([]string{"--yes", "go"})
-	if !yes {
-		t.Fatal("ctx.Yes() must be true when --yes was passed")
+	app.Test([]string{"--approve-consequential", "go"})
+	if !approved {
+		t.Fatal("ctx.ApproveConsequential() must be true when the flag was passed")
 	}
 }
 

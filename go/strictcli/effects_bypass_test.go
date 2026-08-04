@@ -178,8 +178,8 @@ func TestBypassCheckMetadataMatchesTheContract(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
 	app.RegisterCheckProvider(func() []CheckSpec { return nil })
 	specs := app.effectsBypassProvider()
-	if len(specs) != 2 {
-		t.Fatalf("expected exactly two specs, got %d", len(specs))
+	if len(specs) != 3 {
+		t.Fatalf("expected exactly three specs, got %d", len(specs))
 	}
 	want := []struct {
 		name     string
@@ -187,6 +187,7 @@ func TestBypassCheckMetadataMatchesTheContract(t *testing.T) {
 	}{
 		{"effects-bypass", "error"},
 		{"observe-allowlist-breadth", "warn"},
+		{"consequential-grant-agreement", "warn"},
 	}
 	for i, w := range want {
 		m := specs[i].meta
@@ -380,5 +381,128 @@ func deploy(ctx *Context, args map[string]interface{}) Outcome {
 `)
 	if findings := scanEffectsBypasses(dir); len(findings) != 0 {
 		t.Fatalf("expected no findings, got %#v", findings)
+	}
+}
+
+// --- §8.1's declaration vs §6.1's grants -----------------------------------
+//
+// A grant exists so a reviewer reading a preview sees WHY a dangerous step is
+// there -- the same judgement WithConsequential makes. The check fires only for
+// the two kinds that leave this process (proc_mutate runs another program,
+// net_mutate changes remote state); a file_write or a proc_spawn is local and
+// ordinarily recoverable, and flagging those would re-create the noise the
+// consequential declaration exists to remove.
+//
+// It is a WARNING, not an error, for the same reason: an error would push
+// consumers to declare consequential reflexively to clear a gate, which is the
+// exact reflex the redesign removed.
+
+func grantAgreementApp(t *testing.T, kind string, opts ...CmdOption) *App {
+	t.Helper()
+	app := NewApp("testapp", "1.0.0", "test app")
+	all := append([]CmdOption{
+		WithEffect(EffectMutating),
+		WithGrants(Grant{Name: "push", Reason: "the release engine owns remote refs", Kind: kind}),
+	}, opts...)
+	app.Command("release", "release", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, all...)
+	app.RegisterCheckProvider(func() []CheckSpec { return nil })
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: t.TempDir()} })
+	return app
+}
+
+func TestConsequentialGrantAgreementWarnsOnAProcMutateGrant(t *testing.T) {
+	app := grantAgreementApp(t, ProcMutate)
+	r := app.Test([]string{"check", "--name", "consequential-grant-agreement"})
+	if !strings.Contains(r.Stdout, "WARN") {
+		t.Fatalf("expected a WARN verdict, got %q", r.Stdout)
+	}
+	want := "command 'release' declares grant 'push' (kind proc_mutate) but is not consequential"
+	if !strings.Contains(r.Stdout, want) {
+		t.Fatalf("expected %q, got %q", want, r.Stdout)
+	}
+	if r2 := app.Test([]string{"check", "--name", "consequential-grant-agreement", "--ignore-warnings"}); r2.ExitCode != 0 {
+		t.Fatalf("expected --ignore-warnings to clear the warning, got %d", r2.ExitCode)
+	}
+}
+
+func TestConsequentialGrantAgreementWarnsOnANetMutateGrant(t *testing.T) {
+	r := grantAgreementApp(t, NetMutate).Test([]string{"check", "--name", "consequential-grant-agreement"})
+	if !strings.Contains(r.Stdout, "kind net_mutate") {
+		t.Fatalf("expected the net_mutate warning, got %q", r.Stdout)
+	}
+}
+
+func TestConsequentialGrantAgreementPassesWhenTheCommandIsConsequential(t *testing.T) {
+	r := grantAgreementApp(t, ProcMutate, WithConsequential()).
+		Test([]string{"check", "--name", "consequential-grant-agreement"})
+	if r.ExitCode != 0 || !strings.Contains(r.Stdout, "every escaping grant sits on a consequential command") {
+		t.Fatalf("exit=%d stdout=%q", r.ExitCode, r.Stdout)
+	}
+}
+
+func TestConsequentialGrantAgreementIgnoresLocalKinds(t *testing.T) {
+	for _, kind := range []string{FileWrite, ProcSpawn} {
+		r := grantAgreementApp(t, kind).Test([]string{"check", "--name", "consequential-grant-agreement"})
+		if r.ExitCode != 0 {
+			t.Fatalf("%s must not be flagged: exit=%d stdout=%q", kind, r.ExitCode, r.Stdout)
+		}
+	}
+}
+
+func TestConsequentialGrantAgreementNamesTheDottedPath(t *testing.T) {
+	app := NewApp("testapp", "1.0.0", "test app")
+	grp := app.Group("release", "release")
+	grp.Command("run", "run", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectMutating),
+		WithGrants(Grant{Name: "push", Reason: "owns remote refs", Kind: ProcMutate}))
+	app.RegisterCheckProvider(func() []CheckSpec { return nil })
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: t.TempDir()} })
+	r := app.Test([]string{"check", "--name", "consequential-grant-agreement"})
+	if !strings.Contains(r.Stdout, "command 'release.run' declares grant 'push'") {
+		t.Fatalf("expected the dotted path, got %q", r.Stdout)
+	}
+}
+
+// --- §8.1's declaration guard ----------------------------------------------
+
+func TestReadOnlyCannotBeConsequential(t *testing.T) {
+	app := NewApp("app", "1.0.0", "h")
+	want := `command "look": a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)`
+	got := mustPanic(t, func() {
+		app.Command("look", "h", func(ctx *Context, args map[string]interface{}) Outcome {
+			return Exit(0)
+		}, WithEffect(EffectReadOnly), WithConsequential())
+	})
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestConsequentialIsNotMandatory(t *testing.T) {
+	app := NewApp("app", "1.0.0", "h")
+	app.Command("build", "h", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectMutating))
+	if app.commands["build"].Consequential {
+		t.Fatal("absence must mean not consequential")
+	}
+}
+
+func TestConsequentialIsEmittedInTheSchema(t *testing.T) {
+	app := NewApp("app", "1.0.0", "h")
+	app.Command("plain", "h", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectMutating))
+	app.Command("grave", "h", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectMutating), WithConsequential())
+	if _, present := serializeCommand(app.commands["plain"])["consequential"]; present {
+		t.Fatal("consequential must be omitted when false")
+	}
+	if got := serializeCommand(app.commands["grave"])["consequential"]; got != true {
+		t.Fatalf("consequential = %v, want true", got)
 	}
 }

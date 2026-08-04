@@ -87,14 +87,70 @@ func observeAllowlistBreadthWarning(binary string) string {
 			"subcommands you actually observe.", binary, binary)
 }
 
-// effectsBypassProvider is the built-in check provider for the two
+// consequentialGrantWarning is the `consequential-grant-agreement` warning
+// (contract §8.1, §11).
+//
+// A grant exists so a reviewer reading a preview sees WHY a dangerous step is
+// there (§6.1) -- the same judgement WithConsequential makes. When the grant's
+// kind is one that leaves this process (proc_mutate runs another program,
+// net_mutate changes remote state), the two declarations should almost always
+// agree. They can legitimately disagree, so this is a warning: making it an
+// error would push consumers to declare consequential reflexively to clear a
+// gate, which is exactly the reflex the declaration exists to end.
+func consequentialGrantWarning(cmdPath, grant, kind string) string {
+	return fmt.Sprintf(
+		"command '%s' declares grant '%s' (kind %s) but is not consequential: "+
+			"a %s effect leaves this process and the framework cannot walk it "+
+			"back, and the grant already says the step is worth explaining. "+
+			"Declare the command consequential, or drop the grant if the step "+
+			"is routine.", cmdPath, grant, kind, kind)
+}
+
+// commandWithPath pairs a registered command with its dotted path.
+type commandWithPath struct {
+	path string
+	cmd  *Command
+}
+
+// collectAllCommands enumerates every non-deprecated leaf command with its
+// dotted path, sorted by path so check output is deterministic (Go map
+// iteration is not).
+func (a *App) collectAllCommands() []commandWithPath {
+	var out []commandWithPath
+	for name, cmd := range a.commands {
+		out = append(out, commandWithPath{path: name, cmd: cmd})
+	}
+	var walkGroup func(grp *Group, prefix []string)
+	walkGroup = func(grp *Group, prefix []string) {
+		for cmdName, cmd := range grp.Commands {
+			out = append(out, commandWithPath{
+				path: strings.Join(append(append([]string{}, prefix...), cmdName), "."),
+				cmd:  cmd,
+			})
+		}
+		for subName, subGrp := range grp.Groups {
+			walkGroup(subGrp, append(append([]string{}, prefix...), subName))
+		}
+	}
+	for groupName, grp := range a.groups {
+		walkGroup(grp, []string{groupName})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
+	return out
+}
+
+// effectsBypassProvider is the built-in check provider for the three
 // effects-regime lints. It is registered whenever the check system turns on, so
-// a consumer that adopts checks at all gets both without a TOML declaration:
+// a consumer that adopts checks at all gets all three without a TOML
+// declaration:
 //
 //   - effects-bypass (error) fails on any direct process, filesystem-mutation or
 //     network call REACHABLE FROM A REGISTERED COMMAND HANDLER;
 //   - observe-allowlist-breadth (warn) surfaces short proc_observe_allowlist
-//     prefixes, which authorize real execution under --dry-run.
+//     prefixes, which authorize real execution under --dry-run;
+//   - consequential-grant-agreement (warn) surfaces commands that declare a
+//     process- or network-mutating grant but do not declare themselves
+//     consequential.
 func (a *App) effectsBypassProvider() []CheckSpec {
 	impl := func(ctx CheckContext, reporter *ErrorReporter) CheckOutcome {
 		findings := scanEffectsBypasses(ctx.ProjectRoot())
@@ -123,6 +179,32 @@ func (a *App) effectsBypassProvider() []CheckSpec {
 		return reporter.Passed("no single-token proc_observe_allowlist prefixes")
 	}
 
+	grantAgreement := func(ctx CheckContext, reporter *WarnReporter) CheckOutcome {
+		// Only the kinds that leave this process. A file_write or a proc_spawn
+		// is local and ordinarily recoverable; a proc_mutate runs another
+		// program and a net_mutate changes remote state, and neither can be
+		// walked back by the framework. Widening this to every grant kind would
+		// re-create the noise the consequential declaration exists to remove.
+		found := 0
+		for _, cp := range a.collectAllCommands() {
+			if cp.cmd.Consequential {
+				continue
+			}
+			for _, g := range cp.cmd.Grants {
+				if g.Kind != ProcMutate && g.Kind != NetMutate {
+					continue
+				}
+				found++
+				reporter.Warn(consequentialGrantWarning(cp.path, g.Name, g.Kind))
+			}
+		}
+		if found > 0 {
+			return reporter.Found(fmt.Sprintf(
+				"%d grant(s) on non-consequential command(s)", found))
+		}
+		return reporter.Passed("every escaping grant sits on a consequential command")
+	}
+
 	return []CheckSpec{
 		NewErrorCheckSpec(CheckSpecMeta{
 			Name:         "effects-bypass",
@@ -142,6 +224,15 @@ func (a *App) effectsBypassProvider() []CheckSpec {
 			NeedsNetwork: false,
 			DependsOn:    []string{},
 		}, breadth),
+		NewWarnCheckSpec(CheckSpecMeta{
+			Name:         "consequential-grant-agreement",
+			Tags:         []string{"effects", "quality"},
+			Severity:     "warn",
+			Fast:         true,
+			Pure:         true,
+			NeedsNetwork: false,
+			DependsOn:    []string{},
+		}, grantAgreement),
 	}
 }
 

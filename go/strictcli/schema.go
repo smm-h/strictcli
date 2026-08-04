@@ -154,6 +154,11 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 		// to omit against.
 		"effect": cmd.Effect,
 	}
+	// consequential: NOT mandatory; absence means "not consequential"
+	// (contract §8.1, §13), so it is omitted when false.
+	if cmd.Consequential {
+		m["consequential"] = true
+	}
 	// passthrough: default false (omit when false)
 	if cmd.Passthrough {
 		m["passthrough"] = true

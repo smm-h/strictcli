@@ -219,7 +219,13 @@ type Command struct {
 	// Effect is the mandatory classification: EffectReadOnly or EffectMutating.
 	// There is no default -- a command registered without WithEffect is a
 	// registration-time hard error.
-	Effect             string
+	Effect string
+	// Consequential is declared per-command (contract §8.1) and is NOT
+	// mandatory -- absence means "not consequential". It is a property of the
+	// COMMAND, deliberately not named after the framework's reaction to it, so
+	// other behaviours can hang off it later. Today the framework prompts for
+	// exactly these commands.
+	Consequential      bool
 	Grants             []Grant
 	Forwarding         *Forwarding
 	flags              []Flag
@@ -383,10 +389,10 @@ type App struct {
 
 	// The framework-owned reserved quartet, extracted by the position-aware
 	// pre-scan and delivered on the Context (never as handler kwargs).
-	lastDryRun  bool
-	lastYes     bool
-	lastQuiet   bool
-	lastVerbose bool
+	lastDryRun               bool
+	lastApproveConsequential bool
+	lastQuiet                bool
+	lastVerbose              bool
 
 	// exitHook runs immediately before Run's terminal os.Exit. Test-only
 	// surface; see SetExitHook.
@@ -791,13 +797,31 @@ func WithInteractive() CmdOption {
 // inferred -- a command registered without it is a registration-time hard
 // error, and so is a value that is neither constant.
 //
-// A mutating command is subject to the confirm protocol, participates in dry
-// mode, and may call the mutating members of ctx.Effects(). A read_only command
-// never prompts, and calling any mutating member is a hard error at call time.
+// A mutating command participates in dry mode and may call the mutating
+// members of ctx.Effects(). A read_only command may not, and calling any
+// mutating member is a hard error at call time. Classification does NOT decide
+// whether a command prompts -- WithConsequential does (§8).
 func WithEffect(effect string) CmdOption {
 	return func(c *Command) {
 		c.Effect = effect
 		c.effectSet = true
+	}
+}
+
+// WithConsequential declares that a command's effects are worth interrupting
+// someone for. It is the ONLY thing that makes the framework prompt (§8.1): a
+// plain mutating command never does.
+//
+// It is deliberately not mandatory. Classification answers "should a dry run
+// record rather than execute?", which almost everything that touches anything
+// answers yes to; consequentiality is a separate, much rarer judgement, and
+// making it mandatory would push every registration to answer it reflexively.
+//
+// Declaring it on a read_only command is a registration-time hard error: a
+// command that changes nothing has nothing to confirm.
+func WithConsequential() CmdOption {
+	return func(c *Command) {
+		c.Consequential = true
 	}
 }
 
@@ -1182,6 +1206,9 @@ func validateFlagConfig(f *Flag) {
 	// Short names and positional arg names are unaffected.
 	if reservedFrameworkFlagNames[f.Name] {
 		panic(errFlagNameReservedByFramework(f.Name))
+	}
+	if bannedFlagNames[f.Name] {
+		panic(errFlagNameYesBanned)
 	}
 	if strings.HasPrefix(f.Name, "no-") {
 		panic(errFlagNoPrefixReserved(f.Name))
@@ -1897,6 +1924,9 @@ func (a *App) GlobalFlag(f Flag) {
 	if reservedFrameworkFlagNames[f.Name] {
 		panic(errFlagNameReservedByFramework(f.Name))
 	}
+	if bannedFlagNames[f.Name] {
+		panic(errFlagNameYesBanned)
+	}
 	// Check reserved names
 	if reservedGlobalFlagNames[f.Name] {
 		panic(errGlobalFlagNameReserved(f.Name))
@@ -2111,7 +2141,7 @@ func (a *App) Run() {
 			reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
 		// The confirm protocol fires only on the real CLI path -- and a mutating
 		// PASSTHROUGH is not exempt.
-		a.confirmMutating(pr.cmd, pr.cmdPath)
+		a.confirmConsequential(pr.cmd, pr.cmdPath)
 		code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, func() int {
 			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		})
@@ -2121,7 +2151,7 @@ func (a *App) Run() {
 
 	ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic),
 		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
-	a.confirmMutating(pr.cmd, pr.cmdPath)
+	a.confirmConsequential(pr.cmd, pr.cmdPath)
 	code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, func() int {
 		outcome := pr.cmd.Handler(ctx, pr.kwargs)
 		if outcome.data != nil {
@@ -2141,10 +2171,10 @@ func (a *App) Run() {
 // reservedFlagState snapshots the framework-owned quartet for one dispatch.
 func (a *App) reservedFlagState() reservedFlags {
 	return reservedFlags{
-		dryRun:  a.lastDryRun,
-		yes:     a.lastYes,
-		quiet:   a.lastQuiet,
-		verbose: a.lastVerbose,
+		dryRun:               a.lastDryRun,
+		approveConsequential: a.lastApproveConsequential,
+		quiet:                a.lastQuiet,
+		verbose:              a.lastVerbose,
 	}
 }
 
@@ -2320,7 +2350,7 @@ type preScanResult struct {
 	dumpSchema  bool
 	serveMCP    bool
 	hermetic    bool          // --hermetic: skip config loading and env var resolution
-	reserved    reservedFlags // --dry-run/--yes/--quiet/--verbose
+	reserved    reservedFlags // the framework-owned quartet
 	configPath  string        // value from --config <path> or --config=<path>
 	err         string        // non-empty on error (e.g. missing value, config on disabled app)
 	cleanedArgv []string      // argv with the reserved tokens stripped out
@@ -2331,10 +2361,10 @@ type preScanResult struct {
 // both `app --dry-run cmd` and `app cmd --dry-run` work. Contrast --hermetic,
 // --config, --dump-schema and --mcp, which stay pre-command-only.
 var reservedQuartetTokens = map[string]func(*reservedFlags){
-	"--dry-run": func(r *reservedFlags) { r.dryRun = true },
-	"--yes":     func(r *reservedFlags) { r.yes = true },
-	"--quiet":   func(r *reservedFlags) { r.quiet = true },
-	"--verbose": func(r *reservedFlags) { r.verbose = true },
+	"--dry-run":               func(r *reservedFlags) { r.dryRun = true },
+	"--approve-consequential": func(r *reservedFlags) { r.approveConsequential = true },
+	"--quiet":                 func(r *reservedFlags) { r.quiet = true },
+	"--verbose":               func(r *reservedFlags) { r.verbose = true },
 }
 
 // preScanReservedFlags scans argv for the framework-owned reserved flags.
@@ -2586,7 +2616,7 @@ func (a *App) doParse(argv []string) parseResult {
 
 	// Record the reserved quartet for the dispatch ctx.
 	a.lastDryRun = preScan.reserved.dryRun
-	a.lastYes = preScan.reserved.yes
+	a.lastApproveConsequential = preScan.reserved.approveConsequential
 	a.lastQuiet = preScan.reserved.quiet
 	a.lastVerbose = preScan.reserved.verbose
 
@@ -3125,6 +3155,11 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	}
 	if cmd.Effect != EffectReadOnly && cmd.Effect != EffectMutating {
 		panic(errCommandEffectInvalid(name, cmd.Effect))
+	}
+	// A read_only command cannot be consequential: it changes nothing, so
+	// there is nothing to interrupt anyone for (contract §8.1).
+	if cmd.Consequential && cmd.Effect == EffectReadOnly {
+		panic(errCommandReadOnlyConsequential(name))
 	}
 	cmd.Grants = validateGrants(name, cmd.Grants)
 	if cmd.Forwarding != nil && strings.TrimSpace(cmd.Forwarding.Reason) == "" {

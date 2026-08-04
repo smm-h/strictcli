@@ -1124,8 +1124,14 @@ func errJsonSchemaIsGroup(commandPath string) string {
 // raised from validateFlagConfig (the same site as the 'force' ban) and
 // additionally from the global-flag validation path.
 func errFlagNameReservedByFramework(name string) string {
-	return fmt.Sprintf("flag name '%s' is reserved by the framework (dry-run, yes, quiet, verbose)", name)
+	return fmt.Sprintf("flag name '%s' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)", name)
 }
+
+// errFlagNameYesBanned is the outright `yes` ban (§12.1). `yes` owns no
+// framework flag any more -- --approve-consequential replaced --yes -- but a
+// private --yes would restate it in a spelling that IS muscle memory, which is
+// exactly what the rename removed.
+const errFlagNameYesBanned = "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential"
 
 func errCommandEffectMissing(name string) string {
 	return fmt.Sprintf("command %q: effect classification is required (effect=\"read_only\" or effect=\"mutating\")", name)
@@ -1137,6 +1143,14 @@ func errCommandEffectInvalid(name string, value string) string {
 
 func errDeprecatedCommandEffect(name string) string {
 	return fmt.Sprintf("deprecated command %q: effect classification does not apply (a deprecated command has no handler)", name)
+}
+
+// errCommandReadOnlyConsequential is §8.1's declaration guard: classification
+// answers "should a dry run record rather than execute?" and consequential
+// answers "are these effects worth interrupting someone for?". A command that
+// changes nothing has no effects to weigh.
+func errCommandReadOnlyConsequential(name string) string {
+	return fmt.Sprintf("command %q: a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)", name)
 }
 
 // errHandlerVarKeywordUndeclared exists for catalog parity only. Guard v2's
@@ -1271,10 +1285,10 @@ func errDryRunAborted(step int, cmd string) string {
 // effects.go — the confirm protocol (parse-time)
 // ---------------------------------------------------------------------------
 
-func promptConfirmMutating(name string) string {
-	return fmt.Sprintf("about to run mutating command '%s'. Proceed? [y/N] ", name)
+func promptConfirmConsequential(name string) string {
+	return fmt.Sprintf("about to run consequential command '%s'. Proceed? [y/N] ", name)
 }
 
-const errConfirmNonInteractive = "error: stdin is not interactive; pass --yes to confirm"
+const errConfirmNonInteractive = "error: stdin is not interactive; pass --approve-consequential to confirm"
 
 const errConfirmDeclined = "aborted"
