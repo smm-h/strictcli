@@ -73,6 +73,11 @@
       "type": "doc"
     },
     {
+      "path": "typescript-src-checks-effects_bypass.md",
+      "title": "typescript/src/checks/effects_bypass",
+      "type": "doc"
+    },
+    {
       "path": "typescript-src-checks-framework.md",
       "title": "typescript/src/checks/framework",
       "type": "doc"
@@ -98,6 +103,11 @@
       "type": "doc"
     },
     {
+      "path": "typescript-src-confirm.md",
+      "title": "typescript/src/confirm",
+      "type": "doc"
+    },
+    {
       "path": "typescript-src-context.md",
       "title": "typescript/src/context",
       "type": "doc"
@@ -105,6 +115,16 @@
     {
       "path": "typescript-src-describe.md",
       "title": "typescript/src/describe",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-effects.md",
+      "title": "typescript/src/effects",
+      "type": "doc"
+    },
+    {
+      "path": "typescript-src-effects_exec.md",
+      "title": "typescript/src/effects_exec",
       "type": "doc"
     },
     {
@@ -204,5 +224,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-07-29T16:12:33.673514+00:00"
+  "last_gen": "2026-08-04T08:29:47.939982+00:00"
 }

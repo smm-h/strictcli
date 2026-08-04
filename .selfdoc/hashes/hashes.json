@@ -58,6 +58,11 @@
     "description": "3e20686ddad5333619a8270229f5647b6925846f3c5470d281a086d2329795b9",
     "source_docstring": "45d7184e0dae782ba61d897398783a130fec47d4c706792342efa285f7be88c1"
   },
+  "en/typescript-src-checks-effects_bypass.md": {
+    "content": "22088d7632043cdf3a82cbdd445335174e0b615db1203694406eef96574184df",
+    "description": "ec276f5c65e97d9c0cea97b476ee3a669da207e895480aafd08a8e64015120c2",
+    "source_docstring": "ce6e72111bba5575a72dd52bdb9e4be034d5e95ef5522e1d283ee65fa21d8b15"
+  },
   "en/typescript-src-checks-framework.md": {
     "content": "139bdeb1dbb42a20f5d00c70ea54daa15405076ce3a1cd1b79d136fa53f402b1",
     "description": "939759f73ce2704fe9ce2000e5c8b07a353865a52987ef4f964de8e53332566b",
@@ -83,6 +88,11 @@
     "description": "c300f64decc62f49798364d5b4d9223a2376ce1047a1cb3364921ece0739ee32",
     "source_docstring": "a0a6816d96ec0c12bc6357d9172283ba883d8a4f9384993949afe99123eac938"
   },
+  "en/typescript-src-confirm.md": {
+    "content": "a3c1294343d2e46dab44d3e83e37c8a2b79f9779d4e6baef438100d29aeb5183",
+    "description": "afbb4509bb9e0b091cb49a2e55a4f46ce1beaf27773e30e0e5ccb6ad83c31c74",
+    "source_docstring": "4a172eb0519fb6bbea80ddfeab29fe1b1620fbd7743b864ae8f60488cb278a4f"
+  },
   "en/typescript-src-context.md": {
     "content": "b1748e9063f5023a87169894b57d2b1918d87ff06881fb4d5da989c5902ade40",
     "description": "ff9b75b1da14598214806628e0cde50c8fd96fa907dbf8a4afc0ac8f2c5677ef",
@@ -92,6 +102,16 @@
     "content": "a0cf0dee376ad641aca94533735fdd9e1a7399c34ff11aa34248156809681af0",
     "description": "f5d2283f7250ff02e982ddc12b3b56343d365e2cd9d269edc157fcf625ce46b7",
     "source_docstring": "b275471ced651f5a1e1f5e70a29fdebb526fe13c51dbed19bdce57eb5b1e7628"
+  },
+  "en/typescript-src-effects.md": {
+    "content": "8ed68e55d013699eeb44c753a2c0e052088654ab5ec3403576caa716c67f1624",
+    "description": "e4dccc91e80de4f0d7798e31527e9a63eb5c576d9c78fcf5bc25bcd4321cf21c",
+    "source_docstring": "0278020a13cd4fb894b3d6502c0e5da2159dd7db1d80b78eae9daaca642378de"
+  },
+  "en/typescript-src-effects_exec.md": {
+    "content": "1ce9c6a8d879678df13eb0f8ee0c7143c31b7796b2b078075c98fde4c9aa9706",
+    "description": "f88373bdf7c86e78e2b38e360a830ee6b47cb94b55447fcd0922b9334d020290",
+    "source_docstring": "6d4ed6c7d1c2de64fc5d046e99a05519d3647415a315a5f9fa90914b5c78b04c"
   },
   "en/typescript-src-env.md": {
     "content": "83dd97bbffef8158329e1522f094497f2f360d1819a3f308710cd6860bbbf067",

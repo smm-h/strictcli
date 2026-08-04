@@ -58,8 +58,11 @@ Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface
 - **typescript/src/app** (`typescript/src/app.ts`): Registration and validation: createApp plus the App and Group classes storing commands, groups, deprecated entries, and global flags in insertion order.
 - **typescript/src/atprefix** (`typescript/src/atprefix.ts`): @-prefix resolution for string flag values, mirroring Go resolveAtPrefix (parse.go) and Python _resolve_at_prefix across the three supported @-forms.
 - **typescript/src/config** (`typescript/src/config.ts`): Config subsystem: file loading (JSON + TOML), value coercion, config fields, the --config/XDG path model, and five auto-registered `config` subcommands.
+- **typescript/src/confirm** (`typescript/src/confirm.ts`): The framework-owned confirm protocol for `mutating` commands.
 - **typescript/src/context** (`typescript/src/context.ts`): Structured output context for command handlers, mirroring Go's Context (context.go) with Python's Context as the divergence ground truth.
 - **typescript/src/describe** (`typescript/src/describe.ts`): describe.ts -- dev-only self-dump of the TS public API surface, shape- aligned with the conformance/describe_go/main.go reference dumper's output.
+- **typescript/src/effects** (`typescript/src/effects.ts`): The effects regime: the `ctx.effects` handle, `Unsettled` carriers, dry mode's would-do log, and the runtime seal that makes a preview honest.
+- **typescript/src/effects_exec** (`typescript/src/effects_exec.ts`): Synchronous execution primitives for the two effect methods Node cannot perform synchronously on the main thread: `spawn` (a concurrent child whose exit status must be readable later, synchronously, through `Spawned.wait()`) and `http`.
 - **typescript/src/env** (`typescript/src/env.ts`): Env var value resolution for a single flag, mirroring the env-resolution blocks of Go parseCommand/extractGlobalFlags and Python's step-4 loops.
 - **typescript/src/errors** (`typescript/src/errors.ts`): errors.ts centralizes every user-facing error and panic message template used across the strictcli package, mirroring go/strictcli/errors.go one-to-one.
 - **typescript/src/factories** (`typescript/src/factories.ts`): Declaration factories: flag and arg descriptors, dependency descriptors, and command carriers, all built through `const`-typed option objects.
@@ -84,6 +87,7 @@ Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface
 
 - **typescript/src/checks/cmd** (`typescript/src/checks/cmd.ts`): The auto-registered `check` command plus the human-readable and JSON result formatters, dispatching the list, help, no-match, dry-run, and run modes.
 - **typescript/src/checks/coverage** (`typescript/src/checks/coverage.ts`): CLI test-coverage instrumentation: per-process shard files recording which commands app.test() exercised, plus the built-in cli-test-coverage provider.
+- **typescript/src/checks/effects_bypass** (`typescript/src/checks/effects_bypass.ts`): The built-in `effects-bypass` check provider.
 - **typescript/src/checks/framework** (`typescript/src/checks/framework.ts`): Check framework core: sealed outcomes, reporters, definitions, checks.toml parsing, and the registration/double-entry machinery.
 - **typescript/src/checks/provider** (`typescript/src/checks/provider.ts`): Check providers: the TOML-less way to add checks, where a provider returns a list of fully-formed check specs (metadata plus a ceiling-typed impl).
 - **typescript/src/checks/runner** (`typescript/src/checks/runner.ts`): Check runner: filtering (tag DSL + name glob), DAG-ordered execution with dependency pull-in, cycle detection, and dependency-failure cascade-skips.
