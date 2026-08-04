@@ -1,8 +1,8 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "0fee9f6910904b991b68adf4a31906288f8ef07167674d65f5407afd97fb1b05",
-    "description": "ca260eacd6a69d905989e8047efc42fa1c33f5344f7356c8a65f753ca69c8d5a"
+    "content": "21467a3b453a1671a4664aaa39d91534d7547f845fb1894e59517a626ac4dc65",
+    "description": "7b69c51aa2428859cc1cd03c82ff482083149fa8faff8dece377c423010b5554"
   },
   "en/conformance.md": {
     "content": "60eebf0ec1c95f9ebf982d11cda70548358001bcb129352d35056ad3fd578abb",
@@ -90,7 +90,7 @@
   },
   "en/typescript-src-confirm.md": {
     "content": "a3c1294343d2e46dab44d3e83e37c8a2b79f9779d4e6baef438100d29aeb5183",
-    "description": "afbb4509bb9e0b091cb49a2e55a4f46ce1beaf27773e30e0e5ccb6ad83c31c74",
+    "description": "9d008566ed7edaad4e503193cae519ce1ccd747291f6514ccc065f275797babf",
     "source_docstring": "4a172eb0519fb6bbea80ddfeab29fe1b1620fbd7743b864ae8f60488cb278a4f"
   },
   "en/typescript-src-context.md": {
