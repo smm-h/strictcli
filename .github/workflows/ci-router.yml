@@ -27,8 +27,13 @@ jobs:
             - 'python/**'
             - 'python/**'
             - 'LICENSE'
-          go-strictcli: 'go/**'
-          ts-strictcli: 'typescript/**'
+            - '.rlsbl-monorepo/releasables/py-strictcli/CHANGELOG.md'
+          go-strictcli:
+            - 'go/**'
+            - '.rlsbl-monorepo/releasables/go-strictcli/CHANGELOG.md'
+          ts-strictcli:
+            - 'typescript/**'
+            - '.rlsbl-monorepo/releasables/ts-strictcli/CHANGELOG.md'
           conformance:
             - 'conformance/**'
             - 'python/**'

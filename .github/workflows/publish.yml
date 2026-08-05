@@ -24,8 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: read
+      contents: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
       GATE_TIMEOUT_MINUTES: '20'
       GATE_GRACE_MINUTES: '5'
       GATE_POLL_SECONDS: '15'
@@ -148,7 +150,8 @@ jobs:
           if [ "$total" -eq 0 ]; then
             if [ "$(now)" -ge "$grace_deadline" ]; then
               echo "::error::Publish gate: no CI check runs matching $CI_CHECK_REGEX appeared on $sha within $GATE_GRACE_MINUTES minutes."
-              echo "A scaffolded repository always has a CI workflow, so the release commit must produce CI check runs."
+              echo "A scaffolded repository always has a CI workflow, and rlsbl verifies CI on this exact commit BEFORE tagging it, so check runs must exist here."
+              echo "Their absence means the check runs were deleted, the commit resolution is wrong, or this tag was created outside rlsbl."
               echo "If CI jobs were renamed, update CI_CHECK_REGEX in this workflow's gate job to match the new names."
               exit 1
             fi
@@ -176,13 +179,18 @@ jobs:
             while IFS= read -r conclusion; do
               case "$conclusion" in
                 failure|timed_out)
-                  echo "CI concluded '$conclusion' on the release commit. Fix the failure, re-run the CI workflow to green on this exact commit (gh run rerun <run-id>), then re-dispatch this publish workflow at the tag ref: gh workflow run <publish workflow> --ref $GITHUB_REF_NAME"
+                  echo "CI concluded '$conclusion' on the release commit."
+                  echo "rlsbl tags and releases a commit only AFTER its CI has gone green, so reaching this branch means one of: CI was re-run on an already-released commit and regressed, a required check was added after the release, or this tag/Release was created outside rlsbl."
+                  echo "Do NOT re-dispatch this publish workflow expecting a different answer -- a failure baked into the code at this commit fails identically every time, and there is no way to make this tag green."
+                  echo "Remedy: fix forward on the release branch and cut a NEW release with 'rlsbl release run' (its own CI gate must go green before it is tagged), then mark this one with 'rlsbl release deprecate <version>'."
                   ;;
                 cancelled)
-                  echo "A CI check run was CANCELLED. A cancelled run proves nothing about the commit, so the gate treats it as a hard failure instead of waiting for a conclusion that will never come. Re-run the cancelled CI workflow (gh run rerun <run-id>), then re-dispatch this publish workflow at the tag ref."
+                  echo "A CI check run was CANCELLED. A cancelled run proves nothing about the commit, so the gate treats it as a hard failure instead of waiting for a conclusion that will never come."
+                  echo "Remedy: re-run the cancelled CI workflow on this exact commit (gh run rerun <run-id>). If it concludes success, re-dispatch this publish workflow at the tag ref: gh workflow run <publish workflow> --ref $GITHUB_REF_NAME"
                   ;;
                 skipped)
-                  echo "A CI check run matching the filter was SKIPPED. The gate cannot treat a skipped check as passing: this project's own CI must actually run on the release commit. Check paths filters and job conditions, re-run CI on this commit, then re-dispatch this publish workflow at the tag ref."
+                  echo "A CI check run matching the filter was SKIPPED. The gate cannot treat a skipped check as passing: this project must actually run its own CI on the release commit."
+                  echo "Remedy: check paths filters and job conditions so CI runs for this project, re-run CI on this commit, then re-dispatch this publish workflow at the tag ref."
                   ;;
                 *)
                   echo "CI check concluded '$conclusion' (not success). The gate only proceeds when every matching check concluded success."
@@ -229,6 +237,49 @@ jobs:
     defaults:
       run:
         working-directory: python
+  go-strictcli-go:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.tag || github.event.release.tag_name }}
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: go/go.mod
+    - name: Verify module is available on proxy
+      env:
+        RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      run: |
+        # The module path is baked at scaffold time from this module's
+        # go.mod. It is the full import path -- including the monorepo
+        # subdirectory when the module lives in one -- so `go list -m` asks
+        # the proxy for the right module. The proxy resolves subdir modules
+        # via their companion subdir tag (<subdir>/vX.Y.Z) automatically, so
+        # no manual tag construction is needed here.
+        MODULE="github.com/smm-h/strictcli/go"
+
+        # RELEASE_TAG is resolved via step env (never inlined into the
+        # script -- inputs.tag is user-controlled). Normalise it to a bare
+        # version. Three tag shapes reach this step and all reduce to the
+        # trailing vX.Y.Z:
+        #   - plain standalone:        v0.22.0
+        #   - releasable-format:       go-strictcli@v0.22.0
+        #   - monorepo subdir member:  <subdir>/v0.22.0
+        # Strip the releasable "<name>@" prefix, then the subdir "<path>/"
+        # prefix, then the leading "v".
+        TAG="${RELEASE_TAG}"
+        TAG="${TAG##*@}"
+        TAG="${TAG##*/}"
+        VERSION="${TAG#v}"
+
+        GOPROXY=proxy.golang.org go list -m "${MODULE}@v${VERSION}"
+    permissions:
+      contents: read
+    if: startsWith(inputs.tag || github.ref_name, 'go-strictcli@v')
+    defaults:
+      run:
+        working-directory: go
   ts-strictcli-npm:
     needs: gate
     runs-on: ubuntu-latest
@@ -240,7 +291,6 @@ jobs:
       with:
         node-version: 24
         registry-url: https://registry.npmjs.org
-    - run: npm ci
     - name: Install gitleaks
       run: |
         GITLEAKS_VERSION=8.24.3
@@ -248,6 +298,8 @@ jobs:
     - name: Scan source for secrets
       run: |
         gitleaks dir .
+    - name: Install dependencies
+      run: npm ci
     - name: Check if already published
       id: check-npm
       run: |

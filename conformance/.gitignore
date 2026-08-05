@@ -19,3 +19,6 @@ tmp*.py
 .venv/
 
 .rlsbl-monorepo/lock
+
+build/
+target/

@@ -16,3 +16,6 @@ dist/
 strictcli.test
 
 .rlsbl-monorepo/lock
+
+build/
+target/
