@@ -38,14 +38,37 @@ const app = createApp({
 
 ## Defining Commands
 
-Commands are built with `defineCommand` and registered on the app via
-`app.command()`. Every command requires a `help` string and a `handler`
+Commands are built with one of the **twin factories** and registered on the app
+via `app.command()`. Every command requires a `help` string and a `handler`
 function. The handler receives a fully typed `args` object whose shape is
 inferred from the flag and arg declarations, plus a `Context` for structured
 output.
 
-```typescript
-import { createApp, defineCommand, t, flag } from "strictcli";
+There is no single `defineCommand`: classification is mandatory and has no
+default, so the factory name *is* the classification.
+
+| Factory | Classification | Handler `ctx` |
+|---------|---------------|---------------|
+| `defineReadOnlyCommand(...)` | `read_only` | `ReadOnlyContext` |
+| `defineMutatingCommand(...)` | `mutating` | `MutatingContext` |
+
+A `read_only` command changes nothing: it never prompts, cannot be declared
+consequential, and its handler's `ctx` is narrowed so that
+`ctx.effects.write(...)` is a **compile error**. A `mutating` command
+participates in `--dry-run`, where its effects are recorded instead of
+performed, and may call every member of the effects handle.
+
+Classification answers one question -- "should a dry run record this rather than
+perform it?" It is deliberately **not** the same question as "is this dangerous
+enough to interrupt someone for?", which is what
+[`consequential`](#consequential-commands-and-the-confirm-protocol) answers. A
+mutating command does not prompt unless it also sets `consequential: true`.
+
+Passthrough commands are classified through the same scheme, by the same
+morphology: `readOnlyPassthrough(...)` and `mutatingPassthrough(...)`.
+
+```typescript validate
+import { createApp, defineReadOnlyCommand, t, flag } from "strictcli";
 
 const app = createApp({
   name: "mytool",
@@ -54,7 +77,7 @@ const app = createApp({
 });
 
 app.command(
-  defineCommand("greet", {
+  defineReadOnlyCommand("greet", {
     help: "Greet someone by name",
     flags: {
       name: flag("name", t.str, { help: "Who to greet" }),
@@ -102,7 +125,7 @@ inference for handler arguments without manual annotations.
 | Carrier | CLI syntax | TypeScript type | Notes |
 |---------|-----------|----------------|-------|
 | `t.str` | `--name value` | `string` | |
-| `t.bool` | `--verbose` / `--no-verbose` | `boolean` | Requires a default; negation via `--no-` prefix |
+| `t.bool` | `--cache` / `--no-cache` | `boolean` | Requires a default; negation via `--no-` prefix |
 | `t.int` | `--count 42` | `bigint` | Strict parsing: no leading zeros, 64-bit signed bounds |
 | `t.float` | `--rate 3.14` | `number` | Rejects NaN and Inf |
 | `t.list(t.str)` | `--tag a --tag b` | `string[]` | Repeat the flag for each element |
@@ -118,9 +141,9 @@ by setting `negatable: false` for pure presence flags.
 
 ```typescript
 flags: {
-  verbose: flag("verbose", t.bool, {
-    help: "Enable verbose output",
-    default: false,
+  cache: flag("cache", t.bool, {
+    help: "Reuse the build cache",
+    default: true,
   }),
   watch: flag("watch", t.bool, {
     help: "Watch mode",
@@ -219,9 +242,9 @@ appear alongside long flags in help output.
 
 ```typescript
 flags: {
-  verbose: flag("verbose", t.bool, {
-    help: "Verbose output",
-    short: "v",
+  recursive: flag("recursive", t.bool, {
+    help: "Recurse into subdirectories",
+    short: "r",
     default: false,
   }),
   output: flag("output", t.str, {
@@ -231,7 +254,7 @@ flags: {
 }
 ```
 
-Usage: `-v`, `-o file.txt`
+Usage: `-r`, `-o file.txt`
 
 ### Environment Variables
 
@@ -250,7 +273,7 @@ const app = createApp({
 });
 
 app.command(
-  defineCommand("deploy", {
+  defineMutatingCommand("deploy", {
     help: "Deploy the app",
     flags: {
       target: flag("target", t.str, {
@@ -291,7 +314,7 @@ help text.
 import { arg } from "strictcli";
 
 app.command(
-  defineCommand("copy", {
+  defineMutatingCommand("copy", {
     help: "Copy a file",
     args: [
       arg("src", t.str, { help: "Source file" }),
@@ -342,7 +365,7 @@ const pagination = flagSet("pagination", {
 });
 
 app.command(
-  defineCommand("list-users", {
+  defineReadOnlyCommand("list-users", {
     help: "List all users",
     flagSets: [pagination],
     handler: (args, ctx) => {
@@ -365,7 +388,7 @@ flag was provided.
 import { mutexGroup } from "strictcli";
 
 app.command(
-  defineCommand("fetch", {
+  defineReadOnlyCommand("fetch", {
     help: "Fetch data from a source",
     mutex: [
       mutexGroup({
@@ -395,21 +418,21 @@ flag when a trigger is provided).
 import { requires, coRequired, implies } from "strictcli";
 
 app.command(
-  defineCommand("deploy", {
+  defineMutatingCommand("deploy", {
     help: "Deploy the service",
     flags: {
       target: flag("target", t.str, { help: "Deploy target" }),
       region: flag("region", t.str, { help: "AWS region" }),
-      dry_run: flag("dry-run", t.bool, { help: "Dry run mode", default: false }),
-      confirm: flag("confirm", t.bool, { help: "Confirm deploy", default: false }),
+      canary: flag("canary", t.bool, { help: "Canary rollout first", default: false }),
+      wait: flag("wait", t.bool, { help: "Block until settled", default: false }),
     },
     dependencies: [
       // --target requires --region to also be provided
       requires({ flag: "target", dependsOn: "region" }),
       // --target and --region must appear together
       coRequired(["target", "region"]),
-      // When --dry-run is set, auto-set --confirm to true
-      implies({ flag: "dry-run", implies: "confirm", value: true }),
+      // When --canary is set, auto-set --wait to true
+      implies({ flag: "canary", implies: "wait", value: true }),
     ],
     handler: (args, ctx) => {
       ctx.info(`Deploying to ${args.target} in ${args.region}`);
@@ -435,7 +458,7 @@ const app = createApp({
 const dns = app.group("dns", { help: "Manage DNS records" });
 
 dns.command(
-  defineCommand("list", {
+  defineReadOnlyCommand("list", {
     help: "List all DNS records",
     handler: (args, ctx) => {
       ctx.info("Listing DNS records...");
@@ -446,7 +469,7 @@ dns.command(
 const zone = dns.group("zone", { help: "Manage DNS zones" });
 
 zone.command(
-  defineCommand("create", {
+  defineMutatingCommand("create", {
     help: "Create a new DNS zone",
     flags: {
       name: flag("name", t.str, { help: "Zone name" }),
@@ -501,9 +524,9 @@ const app = createApp({
   version: "0.1.0",
   help: "My tool",
   flags: {
-    verbose: flag("verbose", t.bool, {
-      help: "Enable verbose output",
-      default: false,
+    color: flag("color", t.bool, {
+      help: "Colorize output",
+      default: true,
     }),
     settings: flag("settings", t.str, {
       help: "Settings file path",
@@ -522,11 +545,14 @@ directly to the handler. They are useful for wrapping external tools where the
 argument format is not known in advance. Passthrough commands cannot have flags,
 args, flag sets, or mutex groups.
 
+Passthroughs use the same twin morphology as commands -- there is no bare
+`passthrough` factory:
+
 ```typescript
-import { passthrough } from "strictcli";
+import { mutatingPassthrough } from "strictcli";
 
 app.command(
-  passthrough("exec", {
+  mutatingPassthrough("exec", {
     help: "Execute a command in the container",
     handler: (pt, ctx) => {
       ctx.info(`Running: ${pt.args.join(" ")}`);
@@ -538,7 +564,13 @@ app.command(
 );
 ```
 
-Usage: `mytool exec ls -la /tmp` -- the handler receives `["-la", "/tmp"]` (note: `ls` is consumed as part of the routing to `exec`; all tokens after the passthrough command name are raw args -- correction: all tokens after `exec` are in `pt.args`, so `["ls", "-la", "/tmp"]`).
+Usage: `mytool exec ls -la /tmp` -- all tokens after `exec` land in `pt.args`, so the handler receives `["ls", "-la", "/tmp"]`.
+
+A passthrough may declare `consequential: true` like any other command; it is
+not exempt from the prompt, because the framework knows *less* about what is
+about to happen there, not more. Because its args are forwarded to the child
+byte-for-byte, the reserved quartet is not scanned after the passthrough
+command's name: `mytool exec deploy --dry-run` passes `--dry-run` to the child.
 
 ## Flag Naming Conventions
 
@@ -549,15 +581,134 @@ conversion for handler args.
 
 - **Bare `--force` is banned.** Use qualified names: `--force-overwrite`, `--force-delete`.
 - **`--no-` prefix is reserved.** Flag names cannot start with `no-`. The `--no-` prefix is auto-generated for negatable boolean flags.
-- **Dashes to underscores.** Flags with dashes (`--dry-run`) become underscore keys in the handler args (`args.dry_run`). The flag map key must also use the underscore form.
+- **Dashes to underscores.** Flags with dashes (`--log-file`) become underscore keys in the handler args (`args.log_file`). The flag map key must also use the underscore form.
+- **The reserved quartet is banned.** `dry-run`, `approve-consequential`, `quiet` and `verbose` cannot be declared at any level. The name `yes` is banned outright -- the confirmation skip is `--approve-consequential`.
 
 ```typescript
 // The flag map key is the underscore form of the flag name
 flags: {
-  dry_run: flag("dry-run", t.bool, { help: "Dry run mode", default: false }),
+  log_file: flag("log-file", t.str, { help: "Log file path", default: null }),
   force_overwrite: flag("force-overwrite", t.bool, { help: "Force overwrite", default: false }),
 }
 ```
+
+## The Reserved Flag Quartet
+
+Four flag names are owned by the framework and cannot be declared at any level --
+not as app global flags, not as command flags, not inside a flag set, not inside
+a mutex group:
+
+| Flag | Delivered as | Meaning |
+|------|-------------|---------|
+| `--dry-run` | `ctx.dryRun` | Record effects instead of performing them, then print the would-do log |
+| `--approve-consequential` | `ctx.approveConsequential` | Answer the confirm prompt in advance |
+| `--quiet` | `ctx.quiet` | Suppress `ctx.info()` output; warnings and errors still print |
+| `--verbose` | `ctx.verbose` | Enable `ctx.debug()` output |
+
+```typescript
+// Every one of these throws at registration time:
+flag("dry-run", t.bool, { help: "Simulate the run", default: false });
+flag("verbose", t.bool, { help: "Be verbose", default: false });
+flag("quiet", t.bool, { help: "Be quiet", default: false });
+```
+
+The message is `flag name 'dry-run' is reserved by the framework (dry-run,
+approve-consequential, quiet, verbose)`.
+
+All four are recognized anywhere in argv: `mytool deploy --dry-run` and
+`mytool --dry-run deploy` are equivalent. Two boundaries stop the scan -- a bare
+`--` (everything after it is data) and a passthrough command's name.
+
+### Refusing `--dry-run` with `dryRunSupported`
+
+`--dry-run` works on every mutating command by default: its effects are recorded
+rather than performed. Some commands cannot honor that honestly -- their effects
+escape the effects handle, or their later steps read state that their earlier
+(recorded, therefore un-performed) steps would have written. Such a command sets
+`dryRunSupported: false` with a mandatory `dryRunUnsupportedReason`:
+
+```typescript
+app.command(
+  defineMutatingCommand("migrate", {
+    help: "Run pending database migrations",
+    dryRunSupported: false,
+    dryRunUnsupportedReason:
+      "each migration reads the schema the previous one wrote, " +
+      "so a recorded run would report the wrong pending set",
+    handler: (args, ctx) => {
+      ctx.info("migrating");
+    },
+  }),
+);
+```
+
+`--dry-run` is then refused at parse time rather than rendering a preview that
+would lie:
+
+```
+$ mytool migrate --dry-run
+error: --dry-run is not supported by command 'migrate': each migration reads the schema the previous one wrote, so a recorded run would report the wrong pending set
+```
+
+Three guardrails apply at registration time:
+
+- `dryRunSupported: false` on a read-only command throws -- a command that changes nothing has no effects a preview could misrepresent.
+- `dryRunSupported: false` without a non-empty reason throws -- say what a preview cannot honestly show.
+- A `dryRunUnsupportedReason` without `dryRunSupported: false` throws -- there is nothing to explain while dry run is supported.
+
+The reason also appears in the command's help under a `Dry run:` section, and in
+`--dump-schema` output as the pair `dry_run_supported` / `dry_run_unsupported_reason`.
+Both keys are emitted only when declared, so a schema entry without them means
+dry run is supported. `--help` always beats the refusal.
+
+## Consequential Commands and the Confirm Protocol
+
+Classification says whether a dry run should record rather than perform.
+`consequential` says something different: that these effects are worth
+interrupting a human for. It is the **only** thing that makes the framework
+prompt -- a plain mutating command never does.
+
+```typescript
+app.command(
+  defineMutatingCommand("destroy", {
+    help: "Destroy the cluster",
+    consequential: true,
+    args: [arg("cluster", t.str, { help: "Cluster to destroy" })],
+    handler: (args, ctx) => {
+      ctx.info(`Destroying ${args.cluster}`);
+    },
+  }),
+);
+```
+
+Before dispatching, the framework prints the prompt to stderr and reads one line
+from stdin:
+
+```
+$ mytool destroy prod
+about to run consequential command 'destroy'. Proceed? [y/N]
+```
+
+Only `y` or `Y` proceeds. Anything else prints `aborted` to stderr and exits 1.
+
+Two things skip the prompt, and neither disables anything else:
+
+- `--approve-consequential` -- the operator answered in advance. This is what automation and CI pass.
+- `--dry-run` -- nothing is being performed, so there is nothing to confirm.
+
+When stdin is not a TTY and neither flag was passed, the framework refuses
+rather than hanging or silently proceeding:
+
+```
+$ mytool destroy prod < /dev/null
+error: stdin is not interactive; pass --approve-consequential to confirm
+```
+
+The prompt never fires on the programmatic paths (`app.test()`, `app.call()`,
+MCP), which have no TTY contract. There is no bypass flag:
+`--approve-consequential` answers the prompt and does nothing else. Setting
+`consequential: true` on `defineReadOnlyCommand` throws at registration time --
+a command that changes nothing has nothing to confirm.
 
 ## Schema Dump
 
@@ -616,18 +767,18 @@ Failures throw `InvokeError`.
 The type system infers the exact shape of the handler's `args` parameter from
 flag and arg declarations, so no manual type annotations are needed. The type
 carriers (`t.str`, `t.int`, etc.) carry phantom types that flow through the
-generic machinery in `defineCommand`, producing correct output types without
+generic machinery in the twin factories, producing correct output types without
 casts. Flags from `flagSets` and `mutexGroup` entries are also merged into the
 handler args type.
 
 ```typescript
 app.command(
-  defineCommand("deploy", {
+  defineMutatingCommand("deploy", {
     help: "Deploy the service",
     flags: {
       target: flag("target", t.str, { help: "Deploy target" }),
       replicas: flag("replicas", t.int, { help: "Replica count" }),
-      verbose: flag("verbose", t.bool, { help: "Verbose", default: false }),
+      canary: flag("canary", t.bool, { help: "Canary first", default: false }),
       tag: flag("tag", t.str, { help: "Tag", default: null }),
     },
     args: [arg("service", t.str, { help: "Service name" })],
@@ -635,7 +786,7 @@ app.command(
       // TypeScript knows the exact type of args:
       //   args.target    -> string         (required)
       //   args.replicas  -> bigint         (required)
-      //   args.verbose   -> boolean        (has default)
+      //   args.canary    -> boolean        (has default)
       //   args.tag       -> string | undefined  (default: null = optional)
       //   args.service   -> string         (positional arg)
     },
@@ -643,21 +794,35 @@ app.command(
 );
 ```
 
-The type carriers (`t.str`, `t.int`, etc.) carry phantom types that flow through the generic machinery in `defineCommand` and `flag`/`arg`, so the output types are correct without casts. Flags from `flagSets` and `mutexGroup` entries are also merged into the handler args type.
+The type carriers (`t.str`, `t.int`, etc.) carry phantom types that flow through the generic machinery in the twin factories and `flag`/`arg`, so the output types are correct without casts. Flags from `flagSets` and `mutexGroup` entries are also merged into the handler args type.
+
+The classification also flows into the type system. Because
+`defineReadOnlyCommand` narrows its handler's `ctx` to `ReadOnlyContext`, a
+mutating effect inside a read-only command does not compile:
+
+```typescript
+defineReadOnlyCommand("status", {
+  help: "Show status",
+  handler: (args, ctx) => {
+    ctx.effects.write("out.txt", "data"); // compile error: not on ReadOnlyContext
+  },
+});
+```
 
 ## Complete Example
 
-```typescript
+```typescript validate
 import {
   createApp,
-  defineCommand,
+  defineMutatingCommand,
+  defineReadOnlyCommand,
   deprecated,
   flag,
   flagSet,
   mutexGroup,
   arg,
+  mutatingPassthrough,
   outcome,
-  passthrough,
   t,
 } from "strictcli";
 
@@ -667,9 +832,9 @@ const app = createApp({
   help: "Deployment management tool",
   envPrefix: "DEPLOY",
   flags: {
-    verbose: flag("verbose", t.bool, {
-      help: "Enable verbose logging",
-      default: false,
+    color: flag("color", t.bool, {
+      help: "Colorize output",
+      default: true,
     }),
   },
 });
@@ -683,7 +848,7 @@ const common = flagSet("common", {
 });
 
 app.command(
-  defineCommand("run", {
+  defineMutatingCommand("run", {
     help: "Deploy a service",
     flags: {
       replicas: flag("replicas", t.int, { help: "Number of replicas", default: 1n }),
@@ -705,7 +870,7 @@ app.command(
 const infra = app.group("infra", { help: "Infrastructure commands" });
 
 infra.command(
-  defineCommand("status", {
+  defineReadOnlyCommand("status", {
     help: "Show infrastructure status",
     flagSets: [common],
     handler: (args, ctx) => {
@@ -715,7 +880,7 @@ infra.command(
 );
 
 infra.command(
-  defineCommand("logs", {
+  defineReadOnlyCommand("logs", {
     help: "View infrastructure logs",
     mutex: [
       mutexGroup({
@@ -736,7 +901,7 @@ infra.command(
 app.deprecate(deprecated("push", "use 'run' instead"));
 
 app.command(
-  passthrough("exec", {
+  mutatingPassthrough("exec", {
     help: "Execute a command on a service",
     handler: (pt, ctx) => {
       ctx.info(`Executing on ${pt.name}: ${pt.args.join(" ")}`);
