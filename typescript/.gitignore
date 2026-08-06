@@ -2,6 +2,11 @@ node_modules/
 dist/
 dist-test/
 
+# Build artifact: regenerated from package.json by scripts/gen-version.mjs on
+# every build (prebuild hook). Committing it would let it go stale after a
+# version bump -- package.json is the single source of truth.
+src/version.ts
+
 __pycache__/
 *.pyc
 *.log

@@ -4,9 +4,6 @@
  * types.
  */
 
-/** The current version of the strictcli TypeScript package. */
-export const VERSION = "0.31.0";
-
 export type {
 	App,
 	AppSpec,
@@ -126,3 +123,7 @@ export type {
 	Schema,
 } from "./types.js";
 export { t } from "./types.js";
+// VERSION is generated from package.json by scripts/gen-version.mjs on every
+// build (the `prebuild` hook, inherited by `prepack`), so the published
+// constant cannot drift from the published package.
+export { VERSION } from "./version.js";
