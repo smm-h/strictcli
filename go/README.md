@@ -14,7 +14,7 @@ Requires Go 1.25+. One dependency: [go-toml-edit](https://github.com/smm-h/go-to
 
 ## Quickstart
 
-```go
+```go validate
 package main
 
 import (
@@ -38,6 +38,7 @@ func main() {
             ctx.Info(msg)
             return strictcli.Exit(0)
         },
+        strictcli.WithEffect(strictcli.EffectReadOnly),
         strictcli.WithFlags(
             strictcli.StringFlag("name", "Who to greet"),
             strictcli.BoolFlag("loud", "Shout it", strictcli.Default(false)),
@@ -48,7 +49,10 @@ func main() {
 }
 ```
 
-Name, version, and help are all required `NewApp` arguments.
+Name, version, and help are all required `NewApp` arguments, and every command
+must declare its effect: `WithEffect(EffectReadOnly)` or
+`WithEffect(EffectMutating)`. There is no default -- omitting it panics at
+registration time.
 
 ```
 $ greet hello --name World
@@ -80,6 +84,7 @@ schema.Command("migrate", "Run migrations",
         ctx.Info("migrating")
         return strictcli.Exit(0)
     },
+    strictcli.WithEffect(strictcli.EffectMutating),
 )
 ```
 
@@ -91,7 +96,7 @@ Invoked as `myapp db schema migrate`.
 
 ```go
 strictcli.StringFlag("output", "Output path", strictcli.Default("out.txt")),
-strictcli.BoolFlag("verbose", "Verbose output"),
+strictcli.BoolFlag("cache", "Reuse the build cache", strictcli.Default(true)),
 strictcli.IntFlag("port", "Port number"),
 strictcli.FloatFlag("threshold", "Score threshold"),
 ```
@@ -116,6 +121,7 @@ Required by default. Support optional (`ArgRequired(false)`), default values (`A
 ```go
 app.Command("copy", "Copy files",
     handler,
+    strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithArgs(
         strictcli.NewArg("src", "Source path"),
         strictcli.NewArg("dst", "Destination path"),
@@ -128,7 +134,7 @@ app.Command("copy", "Copy files",
 Single-character shortcuts for any flag.
 
 ```go
-strictcli.BoolFlag("verbose", "Verbose output", strictcli.Short("v")),
+strictcli.BoolFlag("recursive", "Recurse into subdirectories", strictcli.Short("r"), strictcli.Default(false)),
 strictcli.StringFlag("output", "Output path", strictcli.Short("o"), strictcli.Default(".")),
 ```
 
@@ -156,11 +162,12 @@ authFlags := strictcli.FlagSet{
     Name: "auth",
     Flags: []strictcli.Flag{
         strictcli.StringFlag("token", "Auth token", strictcli.Default("")),
-        strictcli.BoolFlag("insecure", "Skip TLS verification"),
+        strictcli.BoolFlag("insecure", "Skip TLS verification", strictcli.Default(false)),
     },
 }
 
 app.Command("deploy", "Deploy", handler,
+    strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithFlagSets(authFlags),
 )
 ```
@@ -171,10 +178,11 @@ Exactly one flag from the group must be provided.
 
 ```go
 app.Command("log", "Show logs", handler,
+    strictcli.WithEffect(strictcli.EffectReadOnly),
     strictcli.WithMutex(strictcli.MutexGroup{
         Flags: []strictcli.Flag{
-            strictcli.BoolFlag("verbose", "Verbose output"),
-            strictcli.BoolFlag("quiet", "Quiet output"),
+            strictcli.StringFlag("since", "Show logs since a timestamp"),
+            strictcli.IntFlag("tail", "Show the last N lines"),
         },
     }),
 )
@@ -185,27 +193,40 @@ app.Command("log", "Show logs", handler,
 Three relationship types, all passed via `WithDependencies(...)`:
 
 - `CoRequired{Flags: []string{"output", "format"}}` -- all must appear together, or none
-- `Requires{Flag: "verbose", DependsOn: "output"}` -- one-way dependency
-- `Implies{Flag: "verbose", Implies: "log-output", Value: true}` -- auto-set a bool flag when another is provided; explicit contradictions are parse errors
+- `Requires{Flag: "trace", DependsOn: "output"}` -- one-way dependency
+- `Implies{Flag: "trace", Implies: "log-output", Value: true}` -- auto-set a bool flag when another is provided; explicit contradictions are parse errors
 
 ```go
 app.Command("export", "Export data", handler,
-    strictcli.WithFlags(...),
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithFlags(
+        strictcli.StringFlag("output", "Output path", strictcli.Default(nil)),
+        strictcli.StringFlag("format", "Output format", strictcli.Default(nil)),
+        strictcli.BoolFlag("trace", "Emit a trace", strictcli.Default(false)),
+        strictcli.BoolFlag("log-output", "Log the output path", strictcli.Default(false)),
+    ),
     strictcli.WithDependencies(
         strictcli.CoRequired{Flags: []string{"output", "format"}},
-        strictcli.Requires{Flag: "verbose", DependsOn: "output"},
-        strictcli.Implies{Flag: "verbose", Implies: "log-output", Value: true},
+        strictcli.Requires{Flag: "trace", DependsOn: "output"},
+        strictcli.Implies{Flag: "trace", Implies: "log-output", Value: true},
     ),
 )
 ```
+
+Dependencies can only reference flags you declared, so the reserved quartet
+(`dry-run`, `approve-consequential`, `quiet`, `verbose`) can never appear in one.
 
 ### Global flags
 
 App-level flags available to all commands, parsed before and after the command token.
 
 ```go
-app.GlobalFlag(strictcli.BoolFlag("verbose", "Verbose output"))
+app.GlobalFlag(strictcli.BoolFlag("color", "Colorize output", strictcli.Default(true)))
 ```
+
+Global flag names cannot collide with the framework's reserved names (`help`,
+`h`, `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`) or with the
+reserved quartet.
 
 ### Passthrough commands
 
@@ -217,6 +238,7 @@ app.Passthrough("run", "Run a script",
         // args contains everything after the command name
         return 0
     },
+    strictcli.WithEffect(strictcli.EffectMutating),
 )
 ```
 
@@ -268,6 +290,7 @@ Commands and groups can be hidden from help output while remaining functional.
 
 ```go
 app.Command("internal-debug", "Debug internals", handler,
+    strictcli.WithEffect(strictcli.EffectReadOnly),
     strictcli.WithHidden(),
 )
 ```
@@ -290,9 +313,66 @@ app.ConfigField("serve.port",
 )
 ```
 
+### The effects regime
+
+Every command declares `WithEffect(EffectReadOnly)` or
+`WithEffect(EffectMutating)` -- there is no default and no inference. A read-only
+command changes nothing and calling a mutating member of `ctx.Effects()` from one
+is a hard error at call time. A mutating command participates in `--dry-run`,
+where the eight recorded operations (`Run`, `Spawn`, `Write`, `Mkdir`, `Remove`,
+`Rename`, `Chmod`, `HTTP`) are recorded rather than performed and rendered as a
+would-do log.
+
+Four flag names are owned by the framework and cannot be declared at any level
+(global flags, command flags, flag sets, mutex groups). They arrive on the
+context, never in `kwargs`:
+
+| Flag | Context accessor |
+|------|-----------------|
+| `--dry-run` | `ctx.DryRun()` |
+| `--approve-consequential` | `ctx.ApproveConsequential()` |
+| `--quiet` | `ctx.Quiet()` |
+| `--verbose` | `ctx.Verbose()` |
+
+A flag named `yes` is banned outright -- the confirmation skip is
+`--approve-consequential`.
+
+A command whose preview would lie declares the refusal instead of rendering one:
+
+```go
+app.Command("migrate", "Run migrations", handler,
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithDryRunUnsupported("each migration reads the schema the previous one wrote"),
+)
+```
+
+`--dry-run` is then refused at parse time with the reason, which also appears in
+the command's help under a `Dry run:` section and in the schema.
+
+### Consequential commands
+
+`WithConsequential()` is the only thing that makes the framework prompt -- a
+plain mutating command never does. Classification answers "should a dry run
+record this?"; consequential answers "are these effects worth interrupting
+someone for?"
+
+```go
+app.Command("destroy", "Destroy the cluster", handler,
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithConsequential(),
+)
+```
+
+Before dispatch the framework prints `about to run consequential command
+'destroy'. Proceed? [y/N] ` to stderr and reads one line from stdin; only `y` or
+`Y` proceeds. `--approve-consequential` answers in advance, and `--dry-run`
+skips the prompt because nothing is being performed. A non-interactive stdin
+without either flag is a hard error rather than a hang. Declaring
+`WithConsequential()` on a read-only command panics.
+
 ### Schema dump
 
-`--dump-schema` is auto-injected on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups, checks).
+`--dump-schema` is auto-injected on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups, checks). Every command entry carries its `effect`; `consequential`, `dry_run_supported` and `dry_run_unsupported_reason` are emitted only when declared.
 
 ### Check system
 
@@ -310,7 +390,10 @@ Checks are declared in TOML and registered in code -- both must agree. Registrat
 
 ### Context
 
-`Context` is constructed by the framework for every dispatch and passed as the first argument to every handler. It provides structured output methods -- `Info(msg)` (stdout), `Warn(msg)` (stderr), `Debug(msg)` (stdout), `Error(msg)` (stderr) -- plus provenance: `Source(name)` returns where a flag's value came from (`"cli"`, `"env"`, `"config"`, `"default"`, `"implied"`, or `"infra"`), and `InfraValue(envVar)` reads a declared infrastructure env var.
+`Context` is constructed by the framework for every dispatch and passed as the first argument to every handler. It provides structured output methods -- `Info(msg)` (stdout, suppressed under `--quiet`), `Warn(msg)` (stderr), `Debug(msg)` (stdout, shown only under `--verbose`), `Error(msg)` (stderr) -- plus provenance: `Source(name)` returns where a flag's value came from (`"cli"`, `"env"`, `"config"`, `"default"`, `"implied"`, or `"infra"`), and `InfraValue(envVar)` reads a declared infrastructure env var.
+
+It also carries the reserved quartet and the effects handle: `DryRun()`,
+`ApproveConsequential()`, `Quiet()`, `Verbose()`, and `Effects()`.
 
 ### Tool export
 
@@ -339,7 +422,7 @@ Every command handler has the ctx-first signature:
 func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome
 ```
 
-`kwargs` holds the parsed flag and arg values, keyed by parameter name (hyphens converted to underscores: `--dry-run` becomes `dry_run`). `ctx` provides structured output and provenance (see Context above).
+`kwargs` holds the parsed flag and arg values, keyed by parameter name (hyphens converted to underscores: `--log-file` becomes `log_file`). The reserved quartet is never in `kwargs` -- it arrives on `ctx`. `ctx` provides structured output and provenance (see Context above).
 
 ### Outcome
 
@@ -436,6 +519,11 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `WithDependencies(deps...)` | Add CoRequired/Requires/Implies constraints |
 | `WithPassthrough(handler)` | Mark as passthrough command |
 | `WithHidden()` | Hide from help output |
+| `WithEffect(effect)` | **Mandatory.** `EffectReadOnly` or `EffectMutating` |
+| `WithConsequential()` | Prompt for confirmation before dispatch |
+| `WithDryRunUnsupported(reason)` | Refuse `--dry-run` with a mandatory reason |
+| `WithGrants(grants...)` | Declare why a dangerous step is authorized |
+| `WithForwarding(reason)` | Declare that the handler forwards its arguments |
 
 ### App options
 
@@ -495,6 +583,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 - **Help is mandatory.** Every command, flag, and argument must have help text. Missing help panics at registration time.
 - **Four types only.** `str`, `bool`, `int`, `float` -- plus compound `list` and `dict`. No magic type coercion.
 - **One handler contract.** `func(ctx *Context, kwargs map[string]interface{}) Outcome`, with kwargs keyed by parameter name (hyphens become underscores) and exit codes/data flowing only through `Exit` / `ExitData`.
+- **Effect classification is mandatory.** Every command declares `EffectReadOnly` or `EffectMutating`. There is no default and no inference.
 - **Registration-time errors.** Misconfigurations panic loud and early, not at parse time.
 - **Minimal dependencies.** One dependency ([go-toml-edit](https://github.com/smm-h/go-toml-edit)) for TOML support.
 
