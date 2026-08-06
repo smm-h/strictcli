@@ -48,6 +48,11 @@
       "wesktop": "https://docs.smmh.dev/wesktop"
     }
   },
+  "examples": {
+    "python": "uv run --directory python python {file}",
+    "go": "scripts/validate-example-go.sh {file}",
+    "typescript": "scripts/validate-example-ts.sh {file}"
+  },
   "assembly": {
     "repo": "smm-h/selfdoc-cache"
   },

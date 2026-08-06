@@ -1,8 +1,7 @@
 ---
 title: typescript/src/version
-description: "GENERATED FILE -- do not edit, and do not commit."
+description: "The package VERSION constant, regenerated from package.json on every build so the value the framework reports can never drift from what npm publishes."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 35
 ---
