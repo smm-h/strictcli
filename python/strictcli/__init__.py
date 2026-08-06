@@ -6406,6 +6406,14 @@ class App:
         Routing tokens are walked through the group/command tree so a quartet
         token may sit anywhere among them. Nothing here raises: routing errors
         are the real parse's job.
+
+        Both boundaries are visible in the ``dry_run_supported=False`` refusal,
+        which reads the flag this scan resolved. ``app cmd -- --dry-run`` and
+        ``app passthrough --dry-run`` are NOT refused, because in neither case
+        did the operator ask this app for a dry run: after ``--`` the token is
+        the command's own data, and after a passthrough's name it is the child
+        process's flag. ``app --dry-run passthrough`` IS refused -- there the
+        token is unambiguously addressed to this app.
         """
         groups = self._groups
         commands = self._commands
