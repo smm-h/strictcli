@@ -25,31 +25,47 @@ Types are carriers (`t.str`, `t.bool`, `t.int`, `t.float`, plus `t.list(...)`
 and `t.dict(...)`) that bind the schema, the runtime parser, and the inferred
 TypeScript type in one value, so they cannot drift apart:
 
-```ts
-import { arg, command, createApp, flag, t } from "strictcli";
+```ts validate
+import { arg, createApp, defineMutatingCommand, flag, t } from "strictcli";
 
-const build = command("build", {
-	help: "Build the project",
-	flags: [
-		flag("dry-run", t.bool, { help: "Print actions without running", default: true }),
-		flag("count", t.int, { help: "How many times to build", required: true }),
-	],
-	args: [arg("values", t.float, { help: "Input values", variadic: true })],
-	handler: (args, ctx) => {
-		// Inferred: args.dry_run is boolean, args.count is bigint, args.values is number[]
-		ctx.info(`building ${args.count} time(s), dry-run=${args.dry_run}`);
-		return 0;
-	},
-});
-
-const app = createApp("myapp", {
+const app = createApp({
+	name: "myapp",
 	version: "1.0.0",
 	help: "my cool app",
-	commands: [build],
 });
+
+app.command(
+	defineMutatingCommand("build", {
+		help: "Build the project",
+		flags: {
+			count: flag("count", t.int, { help: "How many times to build" }),
+			label: flag("label", t.str, { help: "Build label", default: "dev" }),
+		},
+		args: [arg("values", t.float, { help: "Input values", variadic: true })],
+		handler: (args, ctx) => {
+			// Inferred: args.count is bigint, args.label is string, args.values is number[]
+			ctx.info(`building ${args.count} time(s) as ${args.label}`);
+			if (ctx.dryRun) {
+				ctx.info("(preview only)");
+			}
+			return 0;
+		},
+	}),
+);
 
 app.run(process.argv.slice(2));
 ```
+
+Commands are registered through the **twin factories**: `defineReadOnlyCommand`
+for commands that change nothing, `defineMutatingCommand` for commands that do.
+Classification is mandatory and has no default, so the factory name *is* the
+classification, and a read-only command's handler `ctx` is narrowed such that
+calling a mutating effect on it is a compile error.
+
+Note that `--dry-run`, `--approve-consequential`, `--quiet` and `--verbose` are
+framework-owned names. You never declare them; their values arrive on the
+context as `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet` and
+`ctx.verbose`.
 
 ## Features
 
@@ -61,6 +77,19 @@ app.run(process.argv.slice(2));
   derived entirely from the declarations.
 - **Mandatory help everywhere** — missing help text on any app, group, command,
   flag, or argument is a registration-time error.
+- **Mandatory effect classification** — every command is registered through
+  `defineReadOnlyCommand` or `defineMutatingCommand` (and passthroughs through
+  `readOnlyPassthrough` / `mutatingPassthrough`). There is no default and no
+  inference from names, tags, or handler bodies.
+- **Honest dry runs** — `ctx.effects` mints eight recorded operations (`run`,
+  `spawn`, `write`, `mkdir`, `remove`, `rename`, `chmod`, `http`). Under
+  `--dry-run` they are recorded rather than performed and rendered as a would-do
+  log. A command whose preview would lie declares `dryRunSupported: false` with
+  a mandatory reason, and `--dry-run` is refused at parse time instead.
+- **A confirm protocol you opt into** — `consequential: true` is the only thing
+  that makes the framework prompt before dispatch; `--approve-consequential`
+  answers it in advance, and a non-interactive stdin without it is a hard error
+  rather than a hang.
 - **Env var and JSON config file resolution** — explicit precedence:
   CLI > env > config > default, with auto-registered `config show/set/path/edit`
   subcommands.
