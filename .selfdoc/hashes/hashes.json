@@ -5,20 +5,20 @@
     "description": "41d9d797eec63a9fa35f6ecba944148da61725bb479e989eea1d373176e12644"
   },
   "en/conformance.md": {
-    "content": "60eebf0ec1c95f9ebf982d11cda70548358001bcb129352d35056ad3fd578abb",
-    "description": "22f9577d29c3c24af4d0cbc16f0b5c3736ce7a75dafe2d7ce8c12d4073acdbbd"
+    "content": "da5529a7926bdc975e7975e909245ab3f35634a95a18328064fa382a53940030",
+    "description": "5f62213d163489cc78af1595dbb9de858c171190608dbd1b290b5a3a5ed05af2"
   },
   "en/flag-system.md": {
-    "content": "6a0a37b5f00fc7427a792c4a3d9d747577929ea2dd20d2344f85cfc1a19e7af6",
-    "description": "80afb68440d5642bf6e3012bf4dc98f2cb0c6cf5a4cf8458a0b0b9d93cba1936"
+    "content": "4a7f3fd2b82142bf48a6977894b5d214802bf8480aa4304f2e0bcd3e46f96036",
+    "description": "75cdf2d3c184585cd125c94c4219fbf4bab7347ce572814fb5eac8e9cf33b80c"
   },
   "en/gen-index.md": {
     "content": "951874ad7e086716e9b06166256b98558137da4c20423cbbfa02dc999ce3268b",
     "description": "de421ec712350fd2336eb5ecdb2b218864da7af30526828f1b7c7f55293aa31b"
   },
   "en/go-quickstart.md": {
-    "content": "0db06dbbcb812dc9d405dbe47aa1e6088c7d0770f2e8ffbc5aac670820d8021d",
-    "description": "1f5330a2db15a3891a82e62eb5df38bfea73e06827a61806c06907a5b14827a0"
+    "content": "e385c4fa9723cdf5367b5879460254e43561b166fd9e5400e0dfa619aaa93615",
+    "description": "0f717708ce4d54d9b37e04ff7b450204fee43bfe1753063b311b6f53e24fed6a"
   },
   "en/go-strictcli-testdata-noncomparable.md": {
     "content": "3e51fdc0997f38707db188e2cce1590da01f17bdcd6361a5dc8e805303ac7af0",
@@ -32,8 +32,8 @@
     "source_docstring": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
   },
   "en/python-quickstart.md": {
-    "content": "8c47a50b7863634f65c74bcbc94211c8c613f18d9acc5151e5eaf72f9796a2be",
-    "description": "bef771817b0da77363e11a9d0f26b17cc15a37fb8d3c7b03f0868469732a279b"
+    "content": "48fd9976536e07d810e511c0a63387cd2a0b15f9b9d9cb65fac71f85fb4de415",
+    "description": "cacdfdf60810515140788c990c9734841abe7890d9641c55027d9a008157bb5e"
   },
   "en/python-strictcli.md": {
     "content": "6f1b6e55f543e1bfc7464a15348000471faada959c6686d2ed797541d3d806f7",
@@ -41,8 +41,8 @@
     "source_docstring": "869d760f17632ede6f9b09aa15d41ddd3e3626fd1471d84ece919e2402507969"
   },
   "en/typescript-quickstart.md": {
-    "content": "dacebda1157cac0774bd83c1f1f23f124edd1a01d378d6cd72e6dc702940f459",
-    "description": "8a9c6c082a39be6fb3eda34df1562b33cf1bb588efc522e978d2b8ba77d866a8"
+    "content": "979bc70edd69e632a304be9a7e2a03c5eb9bb9200d2e159430e839e364d549c4",
+    "description": "18cd56231baf9df99df0feeb7e182a62d0a4507baa576a518464e873a6dd49ea"
   },
   "en/typescript-src-app.md": {
     "content": "b3a7b96dc80757525ecf75be7b79145d23b295e3225f88200eaf98dec991d7a5",
