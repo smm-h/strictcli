@@ -34,22 +34,21 @@ app = App(
 app.set_check_context(lambda: ConformanceContext(project_root=PROJECT_ROOT))
 
 
-def _run_script(reporter: ErrorReporter, script: str, *args: str):
-    """Run a conformance script and mint an outcome via the reporter.
+def _run_argv(reporter: ErrorReporter, label: str, argv: list[str]):
+    """Run a subprocess from CONFORMANCE_DIR and mint an outcome via the reporter.
 
     Exit 0 mints a terminal pass; a non-zero exit mints error-severity problems
-    (the script's stdout/stderr) and a terminal ``found`` outcome, which derives
+    (the process's stdout/stderr) and a terminal ``found`` outcome, which derives
     to FAIL. All conformance checks are error-severity, so a failure gates.
     """
-    script_path = CONFORMANCE_DIR / script
     result = subprocess.run(
-        [sys.executable, str(script_path), *args],
+        argv,
         capture_output=True,
         text=True,
         cwd=str(CONFORMANCE_DIR),
     )
     if result.returncode == 0:
-        return reporter.passed(f"{script} passed")
+        return reporter.passed(f"{label} passed")
     problems = []
     if result.stdout.strip():
         problems.append(result.stdout.strip())
@@ -59,7 +58,27 @@ def _run_script(reporter: ErrorReporter, script: str, *args: str):
         problems.append(f"exited with code {result.returncode} and no output")
     for text in problems:
         reporter.error(text)
-    return reporter.found(f"{script} failed (exit code {result.returncode})")
+    return reporter.found(f"{label} failed (exit code {result.returncode})")
+
+
+def _run_script(reporter: ErrorReporter, script: str, *args: str):
+    """Run a conformance script under this interpreter."""
+    script_path = CONFORMANCE_DIR / script
+    return _run_argv(
+        reporter, script, [sys.executable, str(script_path), *args]
+    )
+
+
+# The meta-tests that guard the checkers themselves. They pin invariants of the
+# extraction surfaces (which templates the parity extractor can see, which TS
+# names the api-surface registry points at) and of the run.py case registry --
+# the failure modes that produce a false PASS rather than a visible error.
+# `--frozen` keeps the gate from ever rewriting uv.lock mid-release.
+META_TEST_FILES = [
+    "test_error_parity_extraction.py",
+    "test_run_registry.py",
+    "test_api_surface_registry.py",
+]
 
 
 @app.error_check("api-surface")
@@ -70,6 +89,15 @@ def check_api_surface(ctx, reporter):
 @app.error_check("error-parity")
 def check_error_parity(ctx, reporter):
     return _run_script(reporter, "check_error_parity.py")
+
+
+@app.error_check("conformance-meta")
+def check_conformance_meta(ctx, reporter):
+    return _run_argv(
+        reporter,
+        "conformance meta-tests",
+        ["uv", "run", "--frozen", "pytest", "-q", *META_TEST_FILES],
+    )
 
 
 @app.error_check("conformance-python")

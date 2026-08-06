@@ -127,6 +127,18 @@
       "needs_network": false,
       "depends_on": []
     },
+    "conformance-meta": {
+      "tags": [
+        "pre-release",
+        "fast",
+        "meta"
+      ],
+      "severity": "error",
+      "fast": true,
+      "pure": true,
+      "needs_network": false,
+      "depends_on": []
+    },
     "conformance-python": {
       "tags": [
         "pre-release",

@@ -16,6 +16,14 @@ pure = true
 needs_network = false
 depends_on = []
 
+[checks.conformance-meta]
+tags = ["pre-release", "fast", "meta"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
 [checks.conformance-python]
 tags = ["pre-release", "conformance", "python"]
 severity = "error"
