@@ -3708,6 +3708,58 @@ def _raise_command_read_only_consequential(name: str):
     )
 
 
+def _raise_command_read_only_dry_run_unsupported(name: str):
+    """A read_only command cannot declare ``dry_run_supported=False``.
+
+    Mirrors the read_only + consequential prohibition: a command that changes
+    nothing records nothing, so a preview of it can never be dishonest and
+    there is no reason to refuse one.
+    """
+    raise ValueError(
+        f'command "{name}": a read_only command cannot declare '
+        f'dry_run_supported=false (a command that changes nothing has no '
+        f'effects a preview could misrepresent)'
+    )
+
+
+def _raise_command_dry_run_reason_missing(name: str):
+    raise ValueError(
+        f'command "{name}": dry_run_supported=false requires a non-empty '
+        f'dry_run_unsupported_reason (say what a preview cannot honestly show)'
+    )
+
+
+def _raise_command_dry_run_reason_without_declaration(name: str):
+    raise ValueError(
+        f'command "{name}": dry_run_unsupported_reason requires '
+        f'dry_run_supported=false (there is nothing to explain while dry run '
+        f'is supported)'
+    )
+
+
+def _validate_dry_run_declaration(
+    name: str, effect: str, dry_run_supported: bool,
+    dry_run_unsupported_reason: str | None,
+) -> None:
+    """The three registration-time guards on the dry-run declaration.
+
+    Shared by :class:`Command.__post_init__` and
+    :func:`_build_and_validate_command` so both registration surfaces reject
+    the same shapes with the same messages.
+    """
+    has_reason = (
+        isinstance(dry_run_unsupported_reason, str)
+        and bool(dry_run_unsupported_reason.strip())
+    )
+    if not dry_run_supported:
+        if effect == EFFECT_READ_ONLY:
+            _raise_command_read_only_dry_run_unsupported(name)
+        if not has_reason:
+            _raise_command_dry_run_reason_missing(name)
+    elif dry_run_unsupported_reason is not None:
+        _raise_command_dry_run_reason_without_declaration(name)
+
+
 @dataclass(frozen=True)
 class Command:
     """A leaf command with a handler."""
@@ -3721,6 +3773,15 @@ class Command:
     # named after the framework's reaction to it, so other behaviours can hang
     # off it later. Today the framework prompts for exactly these commands.
     consequential: bool = False
+    # Declared per-command. Absence means "dry run is supported", which is the
+    # regime's baseline: a mutating command records rather than executes. A
+    # command that declares it false is saying a preview of it would LIE --
+    # its effects escape the effects handle, or its later steps read state the
+    # recorded ones would have written -- so the framework refuses --dry-run
+    # for it at parse time rather than rendering a preview nobody can trust.
+    # The reason is mandatory and is shown in help and in the refusal.
+    dry_run_supported: bool = True
+    dry_run_unsupported_reason: str | None = None
     flags: tuple[Flag, ...] = ()
     args: tuple[Arg, ...] = ()
     flag_sets: tuple[FlagSet, ...] = ()
@@ -3744,6 +3805,10 @@ class Command:
             _raise_command_effect_invalid(self.name, self.effect)
         if self.consequential and self.effect == EFFECT_READ_ONLY:
             _raise_command_read_only_consequential(self.name)
+        _validate_dry_run_declaration(
+            self.name, self.effect, self.dry_run_supported,
+            self.dry_run_unsupported_reason,
+        )
         for tag in self.tags:
             if not _IDENTIFIER_RE.fullmatch(tag):
                 raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
@@ -3830,6 +3895,8 @@ class Group:
         help: str,
         effect: str | None = None,
         consequential: bool = False,
+        dry_run_supported: bool = True,
+        dry_run_unsupported_reason: str | None = None,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -3852,6 +3919,8 @@ class Group:
             cmd = _build_and_validate_command(
                 name, help=help, effect=effect,
                 consequential=consequential,
+                dry_run_supported=dry_run_supported,
+                dry_run_unsupported_reason=dry_run_unsupported_reason,
                 handler=func, args=args, flag_sets=flag_sets, mutex=mutex,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
@@ -5473,6 +5542,8 @@ class App:
         help: str,
         effect: str | None = None,
         consequential: bool = False,
+        dry_run_supported: bool = True,
+        dry_run_unsupported_reason: str | None = None,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -5493,6 +5564,8 @@ class App:
                 help=help,
                 effect=effect,
                 consequential=consequential,
+                dry_run_supported=dry_run_supported,
+                dry_run_unsupported_reason=dry_run_unsupported_reason,
                 handler=func,
                 args=args,
                 flag_sets=flag_sets,
@@ -6458,6 +6531,22 @@ class App:
         # (but not after "--" separator, which makes everything literal)
         if _tokens_contain_help(rest):
             raise _HelpRequested(target=cmd)
+
+        # A command that declares dry_run_supported=False refuses --dry-run
+        # here, on every argv path (run/test/harness) at once, and AFTER the
+        # command-help check above so `--help` always beats the refusal: asking
+        # what a command does must never be answered with a refusal to preview
+        # it. self._last_dry_run was set by the pre-scan, so this covers both
+        # `app --dry-run cmd` and `app cmd --dry-run`; see
+        # _scan_command_region_quartet for the two boundaries that make a
+        # trailing --dry-run invisible here (a bare `--`, and a passthrough
+        # command's name).
+        if self._last_dry_run and not cmd.dry_run_supported:
+            refused_path = ".".join(path + [cmd.name])
+            raise _ParseError(
+                f"--dry-run is not supported by command '{refused_path}': "
+                f"{cmd.dry_run_unsupported_reason}"
+            )
 
         # Config subcommand exemption: config edit, config path, config set
         # are exempt from config load errors (self-lock prevention).
@@ -8258,6 +8347,8 @@ def _build_and_validate_command(
     help: str,
     effect: str | None,
     consequential: bool = False,
+    dry_run_supported: bool = True,
+    dry_run_unsupported_reason: str | None = None,
     handler: Callable,
     args: list[Arg] | None,
     flag_sets: list[FlagSet] | None,
@@ -8299,6 +8390,13 @@ def _build_and_validate_command(
     # there is nothing to interrupt anyone for (contract §8.1).
     if consequential and effect == EFFECT_READ_ONLY:
         _raise_command_read_only_consequential(name)
+
+    # The dry-run declaration: illegal on read_only, mandatory reason, and no
+    # orphan reason. Checked here as well as in Command.__post_init__ so the
+    # message names the command before any later validation can fire.
+    _validate_dry_run_declaration(
+        name, effect, dry_run_supported, dry_run_unsupported_reason,
+    )
 
     resolved_grants = _validate_grants(name, grants)
 
@@ -8358,6 +8456,8 @@ def _build_and_validate_command(
             handler=None,
             effect=effect,
             consequential=consequential,
+            dry_run_supported=dry_run_supported,
+            dry_run_unsupported_reason=dry_run_unsupported_reason,
             passthrough=passthrough,
             tags=effective_tags,
             hidden=hidden,
@@ -8624,6 +8724,8 @@ def _build_and_validate_command(
         handler=handler,
         effect=effect,
         consequential=consequential,
+        dry_run_supported=dry_run_supported,
+        dry_run_unsupported_reason=dry_run_unsupported_reason,
         flags=tuple(all_flags),
         args=tuple(all_args),
         flag_sets=tuple(resolved_flag_sets),
@@ -8926,9 +9028,30 @@ def _build_flag_meta(f: Flag) -> str:
     return " [" + "] [".join(meta_parts) + "]"
 
 
+def _format_dry_run_section(cmd: Command) -> list[str]:
+    """The `Dry run:` section of command help, or nothing.
+
+    Rendered only for a command that declares ``dry_run_supported=False``: the
+    baseline (dry run works) needs no announcement, and a section on every
+    command would be noise. Byte-identical across implementations.
+    """
+    if cmd.dry_run_supported:
+        return []
+    return [
+        "",
+        "Dry run:",
+        f"  --dry-run is not supported: {cmd.dry_run_unsupported_reason}",
+    ]
+
+
 def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
     """Format command-level help shown when the user runs 'myapp cmd --help'."""
     lines: list[str] = [f"{app.name} {prefix}{cmd.name} -- {cmd.help}"]
+
+    # Rendered before the passthrough early-return: a passthrough command can
+    # declare the refusal too, and its help is the only place the reason would
+    # otherwise be visible.
+    lines.extend(_format_dry_run_section(cmd))
 
     # Passthrough commands show only the header line (no flags/args section)
     if cmd.passthrough is not None:
@@ -9683,6 +9806,11 @@ def _serialize_command(cmd: Command) -> dict:
     # "not consequential" (contract §8.1, §13).
     if cmd.consequential:
         d["consequential"] = True
+    # Emitted only when declared: dry run is supported unless a command says
+    # otherwise, so the pair appears exactly on the commands that refuse it.
+    if not cmd.dry_run_supported:
+        d["dry_run_supported"] = False
+        d["dry_run_unsupported_reason"] = cmd.dry_run_unsupported_reason
     if cmd.passthrough is not None:
         d["passthrough"] = True
     flags = [_serialize_flag(f) for f in cmd.flags]
