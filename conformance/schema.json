@@ -830,6 +830,19 @@
           "type": "array",
           "items": { "$ref": "#/$defs/effect_record" },
           "description": "Deep-equality assertion against the structured effect log the run produced (effects contract §14.1). Comparison is deep equality over the parsed JSON arrays, in order; absent optional keys and explicit-null keys are equivalent. 'recorded' is required on every record and is therefore never absent."
+        },
+        "schema_command_keys": {
+          "type": "object",
+          "additionalProperties": { "type": "object" },
+          "description": "Per-command key assertions against the .strictcli/schema.json a --dump-schema run emitted. Maps a dotted command path (groups then command, e.g. 'release.run') to the keys that entry must carry, with their exact values. Requires --dump-schema in the case argv."
+        },
+        "schema_command_absent_keys": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "The mirror of schema_command_keys: maps a dotted command path to keys that must NOT appear on that entry. Pins the emit-when-declared contract (a key omitted by one implementation and emitted with a default value by another is a silent divergence). Requires --dump-schema in the case argv."
         }
       }
     }

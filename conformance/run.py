@@ -240,6 +240,84 @@ def _check_effects_equals(log_path: str | None, expected: list) -> list[str]:
     ]
 
 
+SCHEMA_ASSERT_KEYS = ("schema_command_keys", "schema_command_absent_keys")
+
+
+def _resolve_schema_command(schema: dict, dotted: str) -> dict | None:
+    """Walk an emitted schema's group tree to the command at a dotted path.
+
+    `groups` and `commands` are name-keyed objects in every implementation's
+    dump, so the walk is a plain key lookup per segment.
+    """
+    node: dict = schema
+    parts = dotted.split(".")
+    for part in parts[:-1]:
+        node = (node.get("groups") or {}).get(part)
+        if not isinstance(node, dict):
+            return None
+    entry = (node.get("commands") or {}).get(parts[-1])
+    return entry if isinstance(entry, dict) else None
+
+
+def _check_schema_commands(proj_dir: str | None, expect: dict) -> list[str]:
+    """Assert per-command key presence/absence in the emitted schema file.
+
+    Structural, not textual: key order and indentation are not part of the
+    contract, but WHICH keys a command entry carries is. The emit-when-declared
+    pairs (`dry_run_supported`/`dry_run_unsupported_reason`, `consequential`)
+    only mean anything if their absence is pinned too -- an implementation that
+    emitted a default-valued key where its siblings omit it would otherwise be
+    a silent schema divergence.
+    """
+    if proj_dir is None:
+        return [
+            "  schema_command_* assertion requires --dump-schema in the case argv"
+        ]
+    path = os.path.join(proj_dir, ".strictcli", "schema.json")
+    if not os.path.exists(path):
+        return [f"  schema_command_*: no schema was emitted at {path}"]
+    with open(path, encoding="utf-8") as fh:
+        try:
+            schema = json.load(fh)
+        except json.JSONDecodeError as e:
+            return [f"  schema_command_*: emitted schema is not valid JSON: {e}"]
+
+    errors: list[str] = []
+    for dotted, fields in expect.get("schema_command_keys", {}).items():
+        entry = _resolve_schema_command(schema, dotted)
+        if entry is None:
+            errors.append(
+                f"  schema_command_keys: no command {dotted!r} in the emitted schema"
+            )
+            continue
+        for key, want in fields.items():
+            if key not in entry:
+                errors.append(
+                    f"  schema_command_keys: {dotted}.{key} is absent, "
+                    f"expected {want!r}"
+                )
+            elif entry[key] != want:
+                errors.append(
+                    f"  schema_command_keys: {dotted}.{key} is {entry[key]!r}, "
+                    f"expected {want!r}"
+                )
+    for dotted, keys in expect.get("schema_command_absent_keys", {}).items():
+        entry = _resolve_schema_command(schema, dotted)
+        if entry is None:
+            errors.append(
+                "  schema_command_absent_keys: no command "
+                f"{dotted!r} in the emitted schema"
+            )
+            continue
+        for key in keys:
+            if key in entry:
+                errors.append(
+                    f"  schema_command_absent_keys: {dotted}.{key} is present "
+                    f"({entry[key]!r}), expected absent"
+                )
+    return errors
+
+
 # --- N-way target registry ---------------------------------------------------
 #
 # Each registered target is a self-contained descriptor that knows how to
@@ -569,6 +647,10 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             errors.extend(
                 _check_effects_equals(effect_log_path, expect["effects_equals"])
             )
+
+        # Check the schema file a --dump-schema run emitted into proj_dir.
+        if any(k in expect for k in SCHEMA_ASSERT_KEYS):
+            errors.extend(_check_schema_commands(proj_dir, expect))
 
     except subprocess.TimeoutExpired:
         errors.append("  timed out after 10 seconds")
