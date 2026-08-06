@@ -29,12 +29,12 @@ enforces self-documenting apps from the first line of code. Additional options
 like `config=True`, `env_prefix=`, and `config_format=` are passed as keyword
 arguments.
 
-```python
+```python validate
 import strictcli
 
 app = strictcli.App(name="mytool", version="0.1.0", help="A tool that does useful things")
 
-@app.command("hello", help="Print a greeting")
+@app.command("hello", help="Print a greeting", effect="read_only")
 def hello(ctx):
     ctx.info("Hello, world!")
 
@@ -57,6 +57,40 @@ $ mytool --version
 mytool 0.1.0
 ```
 
+## Command Classification
+
+Every command must declare what it does to the world. The `effect` keyword is
+mandatory on `@app.command()` and takes exactly one of two values -- there is no
+default, and a command registered without it raises `ValueError` at registration
+time:
+
+| Value | Meaning |
+|-------|---------|
+| `effect="read_only"` | The command changes nothing. It never prompts, and calling a mutating member of the effects handle from it is a hard error at call time. |
+| `effect="mutating"` | The command changes something. It participates in `--dry-run`, where its effects are recorded instead of performed. |
+
+```python
+@app.command("status", help="Show deployment status", effect="read_only")
+def status(ctx):
+    ctx.info("healthy")
+
+@app.command("deploy", help="Deploy the app", effect="mutating")
+def deploy(ctx):
+    ctx.info("deploying")
+```
+
+Classification answers one question -- "should a dry run record this rather than
+perform it?" It is deliberately **not** the same question as "is this dangerous
+enough to interrupt someone for?", which is what
+[`consequential`](#consequential-commands-and-the-confirm-protocol) answers. A
+`mutating` command does not prompt unless it also declares itself
+`consequential`.
+
+Classification is a property of the command, so it is emitted in `--dump-schema`
+output on every command entry and can be asserted against by check gates.
+Deprecated commands are exempt: they have no handler, execute nothing, and
+passing `effect=` to `app.deprecate()` is a registration-time error.
+
 ## Handler Signature
 
 Every command handler receives `ctx` as its first argument, providing structured
@@ -67,7 +101,7 @@ keyword arguments with dashes converted to underscores (`--dry-run` becomes
 error.
 
 ```python
-@app.command("greet", help="Greet someone")
+@app.command("greet", help="Greet someone", effect="read_only")
 @strictcli.flag("name", type=str, help="Who to greet")
 @strictcli.flag("loud", type=bool, default=False, help="Shout the greeting")
 def greet(ctx, name, loud):
@@ -77,18 +111,34 @@ def greet(ctx, name, loud):
     ctx.info(msg)
 ```
 
-- `ctx` provides structured output (`ctx.info`, `ctx.warn`, `ctx.error`, `ctx.debug`) and provenance (`ctx.source`).
+- `ctx` provides structured output (`ctx.info`, `ctx.warn`, `ctx.error`, `ctx.debug`), provenance (`ctx.source`), the four reserved-quartet values, and the effects handle (`ctx.effects`).
 - Return `int` for an exit code, `None` for exit 0, or `strictcli.outcome(exit_code, data)` for structured output. Any other return type is a hard error.
 
 ### Context Methods
 
 | Method | Stream | Purpose |
 |--------|--------|---------|
-| `ctx.info(msg)` | stdout | Informational messages |
-| `ctx.warn(msg)` | stderr | Warnings |
-| `ctx.error(msg)` | stderr | Errors |
-| `ctx.debug(msg)` | stdout | Debug output |
+| `ctx.info(msg)` | stdout | Informational messages (suppressed under `--quiet`) |
+| `ctx.warn(msg)` | stderr | Warnings (never suppressed) |
+| `ctx.error(msg)` | stderr | Errors (never suppressed) |
+| `ctx.debug(msg)` | stdout | Debug output (shown only under `--verbose`) |
 | `ctx.source(name)` | -- | Provenance of a flag value (`"cli"`, `"env"`, `"config"`, `"default"`, `"implied"`, `"infra"`) |
+
+### Context Properties
+
+The four reserved-quartet flags are never declared by you and never arrive as
+handler kwargs -- the framework parses them and delivers them on `ctx`:
+
+| Property | Set by |
+|----------|--------|
+| `ctx.dry_run` | `--dry-run` |
+| `ctx.approve_consequential` | `--approve-consequential` |
+| `ctx.quiet` | `--quiet` |
+| `ctx.verbose` | `--verbose` |
+
+`ctx.effects` is the recorded-effects handle. Under `--dry-run` its operations
+are recorded and rendered as a would-do log instead of being performed, which is
+what makes a preview honest.
 
 ### Returning Structured Data
 
@@ -98,7 +148,7 @@ programmatic consumption. The `outcome()` factory is the only way to construct
 a branded `Outcome` -- hand-forging the return value is rejected at runtime.
 
 ```python
-@app.command("status", help="Show status")
+@app.command("status", help="Show status", effect="read_only")
 def status(ctx):
     return strictcli.outcome(exit_code=0, data={"healthy": True, "uptime": 3600})
 ```
@@ -119,7 +169,7 @@ metadata to the handler function before command registration. The `name` and
 ### String Flags
 
 ```python
-@app.command("build", help="Build the project")
+@app.command("build", help="Build the project", effect="mutating")
 @strictcli.flag("output", type=str, help="Output file path")
 @strictcli.flag("format", type=str, default="json", help="Output format")
 def build(ctx, output, format):
@@ -131,15 +181,19 @@ A string flag with no `default` is required -- the user must provide it.
 ### Bool Flags
 
 ```python
-@app.command("deploy", help="Deploy the app")
-@strictcli.flag("verbose", type=bool, default=False, help="Enable verbose output")
+@app.command("deploy", help="Deploy the app", effect="mutating")
+@strictcli.flag("cache", type=bool, default=True, help="Reuse the build cache")
 @strictcli.flag("watch", type=bool, help="Watch for changes")
-def deploy(ctx, verbose, watch):
-    if verbose:
-        ctx.info("Verbose mode enabled")
+def deploy(ctx, cache, watch):
+    if not cache:
+        ctx.info("Cache disabled")
 ```
 
-Bool flags are negatable by default: `--verbose` sets `True`, `--no-verbose` sets `False`. A bool flag with no `default` is required -- the user must pass either `--flag` or `--no-flag` explicitly.
+Bool flags are negatable by default: `--cache` sets `True`, `--no-cache` sets `False`. A bool flag with no `default` is required -- the user must pass either `--flag` or `--no-flag` explicitly.
+
+Note that `verbose` and `quiet` are **not** available as flag names: they belong
+to the [reserved quartet](#the-reserved-flag-quartet) and arrive on `ctx`
+instead.
 
 ### Int Flags
 
@@ -185,10 +239,10 @@ including uniqueness enforcement and env var splitting for repeatable flags:
 
 ```python
 @strictcli.flag("output", short="o", type=str, help="Output file")
-@strictcli.flag("verbose", short="v", type=bool, default=False, help="Be verbose")
+@strictcli.flag("recursive", short="r", type=bool, default=False, help="Recurse into subdirectories")
 ```
 
-Usage: `-o myfile.txt`, `-v`.
+Usage: `-o myfile.txt`, `-r`.
 
 ### Choices
 
@@ -232,7 +286,7 @@ list. The `unique` parameter is mandatory: set `unique=True` to reject duplicate
 values, or `unique=False` to allow them:
 
 ```python
-@app.command("process", help="Process records")
+@app.command("process", help="Process records", effect="read_only")
 @strictcli.flag("record", type=str, help="A record to process", repeatable=True, unique=False)
 def process(ctx, record):
     for r in record:
@@ -262,7 +316,7 @@ default. Optional arguments use `required=False` and may declare a default
 value.
 
 ```python
-@app.command("deploy", help="Deploy to an environment")
+@app.command("deploy", help="Deploy to an environment", effect="mutating")
 @strictcli.arg("environment", help="Target environment")
 @strictcli.arg("version", help="Version to deploy", required=False, default="latest")
 def deploy(ctx, environment, version):
@@ -289,7 +343,7 @@ variadic argument is allowed per command. A variadic arg with `required=True`
 (the default) requires at least one value:
 
 ```python
-@app.command("process", help="Process files")
+@app.command("process", help="Process files", effect="read_only")
 @strictcli.arg("files", help="Files to process", variadic=True)
 def process(ctx, files):
     for f in files:
@@ -310,7 +364,7 @@ Only one variadic argument is allowed, and it must be the last. You can also use
 Global flags are available to all commands and can appear before or after the
 command name in argv. Pass them via the `flags` parameter on `App`. Global flag
 names cannot collide with reserved framework names like `help`, `version`,
-`dump-schema`, `mcp`, `config`, or `hermetic`:
+`dump-schema`, `mcp`, `config`, or `hermetic`, nor with the reserved quartet:
 
 ```python
 app = strictcli.App(
@@ -318,22 +372,22 @@ app = strictcli.App(
     version="0.1.0",
     help="A useful tool",
     flags=[
-        strictcli.Flag(name="verbose", type=bool, default=False, help="Enable verbose output"),
+        strictcli.Flag(name="color", type=bool, default=True, help="Colorize output"),
         strictcli.Flag(name="log-level", type=str, default="info",
                        choices=["debug", "info", "warn", "error"], help="Log level"),
     ],
 )
 
-@app.command("deploy", help="Deploy the app")
-def deploy(ctx, verbose, log_level):
-    if verbose:
-        ctx.info("Verbose mode enabled")
+@app.command("deploy", help="Deploy the app", effect="mutating")
+def deploy(ctx, color, log_level):
+    if not color:
+        ctx.info("Color disabled")
     ctx.info(f"Log level: {log_level}")
 ```
 
-Usage: `mytool --verbose deploy` or `mytool deploy --verbose` (global flags can appear before or after the command).
+Usage: `mytool --no-color deploy` or `mytool deploy --no-color` (global flags can appear before or after the command).
 
-Reserved global flag names that cannot be used: `help`, `h`, `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`.
+Reserved global flag names that cannot be used: `help`, `h`, `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`, plus the reserved quartet `dry-run`, `approve-consequential`, `quiet`, `verbose`. The name `yes` is banned outright -- the confirmation skip is `--approve-consequential`.
 
 ## Command Groups
 
@@ -347,22 +401,22 @@ app = strictcli.App(name="mytool", version="0.1.0", help="Infrastructure tool")
 
 dns = app.group("dns", help="DNS management")
 
-@dns.command("list", help="List DNS records")
+@dns.command("list", help="List DNS records", effect="read_only")
 def dns_list(ctx):
     ctx.info("Listing records...")
 
-@dns.command("create", help="Create a DNS record")
+@dns.command("create", help="Create a DNS record", effect="mutating")
 @strictcli.flag("name", type=str, help="Record name")
 def dns_create(ctx, name):
     ctx.info(f"Creating record: {name}")
 
 zone = dns.group("zone", help="Zone management")
 
-@zone.command("list", help="List zones")
+@zone.command("list", help="List zones", effect="read_only")
 def zone_list(ctx):
     ctx.info("Listing zones...")
 
-@zone.command("delete", help="Delete a zone")
+@zone.command("delete", help="Delete a zone", effect="mutating", consequential=True)
 @strictcli.flag("name", type=str, help="Zone name")
 def zone_delete(ctx, name):
     ctx.info(f"Deleting zone: {name}")
@@ -416,12 +470,125 @@ strictcli.flag("cache", type=bool, default=True, help="Enable caching")
 # Users pass --no-cache to disable
 ```
 
-### `--dry-run` is the standard name
+### The reserved flag quartet
 
-Use `--dry-run` for dry-run flags (not `--dry` or any other abbreviation). This
-is a naming convention enforced across all strictcli projects to ensure
-consistent flag names that agents and users can predict without checking help
-text.
+Four flag names are owned by the framework and cannot be declared at any level --
+not as app global flags, not as command flags, not inside a flag set, not inside
+a mutex group:
+
+| Flag | Delivered as | Meaning |
+|------|-------------|---------|
+| `--dry-run` | `ctx.dry_run` | Record effects instead of performing them, then print the would-do log |
+| `--approve-consequential` | `ctx.approve_consequential` | Answer the confirm prompt in advance |
+| `--quiet` | `ctx.quiet` | Suppress `ctx.info` output; warnings and errors still print |
+| `--verbose` | `ctx.verbose` | Enable `ctx.debug` output |
+
+```python
+# Every one of these raises ValueError:
+strictcli.flag("dry-run", type=bool, default=False, help="Simulate the run")
+strictcli.flag("verbose", type=bool, default=False, help="Be verbose")
+strictcli.flag("quiet", type=bool, default=False, help="Be quiet")
+```
+
+The error message is `flag name 'dry-run' is reserved by the framework
+(dry-run, approve-consequential, quiet, verbose)`. The name `yes` is banned
+outright with its own message pointing at `--approve-consequential`, so that a
+private `--yes` cannot restate the confirmation skip in a different spelling.
+
+All four are recognized anywhere in argv: `mytool deploy --dry-run` and
+`mytool --dry-run deploy` are equivalent. Two boundaries stop the scan -- a bare
+`--` (everything after it is data) and a passthrough command's name (its args
+are forwarded to the child byte-for-byte).
+
+### Refusing `--dry-run` with `dry_run_supported`
+
+`--dry-run` works on every `mutating` command by default: its effects are
+recorded rather than performed. Some commands cannot honor that honestly --
+their effects escape the effects handle, or their later steps read state that
+their earlier (recorded, therefore un-performed) steps would have written. Such
+a command declares `dry_run_supported=False` with a mandatory
+`dry_run_unsupported_reason`:
+
+```python
+@app.command(
+    "migrate",
+    help="Run pending database migrations",
+    effect="mutating",
+    dry_run_supported=False,
+    dry_run_unsupported_reason=(
+        "each migration reads the schema the previous one wrote, "
+        "so a recorded run would report the wrong pending set"
+    ),
+)
+def migrate(ctx):
+    ...
+```
+
+`--dry-run` is then refused at parse time rather than rendering a preview that
+would lie:
+
+```
+$ mytool migrate --dry-run
+error: --dry-run is not supported by command 'migrate': each migration reads the schema the previous one wrote, so a recorded run would report the wrong pending set
+```
+
+Three guardrails apply at registration time:
+
+- `dry_run_supported=False` on a `read_only` command is an error -- a command that changes nothing has no effects a preview could misrepresent.
+- `dry_run_supported=False` without a non-empty reason is an error -- say what a preview cannot honestly show.
+- A `dry_run_unsupported_reason` without `dry_run_supported=False` is an error -- there is nothing to explain while dry run is supported.
+
+The reason also appears in the command's help under a `Dry run:` section, and in
+`--dump-schema` output as the pair `dry_run_supported` / `dry_run_unsupported_reason`.
+Both keys are emitted only when declared, so a schema entry without them means
+dry run is supported. `--help` always beats the refusal: asking what a command
+does is never answered with a refusal to preview it.
+
+## Consequential Commands and the Confirm Protocol
+
+Classification says whether a dry run should record rather than perform.
+`consequential` says something different: that these effects are worth
+interrupting a human for. It is the **only** thing that makes the framework
+prompt -- a plain `mutating` command never does.
+
+```python
+@app.command("destroy", help="Destroy the cluster", effect="mutating", consequential=True)
+@strictcli.arg("cluster", help="Cluster to destroy")
+def destroy(ctx, cluster):
+    ctx.info(f"Destroying {cluster}")
+```
+
+Before dispatching, the framework prints the prompt to stderr and reads one line
+from stdin:
+
+```
+$ mytool destroy prod
+about to run consequential command 'destroy'. Proceed? [y/N]
+```
+
+Only `y` or `Y` proceeds. Anything else prints `aborted` to stderr and exits 1.
+
+Two things skip the prompt, and neither disables anything else:
+
+- `--approve-consequential` -- the operator answered in advance. This is what automation and CI pass.
+- `--dry-run` -- nothing is being performed, so there is nothing to confirm.
+
+When stdin is not a TTY and neither flag was passed, the framework refuses
+rather than hanging or silently proceeding:
+
+```
+$ mytool destroy prod < /dev/null
+error: stdin is not interactive; pass --approve-consequential to confirm
+```
+
+The prompt never fires on the programmatic paths (`app.test()`, `app.call()`,
+MCP), which have no TTY contract. There is no bypass flag: `--approve-consequential`
+answers the prompt and does nothing else. A `read_only` command cannot be
+declared consequential -- a command that changes nothing has nothing to confirm --
+and trying raises `ValueError` at registration time.
+
+A consequential passthrough command is not exempt. The framework knows *less*
+about what is about to happen there, not more.
 
 ### Help text is mandatory
 
@@ -438,15 +605,21 @@ or config). A mutex group must contain at least 2 flags, and flags in a mutex
 group with no default get `None` instead of being required:
 
 ```python
-@app.command("output", help="Produce output", mutex=[
+@app.command("output", help="Produce output", effect="read_only", mutex=[
     strictcli.MutexGroup(flags=[
         strictcli.Flag(name="file", type=str, help="Write to file"),
         strictcli.Flag(name="stdout-only", type=bool, default=False, help="Write to stdout"),
     ]),
 ])
-def output(ctx, **kwargs):
-    pass
+def output(ctx, file, stdout_only):
+    if file is not None:
+        ctx.info(f"Writing to {file}")
 ```
+
+Name every parameter explicitly. A handler that accepts `**kwargs` without the
+command declaring `forwarding=strictcli.Forwarding(reason=...)` is a
+registration-time error -- an unnamed parameter bag hides which flags a handler
+actually consumes.
 
 ## Dependencies
 
@@ -456,21 +629,24 @@ dependency types are available: `Requires` (one-way dependency), `CoRequired`
 flag when a trigger is provided):
 
 ```python
-@app.command("deploy", help="Deploy the app", dependencies=[
+@app.command("deploy", help="Deploy the app", effect="mutating", dependencies=[
     # --region requires --target to be present
     strictcli.Requires(flag="region", depends_on="target"),
     # --target and --region must both appear or neither
     strictcli.CoRequired(flags=["target", "region"]),
-    # --auto-approve implies --dry-run=False
-    strictcli.Implies(flag="auto-approve", implies="dry-run", value=False),
+    # --canary implies --wait=True
+    strictcli.Implies(flag="canary", implies="wait", value=True),
 ])
 @strictcli.flag("target", type=str, help="Deploy target")
 @strictcli.flag("region", type=str, help="Target region")
-@strictcli.flag("dry-run", type=bool, default=False, help="Simulate the deploy")
-@strictcli.flag("auto-approve", type=bool, default=False, help="Skip confirmation")
-def deploy(ctx, target, region, dry_run, auto_approve):
+@strictcli.flag("canary", type=bool, default=False, help="Roll out to the canary fleet first")
+@strictcli.flag("wait", type=bool, default=False, help="Block until the rollout settles")
+def deploy(ctx, target, region, canary, wait):
     ctx.info(f"Deploying to {target} in {region}")
 ```
+
+Dependencies cannot reference the reserved quartet: `dry-run` is not a flag you
+declare, so it cannot be a `Requires` target or an `Implies` subject.
 
 | Dependency | Behavior |
 |------------|----------|
@@ -491,11 +667,12 @@ auth_flags = strictcli.FlagSet(name="auth", flags=[
     strictcli.Flag(name="region", type=str, default="us-east", help="API region"),
 ])
 
-@app.command("list", help="List resources", flag_sets=[auth_flags])
+@app.command("list", help="List resources", effect="read_only", flag_sets=[auth_flags])
 def list_cmd(ctx, token, region):
     ctx.info(f"Listing in {region}")
 
-@app.command("delete", help="Delete a resource", flag_sets=[auth_flags])
+@app.command("delete", help="Delete a resource", effect="mutating",
+             consequential=True, flag_sets=[auth_flags])
 @strictcli.flag("resource-id", type=str, help="Resource to delete")
 def delete_cmd(ctx, token, region, resource_id):
     ctx.info(f"Deleting {resource_id}")
@@ -517,7 +694,7 @@ app = strictcli.App(
     env_prefix="MYTOOL",
 )
 
-@app.command("run", help="Run the tool")
+@app.command("run", help="Run the tool", effect="read_only")
 @strictcli.flag("port", type=int, default=8080, env="MYTOOL_PORT", help="Server port")
 def run(ctx, port):
     ctx.info(f"Listening on port {port}")
@@ -617,7 +794,7 @@ strictcli apps:
 def test_greet():
     app = strictcli.App(name="mytool", version="0.1.0", help="test app")
 
-    @app.command("greet", help="Say hello")
+    @app.command("greet", help="Say hello", effect="read_only")
     @strictcli.flag("name", type=str, help="Who to greet")
     def greet(ctx, name):
         ctx.info(f"Hello, {name}!")
@@ -662,7 +839,8 @@ argument format is not known in advance. Passthrough commands cannot have flags,
 args, flag sets, or mutex groups:
 
 ```python
-@app.command("exec", help="Execute a command", passthrough=strictcli.Passthrough(
+@app.command("exec", help="Execute a command", effect="mutating",
+             passthrough=strictcli.Passthrough(
     handler=lambda ctx, name, args, globals: (
         ctx.info(f"Running: {name} {args}") or 0
     ),
@@ -672,6 +850,11 @@ def exec_placeholder():
 ```
 
 The passthrough handler receives `(ctx, name, args, globals)` where `args` is the raw list of tokens and `globals` is a dict of global flag values.
+
+A passthrough command is classified like any other command, and may declare
+itself `consequential`. Because its args are forwarded to the child
+byte-for-byte, the reserved quartet is not scanned after the passthrough
+command's name: `mytool exec deploy --dry-run` passes `--dry-run` to the child.
 
 ## Error Handling
 
@@ -695,7 +878,7 @@ try 'mytool deploy --help'
 
 ## Full Example
 
-```python
+```python validate
 import strictcli
 
 app = strictcli.App(
@@ -705,16 +888,15 @@ app = strictcli.App(
     config=True,
     env_prefix="DEPLOY",
     flags=[
-        strictcli.Flag(name="verbose", type=bool, default=False, help="Enable verbose output"),
+        strictcli.Flag(name="color", type=bool, default=True, help="Colorize output"),
     ],
 )
 
-@app.command("status", help="Show deployment status")
+@app.command("status", help="Show deployment status", effect="read_only")
 @strictcli.flag("environment", short="e", type=str, default="production",
                 choices=["production", "staging", "dev"], help="Target environment")
-def status(ctx, verbose, environment):
-    if verbose:
-        ctx.info(f"Checking status for environment: {environment}")
+def status(ctx, color, environment):
+    ctx.debug(f"Checking status for environment: {environment}")
     return strictcli.outcome(exit_code=0, data={
         "environment": environment,
         "status": "healthy",
@@ -722,10 +904,10 @@ def status(ctx, verbose, environment):
 
 svc = app.group("service", help="Service management")
 
-@svc.command("restart", help="Restart a service")
+@svc.command("restart", help="Restart a service", effect="mutating", consequential=True)
 @strictcli.flag("name", type=str, help="Service name")
 @strictcli.flag("timeout", type=int, default=30, help="Shutdown timeout in seconds")
-def restart(ctx, verbose, name, timeout):
+def restart(ctx, color, name, timeout):
     ctx.info(f"Restarting {name} (timeout: {timeout}s)")
 
 app.run()
@@ -737,8 +919,16 @@ Usage:
 $ deploy-tool status -e staging
 {"environment":"staging","status":"healthy"}
 
-$ deploy-tool --verbose service restart --name api --timeout 60
+$ deploy-tool --verbose status -e staging
+Checking status for environment: staging
+{"environment":"staging","status":"healthy"}
+
+$ deploy-tool service restart --name api --timeout 60
+about to run consequential command 'service restart'. Proceed? [y/N] y
 Restarting api (timeout: 60s)
+
+$ deploy-tool service restart --name api --approve-consequential
+Restarting api (timeout: 30s)
 
 $ deploy-tool config show
 $ deploy-tool --dump-schema
