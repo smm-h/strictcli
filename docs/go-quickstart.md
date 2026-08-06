@@ -149,11 +149,14 @@ A StringFlag with no `Default()` is required -- the user must provide it.
 ### BoolFlag
 
 ```go
-strictcli.BoolFlag("verbose", "Enable verbose output", strictcli.Default(false))
+strictcli.BoolFlag("cache", "Reuse the build cache", strictcli.Default(true))
 strictcli.BoolFlag("watch", "Watch for changes")
 ```
 
-Bool flags are negatable by default: `--verbose` sets true, `--no-verbose` sets false. A BoolFlag with no `Default()` is required -- the user must pass either `--flag` or `--no-flag` explicitly.
+Bool flags are negatable by default: `--cache` sets true, `--no-cache` sets false. A BoolFlag with no `Default()` is required -- the user must pass either `--flag` or `--no-flag` explicitly.
+
+Note that `verbose` and `quiet` are not available as flag names: they belong to
+the [reserved quartet](#the-reserved-flag-quartet) and arrive on `ctx` instead.
 
 ### IntFlag
 
