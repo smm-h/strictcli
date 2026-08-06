@@ -23,7 +23,8 @@
   "en/go-strictcli-testdata-noncomparable.md": {
     "content": "3e51fdc0997f38707db188e2cce1590da01f17bdcd6361a5dc8e805303ac7af0",
     "description": "eda609ee83c64ed2eb8a1a535cfc4269d2d18624127db4f9792e5f9b20841ec0",
-    "seed_hash": "eda609ee83c64ed2eb8a1a535cfc4269d2d18624127db4f9792e5f9b20841ec0"
+    "seed_hash": "eda609ee83c64ed2eb8a1a535cfc4269d2d18624127db4f9792e5f9b20841ec0",
+    "source_docstring": "7aae1df35e93f7050c1ed49c34facd127c89fa00d184a4e88bf2db0c2509e9e4"
   },
   "en/go-strictcli.md": {
     "content": "fdeec4c30ea7f755da9bceec5ec9a00f75acd02d258a2d78d5281cd669b32e19",
@@ -216,6 +217,7 @@
   "en/typescript-src-version.md": {
     "content": "75cfe6e23c71d45f6688a63a36e22361c58315ff04227310970f35290cfd6ce6",
     "description": "5d6a2a8a5d2f0d8e058012b091cf4f095e7d11b758d56a6dbf882343861ecc66",
-    "seed_hash": "5d6a2a8a5d2f0d8e058012b091cf4f095e7d11b758d56a6dbf882343861ecc66"
+    "seed_hash": "5d6a2a8a5d2f0d8e058012b091cf4f095e7d11b758d56a6dbf882343861ecc66",
+    "source_docstring": "f07cbc07fb3c582c58ac246f64815660354e6fd6664a6d9033cc6bd03d8cb83e"
   }
 }
