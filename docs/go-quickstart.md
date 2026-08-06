@@ -29,7 +29,7 @@ error -- strictcli enforces self-documenting apps from the first line of code.
 Additional options like `WithConfig()`, `WithEnvPrefix()`, and `WithConfigFormat()`
 are passed as functional options after the help text.
 
-```go
+```go validate
 package main
 
 import "github.com/smm-h/strictcli/go/strictcli"
@@ -39,7 +39,7 @@ func main() {
     app.Command("hello", "Print a greeting", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
         ctx.Info("Hello, world!")
         return strictcli.Exit(0)
-    })
+    }, strictcli.WithEffect(strictcli.EffectReadOnly))
     app.Run()
 }
 ```
@@ -60,6 +60,37 @@ $ mytool --version
 mytool 0.1.0
 ```
 
+## Command Classification
+
+Every command must declare what it does to the world. `WithEffect(...)` is a
+mandatory `CmdOption` taking one of two exported constants -- there is no
+default, and a command registered without it panics at registration time:
+
+| Constant | Meaning |
+|----------|---------|
+| `strictcli.EffectReadOnly` | The command changes nothing. It never prompts, and calling a mutating member of the effects handle from it is a hard error at call time. |
+| `strictcli.EffectMutating` | The command changes something. It participates in `--dry-run`, where its effects are recorded instead of performed. |
+
+```go
+app.Command("status", "Show deployment status", statusHandler,
+    strictcli.WithEffect(strictcli.EffectReadOnly))
+
+app.Command("deploy", "Deploy the app", deployHandler,
+    strictcli.WithEffect(strictcli.EffectMutating))
+```
+
+Classification answers one question -- "should a dry run record this rather than
+perform it?" It is deliberately **not** the same question as "is this dangerous
+enough to interrupt someone for?", which is what
+[`WithConsequential()`](#consequential-commands-and-the-confirm-protocol)
+answers. A mutating command does not prompt unless it also declares itself
+consequential.
+
+Classification is a property of the command, so it is emitted in `--dump-schema`
+output on every command entry and can be asserted against by check gates.
+Deprecated commands are exempt: they have no handler, execute nothing, and
+passing an effect to `app.Deprecated(...)` is a registration-time error.
+
 ## Handler Signature
 
 Every command handler has a fixed signature that receives a context for
@@ -71,8 +102,8 @@ structured data:
 func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome
 ```
 
-- `ctx` provides structured output (`ctx.Info`, `ctx.Warn`, `ctx.Error`, `ctx.Debug`) and provenance (`ctx.Source`).
-- `kwargs` is a map of flag and arg values, keyed by parameter name (dashes converted to underscores: `--dry-run` becomes `dry_run`).
+- `ctx` provides structured output (`ctx.Info`, `ctx.Warn`, `ctx.Error`, `ctx.Debug`), provenance (`ctx.Source`), the four reserved-quartet values (`ctx.DryRun()`, `ctx.ApproveConsequential()`, `ctx.Quiet()`, `ctx.Verbose()`), and the effects handle (`ctx.Effects()`).
+- `kwargs` is a map of flag and arg values, keyed by parameter name (dashes converted to underscores: `--log-file` becomes `log_file`). The reserved quartet is never in `kwargs` -- it arrives on `ctx`.
 - Return `Exit(code)` for exit-code-only results, or `ExitData(code, data)` to emit structured JSON data to stdout.
 
 Use the typed helpers `Get` and `GetOpt` to extract values from kwargs:
@@ -88,7 +119,7 @@ app.Command("greet", "Greet someone", func(ctx *strictcli.Context, kwargs map[st
     }
     ctx.Info(msg)
     return strictcli.Exit(0)
-}, strictcli.WithFlags(
+}, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithFlags(
     strictcli.StringFlag("name", "Who to greet"),
     strictcli.BoolFlag("loud", "Shout the greeting", strictcli.Default(false)),
 ))
@@ -193,6 +224,7 @@ default value via `ArgDefault()`.
 
 ```go
 app.Command("deploy", "Deploy to an environment", handler,
+    strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithArgs(
         strictcli.NewArg("environment", "Target environment"),
         strictcli.NewArg("version", "Version to deploy", strictcli.ArgRequired(false), strictcli.ArgDefault("latest")),
@@ -219,6 +251,7 @@ setting needs at least one value to be provided.
 
 ```go
 app.Command("process", "Process files", handler,
+    strictcli.WithEffect(strictcli.EffectReadOnly),
     strictcli.WithArgs(
         strictcli.NewArg("files", "Files to process", strictcli.Variadic()),
     ),
@@ -233,25 +266,25 @@ Global flags are available to all commands and can appear before or after the
 command name in argv. They are parsed during the global flag parsing stage,
 before the command is resolved. Global flag names cannot collide with reserved
 framework names like `help`, `version`, `dump-schema`, `mcp`, `config`, or
-`hermetic`.
+`hermetic`, nor with the reserved quartet.
 
 ```go
 app := strictcli.NewApp("mytool", "0.1.0", "A useful tool")
-app.GlobalFlag(strictcli.BoolFlag("verbose", "Enable verbose output", strictcli.Default(false)))
+app.GlobalFlag(strictcli.BoolFlag("color", "Colorize output", strictcli.Default(true)))
 app.GlobalFlag(strictcli.StringFlag("log-level", "Log level", strictcli.Default("info"), strictcli.Choices("debug", "info", "warn", "error")))
 
 app.Command("deploy", "Deploy the app", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
-    verbose := strictcli.Get[bool](kwargs, "verbose")
-    if verbose {
-        ctx.Info("Verbose mode enabled")
+    color := strictcli.Get[bool](kwargs, "color")
+    if !color {
+        ctx.Info("Color disabled")
     }
     return strictcli.Exit(0)
-})
+}, strictcli.WithEffect(strictcli.EffectMutating))
 ```
 
-Usage: `mytool --verbose deploy` or `mytool deploy --verbose` (global flags can appear before or after the command).
+Usage: `mytool --no-color deploy` or `mytool deploy --no-color` (global flags can appear before or after the command).
 
-Reserved global flag names that cannot be used: `help`, `h`, `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`.
+Reserved global flag names that cannot be used: `help`, `h`, `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`, plus the reserved quartet `dry-run`, `approve-consequential`, `quiet`, `verbose`. The name `yes` is banned outright -- the confirmation skip is `--approve-consequential`.
 
 ## Command Groups
 
@@ -264,12 +297,16 @@ subcommand, the group's help text is displayed.
 app := strictcli.NewApp("mytool", "0.1.0", "Infrastructure tool")
 
 dns := app.Group("dns", "DNS management")
-dns.Command("list", "List DNS records", listHandler)
-dns.Command("create", "Create a DNS record", createHandler)
+dns.Command("list", "List DNS records", listHandler,
+    strictcli.WithEffect(strictcli.EffectReadOnly))
+dns.Command("create", "Create a DNS record", createHandler,
+    strictcli.WithEffect(strictcli.EffectMutating))
 
 zone := dns.Group("zone", "Zone management")
-zone.Command("list", "List zones", zoneListHandler)
-zone.Command("delete", "Delete a zone", zoneDeleteHandler)
+zone.Command("list", "List zones", zoneListHandler,
+    strictcli.WithEffect(strictcli.EffectReadOnly))
+zone.Command("delete", "Delete a zone", zoneDeleteHandler,
+    strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithConsequential())
 ```
 
 Usage:
@@ -321,6 +358,119 @@ strictcli.BoolFlag("cache", "Enable caching", strictcli.Default(true))
 // Users pass --no-cache to disable
 ```
 
+### The reserved flag quartet
+
+Four flag names are owned by the framework and cannot be declared at any level --
+not as app global flags, not as command flags, not inside a flag set, not inside
+a mutex group:
+
+| Flag | Delivered as | Meaning |
+|------|-------------|---------|
+| `--dry-run` | `ctx.DryRun()` | Record effects instead of performing them, then print the would-do log |
+| `--approve-consequential` | `ctx.ApproveConsequential()` | Answer the confirm prompt in advance |
+| `--quiet` | `ctx.Quiet()` | Suppress `ctx.Info` output; warnings and errors still print |
+| `--verbose` | `ctx.Verbose()` | Enable `ctx.Debug` output |
+
+```go
+// Every one of these panics:
+strictcli.BoolFlag("dry-run", "Simulate the run", strictcli.Default(false))
+strictcli.BoolFlag("verbose", "Be verbose", strictcli.Default(false))
+strictcli.BoolFlag("quiet", "Be quiet", strictcli.Default(false))
+```
+
+The panic message is `flag name 'dry-run' is reserved by the framework
+(dry-run, approve-consequential, quiet, verbose)`. The name `yes` is banned
+outright with its own message pointing at `--approve-consequential`, so that a
+private `--yes` cannot restate the confirmation skip in a different spelling.
+
+All four are recognized anywhere in argv: `mytool deploy --dry-run` and
+`mytool --dry-run deploy` are equivalent. Two boundaries stop the scan -- a bare
+`--` (everything after it is data) and a passthrough command's name (its args
+are forwarded to the child byte-for-byte).
+
+### Refusing `--dry-run` with `WithDryRunUnsupported`
+
+`--dry-run` works on every mutating command by default: its effects are recorded
+rather than performed. Some commands cannot honor that honestly -- their effects
+escape the effects handle, or their later steps read state that their earlier
+(recorded, therefore un-performed) steps would have written. Such a command
+declares the refusal with a mandatory reason:
+
+```go
+app.Command("migrate", "Run pending database migrations", migrateHandler,
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithDryRunUnsupported(
+        "each migration reads the schema the previous one wrote, "+
+            "so a recorded run would report the wrong pending set"),
+)
+```
+
+`--dry-run` is then refused at parse time rather than rendering a preview that
+would lie:
+
+```
+$ mytool migrate --dry-run
+error: --dry-run is not supported by command 'migrate': each migration reads the schema the previous one wrote, so a recorded run would report the wrong pending set
+```
+
+Two guardrails apply at registration time:
+
+- `WithDryRunUnsupported` on a `read_only` command panics -- a command that changes nothing has no effects a preview could misrepresent.
+- An empty reason panics -- say what a preview cannot honestly show.
+
+The reason also appears in the command's help under a `Dry run:` section, and in
+`--dump-schema` output as the pair `dry_run_supported` / `dry_run_unsupported_reason`.
+Both keys are emitted only when declared, so a schema entry without them means
+dry run is supported. `--help` always beats the refusal: asking what a command
+does is never answered with a refusal to preview it.
+
+## Consequential Commands and the Confirm Protocol
+
+Classification says whether a dry run should record rather than perform.
+`WithConsequential()` says something different: that these effects are worth
+interrupting a human for. It is the **only** thing that makes the framework
+prompt -- a plain mutating command never does.
+
+```go
+app.Command("destroy", "Destroy the cluster", destroyHandler,
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithConsequential(),
+    strictcli.WithArgs(strictcli.NewArg("cluster", "Cluster to destroy")),
+)
+```
+
+Before dispatching, the framework prints the prompt to stderr and reads one line
+from stdin:
+
+```
+$ mytool destroy prod
+about to run consequential command 'destroy'. Proceed? [y/N]
+```
+
+Only `y` or `Y` proceeds. Anything else prints `aborted` to stderr and exits 1.
+
+Two things skip the prompt, and neither disables anything else:
+
+- `--approve-consequential` -- the operator answered in advance. This is what automation and CI pass.
+- `--dry-run` -- nothing is being performed, so there is nothing to confirm.
+
+When stdin is not a TTY and neither flag was passed, the framework refuses
+rather than hanging or silently proceeding:
+
+```
+$ mytool destroy prod < /dev/null
+error: stdin is not interactive; pass --approve-consequential to confirm
+```
+
+The prompt never fires on the programmatic paths (`app.Test()`, `app.Call()`,
+MCP), which have no TTY contract. There is no bypass flag:
+`--approve-consequential` answers the prompt and does nothing else. A read-only
+command cannot be declared consequential -- a command that changes nothing has
+nothing to confirm -- and trying panics at registration time.
+
+A consequential passthrough command is not exempt. The framework knows *less*
+about what is about to happen there, not more.
+
 ### Help text is mandatory
 
 Every flag, arg, command, group, and app must have non-empty help text. Missing
@@ -337,6 +487,7 @@ config). If no flag in the group has a value and no defaults exist, a "one of
 
 ```go
 app.Command("output", "Produce output", handler,
+    strictcli.WithEffect(strictcli.EffectReadOnly),
     strictcli.WithMutex(strictcli.MutexGroup{
         Flags: []strictcli.Flag{
             strictcli.StringFlag("file", "Write to file"),
@@ -355,22 +506,26 @@ trigger is provided):
 
 ```go
 app.Command("deploy", "Deploy the app", handler,
+    strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithFlags(
         strictcli.StringFlag("target", "Deploy target"),
         strictcli.StringFlag("region", "Target region"),
-        strictcli.BoolFlag("dry-run", "Simulate the deploy", strictcli.Default(false)),
-        strictcli.BoolFlag("auto-approve", "Skip confirmation", strictcli.Default(false)),
+        strictcli.BoolFlag("canary", "Roll out to the canary fleet first", strictcli.Default(false)),
+        strictcli.BoolFlag("wait", "Block until the rollout settles", strictcli.Default(false)),
     ),
     strictcli.WithDependencies(
         // --region requires --target to be present
         strictcli.Requires{Flag: "region", DependsOn: "target"},
         // --target and --region must both appear or neither
         strictcli.CoRequired{Flags: []string{"target", "region"}},
-        // --auto-approve implies --dry-run=false
-        strictcli.Implies{Flag: "auto-approve", Implies: "dry-run", Value: false},
+        // --canary implies --wait=true
+        strictcli.Implies{Flag: "canary", Implies: "wait", Value: true},
     ),
 )
 ```
+
+Dependencies cannot reference the reserved quartet: `dry-run` is not a flag you
+declare, so it cannot be a `Requires` target or an `Implies` subject.
 
 ## WithConfig -- Config File Support
 
@@ -390,7 +545,7 @@ app.Command("run", "Run the tool", func(ctx *strictcli.Context, kwargs map[strin
     port := strictcli.Get[int](kwargs, "port")
     ctx.Info(fmt.Sprintf("Listening on port %d", port))
     return strictcli.Exit(0)
-}, strictcli.WithFlags(
+}, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithFlags(
     strictcli.IntFlag("port", "Server port", strictcli.Default(8080), strictcli.Env("MYTOOL_PORT")),
 ))
 ```
@@ -471,7 +626,7 @@ func TestGreet(t *testing.T) {
         name := strictcli.Get[string](kwargs, "name")
         ctx.Info("Hello, " + name + "!")
         return strictcli.Exit(0)
-    }, strictcli.WithFlags(
+    }, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithFlags(
         strictcli.StringFlag("name", "Who to greet"),
     ))
 
@@ -508,12 +663,18 @@ args, flag sets, or mutex groups:
 app.Passthrough("exec", "Execute a command", func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
     ctx.Info(fmt.Sprintf("Running: %s %v", name, args))
     return 0
-})
+}, strictcli.WithEffect(strictcli.EffectMutating))
 ```
+
+A passthrough is an ordinary command registration in Go, so it takes
+`WithEffect(...)` like everything else, and may add `WithConsequential()`.
+Because its args are forwarded to the child byte-for-byte, the reserved quartet
+is not scanned after the passthrough command's name: `mytool exec deploy --dry-run`
+passes `--dry-run` to the child.
 
 ## Full Example
 
-```go
+```go validate
 package main
 
 import (
@@ -528,19 +689,16 @@ func main() {
         strictcli.WithEnvPrefix("DEPLOY"),
     )
 
-    app.GlobalFlag(strictcli.BoolFlag("verbose", "Enable verbose output", strictcli.Default(false)))
+    app.GlobalFlag(strictcli.BoolFlag("color", "Colorize output", strictcli.Default(true)))
 
     app.Command("status", "Show deployment status", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
-        verbose := strictcli.Get[bool](kwargs, "verbose")
         env := strictcli.Get[string](kwargs, "environment")
-        if verbose {
-            ctx.Info(fmt.Sprintf("Checking status for environment: %s", env))
-        }
+        ctx.Debug(fmt.Sprintf("Checking status for environment: %s", env))
         return strictcli.ExitData(0, map[string]interface{}{
             "environment": env,
             "status":      "healthy",
         })
-    }, strictcli.WithFlags(
+    }, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithFlags(
         strictcli.StringFlag("environment", "Target environment",
             strictcli.Default("production"),
             strictcli.Short("e"),
@@ -554,10 +712,11 @@ func main() {
         timeout := strictcli.Get[int](kwargs, "timeout")
         ctx.Info(fmt.Sprintf("Restarting %s (timeout: %ds)", name, timeout))
         return strictcli.Exit(0)
-    }, strictcli.WithFlags(
-        strictcli.StringFlag("name", "Service name"),
-        strictcli.IntFlag("timeout", "Shutdown timeout in seconds", strictcli.Default(30)),
-    ))
+    }, strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithConsequential(),
+        strictcli.WithFlags(
+            strictcli.StringFlag("name", "Service name"),
+            strictcli.IntFlag("timeout", "Shutdown timeout in seconds", strictcli.Default(30)),
+        ))
 
     app.Run()
 }
@@ -569,9 +728,16 @@ Usage:
 $ deploy-tool status -e staging
 {"environment":"staging","status":"healthy"}
 
-$ deploy-tool --verbose service restart --name api --timeout 60
-Checking status for environment: production
+$ deploy-tool --verbose status -e staging
+Checking status for environment: staging
+{"environment":"staging","status":"healthy"}
+
+$ deploy-tool service restart --name api --timeout 60
+about to run consequential command 'service restart'. Proceed? [y/N] y
 Restarting api (timeout: 60s)
+
+$ deploy-tool service restart --name api --approve-consequential
+Restarting api (timeout: 30s)
 
 $ deploy-tool config show
 $ deploy-tool --dump-schema
