@@ -11,16 +11,18 @@ strictcli ships three independent implementations -- Python, Go, and TypeScript 
 
 ## What the suite covers
 
-The conformance suite enforces behavioral parity through nine checks, all gated
+The conformance suite enforces behavioral parity through ten checks, all gated
 at error severity so that any failure blocks a release. These checks cover API
-surface consistency, error message parity, per-target test case execution,
-cross-target output comparison, schema structure identity, and canonical float
-formatting across all three strictcli implementations:
+surface consistency, error message parity, the suite's own extraction and
+registry surfaces, per-target test case execution, cross-target output
+comparison, schema structure identity, and canonical float formatting across all
+three strictcli implementations:
 
 | Check | What it verifies |
 |-------|-----------------|
 | `api-surface` | Every public API field (flags, args, app options, etc.) exists in all three implementations and in the conformance schema, accounting for language-idiomatic name mappings |
 | `error-parity` | Error message templates in `python/strictcli/__init__.py`, `go/strictcli/errors.go`, and `typescript/src/errors.ts` produce identical user-facing messages for identical inputs |
+| `conformance-meta` | The suite's own meta-tests (`test_error_parity_extraction.py`, `test_run_registry.py`, `test_api_surface_registry.py`), which pin the extraction and registry surfaces whose silent drift produces a false PASS rather than a visible error |
 | `conformance-python` | All JSON test cases pass against the Python implementation |
 | `conformance-go` | All JSON test cases pass against the Go implementation |
 | `conformance-typescript` | All JSON test cases pass against the TypeScript implementation |
@@ -50,7 +52,7 @@ check, and any divergence in these areas blocks a release:
 
 ### JSON test cases
 
-The core of the suite is 57 JSON files in `conformance/cases/`, containing 556
+The core of the suite is 69 JSON files in `conformance/cases/`, containing 710
 individual test cases organized by feature area (flags, config, checks, groups,
 etc.). Each case is a self-contained JSON object specifying an app definition,
 argv input, optional environment variables, and expected output assertions
@@ -145,7 +147,7 @@ consistency:
 
 All commands are run from the repository root unless otherwise noted. The test
 runner supports filtering by case name, verbose output for debugging, and parity
-mode for cross-target comparison. The full check gate runs all nine checks in
+mode for cross-target comparison. The full check gate runs all ten checks in
 dependency order.
 
 ### Single target
@@ -169,18 +171,18 @@ python conformance/run.py --target python --filter "config" -v
 python conformance/run.py --both --filter "hermetic" -v
 ```
 
-### Full check gate (all nine checks)
+### Full check gate (all ten checks)
 
-The full check gate runs all nine conformance checks in dependency order from the
-`conformance/` directory. It starts with the fast pure checks (api-surface and
-error-parity), then runs per-target conformance suites, then parity and schema
-checks. All nine checks must pass for a release to proceed:
+The full check gate runs all ten conformance checks in dependency order from the
+`conformance/` directory. It starts with the fast pure checks (api-surface,
+error-parity and conformance-meta), then runs per-target conformance suites, then
+parity and schema checks. All ten checks must pass for a release to proceed:
 
 ```bash
 uv run conformance check --tag pre-release
 ```
 
-This runs all nine checks in dependency order: `api-surface` and `error-parity` first (fast, pure), then the per-target conformance runs, then parity and schema checks.
+This runs all ten checks in dependency order: `api-surface`, `error-parity` and `conformance-meta` first (fast, pure), then the per-target conformance runs, then parity and schema checks.
 
 ### Individual supplementary checks
 
@@ -250,6 +252,11 @@ Key fields in `expect`:
 | `stdout_contains` / `stderr_contains` | Substring(s) that must appear. |
 | `stdout_not_contains` / `stderr_not_contains` | Substring(s) that must not appear. |
 | `stdout_matches` / `stderr_matches` | Regex pattern(s) matched via `re.search`. |
+| `config_file_contains` / `config_file_not_contains` | Substring(s) that must (or must not) appear in the seeded config file after the run. Reads the `config_content` / `config_content_late` temp file. |
+| `config_file_matches` | Regex pattern(s) matched via `re.search` against the seeded config file after the run. Useful for asserting key ordering. |
+| `effects_equals` | Deep-equality assertion against the structured effect log the run produced (effects contract §14.1). Compared in order over the parsed JSON arrays; absent optional keys and explicit-null keys are equivalent, and `recorded` is required on every record. |
+| `schema_command_keys` | Per-command key assertions against the `.strictcli/schema.json` a `--dump-schema` run emitted. Maps a dotted command path (groups then command, e.g. `release.run`) to the keys that entry must carry, with their exact values. Requires `--dump-schema` in the case argv. |
+| `schema_command_absent_keys` | The mirror of `schema_command_keys`: maps a dotted command path to keys that must NOT appear on that entry. Pins the emit-when-declared contract, where a key omitted by one implementation and emitted with a default by another is a silent divergence. Requires `--dump-schema` in the case argv. |
 
 ### 3. Use handler_prints for output
 
@@ -277,7 +284,7 @@ If the new case has output that is legitimately language-specific, add an `ackno
 
 ## Architecture notes
 
-- The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 9 automated checks.
-- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 556 test cases across all 3 targets.
+- The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 10 automated checks.
+- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 710 test cases across all 3 targets.
 - The conformance tool itself is built with strictcli (dogfooding the check system). Its checks are declared in `conformance/conformance_tool/.strictcli/checks.toml`.
 - Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, and `check_schema_parity.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.
