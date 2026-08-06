@@ -48,22 +48,22 @@ def test_literal_run_cut_short_by_an_expression_is_truncated():
 def test_complete_literal_ending_in_a_space_is_not_truncated():
     """The confirm prompt ends with a space BY DESIGN -- no phantom * for it."""
     text, truncated = cep._extract_string_literals(
-        "f\"about to run mutating command '{name}'. Proceed? [y/N] \""
+        "f\"about to run consequential command '{cmd_path}'. Proceed? [y/N] \""
     )
     assert truncated is False
     assert cep.normalize_python(cep._truncation_marker(text, truncated)) == (
-        "about to run mutating command *. Proceed? [y/N] "
+        "about to run consequential command *. Proceed? [y/N] "
     )
 
 
 def test_confirm_prompt_signature_matches_its_go_counterpart():
     """The two normalizers must agree, or parity fails on a spelling artifact."""
     py_text, py_truncated = cep._extract_string_literals(
-        "f\"about to run mutating command '{name}'. Proceed? [y/N] \""
+        "f\"about to run consequential command '{cmd_path}'. Proceed? [y/N] \""
     )
     py_sig = cep.normalize_python(cep._truncation_marker(py_text, py_truncated))
     go_sig = cep.normalize_go(
-        "about to run mutating command '%s'. Proceed? [y/N] "
+        "about to run consequential command '%s'. Proceed? [y/N] "
     )
     assert py_sig == go_sig
 
@@ -154,8 +154,9 @@ def test_type_error_raises_are_not_scanned():
 
 _EFFECTS_TEMPLATES = {
     # Confirm protocol (effects contract §12.6)
-    "about to run mutating command *. Proceed? [y/N] ": "parse",
-    "error: stdin is not interactive; pass --yes to confirm": "parse",
+    "about to run consequential command *. Proceed? [y/N] ": "parse",
+    "error: stdin is not interactive; pass --approve-consequential to confirm":
+        "parse",
     "aborted": "parse",
     # Truncation (§12.5)
     "error: dry-run preview ends at step *: * branched on unsettled value * "
