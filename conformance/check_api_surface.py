@@ -359,14 +359,19 @@ _SHARED_SCHEMA_TO_GO: dict[str, str] = {
     "connection_url": "ConnectionURL",
 }
 
-# TS struct -> owning factory whose option_keys extend the entity's TS name
+# TS struct -> owning factories whose option_keys extend the entity's TS name
 # universe (TS spec/option object types live under the factory in describe.ts,
-# not as separate structs).
-TS_STRUCT_OPTION_CTOR: dict[str, str] = {
-    "FlagDef": "flag",
-    "ArgDef": "arg",
-    "CommandDef": "defineCommand",
-    "App": "createApp",
+# not as separate structs).  The value is a LIST because a carrier can be built
+# by more than one factory: CommandDef comes from the effect-classified twins
+# (contract §1.2), whose specs are the only place command spec-only keys live.
+# Every name here is verified against the live describe dump by
+# check_ts_registry_targets() -- a factory rename must never silently empty a
+# universe (that is how `defineCommand` outlived its own deletion).
+TS_STRUCT_OPTION_CTOR: dict[str, list[str]] = {
+    "FlagDef": ["flag"],
+    "ArgDef": ["arg"],
+    "CommandDef": ["defineReadOnlyCommand", "defineMutatingCommand"],
+    "App": ["createApp"],
 }
 
 _SHARED_TS_TO_SCHEMA: dict[str, str] = {
@@ -655,10 +660,43 @@ def _ts_entity_universe(
     if not desc.ts_struct:
         return set()
     universe = set(ts_structs.get(desc.ts_struct, set()))
-    ctor = TS_STRUCT_OPTION_CTOR.get(desc.ts_struct)
-    if ctor is not None:
+    for ctor in TS_STRUCT_OPTION_CTOR.get(desc.ts_struct, []):
         universe |= ts_ctor_keys.get(ctor, set())
     return universe
+
+
+def check_ts_registry_targets(
+    descriptors: list[EntityDescriptor],
+    ts_structs: dict[str, set[str]],
+    ts_ctor_keys: dict[str, set[str]],
+) -> list[str]:
+    """Every TS name the registry points at must exist in the describe dump.
+
+    Without this, a renamed or deleted TS struct/factory degrades silently: the
+    entity's name universe shrinks (or empties) and the TS arms of check_entity
+    stop checking anything, reporting a vacuous PASS.
+    """
+    errors: list[str] = []
+    for desc in descriptors:
+        if desc.ts_struct and desc.ts_struct not in ts_structs:
+            errors.append(
+                f"registry: ts_struct '{desc.ts_struct}' (entity "
+                f"{desc.schema_def}) is not in the TS describe dump"
+            )
+    for struct, ctors in sorted(TS_STRUCT_OPTION_CTOR.items()):
+        if struct not in ts_structs:
+            errors.append(
+                f"registry: TS_STRUCT_OPTION_CTOR key '{struct}' is not a "
+                f"struct in the TS describe dump"
+            )
+        for ctor in ctors:
+            if ctor not in ts_ctor_keys:
+                errors.append(
+                    f"registry: TS_STRUCT_OPTION_CTOR['{struct}'] names "
+                    f"'{ctor}', which is not an option constructor in the TS "
+                    f"describe dump"
+                )
+    return errors
 
 
 def check_entity(
@@ -1196,6 +1234,11 @@ def main() -> int:
     descriptors = _build_descriptors()
 
     all_errors: list[str] = []
+
+    # Registry integrity: the TS names the descriptors point at must exist.
+    all_errors.extend(
+        check_ts_registry_targets(descriptors, ts_structs, ts_ctor_keys)
+    )
 
     # Entity checks (descriptor-driven)
     for desc in descriptors:
