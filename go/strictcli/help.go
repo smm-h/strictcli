@@ -218,9 +218,30 @@ func formatGroupHelp(app *App, group *Group, path []string) string {
 	return strings.Join(lines, "\n")
 }
 
+// formatDryRunSection renders the `Dry run:` section of command help, or
+// nothing. It appears only for a command that declares
+// dry_run_supported=false: the baseline (dry run works) needs no announcement,
+// and a section on every command would be noise. Byte-identical across
+// implementations.
+func formatDryRunSection(cmd *Command) []string {
+	if cmd.DryRunSupported {
+		return nil
+	}
+	return []string{
+		"",
+		"Dry run:",
+		fmt.Sprintf("  --dry-run is not supported: %s", cmd.DryRunUnsupportedReason),
+	}
+}
+
 func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("%s %s%s -- %s", app.Name, prefix, cmd.Name, cmd.Help))
+
+	// Rendered before the passthrough early-return: a passthrough command can
+	// declare the refusal too, and its help is the only place the reason would
+	// otherwise be visible.
+	lines = append(lines, formatDryRunSection(cmd)...)
 
 	// Passthrough commands: minimal help (no flags/args sections)
 	if cmd.Passthrough {

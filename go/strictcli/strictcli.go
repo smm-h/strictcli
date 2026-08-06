@@ -225,20 +225,30 @@ type Command struct {
 	// COMMAND, deliberately not named after the framework's reaction to it, so
 	// other behaviours can hang off it later. Today the framework prompts for
 	// exactly these commands.
-	Consequential      bool
-	Grants             []Grant
-	Forwarding         *Forwarding
-	flags              []Flag
-	args               []Arg
-	flagSets           []FlagSet
-	mutex              []MutexGroup
-	dependencies       []Dependency
-	tags               []string
-	configFields       []string // bound config field names
-	Passthrough        bool
-	PassthroughHandler PassthroughHandler
-	Hidden             bool
-	Interactive        bool
+	Consequential bool
+	// DryRunSupported is declared per-command and defaults to true (the
+	// regime's baseline: a mutating command records rather than executes). A
+	// command that sets it false is saying a preview of it would LIE -- its
+	// effects escape the effects handle, or its later steps read state the
+	// recorded ones would have written -- so the framework refuses --dry-run
+	// for it at parse time instead of rendering a preview nobody can trust.
+	// Set only through WithDryRunUnsupported, which carries the mandatory
+	// reason shown in help and in the refusal.
+	DryRunSupported         bool
+	DryRunUnsupportedReason string
+	Grants                  []Grant
+	Forwarding              *Forwarding
+	flags                   []Flag
+	args                    []Arg
+	flagSets                []FlagSet
+	mutex                   []MutexGroup
+	dependencies            []Dependency
+	tags                    []string
+	configFields            []string // bound config field names
+	Passthrough             bool
+	PassthroughHandler      PassthroughHandler
+	Hidden                  bool
+	Interactive             bool
 	// effectSet records that WithEffect was applied, so a deliberate
 	// WithEffect("") is told apart from an absent declaration.
 	effectSet bool
@@ -822,6 +832,27 @@ func WithEffect(effect string) CmdOption {
 func WithConsequential() CmdOption {
 	return func(c *Command) {
 		c.Consequential = true
+	}
+}
+
+// WithDryRunUnsupported declares that --dry-run is refused for this command,
+// with a mandatory reason. It is the opt-out from the regime's baseline, where
+// a mutating command's effects are recorded rather than executed under
+// --dry-run.
+//
+// Declare it when a preview would LIE: when the command's effects escape the
+// effects handle, or when its later steps read state its earlier (recorded,
+// therefore un-performed) steps would have written. A refusal that names the
+// reason is honest; a preview that silently diverges from the real run is not.
+//
+// The reason is mandatory and non-empty, and is shown both in the command's
+// help and in the parse-time refusal. Declaring this on a read_only command is
+// a registration-time hard error: a command that changes nothing has no
+// effects a preview could misrepresent.
+func WithDryRunUnsupported(reason string) CmdOption {
+	return func(c *Command) {
+		c.DryRunSupported = false
+		c.DryRunUnsupportedReason = reason
 	}
 }
 
@@ -2694,6 +2725,21 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 		return parseResult{helpText: formatCommandHelp(a, cmd, prefix)}
 	}
+
+	// A command that declares dry_run_supported=false refuses --dry-run here,
+	// on every argv path (Run/Test/harness) at once, and AFTER the
+	// command-help check above so --help always beats the refusal: asking what
+	// a command does must never be answered with a refusal to preview it.
+	// preScan.reserved.dryRun covers both `app --dry-run cmd` and
+	// `app cmd --dry-run`; see scanCommandRegionQuartet for the two boundaries
+	// that make a trailing --dry-run invisible here (a bare `--`, and a
+	// passthrough command's name).
+	if preScan.reserved.dryRun && !cmd.DryRunSupported {
+		return parseResult{
+			parseErr: errDryRunNotSupported(resolvedCmdPath, cmd.DryRunUnsupportedReason),
+		}
+	}
+
 	// Passthrough: skip parsing, forward raw args
 	if cmd.Passthrough {
 		return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, passthroughArgs: cmdRest, globalKwargs: globalValues, hermetic: preScan.hermetic}
@@ -3142,6 +3188,8 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		Name:    name,
 		Help:    help,
 		Handler: handler,
+		// The regime's baseline; WithDryRunUnsupported is the only opt-out.
+		DryRunSupported: true,
 	}
 	for _, opt := range opts {
 		opt(cmd)
@@ -3160,6 +3208,18 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	// there is nothing to interrupt anyone for (contract §8.1).
 	if cmd.Consequential && cmd.Effect == EffectReadOnly {
 		panic(errCommandReadOnlyConsequential(name))
+	}
+	// The dry-run declaration mirrors the guard above: illegal on read_only,
+	// and the reason it exists to carry is mandatory. Go has no third guard
+	// (a reason without the declaration) because WithDryRunUnsupported is the
+	// only way to set either field, and it always sets both.
+	if !cmd.DryRunSupported {
+		if cmd.Effect == EffectReadOnly {
+			panic(errCommandReadOnlyDryRunUnsupported(name))
+		}
+		if strings.TrimSpace(cmd.DryRunUnsupportedReason) == "" {
+			panic(errCommandDryRunReasonMissing(name))
+		}
 	}
 	cmd.Grants = validateGrants(name, cmd.Grants)
 	if cmd.Forwarding != nil && strings.TrimSpace(cmd.Forwarding.Reason) == "" {

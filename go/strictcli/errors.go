@@ -1153,6 +1153,20 @@ func errCommandReadOnlyConsequential(name string) string {
 	return fmt.Sprintf("command %q: a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)", name)
 }
 
+// errCommandReadOnlyDryRunUnsupported mirrors the guard above for the dry-run
+// declaration: a command that changes nothing records nothing, so a preview of
+// it can never be dishonest and there is no reason to refuse one.
+func errCommandReadOnlyDryRunUnsupported(name string) string {
+	return fmt.Sprintf("command %q: a read_only command cannot declare dry_run_supported=false (a command that changes nothing has no effects a preview could misrepresent)", name)
+}
+
+// errCommandDryRunReasonMissing is the mandatory-reason guard. The reason is
+// shown in help and in the parse-time refusal, so a declaration without one
+// leaves an operator staring at a refusal with no explanation.
+func errCommandDryRunReasonMissing(name string) string {
+	return fmt.Sprintf("command %q: dry_run_supported=false requires a non-empty dry_run_unsupported_reason (say what a preview cannot honestly show)", name)
+}
+
 // errHandlerVarKeywordUndeclared exists for catalog parity only. Guard v2's
 // ENFORCEMENT is Python-only: a Go handler takes map[string]interface{}, which
 // carries no var-keyword parameter to introspect. The declaration
@@ -1292,3 +1306,15 @@ func promptConfirmConsequential(name string) string {
 const errConfirmNonInteractive = "error: stdin is not interactive; pass --approve-consequential to confirm"
 
 const errConfirmDeclined = "aborted"
+
+// ---------------------------------------------------------------------------
+// strictcli.go — doParse dry-run refusal (parse-time)
+//
+// Raised for a command that declares dry_run_supported=false: rather than
+// render a preview that would misrepresent what running it does, the framework
+// refuses the flag and repeats the declared reason.
+// ---------------------------------------------------------------------------
+
+func errDryRunNotSupported(cmdPath string, reason string) string {
+	return fmt.Sprintf("--dry-run is not supported by command '%s': %s", cmdPath, reason)
+}

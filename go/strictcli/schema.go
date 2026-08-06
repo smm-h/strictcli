@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
-	"sort"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -158,6 +158,12 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 	// (contract §8.1, §13), so it is omitted when false.
 	if cmd.Consequential {
 		m["consequential"] = true
+	}
+	// Emitted only when declared: dry run is supported unless a command says
+	// otherwise, so the pair appears exactly on the commands that refuse it.
+	if !cmd.DryRunSupported {
+		m["dry_run_supported"] = false
+		m["dry_run_unsupported_reason"] = cmd.DryRunUnsupportedReason
 	}
 	// passthrough: default false (omit when false)
 	if cmd.Passthrough {
@@ -330,13 +336,13 @@ func buildSchemaDefaults() map[string]interface{} {
 	return map[string]interface{}{
 		"schema_version": 1,
 		"app": map[string]interface{}{
-			"env_prefix":     nil,
-			"config":         false,
-			"global_flags":   []interface{}{},
-			"commands":       map[string]interface{}{},
-			"groups":         map[string]interface{}{},
-			"deprecated":     map[string]interface{}{},
-			"tag_contracts":  map[string]interface{}{},
+			"env_prefix":    nil,
+			"config":        false,
+			"global_flags":  []interface{}{},
+			"commands":      map[string]interface{}{},
+			"groups":        map[string]interface{}{},
+			"deprecated":    map[string]interface{}{},
+			"tag_contracts": map[string]interface{}{},
 		},
 		"flag": map[string]interface{}{
 			"short":         nil,
