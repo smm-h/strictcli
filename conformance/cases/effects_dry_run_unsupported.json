@@ -94,5 +94,281 @@
       "stdout_equals": "myapp release -- a command whose preview would lie\n\nDry run:\n  --dry-run is not supported: later steps read what the earlier ones write\n",
       "stderr_equals": ""
     }
+  },
+  {
+    "name": "effects_dry_run_unsupported: the refusal names a grouped command by its dotted path",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "look",
+          "help": "a read_only command",
+          "effect": "read_only",
+          "handler_prints": "looked"
+        }
+      ],
+      "groups": [
+        {
+          "name": "release",
+          "help": "release operations",
+          "commands": [
+            {
+              "name": "run",
+              "help": "a command whose preview would lie",
+              "effect": "mutating",
+              "dry_run_supported": false,
+              "dry_run_unsupported_reason": "later steps read what the earlier ones write",
+              "handler_prints": "released"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["release", "run", "--dry-run"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: --dry-run is not supported by command 'release.run': later steps read what the earlier ones write\ntry 'myapp --help'\n"
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: the dotted path spans every level of a nested group",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "look",
+          "help": "a read_only command",
+          "effect": "read_only",
+          "handler_prints": "looked"
+        }
+      ],
+      "groups": [
+        {
+          "name": "release",
+          "help": "release operations",
+          "groups": [
+            {
+              "name": "remote",
+              "help": "remote release operations",
+              "commands": [
+                {
+                  "name": "run",
+                  "help": "a command whose preview would lie",
+                  "effect": "mutating",
+                  "dry_run_supported": false,
+                  "dry_run_unsupported_reason": "the tag it pushes decides what the next step reads",
+                  "handler_prints": "released"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["release", "remote", "--dry-run", "run"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: --dry-run is not supported by command 'release.remote.run': the tag it pushes decides what the next step reads\ntry 'myapp --help'\n"
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: a bare -- terminates the scan, so the token is data and nothing is refused",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a command whose preview would lie",
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "later steps read what the earlier ones write",
+          "handler_prints": "released",
+          "args": [
+            {
+              "name": "items",
+              "help": "literal items to release",
+              "required": false,
+              "variadic": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": ["release", "--", "--dry-run"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "released\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: a passthrough command's own name terminates the scan, so a trailing --dry-run is the child's flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "a passthrough whose preview would lie",
+          "effect": "mutating",
+          "passthrough": true,
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "the child process decides what happens",
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["exec", "--dry-run", "x"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "exec:--dry-run,x\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: a --dry-run before the passthrough's name is addressed to this app and is refused",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "a passthrough whose preview would lie",
+          "effect": "mutating",
+          "passthrough": true,
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "the child process decides what happens",
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": ["--dry-run", "exec", "x"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: --dry-run is not supported by command 'exec': the child process decides what happens\ntry 'myapp --help'\n"
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: a read_only command cannot declare dry_run_supported=false",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "look",
+          "help": "a read_only command",
+          "effect": "read_only",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "nothing here could be misrepresented",
+          "handler_prints": "looked"
+        }
+      ]
+    },
+    "argv": ["look"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"look\": a read_only command cannot declare dry_run_supported=false (a command that changes nothing has no effects a preview could misrepresent)"
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: dry_run_supported=false requires a non-empty reason",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a command whose preview would lie",
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "",
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["release"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"release\": dry_run_supported=false requires a non-empty dry_run_unsupported_reason (say what a preview cannot honestly show)"
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: a reason without the declaration is rejected",
+    "targets": ["python", "typescript"],
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a command whose preview would lie",
+          "effect": "mutating",
+          "dry_run_unsupported_reason": "later steps read what the earlier ones write",
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["release"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "command \"release\": dry_run_unsupported_reason requires dry_run_supported=false (there is nothing to explain while dry run is supported)"
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: the schema carries the pair exactly on the command that declared it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a command whose preview would lie",
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "later steps read what the earlier ones write",
+          "handler_prints": "released"
+        },
+        {
+          "name": "build",
+          "help": "a mutating command that previews honestly",
+          "effect": "mutating",
+          "handler_prints": "built"
+        }
+      ]
+    },
+    "argv": ["--dump-schema"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": ".strictcli/schema.json",
+      "schema_command_keys": {
+        "release": {
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "later steps read what the earlier ones write"
+        },
+        "build": {
+          "effect": "mutating"
+        }
+      },
+      "schema_command_absent_keys": {
+        "build": ["dry_run_supported", "dry_run_unsupported_reason"]
+      }
+    }
   }
 ]
