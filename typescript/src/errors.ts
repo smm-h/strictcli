@@ -1723,6 +1723,33 @@ export function errCommandReadOnlyConsequential(name: string): string {
 	return `command ${q(name)}: a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)`;
 }
 
+/**
+ * Mirrors the guard above for the dry-run declaration: a command that changes
+ * nothing records nothing, so a preview of it can never be dishonest and there
+ * is no reason to refuse one.
+ */
+export function errCommandReadOnlyDryRunUnsupported(name: string): string {
+	return `command ${q(name)}: a read_only command cannot declare dry_run_supported=false (a command that changes nothing has no effects a preview could misrepresent)`;
+}
+
+/**
+ * The mandatory-reason guard. The reason is shown in help and in the parse-time
+ * refusal, so a declaration without one leaves an operator staring at a refusal
+ * with no explanation.
+ */
+export function errCommandDryRunReasonMissing(name: string): string {
+	return `command ${q(name)}: dry_run_supported=false requires a non-empty dry_run_unsupported_reason (say what a preview cannot honestly show)`;
+}
+
+/**
+ * The orphan-reason guard. Go has no analog: WithDryRunUnsupported is its only
+ * way to set either field and it always sets both, so the shape is
+ * unrepresentable there.
+ */
+export function errCommandDryRunReasonWithoutDeclaration(name: string): string {
+	return `command ${q(name)}: dry_run_unsupported_reason requires dry_run_supported=false (there is nothing to explain while dry run is supported)`;
+}
+
 // ---------------------------------------------------------------------------
 // effects.go — guard v2 and declared forwarding (registration-time)
 //
@@ -1955,6 +1982,18 @@ export function errConfirmNonInteractive(): string {
 
 export function errConfirmDeclined(): string {
 	return "aborted";
+}
+
+// ---------------------------------------------------------------------------
+// strictcli.go — doParse dry-run refusal (parse-time)
+//
+// Raised for a command that declares dry_run_supported=false: rather than
+// render a preview that would misrepresent what running it does, the framework
+// refuses the flag and repeats the declared reason.
+// ---------------------------------------------------------------------------
+
+export function errDryRunNotSupported(cmdPath: string, reason: string): string {
+	return `--dry-run is not supported by command '${cmdPath}': ${reason}`;
 }
 
 // ---------------------------------------------------------------------------

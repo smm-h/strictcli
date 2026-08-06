@@ -34,6 +34,8 @@ import {
 	errCommandCoRequiredDuplicate,
 	errCommandCoRequiredMinFlags,
 	errCommandCoRequiredUnknownFlag,
+	errCommandDryRunReasonMissing,
+	errCommandDryRunReasonWithoutDeclaration,
 	errCommandDuplicateArg,
 	errCommandDuplicateFlag,
 	errCommandFlagInMultipleMutex,
@@ -45,6 +47,7 @@ import {
 	errCommandMissingHelp,
 	errCommandMutexMinFlags,
 	errCommandReadOnlyConsequential,
+	errCommandReadOnlyDryRunUnsupported,
 	errCommandRequiresSameFlag,
 	errCommandRequiresUnknownFlag,
 	errCommandVariadicMustBeLast,
@@ -797,6 +800,17 @@ export interface CommandDef<
 	 * off it later. Today the framework prompts for exactly these commands.
 	 */
 	readonly consequential: boolean;
+	/**
+	 * Declared per-command; the default `true` is the regime's baseline (a
+	 * mutating command records rather than executes under --dry-run). A command
+	 * that declares it false is saying a preview of it would LIE -- its effects
+	 * escape the effects handle, or its later steps read state the recorded
+	 * ones would have written -- so the framework refuses --dry-run for it at
+	 * parse time rather than rendering a preview nobody can trust.
+	 */
+	readonly dryRunSupported: boolean;
+	/** Mandatory when dryRunSupported is false; shown in help and the refusal. */
+	readonly dryRunUnsupportedReason: string | undefined;
 	readonly flags: F;
 	readonly args: A;
 	readonly flagSets: FS;
@@ -822,6 +836,8 @@ export interface AnyCommand {
 	readonly help: string;
 	readonly effect: Effect;
 	readonly consequential: boolean;
+	readonly dryRunSupported: boolean;
+	readonly dryRunUnsupportedReason: string | undefined;
 	readonly flags: FlagMap;
 	readonly args: readonly AnyArg[];
 	readonly flagSets: readonly AnyFlagSet[];
@@ -864,6 +880,14 @@ export interface ReadOnlyCommandSpec<
 	 * on this spec so that error is reachable rather than silently dropped.
 	 */
 	readonly consequential?: boolean;
+	/**
+	 * Declaring this false on a read_only command is a registration-time hard
+	 * error: a command that changes nothing has no effects a preview could
+	 * misrepresent. The member exists on this spec so that error is reachable
+	 * rather than silently dropped.
+	 */
+	readonly dryRunSupported?: boolean;
+	readonly dryRunUnsupportedReason?: string;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
@@ -892,6 +916,17 @@ export interface MutatingCommandSpec<
 	 * mutating command never does.
 	 */
 	readonly consequential?: boolean;
+	/**
+	 * Declares that --dry-run is refused for this command, with a mandatory
+	 * `dryRunUnsupportedReason`. Declare it when a preview would LIE: when the
+	 * command's effects escape the effects handle, or when its later steps read
+	 * state its earlier (recorded, therefore un-performed) steps would have
+	 * written. Absence means the regime's baseline, where effects are recorded
+	 * rather than executed.
+	 */
+	readonly dryRunSupported?: boolean;
+	/** Mandatory when dryRunSupported is false; shown in help and the refusal. */
+	readonly dryRunUnsupportedReason?: string;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
@@ -933,6 +968,34 @@ export function validateGrants(
 		resolved.push(g);
 	}
 	return resolved;
+}
+
+/**
+ * The three registration-time guards on the dry-run declaration, shared by the
+ * ordinary and passthrough builders so both surfaces reject the same shapes
+ * with the same messages.
+ */
+export function validateDryRunDeclaration(
+	cmdName: string,
+	effect: Effect,
+	dryRunSupported: boolean | undefined,
+	dryRunUnsupportedReason: string | undefined,
+): void {
+	const hasReason =
+		typeof dryRunUnsupportedReason === "string" &&
+		dryRunUnsupportedReason.trim() !== "";
+	if (dryRunSupported === false) {
+		if (effect === "read_only") {
+			throw new RegistrationError(errCommandReadOnlyDryRunUnsupported(cmdName));
+		}
+		if (!hasReason) {
+			throw new RegistrationError(errCommandDryRunReasonMissing(cmdName));
+		}
+	} else if (dryRunUnsupportedReason !== undefined) {
+		throw new RegistrationError(
+			errCommandDryRunReasonWithoutDeclaration(cmdName),
+		);
+	}
 }
 
 /** Validates a declared-forwarding declaration at registration time. */
@@ -1006,6 +1069,12 @@ function buildCommandDef<
 	if (spec.consequential === true && effect === "read_only") {
 		throw new RegistrationError(errCommandReadOnlyConsequential(name));
 	}
+	validateDryRunDeclaration(
+		name,
+		effect,
+		spec.dryRunSupported,
+		spec.dryRunUnsupportedReason,
+	);
 	// The empty fallbacks are safe: the type params only default when the
 	// corresponding spec properties are absent.
 	const flags = spec.flags ?? ({} as F);
@@ -1156,6 +1225,8 @@ function buildCommandDef<
 		help: spec.help,
 		effect,
 		consequential: spec.consequential ?? false,
+		dryRunSupported: spec.dryRunSupported ?? true,
+		dryRunUnsupportedReason: spec.dryRunUnsupportedReason,
 		flags,
 		args,
 		flagSets,
@@ -1249,6 +1320,9 @@ export interface PassthroughDef<N extends string, C = MutatingContext> {
 	readonly effect: Effect;
 	/** Declared exactly as on an ordinary command (contract §8.1). */
 	readonly consequential: boolean;
+	/** Declared exactly as on an ordinary command. */
+	readonly dryRunSupported: boolean;
+	readonly dryRunUnsupportedReason: string | undefined;
 	readonly handler: PassthroughHandler<C>;
 	readonly tags: readonly string[];
 	readonly hidden: boolean;
@@ -1260,6 +1334,8 @@ interface PassthroughSpec<C> {
 	readonly help: string;
 	readonly handler: PassthroughHandler<C>;
 	readonly consequential?: boolean;
+	readonly dryRunSupported?: boolean;
+	readonly dryRunUnsupportedReason?: string;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly grants?: readonly Grant[];
@@ -1276,6 +1352,12 @@ function buildPassthroughDef<N extends string, C>(
 	if (spec.consequential === true && effect === "read_only") {
 		throw new RegistrationError(errCommandReadOnlyConsequential(name));
 	}
+	validateDryRunDeclaration(
+		name,
+		effect,
+		spec.dryRunSupported,
+		spec.dryRunUnsupportedReason,
+	);
 	const tags = validateAndDedupTags(spec.tags ?? []);
 	return {
 		kind: "passthrough",
@@ -1283,6 +1365,8 @@ function buildPassthroughDef<N extends string, C>(
 		help: spec.help,
 		effect,
 		consequential: spec.consequential ?? false,
+		dryRunSupported: spec.dryRunSupported ?? true,
+		dryRunUnsupportedReason: spec.dryRunUnsupportedReason,
 		handler: spec.handler,
 		tags,
 		hidden: spec.hidden ?? false,

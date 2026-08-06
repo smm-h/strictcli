@@ -241,6 +241,8 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 	const carrier = rc.def as {
 		readonly effect: Effect;
 		readonly consequential?: boolean;
+		readonly dryRunSupported?: boolean;
+		readonly dryRunUnsupportedReason?: string;
 		readonly grants?: readonly Grant[];
 		readonly forwarding?: Forwarding;
 	};
@@ -255,6 +257,12 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 	// (contract §8.1, §13), so it is omitted when false.
 	if (carrier.consequential === true) {
 		d.consequential = true;
+	}
+	// Emitted only when declared: dry run is supported unless a command says
+	// otherwise, so the pair appears exactly on the commands that refuse it.
+	if (carrier.dryRunSupported === false) {
+		d.dry_run_supported = false;
+		d.dry_run_unsupported_reason = carrier.dryRunUnsupportedReason;
 	}
 	if (rc.kind === "passthrough") {
 		d.passthrough = true;

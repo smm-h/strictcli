@@ -21,6 +21,7 @@ import {
 	errBoolNegationNoValue,
 	errConfigValueDuplicate,
 	errConfigValueError,
+	errDryRunNotSupported,
 	errFlagRequiresFlag,
 	errFlagRequiresValue,
 	errFlagSetInBothAndConfig,
@@ -1458,6 +1459,27 @@ export function doParse(
 	// Command-level --help anywhere in remaining tokens (before any "--")
 	if (tokensContainHelp(cmdRest)) {
 		return { kind: "help", target: { level: "command", cmd, path } };
+	}
+
+	// A command that declares dryRunSupported: false refuses --dry-run here, on
+	// every argv path (run/test/harness) at once, and AFTER the command-help
+	// check above so `--help` always beats the refusal: asking what a command
+	// does must never be answered with a refusal to preview it. `pre.dryRun`
+	// covers both `app --dry-run cmd` and `app cmd --dry-run`; see
+	// scanCommandRegionQuartet for the two boundaries that make a trailing
+	// --dry-run invisible here (a bare `--`, and a passthrough command's name).
+	const dryRunDef = cmd.def as {
+		readonly dryRunSupported?: boolean;
+		readonly dryRunUnsupportedReason?: string;
+	};
+	if (pre.dryRun && dryRunDef.dryRunSupported === false) {
+		return {
+			kind: "parse-error",
+			message: errDryRunNotSupported(
+				cmdPath,
+				dryRunDef.dryRunUnsupportedReason ?? "",
+			),
+		};
 	}
 
 	// Config subcommand exemption (self-lock prevention): the config

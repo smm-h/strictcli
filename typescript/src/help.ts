@@ -274,12 +274,38 @@ function argMeta(a: AnyArg): string {
 	return metaParts.length > 0 ? ` [${metaParts.join("] [")}]` : "";
 }
 
+/**
+ * Renders the `Dry run:` section of command help, or nothing. It appears only
+ * for a command that declares `dryRunSupported: false`: the baseline (dry run
+ * works) needs no announcement, and a section on every command would be noise.
+ * Byte-identical across implementations.
+ */
+function formatDryRunSection(cmd: RegisteredCommand): readonly string[] {
+	const def = cmd.def as {
+		readonly dryRunSupported?: boolean;
+		readonly dryRunUnsupportedReason?: string;
+	};
+	if (def.dryRunSupported !== false) {
+		return [];
+	}
+	return [
+		"",
+		"Dry run:",
+		`  --dry-run is not supported: ${def.dryRunUnsupportedReason ?? ""}`,
+	];
+}
+
 export function formatCommandHelp(
 	app: AppImpl,
 	cmd: RegisteredCommand,
 	prefix: string,
 ): string {
 	const lines: string[] = [`${app.name} ${prefix}${cmd.name} -- ${cmd.help}`];
+
+	// Rendered before the passthrough early-return: a passthrough command can
+	// declare the refusal too, and its help is the only place the reason would
+	// otherwise be visible.
+	lines.push(...formatDryRunSection(cmd));
 
 	// Passthrough commands show only the header line.
 	if (cmd.def.kind === "passthrough") {
