@@ -41,6 +41,17 @@ consumers is the evidence: 63% of commands classified `mutating`, against ~5-10%
 genuinely dangerous. §1's classification is unchanged -- it answers a different question, and it
 answers it well.
 
+Amended a seventh time 2026-08-06 at the ecosystem fix campaign's strictcli phase (§1.2/§1.5).
+This is the first amendment that **reverses** a §16 exclusion: `dry_run_supported` moves from
+"what the regime deliberately does NOT have" to a shipped registration-level declaration. The
+reversal is narrow and the old bullet's reasoning survives it -- what §16 was guarding against
+was runtime *negotiation* (discovery, probing, inheritance across a process boundary), and none
+of that is added. A command states statically that a preview of it would lie, and the framework
+refuses `--dry-run` for it. New §1.1a carries the field, guards, parse-time gate and help
+rendering; new §12.2a carries the four message templates; §13 gains the schema pair and the
+conformance-schema change; §16's bullet is struck through in place rather than deleted, so the
+record of what was once excluded, and why it stopped being excluded, stays readable.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -105,6 +116,69 @@ dispatch, and never appear in the would-do log. They are also not command entrie
 `--dump-schema` output -- they serialize into the separate top-level `deprecated` list -- so §13's
 "`effect` is always emitted on every command entry" rule is unaffected. §14's conformance-schema
 change (§13, last paragraph) encodes the exemption explicitly.
+
+### 1.1a The `dry_run_supported` declaration
+
+*Added 2026-08-06 (ecosystem fix campaign §1.2), superseding §16's "no `dry_run_supported`
+capability negotiation" bullet. Shipped in py-strictcli, go-strictcli and ts-strictcli in the
+same coordinated release as this amendment.*
+
+Alongside classification, a command may carry a second, **optional** registration-level
+declaration:
+
+```
+dry_run_supported          = true | false     (absent means true)
+dry_run_unsupported_reason = <non-empty string>
+```
+
+Absence means the regime's baseline, where a `mutating` command's effects are recorded rather
+than performed (§3). A command declares it **false** when a preview of it would *lie*: when its
+effects escape the effects handle, or when its later steps read state that its earlier --
+recorded, therefore un-performed -- steps would have written. Rather than render a dishonest
+preview, the framework refuses `--dry-run` for that command and states the reason.
+
+| Impl | Spelling |
+|------|----------|
+| Python | `dry_run_supported=False` + `dry_run_unsupported_reason="..."` keywords on `app.command(...)` / `group.command(...)` / the `Command` dataclass. |
+| Go | `WithDryRunUnsupported(reason)` -- a `CmdOption`. The two fields collapse into one option because the reason is mandatory whenever the refusal is declared, so an option carrying the reason cannot express the illegal states. |
+| TypeScript | `dryRunSupported: false` + `dryRunUnsupportedReason: "..."` on the twin command factories and the passthrough twins. |
+
+**Three registration-time guards**, shared by every registration surface in each implementation:
+
+1. `dry_run_supported=false` on a `read_only` command is a hard error. This mirrors the
+   `read_only` + `consequential` prohibition of §8.1 and for the same reason: a command that
+   changes nothing records nothing, so a preview of it can never be dishonest and there is
+   nothing to refuse.
+2. `dry_run_supported=false` without a non-empty reason is a hard error. The refusal is only
+   useful if it says what a preview cannot honestly show.
+3. A reason without `dry_run_supported=false` is a hard error -- there is nothing to explain
+   while dry run is supported. Go has no analog for this third guard: `WithDryRunUnsupported` is
+   its only spelling, so the orphaned-reason state is unrepresentable there.
+
+**The parse-time gate** sits immediately after the command-help check, so that `--help` always
+beats the refusal: asking what a command does must never be answered with a refusal to preview
+it. The gate covers `run`, `test` and the conformance harness in one place because it lives in
+the shared parse path, not next to `_confirm_consequential`.
+
+Two boundaries follow from §7.2's pre-scan and are stated here so implementors do not
+rediscover them: a `--dry-run` after a bare `--` is data and does not trigger the refusal, and a
+`--dry-run` after a passthrough command's name is forwarded to the child rather than scanned, so
+a passthrough that declares the refusal is only protected against a `--dry-run` written before
+its name.
+
+**Help rendering.** A command that declares the refusal gains a `Dry run:` section in its
+command-level help, byte-identical across implementations:
+
+```
+
+Dry run:
+  --dry-run is not supported: <reason>
+```
+
+The baseline needs no announcement, so the section is rendered only for a declaring command; a
+section on every command would be noise. It renders before the passthrough early-return, because
+a passthrough can declare the refusal too and its help is the only place the reason would
+otherwise appear.
 
 ### 1.2 Per-language spelling
 
@@ -1663,6 +1737,41 @@ command "<name>": a read_only command cannot be consequential (a command that ch
 declarations answer different questions, and the read-only answer to the first makes the second
 unanswerable.
 
+### 12.2a Dry-run declaration
+
+*Added 2026-08-06 (ecosystem fix campaign §1.2), with §1.1a and §13's schema pair.*
+
+```
+command "<name>": a read_only command cannot declare dry_run_supported=false (a command that changes nothing has no effects a preview could misrepresent)
+```
+
+`errCommandReadOnlyDryRunUnsupported(name)`. Registration-time, all three. Enforces §1.1a's
+first guard; mirrors `errCommandReadOnlyConsequential` above.
+
+```
+command "<name>": dry_run_supported=false requires a non-empty dry_run_unsupported_reason (say what a preview cannot honestly show)
+```
+
+`errCommandDryRunReasonMissing(name)`. Registration-time, all three. §1.1a's second guard.
+
+```
+command "<name>": dry_run_unsupported_reason requires dry_run_supported=false (there is nothing to explain while dry run is supported)
+```
+
+`errCommandDryRunReasonWithoutDeclaration(name)`. Registration-time, Python and TypeScript only.
+Go has no analog and the template is absent from its catalog with an `impl_exclusions`
+rationale: `WithDryRunUnsupported(reason)` is Go's only spelling, so an orphaned reason is
+unrepresentable there (§1.1a, third guard).
+
+```
+--dry-run is not supported by command '<cmd_path>': <reason>
+```
+
+`errDryRunNotSupported(cmdPath, reason)`. **Parse-time**, all three -- it mirrors the unknown-flag
+format rather than the registration-error format, because from the operator's side this is a
+rejected flag. `<cmd_path>` is the dotted path (groups then command). Raised by the gate
+described in §1.1a, which sits after the command-help check so `--help` wins.
+
 ### 12.3 Guard v2 and forwarding
 
 ```
@@ -1945,6 +2054,8 @@ byte-identical across three languages.
 |-----|------|----------|
 | `effect` | `"read_only"` \| `"mutating"` | **always** -- classification is mandatory, so there is no default to omit against |
 | `consequential` | `true` | omitted when false -- unlike classification it is NOT mandatory, and absence means "not consequential" (§8.1). It follows `hidden` / `interactive`'s omit-when-false shape, not `effect`'s always-emitted one |
+| `dry_run_supported` | `false` | *Added 2026-08-06 (§1.1a).* Emitted **only when declared false**; absence means dry run is supported, which is the baseline. Same omit-when-baseline shape as `consequential` |
+| `dry_run_unsupported_reason` | `str` | *Added 2026-08-06 (§1.1a).* Emitted exactly when `dry_run_supported` is, and never alone -- the pair is atomic, which is what §1.1a's second and third guards buy at registration time |
 | `grants` | array of `{"name": str, "reason": str, "kind": str}` | omitted when empty; entries in declaration order; `kind` uses the lowercase kind name (`proc_mutate`, `proc_spawn`, `file_write`, `net_mutate`) |
 | `forwarding` | `{"reason": str}` | omitted when absent |
 
@@ -1975,6 +2086,19 @@ mandatory on deprecated commands too -- the opposite of §1.1. The concrete chan
   `effect` fails validation;
 - add an `else` branch to the same `if`: `{"required": ["effect"]}`, making classification
   mandatory for every non-deprecated command entry.
+
+*Added 2026-08-06 (§1.1a):* the same treatment extends to the dry-run pair.
+
+- add `dry_run_supported` (`{"type": "boolean", "default": true}`) and
+  `dry_run_unsupported_reason` (`{"type": "string", "minLength": 1}`) to `$defs/command`'s
+  `properties`. Like `consequential`, neither joins the top-level `required` nor the `else`
+  branch's -- absence means supported, and a schema that demanded them would re-impose a
+  per-registration answer to a question almost every command answers the same way. The
+  `minLength: 1` encodes §1.1a's second guard at the case-schema layer;
+- add both to the deprecated branch's `then.properties` as `false`, so a deprecated case
+  declaring either fails validation. This follows from §1.1's exemption for the same reason
+  `effect` and `consequential` do: a deprecated entry has no handler, so it has no effects a
+  preview could misrepresent.
 
 The same three keys (`grants`, `forwarding`, and app-level `proc_observe_allowlist`) are added to
 `properties` as ordinary optional fields, with `grants` and `forwarding` also set `false` in the
@@ -2251,7 +2375,16 @@ already funnel through; the per-site work is passing the effects/reserved-flag s
   skip-if-current evaluation, no persistence, nothing that crosses a spawn. `resource=` is declared
   metadata and `skip_if_current=` is a preview annotation (§5). Real-mode idempotency is the
   handler's job and stays in handler code.
-- **No `dry_run_supported` capability negotiation** inside the framework.
+- ~~**No `dry_run_supported` capability negotiation** inside the framework.~~
+  **Superseded 2026-08-06** (ecosystem fix campaign §1.2). The regime now carries a
+  registration-level `dry_run_supported` **declaration** -- see §1.1a for the field, §12.2a for
+  the message templates, and §13 for the schema pair. What stays excluded is what this bullet
+  was actually guarding against: there is no *negotiation*. Nothing is discovered at runtime,
+  nothing is probed, nothing is inherited across a process boundary, and no handler can change
+  the answer once registration is over. A command states, once and statically, that a preview of
+  it would lie; the framework refuses `--dry-run` for that command and says why. That is a
+  declaration in exactly the same family as `effect` and `consequential`, which is why it
+  belongs to the regime rather than contradicting it.
 - **No inference** of classification from a command's name, tags, flags or handler body.
 - **No partial preview fallback.** When the preview cannot continue it truncates loudly (§3.3);
   it never degrades to a best-effort guess.
