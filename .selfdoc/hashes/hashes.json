@@ -20,6 +20,11 @@
     "content": "0db06dbbcb812dc9d405dbe47aa1e6088c7d0770f2e8ffbc5aac670820d8021d",
     "description": "1f5330a2db15a3891a82e62eb5df38bfea73e06827a61806c06907a5b14827a0"
   },
+  "en/go-strictcli-testdata-noncomparable.md": {
+    "content": "3e51fdc0997f38707db188e2cce1590da01f17bdcd6361a5dc8e805303ac7af0",
+    "description": "eda609ee83c64ed2eb8a1a535cfc4269d2d18624127db4f9792e5f9b20841ec0",
+    "seed_hash": "eda609ee83c64ed2eb8a1a535cfc4269d2d18624127db4f9792e5f9b20841ec0"
+  },
   "en/go-strictcli.md": {
     "content": "fdeec4c30ea7f755da9bceec5ec9a00f75acd02d258a2d78d5281cd669b32e19",
     "description": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3",
@@ -207,5 +212,10 @@
     "content": "dad736102f6ecb203744663f100131ba95889a2386dd3bc90f265a61a6d232ea",
     "description": "28b11961366f448ea9c751775c6428e802d67177ce4e5410c4f438ebbd230656",
     "source_docstring": "9ee35c21ff00f8b110c5061486be333e69a23bd39deb61982da2fdea3f847c93"
+  },
+  "en/typescript-src-version.md": {
+    "content": "75cfe6e23c71d45f6688a63a36e22361c58315ff04227310970f35290cfd6ce6",
+    "description": "5d6a2a8a5d2f0d8e058012b091cf4f095e7d11b758d56a6dbf882343861ecc66",
+    "seed_hash": "5d6a2a8a5d2f0d8e058012b091cf4f095e7d11b758d56a6dbf882343861ecc66"
   }
 }

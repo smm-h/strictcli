@@ -18,6 +18,7 @@ Most CLI frameworks infer behavior from type hints, function signatures, or nami
 
 - **Four types only.** `str`, `bool`, `int`, `float` -- no magic type coercion. NaN and Inf are rejected.
 - **Mandatory help text.** Every flag, arg, command, and group must have help text.
+- **Mandatory effect classification.** Every command declares `read_only` or `mutating`. There is no default and no inference from names, tags or handler bodies.
 - **Handler signature validation.** Parameter names must match declared flags and args exactly.
 - **Registration-time errors.** Misconfigurations fail loud and early, not at parse time.
 - **Minimal dependencies.** Each implementation uses its language's standard library plus TOML support: Python depends on [tomlkit](https://pypi.org/project/tomlkit/), Go depends on [go-toml-edit](https://github.com/smm-h/go-toml-edit), TypeScript depends on [smol-toml](https://www.npmjs.com/package/smol-toml) and [toml-eslint-parser](https://www.npmjs.com/package/toml-eslint-parser).
@@ -26,28 +27,27 @@ Most CLI frameworks infer behavior from type hints, function signatures, or nami
 
 ### Python
 
-```python
+```python validate
 import strictcli
 
 app = strictcli.App("greet", version="1.0.0", help="A greeting app")
 
-@app.command("hello", help="Say hello")
+@app.command("hello", help="Say hello", effect="read_only")
 @strictcli.flag("name", type=str, help="Who to greet")
 @strictcli.flag("loud", type=bool, default=False, help="Shout it")
 def hello(ctx, name, loud):
     msg = f"Hello, {name}!"
-    print(msg.upper() if loud else msg)
+    ctx.info(msg.upper() if loud else msg)
 
 app.run()
 ```
 
 ### Go
 
-```go
+```go validate
 package main
 
 import (
-    "fmt"
     "strings"
 
     "github.com/smm-h/strictcli/go/strictcli"
@@ -58,15 +58,16 @@ func main() {
 
     app.Command("hello", "Say hello",
         func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
-            name := args["name"].(string)
-            loud := args["loud"].(bool)
+            name := strictcli.Get[string](args, "name")
+            loud := strictcli.Get[bool](args, "loud")
             msg := "Hello, " + name + "!"
             if loud {
                 msg = strings.ToUpper(msg)
             }
-            fmt.Println(msg)
+            ctx.Info(msg)
             return strictcli.Exit(0)
         },
+        strictcli.WithEffect(strictcli.EffectReadOnly),
         strictcli.WithFlags(
             strictcli.StringFlag("name", "Who to greet"),
             strictcli.BoolFlag("loud", "Shout it", strictcli.Default(false)),
@@ -79,28 +80,30 @@ func main() {
 
 ### TypeScript
 
-```ts
-import { command, createApp, flag, t } from "strictcli";
+```ts validate
+import { createApp, defineReadOnlyCommand, flag, t } from "strictcli";
 
-const hello = command("hello", {
-    help: "Say hello",
-    flags: [
-        flag("name", t.str, { help: "Who to greet", required: true }),
-        flag("loud", t.bool, { help: "Shout it", default: false }),
-    ],
-    handler: (args) => {
-        // Inferred: args.name is string, args.loud is boolean
-        const msg = `Hello, ${args.name}!`;
-        console.log(args.loud ? msg.toUpperCase() : msg);
-        return 0;
-    },
-});
-
-const app = createApp("greet", {
+const app = createApp({
+    name: "greet",
     version: "1.0.0",
     help: "A greeting app",
-    commands: [hello],
 });
+
+app.command(
+    defineReadOnlyCommand("hello", {
+        help: "Say hello",
+        flags: {
+            name: flag("name", t.str, { help: "Who to greet" }),
+            loud: flag("loud", t.bool, { help: "Shout it", default: false }),
+        },
+        handler: (args, ctx) => {
+            // Inferred: args.name is string, args.loud is boolean
+            const msg = `Hello, ${args.name}!`;
+            ctx.info(args.loud ? msg.toUpperCase() : msg);
+            return 0;
+        },
+    }),
+);
 
 app.run(process.argv.slice(2));
 ```
@@ -110,7 +113,7 @@ app.run(process.argv.slice(2));
 - Commands and command groups (recursive nesting to arbitrary depth)
 - Deprecated commands -- register retired commands that print a message and exit 1, shown in help under a `Deprecated:` section
 - Flags: string, boolean (with `--no-` negation), integer, float (NaN/Inf rejected)
-- Short flag aliases (`-v` for `--verbose`)
+- Short flag aliases (`-o` for `--output`)
 - Positional arguments (required, optional with defaults, variadic)
 - Environment variable binding with prefix enforcement
 - Flag tags -- reusable bundles of flags shared across commands
@@ -125,6 +128,11 @@ app.run(process.argv.slice(2));
 - Built-in `--version` / `-v` support
 - Auto-version detection from package metadata (Python only)
 - Config file support (JSON or TOML) -- reads `~/.config/{name}/config.json` (or `.toml`), auto-registers `config show/set/path/edit/init` subcommands. Precedence: CLI > env > config > default.
+- Mandatory effect classification -- every command declares `read_only` or `mutating` (`effect=` in Python, `WithEffect(...)` in Go, the twin factories `defineReadOnlyCommand` / `defineMutatingCommand` in TypeScript)
+- The effects regime -- `ctx.effects` mints recorded operations (`run`, `spawn`, `write`, `mkdir`, `remove`, `rename`, `chmod`, `http`); under `--dry-run` they are recorded rather than performed and rendered as a would-do log
+- The reserved flag quartet -- `--dry-run`, `--approve-consequential`, `--quiet` and `--verbose` are framework-owned names, banned at every declaration level and delivered on the handler context
+- `dry_run_supported` -- a command whose preview would lie declares the refusal with a mandatory reason, and `--dry-run` is rejected at parse time instead
+- `consequential` -- the per-command declaration that makes the framework prompt before dispatch; `--approve-consequential` answers it in advance, and a non-interactive stdin without it is a hard error
 - `--hermetic` -- reserved global flag that skips config loading and env var resolution entirely, so values come only from the CLI and declared defaults
 - Infrastructure env vars -- declared location roots (resolved at construction, usable in defaults via `RelativeToRoot`), handshake vars (cross-tool protocol signals, read live), and connection vars (behavioral URLs like a database DSN: read live, no default, and hermetic-suppressed so `--hermetic` resolves them absent; flags bind to a declared connection env, and checks can read it via the check context)
 - Value provenance -- every resolved flag reports its source (`cli`/`env`/`config`/`default`/`implied`/`infra`) via the handler context

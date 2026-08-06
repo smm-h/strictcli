@@ -48,6 +48,7 @@ Single-file implementation (~7,900 lines, tomlkit dependency). Key internal stag
 ### Go (`go/strictcli/`)
 
 - **go/strictcli**: Package strictcli is a strict, zero-dependency CLI framework for Go with mandatory help text, type-safe flags, groups, and schema export.
+- **go/strictcli/testdata/noncomparable**: Package noncomparable is a compile-FAIL fixture package.
 
 Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface{}) Outcome`. The `Context` provides structured output, provenance, and infra access; `Outcome` is the branded return type replacing raw exit codes.
 
@@ -82,6 +83,7 @@ Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface
 - **typescript/src/tool** (`typescript/src/tool.ts`): Tool export: descriptors for exposing CLI commands to tool-using LLM agents, mirroring Go tool.go and Python _build_json_schema/as_tools.
 - **typescript/src/types** (`typescript/src/types.ts`): Type foundation: nominally-branded carriers pairing a phantom output type with a literal schema string, productionizing Solution 10 from a verified spike.
 - **typescript/src/values** (`typescript/src/values.ts`): Value engine: strict scalar parsing (bool/int/float), choices matching, error-message value formatting, and compound (list/dict) parsing.
+- **typescript/src/version** (`typescript/src/version.ts`): GENERATED FILE -- do not edit, and do not commit.
 
 **typescript/src/checks/**
 

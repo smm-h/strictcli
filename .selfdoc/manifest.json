@@ -33,6 +33,11 @@
       "type": "doc"
     },
     {
+      "path": "go-strictcli-testdata-noncomparable.md",
+      "title": "go/strictcli/testdata/noncomparable",
+      "type": "doc"
+    },
+    {
       "path": "go-strictcli.md",
       "title": "go/strictcli",
       "type": "doc"
@@ -221,8 +226,13 @@
       "path": "typescript-src-values.md",
       "title": "typescript/src/values",
       "type": "doc"
+    },
+    {
+      "path": "typescript-src-version.md",
+      "title": "typescript/src/version",
+      "type": "doc"
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-04T08:29:47.939982+00:00"
+  "last_gen": "2026-08-06T15:20:29.440590+00:00"
 }
