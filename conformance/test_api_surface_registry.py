@@ -19,7 +19,9 @@ Runnable under pytest (auto-discovered) or standalone
 
 from __future__ import annotations
 
+import io
 import sys
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -119,6 +121,88 @@ def test_a_fully_present_registry_reports_nothing():
         for ctor in ctors
     }
     assert cas.check_ts_registry_targets(descriptors, ts_structs, ts_ctor_keys) == []
+
+
+# ---------------------------------------------------------------------------
+# The guardrail is only a guardrail if main() actually runs it
+# ---------------------------------------------------------------------------
+#
+# check_ts_registry_targets can be perfect and still guard nothing: deleting its
+# one call site in main() leaves every test above green, because they call the
+# function directly. These two run the real main() with every toolchain-touching
+# data source stubbed out, so the only thing under test is main()'s own wiring.
+
+# Every module-level name main() reaches for, replaced by an inert stand-in.
+# Empty inputs are enough: the assertions below are about control flow, not
+# about any real API surface. `generate_target_stub` is deliberately NOT stubbed
+# -- it is pure and main() calls it on the success path.
+_MAIN_STUBS = {
+    "get_python_fields": lambda: {},
+    "_get_go_api": lambda: {},
+    "get_go_fields_from_api": lambda _api: {},
+    "get_go_all_fields_from_api": lambda _api: {},
+    "get_schema_fields": lambda: {},
+    "_get_ts_api": lambda: {},
+    "get_ts_struct_fields_from_api": lambda _api: {},
+    "get_ts_ctor_keys_from_api": lambda _api: {},
+    "_build_descriptors": lambda: [],
+    "check_entity": lambda *_a, **_k: [],
+    "check_option_funcs_coverage": lambda *_a: [],
+    "check_ts_public_names": lambda *_a: [],
+    "check_check_runner_types": lambda *_a: [],
+    "check_check_runner_methods": lambda *_a: [],
+    "check_check_runner_functions": lambda *_a: [],
+    "check_check_runner_shared_types": lambda *_a: [],
+    "check_outcome_api": lambda *_a: [],
+}
+
+
+@contextmanager
+def _isolated_main(**overrides):
+    """Patch check_api_surface's module globals for the duration of one main()."""
+    stubs = {**_MAIN_STUBS, **overrides}
+    originals = {name: getattr(cas, name) for name in stubs}
+    for name, fn in stubs.items():
+        setattr(cas, name, fn)
+    try:
+        yield
+    finally:
+        for name, fn in originals.items():
+            setattr(cas, name, fn)
+
+
+def test_main_invokes_the_registry_check_exactly_once():
+    calls = []
+
+    def _spy(descriptors, ts_structs, ts_ctor_keys):
+        calls.append((descriptors, ts_structs, ts_ctor_keys))
+        return []
+
+    with _isolated_main(check_ts_registry_targets=_spy):
+        with redirect_stdout(io.StringIO()):
+            rc = cas.main()
+
+    assert rc == 0, "the fully-stubbed surface should report no issues"
+    assert len(calls) == 1, (
+        "main() must call check_ts_registry_targets exactly once; got "
+        f"{len(calls)} call(s)"
+    )
+    assert calls[0] == ([], {}, {}), (
+        "main() must pass the descriptors and the two TS name maps it built"
+    )
+
+
+def test_main_fails_when_the_registry_check_reports_an_error():
+    """The registry check's verdict must reach main()'s exit code and output."""
+    buf = io.StringIO()
+    with _isolated_main(
+        check_ts_registry_targets=lambda *_a: ["registry: SENTINEL"]
+    ):
+        with redirect_stdout(buf):
+            rc = cas.main()
+
+    assert rc == 1, "a registry error must make the api-surface check fail"
+    assert "registry: SENTINEL" in buf.getvalue()
 
 
 if __name__ == "__main__":
