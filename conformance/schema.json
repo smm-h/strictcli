@@ -335,6 +335,16 @@
           "default": false,
           "description": "Declares that the command's effects are worth interrupting someone for (effects contract §8.1). The framework prompts for exactly these commands and for no others. NOT mandatory -- absence means 'not consequential' -- so it is neither in 'required' nor in the 'else' branch. Declaring it on a read_only command is a registration-time hard error."
         },
+        "dry_run_supported": {
+          "type": "boolean",
+          "default": true,
+          "description": "Declares whether --dry-run is honored for this command. Only false is declarable: true is the regime's baseline (a mutating command's effects are recorded rather than executed). A command that declares false is saying a preview of it would misrepresent the real run, so the framework refuses --dry-run for it at parse time. NOT mandatory -- absence means supported -- so it is neither in 'required' nor in the 'else' branch. Declaring false on a read_only command is a registration-time hard error, and it requires dry_run_unsupported_reason."
+        },
+        "dry_run_unsupported_reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why a dry run of this command would misrepresent the real run. Mandatory when dry_run_supported is false, and illegal without it. Shown in the command's help and repeated in the parse-time refusal."
+        },
         "grants": {
           "type": "array",
           "items": { "$ref": "#/$defs/grant" },
@@ -446,6 +456,8 @@
           "handler_diagnostics": false,
           "effect": false,
           "consequential": false,
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": false,
           "grants": false,
           "forwarding": false,
           "flags": false,

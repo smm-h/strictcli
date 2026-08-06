@@ -845,7 +845,7 @@ KNOWN_OPTION_FUNCS: set[str] = {
     # EffectEnv, Check, Stream, Body, Header) are not CmdOption/AppOption
     # constructors and so are not part of this catalog.
     "WithEffect", "WithConsequential", "WithGrants", "WithForwarding",
-    "WithProcObserveAllowlist",
+    "WithProcObserveAllowlist", "WithDryRunUnsupported",
 }
 
 

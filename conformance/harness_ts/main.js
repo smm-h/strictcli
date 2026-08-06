@@ -580,6 +580,7 @@ function registerCommand(cmdDef, target, globalFlags) {
 		if (cmdDef.consequential === true) {
 			spec.consequential = true;
 		}
+		spliceDryRun(spec, cmdDef);
 		// Classification is spliced into the factory name (§1.2): the twins are
 		// the sole mint, so an unclassified passthrough is inexpressible in TS
 		// and such a case restricts itself to the other two targets.
@@ -638,6 +639,7 @@ function registerCommand(cmdDef, target, globalFlags) {
 	if (cmdDef.consequential === true) {
 		spec.consequential = true;
 	}
+	spliceDryRun(spec, cmdDef);
 	if ("forwarding" in cmdDef) {
 		spec.forwarding = cmdDef.forwarding;
 	}
@@ -646,6 +648,21 @@ function registerCommand(cmdDef, target, globalFlags) {
 			? defineMutatingCommand(name, spec)
 			: defineReadOnlyCommand(name, spec),
 	);
+}
+
+/**
+ * Splices the dry-run declaration onto a command spec. `dry_run_supported` is
+ * NOT mandatory: absence means supported, only false is declarable, and it
+ * carries a mandatory reason. Both keys are spliced independently so a case can
+ * assert the orphan-reason registration error too.
+ */
+function spliceDryRun(spec, cmdDef) {
+	if ("dry_run_supported" in cmdDef) {
+		spec.dryRunSupported = cmdDef.dry_run_supported;
+	}
+	if ("dry_run_unsupported_reason" in cmdDef) {
+		spec.dryRunUnsupportedReason = cmdDef.dry_run_unsupported_reason;
+	}
 }
 
 /**

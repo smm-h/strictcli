@@ -1,0 +1,98 @@
+[
+  {
+    "name": "effects_dry_run_unsupported: --dry-run on a declared-unsupported command is refused with the reason",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a command whose preview would lie",
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "later steps read what the earlier ones write",
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["release", "--dry-run"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: --dry-run is not supported by command 'release': later steps read what the earlier ones write\ntry 'myapp --help'\n"
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: the refusal fires from the pre-command position too",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a command whose preview would lie",
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "later steps read what the earlier ones write",
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["--dry-run", "release"],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: --dry-run is not supported by command 'release': later steps read what the earlier ones write\ntry 'myapp --help'\n"
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: without --dry-run the command runs normally",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a command whose preview would lie",
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "later steps read what the earlier ones write",
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["release"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "released\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "effects_dry_run_unsupported: --help beats the refusal and renders the Dry run section",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a command whose preview would lie",
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "later steps read what the earlier ones write",
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": ["release", "--dry-run", "--help"],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp release -- a command whose preview would lie\n\nDry run:\n  --dry-run is not supported: later steps read what the earlier ones write\n",
+      "stderr_equals": ""
+    }
+  }
+]

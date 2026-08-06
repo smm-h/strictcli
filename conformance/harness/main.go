@@ -753,6 +753,15 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 	if v, ok := cmdDef["consequential"]; ok && v.(bool) {
 		opts = append(opts, strictcli.WithConsequential())
 	}
+	// `dry_run_supported` is likewise NOT mandatory: absence means supported.
+	// Only false is declarable, and Go's single option carries the mandatory
+	// reason, so the two case keys collapse into one call here. A case that
+	// declares the reason without the flag is inexpressible in Go (its
+	// registration error has no Go analog) and restricts itself accordingly.
+	if v, ok := cmdDef["dry_run_supported"]; ok && !v.(bool) {
+		reason, _ := cmdDef["dry_run_unsupported_reason"].(string)
+		opts = append(opts, strictcli.WithDryRunUnsupported(reason))
+	}
 	if v, ok := cmdDef["grants"]; ok {
 		var grants []strictcli.Grant
 		for _, item := range v.([]interface{}) {

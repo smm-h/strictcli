@@ -314,6 +314,17 @@ def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
     # consequential", so it is emitted only when the case declares it.
     if "consequential" in cmd_def:
         lines.append(f"{indent}consequential={cmd_def['consequential']!r},")
+    # `dry_run_supported` is likewise NOT mandatory: absence means supported.
+    # Only false is declarable, and it carries a mandatory reason.
+    if "dry_run_supported" in cmd_def:
+        lines.append(
+            f"{indent}dry_run_supported={cmd_def['dry_run_supported']!r},"
+        )
+    if "dry_run_unsupported_reason" in cmd_def:
+        lines.append(
+            f"{indent}dry_run_unsupported_reason="
+            f"{cmd_def['dry_run_unsupported_reason']!r},"
+        )
     if cmd_def.get("grants"):
         exprs = [
             f"strictcli.Grant(name={g['name']!r}, reason={g['reason']!r}, "

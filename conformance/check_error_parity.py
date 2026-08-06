@@ -60,6 +60,17 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # Python-present, Go-excluded
     # =======================================================================
 
+    # -- The dry-run declaration's orphan-reason guard (Python/TS only) --
+    # Python and TS take the declaration as two independent spec keys, so a
+    # reason without `dry_run_supported=false` is representable and must be
+    # rejected. Go's WithDryRunUnsupported(reason) is the only way to set
+    # either field and always sets both, which makes the orphan shape
+    # unrepresentable rather than merely unchecked.
+    'command *: dry_run_unsupported_reason requires dry_run_supported=false '
+    '(there is nothing to explain while dry run is supported)': {
+        "go": "excluded:WithDryRunUnsupported(reason) sets both fields at once, so a reason without the declaration is unrepresentable in Go",
+    },
+
     # -- Handler signature validation (Python only) --
     'command *: handler missing parameter * for flag *': {
         "go": "excluded:Go uses map[string]interface{} kwargs, no handler signature validation",
