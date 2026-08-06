@@ -197,6 +197,11 @@ RICH_APP = {
             "name": "deploy",
             "help": "Test dependencies",
             "effect": "mutating",
+            # Consequential on its own (§8.1), with dry run left at the regime's
+            # supported baseline: pairs with `notify` below so the schema
+            # comparison sees `consequential` both with and without a dry-run
+            # declaration alongside it.
+            "consequential": True,
             # Two grants of different kinds, so the schema's `grants` array is
             # compared for both content and declaration order (§13).
             "grants": [
@@ -254,6 +259,15 @@ RICH_APP = {
             "name": "notify",
             "help": "Test implies dependency",
             "effect": "mutating",
+            # Both effects-regime declarations at once: `consequential` and the
+            # `dry_run_supported=false` + reason pair. Every other mutating
+            # command in this fixture omits the pair, so the comparison pins
+            # emission (here) and omission (everywhere else) in one app -- an
+            # implementation that emitted the default-valued key would diverge
+            # on all of them.
+            "consequential": True,
+            "dry_run_supported": False,
+            "dry_run_unsupported_reason": "the alert it raises decides who is paged next",
             "handler_prints": "notify",
             "flags": [
                 {
