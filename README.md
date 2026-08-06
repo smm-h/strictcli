@@ -147,7 +147,7 @@ app.run(process.argv.slice(2));
 
 The `conformance/` directory contains a cross-language test suite that verifies all implementations (Python, Go, TypeScript) produce identical output for identical inputs. It includes:
 
-- 57 JSON test case files (551 cases) covering every feature, run against each target via `run.py --target python` / `--target go` / `--target typescript`
+- 69 JSON test case files (710 cases) covering every feature, run against each target via `run.py --target python` / `--target go` / `--target typescript`
 - API surface verification (`check_api_surface.py`)
 - Error message parity checks (`check_error_parity.py`)
 - Schema dump parity (`check_schema_parity.py`) and float formatting fuzzing (`check_float_fuzz.py`)
