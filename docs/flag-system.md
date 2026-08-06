@@ -18,14 +18,18 @@ are available for repeatable and key-value flags. The type determines how values
 are parsed from CLI tokens, environment variables, and config files.
 
 ```python
-@app.command("deploy", help="deploy the application")
+@app.command("deploy", help="deploy the application", effect="mutating")
 @strictcli.flag("target", type=str, help="deployment target")
-@strictcli.flag("verbose", type=bool, default=False, help="enable verbose output")
+@strictcli.flag("cache", type=bool, default=True, help="reuse the build cache")
 @strictcli.flag("replicas", type=int, default=3, help="number of replicas")
 @strictcli.flag("threshold", type=float, default=0.95, help="success threshold")
-def deploy(ctx, target, verbose, replicas, threshold):
+def deploy(ctx, target, cache, replicas, threshold):
     ...
 ```
+
+Every command declares its `effect` -- `"read_only"` or `"mutating"` -- and the
+declaration is mandatory. See the [Python quickstart](python-quickstart.md#command-classification)
+for what classification buys.
 
 ### String flags
 
@@ -51,8 +55,8 @@ syntax is rejected as a parse error because boolean flags should never accept
 an ambiguous string value.
 
 ```
-mytool deploy --verbose        # verbose=True
-mytool deploy --no-verbose     # verbose=False
+mytool deploy --cache          # cache=True
+mytool deploy --no-cache       # cache=False
 ```
 
 ### Integer flags
@@ -164,10 +168,10 @@ counterparts, including type coercion, env var fallback, and config file
 resolution. Short flags are shown alongside long flags in help output.
 
 ```python
-@strictcli.flag("verbose", short="v", type=bool, default=False, help="verbose output")
+@strictcli.flag("recursive", short="r", type=bool, default=False, help="recurse into subdirectories")
 ```
 
-This allows `-v` as an alias for `--verbose`. Short flags follow the same parsing rules as their long counterparts.
+This allows `-r` as an alias for `--recursive`. Short flags follow the same parsing rules as their long counterparts. The reserved quartet has no short forms, and the quartet's ban applies to long names only -- a short flag named `v` is legal.
 
 ## Repeatable flags
 
@@ -273,13 +277,13 @@ There is no implicit default for boolean flags. A bool flag without a `default` 
 # Optional: defaults to True, user can override with --no-auto-commit
 @strictcli.flag("auto-commit", type=bool, default=True, help="commit automatically")
 
-# Optional: defaults to False, user can override with --verbose
-@strictcli.flag("verbose", type=bool, default=False, help="verbose output")
+# Optional: defaults to False, user can override with --recursive
+@strictcli.flag("recursive", type=bool, default=False, help="recurse into subdirectories")
 ```
 
 ### Dash-to-underscore conversion
 
-Flag names use dashes (`--dry-run`), but handler parameters use underscores (`dry_run`). The conversion is automatic. If the resulting name is a Python keyword (e.g., `global`, `class`), an underscore is appended per PEP 8 convention (`global_`, `class_`).
+Flag names use dashes (`--log-file`), but handler parameters use underscores (`log_file`). The conversion is automatic. If the resulting name is a Python keyword (e.g., `global`, `class`), an underscore is appended per PEP 8 convention (`global_`, `class_`).
 
 ## Choices
 
@@ -340,7 +344,7 @@ consumed in declaration order after all flags have been parsed, and support the
 same four scalar types as flags plus variadic collection into lists.
 
 ```python
-@app.command("greet", help="say hello")
+@app.command("greet", help="say hello", effect="read_only")
 @strictcli.arg("name", help="who to greet")
 def greet(ctx, name):
     ctx.info(f"Hello, {name}!")
@@ -371,6 +375,7 @@ requires at least one value to be provided.
 @app.command(
     "process",
     help="process files",
+    effect="read_only",
     args=[strictcli.Arg(name="files", help="input files", variadic=True)],
 )
 def process(ctx, files):
@@ -401,12 +406,12 @@ output methods for writing to stdout and stderr, provenance introspection via
 context is the primary interface between the handler and the framework.
 
 ```python
-@app.command("deploy", help="deploy the app")
+@app.command("deploy", help="deploy the app", effect="mutating")
 @strictcli.flag("target", type=str, help="deployment target")
 def deploy(ctx, target):
     ctx.info(f"Deploying to {target}")      # stdout
     ctx.warn("Deployment is slow today")     # stderr
-    ctx.debug("Connecting...")               # stdout
+    ctx.debug("Connecting...")               # stdout, only under --verbose
     ctx.error("Connection failed")           # stderr
 ```
 
@@ -414,20 +419,28 @@ def deploy(ctx, target):
 
 | Method | Stream | Purpose |
 |--------|--------|---------|
-| `ctx.info(msg)` | stdout | Informational messages |
-| `ctx.warn(msg)` | stderr | Warnings |
-| `ctx.debug(msg)` | stdout | Debug output |
-| `ctx.error(msg)` | stderr | Error messages |
+| `ctx.info(msg)` | stdout | Informational messages (suppressed under `--quiet`) |
+| `ctx.warn(msg)` | stderr | Warnings (never suppressed) |
+| `ctx.debug(msg)` | stdout | Debug output (shown only under `--verbose`) |
+| `ctx.error(msg)` | stderr | Error messages (never suppressed) |
+
+### The reserved quartet on the context
+
+`--dry-run`, `--approve-consequential`, `--quiet` and `--verbose` are framework
+flag names that cannot be declared at any level. They never arrive as handler
+parameters -- their values are read from the context as `ctx.dry_run`,
+`ctx.approve_consequential`, `ctx.quiet` and `ctx.verbose`. Declaring a flag
+with any of those four names raises `ValueError` at registration time.
 
 ### Provenance: ctx.source()
 
 `ctx.source(name)` returns where a flag's value came from as a string label,
 enabling handlers to alter behavior based on whether a value was explicitly
 provided by the user or fell through to its default. The method accepts both
-dashed names (`dry-run`) and underscored names (`dry_run`).
+dashed names (`log-file`) and underscored names (`log_file`).
 
 ```python
-@app.command("cmd", help="a command")
+@app.command("cmd", help="a command", effect="read_only")
 @strictcli.flag("target", type=str, default="local", help="target", env="MYAPP_TARGET")
 def cmd(ctx, target):
     source = ctx.source("target")  # "cli", "env", "config", "default", "implied", or "infra"
@@ -463,7 +476,8 @@ Flags can be declared at the app level, making them available to all commands
 in the application. Global flags are parsed before the command token during the
 global flag parsing stage, and their values are passed to every handler alongside
 the command's own flags. Global flag names cannot collide with reserved framework
-names like `help`, `version`, `dump-schema`, `mcp`, `config`, or `hermetic`.
+names like `help`, `version`, `dump-schema`, `mcp`, `config`, or `hermetic`, nor
+with the reserved quartet `dry-run`, `approve-consequential`, `quiet`, `verbose`.
 
 ```python
 app = strictcli.App(
@@ -471,7 +485,7 @@ app = strictcli.App(
     version="1.0.0",
     help="my tool",
     flags=[
-        strictcli.Flag(name="verbose", type=bool, default=False, help="verbose output"),
+        strictcli.Flag(name="color", type=bool, default=True, help="colorize output"),
         strictcli.Flag(name="output", type=str, default="text", help="output format"),
     ],
 )
@@ -496,11 +510,11 @@ auth_flags = strictcli.FlagSet(
     ],
 )
 
-@app.command("deploy", help="deploy", flag_sets=[auth_flags])
+@app.command("deploy", help="deploy", effect="mutating", flag_sets=[auth_flags])
 def deploy(ctx, token, region):
     ...
 
-@app.command("status", help="check status", flag_sets=[auth_flags])
+@app.command("status", help="check status", effect="read_only", flag_sets=[auth_flags])
 def status(ctx, token, region):
     ...
 ```
@@ -517,6 +531,7 @@ groups.
 @app.command(
     "output",
     help="produce output",
+    effect="read_only",
     mutex=[strictcli.MutexGroup(flags=[
         strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
         strictcli.Flag(name="csv", type=bool, default=False, help="CSV output"),
@@ -539,18 +554,23 @@ automatically sets a target flag's value when a trigger flag is provided.
 @app.command(
     "cmd",
     help="a command",
+    effect="mutating",
     dependencies=[
         # All must appear together or none
         strictcli.CoRequired(flags=["host", "port"]),
 
-        # One-way: --verbose requires --log-file
-        strictcli.Requires(flag="verbose", depends_on="log-file"),
+        # One-way: --trace requires --log-file
+        strictcli.Requires(flag="trace", depends_on="log-file"),
 
         # Auto-set: when --fast is passed, set --no-embeddings
         strictcli.Implies(flag="fast", implies="embeddings", value=False),
     ],
 )
 ```
+
+Dependencies can only reference flags you declared. The reserved quartet is not
+declarable, so `dry-run`, `approve-consequential`, `quiet` and `verbose` can
+never appear in a `Requires`, `CoRequired` or `Implies`.
 
 ## Help text is mandatory
 
