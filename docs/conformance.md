@@ -1,6 +1,6 @@
 ---
 title: Cross-Language Conformance
-description: "How the conformance test suite keeps the Python, Go, and TypeScript strictcli implementations behaviorally identical using JSON test cases and parity."
+description: "How the conformance suite's ten checks keep the Python, Go, and TypeScript strictcli implementations behaviorally identical, using JSON cases and parity mode."
 nav_group: "Guides"
 nav_order: 10
 ---

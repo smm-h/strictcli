@@ -1,6 +1,6 @@
 ---
 title: Go Quickstart
-description: "Getting started with strictcli in Go: install, create apps, define commands, add flags and args, use groups, and enable config/schema support."
+description: "Build CLIs with strictcli in Go: apps, mandatory WithEffect classification, flags, args, groups, the reserved flag quartet, and consequential confirmations."
 nav_group: "Guides"
 nav_order: 1
 ---

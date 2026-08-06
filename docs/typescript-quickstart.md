@@ -1,6 +1,6 @@
 ---
 title: TypeScript Quickstart
-description: "Get started with strictcli in TypeScript: install, create an app, define commands with typed flags and args, organize with groups, and dump the schema."
+description: "Build CLIs with strictcli in TypeScript: the twin command factories, typed flags and args, groups, the reserved flag quartet, and consequential confirmations."
 nav_group: "Guides"
 nav_order: 0
 ---

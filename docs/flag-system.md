@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "Complete guide to strictcli's flag and argument system: types, defaults, boolean negation, repeatable flags, naming rules, and positional arguments."
+description: "strictcli's flag and argument system: four types, defaults, boolean negation, repeatable flags, naming rules including the reserved quartet, and positional args."
 nav_group: "Guides"
 nav_order: 3
 ---

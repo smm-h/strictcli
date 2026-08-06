@@ -1,6 +1,6 @@
 ---
 title: Python Quickstart
-description: "Getting started with strictcli in Python: install, create apps, define commands, add flags and args, use groups, and enable config/schema support."
+description: "Build CLIs with strictcli in Python: apps, mandatory effect classification, flags, args, groups, the reserved flag quartet, and consequential confirmations."
 nav_group: "Guides"
 nav_order: 2
 ---
@@ -95,8 +95,8 @@ passing `effect=` to `app.deprecate()` is a registration-time error.
 
 Every command handler receives `ctx` as its first argument, providing structured
 output methods and provenance introspection. Flag and arg values arrive as
-keyword arguments with dashes converted to underscores (`--dry-run` becomes
-`dry_run`). The return value must be `int` (exit code), `None` (exit 0), or
+keyword arguments with dashes converted to underscores (`--log-file` becomes
+`log_file`). The return value must be `int` (exit code), `None` (exit 0), or
 `strictcli.outcome()` for structured data -- any other return type is a hard
 error.
 
