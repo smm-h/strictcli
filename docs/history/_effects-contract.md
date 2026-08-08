@@ -1629,6 +1629,37 @@ lists are deliberately **not** narrowed here: a lint that is the sole mitigation
 fails closed, and a false positive is a visible, one-line fix in consumer code where a false
 negative is silent.
 
+**The one carve-out: a false positive that has no fix.** *Added 2026-08-09, from a consumer
+report.* The paragraph above rests on "a false positive is a visible, one-line fix in consumer
+code" -- the consumer routes the call through `ctx.effects` and the finding clears. That rationale
+is **false** for a flagged call the handle could not carry: the handle's method set is closed
+(§2) and has no in-process-observe method, so a finding on a pure in-process read cannot be acted
+on at all. Its own remediation line ("route it through `ctx.effects`") is then a lie, and the
+consumer's only exit is to rewrite working code into a shape the lint happens not to match.
+Reported in the field: `platform.system()` -- a pure string read, no process -- flagged as
+`os.system`, and a consumer rewrote it as a `platform.uname()` projection purely to clear the
+gate.
+
+So a leaf is narrowed when, and only when, **both** hold: its name collides with a call that
+performs no effect at all, and that call has no route through the handle. The narrowing is
+receiver gating, never leaf removal, so the real effect stays a finding:
+
+| Impl | Leaf | Finding | Exempt |
+|------|------|---------|--------|
+| Python | `system` | receiver resolvable to `os` (`os.system`, `import os as o` + `o.system`, `from os import system` + bare call) | every other receiver -- `platform.system()`, `foo.system()` |
+| TypeScript | `exec` | bare `exec(...)`, or a child_process receiver (`cp.exec`, `execa.exec`) | every other receiver -- `re.exec(line)` |
+| Go | n/a | -- | no equivalent: the process list is already receiver-gated (`exec`/`syscall`/`os`/`cmd`) and the stdlib has no `os.System` |
+
+Python resolves the receiver through the module's own imports, against a closed list of effect
+modules, which is why the same table also closes two escapes the name-only matching left open
+(`import requests as rq` + `rq.post`, `from subprocess import run` + a bare `run`). TypeScript has
+no import resolution (§17), so a **bare** `exec(` stays a finding there -- unqualified `exec` in a
+reachable scope is the child_process import in every realistic reading.
+
+This carve-out does not reopen the general rule. A name collision with a call that *does* perform
+an effect (`str.replace` vs `os.replace`) is still reported: routing it through the handle is
+still possible, so the finding is still actionable.
+
 Additionally, the TS `effects-bypass` check flags the two accepted Proxy ceilings (§4.4): a bare
 truthiness test or a `===` comparison against a value the analyser can trace to an effects-handle
 return. These are the only things the runtime seal cannot catch, so lint is the sole line of
@@ -2419,7 +2450,9 @@ Recorded so implementors do not re-litigate them:
   gating, so name collisions with unrelated APIs (`str.replace` vs `os.replace`, `app.call` vs
   `subprocess.call`) are reported. Not narrowed: a lint that is the sole mitigation for the
   no-sandbox ceiling fails closed, and a false positive is a visible one-line fix where a false
-  negative is silent (§11.1).
+  negative is silent (§11.1). The one carve-out, added 2026-08-09: a leaf whose collision is with
+  a call the handle *could not carry* is receiver-gated, because there the one-line fix does not
+  exist and the remediation line is a lie (§11.1's carve-out table).
 - **Go**: extraction is a runtime panic, not a compile error. Non-comparability is the only
   compile-time protection available.
 - **Go**: no compile-time ctx narrowing exists; the twin-factory affordance is TS-only.
