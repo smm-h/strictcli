@@ -326,6 +326,153 @@ async def deploy(ctx):
         assert r.exit_code == 1
 
 
+class TestSystemIsBannedOnlyThroughOs:
+    """`system` starts a shell only as `os.system`.
+
+    `platform.system()` is a pure in-process string read: no process, no
+    effect, and NOTHING the effects handle could carry it -- the handle's
+    closed method set has no in-process-observe method. A finding on it is
+    unfixable by its own remediation ("route it through ctx.effects"), which
+    is the one thing a lint must never emit. So the leaf is receiver-scoped,
+    exactly as the network leaves already are.
+    """
+
+    def _run(self, tmp_path, source):
+        app, root = _app(tmp_path)
+        (root / "handlers.py").write_text(source)
+        return app.test(["check", "--name", "effects-bypass"])
+
+    def test_platform_system_is_not_a_finding(self, tmp_path):
+        r = self._run(tmp_path, '''
+import platform
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    return platform.system()
+''')
+        assert r.exit_code == 0, r.stdout
+        assert "no direct effect calls bypass ctx.effects" in r.stdout
+
+    def test_system_imported_from_platform_is_not_a_finding(self, tmp_path):
+        r = self._run(tmp_path, '''
+from platform import system
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    return system()
+''')
+        assert r.exit_code == 0, r.stdout
+
+    def test_an_unknown_receiver_named_system_is_not_a_finding(self, tmp_path):
+        """No resolvable binding to `os` is no evidence a process starts.
+
+        `foo.system()` is some object's method. Receiver-awareness means the
+        lint reports what it can show, and an unknown receiver shows nothing.
+        """
+        r = self._run(tmp_path, '''
+def deploy(ctx, foo):
+    ctx.effects.run(["true"])
+    return foo.system()
+''')
+        assert r.exit_code == 0, r.stdout
+
+    def test_os_system_is_still_a_finding(self, tmp_path):
+        r = self._run(tmp_path, '''
+import os
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    os.system("rm -rf /")
+''')
+        assert r.exit_code == 1
+        assert "deploy calls os.system directly" in r.stdout
+
+    def test_system_imported_from_os_is_a_finding(self, tmp_path):
+        r = self._run(tmp_path, '''
+from os import system
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    system("rm -rf /")
+''')
+        assert r.exit_code == 1, r.stdout
+        assert "deploy calls system directly" in r.stdout
+
+    def test_system_imported_from_os_under_an_alias_is_a_finding(self, tmp_path):
+        r = self._run(tmp_path, '''
+from os import system as shell_out
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    shell_out("rm -rf /")
+''')
+        assert r.exit_code == 1, r.stdout
+        assert "deploy calls shell_out directly" in r.stdout
+
+    def test_an_aliased_os_module_receiver_is_a_finding(self, tmp_path):
+        r = self._run(tmp_path, '''
+import os as o
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    o.system("rm -rf /")
+''')
+        assert r.exit_code == 1, r.stdout
+        assert "deploy calls o.system directly" in r.stdout
+
+
+class TestImportBindingsResolveReceivers:
+    """An effect-module import is a receiver the analyser can resolve.
+
+    The same binding table that keeps `platform.system` clean also closes two
+    escapes it would otherwise open: an aliased effect module and a bare name
+    imported from one.
+    """
+
+    def _run(self, tmp_path, source):
+        app, root = _app(tmp_path)
+        (root / "handlers.py").write_text(source)
+        return app.test(["check", "--name", "effects-bypass"])
+
+    def test_an_aliased_requests_module_is_a_network_finding(self, tmp_path):
+        r = self._run(tmp_path, '''
+import requests as rq
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    rq.post("https://x.test")
+''')
+        assert r.exit_code == 1, r.stdout
+        assert "deploy calls rq.post directly" in r.stdout
+
+    def test_a_bare_name_imported_from_subprocess_is_a_finding(self, tmp_path):
+        r = self._run(tmp_path, '''
+from subprocess import run
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    run(["git", "push"])
+''')
+        assert r.exit_code == 1, r.stdout
+        assert "deploy calls run directly" in r.stdout
+
+    def test_a_bare_name_from_an_unrelated_module_is_not_a_finding(self, tmp_path):
+        """Only the closed list of effect modules binds a receiver.
+
+        `from mylib import get` must stay silent -- widening the binding table
+        to every module would re-create the `mapping.get(...)` noise the
+        network receiver list exists to remove.
+        """
+        r = self._run(tmp_path, '''
+from mylib import get
+
+def deploy(ctx):
+    ctx.effects.run(["true"])
+    return get("k")
+''')
+        assert r.exit_code == 0, r.stdout
+
+
 class TestObserveAllowlistBreadth:
     """§6.2's hazard, surfaced as a WARNING and never as an error.
 

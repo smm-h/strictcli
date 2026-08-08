@@ -44,7 +44,7 @@ from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol, TypeVar, get_args, get_origin, runtime_checkable
+from typing import Any, Callable, NamedTuple, Protocol, TypeVar, get_args, get_origin, runtime_checkable
 
 # TypeVar for decorator return types — preserves the decorated function's type
 F = TypeVar("F", bound=Callable[..., Any])
@@ -1423,13 +1423,30 @@ def _validate_grants(cmd_name: str, grants) -> tuple:
 # Closed lists, matched on the called attribute/function name: process starts,
 # filesystem mutations, and network calls. The analyser is stdlib `ast` -- a
 # regular dependency, no optional import and no soft degradation.
+#
+# Several leaves are RECEIVER-SCOPED: a name alone is not evidence of an
+# effect, and a finding a consumer cannot act on is worse than no finding.
+# `mapping.get(...)` is not a network call and `platform.system()` is not a
+# process start, so those leaves are banned only through a receiver the
+# module's own imports let the analyser resolve.
 # ---------------------------------------------------------------------------
 
 _BYPASS_PROCESS = frozenset({
     "run", "Popen", "call", "check_call", "check_output", "getoutput",
-    "getstatusoutput", "system", "popen", "execv", "execvp", "execve",
+    "getstatusoutput", "popen", "execv", "execvp", "execve",
     "spawnv", "spawnl", "fork",
 })
+# Process leaves that start a process only through `os`. `system` is the whole
+# set: `os.system` runs a shell, but `platform.system()` is a pure in-process
+# string read -- no process, no effect, and nothing the effects handle could
+# carry, since its closed method set has no in-process-observe method. Banning
+# the leaf on any receiver produced a finding whose own remediation ("route it
+# through ctx.effects") could not be followed, which is the one thing a lint
+# must never emit. An UNKNOWN receiver (`foo.system()`) is exempt for the same
+# reason the network leaves are receiver-scoped: without a resolvable binding
+# to `os` there is no evidence a process starts, and a name is not evidence.
+_BYPASS_PROCESS_OS_ONLY = frozenset({"system"})
+_BYPASS_OS_RECEIVERS = frozenset({"os"})
 _BYPASS_FILESYSTEM = frozenset({
     "remove", "unlink", "rmdir", "removedirs", "mkdir", "makedirs",
     "rename", "renames", "replace", "chmod", "chown", "symlink", "link",
@@ -1453,6 +1470,63 @@ _BYPASS_SKIP_DIRS = frozenset({
     "site-packages", "build", "dist", ".tox", ".mypy_cache", ".ruff_cache",
     ".pytest_cache", ".eggs",
 })
+# The modules whose imports bind a receiver the analyser trusts. Closed, like
+# every other list here: `import requests as rq` must resolve to `requests` and
+# `from os import system` to `os`, while `from mylib import get` must bind
+# NOTHING -- widening this to every module would re-create exactly the ordinary
+# `mapping.get(...)` noise the network receiver list exists to remove.
+_BYPASS_EFFECT_MODULES = frozenset({
+    "os", "os.path", "subprocess", "shutil", "pathlib", "socket", "tempfile",
+    "requests", "httpx", "urllib", "urllib.request", "http", "http.client",
+    "aiohttp", "urllib3",
+})
+
+
+class _BypassImports(NamedTuple):
+    """What a module's imports say about the names it calls.
+
+    ``receivers`` maps a bound module name to the effect module it denotes
+    (``import os as o`` -> ``{"o": "os"}``); ``calls`` maps a bound member name
+    to the ``(module, member)`` pair it came from (``from os import system as
+    sh`` -> ``{"sh": ("os", "system")}``). Both are used to normalize a call
+    before the ban lists see it, so the lists stay written in terms of real
+    module and member names rather than whatever the consumer spelled.
+    """
+
+    receivers: dict
+    calls: dict
+
+
+_BYPASS_NO_IMPORTS = _BypassImports({}, {})
+
+
+def _bypass_import_bindings(tree) -> _BypassImports:
+    """Names bound to effect modules and to their members, in one module.
+
+    Relative imports are skipped: ``from .os import system`` is the consumer's
+    own module, not the stdlib one, and the analyser cannot resolve it.
+    """
+    receivers: dict = {}
+    calls: dict = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name not in _BYPASS_EFFECT_MODULES:
+                    continue
+                if alias.asname is None:
+                    # `import os.path` binds `os`, and `os.system` still works.
+                    bound = module = alias.name.split(".")[0]
+                else:
+                    bound = alias.asname
+                    module = alias.name.rsplit(".", 1)[-1]
+                receivers[bound] = module
+        elif isinstance(node, ast.ImportFrom):
+            if node.level or node.module not in _BYPASS_EFFECT_MODULES:
+                continue
+            module = node.module.rsplit(".", 1)[-1]
+            for alias in node.names:
+                calls[alias.asname or alias.name] = (module, alias.name)
+    return _BypassImports(receivers, calls)
 
 
 def _call_target_name(node) -> tuple:
@@ -1613,10 +1687,42 @@ def _bypass_reachable_functions(tree) -> set:
     return reachable
 
 
-def _bypass_call_is_banned(node, target: str, receiver) -> bool:
+def _bypass_resolve_call(leaf: str, receiver,
+                         imports: _BypassImports) -> tuple:
+    """The ``(leaf, receiver)`` a call really goes through, per its imports.
+
+    A bare name imported from an effect module answers with that module and the
+    member's REAL name (``from os import system as sh`` -> ``("system",
+    "os")``), and an aliased module receiver answers with the module it denotes
+    (``import os as o`` -> ``os``). Anything else is returned untouched, so an
+    unresolvable receiver stays unresolvable rather than being guessed at.
+    """
+    if receiver is None:
+        bound = imports.calls.get(leaf)
+        if bound is None:
+            return leaf, None
+        module, member = bound
+        return member, module
+    return leaf, imports.receivers.get(receiver, receiver)
+
+
+def _bypass_call_is_banned(node, target: str, receiver,
+                           imports: _BypassImports = _BYPASS_NO_IMPORTS) -> bool:
+    """True when one call is a direct effect the handle should have carried.
+
+    The call is resolved through the module's imports first (see
+    :func:`_bypass_resolve_call`), so the lists below are written in terms of
+    real module and member names. Two leaves are deliberately narrower than the
+    rest: ``open`` is a finding only in a writing mode, and ``system`` only
+    through ``os`` -- ``platform.system()`` observes this process and starts
+    nothing, and the effects handle has no method that could carry it.
+    """
     leaf = target.rsplit(".", 1)[-1]
+    leaf, receiver = _bypass_resolve_call(leaf, receiver, imports)
     if leaf == "open" and receiver is None:
         return _open_is_write_mode(node)
+    if leaf in _BYPASS_PROCESS_OS_ONLY:
+        return receiver in _BYPASS_OS_RECEIVERS
     return (
         (leaf in _BYPASS_PROCESS and receiver is not None)
         or leaf in _BYPASS_FILESYSTEM
@@ -1625,7 +1731,7 @@ def _bypass_call_is_banned(node, target: str, receiver) -> bool:
 
 
 def _bypass_walk(node, stack: list, reachable: set, findings: list, rel: str,
-                 aliases: frozenset) -> None:
+                 aliases: frozenset, imports: _BypassImports) -> None:
     """Walk one subtree, carrying the enclosing-function stack.
 
     A banned call is reported once, at the INNERMOST enclosing function, when
@@ -1638,10 +1744,11 @@ def _bypass_walk(node, stack: list, reachable: set, findings: list, rel: str,
         if stack and any(id(fn) in reachable for fn in stack):
             if not _reaches_effects_handle(node.func, aliases):
                 target, receiver = _call_target_name(node.func)
-                if target is not None and _bypass_call_is_banned(node, target, receiver):
+                if target is not None and _bypass_call_is_banned(
+                        node, target, receiver, imports):
                     findings.append((rel, node.lineno, stack[-1].name, target))
     for child in ast.iter_child_nodes(node):
-        _bypass_walk(child, stack, reachable, findings, rel, aliases)
+        _bypass_walk(child, stack, reachable, findings, rel, aliases, imports)
 
 
 def _open_is_write_mode(node) -> bool:
@@ -1685,7 +1792,8 @@ def _scan_effects_bypasses(root: Path) -> list[tuple]:
             if not reachable:
                 continue
             _bypass_walk(tree, [], reachable, findings, rel,
-                         _bypass_effects_aliases(tree))
+                         _bypass_effects_aliases(tree),
+                         _bypass_import_bindings(tree))
     return findings
 
 
@@ -4846,7 +4954,11 @@ class App:
 
         - ``effects-bypass`` (error) fails on any direct process,
           filesystem-mutation or network call REACHABLE FROM A REGISTERED
-          COMMAND HANDLER;
+          COMMAND HANDLER. Its remediation is always "route it through
+          ctx.effects", so a leaf the handle could not carry must never be a
+          finding: the handle's closed method set has no in-process-observe
+          method, which is why ``platform.system()`` is exempt while
+          ``os.system(...)`` is not (see :data:`_BYPASS_PROCESS_OS_ONLY`);
         - ``observe-allowlist-breadth`` (warn) surfaces short
           ``proc_observe_allowlist`` prefixes, which authorize real execution
           under ``--dry-run``;
