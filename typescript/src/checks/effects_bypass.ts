@@ -61,6 +61,30 @@ const BYPASS_PROCESS: ReadonlySet<string> = new Set([
 	"fork",
 ]);
 
+/**
+ * Process leaves that are a process start only bare or through a
+ * child_process receiver. `exec` is the whole set: it is child_process'
+ * shell-runner AND `RegExp.prototype.exec`, a pure in-process string match
+ * that starts nothing. A finding on the latter cannot be acted on -- the
+ * check's remediation is "route it through ctx.effects" and the handle's
+ * closed method set has no in-process-observe method -- so the leaf is
+ * receiver-gated exactly as the network leaves already are. An UNKNOWN
+ * receiver is exempt: `re.exec(s)` is not evidence a process starts. A BARE
+ * `exec(...)` stays a finding, because this analyser has no import resolution
+ * (§17) and an unqualified `exec(` in a reachable scope is the child_process
+ * import in every realistic reading.
+ */
+const BYPASS_PROCESS_RECEIVER_SCOPED: ReadonlySet<string> = new Set(["exec"]);
+
+/** Receivers that make a receiver-scoped process leaf a finding. */
+const BYPASS_PROCESS_RECEIVERS: ReadonlySet<string> = new Set([
+	"child_process",
+	"childProcess",
+	"cp",
+	"execa",
+	"shelljs",
+]);
+
 /** Filesystem mutations (sync and promise forms). */
 const BYPASS_FILESYSTEM: ReadonlySet<string> = new Set([
 	"writeFileSync",
@@ -613,7 +637,10 @@ export function scanTokens(
 				const leaf = t.text;
 				const target = receiver !== undefined ? `${receiver}.${leaf}` : leaf;
 				const banned =
-					BYPASS_PROCESS.has(leaf) ||
+					(BYPASS_PROCESS.has(leaf) &&
+						(!BYPASS_PROCESS_RECEIVER_SCOPED.has(leaf) ||
+							receiver === undefined ||
+							BYPASS_PROCESS_RECEIVERS.has(receiver))) ||
 					BYPASS_FILESYSTEM.has(leaf) ||
 					(leaf === "fetch" && !prevDot) ||
 					(BYPASS_NETWORK.has(leaf) &&

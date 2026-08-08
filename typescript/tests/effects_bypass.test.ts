@@ -107,6 +107,61 @@ export function deploy(ctx, table) {
 	assert.deepEqual(scanEffectsBypasses(root), []);
 });
 
+// --- receiver-scoped process leaves ----------------------------------------
+//
+// `exec` is child_process' shell-runner AND RegExp.prototype.exec, a pure
+// in-process string match. Flagging the latter produces a finding whose own
+// remediation ("route it through ctx.effects") cannot be followed: the handle's
+// closed method set has no in-process-observe method. So `exec` is a finding
+// only through a receiver the analyser can read as child_process, mirroring the
+// receiver gating the network leaves already have. Bare `exec(...)` stays a
+// finding: TypeScript's analyser has no import resolution (§17), and an
+// unqualified `exec(` in a reachable scope is the child_process import in every
+// realistic reading.
+
+test("bypass: a RegExp exec() is NOT a process finding", () => {
+	const root = project({
+		"cli.ts": `
+const VERSION = /v(\\d+)/;
+export function deploy(ctx, line) {
+	ctx.effects.run(["make"]);
+	return VERSION.exec(line);
+}
+`,
+	});
+	assert.deepEqual(scanEffectsBypasses(root), []);
+});
+
+test("bypass: child_process.exec() through a receiver is still a finding", () => {
+	const root = project({
+		"cli.ts": `
+import cp from "node:child_process";
+export function deploy(ctx) {
+	ctx.effects.run(["make"]);
+	cp.exec("git push");
+}
+`,
+	});
+	const findings = scanEffectsBypasses(root);
+	assert.equal(findings.length, 1, JSON.stringify(findings));
+	assert.match(findings[0]?.text ?? "", /calls cp\.exec directly/);
+});
+
+test("bypass: a bare exec() is still a finding", () => {
+	const root = project({
+		"cli.ts": `
+import { exec } from "node:child_process";
+export function deploy(ctx) {
+	ctx.effects.run(["make"]);
+	exec("git push");
+}
+`,
+	});
+	const findings = scanEffectsBypasses(root);
+	assert.equal(findings.length, 1, JSON.stringify(findings));
+	assert.match(findings[0]?.text ?? "", /calls exec directly/);
+});
+
 test("bypass: the truthiness ceiling is named explicitly", () => {
 	const root = project({
 		"cli.ts": `
