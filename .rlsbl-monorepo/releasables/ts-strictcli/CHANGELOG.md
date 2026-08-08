@@ -115,6 +115,47 @@ ruling A1, §18.6).
 
 ## 0.34.0
 
+The effects regime: twin registration factories replacing defineCommand, framework-owned --dry-run/--yes/--quiet/--verbose, and side effects that flow through ctx.effects.
+
+<details>
+<summary>Context</summary>
+
+A consumer command once accepted a dry-run flag, ignored it, and published to a
+public registry for real. Honoring a dry run was a convention, and conventions
+are forgettable. This release makes it structural, in lockstep with the Python
+and Go implementations.
+
+Classification is mandatory and has no default, so there is nothing left for
+defineCommand to mean: it is removed, along with passthrough, in favour of the
+twins defineReadOnlyCommand / defineMutatingCommand and readOnlyPassthrough /
+mutatingPassthrough. The twins pay for themselves at compile time -- a read-only
+command's ctx is narrowed to a context that has no mutating methods, so a stray
+.write() inside one is a type error, not a runtime surprise. Plain JavaScript
+consumers get the same guarantee at runtime through a mandatory seal. The
+framework owns --dry-run, --yes, --quiet and --verbose, and declaring a flag by
+one of those names is a registration error.
+
+Side effects ride ctx.effects: run, spawn, write, mkdir, remove, rename, chmod,
+http. In a dry run the handle records instead of performing and prints the
+would-do log. What a recorded mutation returns is the hard part, and the answer
+is to refuse to guess: the handle returns a branded Unsettled carrier. Forward
+it into a later effect and the preview continues with the provenance rendered
+inline; read it or branch on it and the preview truncates with a message naming
+the step and the reason.
+
+One packaging change comes with this: the built-in effects-bypass check analyses
+consumer sources through the TypeScript compiler API, so typescript moves from
+devDependencies to dependencies and is installed alongside strictcli in
+production installs. That was a deliberate trade -- full AST fidelity in
+lockstep with the Python and Go checks was worth a dependency that most
+consumers of a TypeScript CLI framework already have.
+
+This breaks every consumer at its lock bump, deliberately: a silent grace period
+would have preserved the exact bug class this regime exists to kill. The fleet
+migrates in a dedicated wave immediately after this release.
+
+</details>
+
 ### Breaking
 
 - [ts-strictcli] **Breaking: the effects regime.** Every command must now be registered through the twin factories `defineReadOnlyCommand` / `defineMutatingCommand` (and passthroughs through `readOnlyPassthrough` / `mutatingPassthrough`) — `defineCommand` and `passthrough` are removed, because classification is mandatory and has no default. `--dry-run`, `--yes`, `--quiet` and `--verbose` are reserved framework flag names, delivered on the Context (`ctx.dryRun`, `ctx.yes`, `ctx.quiet`, `ctx.verbose`) and gating `ctx.info`/`ctx.debug`. `ctx.effects` mints the eight recorded operations (`run`, `spawn`, `write`, `mkdir`, `remove`, `rename`, `chmod`, `http`); under `--dry-run` they are recorded, not executed, and rendered as a would-do log, with `Unsettled` carriers that forward into later effects and truncate honestly when extracted from. A read-only command's handler `ctx` is narrowed so a `.write()` inside one is a compile error. Mutating commands prompt for confirmation unless `--yes` is passed. A built-in `effects-bypass` check fails on direct process, filesystem or network calls inside effects-using handlers.
@@ -133,11 +174,22 @@ ruling A1, §18.6).
 
 ## 0.33.0
 
+Add isHermetic() to the check-side ConnectionEnvReader
+
 ### Features
 
 - [ts-strictcli] **Hermetic detection in checks.** `ConnectionEnvReader` now exposes `isHermetic()`, letting a check distinguish `--hermetic` suppression from an unset connection env (both surface as `connectionEnvValue` present=false) and honor hermetic even when the env is absent.
 
 ## 0.32.0
+
+Connection env vars: a hermetic-suppressed, app-level env primitive for connection URLs
+
+<details>
+<summary>Context</summary>
+
+Adds a third infra-env kind alongside infra roots and handshake vars. A connection env (e.g. a database DSN) is declared once at app level via createApp connectionEnv, read lazily with no default, and suppressed under --hermetic so connection-dependent behavior (including checks) skips visibly. Flags bind to it via connectionUrl/connectionEnv and check functions can read it through the ConnectionEnvReader capability.
+
+</details>
 
 ### Features
 
