@@ -200,6 +200,50 @@ corresponding PyPI artifact. It was never installable and never will be.
 
 ## 0.35.0
 
+The effects regime: mandatory command classification, framework-owned --dry-run/--yes/--quiet/--verbose, and side effects that flow through ctx.effects.
+
+<details>
+<summary>Context</summary>
+
+A consumer command once accepted --dry-run into **kwargs, dropped it on the
+floor, and published a package to a public registry. Nothing in the framework
+could have caught that: honoring a dry run was a convention, and a convention is
+something a handler can forget. This release makes it structural.
+
+Every command now declares effect="read_only" or effect="mutating" at
+registration -- no default, no inference from names or tags, a hard error if you
+omit it. The four reserved flags stop being something each app spells for
+itself; the framework owns --dry-run, --yes, --quiet and --verbose, so they mean
+the same thing in every strictcli program, and declaring a flag by one of those
+names is now a registration error. Side effects ride ctx.effects: run, spawn,
+write, mkdir, remove, rename, chmod, http. In a dry run the handle records
+instead of performing and the framework prints the would-do log; in a real run
+the same handler code executes for real. Handlers never branch on a dry_run
+kwarg again, because the mode lives in the handle rather than in an argument
+somebody has to remember to read.
+
+The hard part of previewing is what a recorded mutation returns. Rather than
+guess, the handle returns an Unsettled carrier. Forward it into a later effect
+and the preview continues with the provenance rendered inline -- step-output and
+stale-value brands appear in the log line itself. Try to read it or branch on it
+and you get a hard error and a truncated preview that says exactly where the
+preview stopped and why. A short honest preview beats a long invented one, and
+no amount of inference would have made the guess trustworthy.
+
+Two shipped checks keep the seam visible: effects-bypass follows the call graph
+reachable from every registered handler and reports direct ambient effects, and
+observe-allowlist-breadth names any single-token observe prefix broad enough to
+exempt a whole binary.
+
+This is a breaking release by design: every consumer's commands are unclassified
+today and will fail registration at their lock bump. That is deliberate -- a
+silent grace period would have left exactly the bug class this regime exists to
+kill. The fleet migrates in a dedicated wave right after this release, and the
+same regime lands in the Go and TypeScript implementations in this same
+coordinated release, so the three stay in lockstep.
+
+</details>
+
 ### Breaking
 
 - [strictcli] **Breaking: the effects regime.** Every command must now declare `effect="read_only"` or `effect="mutating"` at registration. `--dry-run`, `--yes`, `--quiet` and `--verbose` are reserved framework flag names, delivered on the Context (`ctx.dry_run`, `ctx.yes`, `ctx.quiet`, `ctx.verbose`) and gating `ctx.info`/`ctx.debug`. `ctx.effects` mints the eight recorded operations (`run`, `spawn`, `write`, `mkdir`, `remove`, `rename`, `chmod`, `http`); under `--dry-run` they are recorded, not executed, and rendered as a would-do log, with `Unsettled` carriers that forward into later effects and truncate honestly when extracted from. Mutating commands prompt for confirmation unless `--yes` is passed. A `**kwargs` handler must declare `forwarding=Forwarding(reason=...)`. A built-in `effects-bypass` check fails on direct process, filesystem or network calls inside effects-using handlers.
@@ -217,17 +261,30 @@ corresponding PyPI artifact. It was never installable and never will be.
 
 ## 0.34.0
 
+Add is_hermetic() to the check-side ConnectionEnvReader
+
 ### Features
 
 - [strictcli] **Hermetic detection in checks.** `ConnectionEnvReader` now exposes `is_hermetic()`, letting a check distinguish `--hermetic` suppression from an unset connection env (both surface as `connection_env_value` present=False) and honor hermetic even when the env is absent.
 
 ## 0.33.0
 
+Connection env vars: a hermetic-suppressed, app-level env primitive for connection URLs
+
+<details>
+<summary>Context</summary>
+
+Adds a third infra-env kind alongside infra roots and handshake vars. A connection env (e.g. a database DSN) is declared once at app level, read lazily with no default, and suppressed under --hermetic so connection-dependent behavior (including checks) skips visibly. Flags bind to it by reference and check functions can read it through the check context.
+
+</details>
+
 ### Features
 
 - [strictcli] **Connection env vars.** Declare a hermetic-suppressed connection URL (e.g. a database DSN) at app level with `App(connection_env=...)`; bind flags to it with `connection_url`/`connection_env`, read it from handlers via `ctx.connection_env_value()`, and from checks via the wrapped check context. Under `--hermetic` it resolves absent so connection-dependent behavior skips visibly.
 
 ## 0.32.2
+
+Strict parsing: reject underscore separators in ints and overflow-to-infinity floats
 
 ### Fixes
 
@@ -236,11 +293,29 @@ corresponding PyPI artifact. It was never installable and never will be.
 
 ## 0.32.1
 
+cli-test-coverage skips instead of failing when run outside the app's own dev tree
+
+<details>
+<summary>Context</summary>
+
+An installed app that runs its checks from a foreign project's directory anchored cli-test-coverage to that foreign cwd, which has no coverage manifest or shard files, so the check failed listing the app's entire command surface as uncovered. The check now applies subject-matter gating: when the anchored coverage root contains neither a manifest nor any shard files, it reports a visible skip naming the anchored path. When either exists, behavior is unchanged.
+
+</details>
+
 ### Fixes
 
 - [strictcli] The `cli-test-coverage` check no longer fails when an installed app runs its checks outside its own development tree (e.g. from a consumer project's directory); it now reports a visible skip when no coverage manifest or shard files exist at the anchored root.
 
 ## 0.32.0
+
+Deterministic cli-test-coverage verdict from the committed manifest; chdir-safe coverage recording
+
+<details>
+<summary>Context</summary>
+
+The cli-test-coverage check previously derived its verdict solely from local per-process shard files, so any machine that had not run the suite failed with 'no coverage data' regardless of repo state. The check now derives its verdict from the committed .strictcli/test-coverage.json manifest (union with any local shards), making it deterministic across machines. Coverage recording and the check are also anchored to the app's construction-time directory, so tests that chdir still record into the repo and a check evaluated from a foreign cwd reads the app's own state.
+
+</details>
 
 ### Fixes
 
@@ -269,11 +344,15 @@ Python users should install strictcli from PyPI.
 
 ## 0.30.1
 
+Fix coverage shard directory creation in test contexts
+
 ### Fixes
 
 - [strictcli] **Bug fix.** Coverage shard directory is now created on-demand in `_record_coverage`, fixing crashes when `app.test()` runs in a different working directory than where the App was constructed.
 
 ## 0.30.0
+
+CLI test-coverage instrumentation, notes channel
 
 ### Features
 
@@ -299,6 +378,24 @@ Python users should install strictcli from PyPI.
 
 ## 0.28.0
 
+Check outcome model (sealed reporters, per-problem severity, purity partition), check providers, InfraEnv location roots, global-flag conflict fix, conformance parity.
+
+<details>
+<summary>Context</summary>
+
+Breaking changes (minor bump in 0.x):
+
+- CheckResult deleted. Check handlers now receive a ceiling-typed reporter
+  (ErrorReporter for error-severity checks, WarnReporter for warn-severity)
+  and return outcomes via reporter.passed / reporter.found / reporter.skipped.
+- @app.check replaced by @app.error_check / @app.warn_check decorators that
+  enforce the severity-form contract at registration time.
+- Check implementations change from fn(ctx) -> CheckResult to
+  fn(ctx, reporter) -> outcome.
+- Scope adapters return SkipCheck(reason=...) instead of CheckResult("skip", ...).
+
+</details>
+
 ### Breaking
 
 - [strictcli] **Breaking: sealed reporter outcome model.** CheckResult removed; check handlers now receive a ceiling-typed reporter (ErrorReporter / WarnReporter) and return outcomes via reporter.passed / reporter.found / reporter.skipped. Registration via @app.error_check / @app.warn_check replaces @app.check.
@@ -315,6 +412,23 @@ Python users should install strictcli from PyPI.
 - [strictcli] **Fix: --dump-schema serializes RelativeToRoot flag defaults machine-stably.** Schema output is now deterministic across platforms.
 
 ## 0.27.0
+
+Public schema-dict accessor, divergence-aware config conflict mode with per-flag override, and validation-only ConfigField/flag coexistence
+
+<details>
+<summary>Context</summary>
+
+Phase 2 additions, all backward compatible:
+- dump_schema_dict() exposes the CLI schema as a dict with no filesystem or
+  CWD access (the --dump-schema writer path adds project_id on top).
+- config_conflict_mode="error" now only errors when the config and CLI/env
+  values actually diverge; identical values agree. A per-flag conflict_mode
+  kwarg overrides the app default for a single flag.
+- A config field whose name equals a flag's param name is a validation-only
+  annotation of that flag: it renders once (in config show/init) and its
+  default must agree with the flag's default (registration error otherwise).
+
+</details>
 
 ### Features
 
@@ -376,11 +490,29 @@ built-in flags.
 
 ## 0.24.1
 
+Recovered full release history and added MIT license
+
+<details>
+<summary>Context</summary>
+
+53 pre-releasable versioned changelog files were recovered from saferm archive, restoring complete release history in CHANGELOG.md. Project now includes MIT license.
+
+</details>
+
 ### Features
 
 - [strictcli] **New feature.** Project now includes MIT license.
 
 ## 0.24.0
+
+Optional values skip choices validation; WARN check results satisfy depends_on; arg default-type validation.
+
+<details>
+<summary>Context</summary>
+
+Choices validation previously rejected optional flags/args that were not passed (None flowed into the choices check, producing "invalid value 'None'"). Validation is now skipped for absent optional values across flags, args, and globals via one shared helper. Check dependency semantics changed: a check that WARNs satisfies its dependents (WARN means passed-with-notes, not failed); only FAIL cascade-skips. Arg default-type validation gains str and list cases.
+
+</details>
 
 ### Features
 
@@ -393,11 +525,29 @@ built-in flags.
 
 ## 0.23.0
 
+Registration-time ban on bare --force flag name and --no-* prefix
+
+<details>
+<summary>Context</summary>
+
+Flag names 'force' (exact) and names starting with 'no-' are now rejected at registration time. Bare --force encourages agents to bypass guardrails without thinking; qualified names like --force-overwrite make the intent explicit. The no- prefix is reserved for strictcli's auto-generated negation system (--no-flag for negatable bools).
+
+</details>
+
 ### Features
 
 - [strictcli] **New.** Registration-time ban on bare --force flag name and --no-* prefix. Flag names starting with no- are reserved for the negation system.
 
 ## 0.22.0
+
+Required booleans, Context type, schema project_id guard, tag contract global flags fix
+
+<details>
+<summary>Context</summary>
+
+Breaking change: Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required. New Context type for structured handler communication. Schema dump now validates project_id. TagContract now checks global flags.
+
+</details>
 
 ### Breaking
 
@@ -414,6 +564,17 @@ built-in flags.
 - [strictcli] **Fix.** TagContract now checks global flags, not just command-level flags.
 
 ## 0.21.0
+
+Command declaration framework: structured handler returns, programmatic invocation, typed args, config fields, compound types, tool export, MCP projection, and scope-based check filtering.
+
+<details>
+<summary>Context</summary>
+
+This release transforms strictcli from a CLI framework into a command declaration framework with multiple output projections. Commands declared once can be invoked via CLI (existing), programmatic API (app.call/acall), tool export (as_tools with JSON Schema), and MCP server (--mcp flag).
+
+Key additions: handlers can return structured data (backward compatible -- int returns still work), positional args gain type and choices support, first-class config fields with per-command binding and startup validation, compound types (list[T] and dict[str,T]), command visibility (hidden/interactive), schema enrichment with versioning and constraint serialization, and declarative scope field on check definitions with set_scope_adapter() for context-dependent pre-check filtering.
+
+</details>
 
 ### Features
 
@@ -575,6 +736,15 @@ config set now validates keys against registered flags and coerces string values
 - [strictcli] **New feature.** `config set` coerces values to the flag's declared type (int, bool, float) before writing to config.
 
 ## 0.14.0
+
+checks_embed for inline TOML data
+
+<details>
+<summary>Context</summary>
+
+Adds checks_embed parameter as an alternative to checks_path, allowing TOML bytes to be passed directly without requiring a file on disk.
+
+</details>
 
 ### Features
 
