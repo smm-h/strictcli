@@ -1710,17 +1710,20 @@ def _bypass_call_is_banned(node, target: str, receiver,
                            imports: _BypassImports = _BYPASS_NO_IMPORTS) -> bool:
     """True when one call is a direct effect the handle should have carried.
 
-    The call is resolved through the module's imports first (see
-    :func:`_bypass_resolve_call`), so the lists below are written in terms of
-    real module and member names. Two leaves are deliberately narrower than the
-    rest: ``open`` is a finding only in a writing mode, and ``system`` only
-    through ``os`` -- ``platform.system()`` observes this process and starts
-    nothing, and the effects handle has no method that could carry it.
+    Two leaves are deliberately narrower than the rest: builtin ``open`` is a
+    finding only in a writing mode, and ``system`` only through ``os`` --
+    ``platform.system()`` observes this process and starts nothing, and the
+    effects handle has no method that could carry it.
+
+    Builtin ``open`` is answered BEFORE import resolution, because it is the
+    one leaf whose meaning comes from being unqualified. Everything after it is
+    resolved through the module's imports (see :func:`_bypass_resolve_call`),
+    so the lists below are written in terms of real module and member names.
     """
     leaf = target.rsplit(".", 1)[-1]
-    leaf, receiver = _bypass_resolve_call(leaf, receiver, imports)
     if leaf == "open" and receiver is None:
         return _open_is_write_mode(node)
+    leaf, receiver = _bypass_resolve_call(leaf, receiver, imports)
     if leaf in _BYPASS_PROCESS_OS_ONLY:
         return receiver in _BYPASS_OS_RECEIVERS
     return (
