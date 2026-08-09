@@ -1701,6 +1701,26 @@ Deployed Go binaries that use strictcli's check system previously panicked when 
 
 # ts-strictcli
 
+## 0.37.0
+
+Receiver-aware `effects-bypass` lint: `RegExp.prototype.exec` is no longer a false positive.
+
+<details>
+<summary>Context</summary>
+
+The `effects-bypass` check matched the bare leaf name `exec`, so `pattern.exec(line)`
+in a handler was reported as an escaped effect. The leaf is now a finding only bare
+or through a child_process receiver (`cp`, `childProcess`, `child_process`, `execa`,
+`shelljs`), matching the receiver-aware resolution on the Python side.
+
+Consumers pick the fix up on their next lock bump.
+
+</details>
+
+### Fixes
+
+- [ts-strictcli] **`effects-bypass` no longer flags `RegExp.prototype.exec`.** The `exec` leaf is a finding bare or through a child_process receiver (`cp`, `childProcess`, `child_process`, `execa`, `shelljs`); `pattern.exec(line)` in a handler is no longer reported.
+
 ## 0.36.0
 
 Adds the `dryRunSupported: false` command declaration -- a mutating command can now refuse `--dry-run` with a mandatory reason carried into help and the schema -- generates the exported `VERSION` constant from package.json so it can no longer report a version the package never shipped, and rewrites an npm README usage example that did not compile.
