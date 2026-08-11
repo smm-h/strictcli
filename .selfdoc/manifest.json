@@ -10,229 +10,7649 @@
     {
       "path": "architecture.md",
       "title": "Architecture and Internals",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Architecture and Internals",
+          "anchor": "architecture-and-internals"
+        },
+        {
+          "level": 2,
+          "text": "Implementation layout",
+          "anchor": "implementation-layout"
+        },
+        {
+          "level": 2,
+          "text": "The parse pipeline",
+          "anchor": "the-parse-pipeline"
+        },
+        {
+          "level": 3,
+          "text": "Stage 1: reserved flag pre-scan",
+          "anchor": "stage-1-reserved-flag-pre-scan"
+        },
+        {
+          "level": 3,
+          "text": "Stage 2: global flag parsing",
+          "anchor": "stage-2-global-flag-parsing"
+        },
+        {
+          "level": 3,
+          "text": "Stage 3: command routing",
+          "anchor": "stage-3-command-routing"
+        },
+        {
+          "level": 3,
+          "text": "Stage 4: command parsing",
+          "anchor": "stage-4-command-parsing"
+        },
+        {
+          "level": 3,
+          "text": "Stage 5: dispatch",
+          "anchor": "stage-5-dispatch"
+        },
+        {
+          "level": 2,
+          "text": "Source provenance",
+          "anchor": "source-provenance"
+        },
+        {
+          "level": 2,
+          "text": "Registration-time validation",
+          "anchor": "registration-time-validation"
+        },
+        {
+          "level": 3,
+          "text": "Flag naming rules",
+          "anchor": "flag-naming-rules"
+        },
+        {
+          "level": 3,
+          "text": "Type checking",
+          "anchor": "type-checking"
+        },
+        {
+          "level": 3,
+          "text": "Arg validation",
+          "anchor": "arg-validation"
+        },
+        {
+          "level": 3,
+          "text": "Command validation",
+          "anchor": "command-validation"
+        },
+        {
+          "level": 3,
+          "text": "Global flag validation",
+          "anchor": "global-flag-validation"
+        },
+        {
+          "level": 3,
+          "text": "Tag validation",
+          "anchor": "tag-validation"
+        },
+        {
+          "level": 2,
+          "text": "The schema format (`.strictcli/schema.json`)",
+          "anchor": "the-schema-format-strictclischemajson"
+        },
+        {
+          "level": 3,
+          "text": "Top-level fields",
+          "anchor": "top-level-fields"
+        },
+        {
+          "level": 3,
+          "text": "Defaults object",
+          "anchor": "defaults-object"
+        },
+        {
+          "level": 3,
+          "text": "Constraint serialization",
+          "anchor": "constraint-serialization"
+        },
+        {
+          "level": 3,
+          "text": "InfraRootPath serialization",
+          "anchor": "infrarootpath-serialization"
+        },
+        {
+          "level": 3,
+          "text": "Schema freshness",
+          "anchor": "schema-freshness"
+        },
+        {
+          "level": 2,
+          "text": "How WithConfig works internally",
+          "anchor": "how-withconfig-works-internally"
+        },
+        {
+          "level": 3,
+          "text": "Config loading flow",
+          "anchor": "config-loading-flow"
+        },
+        {
+          "level": 3,
+          "text": "Config field declarations",
+          "anchor": "config-field-declarations"
+        },
+        {
+          "level": 3,
+          "text": "Config conflict modes",
+          "anchor": "config-conflict-modes"
+        },
+        {
+          "level": 3,
+          "text": "Hermetic mode interaction",
+          "anchor": "hermetic-mode-interaction"
+        },
+        {
+          "level": 2,
+          "text": "Flag negation system",
+          "anchor": "flag-negation-system"
+        },
+        {
+          "level": 3,
+          "text": "How negation works at parse time",
+          "anchor": "how-negation-works-at-parse-time"
+        },
+        {
+          "level": 3,
+          "text": "The `no-` prefix ban",
+          "anchor": "the-no-prefix-ban"
+        },
+        {
+          "level": 3,
+          "text": "Schema representation",
+          "anchor": "schema-representation"
+        },
+        {
+          "level": 3,
+          "text": "Required bool flags",
+          "anchor": "required-bool-flags"
+        },
+        {
+          "level": 2,
+          "text": "Error handling philosophy",
+          "anchor": "error-handling-philosophy"
+        },
+        {
+          "level": 3,
+          "text": "Two error categories",
+          "anchor": "two-error-categories"
+        },
+        {
+          "level": 3,
+          "text": "Error message parity",
+          "anchor": "error-message-parity"
+        },
+        {
+          "level": 3,
+          "text": "No implicit defaults",
+          "anchor": "no-implicit-defaults"
+        },
+        {
+          "level": 3,
+          "text": "No unknown flags",
+          "anchor": "no-unknown-flags"
+        },
+        {
+          "level": 3,
+          "text": "Strict type parsing",
+          "anchor": "strict-type-parsing"
+        },
+        {
+          "level": 2,
+          "text": "Conformance testing",
+          "anchor": "conformance-testing"
+        }
+      ]
     },
     {
       "path": "conformance.md",
       "title": "Cross-Language Conformance",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Cross-Language Conformance",
+          "anchor": "cross-language-conformance"
+        },
+        {
+          "level": 2,
+          "text": "What the suite covers",
+          "anchor": "what-the-suite-covers"
+        },
+        {
+          "level": 2,
+          "text": "Guaranteed-identical behaviors",
+          "anchor": "guaranteed-identical-behaviors"
+        },
+        {
+          "level": 2,
+          "text": "How testing works",
+          "anchor": "how-testing-works"
+        },
+        {
+          "level": 3,
+          "text": "JSON test cases",
+          "anchor": "json-test-cases"
+        },
+        {
+          "level": 3,
+          "text": "Per-target execution",
+          "anchor": "per-target-execution"
+        },
+        {
+          "level": 3,
+          "text": "Parity mode",
+          "anchor": "parity-mode"
+        },
+        {
+          "level": 3,
+          "text": "Acknowledged divergence",
+          "anchor": "acknowledged-divergence"
+        },
+        {
+          "level": 3,
+          "text": "Target restrictions",
+          "anchor": "target-restrictions"
+        },
+        {
+          "level": 3,
+          "text": "Differential argv fuzzing",
+          "anchor": "differential-argv-fuzzing"
+        },
+        {
+          "level": 3,
+          "text": "Supplementary checks",
+          "anchor": "supplementary-checks"
+        },
+        {
+          "level": 2,
+          "text": "Running conformance tests",
+          "anchor": "running-conformance-tests"
+        },
+        {
+          "level": 3,
+          "text": "Single target",
+          "anchor": "single-target"
+        },
+        {
+          "level": 3,
+          "text": "Parity mode (all targets, cross-comparison)",
+          "anchor": "parity-mode-all-targets-cross-comparison"
+        },
+        {
+          "level": 3,
+          "text": "With filtering and verbose output",
+          "anchor": "with-filtering-and-verbose-output"
+        },
+        {
+          "level": 3,
+          "text": "Full check gate (all ten checks)",
+          "anchor": "full-check-gate-all-ten-checks"
+        },
+        {
+          "level": 3,
+          "text": "Individual supplementary checks",
+          "anchor": "individual-supplementary-checks"
+        },
+        {
+          "level": 3,
+          "text": "Differential fuzzing",
+          "anchor": "differential-fuzzing"
+        },
+        {
+          "level": 2,
+          "text": "Adding a new conformance test case",
+          "anchor": "adding-a-new-conformance-test-case"
+        },
+        {
+          "level": 3,
+          "text": "1. Choose or create a case file",
+          "anchor": "1-choose-or-create-a-case-file"
+        },
+        {
+          "level": 3,
+          "text": "2. Write the case",
+          "anchor": "2-write-the-case"
+        },
+        {
+          "level": 3,
+          "text": "3. Use handler_prints for output",
+          "anchor": "3-use-handler_prints-for-output"
+        },
+        {
+          "level": 3,
+          "text": "4. Validate against the schema",
+          "anchor": "4-validate-against-the-schema"
+        },
+        {
+          "level": 3,
+          "text": "5. Run and verify",
+          "anchor": "5-run-and-verify"
+        },
+        {
+          "level": 3,
+          "text": "6. Handle intentional divergence",
+          "anchor": "6-handle-intentional-divergence"
+        },
+        {
+          "level": 2,
+          "text": "Architecture notes",
+          "anchor": "architecture-notes"
+        }
+      ]
     },
     {
       "path": "flag-system.md",
       "title": "Flag System",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Flag System",
+          "anchor": "flag-system"
+        },
+        {
+          "level": 2,
+          "text": "Flag types",
+          "anchor": "flag-types"
+        },
+        {
+          "level": 3,
+          "text": "String flags",
+          "anchor": "string-flags"
+        },
+        {
+          "level": 3,
+          "text": "Boolean flags",
+          "anchor": "boolean-flags"
+        },
+        {
+          "level": 3,
+          "text": "Integer flags",
+          "anchor": "integer-flags"
+        },
+        {
+          "level": 3,
+          "text": "Float flags",
+          "anchor": "float-flags"
+        },
+        {
+          "level": 2,
+          "text": "Required vs optional flags",
+          "anchor": "required-vs-optional-flags"
+        },
+        {
+          "level": 3,
+          "text": "How defaults work internally",
+          "anchor": "how-defaults-work-internally"
+        },
+        {
+          "level": 2,
+          "text": "Boolean flag semantics",
+          "anchor": "boolean-flag-semantics"
+        },
+        {
+          "level": 3,
+          "text": "Automatic negation (--flag / --no-flag)",
+          "anchor": "automatic-negation-flag-no-flag"
+        },
+        {
+          "level": 3,
+          "text": "Required booleans",
+          "anchor": "required-booleans"
+        },
+        {
+          "level": 3,
+          "text": "Non-negatable booleans",
+          "anchor": "non-negatable-booleans"
+        },
+        {
+          "level": 3,
+          "text": "Env var parsing for booleans",
+          "anchor": "env-var-parsing-for-booleans"
+        },
+        {
+          "level": 2,
+          "text": "Short flags",
+          "anchor": "short-flags"
+        },
+        {
+          "level": 2,
+          "text": "Repeatable flags",
+          "anchor": "repeatable-flags"
+        },
+        {
+          "level": 3,
+          "text": "Rules for repeatable flags",
+          "anchor": "rules-for-repeatable-flags"
+        },
+        {
+          "level": 3,
+          "text": "Compound types: list[T] and dict[str, T]",
+          "anchor": "compound-types-listt-and-dictstr-t"
+        },
+        {
+          "level": 2,
+          "text": "Flag naming rules",
+          "anchor": "flag-naming-rules"
+        },
+        {
+          "level": 3,
+          "text": "Bare --force is banned",
+          "anchor": "bare-force-is-banned"
+        },
+        {
+          "level": 3,
+          "text": "--no-* prefix is reserved",
+          "anchor": "no-prefix-is-reserved"
+        },
+        {
+          "level": 3,
+          "text": "All booleans must have explicit defaults or be required",
+          "anchor": "all-booleans-must-have-explicit-defaults-or-be-required"
+        },
+        {
+          "level": 3,
+          "text": "Dash-to-underscore conversion",
+          "anchor": "dash-to-underscore-conversion"
+        },
+        {
+          "level": 2,
+          "text": "Choices",
+          "anchor": "choices"
+        },
+        {
+          "level": 2,
+          "text": "Custom validation",
+          "anchor": "custom-validation"
+        },
+        {
+          "level": 2,
+          "text": "Env var binding",
+          "anchor": "env-var-binding"
+        },
+        {
+          "level": 2,
+          "text": "Positional arguments",
+          "anchor": "positional-arguments"
+        },
+        {
+          "level": 3,
+          "text": "Required vs optional args",
+          "anchor": "required-vs-optional-args"
+        },
+        {
+          "level": 3,
+          "text": "Variadic args",
+          "anchor": "variadic-args"
+        },
+        {
+          "level": 3,
+          "text": "Arg types",
+          "anchor": "arg-types"
+        },
+        {
+          "level": 2,
+          "text": "The context object",
+          "anchor": "the-context-object"
+        },
+        {
+          "level": 3,
+          "text": "Output methods",
+          "anchor": "output-methods"
+        },
+        {
+          "level": 3,
+          "text": "The reserved quartet on the context",
+          "anchor": "the-reserved-quartet-on-the-context"
+        },
+        {
+          "level": 3,
+          "text": "The consent parameter name",
+          "anchor": "the-consent-parameter-name"
+        },
+        {
+          "level": 3,
+          "text": "Provenance: ctx.source()",
+          "anchor": "provenance-ctxsource"
+        },
+        {
+          "level": 3,
+          "text": "Handler return values",
+          "anchor": "handler-return-values"
+        },
+        {
+          "level": 2,
+          "text": "Global flags",
+          "anchor": "global-flags"
+        },
+        {
+          "level": 2,
+          "text": "Flag sets",
+          "anchor": "flag-sets"
+        },
+        {
+          "level": 2,
+          "text": "Mutex groups",
+          "anchor": "mutex-groups"
+        },
+        {
+          "level": 2,
+          "text": "Dependencies",
+          "anchor": "dependencies"
+        },
+        {
+          "level": 2,
+          "text": "Help text is mandatory",
+          "anchor": "help-text-is-mandatory"
+        }
+      ]
     },
     {
       "path": "gen-index.md",
       "title": "API Reference",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "API Reference",
+          "anchor": "api-reference"
+        }
+      ]
     },
     {
       "path": "go-quickstart.md",
       "title": "Go Quickstart",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Go Quickstart",
+          "anchor": "go-quickstart"
+        },
+        {
+          "level": 2,
+          "text": "Install",
+          "anchor": "install"
+        },
+        {
+          "level": 2,
+          "text": "Creating an App",
+          "anchor": "creating-an-app"
+        },
+        {
+          "level": 2,
+          "text": "Command Classification",
+          "anchor": "command-classification"
+        },
+        {
+          "level": 2,
+          "text": "Handler Signature",
+          "anchor": "handler-signature"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 3,
+          "text": "StringFlag",
+          "anchor": "stringflag"
+        },
+        {
+          "level": 3,
+          "text": "BoolFlag",
+          "anchor": "boolflag"
+        },
+        {
+          "level": 3,
+          "text": "IntFlag",
+          "anchor": "intflag"
+        },
+        {
+          "level": 3,
+          "text": "FloatFlag",
+          "anchor": "floatflag"
+        },
+        {
+          "level": 3,
+          "text": "Flag Options",
+          "anchor": "flag-options"
+        },
+        {
+          "level": 3,
+          "text": "Default(nil) for Optional Flags",
+          "anchor": "defaultnil-for-optional-flags"
+        },
+        {
+          "level": 2,
+          "text": "Positional Arguments",
+          "anchor": "positional-arguments"
+        },
+        {
+          "level": 3,
+          "text": "Variadic Arguments",
+          "anchor": "variadic-arguments"
+        },
+        {
+          "level": 2,
+          "text": "Global Flags",
+          "anchor": "global-flags"
+        },
+        {
+          "level": 2,
+          "text": "Command Groups",
+          "anchor": "command-groups"
+        },
+        {
+          "level": 2,
+          "text": "Flag Naming Conventions",
+          "anchor": "flag-naming-conventions"
+        },
+        {
+          "level": 3,
+          "text": "Bare `--force` is banned",
+          "anchor": "bare-force-is-banned"
+        },
+        {
+          "level": 3,
+          "text": "`--no-*` prefix is reserved",
+          "anchor": "no-prefix-is-reserved"
+        },
+        {
+          "level": 3,
+          "text": "The reserved flag quartet",
+          "anchor": "the-reserved-flag-quartet"
+        },
+        {
+          "level": 3,
+          "text": "Refusing `--dry-run` with `WithDryRunUnsupported`",
+          "anchor": "refusing-dry-run-with-withdryrununsupported"
+        },
+        {
+          "level": 2,
+          "text": "Consequential Commands and the Confirm Protocol",
+          "anchor": "consequential-commands-and-the-confirm-protocol"
+        },
+        {
+          "level": 3,
+          "text": "Help text is mandatory",
+          "anchor": "help-text-is-mandatory"
+        },
+        {
+          "level": 2,
+          "text": "Mutex Groups",
+          "anchor": "mutex-groups"
+        },
+        {
+          "level": 2,
+          "text": "Dependencies",
+          "anchor": "dependencies"
+        },
+        {
+          "level": 2,
+          "text": "WithConfig -- Config File Support",
+          "anchor": "withconfig-config-file-support"
+        },
+        {
+          "level": 3,
+          "text": "Config format",
+          "anchor": "config-format"
+        },
+        {
+          "level": 3,
+          "text": "Auto-registered config commands",
+          "anchor": "auto-registered-config-commands"
+        },
+        {
+          "level": 3,
+          "text": "Config path override",
+          "anchor": "config-path-override"
+        },
+        {
+          "level": 3,
+          "text": "Hermetic mode",
+          "anchor": "hermetic-mode"
+        },
+        {
+          "level": 2,
+          "text": "Schema Dump",
+          "anchor": "schema-dump"
+        },
+        {
+          "level": 2,
+          "text": "Testing",
+          "anchor": "testing"
+        },
+        {
+          "level": 2,
+          "text": "Deprecated Commands",
+          "anchor": "deprecated-commands"
+        },
+        {
+          "level": 2,
+          "text": "Passthrough Commands",
+          "anchor": "passthrough-commands"
+        },
+        {
+          "level": 2,
+          "text": "Full Example",
+          "anchor": "full-example"
+        }
+      ]
     },
     {
       "path": "go-strictcli-testdata-noncomparable.md",
       "title": "go/strictcli/testdata/noncomparable",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "go/strictcli/testdata/noncomparable",
+          "anchor": "gostrictclitestdatanoncomparable"
+        },
+        {
+          "level": 2,
+          "text": "go/strictcli/testdata/noncomparable",
+          "anchor": "gostrictclitestdatanoncomparable"
+        }
+      ]
     },
     {
       "path": "go-strictcli.md",
       "title": "go/strictcli",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "go/strictcli",
+          "anchor": "gostrictcli"
+        },
+        {
+          "level": 2,
+          "text": "go/strictcli",
+          "anchor": "gostrictcli"
+        },
+        {
+          "level": 3,
+          "text": "EffectReadOnly",
+          "anchor": "effectreadonly"
+        },
+        {
+          "level": 3,
+          "text": "EffectMutating",
+          "anchor": "effectmutating"
+        },
+        {
+          "level": 3,
+          "text": "ProcMutate",
+          "anchor": "procmutate"
+        },
+        {
+          "level": 3,
+          "text": "ProcSpawn",
+          "anchor": "procspawn"
+        },
+        {
+          "level": 3,
+          "text": "FileWrite",
+          "anchor": "filewrite"
+        },
+        {
+          "level": 3,
+          "text": "NetMutate",
+          "anchor": "netmutate"
+        },
+        {
+          "level": 3,
+          "text": "CacheWrite",
+          "anchor": "cachewrite"
+        },
+        {
+          "level": 3,
+          "text": "SourceCLI",
+          "anchor": "sourcecli"
+        },
+        {
+          "level": 3,
+          "text": "SourceEnv",
+          "anchor": "sourceenv"
+        },
+        {
+          "level": 3,
+          "text": "SourceConfig",
+          "anchor": "sourceconfig"
+        },
+        {
+          "level": 3,
+          "text": "SourceDefault",
+          "anchor": "sourcedefault"
+        },
+        {
+          "level": 3,
+          "text": "SourceImplied",
+          "anchor": "sourceimplied"
+        },
+        {
+          "level": 3,
+          "text": "SourceInfra",
+          "anchor": "sourceinfra"
+        },
+        {
+          "level": 3,
+          "text": "TypeStr",
+          "anchor": "typestr"
+        },
+        {
+          "level": 3,
+          "text": "TypeBool",
+          "anchor": "typebool"
+        },
+        {
+          "level": 3,
+          "text": "TypeInt",
+          "anchor": "typeint"
+        },
+        {
+          "level": 3,
+          "text": "TypeFloat",
+          "anchor": "typefloat"
+        },
+        {
+          "level": 3,
+          "text": "TypeListStr",
+          "anchor": "typeliststr"
+        },
+        {
+          "level": 3,
+          "text": "TypeListInt",
+          "anchor": "typelistint"
+        },
+        {
+          "level": 3,
+          "text": "TypeListFloat",
+          "anchor": "typelistfloat"
+        },
+        {
+          "level": 3,
+          "text": "TypeDictStr",
+          "anchor": "typedictstr"
+        },
+        {
+          "level": 3,
+          "text": "TypeDictInt",
+          "anchor": "typedictint"
+        },
+        {
+          "level": 3,
+          "text": "TypeDictFloat",
+          "anchor": "typedictfloat"
+        },
+        {
+          "level": 3,
+          "text": "CheckContext",
+          "anchor": "checkcontext"
+        },
+        {
+          "level": 3,
+          "text": "ConnectionEnvReader",
+          "anchor": "connectionenvreader"
+        },
+        {
+          "level": 3,
+          "text": "CheckOutcome",
+          "anchor": "checkoutcome"
+        },
+        {
+          "level": 3,
+          "text": "WarnReporter",
+          "anchor": "warnreporter"
+        },
+        {
+          "level": 3,
+          "text": "ErrorReporter",
+          "anchor": "errorreporter"
+        },
+        {
+          "level": 3,
+          "text": "CheckSpecMeta",
+          "anchor": "checkspecmeta"
+        },
+        {
+          "level": 3,
+          "text": "CheckSpec",
+          "anchor": "checkspec"
+        },
+        {
+          "level": 3,
+          "text": "RunChecksOptions",
+          "anchor": "runchecksoptions"
+        },
+        {
+          "level": 3,
+          "text": "CheckRunResult",
+          "anchor": "checkrunresult"
+        },
+        {
+          "level": 3,
+          "text": "ConfigField",
+          "anchor": "configfield"
+        },
+        {
+          "level": 3,
+          "text": "ConfigFieldOption",
+          "anchor": "configfieldoption"
+        },
+        {
+          "level": 3,
+          "text": "Context",
+          "anchor": "context"
+        },
+        {
+          "level": 3,
+          "text": "Grant",
+          "anchor": "grant"
+        },
+        {
+          "level": 3,
+          "text": "Forwarding",
+          "anchor": "forwarding"
+        },
+        {
+          "level": 3,
+          "text": "Unsettled",
+          "anchor": "unsettled"
+        },
+        {
+          "level": 3,
+          "text": "Completed",
+          "anchor": "completed"
+        },
+        {
+          "level": 3,
+          "text": "Spawned",
+          "anchor": "spawned"
+        },
+        {
+          "level": 3,
+          "text": "Response",
+          "anchor": "response"
+        },
+        {
+          "level": 3,
+          "text": "EffectOption",
+          "anchor": "effectoption"
+        },
+        {
+          "level": 3,
+          "text": "Effects",
+          "anchor": "effects"
+        },
+        {
+          "level": 3,
+          "text": "InvokeError",
+          "anchor": "invokeerror"
+        },
+        {
+          "level": 3,
+          "text": "CallOption",
+          "anchor": "calloption"
+        },
+        {
+          "level": 3,
+          "text": "Outcome",
+          "anchor": "outcome"
+        },
+        {
+          "level": 3,
+          "text": "Source",
+          "anchor": "source"
+        },
+        {
+          "level": 3,
+          "text": "FlagType",
+          "anchor": "flagtype"
+        },
+        {
+          "level": 3,
+          "text": "Flag",
+          "anchor": "flag"
+        },
+        {
+          "level": 3,
+          "text": "Arg",
+          "anchor": "arg"
+        },
+        {
+          "level": 3,
+          "text": "FlagSet",
+          "anchor": "flagset"
+        },
+        {
+          "level": 3,
+          "text": "MutexGroup",
+          "anchor": "mutexgroup"
+        },
+        {
+          "level": 3,
+          "text": "CoRequired",
+          "anchor": "corequired"
+        },
+        {
+          "level": 3,
+          "text": "Requires",
+          "anchor": "requires"
+        },
+        {
+          "level": 3,
+          "text": "Implies",
+          "anchor": "implies"
+        },
+        {
+          "level": 3,
+          "text": "Dependency",
+          "anchor": "dependency"
+        },
+        {
+          "level": 3,
+          "text": "InfraRootPath",
+          "anchor": "infrarootpath"
+        },
+        {
+          "level": 3,
+          "text": "PassthroughHandler",
+          "anchor": "passthroughhandler"
+        },
+        {
+          "level": 3,
+          "text": "Command",
+          "anchor": "command"
+        },
+        {
+          "level": 3,
+          "text": "Group",
+          "anchor": "group"
+        },
+        {
+          "level": 3,
+          "text": "Result",
+          "anchor": "result"
+        },
+        {
+          "level": 3,
+          "text": "App",
+          "anchor": "app"
+        },
+        {
+          "level": 3,
+          "text": "AppOption",
+          "anchor": "appoption"
+        },
+        {
+          "level": 3,
+          "text": "FlagOption",
+          "anchor": "flagoption"
+        },
+        {
+          "level": 3,
+          "text": "ArgOption",
+          "anchor": "argoption"
+        },
+        {
+          "level": 3,
+          "text": "CmdOption",
+          "anchor": "cmdoption"
+        },
+        {
+          "level": 3,
+          "text": "Tool",
+          "anchor": "tool"
+        },
+        {
+          "level": 3,
+          "text": "NewErrorCheckSpec",
+          "anchor": "newerrorcheckspec"
+        },
+        {
+          "level": 3,
+          "text": "NewWarnCheckSpec",
+          "anchor": "newwarncheckspec"
+        },
+        {
+          "level": 3,
+          "text": "FormatCheckResults",
+          "anchor": "formatcheckresults"
+        },
+        {
+          "level": 3,
+          "text": "FormatCheckResultsJSON",
+          "anchor": "formatcheckresultsjson"
+        },
+        {
+          "level": 3,
+          "text": "ConfigFieldType",
+          "anchor": "configfieldtype"
+        },
+        {
+          "level": 3,
+          "text": "ConfigFieldHelp",
+          "anchor": "configfieldhelp"
+        },
+        {
+          "level": 3,
+          "text": "ConfigFieldDefault",
+          "anchor": "configfielddefault"
+        },
+        {
+          "level": 3,
+          "text": "Resource",
+          "anchor": "resource"
+        },
+        {
+          "level": 3,
+          "text": "SkipIfCurrent",
+          "anchor": "skipifcurrent"
+        },
+        {
+          "level": 3,
+          "text": "UseGrant",
+          "anchor": "usegrant"
+        },
+        {
+          "level": 3,
+          "text": "Cwd",
+          "anchor": "cwd"
+        },
+        {
+          "level": 3,
+          "text": "EffectEnv",
+          "anchor": "effectenv"
+        },
+        {
+          "level": 3,
+          "text": "Check",
+          "anchor": "check"
+        },
+        {
+          "level": 3,
+          "text": "Stream",
+          "anchor": "stream"
+        },
+        {
+          "level": 3,
+          "text": "Body",
+          "anchor": "body"
+        },
+        {
+          "level": 3,
+          "text": "Header",
+          "anchor": "header"
+        },
+        {
+          "level": 3,
+          "text": "WithApproveConsequential",
+          "anchor": "withapproveconsequential"
+        },
+        {
+          "level": 3,
+          "text": "Exit",
+          "anchor": "exit"
+        },
+        {
+          "level": 3,
+          "text": "ExitData",
+          "anchor": "exitdata"
+        },
+        {
+          "level": 3,
+          "text": "IsScalarType",
+          "anchor": "isscalartype"
+        },
+        {
+          "level": 3,
+          "text": "IsListType",
+          "anchor": "islisttype"
+        },
+        {
+          "level": 3,
+          "text": "IsDictType",
+          "anchor": "isdicttype"
+        },
+        {
+          "level": 3,
+          "text": "IsCompoundType",
+          "anchor": "iscompoundtype"
+        },
+        {
+          "level": 3,
+          "text": "ItemType",
+          "anchor": "itemtype"
+        },
+        {
+          "level": 3,
+          "text": "ListOf",
+          "anchor": "listof"
+        },
+        {
+          "level": 3,
+          "text": "DictOf",
+          "anchor": "dictof"
+        },
+        {
+          "level": 3,
+          "text": "RelativeToRoot",
+          "anchor": "relativetoroot"
+        },
+        {
+          "level": 3,
+          "text": "WithEnvPrefix",
+          "anchor": "withenvprefix"
+        },
+        {
+          "level": 3,
+          "text": "WithConfig",
+          "anchor": "withconfig"
+        },
+        {
+          "level": 3,
+          "text": "WithConfigPath",
+          "anchor": "withconfigpath"
+        },
+        {
+          "level": 3,
+          "text": "WithConfigFormat",
+          "anchor": "withconfigformat"
+        },
+        {
+          "level": 3,
+          "text": "WithNoDefaultConfigPath",
+          "anchor": "withnodefaultconfigpath"
+        },
+        {
+          "level": 3,
+          "text": "WithConfigConflictMode",
+          "anchor": "withconfigconflictmode"
+        },
+        {
+          "level": 3,
+          "text": "WithInfraRoot",
+          "anchor": "withinfraroot"
+        },
+        {
+          "level": 3,
+          "text": "WithHandshakeEnv",
+          "anchor": "withhandshakeenv"
+        },
+        {
+          "level": 3,
+          "text": "WithConnectionEnv",
+          "anchor": "withconnectionenv"
+        },
+        {
+          "level": 3,
+          "text": "WithConfigPathRelativeToRoot",
+          "anchor": "withconfigpathrelativetoroot"
+        },
+        {
+          "level": 3,
+          "text": "WithChecks",
+          "anchor": "withchecks"
+        },
+        {
+          "level": 3,
+          "text": "WithChecksEmbed",
+          "anchor": "withchecksembed"
+        },
+        {
+          "level": 3,
+          "text": "WithProcObserveAllowlist",
+          "anchor": "withprocobserveallowlist"
+        },
+        {
+          "level": 3,
+          "text": "WithTestCoverage",
+          "anchor": "withtestcoverage"
+        },
+        {
+          "level": 3,
+          "text": "Short",
+          "anchor": "short"
+        },
+        {
+          "level": 3,
+          "text": "Default",
+          "anchor": "default"
+        },
+        {
+          "level": 3,
+          "text": "Env",
+          "anchor": "env"
+        },
+        {
+          "level": 3,
+          "text": "Prefixed",
+          "anchor": "prefixed"
+        },
+        {
+          "level": 3,
+          "text": "Choices",
+          "anchor": "choices"
+        },
+        {
+          "level": 3,
+          "text": "Repeatable",
+          "anchor": "repeatable"
+        },
+        {
+          "level": 3,
+          "text": "Unique",
+          "anchor": "unique"
+        },
+        {
+          "level": 3,
+          "text": "ConflictMode",
+          "anchor": "conflictmode"
+        },
+        {
+          "level": 3,
+          "text": "ConnectionURLFlag",
+          "anchor": "connectionurlflag"
+        },
+        {
+          "level": 3,
+          "text": "EnvSeparator",
+          "anchor": "envseparator"
+        },
+        {
+          "level": 3,
+          "text": "ValidateFn",
+          "anchor": "validatefn"
+        },
+        {
+          "level": 3,
+          "text": "NegatableOpt",
+          "anchor": "negatableopt"
+        },
+        {
+          "level": 3,
+          "text": "ArgRequired",
+          "anchor": "argrequired"
+        },
+        {
+          "level": 3,
+          "text": "ArgDefault",
+          "anchor": "argdefault"
+        },
+        {
+          "level": 3,
+          "text": "Variadic",
+          "anchor": "variadic"
+        },
+        {
+          "level": 3,
+          "text": "ArgType",
+          "anchor": "argtype"
+        },
+        {
+          "level": 3,
+          "text": "ArgChoices",
+          "anchor": "argchoices"
+        },
+        {
+          "level": 3,
+          "text": "WithArgs",
+          "anchor": "withargs"
+        },
+        {
+          "level": 3,
+          "text": "WithFlags",
+          "anchor": "withflags"
+        },
+        {
+          "level": 3,
+          "text": "WithFlagSets",
+          "anchor": "withflagsets"
+        },
+        {
+          "level": 3,
+          "text": "WithMutex",
+          "anchor": "withmutex"
+        },
+        {
+          "level": 3,
+          "text": "WithDependencies",
+          "anchor": "withdependencies"
+        },
+        {
+          "level": 3,
+          "text": "WithPassthrough",
+          "anchor": "withpassthrough"
+        },
+        {
+          "level": 3,
+          "text": "WithHidden",
+          "anchor": "withhidden"
+        },
+        {
+          "level": 3,
+          "text": "WithInteractive",
+          "anchor": "withinteractive"
+        },
+        {
+          "level": 3,
+          "text": "WithEffect",
+          "anchor": "witheffect"
+        },
+        {
+          "level": 3,
+          "text": "WithConsequential",
+          "anchor": "withconsequential"
+        },
+        {
+          "level": 3,
+          "text": "WithDryRunUnsupported",
+          "anchor": "withdryrununsupported"
+        },
+        {
+          "level": 3,
+          "text": "WithGrants",
+          "anchor": "withgrants"
+        },
+        {
+          "level": 3,
+          "text": "WithForwarding",
+          "anchor": "withforwarding"
+        },
+        {
+          "level": 3,
+          "text": "WithConfigFields",
+          "anchor": "withconfigfields"
+        },
+        {
+          "level": 3,
+          "text": "WithTags",
+          "anchor": "withtags"
+        },
+        {
+          "level": 3,
+          "text": "StringFlag",
+          "anchor": "stringflag"
+        },
+        {
+          "level": 3,
+          "text": "BoolFlag",
+          "anchor": "boolflag"
+        },
+        {
+          "level": 3,
+          "text": "IntFlag",
+          "anchor": "intflag"
+        },
+        {
+          "level": 3,
+          "text": "FloatFlag",
+          "anchor": "floatflag"
+        },
+        {
+          "level": 3,
+          "text": "ListFlag",
+          "anchor": "listflag"
+        },
+        {
+          "level": 3,
+          "text": "DictFlag",
+          "anchor": "dictflag"
+        },
+        {
+          "level": 3,
+          "text": "NewArg",
+          "anchor": "newarg"
+        },
+        {
+          "level": 3,
+          "text": "NewApp",
+          "anchor": "newapp"
+        },
+        {
+          "level": 3,
+          "text": "checkContextWithConn.ConnectionEnvValue",
+          "anchor": "checkcontextwithconnconnectionenvvalue"
+        },
+        {
+          "level": 3,
+          "text": "checkContextWithConn.IsHermetic",
+          "anchor": "checkcontextwithconnishermetic"
+        },
+        {
+          "level": 3,
+          "text": "reporterCore.Note",
+          "anchor": "reportercorenote"
+        },
+        {
+          "level": 3,
+          "text": "reporterCore.Warn",
+          "anchor": "reportercorewarn"
+        },
+        {
+          "level": 3,
+          "text": "reporterCore.Passed",
+          "anchor": "reportercorepassed"
+        },
+        {
+          "level": 3,
+          "text": "reporterCore.Skipped",
+          "anchor": "reportercoreskipped"
+        },
+        {
+          "level": 3,
+          "text": "reporterCore.Found",
+          "anchor": "reportercorefound"
+        },
+        {
+          "level": 3,
+          "text": "ErrorReporter.Error",
+          "anchor": "errorreportererror"
+        },
+        {
+          "level": 3,
+          "text": "App.RegisterCheckProvider",
+          "anchor": "appregistercheckprovider"
+        },
+        {
+          "level": 3,
+          "text": "App.ResetCheckProviderCache",
+          "anchor": "appresetcheckprovidercache"
+        },
+        {
+          "level": 3,
+          "text": "App.RunChecks",
+          "anchor": "apprunchecks"
+        },
+        {
+          "level": 3,
+          "text": "CheckRunResult.Status",
+          "anchor": "checkrunresultstatus"
+        },
+        {
+          "level": 3,
+          "text": "CheckRunResult.Gated",
+          "anchor": "checkrunresultgated"
+        },
+        {
+          "level": 3,
+          "text": "CheckRunResult.Warned",
+          "anchor": "checkrunresultwarned"
+        },
+        {
+          "level": 3,
+          "text": "App.ConfigField",
+          "anchor": "appconfigfield"
+        },
+        {
+          "level": 3,
+          "text": "Context.DryRun",
+          "anchor": "contextdryrun"
+        },
+        {
+          "level": 3,
+          "text": "Context.ApproveConsequential",
+          "anchor": "contextapproveconsequential"
+        },
+        {
+          "level": 3,
+          "text": "Context.Quiet",
+          "anchor": "contextquiet"
+        },
+        {
+          "level": 3,
+          "text": "Context.Verbose",
+          "anchor": "contextverbose"
+        },
+        {
+          "level": 3,
+          "text": "Context.Effects",
+          "anchor": "contexteffects"
+        },
+        {
+          "level": 3,
+          "text": "Context.InfraValue",
+          "anchor": "contextinfravalue"
+        },
+        {
+          "level": 3,
+          "text": "Context.ConnectionEnvValue",
+          "anchor": "contextconnectionenvvalue"
+        },
+        {
+          "level": 3,
+          "text": "Context.Info",
+          "anchor": "contextinfo"
+        },
+        {
+          "level": 3,
+          "text": "Context.Warn",
+          "anchor": "contextwarn"
+        },
+        {
+          "level": 3,
+          "text": "Context.Debug",
+          "anchor": "contextdebug"
+        },
+        {
+          "level": 3,
+          "text": "Context.Error",
+          "anchor": "contexterror"
+        },
+        {
+          "level": 3,
+          "text": "Context.Source",
+          "anchor": "contextsource"
+        },
+        {
+          "level": 3,
+          "text": "Unsettled.String",
+          "anchor": "unsettledstring"
+        },
+        {
+          "level": 3,
+          "text": "Unsettled.Bytes",
+          "anchor": "unsettledbytes"
+        },
+        {
+          "level": 3,
+          "text": "Unsettled.Int",
+          "anchor": "unsettledint"
+        },
+        {
+          "level": 3,
+          "text": "Unsettled.Bool",
+          "anchor": "unsettledbool"
+        },
+        {
+          "level": 3,
+          "text": "Completed.ExitCode",
+          "anchor": "completedexitcode"
+        },
+        {
+          "level": 3,
+          "text": "Completed.Stdout",
+          "anchor": "completedstdout"
+        },
+        {
+          "level": 3,
+          "text": "Completed.Stderr",
+          "anchor": "completedstderr"
+        },
+        {
+          "level": 3,
+          "text": "Spawned.PID",
+          "anchor": "spawnedpid"
+        },
+        {
+          "level": 3,
+          "text": "Spawned.Wait",
+          "anchor": "spawnedwait"
+        },
+        {
+          "level": 3,
+          "text": "Response.Status",
+          "anchor": "responsestatus"
+        },
+        {
+          "level": 3,
+          "text": "Response.Body",
+          "anchor": "responsebody"
+        },
+        {
+          "level": 3,
+          "text": "Response.Header",
+          "anchor": "responseheader"
+        },
+        {
+          "level": 3,
+          "text": "Effects.Run",
+          "anchor": "effectsrun"
+        },
+        {
+          "level": 3,
+          "text": "Effects.Spawn",
+          "anchor": "effectsspawn"
+        },
+        {
+          "level": 3,
+          "text": "Effects.Write",
+          "anchor": "effectswrite"
+        },
+        {
+          "level": 3,
+          "text": "Effects.Mkdir",
+          "anchor": "effectsmkdir"
+        },
+        {
+          "level": 3,
+          "text": "Effects.Remove",
+          "anchor": "effectsremove"
+        },
+        {
+          "level": 3,
+          "text": "Effects.Rename",
+          "anchor": "effectsrename"
+        },
+        {
+          "level": 3,
+          "text": "Effects.Chmod",
+          "anchor": "effectschmod"
+        },
+        {
+          "level": 3,
+          "text": "Effects.HTTP",
+          "anchor": "effectshttp"
+        },
+        {
+          "level": 3,
+          "text": "App.EffectLog",
+          "anchor": "appeffectlog"
+        },
+        {
+          "level": 3,
+          "text": "InvokeError.Error",
+          "anchor": "invokeerrorerror"
+        },
+        {
+          "level": 3,
+          "text": "App.Call",
+          "anchor": "appcall"
+        },
+        {
+          "level": 3,
+          "text": "App.ServeMCP",
+          "anchor": "appservemcp"
+        },
+        {
+          "level": 3,
+          "text": "App.DumpSchemaDict",
+          "anchor": "appdumpschemadict"
+        },
+        {
+          "level": 3,
+          "text": "App.SetExitHook",
+          "anchor": "appsetexithook"
+        },
+        {
+          "level": 3,
+          "text": "App.RegisterErrorCheck",
+          "anchor": "appregistererrorcheck"
+        },
+        {
+          "level": 3,
+          "text": "App.RegisterWarnCheck",
+          "anchor": "appregisterwarncheck"
+        },
+        {
+          "level": 3,
+          "text": "App.SetCheckContext",
+          "anchor": "appsetcheckcontext"
+        },
+        {
+          "level": 3,
+          "text": "App.TagContract",
+          "anchor": "apptagcontract"
+        },
+        {
+          "level": 3,
+          "text": "App.Command",
+          "anchor": "appcommand"
+        },
+        {
+          "level": 3,
+          "text": "App.Passthrough",
+          "anchor": "apppassthrough"
+        },
+        {
+          "level": 3,
+          "text": "App.GlobalFlag",
+          "anchor": "appglobalflag"
+        },
+        {
+          "level": 3,
+          "text": "App.Group",
+          "anchor": "appgroup"
+        },
+        {
+          "level": 3,
+          "text": "Group.Group",
+          "anchor": "groupgroup"
+        },
+        {
+          "level": 3,
+          "text": "Group.Command",
+          "anchor": "groupcommand"
+        },
+        {
+          "level": 3,
+          "text": "App.Deprecated",
+          "anchor": "appdeprecated"
+        },
+        {
+          "level": 3,
+          "text": "Group.Deprecated",
+          "anchor": "groupdeprecated"
+        },
+        {
+          "level": 3,
+          "text": "App.Commands",
+          "anchor": "appcommands"
+        },
+        {
+          "level": 3,
+          "text": "App.Groups",
+          "anchor": "appgroups"
+        },
+        {
+          "level": 3,
+          "text": "App.GlobalFlags",
+          "anchor": "appglobalflags"
+        },
+        {
+          "level": 3,
+          "text": "App.DeprecatedCommands",
+          "anchor": "appdeprecatedcommands"
+        },
+        {
+          "level": 3,
+          "text": "Group.DeprecatedCommands",
+          "anchor": "groupdeprecatedcommands"
+        },
+        {
+          "level": 3,
+          "text": "App.Run",
+          "anchor": "apprun"
+        },
+        {
+          "level": 3,
+          "text": "App.Test",
+          "anchor": "apptest"
+        },
+        {
+          "level": 3,
+          "text": "App.JsonSchema",
+          "anchor": "appjsonschema"
+        },
+        {
+          "level": 3,
+          "text": "App.AsTools",
+          "anchor": "appastools"
+        }
+      ]
     },
     {
       "path": "python-quickstart.md",
       "title": "Python Quickstart",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Python Quickstart",
+          "anchor": "python-quickstart"
+        },
+        {
+          "level": 2,
+          "text": "Install",
+          "anchor": "install"
+        },
+        {
+          "level": 2,
+          "text": "Creating an App",
+          "anchor": "creating-an-app"
+        },
+        {
+          "level": 2,
+          "text": "Command Classification",
+          "anchor": "command-classification"
+        },
+        {
+          "level": 2,
+          "text": "Handler Signature",
+          "anchor": "handler-signature"
+        },
+        {
+          "level": 3,
+          "text": "Context Methods",
+          "anchor": "context-methods"
+        },
+        {
+          "level": 3,
+          "text": "Context Properties",
+          "anchor": "context-properties"
+        },
+        {
+          "level": 3,
+          "text": "Returning Structured Data",
+          "anchor": "returning-structured-data"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 3,
+          "text": "String Flags",
+          "anchor": "string-flags"
+        },
+        {
+          "level": 3,
+          "text": "Bool Flags",
+          "anchor": "bool-flags"
+        },
+        {
+          "level": 3,
+          "text": "Int Flags",
+          "anchor": "int-flags"
+        },
+        {
+          "level": 3,
+          "text": "Float Flags",
+          "anchor": "float-flags"
+        },
+        {
+          "level": 3,
+          "text": "Flag Options",
+          "anchor": "flag-options"
+        },
+        {
+          "level": 3,
+          "text": "Short Flags",
+          "anchor": "short-flags"
+        },
+        {
+          "level": 3,
+          "text": "Choices",
+          "anchor": "choices"
+        },
+        {
+          "level": 3,
+          "text": "Environment Variables",
+          "anchor": "environment-variables"
+        },
+        {
+          "level": 3,
+          "text": "Required vs Optional",
+          "anchor": "required-vs-optional"
+        },
+        {
+          "level": 3,
+          "text": "Repeatable Flags",
+          "anchor": "repeatable-flags"
+        },
+        {
+          "level": 2,
+          "text": "Positional Arguments",
+          "anchor": "positional-arguments"
+        },
+        {
+          "level": 3,
+          "text": "Arg Parameters",
+          "anchor": "arg-parameters"
+        },
+        {
+          "level": 3,
+          "text": "Variadic Arguments",
+          "anchor": "variadic-arguments"
+        },
+        {
+          "level": 2,
+          "text": "Global Flags",
+          "anchor": "global-flags"
+        },
+        {
+          "level": 2,
+          "text": "Command Groups",
+          "anchor": "command-groups"
+        },
+        {
+          "level": 2,
+          "text": "Flag Naming Conventions",
+          "anchor": "flag-naming-conventions"
+        },
+        {
+          "level": 3,
+          "text": "Bare `--force` is banned",
+          "anchor": "bare-force-is-banned"
+        },
+        {
+          "level": 3,
+          "text": "`--no-*` prefix is reserved",
+          "anchor": "no-prefix-is-reserved"
+        },
+        {
+          "level": 3,
+          "text": "The reserved flag quartet",
+          "anchor": "the-reserved-flag-quartet"
+        },
+        {
+          "level": 3,
+          "text": "Refusing `--dry-run` with `dry_run_supported`",
+          "anchor": "refusing-dry-run-with-dry_run_supported"
+        },
+        {
+          "level": 2,
+          "text": "Consequential Commands and the Confirm Protocol",
+          "anchor": "consequential-commands-and-the-confirm-protocol"
+        },
+        {
+          "level": 3,
+          "text": "Help text is mandatory",
+          "anchor": "help-text-is-mandatory"
+        },
+        {
+          "level": 2,
+          "text": "Mutex Groups",
+          "anchor": "mutex-groups"
+        },
+        {
+          "level": 2,
+          "text": "Dependencies",
+          "anchor": "dependencies"
+        },
+        {
+          "level": 2,
+          "text": "Flag Sets",
+          "anchor": "flag-sets"
+        },
+        {
+          "level": 2,
+          "text": "Config File Support",
+          "anchor": "config-file-support"
+        },
+        {
+          "level": 3,
+          "text": "Config format",
+          "anchor": "config-format"
+        },
+        {
+          "level": 3,
+          "text": "Auto-registered config commands",
+          "anchor": "auto-registered-config-commands"
+        },
+        {
+          "level": 3,
+          "text": "Config path override",
+          "anchor": "config-path-override"
+        },
+        {
+          "level": 3,
+          "text": "Config fields",
+          "anchor": "config-fields"
+        },
+        {
+          "level": 3,
+          "text": "Hermetic mode",
+          "anchor": "hermetic-mode"
+        },
+        {
+          "level": 2,
+          "text": "Schema Dump",
+          "anchor": "schema-dump"
+        },
+        {
+          "level": 2,
+          "text": "Testing",
+          "anchor": "testing"
+        },
+        {
+          "level": 3,
+          "text": "Programmatic Invocation",
+          "anchor": "programmatic-invocation"
+        },
+        {
+          "level": 2,
+          "text": "Deprecated Commands",
+          "anchor": "deprecated-commands"
+        },
+        {
+          "level": 2,
+          "text": "Passthrough Commands",
+          "anchor": "passthrough-commands"
+        },
+        {
+          "level": 2,
+          "text": "Error Handling",
+          "anchor": "error-handling"
+        },
+        {
+          "level": 2,
+          "text": "Full Example",
+          "anchor": "full-example"
+        }
+      ]
     },
     {
       "path": "python-strictcli.md",
       "title": "python.strictcli",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "python.strictcli",
+          "anchor": "pythonstrictcli"
+        },
+        {
+          "level": 2,
+          "text": "python.strictcli",
+          "anchor": "pythonstrictcli"
+        },
+        {
+          "level": 3,
+          "text": "RelativeToRoot",
+          "anchor": "relativetoroot"
+        },
+        {
+          "level": 3,
+          "text": "_serialize_marker",
+          "anchor": "_serialize_marker"
+        },
+        {
+          "level": 3,
+          "text": "_resolve_infra_root_path",
+          "anchor": "_resolve_infra_root_path"
+        },
+        {
+          "level": 3,
+          "text": "_validate_connection_binding",
+          "anchor": "_validate_connection_binding"
+        },
+        {
+          "level": 3,
+          "text": "_Source",
+          "anchor": "_source"
+        },
+        {
+          "level": 3,
+          "text": "_SourcedEntry",
+          "anchor": "_sourcedentry"
+        },
+        {
+          "level": 3,
+          "text": "_SourcedStore",
+          "anchor": "_sourcedstore"
+        },
+        {
+          "level": 4,
+          "text": "set",
+          "anchor": "set"
+        },
+        {
+          "level": 4,
+          "text": "get",
+          "anchor": "get"
+        },
+        {
+          "level": 4,
+          "text": "has",
+          "anchor": "has"
+        },
+        {
+          "level": 4,
+          "text": "get_value",
+          "anchor": "get_value"
+        },
+        {
+          "level": 4,
+          "text": "set_value",
+          "anchor": "set_value"
+        },
+        {
+          "level": 4,
+          "text": "is_present_for_mutex",
+          "anchor": "is_present_for_mutex"
+        },
+        {
+          "level": 4,
+          "text": "is_present_for_deps",
+          "anchor": "is_present_for_deps"
+        },
+        {
+          "level": 4,
+          "text": "source_map",
+          "anchor": "source_map"
+        },
+        {
+          "level": 4,
+          "text": "from_dict",
+          "anchor": "from_dict"
+        },
+        {
+          "level": 3,
+          "text": "_InfraAccess",
+          "anchor": "_infraaccess"
+        },
+        {
+          "level": 3,
+          "text": "Context",
+          "anchor": "context"
+        },
+        {
+          "level": 4,
+          "text": "dry_run",
+          "anchor": "dry_run"
+        },
+        {
+          "level": 4,
+          "text": "approve_consequential",
+          "anchor": "approve_consequential"
+        },
+        {
+          "level": 4,
+          "text": "quiet",
+          "anchor": "quiet"
+        },
+        {
+          "level": 4,
+          "text": "verbose",
+          "anchor": "verbose"
+        },
+        {
+          "level": 4,
+          "text": "effects",
+          "anchor": "effects"
+        },
+        {
+          "level": 4,
+          "text": "info",
+          "anchor": "info"
+        },
+        {
+          "level": 4,
+          "text": "warn",
+          "anchor": "warn"
+        },
+        {
+          "level": 4,
+          "text": "debug",
+          "anchor": "debug"
+        },
+        {
+          "level": 4,
+          "text": "error",
+          "anchor": "error"
+        },
+        {
+          "level": 4,
+          "text": "source",
+          "anchor": "source"
+        },
+        {
+          "level": 4,
+          "text": "infra_value",
+          "anchor": "infra_value"
+        },
+        {
+          "level": 4,
+          "text": "connection_env_value",
+          "anchor": "connection_env_value"
+        },
+        {
+          "level": 3,
+          "text": "EffectFailed",
+          "anchor": "effectfailed"
+        },
+        {
+          "level": 3,
+          "text": "_DryRunTruncated",
+          "anchor": "_dryruntruncated"
+        },
+        {
+          "level": 3,
+          "text": "Grant",
+          "anchor": "grant"
+        },
+        {
+          "level": 3,
+          "text": "Completed",
+          "anchor": "completed"
+        },
+        {
+          "level": 3,
+          "text": "Response",
+          "anchor": "response"
+        },
+        {
+          "level": 3,
+          "text": "Spawned",
+          "anchor": "spawned"
+        },
+        {
+          "level": 4,
+          "text": "wait",
+          "anchor": "wait"
+        },
+        {
+          "level": 3,
+          "text": "Unsettled",
+          "anchor": "unsettled"
+        },
+        {
+          "level": 3,
+          "text": "_EffectRecord",
+          "anchor": "_effectrecord"
+        },
+        {
+          "level": 4,
+          "text": "to_dict",
+          "anchor": "to_dict"
+        },
+        {
+          "level": 4,
+          "text": "render",
+          "anchor": "render"
+        },
+        {
+          "level": 3,
+          "text": "_EffectLog",
+          "anchor": "_effectlog"
+        },
+        {
+          "level": 4,
+          "text": "append",
+          "anchor": "append"
+        },
+        {
+          "level": 4,
+          "text": "next_seq",
+          "anchor": "next_seq"
+        },
+        {
+          "level": 4,
+          "text": "next_cache_seq",
+          "anchor": "next_cache_seq"
+        },
+        {
+          "level": 4,
+          "text": "render",
+          "anchor": "render-1"
+        },
+        {
+          "level": 4,
+          "text": "to_list",
+          "anchor": "to_list"
+        },
+        {
+          "level": 3,
+          "text": "_msg_dry_run_truncated",
+          "anchor": "_msg_dry_run_truncated"
+        },
+        {
+          "level": 3,
+          "text": "_msg_dry_run_aborted",
+          "anchor": "_msg_dry_run_aborted"
+        },
+        {
+          "level": 3,
+          "text": "_msg_confirm_prompt",
+          "anchor": "_msg_confirm_prompt"
+        },
+        {
+          "level": 3,
+          "text": "_strip_confirm_line",
+          "anchor": "_strip_confirm_line"
+        },
+        {
+          "level": 3,
+          "text": "_msg_call_consequential_unconsented",
+          "anchor": "_msg_call_consequential_unconsented"
+        },
+        {
+          "level": 3,
+          "text": "_consequential_grant_warning",
+          "anchor": "_consequential_grant_warning"
+        },
+        {
+          "level": 3,
+          "text": "_observe_allowlist_breadth_warning",
+          "anchor": "_observe_allowlist_breadth_warning"
+        },
+        {
+          "level": 3,
+          "text": "_msg_effect_option_not_accepted",
+          "anchor": "_msg_effect_option_not_accepted"
+        },
+        {
+          "level": 3,
+          "text": "_reject_unaccepted_options",
+          "anchor": "_reject_unaccepted_options"
+        },
+        {
+          "level": 3,
+          "text": "_Effects",
+          "anchor": "_effects"
+        },
+        {
+          "level": 4,
+          "text": "_reject_carrier_params",
+          "anchor": "_reject_carrier_params"
+        },
+        {
+          "level": 4,
+          "text": "_operand",
+          "anchor": "_operand"
+        },
+        {
+          "level": 4,
+          "text": "_content_operand",
+          "anchor": "_content_operand"
+        },
+        {
+          "level": 4,
+          "text": "_authorize",
+          "anchor": "_authorize"
+        },
+        {
+          "level": 4,
+          "text": "_is_observe",
+          "anchor": "_is_observe"
+        },
+        {
+          "level": 4,
+          "text": "run",
+          "anchor": "run"
+        },
+        {
+          "level": 4,
+          "text": "spawn",
+          "anchor": "spawn"
+        },
+        {
+          "level": 4,
+          "text": "write",
+          "anchor": "write"
+        },
+        {
+          "level": 4,
+          "text": "mkdir",
+          "anchor": "mkdir"
+        },
+        {
+          "level": 4,
+          "text": "remove",
+          "anchor": "remove"
+        },
+        {
+          "level": 4,
+          "text": "rename",
+          "anchor": "rename"
+        },
+        {
+          "level": 4,
+          "text": "chmod",
+          "anchor": "chmod"
+        },
+        {
+          "level": 4,
+          "text": "http",
+          "anchor": "http"
+        },
+        {
+          "level": 4,
+          "text": "_merged_env",
+          "anchor": "_merged_env"
+        },
+        {
+          "level": 3,
+          "text": "_decode_effect_output",
+          "anchor": "_decode_effect_output"
+        },
+        {
+          "level": 3,
+          "text": "_remove_path",
+          "anchor": "_remove_path"
+        },
+        {
+          "level": 3,
+          "text": "_validate_grants",
+          "anchor": "_validate_grants"
+        },
+        {
+          "level": 3,
+          "text": "_BypassImports",
+          "anchor": "_bypassimports"
+        },
+        {
+          "level": 3,
+          "text": "_bypass_import_bindings",
+          "anchor": "_bypass_import_bindings"
+        },
+        {
+          "level": 3,
+          "text": "_call_target_name",
+          "anchor": "_call_target_name"
+        },
+        {
+          "level": 3,
+          "text": "_reaches_effects_handle",
+          "anchor": "_reaches_effects_handle"
+        },
+        {
+          "level": 3,
+          "text": "_bypass_effects_aliases",
+          "anchor": "_bypass_effects_aliases"
+        },
+        {
+          "level": 3,
+          "text": "_function_opts_into_effects",
+          "anchor": "_function_opts_into_effects"
+        },
+        {
+          "level": 3,
+          "text": "_decorator_leaf",
+          "anchor": "_decorator_leaf"
+        },
+        {
+          "level": 3,
+          "text": "_bypass_handler_names",
+          "anchor": "_bypass_handler_names"
+        },
+        {
+          "level": 3,
+          "text": "_is_registered_handler",
+          "anchor": "_is_registered_handler"
+        },
+        {
+          "level": 3,
+          "text": "_bypass_direct_call_names",
+          "anchor": "_bypass_direct_call_names"
+        },
+        {
+          "level": 3,
+          "text": "_bypass_reachable_functions",
+          "anchor": "_bypass_reachable_functions"
+        },
+        {
+          "level": 3,
+          "text": "_bypass_resolve_call",
+          "anchor": "_bypass_resolve_call"
+        },
+        {
+          "level": 3,
+          "text": "_bypass_call_is_banned",
+          "anchor": "_bypass_call_is_banned"
+        },
+        {
+          "level": 3,
+          "text": "_bypass_walk",
+          "anchor": "_bypass_walk"
+        },
+        {
+          "level": 3,
+          "text": "_open_is_write_mode",
+          "anchor": "_open_is_write_mode"
+        },
+        {
+          "level": 3,
+          "text": "_scan_effects_bypasses",
+          "anchor": "_scan_effects_bypasses"
+        },
+        {
+          "level": 3,
+          "text": "Outcome",
+          "anchor": "outcome"
+        },
+        {
+          "level": 3,
+          "text": "outcome",
+          "anchor": "outcome-1"
+        },
+        {
+          "level": 3,
+          "text": "_interpret_handler_return",
+          "anchor": "_interpret_handler_return"
+        },
+        {
+          "level": 3,
+          "text": "_config_path",
+          "anchor": "_config_path"
+        },
+        {
+          "level": 3,
+          "text": "_ConfigLoadResult",
+          "anchor": "_configloadresult"
+        },
+        {
+          "level": 3,
+          "text": "_compute_json_position",
+          "anchor": "_compute_json_position"
+        },
+        {
+          "level": 3,
+          "text": "_load_config",
+          "anchor": "_load_config"
+        },
+        {
+          "level": 3,
+          "text": "_toml_format_scalar",
+          "anchor": "_toml_format_scalar"
+        },
+        {
+          "level": 3,
+          "text": "_load_toml_doc",
+          "anchor": "_load_toml_doc"
+        },
+        {
+          "level": 3,
+          "text": "_toml_value_item",
+          "anchor": "_toml_value_item"
+        },
+        {
+          "level": 3,
+          "text": "_toml_set_nested",
+          "anchor": "_toml_set_nested"
+        },
+        {
+          "level": 3,
+          "text": "_toml_del_nested",
+          "anchor": "_toml_del_nested"
+        },
+        {
+          "level": 3,
+          "text": "_coerce_config_scalar",
+          "anchor": "_coerce_config_scalar"
+        },
+        {
+          "level": 3,
+          "text": "_coerce_config_value",
+          "anchor": "_coerce_config_value"
+        },
+        {
+          "level": 3,
+          "text": "_resolve_flag_show_source",
+          "anchor": "_resolve_flag_show_source"
+        },
+        {
+          "level": 3,
+          "text": "_format_config_value",
+          "anchor": "_format_config_value"
+        },
+        {
+          "level": 3,
+          "text": "_nested_get",
+          "anchor": "_nested_get"
+        },
+        {
+          "level": 3,
+          "text": "_nested_set",
+          "anchor": "_nested_set"
+        },
+        {
+          "level": 3,
+          "text": "_nested_delete",
+          "anchor": "_nested_delete"
+        },
+        {
+          "level": 3,
+          "text": "_collect_nested_keys",
+          "anchor": "_collect_nested_keys"
+        },
+        {
+          "level": 3,
+          "text": "_check_config_field_type",
+          "anchor": "_check_config_field_type"
+        },
+        {
+          "level": 3,
+          "text": "_config_set_field",
+          "anchor": "_config_set_field"
+        },
+        {
+          "level": 3,
+          "text": "_write_config_set",
+          "anchor": "_write_config_set"
+        },
+        {
+          "level": 3,
+          "text": "_write_config_unset",
+          "anchor": "_write_config_unset"
+        },
+        {
+          "level": 3,
+          "text": "_ensure_config_dir",
+          "anchor": "_ensure_config_dir"
+        },
+        {
+          "level": 3,
+          "text": "_generate_config_template_toml",
+          "anchor": "_generate_config_template_toml"
+        },
+        {
+          "level": 3,
+          "text": "_generate_config_template_json",
+          "anchor": "_generate_config_template_json"
+        },
+        {
+          "level": 3,
+          "text": "_split_escaped",
+          "anchor": "_split_escaped"
+        },
+        {
+          "level": 3,
+          "text": "_values_equal_for_conflict",
+          "anchor": "_values_equal_for_conflict"
+        },
+        {
+          "level": 3,
+          "text": "_check_flag_configfield_default",
+          "anchor": "_check_flag_configfield_default"
+        },
+        {
+          "level": 3,
+          "text": "_find_duplicate",
+          "anchor": "_find_duplicate"
+        },
+        {
+          "level": 3,
+          "text": "_format_float_canonical",
+          "anchor": "_format_float_canonical"
+        },
+        {
+          "level": 3,
+          "text": "_format_dict_for_display",
+          "anchor": "_format_dict_for_display"
+        },
+        {
+          "level": 3,
+          "text": "_format_default_for_help",
+          "anchor": "_format_default_for_help"
+        },
+        {
+          "level": 3,
+          "text": "_format_value_for_error",
+          "anchor": "_format_value_for_error"
+        },
+        {
+          "level": 3,
+          "text": "_config_typename",
+          "anchor": "_config_typename"
+        },
+        {
+          "level": 3,
+          "text": "_parse_checks_toml",
+          "anchor": "_parse_checks_toml"
+        },
+        {
+          "level": 3,
+          "text": "_load_checks_toml",
+          "anchor": "_load_checks_toml"
+        },
+        {
+          "level": 3,
+          "text": "_HelpRequested",
+          "anchor": "_helprequested"
+        },
+        {
+          "level": 3,
+          "text": "_VersionRequested",
+          "anchor": "_versionrequested"
+        },
+        {
+          "level": 3,
+          "text": "_DumpSchemaRequested",
+          "anchor": "_dumpschemarequested"
+        },
+        {
+          "level": 3,
+          "text": "_McpRequested",
+          "anchor": "_mcprequested"
+        },
+        {
+          "level": 3,
+          "text": "_ParseError",
+          "anchor": "_parseerror"
+        },
+        {
+          "level": 3,
+          "text": "InvokeError",
+          "anchor": "invokeerror"
+        },
+        {
+          "level": 3,
+          "text": "_strict_bool",
+          "anchor": "_strict_bool"
+        },
+        {
+          "level": 3,
+          "text": "_strict_int",
+          "anchor": "_strict_int"
+        },
+        {
+          "level": 3,
+          "text": "_strict_float",
+          "anchor": "_strict_float"
+        },
+        {
+          "level": 3,
+          "text": "_float_parse_error",
+          "anchor": "_float_parse_error"
+        },
+        {
+          "level": 3,
+          "text": "_coerce_arg_value",
+          "anchor": "_coerce_arg_value"
+        },
+        {
+          "level": 3,
+          "text": "_resolve_at_prefix",
+          "anchor": "_resolve_at_prefix"
+        },
+        {
+          "level": 3,
+          "text": "_parse_dict_value",
+          "anchor": "_parse_dict_value"
+        },
+        {
+          "level": 3,
+          "text": "_coerce_dict_json_value",
+          "anchor": "_coerce_dict_json_value"
+        },
+        {
+          "level": 3,
+          "text": "_store_dict_flag",
+          "anchor": "_store_dict_flag"
+        },
+        {
+          "level": 3,
+          "text": "_raise_flag_name_reserved_by_framework",
+          "anchor": "_raise_flag_name_reserved_by_framework"
+        },
+        {
+          "level": 3,
+          "text": "_raise_flag_name_yes_banned",
+          "anchor": "_raise_flag_name_yes_banned"
+        },
+        {
+          "level": 3,
+          "text": "_raise_flag_name_consent_reserved",
+          "anchor": "_raise_flag_name_consent_reserved"
+        },
+        {
+          "level": 3,
+          "text": "_raise_arg_name_consent_reserved",
+          "anchor": "_raise_arg_name_consent_reserved"
+        },
+        {
+          "level": 3,
+          "text": "_parse_compound_type",
+          "anchor": "_parse_compound_type"
+        },
+        {
+          "level": 3,
+          "text": "_validate_element_type",
+          "anchor": "_validate_element_type"
+        },
+        {
+          "level": 3,
+          "text": "Flag",
+          "anchor": "flag"
+        },
+        {
+          "level": 3,
+          "text": "Arg",
+          "anchor": "arg"
+        },
+        {
+          "level": 3,
+          "text": "FlagSet",
+          "anchor": "flagset"
+        },
+        {
+          "level": 3,
+          "text": "MutexGroup",
+          "anchor": "mutexgroup"
+        },
+        {
+          "level": 3,
+          "text": "CoRequired",
+          "anchor": "corequired"
+        },
+        {
+          "level": 3,
+          "text": "Requires",
+          "anchor": "requires"
+        },
+        {
+          "level": 3,
+          "text": "Implies",
+          "anchor": "implies"
+        },
+        {
+          "level": 3,
+          "text": "Passthrough",
+          "anchor": "passthrough"
+        },
+        {
+          "level": 3,
+          "text": "Forwarding",
+          "anchor": "forwarding"
+        },
+        {
+          "level": 3,
+          "text": "DeprecatedCommand",
+          "anchor": "deprecatedcommand"
+        },
+        {
+          "level": 3,
+          "text": "_raise_command_read_only_consequential",
+          "anchor": "_raise_command_read_only_consequential"
+        },
+        {
+          "level": 3,
+          "text": "_raise_command_read_only_dry_run_unsupported",
+          "anchor": "_raise_command_read_only_dry_run_unsupported"
+        },
+        {
+          "level": 3,
+          "text": "_validate_dry_run_declaration",
+          "anchor": "_validate_dry_run_declaration"
+        },
+        {
+          "level": 3,
+          "text": "Command",
+          "anchor": "command"
+        },
+        {
+          "level": 3,
+          "text": "Group",
+          "anchor": "group"
+        },
+        {
+          "level": 4,
+          "text": "group",
+          "anchor": "group-1"
+        },
+        {
+          "level": 4,
+          "text": "deprecate",
+          "anchor": "deprecate"
+        },
+        {
+          "level": 4,
+          "text": "command",
+          "anchor": "command-1"
+        },
+        {
+          "level": 3,
+          "text": "ConfigField",
+          "anchor": "configfield"
+        },
+        {
+          "level": 3,
+          "text": "Result",
+          "anchor": "result"
+        },
+        {
+          "level": 3,
+          "text": "Tool",
+          "anchor": "tool"
+        },
+        {
+          "level": 3,
+          "text": "_CheckProblem",
+          "anchor": "_checkproblem"
+        },
+        {
+          "level": 3,
+          "text": "_CheckOutcome",
+          "anchor": "_checkoutcome"
+        },
+        {
+          "level": 4,
+          "text": "status",
+          "anchor": "status"
+        },
+        {
+          "level": 4,
+          "text": "_ordered_problems",
+          "anchor": "_ordered_problems"
+        },
+        {
+          "level": 3,
+          "text": "_mint_skip",
+          "anchor": "_mint_skip"
+        },
+        {
+          "level": 3,
+          "text": "_derive_status",
+          "anchor": "_derive_status"
+        },
+        {
+          "level": 3,
+          "text": "_ReporterCore",
+          "anchor": "_reportercore"
+        },
+        {
+          "level": 4,
+          "text": "note",
+          "anchor": "note"
+        },
+        {
+          "level": 4,
+          "text": "warn",
+          "anchor": "warn-1"
+        },
+        {
+          "level": 4,
+          "text": "passed",
+          "anchor": "passed"
+        },
+        {
+          "level": 4,
+          "text": "skipped",
+          "anchor": "skipped"
+        },
+        {
+          "level": 4,
+          "text": "found",
+          "anchor": "found"
+        },
+        {
+          "level": 3,
+          "text": "WarnReporter",
+          "anchor": "warnreporter"
+        },
+        {
+          "level": 3,
+          "text": "ErrorReporter",
+          "anchor": "errorreporter"
+        },
+        {
+          "level": 4,
+          "text": "error",
+          "anchor": "error-1"
+        },
+        {
+          "level": 3,
+          "text": "SkipCheck",
+          "anchor": "skipcheck"
+        },
+        {
+          "level": 3,
+          "text": "CheckRunResult",
+          "anchor": "checkrunresult"
+        },
+        {
+          "level": 4,
+          "text": "status",
+          "anchor": "status-1"
+        },
+        {
+          "level": 4,
+          "text": "message",
+          "anchor": "message"
+        },
+        {
+          "level": 4,
+          "text": "problems",
+          "anchor": "problems"
+        },
+        {
+          "level": 4,
+          "text": "notes",
+          "anchor": "notes"
+        },
+        {
+          "level": 4,
+          "text": "gated",
+          "anchor": "gated"
+        },
+        {
+          "level": 4,
+          "text": "warned",
+          "anchor": "warned"
+        },
+        {
+          "level": 3,
+          "text": "CheckContext",
+          "anchor": "checkcontext"
+        },
+        {
+          "level": 3,
+          "text": "ConnectionEnvReader",
+          "anchor": "connectionenvreader"
+        },
+        {
+          "level": 4,
+          "text": "connection_env_value",
+          "anchor": "connection_env_value-1"
+        },
+        {
+          "level": 4,
+          "text": "is_hermetic",
+          "anchor": "is_hermetic"
+        },
+        {
+          "level": 3,
+          "text": "_CheckContextWithConn",
+          "anchor": "_checkcontextwithconn"
+        },
+        {
+          "level": 4,
+          "text": "connection_env_value",
+          "anchor": "connection_env_value-2"
+        },
+        {
+          "level": 4,
+          "text": "is_hermetic",
+          "anchor": "is_hermetic-1"
+        },
+        {
+          "level": 3,
+          "text": "_CheckDef",
+          "anchor": "_checkdef"
+        },
+        {
+          "level": 3,
+          "text": "CheckSpec",
+          "anchor": "checkspec"
+        },
+        {
+          "level": 3,
+          "text": "error_check_spec",
+          "anchor": "error_check_spec"
+        },
+        {
+          "level": 3,
+          "text": "warn_check_spec",
+          "anchor": "warn_check_spec"
+        },
+        {
+          "level": 3,
+          "text": "App",
+          "anchor": "app"
+        },
+        {
+          "level": 4,
+          "text": "_validate_flag_infra_marker",
+          "anchor": "_validate_flag_infra_marker"
+        },
+        {
+          "level": 4,
+          "text": "_infra_access",
+          "anchor": "_infra_access"
+        },
+        {
+          "level": 4,
+          "text": "_record_coverage",
+          "anchor": "_record_coverage"
+        },
+        {
+          "level": 4,
+          "text": "_collect_all_command_paths",
+          "anchor": "_collect_all_command_paths"
+        },
+        {
+          "level": 4,
+          "text": "_collect_all_commands",
+          "anchor": "_collect_all_commands"
+        },
+        {
+          "level": 4,
+          "text": "_test_coverage_provider",
+          "anchor": "_test_coverage_provider"
+        },
+        {
+          "level": 4,
+          "text": "_effects_bypass_provider",
+          "anchor": "_effects_bypass_provider"
+        },
+        {
+          "level": 4,
+          "text": "config_file_path",
+          "anchor": "config_file_path"
+        },
+        {
+          "level": 4,
+          "text": "dump_schema_dict",
+          "anchor": "dump_schema_dict"
+        },
+        {
+          "level": 4,
+          "text": "config_field",
+          "anchor": "config_field"
+        },
+        {
+          "level": 4,
+          "text": "_register_framework_field",
+          "anchor": "_register_framework_field"
+        },
+        {
+          "level": 4,
+          "text": "error_check",
+          "anchor": "error_check"
+        },
+        {
+          "level": 4,
+          "text": "warn_check",
+          "anchor": "warn_check"
+        },
+        {
+          "level": 4,
+          "text": "_make_check_decorator",
+          "anchor": "_make_check_decorator"
+        },
+        {
+          "level": 4,
+          "text": "_validate_check_registrations",
+          "anchor": "_validate_check_registrations"
+        },
+        {
+          "level": 4,
+          "text": "tag_contract",
+          "anchor": "tag_contract"
+        },
+        {
+          "level": 4,
+          "text": "_validate_tag_contracts",
+          "anchor": "_validate_tag_contracts"
+        },
+        {
+          "level": 4,
+          "text": "_resolve_config_data",
+          "anchor": "_resolve_config_data"
+        },
+        {
+          "level": 4,
+          "text": "_validate_config_fields",
+          "anchor": "_validate_config_fields"
+        },
+        {
+          "level": 4,
+          "text": "set_check_context",
+          "anchor": "set_check_context"
+        },
+        {
+          "level": 4,
+          "text": "_wrap_check_context",
+          "anchor": "_wrap_check_context"
+        },
+        {
+          "level": 4,
+          "text": "set_scope_adapter",
+          "anchor": "set_scope_adapter"
+        },
+        {
+          "level": 4,
+          "text": "register_check_provider",
+          "anchor": "register_check_provider"
+        },
+        {
+          "level": 4,
+          "text": "reset_check_provider_cache",
+          "anchor": "reset_check_provider_cache"
+        },
+        {
+          "level": 4,
+          "text": "_materialize_check_providers",
+          "anchor": "_materialize_check_providers"
+        },
+        {
+          "level": 4,
+          "text": "run_checks",
+          "anchor": "run_checks"
+        },
+        {
+          "level": 4,
+          "text": "_enable_checks",
+          "anchor": "_enable_checks"
+        },
+        {
+          "level": 4,
+          "text": "_add_check_def",
+          "anchor": "_add_check_def"
+        },
+        {
+          "level": 4,
+          "text": "_register_check_command",
+          "anchor": "_register_check_command"
+        },
+        {
+          "level": 4,
+          "text": "command",
+          "anchor": "command-2"
+        },
+        {
+          "level": 4,
+          "text": "group",
+          "anchor": "group-2"
+        },
+        {
+          "level": 4,
+          "text": "deprecate",
+          "anchor": "deprecate-1"
+        },
+        {
+          "level": 4,
+          "text": "_collect_all_flags",
+          "anchor": "_collect_all_flags"
+        },
+        {
+          "level": 4,
+          "text": "_colliding_config_fields",
+          "anchor": "_colliding_config_fields"
+        },
+        {
+          "level": 4,
+          "text": "_confirm_consequential",
+          "anchor": "_confirm_consequential"
+        },
+        {
+          "level": 4,
+          "text": "_arm_effects",
+          "anchor": "_arm_effects"
+        },
+        {
+          "level": 4,
+          "text": "_begin_dispatch",
+          "anchor": "_begin_dispatch"
+        },
+        {
+          "level": 4,
+          "text": "_render_dry_log",
+          "anchor": "_render_dry_log"
+        },
+        {
+          "level": 4,
+          "text": "_record_cache_write",
+          "anchor": "_record_cache_write"
+        },
+        {
+          "level": 4,
+          "text": "effect_log",
+          "anchor": "effect_log"
+        },
+        {
+          "level": 4,
+          "text": "_build_framework_command",
+          "anchor": "_build_framework_command"
+        },
+        {
+          "level": 4,
+          "text": "_register_config_group",
+          "anchor": "_register_config_group"
+        },
+        {
+          "level": 4,
+          "text": "_pre_scan_reserved_flags",
+          "anchor": "_pre_scan_reserved_flags"
+        },
+        {
+          "level": 4,
+          "text": "_scan_command_region_quartet",
+          "anchor": "_scan_command_region_quartet"
+        },
+        {
+          "level": 4,
+          "text": "_parse",
+          "anchor": "_parse"
+        },
+        {
+          "level": 4,
+          "text": "_resolve_command",
+          "anchor": "_resolve_command"
+        },
+        {
+          "level": 4,
+          "text": "_parse_global_flags",
+          "anchor": "_parse_global_flags"
+        },
+        {
+          "level": 4,
+          "text": "_find_command_prefix",
+          "anchor": "_find_command_prefix"
+        },
+        {
+          "level": 4,
+          "text": "run",
+          "anchor": "run-1"
+        },
+        {
+          "level": 4,
+          "text": "test",
+          "anchor": "test"
+        },
+        {
+          "level": 4,
+          "text": "_invoke",
+          "anchor": "_invoke"
+        },
+        {
+          "level": 4,
+          "text": "call",
+          "anchor": "call"
+        },
+        {
+          "level": 4,
+          "text": "_call_with_kwargs",
+          "anchor": "_call_with_kwargs"
+        },
+        {
+          "level": 4,
+          "text": "acall",
+          "anchor": "acall"
+        },
+        {
+          "level": 4,
+          "text": "json_schema",
+          "anchor": "json_schema"
+        },
+        {
+          "level": 4,
+          "text": "as_tools",
+          "anchor": "as_tools"
+        },
+        {
+          "level": 4,
+          "text": "_collect_tools_from_group",
+          "anchor": "_collect_tools_from_group"
+        },
+        {
+          "level": 4,
+          "text": "_make_tool",
+          "anchor": "_make_tool"
+        },
+        {
+          "level": 4,
+          "text": "_make_router_tool",
+          "anchor": "_make_router_tool"
+        },
+        {
+          "level": 4,
+          "text": "serve_mcp",
+          "anchor": "serve_mcp"
+        },
+        {
+          "level": 3,
+          "text": "_build_json_schema",
+          "anchor": "_build_json_schema"
+        },
+        {
+          "level": 3,
+          "text": "_tokens_contain_help",
+          "anchor": "_tokens_contain_help"
+        },
+        {
+          "level": 3,
+          "text": "_validate_choices",
+          "anchor": "_validate_choices"
+        },
+        {
+          "level": 3,
+          "text": "_validate_and_build_kwargs",
+          "anchor": "_validate_and_build_kwargs"
+        },
+        {
+          "level": 3,
+          "text": "_parse_command",
+          "anchor": "_parse_command"
+        },
+        {
+          "level": 3,
+          "text": "_flag_param_name",
+          "anchor": "_flag_param_name"
+        },
+        {
+          "level": 3,
+          "text": "_build_and_validate_command",
+          "anchor": "_build_and_validate_command"
+        },
+        {
+          "level": 3,
+          "text": "flag",
+          "anchor": "flag-1"
+        },
+        {
+          "level": 3,
+          "text": "arg",
+          "anchor": "arg-1"
+        },
+        {
+          "level": 3,
+          "text": "_format_version",
+          "anchor": "_format_version"
+        },
+        {
+          "level": 3,
+          "text": "_format_app_help",
+          "anchor": "_format_app_help"
+        },
+        {
+          "level": 3,
+          "text": "_format_group_help",
+          "anchor": "_format_group_help"
+        },
+        {
+          "level": 3,
+          "text": "_find_group_path",
+          "anchor": "_find_group_path"
+        },
+        {
+          "level": 3,
+          "text": "_build_flag_spec",
+          "anchor": "_build_flag_spec"
+        },
+        {
+          "level": 3,
+          "text": "_build_flag_meta",
+          "anchor": "_build_flag_meta"
+        },
+        {
+          "level": 3,
+          "text": "_format_dry_run_section",
+          "anchor": "_format_dry_run_section"
+        },
+        {
+          "level": 3,
+          "text": "_format_command_help",
+          "anchor": "_format_command_help"
+        },
+        {
+          "level": 3,
+          "text": "_tagdsl_tokenize",
+          "anchor": "_tagdsl_tokenize"
+        },
+        {
+          "level": 3,
+          "text": "_tagdsl_parse",
+          "anchor": "_tagdsl_parse"
+        },
+        {
+          "level": 3,
+          "text": "_tagdsl_evaluate",
+          "anchor": "_tagdsl_evaluate"
+        },
+        {
+          "level": 3,
+          "text": "_match_tag_expr",
+          "anchor": "_match_tag_expr"
+        },
+        {
+          "level": 3,
+          "text": "_filter_checks",
+          "anchor": "_filter_checks"
+        },
+        {
+          "level": 3,
+          "text": "_resolve_check_order",
+          "anchor": "_resolve_check_order"
+        },
+        {
+          "level": 3,
+          "text": "_find_cycle",
+          "anchor": "_find_cycle"
+        },
+        {
+          "level": 3,
+          "text": "_check_is_pure",
+          "anchor": "_check_is_pure"
+        },
+        {
+          "level": 3,
+          "text": "_run_checks",
+          "anchor": "_run_checks"
+        },
+        {
+          "level": 3,
+          "text": "_check_list_mode",
+          "anchor": "_check_list_mode"
+        },
+        {
+          "level": 3,
+          "text": "_check_dry_run_mode",
+          "anchor": "_check_dry_run_mode"
+        },
+        {
+          "level": 3,
+          "text": "format_check_results",
+          "anchor": "format_check_results"
+        },
+        {
+          "level": 3,
+          "text": "format_check_results_json",
+          "anchor": "format_check_results_json"
+        },
+        {
+          "level": 3,
+          "text": "_serialize_flag",
+          "anchor": "_serialize_flag"
+        },
+        {
+          "level": 3,
+          "text": "_serialize_arg",
+          "anchor": "_serialize_arg"
+        },
+        {
+          "level": 3,
+          "text": "_serialize_command",
+          "anchor": "_serialize_command"
+        },
+        {
+          "level": 3,
+          "text": "_serialize_group",
+          "anchor": "_serialize_group"
+        },
+        {
+          "level": 3,
+          "text": "_build_schema_defaults",
+          "anchor": "_build_schema_defaults"
+        },
+        {
+          "level": 3,
+          "text": "_read_project_id",
+          "anchor": "_read_project_id"
+        },
+        {
+          "level": 3,
+          "text": "_collect_config_field_bindings",
+          "anchor": "_collect_config_field_bindings"
+        },
+        {
+          "level": 3,
+          "text": "_collect_config_field_bindings_from_group",
+          "anchor": "_collect_config_field_bindings_from_group"
+        },
+        {
+          "level": 3,
+          "text": "_dump_schema_core",
+          "anchor": "_dump_schema_core"
+        },
+        {
+          "level": 3,
+          "text": "_dump_schema",
+          "anchor": "_dump_schema"
+        },
+        {
+          "level": 3,
+          "text": "_check_schema_project_id",
+          "anchor": "_check_schema_project_id"
+        },
+        {
+          "level": 3,
+          "text": "_write_schema",
+          "anchor": "_write_schema"
+        },
+        {
+          "level": 3,
+          "text": "_mcp_collect_commands",
+          "anchor": "_mcp_collect_commands"
+        },
+        {
+          "level": 3,
+          "text": "_mcp_jsonrpc_error",
+          "anchor": "_mcp_jsonrpc_error"
+        },
+        {
+          "level": 3,
+          "text": "_mcp_handle_initialize",
+          "anchor": "_mcp_handle_initialize"
+        },
+        {
+          "level": 3,
+          "text": "_mcp_handle_tools_list",
+          "anchor": "_mcp_handle_tools_list"
+        },
+        {
+          "level": 3,
+          "text": "_mcp_handle_tools_call",
+          "anchor": "_mcp_handle_tools_call"
+        },
+        {
+          "level": 3,
+          "text": "_run_mcp_server",
+          "anchor": "_run_mcp_server"
+        },
+        {
+          "level": 3,
+          "text": "PROC_MUTATE",
+          "anchor": "proc_mutate"
+        },
+        {
+          "level": 3,
+          "text": "PROC_SPAWN",
+          "anchor": "proc_spawn"
+        },
+        {
+          "level": 3,
+          "text": "FILE_WRITE",
+          "anchor": "file_write"
+        },
+        {
+          "level": 3,
+          "text": "NET_MUTATE",
+          "anchor": "net_mutate"
+        }
+      ]
     },
     {
       "path": "typescript-quickstart.md",
       "title": "TypeScript Quickstart",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "TypeScript Quickstart",
+          "anchor": "typescript-quickstart"
+        },
+        {
+          "level": 2,
+          "text": "Installation",
+          "anchor": "installation"
+        },
+        {
+          "level": 2,
+          "text": "Creating an App",
+          "anchor": "creating-an-app"
+        },
+        {
+          "level": 2,
+          "text": "Defining Commands",
+          "anchor": "defining-commands"
+        },
+        {
+          "level": 3,
+          "text": "Handler return values",
+          "anchor": "handler-return-values"
+        },
+        {
+          "level": 2,
+          "text": "Flag Types",
+          "anchor": "flag-types"
+        },
+        {
+          "level": 3,
+          "text": "Boolean Flags",
+          "anchor": "boolean-flags"
+        },
+        {
+          "level": 3,
+          "text": "String Flags",
+          "anchor": "string-flags"
+        },
+        {
+          "level": 3,
+          "text": "Number Flags",
+          "anchor": "number-flags"
+        },
+        {
+          "level": 3,
+          "text": "Repeatable Flags (Lists)",
+          "anchor": "repeatable-flags-lists"
+        },
+        {
+          "level": 3,
+          "text": "Dict Flags",
+          "anchor": "dict-flags"
+        },
+        {
+          "level": 3,
+          "text": "Choices",
+          "anchor": "choices"
+        },
+        {
+          "level": 3,
+          "text": "Short Aliases",
+          "anchor": "short-aliases"
+        },
+        {
+          "level": 3,
+          "text": "Environment Variables",
+          "anchor": "environment-variables"
+        },
+        {
+          "level": 2,
+          "text": "Positional Args",
+          "anchor": "positional-args"
+        },
+        {
+          "level": 3,
+          "text": "Variadic Args",
+          "anchor": "variadic-args"
+        },
+        {
+          "level": 2,
+          "text": "Flag Sets",
+          "anchor": "flag-sets"
+        },
+        {
+          "level": 2,
+          "text": "Mutex Groups",
+          "anchor": "mutex-groups"
+        },
+        {
+          "level": 2,
+          "text": "Flag Dependencies",
+          "anchor": "flag-dependencies"
+        },
+        {
+          "level": 2,
+          "text": "Command Groups",
+          "anchor": "command-groups"
+        },
+        {
+          "level": 3,
+          "text": "Group tags",
+          "anchor": "group-tags"
+        },
+        {
+          "level": 3,
+          "text": "Deprecated Commands",
+          "anchor": "deprecated-commands"
+        },
+        {
+          "level": 2,
+          "text": "Global Flags",
+          "anchor": "global-flags"
+        },
+        {
+          "level": 2,
+          "text": "Passthrough Commands",
+          "anchor": "passthrough-commands"
+        },
+        {
+          "level": 2,
+          "text": "Flag Naming Conventions",
+          "anchor": "flag-naming-conventions"
+        },
+        {
+          "level": 2,
+          "text": "The Reserved Flag Quartet",
+          "anchor": "the-reserved-flag-quartet"
+        },
+        {
+          "level": 3,
+          "text": "Refusing `--dry-run` with `dryRunSupported`",
+          "anchor": "refusing-dry-run-with-dryrunsupported"
+        },
+        {
+          "level": 2,
+          "text": "Consequential Commands and the Confirm Protocol",
+          "anchor": "consequential-commands-and-the-confirm-protocol"
+        },
+        {
+          "level": 2,
+          "text": "Schema Dump",
+          "anchor": "schema-dump"
+        },
+        {
+          "level": 2,
+          "text": "Testing",
+          "anchor": "testing"
+        },
+        {
+          "level": 2,
+          "text": "Programmatic Invocation",
+          "anchor": "programmatic-invocation"
+        },
+        {
+          "level": 2,
+          "text": "TypeScript Type Safety",
+          "anchor": "typescript-type-safety"
+        },
+        {
+          "level": 2,
+          "text": "Complete Example",
+          "anchor": "complete-example"
+        },
+        {
+          "level": 2,
+          "text": "Reserved Global Flags",
+          "anchor": "reserved-global-flags"
+        }
+      ]
     },
     {
       "path": "typescript-src-app.md",
       "title": "typescript/src/app",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/app",
+          "anchor": "typescriptsrcapp"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/app",
+          "anchor": "typescriptsrcapp"
+        },
+        {
+          "level": 3,
+          "text": "AppSpec",
+          "anchor": "appspec"
+        },
+        {
+          "level": 3,
+          "text": "GroupSpec",
+          "anchor": "groupspec"
+        },
+        {
+          "level": 3,
+          "text": "Group",
+          "anchor": "group"
+        },
+        {
+          "level": 3,
+          "text": "Result",
+          "anchor": "result"
+        },
+        {
+          "level": 3,
+          "text": "App",
+          "anchor": "app"
+        },
+        {
+          "level": 3,
+          "text": "RunChecksOptions",
+          "anchor": "runchecksoptions"
+        },
+        {
+          "level": 3,
+          "text": "RunChecksResult",
+          "anchor": "runchecksresult"
+        },
+        {
+          "level": 3,
+          "text": "createApp",
+          "anchor": "createapp"
+        },
+        {
+          "level": 3,
+          "text": "RESERVED_GLOBAL_SHORT_NAMES",
+          "anchor": "reserved_global_short_names"
+        },
+        {
+          "level": 3,
+          "text": "RESERVED_GLOBAL_FLAG_NAMES",
+          "anchor": "reserved_global_flag_names"
+        },
+        {
+          "level": 3,
+          "text": "markFrameworkHandler",
+          "anchor": "markframeworkhandler"
+        },
+        {
+          "level": 3,
+          "text": "FRAMEWORK_INTERNAL_FORWARDING_REASON",
+          "anchor": "framework_internal_forwarding_reason"
+        },
+        {
+          "level": 3,
+          "text": "defineFrameworkCommand",
+          "anchor": "defineframeworkcommand"
+        },
+        {
+          "level": 3,
+          "text": "RegisteredCommand",
+          "anchor": "registeredcommand"
+        },
+        {
+          "level": 3,
+          "text": "GroupImpl",
+          "anchor": "groupimpl"
+        },
+        {
+          "level": 3,
+          "text": "AppImpl",
+          "anchor": "appimpl"
+        }
+      ]
     },
     {
       "path": "typescript-src-atprefix.md",
       "title": "typescript/src/atprefix",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/atprefix",
+          "anchor": "typescriptsrcatprefix"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/atprefix",
+          "anchor": "typescriptsrcatprefix"
+        },
+        {
+          "level": 3,
+          "text": "AT_PREFIX_MAX_SIZE",
+          "anchor": "at_prefix_max_size"
+        },
+        {
+          "level": 3,
+          "text": "StdinTracker",
+          "anchor": "stdintracker"
+        },
+        {
+          "level": 3,
+          "text": "newStdinTracker",
+          "anchor": "newstdintracker"
+        },
+        {
+          "level": 3,
+          "text": "StdinReader",
+          "anchor": "stdinreader"
+        },
+        {
+          "level": 3,
+          "text": "resolveAtPrefix",
+          "anchor": "resolveatprefix"
+        }
+      ]
     },
     {
       "path": "typescript-src-checks-cmd.md",
       "title": "typescript/src/checks/cmd",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/checks/cmd",
+          "anchor": "typescriptsrccheckscmd"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/checks/cmd",
+          "anchor": "typescriptsrccheckscmd"
+        },
+        {
+          "level": 3,
+          "text": "enableChecks",
+          "anchor": "enablechecks"
+        },
+        {
+          "level": 3,
+          "text": "formatCheckResults",
+          "anchor": "formatcheckresults"
+        },
+        {
+          "level": 3,
+          "text": "formatCheckResultsJSON",
+          "anchor": "formatcheckresultsjson"
+        }
+      ]
     },
     {
       "path": "typescript-src-checks-coverage.md",
       "title": "typescript/src/checks/coverage",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/checks/coverage",
+          "anchor": "typescriptsrccheckscoverage"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/checks/coverage",
+          "anchor": "typescriptsrccheckscoverage"
+        },
+        {
+          "level": 3,
+          "text": "initTestCoverage",
+          "anchor": "inittestcoverage"
+        },
+        {
+          "level": 3,
+          "text": "recordCoverage",
+          "anchor": "recordcoverage"
+        },
+        {
+          "level": 3,
+          "text": "collectAllCommandPaths",
+          "anchor": "collectallcommandpaths"
+        },
+        {
+          "level": 3,
+          "text": "testCoverageProvider",
+          "anchor": "testcoverageprovider"
+        }
+      ]
     },
     {
       "path": "typescript-src-checks-effects_bypass.md",
       "title": "typescript/src/checks/effects_bypass",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/checks/effects_bypass",
+          "anchor": "typescriptsrccheckseffects_bypass"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/checks/effects_bypass",
+          "anchor": "typescriptsrccheckseffects_bypass"
+        },
+        {
+          "level": 3,
+          "text": "BypassFinding",
+          "anchor": "bypassfinding"
+        },
+        {
+          "level": 3,
+          "text": "scanTokens",
+          "anchor": "scantokens"
+        },
+        {
+          "level": 3,
+          "text": "scanEffectsBypasses",
+          "anchor": "scaneffectsbypasses"
+        },
+        {
+          "level": 3,
+          "text": "observeAllowlistBreadthWarning",
+          "anchor": "observeallowlistbreadthwarning"
+        },
+        {
+          "level": 3,
+          "text": "consequentialGrantWarning",
+          "anchor": "consequentialgrantwarning"
+        },
+        {
+          "level": 3,
+          "text": "effectsBypassProvider",
+          "anchor": "effectsbypassprovider"
+        }
+      ]
     },
     {
       "path": "typescript-src-checks-framework.md",
       "title": "typescript/src/checks/framework",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/checks/framework",
+          "anchor": "typescriptsrcchecksframework"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/checks/framework",
+          "anchor": "typescriptsrcchecksframework"
+        },
+        {
+          "level": 3,
+          "text": "CheckContext",
+          "anchor": "checkcontext"
+        },
+        {
+          "level": 3,
+          "text": "CheckSeverity",
+          "anchor": "checkseverity"
+        },
+        {
+          "level": 3,
+          "text": "CheckProblem",
+          "anchor": "checkproblem"
+        },
+        {
+          "level": 3,
+          "text": "CheckOutcome",
+          "anchor": "checkoutcome"
+        },
+        {
+          "level": 3,
+          "text": "mintSkip",
+          "anchor": "mintskip"
+        },
+        {
+          "level": 3,
+          "text": "orderedProblems",
+          "anchor": "orderedproblems"
+        },
+        {
+          "level": 3,
+          "text": "deriveStatus",
+          "anchor": "derivestatus"
+        },
+        {
+          "level": 3,
+          "text": "CheckStatus",
+          "anchor": "checkstatus"
+        },
+        {
+          "level": 3,
+          "text": "WarnReporter",
+          "anchor": "warnreporter"
+        },
+        {
+          "level": 3,
+          "text": "ErrorReporter",
+          "anchor": "errorreporter"
+        },
+        {
+          "level": 3,
+          "text": "CheckRunResult",
+          "anchor": "checkrunresult"
+        },
+        {
+          "level": 3,
+          "text": "CheckImpl",
+          "anchor": "checkimpl"
+        },
+        {
+          "level": 3,
+          "text": "CheckDef",
+          "anchor": "checkdef"
+        },
+        {
+          "level": 3,
+          "text": "ChecksState",
+          "anchor": "checksstate"
+        },
+        {
+          "level": 3,
+          "text": "newChecksState",
+          "anchor": "newchecksstate"
+        },
+        {
+          "level": 3,
+          "text": "addCheckDef",
+          "anchor": "addcheckdef"
+        },
+        {
+          "level": 3,
+          "text": "sortedCheckNames",
+          "anchor": "sortedchecknames"
+        },
+        {
+          "level": 3,
+          "text": "registerCheckImpl",
+          "anchor": "registercheckimpl"
+        },
+        {
+          "level": 3,
+          "text": "validateCheckRegistrations",
+          "anchor": "validatecheckregistrations"
+        },
+        {
+          "level": 3,
+          "text": "CHECK_IDENTIFIER_RE",
+          "anchor": "check_identifier_re"
+        },
+        {
+          "level": 3,
+          "text": "ParsedChecksToml",
+          "anchor": "parsedcheckstoml"
+        },
+        {
+          "level": 3,
+          "text": "parseChecksToml",
+          "anchor": "parsecheckstoml"
+        }
+      ]
     },
     {
       "path": "typescript-src-checks-provider.md",
       "title": "typescript/src/checks/provider",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/checks/provider",
+          "anchor": "typescriptsrcchecksprovider"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/checks/provider",
+          "anchor": "typescriptsrcchecksprovider"
+        },
+        {
+          "level": 3,
+          "text": "CheckSpec",
+          "anchor": "checkspec"
+        },
+        {
+          "level": 3,
+          "text": "ErrorCheckSpecInit",
+          "anchor": "errorcheckspecinit"
+        },
+        {
+          "level": 3,
+          "text": "WarnCheckSpecInit",
+          "anchor": "warncheckspecinit"
+        },
+        {
+          "level": 3,
+          "text": "errorCheckSpec",
+          "anchor": "errorcheckspec"
+        },
+        {
+          "level": 3,
+          "text": "warnCheckSpec",
+          "anchor": "warncheckspec"
+        },
+        {
+          "level": 3,
+          "text": "materializeCheckProviders",
+          "anchor": "materializecheckproviders"
+        },
+        {
+          "level": 3,
+          "text": "resetCheckProviderCache",
+          "anchor": "resetcheckprovidercache"
+        }
+      ]
     },
     {
       "path": "typescript-src-checks-runner.md",
       "title": "typescript/src/checks/runner",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/checks/runner",
+          "anchor": "typescriptsrcchecksrunner"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/checks/runner",
+          "anchor": "typescriptsrcchecksrunner"
+        },
+        {
+          "level": 3,
+          "text": "globToRegExp",
+          "anchor": "globtoregexp"
+        },
+        {
+          "level": 3,
+          "text": "filterChecks",
+          "anchor": "filterchecks"
+        },
+        {
+          "level": 3,
+          "text": "resolveCheckOrder",
+          "anchor": "resolvecheckorder"
+        },
+        {
+          "level": 3,
+          "text": "checkIsPure",
+          "anchor": "checkispure"
+        },
+        {
+          "level": 3,
+          "text": "RunChecksOutput",
+          "anchor": "runchecksoutput"
+        },
+        {
+          "level": 3,
+          "text": "runOrderedChecks",
+          "anchor": "runorderedchecks"
+        }
+      ]
     },
     {
       "path": "typescript-src-checks-tagdsl.md",
       "title": "typescript/src/checks/tagdsl",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/checks/tagdsl",
+          "anchor": "typescriptsrccheckstagdsl"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/checks/tagdsl",
+          "anchor": "typescriptsrccheckstagdsl"
+        },
+        {
+          "level": 3,
+          "text": "matchTagExpr",
+          "anchor": "matchtagexpr"
+        }
+      ]
     },
     {
       "path": "typescript-src-config.md",
       "title": "typescript/src/config",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/config",
+          "anchor": "typescriptsrcconfig"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/config",
+          "anchor": "typescriptsrcconfig"
+        },
+        {
+          "level": 3,
+          "text": "JsonLoadFailure",
+          "anchor": "jsonloadfailure"
+        },
+        {
+          "level": 3,
+          "text": "parseJsonConfig",
+          "anchor": "parsejsonconfig"
+        },
+        {
+          "level": 3,
+          "text": "nestedGet",
+          "anchor": "nestedget"
+        },
+        {
+          "level": 3,
+          "text": "nestedSet",
+          "anchor": "nestedset"
+        },
+        {
+          "level": 3,
+          "text": "nestedDelete",
+          "anchor": "nesteddelete"
+        },
+        {
+          "level": 3,
+          "text": "collectNestedKeys",
+          "anchor": "collectnestedkeys"
+        },
+        {
+          "level": 3,
+          "text": "configFilePath",
+          "anchor": "configfilepath"
+        },
+        {
+          "level": 3,
+          "text": "ConfigFileResult",
+          "anchor": "configfileresult"
+        },
+        {
+          "level": 3,
+          "text": "loadConfigFile",
+          "anchor": "loadconfigfile"
+        },
+        {
+          "level": 3,
+          "text": "configTypename",
+          "anchor": "configtypename"
+        },
+        {
+          "level": 3,
+          "text": "coerceConfigValueForFlag",
+          "anchor": "coerceconfigvalueforflag"
+        },
+        {
+          "level": 3,
+          "text": "ConfigFieldSpec",
+          "anchor": "configfieldspec"
+        },
+        {
+          "level": 3,
+          "text": "ConfigFieldRt",
+          "anchor": "configfieldrt"
+        },
+        {
+          "level": 3,
+          "text": "checkFlagConfigFieldDefault",
+          "anchor": "checkflagconfigfielddefault"
+        },
+        {
+          "level": 3,
+          "text": "registerConfigField",
+          "anchor": "registerconfigfield"
+        },
+        {
+          "level": 3,
+          "text": "registerFrameworkField",
+          "anchor": "registerframeworkfield"
+        },
+        {
+          "level": 3,
+          "text": "validateConfigFieldsForCommand",
+          "anchor": "validateconfigfieldsforcommand"
+        },
+        {
+          "level": 3,
+          "text": "collectAllFlags",
+          "anchor": "collectallflags"
+        },
+        {
+          "level": 3,
+          "text": "collidingConfigFields",
+          "anchor": "collidingconfigfields"
+        },
+        {
+          "level": 3,
+          "text": "jsonDumpsPy",
+          "anchor": "jsondumpspy"
+        },
+        {
+          "level": 3,
+          "text": "formatConfigValue",
+          "anchor": "formatconfigvalue"
+        },
+        {
+          "level": 3,
+          "text": "resolveFlagShowSource",
+          "anchor": "resolveflagshowsource"
+        },
+        {
+          "level": 3,
+          "text": "generateTomlTemplate",
+          "anchor": "generatetomltemplate"
+        },
+        {
+          "level": 3,
+          "text": "generateJsonTemplate",
+          "anchor": "generatejsontemplate"
+        },
+        {
+          "level": 3,
+          "text": "registerConfigGroup",
+          "anchor": "registerconfiggroup"
+        },
+        {
+          "level": 3,
+          "text": "makeConfigProvider",
+          "anchor": "makeconfigprovider"
+        }
+      ]
     },
     {
       "path": "typescript-src-confirm.md",
       "title": "typescript/src/confirm",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/confirm",
+          "anchor": "typescriptsrcconfirm"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/confirm",
+          "anchor": "typescriptsrcconfirm"
+        },
+        {
+          "level": 3,
+          "text": "ConfirmIO",
+          "anchor": "confirmio"
+        },
+        {
+          "level": 3,
+          "text": "setConfirmIO",
+          "anchor": "setconfirmio"
+        },
+        {
+          "level": 3,
+          "text": "confirmConsequential",
+          "anchor": "confirmconsequential"
+        }
+      ]
     },
     {
       "path": "typescript-src-context.md",
       "title": "typescript/src/context",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/context",
+          "anchor": "typescriptsrccontext"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/context",
+          "anchor": "typescriptsrccontext"
+        },
+        {
+          "level": 3,
+          "text": "Writer",
+          "anchor": "writer"
+        },
+        {
+          "level": 3,
+          "text": "InfraAccess",
+          "anchor": "infraaccess"
+        },
+        {
+          "level": 3,
+          "text": "ConnectionEnvReader",
+          "anchor": "connectionenvreader"
+        },
+        {
+          "level": 3,
+          "text": "ReservedFlags",
+          "anchor": "reservedflags"
+        },
+        {
+          "level": 3,
+          "text": "NO_RESERVED_FLAGS",
+          "anchor": "no_reserved_flags"
+        },
+        {
+          "level": 3,
+          "text": "ReadOnlyContext",
+          "anchor": "readonlycontext"
+        },
+        {
+          "level": 3,
+          "text": "MutatingContext",
+          "anchor": "mutatingcontext"
+        },
+        {
+          "level": 3,
+          "text": "Context",
+          "anchor": "context"
+        },
+        {
+          "level": 3,
+          "text": "contextIsHermetic",
+          "anchor": "contextishermetic"
+        }
+      ]
     },
     {
       "path": "typescript-src-describe.md",
       "title": "typescript/src/describe",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/describe",
+          "anchor": "typescriptsrcdescribe"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/describe",
+          "anchor": "typescriptsrcdescribe"
+        },
+        {
+          "level": 3,
+          "text": "SCHEMA_VERSION",
+          "anchor": "schema_version"
+        },
+        {
+          "level": 3,
+          "text": "SURFACE",
+          "anchor": "surface"
+        },
+        {
+          "level": 3,
+          "text": "SurfaceDump",
+          "anchor": "surfacedump"
+        },
+        {
+          "level": 3,
+          "text": "describeSurface",
+          "anchor": "describesurface"
+        },
+        {
+          "level": 3,
+          "text": "describeSurfaceJson",
+          "anchor": "describesurfacejson"
+        }
+      ]
     },
     {
       "path": "typescript-src-effects.md",
       "title": "typescript/src/effects",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/effects",
+          "anchor": "typescriptsrceffects"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/effects",
+          "anchor": "typescriptsrceffects"
+        },
+        {
+          "level": 3,
+          "text": "EffectKind",
+          "anchor": "effectkind"
+        },
+        {
+          "level": 3,
+          "text": "CACHE_WRITE",
+          "anchor": "cache_write"
+        },
+        {
+          "level": 3,
+          "text": "isGrantableKind",
+          "anchor": "isgrantablekind"
+        },
+        {
+          "level": 3,
+          "text": "Effect",
+          "anchor": "effect"
+        },
+        {
+          "level": 3,
+          "text": "Grant",
+          "anchor": "grant"
+        },
+        {
+          "level": 3,
+          "text": "Forwarding",
+          "anchor": "forwarding"
+        },
+        {
+          "level": 3,
+          "text": "Completed",
+          "anchor": "completed"
+        },
+        {
+          "level": 3,
+          "text": "Response",
+          "anchor": "response"
+        },
+        {
+          "level": 3,
+          "text": "Spawned",
+          "anchor": "spawned"
+        },
+        {
+          "level": 3,
+          "text": "EffectRecord",
+          "anchor": "effectrecord"
+        },
+        {
+          "level": 3,
+          "text": "DRY_RUN_HEADER",
+          "anchor": "dry_run_header"
+        },
+        {
+          "level": 3,
+          "text": "EffectLog",
+          "anchor": "effectlog"
+        },
+        {
+          "level": 3,
+          "text": "effectTypeName",
+          "anchor": "effecttypename"
+        },
+        {
+          "level": 3,
+          "text": "EffectsCommandView",
+          "anchor": "effectscommandview"
+        },
+        {
+          "level": 3,
+          "text": "ReadOnlyEffects",
+          "anchor": "readonlyeffects"
+        },
+        {
+          "level": 3,
+          "text": "MutatingEffects",
+          "anchor": "mutatingeffects"
+        },
+        {
+          "level": 3,
+          "text": "Effects",
+          "anchor": "effects"
+        }
+      ]
     },
     {
       "path": "typescript-src-effects_exec.md",
       "title": "typescript/src/effects_exec",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/effects_exec",
+          "anchor": "typescriptsrceffects_exec"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/effects_exec",
+          "anchor": "typescriptsrceffects_exec"
+        },
+        {
+          "level": 3,
+          "text": "SpawnedChild",
+          "anchor": "spawnedchild"
+        },
+        {
+          "level": 3,
+          "text": "spawnConcurrent",
+          "anchor": "spawnconcurrent"
+        },
+        {
+          "level": 3,
+          "text": "HttpResult",
+          "anchor": "httpresult"
+        },
+        {
+          "level": 3,
+          "text": "httpSync",
+          "anchor": "httpsync"
+        }
+      ]
     },
     {
       "path": "typescript-src-env.md",
       "title": "typescript/src/env",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/env",
+          "anchor": "typescriptsrcenv"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/env",
+          "anchor": "typescriptsrcenv"
+        },
+        {
+          "level": 3,
+          "text": "resolveEnvValue",
+          "anchor": "resolveenvvalue"
+        }
+      ]
     },
     {
       "path": "typescript-src-errors.md",
       "title": "typescript/src/errors",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/errors",
+          "anchor": "typescriptsrcerrors"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/errors",
+          "anchor": "typescriptsrcerrors"
+        },
+        {
+          "level": 3,
+          "text": "RegistrationError",
+          "anchor": "registrationerror"
+        },
+        {
+          "level": 3,
+          "text": "ParseError",
+          "anchor": "parseerror"
+        },
+        {
+          "level": 3,
+          "text": "InvokeError",
+          "anchor": "invokeerror"
+        },
+        {
+          "level": 3,
+          "text": "EffectFailed",
+          "anchor": "effectfailed"
+        },
+        {
+          "level": 3,
+          "text": "DryRunTruncated",
+          "anchor": "dryruntruncated"
+        },
+        {
+          "level": 3,
+          "text": "errListOfBadItemType",
+          "anchor": "errlistofbaditemtype"
+        },
+        {
+          "level": 3,
+          "text": "errDictOfBadValueType",
+          "anchor": "errdictofbadvaluetype"
+        },
+        {
+          "level": 3,
+          "text": "errWithConfigConflictModeBadMode",
+          "anchor": "errwithconfigconflictmodebadmode"
+        },
+        {
+          "level": 3,
+          "text": "errHandshakeEnvVarEmptyHelp",
+          "anchor": "errhandshakeenvvaremptyhelp"
+        },
+        {
+          "level": 3,
+          "text": "errDuplicateHandshakeEnvVar",
+          "anchor": "errduplicatehandshakeenvvar"
+        },
+        {
+          "level": 3,
+          "text": "errConnectionEnvVarEmptyHelp",
+          "anchor": "errconnectionenvvaremptyhelp"
+        },
+        {
+          "level": 3,
+          "text": "errConnectionEnvIsAlreadyInfraRoot",
+          "anchor": "errconnectionenvisalreadyinfraroot"
+        },
+        {
+          "level": 3,
+          "text": "errConnectionEnvIsAlreadyHandshake",
+          "anchor": "errconnectionenvisalreadyhandshake"
+        },
+        {
+          "level": 3,
+          "text": "errConnectionURLFlagUnbound",
+          "anchor": "errconnectionurlflagunbound"
+        },
+        {
+          "level": 3,
+          "text": "errConnectionEnvWithoutURLFlag",
+          "anchor": "errconnectionenvwithouturlflag"
+        },
+        {
+          "level": 3,
+          "text": "errConnectionEnvWithPerFlagEnv",
+          "anchor": "errconnectionenvwithperflagenv"
+        },
+        {
+          "level": 3,
+          "text": "errFlagConnectionEnvUndeclared",
+          "anchor": "errflagconnectionenvundeclared"
+        },
+        {
+          "level": 3,
+          "text": "errConflictModeBadMode",
+          "anchor": "errconflictmodebadmode"
+        },
+        {
+          "level": 3,
+          "text": "errInvalidTagName",
+          "anchor": "errinvalidtagname"
+        },
+        {
+          "level": 3,
+          "text": "errArgHelpEmpty",
+          "anchor": "errarghelpempty"
+        },
+        {
+          "level": 3,
+          "text": "errRequiredArgCannotHaveDefault",
+          "anchor": "errrequiredargcannothavedefault"
+        },
+        {
+          "level": 3,
+          "text": "errArgListTypeRequiresVariadic",
+          "anchor": "errarglisttyperequiresvariadic"
+        },
+        {
+          "level": 3,
+          "text": "errArgListItemTypeBad",
+          "anchor": "errarglistitemtypebad"
+        },
+        {
+          "level": 3,
+          "text": "errArgDictTypeNotSupported",
+          "anchor": "errargdicttypenotsupported"
+        },
+        {
+          "level": 3,
+          "text": "errArgTypeBad",
+          "anchor": "errargtypebad"
+        },
+        {
+          "level": 3,
+          "text": "errArgChoicesIncompatibleListType",
+          "anchor": "errargchoicesincompatiblelisttype"
+        },
+        {
+          "level": 3,
+          "text": "errArgChoicesIncompatibleBool",
+          "anchor": "errargchoicesincompatiblebool"
+        },
+        {
+          "level": 3,
+          "text": "errArgChoicesEmpty",
+          "anchor": "errargchoicesempty"
+        },
+        {
+          "level": 3,
+          "text": "errArgChoiceTypeMismatch",
+          "anchor": "errargchoicetypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errArgListDefaultMustBeList",
+          "anchor": "errarglistdefaultmustbelist"
+        },
+        {
+          "level": 3,
+          "text": "errArgExplicitEmptyDefaultRedundantList",
+          "anchor": "errargexplicitemptydefaultredundantlist"
+        },
+        {
+          "level": 3,
+          "text": "errArgDefaultElementTypeMismatch",
+          "anchor": "errargdefaultelementtypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errArgStrDefaultTypeMismatch",
+          "anchor": "errargstrdefaulttypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errArgIntDefaultTypeMismatch",
+          "anchor": "errargintdefaulttypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errArgFloatDefaultTypeMismatch",
+          "anchor": "errargfloatdefaulttypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errArgBoolDefaultTypeMismatch",
+          "anchor": "errargbooldefaulttypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errArgDefaultNotInChoices",
+          "anchor": "errargdefaultnotinchoices"
+        },
+        {
+          "level": 3,
+          "text": "errFlagHelpEmpty",
+          "anchor": "errflaghelpempty"
+        },
+        {
+          "level": 3,
+          "text": "errFlagForceReserved",
+          "anchor": "errflagforcereserved"
+        },
+        {
+          "level": 3,
+          "text": "errFlagNoPrefixReserved",
+          "anchor": "errflagnoprefixreserved"
+        },
+        {
+          "level": 3,
+          "text": "errFlagRepeatableIncompatibleBool",
+          "anchor": "errflagrepeatableincompatiblebool"
+        },
+        {
+          "level": 3,
+          "text": "errFlagChoicesIncompatibleCompound",
+          "anchor": "errflagchoicesincompatiblecompound"
+        },
+        {
+          "level": 3,
+          "text": "errFlagRepeatableRequiresExplicitUnique",
+          "anchor": "errflagrepeatablerequiresexplicitunique"
+        },
+        {
+          "level": 3,
+          "text": "errFlagUniqueRequiresRepeatable",
+          "anchor": "errflaguniquerequiresrepeatable"
+        },
+        {
+          "level": 3,
+          "text": "errFlagEnvSeparatorRequiresRepeatable",
+          "anchor": "errflagenvseparatorrequiresrepeatable"
+        },
+        {
+          "level": 3,
+          "text": "errFlagEnvSeparatorRequiresEnv",
+          "anchor": "errflagenvseparatorrequiresenv"
+        },
+        {
+          "level": 3,
+          "text": "errFlagRepeatableEnvRequiresSeparator",
+          "anchor": "errflagrepeatableenvrequiresseparator"
+        },
+        {
+          "level": 3,
+          "text": "errFlagEnvSeparatorSingleChar",
+          "anchor": "errflagenvseparatorsinglechar"
+        },
+        {
+          "level": 3,
+          "text": "errFlagEnvSeparatorBackslash",
+          "anchor": "errflagenvseparatorbackslash"
+        },
+        {
+          "level": 3,
+          "text": "errFlagChoicesIncompatibleBool",
+          "anchor": "errflagchoicesincompatiblebool"
+        },
+        {
+          "level": 3,
+          "text": "errFlagChoicesEmpty",
+          "anchor": "errflagchoicesempty"
+        },
+        {
+          "level": 3,
+          "text": "errFlagChoiceTypeMismatch",
+          "anchor": "errflagchoicetypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errFlagIntDefaultTypeMismatch",
+          "anchor": "errflagintdefaulttypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errFlagFloatDefaultTypeMismatch",
+          "anchor": "errflagfloatdefaulttypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDictDefaultMustBeMap",
+          "anchor": "errflagdictdefaultmustbemap"
+        },
+        {
+          "level": 3,
+          "text": "errFlagExplicitEmptyDefaultRedundantDict",
+          "anchor": "errflagexplicitemptydefaultredundantdict"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDefaultValueForKey",
+          "anchor": "errflagdefaultvalueforkey"
+        },
+        {
+          "level": 3,
+          "text": "errFlagListDefaultMustBeSlice",
+          "anchor": "errflaglistdefaultmustbeslice"
+        },
+        {
+          "level": 3,
+          "text": "errFlagExplicitEmptyDefaultRedundantList",
+          "anchor": "errflagexplicitemptydefaultredundantlist"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDefaultElementError",
+          "anchor": "errflagdefaultelementerror"
+        },
+        {
+          "level": 3,
+          "text": "errFlagRepeatableDefaultMustBeList",
+          "anchor": "errflagrepeatabledefaultmustbelist"
+        },
+        {
+          "level": 3,
+          "text": "errFlagExplicitEmptyDefaultRedundantRepeatable",
+          "anchor": "errflagexplicitemptydefaultredundantrepeatable"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDefaultElementTypeMismatch",
+          "anchor": "errflagdefaultelementtypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDefaultNotInChoices",
+          "anchor": "errflagdefaultnotinchoices"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDictCannotCombineRepeatable",
+          "anchor": "errflagdictcannotcombinerepeatable"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDictCannotCombineUnique",
+          "anchor": "errflagdictcannotcombineunique"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDictCannotCombineChoices",
+          "anchor": "errflagdictcannotcombinechoices"
+        },
+        {
+          "level": 3,
+          "text": "errFlagConflictModeBad",
+          "anchor": "errflagconflictmodebad"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDictCannotUseEnvSeparator",
+          "anchor": "errflagdictcannotuseenvseparator"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDictDefaultKeyMustBeString",
+          "anchor": "errflagdictdefaultkeymustbestring"
+        },
+        {
+          "level": 3,
+          "text": "errArgDictTypeNotSupportedOnArgs",
+          "anchor": "errargdicttypenotsupportedonargs"
+        },
+        {
+          "level": 3,
+          "text": "errArgListTypeOnArgsRequiresVariadicTrue",
+          "anchor": "errarglisttypeonargsrequiresvariadictrue"
+        },
+        {
+          "level": 3,
+          "text": "errCommandImpliesValueMustBeBool",
+          "anchor": "errcommandimpliesvaluemustbebool"
+        },
+        {
+          "level": 3,
+          "text": "errAppHelpEmpty",
+          "anchor": "errapphelpempty"
+        },
+        {
+          "level": 3,
+          "text": "errDuplicateInfraRootEnvVar",
+          "anchor": "errduplicateinfrarootenvvar"
+        },
+        {
+          "level": 3,
+          "text": "errHandshakeIsAlreadyInfraRoot",
+          "anchor": "errhandshakeisalreadyinfraroot"
+        },
+        {
+          "level": 3,
+          "text": "errCannotUseBothChecksAndEmbed",
+          "anchor": "errcannotusebothchecksandembed"
+        },
+        {
+          "level": 3,
+          "text": "errChecksPathNotExist",
+          "anchor": "errcheckspathnotexist"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlAppMismatch",
+          "anchor": "errcheckstomlappmismatch"
+        },
+        {
+          "level": 3,
+          "text": "errTestCoverageCannotCreateDir",
+          "anchor": "errtestcoveragecannotcreatedir"
+        },
+        {
+          "level": 3,
+          "text": "errCannotRegisterCheckNotEnabled",
+          "anchor": "errcannotregisterchecknotenabled"
+        },
+        {
+          "level": 3,
+          "text": "errCannotRegisterCheckNotDeclared",
+          "anchor": "errcannotregisterchecknotdeclared"
+        },
+        {
+          "level": 3,
+          "text": "errCheckDuplicateRegistration",
+          "anchor": "errcheckduplicateregistration"
+        },
+        {
+          "level": 3,
+          "text": "errCheckSeverityMismatch",
+          "anchor": "errcheckseveritymismatch"
+        },
+        {
+          "level": 3,
+          "text": "errTagContractViolation",
+          "anchor": "errtagcontractviolation"
+        },
+        {
+          "level": 3,
+          "text": "errCommandConfigFieldsUnknownField",
+          "anchor": "errcommandconfigfieldsunknownfield"
+        },
+        {
+          "level": 3,
+          "text": "errConfigFieldFlagDefaultDisagree",
+          "anchor": "errconfigfieldflagdefaultdisagree"
+        },
+        {
+          "level": 3,
+          "text": "errRelativeToRootUndeclared",
+          "anchor": "errrelativetorootundeclared"
+        },
+        {
+          "level": 3,
+          "text": "errFlagRelativeToRootUndeclared",
+          "anchor": "errflagrelativetorootundeclared"
+        },
+        {
+          "level": 3,
+          "text": "errCommandFlagRelativeToRootUndeclared",
+          "anchor": "errcommandflagrelativetorootundeclared"
+        },
+        {
+          "level": 3,
+          "text": "errCommandMissingHelp",
+          "anchor": "errcommandmissinghelp"
+        },
+        {
+          "level": 3,
+          "text": "errCommandPassthroughCannotHave",
+          "anchor": "errcommandpassthroughcannothave"
+        },
+        {
+          "level": 3,
+          "text": "errGlobalFlagNameReserved",
+          "anchor": "errglobalflagnamereserved"
+        },
+        {
+          "level": 3,
+          "text": "errGlobalShortFlagReserved",
+          "anchor": "errglobalshortflagreserved"
+        },
+        {
+          "level": 3,
+          "text": "errDuplicateGlobalFlag",
+          "anchor": "errduplicateglobalflag"
+        },
+        {
+          "level": 3,
+          "text": "errGroupHelpEmpty",
+          "anchor": "errgrouphelpempty"
+        },
+        {
+          "level": 3,
+          "text": "errGroupCollidesWithCommand",
+          "anchor": "errgroupcollideswithcommand"
+        },
+        {
+          "level": 3,
+          "text": "errGroupAlreadyRegistered",
+          "anchor": "errgroupalreadyregistered"
+        },
+        {
+          "level": 3,
+          "text": "errCommandCollidesWithGroup",
+          "anchor": "errcommandcollideswithgroup"
+        },
+        {
+          "level": 3,
+          "text": "errDeprecatedNameEmpty",
+          "anchor": "errdeprecatednameempty"
+        },
+        {
+          "level": 3,
+          "text": "errDeprecatedMessageEmpty",
+          "anchor": "errdeprecatedmessageempty"
+        },
+        {
+          "level": 3,
+          "text": "errDeprecatedCollidesCommand",
+          "anchor": "errdeprecatedcollidescommand"
+        },
+        {
+          "level": 3,
+          "text": "errDeprecatedCollidesGroup",
+          "anchor": "errdeprecatedcollidesgroup"
+        },
+        {
+          "level": 3,
+          "text": "errDeprecatedAlreadyRegistered",
+          "anchor": "errdeprecatedalreadyregistered"
+        },
+        {
+          "level": 3,
+          "text": "errCommandMutexMinFlags",
+          "anchor": "errcommandmutexminflags"
+        },
+        {
+          "level": 3,
+          "text": "errCommandFlagInMultipleMutex",
+          "anchor": "errcommandflaginmultiplemutex"
+        },
+        {
+          "level": 3,
+          "text": "errCommandFlagCollidesGlobal",
+          "anchor": "errcommandflagcollidesglobal"
+        },
+        {
+          "level": 3,
+          "text": "errCommandDuplicateFlag",
+          "anchor": "errcommandduplicateflag"
+        },
+        {
+          "level": 3,
+          "text": "errCommandDuplicateArg",
+          "anchor": "errcommandduplicatearg"
+        },
+        {
+          "level": 3,
+          "text": "errCommandAtMostOneVariadic",
+          "anchor": "errcommandatmostonevariadic"
+        },
+        {
+          "level": 3,
+          "text": "errCommandVariadicMustBeLast",
+          "anchor": "errcommandvariadicmustbelast"
+        },
+        {
+          "level": 3,
+          "text": "errCommandFlagMissingHelp",
+          "anchor": "errcommandflagmissinghelp"
+        },
+        {
+          "level": 3,
+          "text": "errCommandEnvVarPrefix",
+          "anchor": "errcommandenvvarprefix"
+        },
+        {
+          "level": 3,
+          "text": "errCommandCoRequiredMinFlags",
+          "anchor": "errcommandcorequiredminflags"
+        },
+        {
+          "level": 3,
+          "text": "errCommandCoRequiredUnknownFlag",
+          "anchor": "errcommandcorequiredunknownflag"
+        },
+        {
+          "level": 3,
+          "text": "errCommandCoRequiredDuplicate",
+          "anchor": "errcommandcorequiredduplicate"
+        },
+        {
+          "level": 3,
+          "text": "errCommandRequiresSameFlag",
+          "anchor": "errcommandrequiressameflag"
+        },
+        {
+          "level": 3,
+          "text": "errCommandRequiresUnknownFlag",
+          "anchor": "errcommandrequiresunknownflag"
+        },
+        {
+          "level": 3,
+          "text": "errCommandImpliesSameFlag",
+          "anchor": "errcommandimpliessameflag"
+        },
+        {
+          "level": 3,
+          "text": "errCommandImpliesUnknownFlag",
+          "anchor": "errcommandimpliesunknownflag"
+        },
+        {
+          "level": 3,
+          "text": "errCommandImpliesTriggerNotBool",
+          "anchor": "errcommandimpliestriggernotbool"
+        },
+        {
+          "level": 3,
+          "text": "errCommandImpliesTargetNotBool",
+          "anchor": "errcommandimpliestargetnotbool"
+        },
+        {
+          "level": 3,
+          "text": "errExpectedStrGot",
+          "anchor": "errexpectedstrgot"
+        },
+        {
+          "level": 3,
+          "text": "errExpectedIntGot",
+          "anchor": "errexpectedintgot"
+        },
+        {
+          "level": 3,
+          "text": "errExpectedFloatGot",
+          "anchor": "errexpectedfloatgot"
+        },
+        {
+          "level": 3,
+          "text": "errExpectedBoolGot",
+          "anchor": "errexpectedboolgot"
+        },
+        {
+          "level": 3,
+          "text": "errHermeticConfigMutuallyExclusive",
+          "anchor": "errhermeticconfigmutuallyexclusive"
+        },
+        {
+          "level": 3,
+          "text": "errHermeticWithConfigCommands",
+          "anchor": "errhermeticwithconfigcommands"
+        },
+        {
+          "level": 3,
+          "text": "errExpectedBoolean",
+          "anchor": "errexpectedboolean"
+        },
+        {
+          "level": 3,
+          "text": "errExpectedInteger",
+          "anchor": "errexpectedinteger"
+        },
+        {
+          "level": 3,
+          "text": "errExpectedFloat",
+          "anchor": "errexpectedfloat"
+        },
+        {
+          "level": 3,
+          "text": "errNaNNotAllowed",
+          "anchor": "errnannotallowed"
+        },
+        {
+          "level": 3,
+          "text": "errInfNotAllowed",
+          "anchor": "errinfnotallowed"
+        },
+        {
+          "level": 3,
+          "text": "errAtPrefixStdinOnce",
+          "anchor": "erratprefixstdinonce"
+        },
+        {
+          "level": 3,
+          "text": "errAtPrefixCannotReadStdin",
+          "anchor": "erratprefixcannotreadstdin"
+        },
+        {
+          "level": 3,
+          "text": "errAtPrefixFileTooLarge",
+          "anchor": "erratprefixfiletoolarge"
+        },
+        {
+          "level": 3,
+          "text": "errAtPrefixFileNotFound",
+          "anchor": "erratprefixfilenotfound"
+        },
+        {
+          "level": 3,
+          "text": "errAtPrefixCannotReadFile",
+          "anchor": "erratprefixcannotreadfile"
+        },
+        {
+          "level": 3,
+          "text": "errBoolFlagNoValue",
+          "anchor": "errboolflagnovalue"
+        },
+        {
+          "level": 3,
+          "text": "errBoolNegationNoValue",
+          "anchor": "errboolnegationnovalue"
+        },
+        {
+          "level": 3,
+          "text": "errUnknownFlag",
+          "anchor": "errunknownflag"
+        },
+        {
+          "level": 3,
+          "text": "errFlagRequiresValue",
+          "anchor": "errflagrequiresvalue"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDuplicateValue",
+          "anchor": "errflagduplicatevalue"
+        },
+        {
+          "level": 3,
+          "text": "errWrappedFromEnvVar",
+          "anchor": "errwrappedfromenvvar"
+        },
+        {
+          "level": 3,
+          "text": "errListFlagEnvRequiresSeparator",
+          "anchor": "errlistflagenvrequiresseparator"
+        },
+        {
+          "level": 3,
+          "text": "errFlagDuplicateValueFromEnv",
+          "anchor": "errflagduplicatevaluefromenv"
+        },
+        {
+          "level": 3,
+          "text": "errInvalidBoolEnvValue",
+          "anchor": "errinvalidboolenvvalue"
+        },
+        {
+          "level": 3,
+          "text": "errFlagErrFromEnvVar",
+          "anchor": "errflagerrfromenvvar"
+        },
+        {
+          "level": 3,
+          "text": "errConfigValueError",
+          "anchor": "errconfigvalueerror"
+        },
+        {
+          "level": 3,
+          "text": "errFlagSetInBothAndConfig",
+          "anchor": "errflagsetinbothandconfig"
+        },
+        {
+          "level": 3,
+          "text": "errConfigValueDuplicate",
+          "anchor": "errconfigvalueduplicate"
+        },
+        {
+          "level": 3,
+          "text": "errFlagSetInBothCliAndConfig",
+          "anchor": "errflagsetinbothcliandconfig"
+        },
+        {
+          "level": 3,
+          "text": "errMutuallyExclusive",
+          "anchor": "errmutuallyexclusive"
+        },
+        {
+          "level": 3,
+          "text": "errOneOfRequired",
+          "anchor": "erroneofrequired"
+        },
+        {
+          "level": 3,
+          "text": "errImpliesConflict",
+          "anchor": "errimpliesconflict"
+        },
+        {
+          "level": 3,
+          "text": "errFlagsMustBeUsedTogether",
+          "anchor": "errflagsmustbeusedtogether"
+        },
+        {
+          "level": 3,
+          "text": "errFlagRequiresFlag",
+          "anchor": "errflagrequiresflag"
+        },
+        {
+          "level": 3,
+          "text": "errFlagValueError",
+          "anchor": "errflagvalueerror"
+        },
+        {
+          "level": 3,
+          "text": "errMissingRequiredArgument",
+          "anchor": "errmissingrequiredargument"
+        },
+        {
+          "level": 3,
+          "text": "errUnexpectedArgument",
+          "anchor": "errunexpectedargument"
+        },
+        {
+          "level": 3,
+          "text": "errArgInvalidChoice",
+          "anchor": "errarginvalidchoice"
+        },
+        {
+          "level": 3,
+          "text": "errFlagInvalidChoice",
+          "anchor": "errflaginvalidchoice"
+        },
+        {
+          "level": 3,
+          "text": "errArgumentWrapped",
+          "anchor": "errargumentwrapped"
+        },
+        {
+          "level": 3,
+          "text": "errArgumentExpectedFloat",
+          "anchor": "errargumentexpectedfloat"
+        },
+        {
+          "level": 3,
+          "text": "errDictJsonValueForKeyMustBeString",
+          "anchor": "errdictjsonvalueforkeymustbestring"
+        },
+        {
+          "level": 3,
+          "text": "errDictJsonValueForKeyMustBeInteger",
+          "anchor": "errdictjsonvalueforkeymustbeinteger"
+        },
+        {
+          "level": 3,
+          "text": "errDictJsonValueForKeyMustBeNumber",
+          "anchor": "errdictjsonvalueforkeymustbenumber"
+        },
+        {
+          "level": 3,
+          "text": "errDictUnsupportedValueType",
+          "anchor": "errdictunsupportedvaluetype"
+        },
+        {
+          "level": 3,
+          "text": "errDictInvalidJson",
+          "anchor": "errdictinvalidjson"
+        },
+        {
+          "level": 3,
+          "text": "errDictJsonValueMustBeObject",
+          "anchor": "errdictjsonvaluemustbeobject"
+        },
+        {
+          "level": 3,
+          "text": "errDictExpectedKeyValueOrJson",
+          "anchor": "errdictexpectedkeyvalueorjson"
+        },
+        {
+          "level": 3,
+          "text": "errDictEmptyKey",
+          "anchor": "errdictemptykey"
+        },
+        {
+          "level": 3,
+          "text": "errDictValueForKey",
+          "anchor": "errdictvalueforkey"
+        },
+        {
+          "level": 3,
+          "text": "errDictDuplicateKey",
+          "anchor": "errdictduplicatekey"
+        },
+        {
+          "level": 3,
+          "text": "errDictInvalidJsonInEnvVar",
+          "anchor": "errdictinvalidjsoninenvvar"
+        },
+        {
+          "level": 3,
+          "text": "errDictEnvVarMustBeJsonObject",
+          "anchor": "errdictenvvarmustbejsonobject"
+        },
+        {
+          "level": 3,
+          "text": "errConfigFieldNameInvalid",
+          "anchor": "errconfigfieldnameinvalid"
+        },
+        {
+          "level": 3,
+          "text": "errConfigFieldNameReserved",
+          "anchor": "errconfigfieldnamereserved"
+        },
+        {
+          "level": 3,
+          "text": "errConfigFieldHelpRequired",
+          "anchor": "errconfigfieldhelprequired"
+        },
+        {
+          "level": 3,
+          "text": "errConfigFieldTypeBad",
+          "anchor": "errconfigfieldtypebad"
+        },
+        {
+          "level": 3,
+          "text": "errDuplicateConfigField",
+          "anchor": "errduplicateconfigfield"
+        },
+        {
+          "level": 3,
+          "text": "errConfigFieldConflictsFramework",
+          "anchor": "errconfigfieldconflictsframework"
+        },
+        {
+          "level": 3,
+          "text": "errFrameworkFieldMustStartUnderscore",
+          "anchor": "errframeworkfieldmuststartunderscore"
+        },
+        {
+          "level": 3,
+          "text": "errFrameworkFieldNameInvalid",
+          "anchor": "errframeworkfieldnameinvalid"
+        },
+        {
+          "level": 3,
+          "text": "errFrameworkFieldHelpRequired",
+          "anchor": "errframeworkfieldhelprequired"
+        },
+        {
+          "level": 3,
+          "text": "errDuplicateFrameworkField",
+          "anchor": "errduplicateframeworkfield"
+        },
+        {
+          "level": 3,
+          "text": "errFrameworkFieldConflictsUser",
+          "anchor": "errframeworkfieldconflictsuser"
+        },
+        {
+          "level": 3,
+          "text": "errConfigFieldDefaultMismatch",
+          "anchor": "errconfigfielddefaultmismatch"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedBooleanGot",
+          "anchor": "errconfigexpectedbooleangot"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedIntegerGotFloat",
+          "anchor": "errconfigexpectedintegergotfloat"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedIntegerGot",
+          "anchor": "errconfigexpectedintegergot"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedStringGot",
+          "anchor": "errconfigexpectedstringgot"
+        },
+        {
+          "level": 3,
+          "text": "errConfigUnsupportedFlagType",
+          "anchor": "errconfigunsupportedflagtype"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedIntGotFloat",
+          "anchor": "errconfigexpectedintgotfloat"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedObjectForDictFlag",
+          "anchor": "errconfigexpectedobjectfordictflag"
+        },
+        {
+          "level": 3,
+          "text": "errConfigDictKeyTypeMismatch",
+          "anchor": "errconfigdictkeytypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedArrayForListFlag",
+          "anchor": "errconfigexpectedarrayforlistflag"
+        },
+        {
+          "level": 3,
+          "text": "errConfigElementTypeMismatch",
+          "anchor": "errconfigelementtypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedScalarGotArray",
+          "anchor": "errconfigexpectedscalargotarray"
+        },
+        {
+          "level": 3,
+          "text": "errConfigExpectedArrayForRepeatableFlag",
+          "anchor": "errconfigexpectedarrayforrepeatableflag"
+        },
+        {
+          "level": 3,
+          "text": "errCommandDeprecated",
+          "anchor": "errcommanddeprecated"
+        },
+        {
+          "level": 3,
+          "text": "errUnknownCommandInGroup",
+          "anchor": "errunknowncommandingroup"
+        },
+        {
+          "level": 3,
+          "text": "errUnknownCommand",
+          "anchor": "errunknowncommand"
+        },
+        {
+          "level": 3,
+          "text": "errNoCommandSpecified",
+          "anchor": "errnocommandspecified"
+        },
+        {
+          "level": 3,
+          "text": "errPassthroughArgsNotStringSlice",
+          "anchor": "errpassthroughargsnotstringslice"
+        },
+        {
+          "level": 3,
+          "text": "errUnknownParameterForPassthroughCommand",
+          "anchor": "errunknownparameterforpassthroughcommand"
+        },
+        {
+          "level": 3,
+          "text": "errUnknownParameterForCommand",
+          "anchor": "errunknownparameterforcommand"
+        },
+        {
+          "level": 3,
+          "text": "errCallPathIsGroup",
+          "anchor": "errcallpathisgroup"
+        },
+        {
+          "level": 3,
+          "text": "errDictFlagExpectedMapType",
+          "anchor": "errdictflagexpectedmaptype"
+        },
+        {
+          "level": 3,
+          "text": "errNoteTextEmpty",
+          "anchor": "errnotetextempty"
+        },
+        {
+          "level": 3,
+          "text": "errProblemTextEmpty",
+          "anchor": "errproblemtextempty"
+        },
+        {
+          "level": 3,
+          "text": "errOutcomeMessageEmpty",
+          "anchor": "erroutcomemessageempty"
+        },
+        {
+          "level": 3,
+          "text": "errPassedWithProblems",
+          "anchor": "errpassedwithproblems"
+        },
+        {
+          "level": 3,
+          "text": "errSkipReasonEmpty",
+          "anchor": "errskipreasonempty"
+        },
+        {
+          "level": 3,
+          "text": "errSkippedWithProblems",
+          "anchor": "errskippedwithproblems"
+        },
+        {
+          "level": 3,
+          "text": "errFoundNoProblems",
+          "anchor": "errfoundnoproblems"
+        },
+        {
+          "level": 3,
+          "text": "errCheckOutcomeDirectConstruction",
+          "anchor": "errcheckoutcomedirectconstruction"
+        },
+        {
+          "level": 3,
+          "text": "errUnknownCheckOutcomeKind",
+          "anchor": "errunknowncheckoutcomekind"
+        },
+        {
+          "level": 3,
+          "text": "errDuplicateCheckDef",
+          "anchor": "errduplicatecheckdef"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlParse",
+          "anchor": "errcheckstomlparse"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlUnknownTopLevelKey",
+          "anchor": "errcheckstomlunknowntoplevelkey"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlMissingApp",
+          "anchor": "errcheckstomlmissingapp"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlAppNotString",
+          "anchor": "errcheckstomlappnotstring"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlChecksMustBeTable",
+          "anchor": "errcheckstomlchecksmustbetable"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlInvalidCheckName",
+          "anchor": "errcheckstomlinvalidcheckname"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlCheckMustBeTable",
+          "anchor": "errcheckstomlcheckmustbetable"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlUnknownField",
+          "anchor": "errcheckstomlunknownfield"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlMissingField",
+          "anchor": "errcheckstomlmissingfield"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlTagsMustBeStrings",
+          "anchor": "errcheckstomltagsmustbestrings"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlTagsEntriesMustBeStrings",
+          "anchor": "errcheckstomltagsentriesmustbestrings"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlSeverityInvalid",
+          "anchor": "errcheckstomlseverityinvalid"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlBoolFieldInvalid",
+          "anchor": "errcheckstomlboolfieldinvalid"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlDependsOnMustBeStrings",
+          "anchor": "errcheckstomldependsonmustbestrings"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlDependsOnEntriesMustBeStrings",
+          "anchor": "errcheckstomldependsonentriesmustbestrings"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlScopeMustBeString",
+          "anchor": "errcheckstomlscopemustbestring"
+        },
+        {
+          "level": 3,
+          "text": "errChecksTomlDependsOnUnknown",
+          "anchor": "errcheckstomldependsonunknown"
+        },
+        {
+          "level": 3,
+          "text": "errCheckDependencyCycleInvolving",
+          "anchor": "errcheckdependencycycleinvolving"
+        },
+        {
+          "level": 3,
+          "text": "errCheckDependencyCycle",
+          "anchor": "errcheckdependencycycle"
+        },
+        {
+          "level": 3,
+          "text": "errCheckDependencyCycleDetected",
+          "anchor": "errcheckdependencycycledetected"
+        },
+        {
+          "level": 3,
+          "text": "errCheckOutcomeNotMinted",
+          "anchor": "errcheckoutcomenotminted"
+        },
+        {
+          "level": 3,
+          "text": "errInvalidGlobPattern",
+          "anchor": "errinvalidglobpattern"
+        },
+        {
+          "level": 3,
+          "text": "errCheckProviderSeverityMismatch",
+          "anchor": "errcheckproviderseveritymismatch"
+        },
+        {
+          "level": 3,
+          "text": "errCheckProviderMustBeCallable",
+          "anchor": "errcheckprovidermustbecallable"
+        },
+        {
+          "level": 3,
+          "text": "errCheckProviderMustReturnList",
+          "anchor": "errcheckprovidermustreturnlist"
+        },
+        {
+          "level": 3,
+          "text": "errCheckProviderNonCheckSpec",
+          "anchor": "errcheckprovidernoncheckspec"
+        },
+        {
+          "level": 3,
+          "text": "errChecksNotEnabled",
+          "anchor": "errchecksnotenabled"
+        },
+        {
+          "level": 3,
+          "text": "errCannotDetermineProjectIDNoPackageJson",
+          "anchor": "errcannotdetermineprojectidnopackagejson"
+        },
+        {
+          "level": 3,
+          "text": "errCannotDetermineProjectIDReadError",
+          "anchor": "errcannotdetermineprojectidreaderror"
+        },
+        {
+          "level": 3,
+          "text": "errCannotDetermineProjectIDNoName",
+          "anchor": "errcannotdetermineprojectidnoname"
+        },
+        {
+          "level": 3,
+          "text": "errSchemaMismatch",
+          "anchor": "errschemamismatch"
+        },
+        {
+          "level": 3,
+          "text": "errTagExprUnexpectedChar",
+          "anchor": "errtagexprunexpectedchar"
+        },
+        {
+          "level": 3,
+          "text": "errTagExprEmpty",
+          "anchor": "errtagexprempty"
+        },
+        {
+          "level": 3,
+          "text": "errTagExprUnexpectedToken",
+          "anchor": "errtagexprunexpectedtoken"
+        },
+        {
+          "level": 3,
+          "text": "errTagExprUnexpectedEnd",
+          "anchor": "errtagexprunexpectedend"
+        },
+        {
+          "level": 3,
+          "text": "errTagExprExpectedRParen",
+          "anchor": "errtagexprexpectedrparen"
+        },
+        {
+          "level": 3,
+          "text": "errInfraValueUndeclared",
+          "anchor": "errinfravalueundeclared"
+        },
+        {
+          "level": 3,
+          "text": "errConnectionValueUndeclared",
+          "anchor": "errconnectionvalueundeclared"
+        },
+        {
+          "level": 3,
+          "text": "errNoSourceInfo",
+          "anchor": "errnosourceinfo"
+        },
+        {
+          "level": 3,
+          "text": "errHandlerReturnInvalid",
+          "anchor": "errhandlerreturninvalid"
+        },
+        {
+          "level": 3,
+          "text": "errOutcomeExitCodeNotInteger",
+          "anchor": "erroutcomeexitcodenotinteger"
+        },
+        {
+          "level": 3,
+          "text": "errGetNoSuchKey",
+          "anchor": "errgetnosuchkey"
+        },
+        {
+          "level": 3,
+          "text": "errGetKeyNil",
+          "anchor": "errgetkeynil"
+        },
+        {
+          "level": 3,
+          "text": "errGetTypeMismatch",
+          "anchor": "errgettypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errGetOptNoSuchKey",
+          "anchor": "errgetoptnosuchkey"
+        },
+        {
+          "level": 3,
+          "text": "errGetOptTypeMismatch",
+          "anchor": "errgetopttypemismatch"
+        },
+        {
+          "level": 3,
+          "text": "errJsonSchemaRouteError",
+          "anchor": "errjsonschemarouteerror"
+        },
+        {
+          "level": 3,
+          "text": "errJsonSchemaIsGroup",
+          "anchor": "errjsonschemaisgroup"
+        },
+        {
+          "level": 3,
+          "text": "errRouterCommandMustBeString",
+          "anchor": "errroutercommandmustbestring"
+        },
+        {
+          "level": 3,
+          "text": "errFlagNameReservedByFramework",
+          "anchor": "errflagnamereservedbyframework"
+        },
+        {
+          "level": 3,
+          "text": "errFlagNameYesBanned",
+          "anchor": "errflagnameyesbanned"
+        },
+        {
+          "level": 3,
+          "text": "errFlagNameConsentReserved",
+          "anchor": "errflagnameconsentreserved"
+        },
+        {
+          "level": 3,
+          "text": "errArgNameConsentReserved",
+          "anchor": "errargnameconsentreserved"
+        },
+        {
+          "level": 3,
+          "text": "errCommandEffectMissing",
+          "anchor": "errcommandeffectmissing"
+        },
+        {
+          "level": 3,
+          "text": "errCommandEffectInvalid",
+          "anchor": "errcommandeffectinvalid"
+        },
+        {
+          "level": 3,
+          "text": "errDeprecatedCommandEffect",
+          "anchor": "errdeprecatedcommandeffect"
+        },
+        {
+          "level": 3,
+          "text": "errCommandReadOnlyConsequential",
+          "anchor": "errcommandreadonlyconsequential"
+        },
+        {
+          "level": 3,
+          "text": "errCommandReadOnlyDryRunUnsupported",
+          "anchor": "errcommandreadonlydryrununsupported"
+        },
+        {
+          "level": 3,
+          "text": "errCommandDryRunReasonMissing",
+          "anchor": "errcommanddryrunreasonmissing"
+        },
+        {
+          "level": 3,
+          "text": "errCommandDryRunReasonWithoutDeclaration",
+          "anchor": "errcommanddryrunreasonwithoutdeclaration"
+        },
+        {
+          "level": 3,
+          "text": "errHandlerVarKeywordUndeclared",
+          "anchor": "errhandlervarkeywordundeclared"
+        },
+        {
+          "level": 3,
+          "text": "errForwardingReasonEmpty",
+          "anchor": "errforwardingreasonempty"
+        },
+        {
+          "level": 3,
+          "text": "errFrameworkInternalHandlerForeign",
+          "anchor": "errframeworkinternalhandlerforeign"
+        },
+        {
+          "level": 3,
+          "text": "errGrantReasonEmpty",
+          "anchor": "errgrantreasonempty"
+        },
+        {
+          "level": 3,
+          "text": "errGrantDuplicate",
+          "anchor": "errgrantduplicate"
+        },
+        {
+          "level": 3,
+          "text": "errGrantNameInvalid",
+          "anchor": "errgrantnameinvalid"
+        },
+        {
+          "level": 3,
+          "text": "errGrantKindInvalid",
+          "anchor": "errgrantkindinvalid"
+        },
+        {
+          "level": 3,
+          "text": "errProcObserveAllowlistNotStrings",
+          "anchor": "errprocobserveallowlistnotstrings"
+        },
+        {
+          "level": 3,
+          "text": "errProcObserveAllowlistEmptyPrefix",
+          "anchor": "errprocobserveallowlistemptyprefix"
+        },
+        {
+          "level": 3,
+          "text": "errEffectMutatingInReadOnly",
+          "anchor": "erreffectmutatinginreadonly"
+        },
+        {
+          "level": 3,
+          "text": "errEffectRunNotAllowlisted",
+          "anchor": "erreffectrunnotallowlisted"
+        },
+        {
+          "level": 3,
+          "text": "errEffectGrantUndeclared",
+          "anchor": "erreffectgrantundeclared"
+        },
+        {
+          "level": 3,
+          "text": "errEffectGrantKindMismatch",
+          "anchor": "erreffectgrantkindmismatch"
+        },
+        {
+          "level": 3,
+          "text": "errEffectGrantOnObserve",
+          "anchor": "erreffectgrantonobserve"
+        },
+        {
+          "level": 3,
+          "text": "errEffectRunFailed",
+          "anchor": "erreffectrunfailed"
+        },
+        {
+          "level": 3,
+          "text": "errEffectHTTPFailed",
+          "anchor": "erreffecthttpfailed"
+        },
+        {
+          "level": 3,
+          "text": "errEffectOutputNotUTF8",
+          "anchor": "erreffectoutputnotutf8"
+        },
+        {
+          "level": 3,
+          "text": "errEffectParamRejectsCarrier",
+          "anchor": "erreffectparamrejectscarrier"
+        },
+        {
+          "level": 3,
+          "text": "errEffectOptionNotAccepted",
+          "anchor": "erreffectoptionnotaccepted"
+        },
+        {
+          "level": 3,
+          "text": "errEffectParamNotStringish",
+          "anchor": "erreffectparamnotstringish"
+        },
+        {
+          "level": 3,
+          "text": "errEffectArgvNotSequence",
+          "anchor": "erreffectargvnotsequence"
+        },
+        {
+          "level": 3,
+          "text": "errEffectArgvEmpty",
+          "anchor": "erreffectargvempty"
+        },
+        {
+          "level": 3,
+          "text": "errEffectModeNotInt",
+          "anchor": "erreffectmodenotint"
+        },
+        {
+          "level": 3,
+          "text": "errEffectHTTPMethodNotString",
+          "anchor": "erreffecthttpmethodnotstring"
+        },
+        {
+          "level": 3,
+          "text": "errEffectsUnavailable",
+          "anchor": "erreffectsunavailable"
+        },
+        {
+          "level": 3,
+          "text": "errDryRunTruncated",
+          "anchor": "errdryruntruncated"
+        },
+        {
+          "level": 3,
+          "text": "errDryRunAborted",
+          "anchor": "errdryrunaborted"
+        },
+        {
+          "level": 3,
+          "text": "promptConfirmConsequential",
+          "anchor": "promptconfirmconsequential"
+        },
+        {
+          "level": 3,
+          "text": "errConfirmNonInteractive",
+          "anchor": "errconfirmnoninteractive"
+        },
+        {
+          "level": 3,
+          "text": "errConfirmDeclined",
+          "anchor": "errconfirmdeclined"
+        },
+        {
+          "level": 3,
+          "text": "errCallConsequentialUnconsented",
+          "anchor": "errcallconsequentialunconsented"
+        },
+        {
+          "level": 3,
+          "text": "errDryRunNotSupported",
+          "anchor": "errdryrunnotsupported"
+        },
+        {
+          "level": 3,
+          "text": "errTomlBasicStringEscape",
+          "anchor": "errtomlbasicstringescape"
+        },
+        {
+          "level": 3,
+          "text": "errTomlInlineTableNewline",
+          "anchor": "errtomlinlinetablenewline"
+        },
+        {
+          "level": 3,
+          "text": "errTomlInlineTableTrailingComma",
+          "anchor": "errtomlinlinetabletrailingcomma"
+        },
+        {
+          "level": 3,
+          "text": "errTomlTimeMissingSeconds",
+          "anchor": "errtomltimemissingseconds"
+        },
+        {
+          "level": 3,
+          "text": "errTomlDatetimeMissingSeconds",
+          "anchor": "errtomldatetimemissingseconds"
+        },
+        {
+          "level": 3,
+          "text": "errTomlSpliceVerifyFailed",
+          "anchor": "errtomlspliceverifyfailed"
+        },
+        {
+          "level": 3,
+          "text": "errTomlSpliceKeyNotFound",
+          "anchor": "errtomlsplicekeynotfound"
+        },
+        {
+          "level": 3,
+          "text": "errAppConfigFormatBad",
+          "anchor": "errappconfigformatbad"
+        },
+        {
+          "level": 3,
+          "text": "errAppConfigConflictModeBad",
+          "anchor": "errappconfigconflictmodebad"
+        }
+      ]
     },
     {
       "path": "typescript-src-factories.md",
       "title": "typescript/src/factories",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/factories",
+          "anchor": "typescriptsrcfactories"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/factories",
+          "anchor": "typescriptsrcfactories"
+        },
+        {
+          "level": 3,
+          "text": "pyRepr",
+          "anchor": "pyrepr"
+        },
+        {
+          "level": 3,
+          "text": "pyTypeName",
+          "anchor": "pytypename"
+        },
+        {
+          "level": 3,
+          "text": "ElementOf",
+          "anchor": "elementof"
+        },
+        {
+          "level": 3,
+          "text": "ConflictMode",
+          "anchor": "conflictmode"
+        },
+        {
+          "level": 3,
+          "text": "FlagOpts",
+          "anchor": "flagopts"
+        },
+        {
+          "level": 3,
+          "text": "FlagDef",
+          "anchor": "flagdef"
+        },
+        {
+          "level": 3,
+          "text": "AnyFlag",
+          "anchor": "anyflag"
+        },
+        {
+          "level": 3,
+          "text": "FlagOptsView",
+          "anchor": "flagoptsview"
+        },
+        {
+          "level": 3,
+          "text": "flagOpts",
+          "anchor": "flagopts-1"
+        },
+        {
+          "level": 3,
+          "text": "schemaKind",
+          "anchor": "schemakind"
+        },
+        {
+          "level": 3,
+          "text": "elemSchemaOf",
+          "anchor": "elemschemaof"
+        },
+        {
+          "level": 3,
+          "text": "RESERVED_FRAMEWORK_FLAG_NAMES",
+          "anchor": "reserved_framework_flag_names"
+        },
+        {
+          "level": 3,
+          "text": "BANNED_FLAG_NAMES",
+          "anchor": "banned_flag_names"
+        },
+        {
+          "level": 3,
+          "text": "RESERVED_CONSENT_PARAM_NAME",
+          "anchor": "reserved_consent_param_name"
+        },
+        {
+          "level": 3,
+          "text": "flag",
+          "anchor": "flag"
+        },
+        {
+          "level": 3,
+          "text": "ArgOpts",
+          "anchor": "argopts"
+        },
+        {
+          "level": 3,
+          "text": "ArgDef",
+          "anchor": "argdef"
+        },
+        {
+          "level": 3,
+          "text": "AnyArg",
+          "anchor": "anyarg"
+        },
+        {
+          "level": 3,
+          "text": "ArgOptsView",
+          "anchor": "argoptsview"
+        },
+        {
+          "level": 3,
+          "text": "arg",
+          "anchor": "arg"
+        },
+        {
+          "level": 3,
+          "text": "FlagSet",
+          "anchor": "flagset"
+        },
+        {
+          "level": 3,
+          "text": "AnyFlagSet",
+          "anchor": "anyflagset"
+        },
+        {
+          "level": 3,
+          "text": "flagSet",
+          "anchor": "flagset-1"
+        },
+        {
+          "level": 3,
+          "text": "MutexGroup",
+          "anchor": "mutexgroup"
+        },
+        {
+          "level": 3,
+          "text": "AnyMutexGroup",
+          "anchor": "anymutexgroup"
+        },
+        {
+          "level": 3,
+          "text": "mutexGroup",
+          "anchor": "mutexgroup-1"
+        },
+        {
+          "level": 3,
+          "text": "CoRequired",
+          "anchor": "corequired"
+        },
+        {
+          "level": 3,
+          "text": "coRequired",
+          "anchor": "corequired-1"
+        },
+        {
+          "level": 3,
+          "text": "Requires",
+          "anchor": "requires"
+        },
+        {
+          "level": 3,
+          "text": "requires",
+          "anchor": "requires-1"
+        },
+        {
+          "level": 3,
+          "text": "Implies",
+          "anchor": "implies"
+        },
+        {
+          "level": 3,
+          "text": "implies",
+          "anchor": "implies-1"
+        },
+        {
+          "level": 3,
+          "text": "Dependency",
+          "anchor": "dependency"
+        },
+        {
+          "level": 3,
+          "text": "FlagMap",
+          "anchor": "flagmap"
+        },
+        {
+          "level": 3,
+          "text": "Handler",
+          "anchor": "handler"
+        },
+        {
+          "level": 3,
+          "text": "CommandDef",
+          "anchor": "commanddef"
+        },
+        {
+          "level": 3,
+          "text": "AnyCommand",
+          "anchor": "anycommand"
+        },
+        {
+          "level": 3,
+          "text": "ReadOnlyCommandSpec",
+          "anchor": "readonlycommandspec"
+        },
+        {
+          "level": 3,
+          "text": "MutatingCommandSpec",
+          "anchor": "mutatingcommandspec"
+        },
+        {
+          "level": 3,
+          "text": "validateGrants",
+          "anchor": "validategrants"
+        },
+        {
+          "level": 3,
+          "text": "validateDryRunDeclaration",
+          "anchor": "validatedryrundeclaration"
+        },
+        {
+          "level": 3,
+          "text": "validateForwarding",
+          "anchor": "validateforwarding"
+        },
+        {
+          "level": 3,
+          "text": "validateAndDedupTags",
+          "anchor": "validateanddeduptags"
+        },
+        {
+          "level": 3,
+          "text": "defineReadOnlyCommand",
+          "anchor": "definereadonlycommand"
+        },
+        {
+          "level": 3,
+          "text": "defineMutatingCommand",
+          "anchor": "definemutatingcommand"
+        },
+        {
+          "level": 3,
+          "text": "PassthroughArgs",
+          "anchor": "passthroughargs"
+        },
+        {
+          "level": 3,
+          "text": "PassthroughHandler",
+          "anchor": "passthroughhandler"
+        },
+        {
+          "level": 3,
+          "text": "PassthroughDef",
+          "anchor": "passthroughdef"
+        },
+        {
+          "level": 3,
+          "text": "readOnlyPassthrough",
+          "anchor": "readonlypassthrough"
+        },
+        {
+          "level": 3,
+          "text": "mutatingPassthrough",
+          "anchor": "mutatingpassthrough"
+        },
+        {
+          "level": 3,
+          "text": "DeprecatedDef",
+          "anchor": "deprecateddef"
+        },
+        {
+          "level": 3,
+          "text": "deprecated",
+          "anchor": "deprecated"
+        }
+      ]
     },
     {
       "path": "typescript-src-float.md",
       "title": "typescript/src/float",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/float",
+          "anchor": "typescriptsrcfloat"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/float",
+          "anchor": "typescriptsrcfloat"
+        },
+        {
+          "level": 3,
+          "text": "formatFloatCanonical",
+          "anchor": "formatfloatcanonical"
+        }
+      ]
     },
     {
       "path": "typescript-src-help.md",
       "title": "typescript/src/help",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/help",
+          "anchor": "typescriptsrchelp"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/help",
+          "anchor": "typescriptsrchelp"
+        },
+        {
+          "level": 3,
+          "text": "formatVersion",
+          "anchor": "formatversion"
+        },
+        {
+          "level": 3,
+          "text": "formatAppHelp",
+          "anchor": "formatapphelp"
+        },
+        {
+          "level": 3,
+          "text": "formatGroupHelp",
+          "anchor": "formatgrouphelp"
+        },
+        {
+          "level": 3,
+          "text": "buildFlagSpec",
+          "anchor": "buildflagspec"
+        },
+        {
+          "level": 3,
+          "text": "buildFlagMeta",
+          "anchor": "buildflagmeta"
+        },
+        {
+          "level": 3,
+          "text": "formatCommandHelp",
+          "anchor": "formatcommandhelp"
+        }
+      ]
     },
     {
       "path": "typescript-src-index.md",
       "title": "typescript/src/index",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/index",
+          "anchor": "typescriptsrcindex"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/index",
+          "anchor": "typescriptsrcindex"
+        },
+        {
+          "level": 3,
+          "text": "createApp",
+          "anchor": "createapp"
+        },
+        {
+          "level": 3,
+          "text": "formatCheckResults",
+          "anchor": "formatcheckresults"
+        },
+        {
+          "level": 3,
+          "text": "formatCheckResultsJSON",
+          "anchor": "formatcheckresultsjson"
+        },
+        {
+          "level": 3,
+          "text": "CheckRunResult",
+          "anchor": "checkrunresult"
+        },
+        {
+          "level": 3,
+          "text": "ErrorReporter",
+          "anchor": "errorreporter"
+        },
+        {
+          "level": 3,
+          "text": "WarnReporter",
+          "anchor": "warnreporter"
+        },
+        {
+          "level": 3,
+          "text": "CheckSpec",
+          "anchor": "checkspec"
+        },
+        {
+          "level": 3,
+          "text": "errorCheckSpec",
+          "anchor": "errorcheckspec"
+        },
+        {
+          "level": 3,
+          "text": "warnCheckSpec",
+          "anchor": "warncheckspec"
+        },
+        {
+          "level": 3,
+          "text": "Context",
+          "anchor": "context"
+        },
+        {
+          "level": 3,
+          "text": "EffectFailed",
+          "anchor": "effectfailed"
+        },
+        {
+          "level": 3,
+          "text": "InvokeError",
+          "anchor": "invokeerror"
+        },
+        {
+          "level": 3,
+          "text": "arg",
+          "anchor": "arg"
+        },
+        {
+          "level": 3,
+          "text": "coRequired",
+          "anchor": "corequired"
+        },
+        {
+          "level": 3,
+          "text": "defineMutatingCommand",
+          "anchor": "definemutatingcommand"
+        },
+        {
+          "level": 3,
+          "text": "defineReadOnlyCommand",
+          "anchor": "definereadonlycommand"
+        },
+        {
+          "level": 3,
+          "text": "deprecated",
+          "anchor": "deprecated"
+        },
+        {
+          "level": 3,
+          "text": "flag",
+          "anchor": "flag"
+        },
+        {
+          "level": 3,
+          "text": "flagSet",
+          "anchor": "flagset"
+        },
+        {
+          "level": 3,
+          "text": "implies",
+          "anchor": "implies"
+        },
+        {
+          "level": 3,
+          "text": "mutatingPassthrough",
+          "anchor": "mutatingpassthrough"
+        },
+        {
+          "level": 3,
+          "text": "mutexGroup",
+          "anchor": "mutexgroup"
+        },
+        {
+          "level": 3,
+          "text": "readOnlyPassthrough",
+          "anchor": "readonlypassthrough"
+        },
+        {
+          "level": 3,
+          "text": "requires",
+          "anchor": "requires"
+        },
+        {
+          "level": 3,
+          "text": "relativeToRoot",
+          "anchor": "relativetoroot"
+        },
+        {
+          "level": 3,
+          "text": "outcome",
+          "anchor": "outcome"
+        },
+        {
+          "level": 3,
+          "text": "t",
+          "anchor": "t"
+        },
+        {
+          "level": 3,
+          "text": "VERSION",
+          "anchor": "version"
+        }
+      ]
     },
     {
       "path": "typescript-src-infer.md",
       "title": "typescript/src/infer",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/infer",
+          "anchor": "typescriptsrcinfer"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/infer",
+          "anchor": "typescriptsrcinfer"
+        },
+        {
+          "level": 3,
+          "text": "InferHandlerArgs",
+          "anchor": "inferhandlerargs"
+        },
+        {
+          "level": 3,
+          "text": "HandlerArgs",
+          "anchor": "handlerargs"
+        },
+        {
+          "level": 3,
+          "text": "InferHandler",
+          "anchor": "inferhandler"
+        }
+      ]
     },
     {
       "path": "typescript-src-infra.md",
       "title": "typescript/src/infra",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/infra",
+          "anchor": "typescriptsrcinfra"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/infra",
+          "anchor": "typescriptsrcinfra"
+        },
+        {
+          "level": 3,
+          "text": "InfraRootPath",
+          "anchor": "infrarootpath"
+        },
+        {
+          "level": 3,
+          "text": "relativeToRoot",
+          "anchor": "relativetoroot"
+        },
+        {
+          "level": 3,
+          "text": "isInfraRootPath",
+          "anchor": "isinfrarootpath"
+        },
+        {
+          "level": 3,
+          "text": "expandTilde",
+          "anchor": "expandtilde"
+        },
+        {
+          "level": 3,
+          "text": "resolveInfraRootPath",
+          "anchor": "resolveinfrarootpath"
+        },
+        {
+          "level": 3,
+          "text": "validateFlagInfraMarker",
+          "anchor": "validateflaginframarker"
+        },
+        {
+          "level": 3,
+          "text": "buildInfraAccess",
+          "anchor": "buildinfraaccess"
+        }
+      ]
     },
     {
       "path": "typescript-src-invoke.md",
       "title": "typescript/src/invoke",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/invoke",
+          "anchor": "typescriptsrcinvoke"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/invoke",
+          "anchor": "typescriptsrcinvoke"
+        },
+        {
+          "level": 3,
+          "text": "CallOptions",
+          "anchor": "calloptions"
+        },
+        {
+          "level": 3,
+          "text": "commandClassification",
+          "anchor": "commandclassification"
+        },
+        {
+          "level": 3,
+          "text": "invokeApp",
+          "anchor": "invokeapp"
+        }
+      ]
     },
     {
       "path": "typescript-src-mcp.md",
       "title": "typescript/src/mcp",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/mcp",
+          "anchor": "typescriptsrcmcp"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/mcp",
+          "anchor": "typescriptsrcmcp"
+        },
+        {
+          "level": 3,
+          "text": "McpIO",
+          "anchor": "mcpio"
+        },
+        {
+          "level": 3,
+          "text": "serveMcp",
+          "anchor": "servemcp"
+        }
+      ]
     },
     {
       "path": "typescript-src-outcome.md",
       "title": "typescript/src/outcome",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/outcome",
+          "anchor": "typescriptsrcoutcome"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/outcome",
+          "anchor": "typescriptsrcoutcome"
+        },
+        {
+          "level": 3,
+          "text": "Outcome",
+          "anchor": "outcome"
+        },
+        {
+          "level": 3,
+          "text": "outcome",
+          "anchor": "outcome-1"
+        },
+        {
+          "level": 3,
+          "text": "isOutcome",
+          "anchor": "isoutcome"
+        },
+        {
+          "level": 3,
+          "text": "InterpretedReturn",
+          "anchor": "interpretedreturn"
+        },
+        {
+          "level": 3,
+          "text": "interpretHandlerReturn",
+          "anchor": "interprethandlerreturn"
+        },
+        {
+          "level": 3,
+          "text": "jsonCompact",
+          "anchor": "jsoncompact"
+        }
+      ]
     },
     {
       "path": "typescript-src-parse.md",
       "title": "typescript/src/parse",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/parse",
+          "anchor": "typescriptsrcparse"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/parse",
+          "anchor": "typescriptsrcparse"
+        },
+        {
+          "level": 3,
+          "text": "flagParamName",
+          "anchor": "flagparamname"
+        },
+        {
+          "level": 3,
+          "text": "ConfigLoadResult",
+          "anchor": "configloadresult"
+        },
+        {
+          "level": 3,
+          "text": "ConfigProvider",
+          "anchor": "configprovider"
+        },
+        {
+          "level": 3,
+          "text": "emptyConfigProvider",
+          "anchor": "emptyconfigprovider"
+        },
+        {
+          "level": 3,
+          "text": "valuesEqualForConflict",
+          "anchor": "valuesequalforconflict"
+        },
+        {
+          "level": 3,
+          "text": "applyFlagDefault",
+          "anchor": "applyflagdefault"
+        },
+        {
+          "level": 3,
+          "text": "ParsedCommand",
+          "anchor": "parsedcommand"
+        },
+        {
+          "level": 3,
+          "text": "parseCommand",
+          "anchor": "parsecommand"
+        },
+        {
+          "level": 3,
+          "text": "validateAndBuildKwargs",
+          "anchor": "validateandbuildkwargs"
+        },
+        {
+          "level": 3,
+          "text": "ExtractedGlobals",
+          "anchor": "extractedglobals"
+        },
+        {
+          "level": 3,
+          "text": "extractGlobalFlags",
+          "anchor": "extractglobalflags"
+        },
+        {
+          "level": 3,
+          "text": "PreScanResult",
+          "anchor": "prescanresult"
+        },
+        {
+          "level": 3,
+          "text": "preScanReservedFlags",
+          "anchor": "prescanreservedflags"
+        },
+        {
+          "level": 3,
+          "text": "reservedFlagsOf",
+          "anchor": "reservedflagsof"
+        },
+        {
+          "level": 3,
+          "text": "HelpTarget",
+          "anchor": "helptarget"
+        },
+        {
+          "level": 3,
+          "text": "ParseOutcome",
+          "anchor": "parseoutcome"
+        },
+        {
+          "level": 3,
+          "text": "DoParseDeps",
+          "anchor": "doparsedeps"
+        },
+        {
+          "level": 3,
+          "text": "tokensContainHelp",
+          "anchor": "tokenscontainhelp"
+        },
+        {
+          "level": 3,
+          "text": "doParse",
+          "anchor": "doparse"
+        },
+        {
+          "level": 3,
+          "text": "formatParseErrorOutput",
+          "anchor": "formatparseerroroutput"
+        }
+      ]
     },
     {
       "path": "typescript-src-routing.md",
       "title": "typescript/src/routing",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/routing",
+          "anchor": "typescriptsrcrouting"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/routing",
+          "anchor": "typescriptsrcrouting"
+        },
+        {
+          "level": 3,
+          "text": "RouteResult",
+          "anchor": "routeresult"
+        },
+        {
+          "level": 3,
+          "text": "resolveCommand",
+          "anchor": "resolvecommand"
+        }
+      ]
     },
     {
       "path": "typescript-src-schema.md",
       "title": "typescript/src/schema",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/schema",
+          "anchor": "typescriptsrcschema"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/schema",
+          "anchor": "typescriptsrcschema"
+        },
+        {
+          "level": 3,
+          "text": "schemaJson",
+          "anchor": "schemajson"
+        },
+        {
+          "level": 3,
+          "text": "dumpSchemaCore",
+          "anchor": "dumpschemacore"
+        },
+        {
+          "level": 3,
+          "text": "writeSchema",
+          "anchor": "writeschema"
+        }
+      ]
     },
     {
       "path": "typescript-src-sources.md",
       "title": "typescript/src/sources",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/sources",
+          "anchor": "typescriptsrcsources"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/sources",
+          "anchor": "typescriptsrcsources"
+        },
+        {
+          "level": 3,
+          "text": "SourceLabel",
+          "anchor": "sourcelabel"
+        },
+        {
+          "level": 3,
+          "text": "SourcedEntry",
+          "anchor": "sourcedentry"
+        },
+        {
+          "level": 3,
+          "text": "SourcedStore",
+          "anchor": "sourcedstore"
+        }
+      ]
     },
     {
       "path": "typescript-src-toml.md",
       "title": "typescript/src/toml",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/toml",
+          "anchor": "typescriptsrctoml"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/toml",
+          "anchor": "typescriptsrctoml"
+        },
+        {
+          "level": 3,
+          "text": "TomlLoadFailure",
+          "anchor": "tomlloadfailure"
+        },
+        {
+          "level": 3,
+          "text": "parseTomlConfig",
+          "anchor": "parsetomlconfig"
+        },
+        {
+          "level": 3,
+          "text": "renderTomlValue",
+          "anchor": "rendertomlvalue"
+        },
+        {
+          "level": 3,
+          "text": "renderTomlKeyPart",
+          "anchor": "rendertomlkeypart"
+        },
+        {
+          "level": 3,
+          "text": "deepEqualTrees",
+          "anchor": "deepequaltrees"
+        },
+        {
+          "level": 3,
+          "text": "tomlSetKey",
+          "anchor": "tomlsetkey"
+        },
+        {
+          "level": 3,
+          "text": "tomlDeleteKey",
+          "anchor": "tomldeletekey"
+        }
+      ]
     },
     {
       "path": "typescript-src-tool.md",
       "title": "typescript/src/tool",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/tool",
+          "anchor": "typescriptsrctool"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/tool",
+          "anchor": "typescriptsrctool"
+        },
+        {
+          "level": 3,
+          "text": "Tool",
+          "anchor": "tool"
+        },
+        {
+          "level": 3,
+          "text": "buildJSONSchema",
+          "anchor": "buildjsonschema"
+        },
+        {
+          "level": 3,
+          "text": "jsonSchemaForApp",
+          "anchor": "jsonschemaforapp"
+        },
+        {
+          "level": 3,
+          "text": "collectToolCommands",
+          "anchor": "collecttoolcommands"
+        },
+        {
+          "level": 3,
+          "text": "asToolsForApp",
+          "anchor": "astoolsforapp"
+        }
+      ]
     },
     {
       "path": "typescript-src-types.md",
       "title": "typescript/src/types",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/types",
+          "anchor": "typescriptsrctypes"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/types",
+          "anchor": "typescriptsrctypes"
+        },
+        {
+          "level": 3,
+          "text": "ScalarSchema",
+          "anchor": "scalarschema"
+        },
+        {
+          "level": 3,
+          "text": "ElemSchema",
+          "anchor": "elemschema"
+        },
+        {
+          "level": 3,
+          "text": "ListSchema",
+          "anchor": "listschema"
+        },
+        {
+          "level": 3,
+          "text": "DictSchema",
+          "anchor": "dictschema"
+        },
+        {
+          "level": 3,
+          "text": "Schema",
+          "anchor": "schema"
+        },
+        {
+          "level": 3,
+          "text": "Carrier",
+          "anchor": "carrier"
+        },
+        {
+          "level": 3,
+          "text": "t",
+          "anchor": "t"
+        },
+        {
+          "level": 3,
+          "text": "HandlerResult",
+          "anchor": "handlerresult"
+        },
+        {
+          "level": 3,
+          "text": "HandlerReturn",
+          "anchor": "handlerreturn"
+        }
+      ]
     },
     {
       "path": "typescript-src-values.md",
       "title": "typescript/src/values",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/values",
+          "anchor": "typescriptsrcvalues"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/values",
+          "anchor": "typescriptsrcvalues"
+        },
+        {
+          "level": 3,
+          "text": "parseBoolStrict",
+          "anchor": "parseboolstrict"
+        },
+        {
+          "level": 3,
+          "text": "parseIntStrict",
+          "anchor": "parseintstrict"
+        },
+        {
+          "level": 3,
+          "text": "parseFloatStrictValue",
+          "anchor": "parsefloatstrictvalue"
+        },
+        {
+          "level": 3,
+          "text": "parseFloatStrictFlag",
+          "anchor": "parsefloatstrictflag"
+        },
+        {
+          "level": 3,
+          "text": "coerceToScalar",
+          "anchor": "coercetoscalar"
+        },
+        {
+          "level": 3,
+          "text": "coerceArgValue",
+          "anchor": "coerceargvalue"
+        },
+        {
+          "level": 3,
+          "text": "formatValueForError",
+          "anchor": "formatvalueforerror"
+        },
+        {
+          "level": 3,
+          "text": "formatDictForDisplay",
+          "anchor": "formatdictfordisplay"
+        },
+        {
+          "level": 3,
+          "text": "formatChoices",
+          "anchor": "formatchoices"
+        },
+        {
+          "level": 3,
+          "text": "validateChoices",
+          "anchor": "validatechoices"
+        },
+        {
+          "level": 3,
+          "text": "findDuplicate",
+          "anchor": "findduplicate"
+        },
+        {
+          "level": 3,
+          "text": "appendListValue",
+          "anchor": "appendlistvalue"
+        },
+        {
+          "level": 3,
+          "text": "splitEscaped",
+          "anchor": "splitescaped"
+        },
+        {
+          "level": 3,
+          "text": "parseDictValue",
+          "anchor": "parsedictvalue"
+        },
+        {
+          "level": 3,
+          "text": "storeDictEntries",
+          "anchor": "storedictentries"
+        },
+        {
+          "level": 3,
+          "text": "parseDictEnvValue",
+          "anchor": "parsedictenvvalue"
+        }
+      ]
     },
     {
       "path": "typescript-src-version.md",
       "title": "typescript/src/version",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/version",
+          "anchor": "typescriptsrcversion"
+        },
+        {
+          "level": 2,
+          "text": "typescript/src/version",
+          "anchor": "typescriptsrcversion"
+        },
+        {
+          "level": 3,
+          "text": "VERSION",
+          "anchor": "version"
+        }
+      ]
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-06T15:20:29.440590+00:00"
+  "last_gen": "2026-08-11T22:07:15.236898+00:00"
 }
