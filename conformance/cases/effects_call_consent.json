@@ -250,7 +250,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys and renders an empty required list as null. What the classification and the consent refusal mean is identical everywhere, and each target's own expect block pins it.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. What the classification and the consent refusal mean is identical everywhere, and each target's own expect block pins it.",
       "streams": {
         "stdout": [
           "python",
@@ -293,7 +293,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys and renders an empty required list as null. What the classification and the consent refusal mean is identical everywhere, and each target's own expect block pins it.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. What the classification and the consent refusal mean is identical everywhere, and each target's own expect block pins it.",
       "streams": {
         "stdout": [
           "python",
@@ -345,7 +345,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys and renders an empty required list as null. What the classification and the consent refusal mean is identical everywhere, and each target's own expect block pins it.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. What the classification and the consent refusal mean is identical everywhere, and each target's own expect block pins it.",
       "streams": {
         "stdout": [
           "python",
@@ -363,6 +363,143 @@
         "\"effect\":\\s*\"read_only\"",
         "\"effect\":\\s*\"mutating\"",
         "\"consequential\":\\s*true"
+      ],
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "effects_call_consent: MCP consent smuggled inside arguments does not consent",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "released": true
+            }
+          }
+        }
+      ]
+    },
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. What the refusal MEANS is identical everywhere -- the command's argument namespace is not a consent channel, so the consequential refusal stands -- and each target's own expect block pins it.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"release\",\"arguments\":{\"approve_consequential\":true}}}\n",
+    "expect": {
+      "exit_code": 0,
+      "stdout_matches": [
+        "\"isError\":\\s*true",
+        "command 'release' is consequential: pass approve_consequential to confirm"
+      ],
+      "stdout_not_contains": [
+        "released"
+      ],
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "effects_call_consent: a non-boolean MCP consent is a protocol error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "released": true
+            }
+          }
+        }
+      ]
+    },
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The protocol error code and message are identical everywhere, and each target's own expect block pins them.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"release\",\"approve_consequential\":\"yes\"}}\n",
+    "expect": {
+      "exit_code": 0,
+      "stdout_matches": [
+        "\"code\":\\s*-32602",
+        "parameter 'approve_consequential' must be a boolean"
+      ],
+      "stdout_not_contains": [
+        "released"
+      ],
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "effects_call_consent: the consent name inside arguments is an unknown parameter of the command's own namespace",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "build",
+          "help": "a plain mutating command",
+          "effect": "mutating",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "built": true
+            }
+          }
+        }
+      ]
+    },
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The unknown-parameter message also quotes the name Python-style in Python and Go-style in Go and TypeScript. What it MEANS is identical everywhere: `approve_consequential` is reserved, no command can declare it, so inside `arguments` it can only be an unknown parameter -- never consent. Each target's own expect block pins it.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"build\",\"arguments\":{\"approve_consequential\":true}}}\n",
+    "expect": {
+      "exit_code": 0,
+      "stdout_matches": [
+        "\"isError\":\\s*true",
+        "unknown parameter ['\\\\\"]{1,2}approve_consequential"
+      ],
+      "stdout_not_contains": [
+        "built"
       ],
       "stderr_equals": ""
     }

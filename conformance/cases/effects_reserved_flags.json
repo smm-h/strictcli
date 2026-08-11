@@ -44,6 +44,72 @@
     }
   },
   {
+    "name": "effects_reserved_flags: a command flag named approve_consequential is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [{"name": "approve_consequential", "type": "bool", "help": "should be rejected"}]
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: a global flag named approve_consequential is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [{"name": "approve_consequential", "type": "bool", "help": "should be rejected"}],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": ["cmd"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
+    }
+  },
+  {
+    "name": "effects_reserved_flags: an arg named approve_consequential is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "arg={approve_consequential}",
+          "args": [{"name": "approve_consequential", "help": "should be rejected"}]
+        }
+      ]
+    },
+    "argv": ["cmd", "value"],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "arg name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
+    }
+  },
+  {
     "name": "effects_reserved_flags: a command flag named yes is banned outright",
     "app": {
       "name": "myapp",
