@@ -677,3 +677,108 @@ class TestMcpEdgeCases:
             "params": {"name": "ok", "arguments": {}},
         })
         assert "isError" not in resp["result"]
+
+
+# ---------------------------------------------------------------------------
+# Effects classification and programmatic consent over MCP
+# ---------------------------------------------------------------------------
+
+
+def _consent_app():
+    app = _build_app()
+
+    @app.command("look", effect="read_only", help="look at things")
+    def look(ctx):
+        return strictcli.outcome(data={"looked": True})
+
+    @app.command("release", effect="mutating", consequential=True,
+                 help="release things")
+    def release(ctx):
+        return strictcli.outcome(data={"released": True})
+
+    return app
+
+
+def _call(app, name, **params):
+    return _send_one(app, {
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": name, **params},
+    })
+
+
+class TestMcpToolsListClassification:
+    """tools/list publishes the classification beside inputSchema."""
+
+    def test_effect_and_consequential_are_published(self):
+        resp = _send_one(_consent_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {},
+        })
+        tools = {t["name"]: t for t in resp["result"]["tools"]}
+        assert tools["look"]["effect"] == "read_only"
+        assert tools["release"]["effect"] == "mutating"
+        assert tools["release"]["consequential"] is True
+
+    def test_consequential_is_omitted_when_false(self):
+        resp = _send_one(_consent_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {},
+        })
+        tools = {t["name"]: t for t in resp["result"]["tools"]}
+        assert "consequential" not in tools["look"]
+
+    def test_classification_is_not_in_the_input_schema(self):
+        resp = _send_one(_consent_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {},
+        })
+        tools = {t["name"]: t for t in resp["result"]["tools"]}
+        schema = tools["release"]["inputSchema"]
+        assert "effect" not in schema["properties"]
+        assert "consequential" not in schema["properties"]
+        assert "approve_consequential" not in schema["properties"]
+
+
+class TestMcpToolsCallConsent:
+    """tools/call honours the confirmation requirement."""
+
+    def test_unconsented_call_is_refused(self):
+        resp = _call(_consent_app(), "release")
+        result = resp["result"]
+        assert result["isError"] is True
+        assert result["content"][0]["text"] == (
+            "command 'release' is consequential: pass approve_consequential "
+            "to confirm"
+        )
+
+    def test_explicit_false_is_refused(self):
+        resp = _call(_consent_app(), "release", approve_consequential=False)
+        assert resp["result"]["isError"] is True
+
+    def test_consented_call_proceeds(self):
+        resp = _call(_consent_app(), "release", approve_consequential=True)
+        result = resp["result"]
+        assert "isError" not in result
+        assert json.loads(result["content"][0]["text"]) == {"released": True}
+
+    def test_read_only_call_needs_no_consent(self):
+        resp = _call(_consent_app(), "look")
+        result = resp["result"]
+        assert "isError" not in result
+        assert json.loads(result["content"][0]["text"]) == {"looked": True}
+
+    def test_non_boolean_consent_is_a_protocol_error(self):
+        resp = _call(_consent_app(), "release", approve_consequential="yes")
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == (
+            "parameter 'approve_consequential' must be a boolean"
+        )
+
+    def test_consent_inside_arguments_does_not_consent(self):
+        """The command's argument namespace is not a consent channel."""
+        resp = _send_one(_consent_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "name": "release",
+                "arguments": {"approve_consequential": True},
+            },
+        })
+        assert resp["result"]["isError"] is True
+        assert "is consequential" in resp["result"]["content"][0]["text"]

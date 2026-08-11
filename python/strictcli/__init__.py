@@ -717,6 +717,20 @@ def _msg_confirm_declined() -> str:
     return "aborted"
 
 
+def _msg_call_consequential_unconsented(cmd_path: str) -> str:
+    """The programmatic-path refusal (contract §8.5).
+
+    Requiring confirmation is a property of the COMMAND, so every channel has
+    to honour it -- but a programmatic caller has no terminal to prompt. The
+    refusal makes the caller state, in the call, that it is proceeding without
+    a human, instead of the framework deciding that silently on its behalf.
+    """
+    return (
+        f"command '{cmd_path}' is consequential: pass approve_consequential "
+        f"to confirm"
+    )
+
+
 def _consequential_grant_warning(cmd_path: str, grant: str, kind: str) -> str:
     """The `consequential-grant-agreement` warning (contract §8.1, §11).
 
@@ -4108,6 +4122,13 @@ class Tool:
     name: str
     description: str
     parameters: dict
+    # The effects-regime classification, published BESIDE the argument schema
+    # (never inside it): a consumer rendering this tool must be able to see
+    # that the command changes things and that calling it requires stating
+    # consent. Same vocabulary as the schema dump: `effect` is mandatory,
+    # `consequential` defaults to False.
+    effect: str
+    consequential: bool
     execute: Callable
 
 
@@ -7386,7 +7407,8 @@ class App:
         )
 
     def _invoke(
-        self, command_path: str, kwargs: dict[str, object]
+        self, command_path: str, kwargs: dict[str, object],
+        *, approve_consequential: bool = False,
     ) -> object:
         """Invoke a command programmatically with pre-typed kwargs.
 
@@ -7401,18 +7423,29 @@ class App:
                 (e.g. dry_run). Positional args use their declared name.
                 For passthrough commands, pass a single key "_args" with
                 a list of raw string arguments.
+            approve_consequential: the caller's explicit consent. A command
+                that declares itself consequential is refused without it.
 
         Returns:
             The handler's return value (structured data, int, or None).
 
         Raises:
             _ParseError: if validation fails (missing required flags,
-                mutex violations, dependency errors, etc.).
+                mutex violations, dependency errors, etc.), or if the command
+                is consequential and no consent was supplied.
             _HelpRequested: if the command path resolves to a group
                 with no subcommand.
         """
         path_segments = command_path.split(".")
         cmd, _rest, _path = self._resolve_command(path_segments)
+
+        # The consent check (contract §8.5). There is no terminal here, so the
+        # confirm protocol's prompt cannot fire -- the caller must have said so
+        # in the call. Checked before anything is dispatched or recorded.
+        if cmd.consequential and not approve_consequential:
+            raise _ParseError(
+                _msg_call_consequential_unconsented(command_path)
+            )
 
         self._begin_dispatch()
         # Record test-coverage hit (command-level only).
@@ -7453,10 +7486,13 @@ class App:
                     )
 
             # Programmatic dispatch: --dry-run is not reachable (argv parsing
-            # is bypassed entirely) and the confirm protocol never fires.
+            # is bypassed entirely) and the confirm protocol's PROMPT never
+            # fires -- there is no terminal. The requirement itself is honoured
+            # above, and the caller's consent is delivered to the handler here.
             ctx = Context(
                 stdout=sys.stdout, stderr=sys.stderr, sources={},
                 infra=self._infra_access(),
+                approve_consequential=approve_consequential,
                 effects=self._arm_effects(cmd, command_path, dry_run=False),
             )
             result = cmd.passthrough.handler(
@@ -7537,6 +7573,7 @@ class App:
         ctx = Context(
             stdout=sys.stdout, stderr=sys.stderr, sources=invoke_sources,
             infra=self._infra_access(),
+            approve_consequential=approve_consequential,
             effects=self._arm_effects(cmd, command_path, dry_run=False),
         )
         result = cmd.handler(ctx, **final_kwargs)
@@ -7545,7 +7582,10 @@ class App:
             return result.data
         return result
 
-    def call(self, command_path: str, **kwargs: object) -> object:
+    def call(
+        self, command_path: str, *, approve_consequential: bool = False,
+        **kwargs: object,
+    ) -> object:
         """Invoke a command programmatically and return its result.
 
         Unlike _invoke(), this is the public API. It converts internal
@@ -7555,6 +7595,13 @@ class App:
         Args:
             command_path: dot-separated path to the command
                 (e.g. "deploy" or "config.set").
+            approve_consequential: the caller's explicit consent, the
+                programmatic counterpart of ``--approve-consequential``.
+                Keyword-only, and never a handler kwarg: the name is
+                framework-reserved, so no command can declare a parameter
+                that collides with it. A command that declares itself
+                consequential is refused without it. Read-only and plain
+                mutating commands ignore it.
             **kwargs: handler keyword arguments. Flag names use underscores
                 (e.g. dry_run). Positional args use their declared name.
                 For passthrough commands, pass _args=[...] for raw arguments.
@@ -7564,10 +7611,32 @@ class App:
 
         Raises:
             InvokeError: if validation fails (unknown command, missing
-                required flags, mutex violations, dependency errors, etc.).
+                required flags, mutex violations, dependency errors, etc.),
+                or if the command is consequential and no consent was given.
+        """
+        return self._call_with_kwargs(
+            command_path, kwargs,
+            approve_consequential=approve_consequential,
+        )
+
+    def _call_with_kwargs(
+        self, command_path: str, kwargs: dict[str, object],
+        *, approve_consequential: bool,
+    ) -> object:
+        """call() with the handler kwargs as a dict instead of a splat.
+
+        The MCP server routes through here rather than ``call(**arguments)``:
+        an ``approve_consequential`` key inside a tools/call ``arguments``
+        object is a parameter of the command's own namespace -- no command can
+        declare that reserved name, so it must surface as the usual
+        unknown-parameter error, exactly as it does in the siblings whose
+        kwargs are a map. Splatting it would silently promote it to consent.
         """
         try:
-            return self._invoke(command_path, kwargs)
+            return self._invoke(
+                command_path, kwargs,
+                approve_consequential=approve_consequential,
+            )
         except _ParseError as e:
             raise InvokeError(str(e)) from e
         except _HelpRequested:
@@ -7575,21 +7644,32 @@ class App:
                 f"'{command_path}' is a group, not a command"
             )
 
-    async def acall(self, command_path: str, **kwargs: object) -> object:
+    async def acall(
+        self, command_path: str, *, approve_consequential: bool = False,
+        **kwargs: object,
+    ) -> object:
         """Async version of call(). Runs the handler in a thread.
 
         Args:
             command_path: dot-separated path to the command.
+            approve_consequential: the caller's explicit consent (same as
+                call()).
             **kwargs: handler keyword arguments (same as call()).
 
         Returns:
             The handler's return value (structured data, int, or None).
 
         Raises:
-            InvokeError: if validation fails.
+            InvokeError: if validation fails, or if the command is
+                consequential and no consent was given.
         """
         import asyncio
-        return await asyncio.to_thread(self.call, command_path, **kwargs)
+        # to_thread takes func positional-only, so a handler kwarg can never
+        # shadow it.
+        return await asyncio.to_thread(
+            self.call, command_path,
+            approve_consequential=approve_consequential, **kwargs,
+        )
 
     def json_schema(self, command_path: str) -> dict:
         """Produce a JSON Schema parameters object for a command's flags and args.
@@ -7669,13 +7749,21 @@ class App:
         """Build a Tool for a single command."""
         app_ref = self
 
-        async def execute(**kwargs: object) -> object:
-            return await app_ref.acall(command_path, **kwargs)
+        async def execute(
+            *, approve_consequential: bool = False, **kwargs: object,
+        ) -> object:
+            return await app_ref.acall(
+                command_path,
+                approve_consequential=approve_consequential,
+                **kwargs,
+            )
 
         return Tool(
             name=command_path,
             description=cmd.help,
             parameters=_build_json_schema(cmd),
+            effect=cmd.effect,
+            consequential=cmd.consequential,
             execute=execute,
         )
 
@@ -7683,10 +7771,17 @@ class App:
         """Build the router tool that dispatches to per-command tools."""
         app_ref = self
 
-        async def execute(command: str | None = None, **kwargs: object) -> object:
+        async def execute(
+            command: str | None = None, *,
+            approve_consequential: bool = False, **kwargs: object,
+        ) -> object:
             if command is None:
                 return command_paths[:]
-            return await app_ref.acall(command, **kwargs)
+            return await app_ref.acall(
+                command,
+                approve_consequential=approve_consequential,
+                **kwargs,
+            )
 
         parameters: dict = {
             "type": "object",
@@ -7702,10 +7797,18 @@ class App:
             "required": ["command"],
             "additionalProperties": False,
         }
+        # The router can reach a mutating command, so it classifies as
+        # mutating. It is NOT itself consequential: the routed command's own
+        # requirement is checked when the call reaches it, and the router
+        # forwards the caller's consent unchanged. Marking the router
+        # consequential would demand consent for routing to a read_only
+        # command, which confirms nothing.
         return Tool(
             name=self.name,
             description=f"Route to {self.name} commands",
             parameters=parameters,
+            effect=EFFECT_MUTATING,
+            consequential=False,
             execute=execute,
         )
 
@@ -10330,11 +10433,19 @@ def _mcp_handle_tools_list(
     """Handle the MCP 'tools/list' request."""
     tools = []
     for dotted_path, (cmd, help_text) in commands.items():
-        tools.append({
+        # The classification sits BESIDE inputSchema, never inside it: it
+        # describes the tool, not an argument the caller passes. Same emission
+        # rule as the schema dump -- `effect` always, `consequential` only when
+        # true (absence means "not consequential").
+        entry: dict = {
             "name": dotted_path,
             "description": help_text,
+            "effect": cmd.effect,
             "inputSchema": _build_json_schema(cmd),
-        })
+        }
+        if cmd.consequential:
+            entry["consequential"] = True
+        tools.append(entry)
     return {
         "jsonrpc": "2.0",
         "id": req_id,
@@ -10367,8 +10478,23 @@ def _mcp_handle_tools_call(
             req_id, -32602, "parameter 'arguments' must be an object",
         )
 
+    # Consent is a top-level param, a sibling of `name` and `arguments` --
+    # never a member of `arguments`, which is the command's own argument
+    # namespace and is published with additionalProperties: false. There is no
+    # server-side default: absent means "not consented", and a consequential
+    # tool is then refused.
+    approve_consequential = params.get("approve_consequential", False)
+    if not isinstance(approve_consequential, bool):
+        return _mcp_jsonrpc_error(
+            req_id, -32602,
+            "parameter 'approve_consequential' must be a boolean",
+        )
+
     try:
-        result = app.call(tool_name, **arguments)
+        result = app._call_with_kwargs(
+            tool_name, dict(arguments),
+            approve_consequential=approve_consequential,
+        )
     except InvokeError as e:
         return {
             "jsonrpc": "2.0",

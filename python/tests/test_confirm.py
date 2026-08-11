@@ -6,6 +6,7 @@ record rather than execute?"; ``consequential`` answers "are these effects
 worth interrupting someone for?".
 """
 
+import asyncio
 import sys
 
 import pytest
@@ -201,8 +202,69 @@ class TestWhenItDoesNotFire:
         assert "ran" in r.stdout
 
     def test_call_dispatch_never_prompts(self, monkeypatch):
-        monkeypatch.setattr(sys, "stdin", FakeStdin(answer="n\n", tty=False))
-        _app().call("deploy")
+        """call() never reads stdin -- consent is stated in the call itself."""
+        stdin = FakeStdin(answer="n\n", tty=False)
+        monkeypatch.setattr(sys, "stdin", stdin)
+        _app().call("deploy", approve_consequential=True)
+        assert stdin.read_count == 0
+
+
+class TestCallConsent:
+    """The programmatic channel honours the requirement without prompting."""
+
+    def test_unconsented_call_is_refused(self, monkeypatch):
+        monkeypatch.setattr(sys, "stdin", FakeStdin(answer="y\n", tty=False))
+        with pytest.raises(sc.InvokeError) as exc:
+            _app().call("deploy")
+        assert str(exc.value) == (
+            "command 'deploy' is consequential: pass approve_consequential "
+            "to confirm"
+        )
+
+    def test_consented_call_proceeds(self, capsys):
+        assert _app().call("deploy", approve_consequential=True) == 0
+        assert "ran" in capsys.readouterr().out
+
+    def test_unconsented_passthrough_call_is_refused(self):
+        with pytest.raises(sc.InvokeError) as exc:
+            _app(passthrough=True).call("deploy", _args=["-x"])
+        assert "is consequential" in str(exc.value)
+
+    def test_consented_passthrough_call_proceeds(self, capsys):
+        app = _app(passthrough=True)
+        assert app.call(
+            "deploy", approve_consequential=True, _args=["-x"],
+        ) == 0
+        assert "ran" in capsys.readouterr().out
+
+    def test_a_plain_mutating_call_needs_no_consent(self, capsys):
+        assert _app(consequential=False).call("deploy") == 0
+        assert "ran" in capsys.readouterr().out
+
+    def test_a_read_only_call_needs_no_consent(self, capsys):
+        app = _app(effect="read_only", consequential=False)
+        assert app.call("deploy") == 0
+        assert "ran" in capsys.readouterr().out
+
+    def test_consent_reaches_the_handler(self):
+        app = sc.App(name="app", version="1.0.0", help="app")
+        seen = {}
+
+        @app.command("deploy", help="deploy", effect="mutating",
+                     consequential=True)
+        def _deploy(ctx):
+            seen["approved"] = ctx.approve_consequential
+            return 0
+
+        app.call("deploy", approve_consequential=True)
+        assert seen == {"approved": True}
+
+    def test_acall_refuses_and_proceeds_like_call(self):
+        with pytest.raises(sc.InvokeError):
+            asyncio.run(_app().acall("deploy"))
+        assert asyncio.run(
+            _app().acall("deploy", approve_consequential=True)
+        ) == 0
 
 
 class TestPassthroughIsNotExempt:

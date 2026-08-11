@@ -921,3 +921,90 @@ class TestToolExecuteGroupedCommand:
         result = asyncio.run(migrate_tool.execute(sim_run=True))
         assert captured["sim_run"] is True
         assert result == {"migrated": True, "sim_run": True}
+
+
+# ---------------------------------------------------------------------------
+# Effects classification on the descriptor + programmatic consent
+# ---------------------------------------------------------------------------
+
+
+def _consent_app():
+    app = _build_app()
+
+    @app.command("look", effect="read_only", help="look at things")
+    def look(ctx):
+        return strictcli.outcome(data={"looked": True})
+
+    @app.command("build", effect="mutating", help="build things")
+    def build(ctx):
+        return strictcli.outcome(data={"built": True})
+
+    @app.command("release", effect="mutating", consequential=True,
+                 help="release things")
+    def release(ctx):
+        return strictcli.outcome(data={"released": True})
+
+    return app
+
+
+class TestToolClassification:
+    """Every descriptor publishes effect and consequential beside the schema."""
+
+    def test_per_command_classification(self):
+        tools = {t.name: t for t in _consent_app().as_tools()}
+        assert (tools["look"].effect, tools["look"].consequential) == (
+            "read_only", False,
+        )
+        assert (tools["build"].effect, tools["build"].consequential) == (
+            "mutating", False,
+        )
+        assert (tools["release"].effect, tools["release"].consequential) == (
+            "mutating", True,
+        )
+
+    def test_classification_is_not_in_the_argument_schema(self):
+        tools = {t.name: t for t in _consent_app().as_tools()}
+        props = tools["release"].parameters["properties"]
+        assert "effect" not in props
+        assert "consequential" not in props
+        assert "approve_consequential" not in props
+
+    def test_router_is_mutating_but_not_consequential(self):
+        router = _consent_app().as_tools()[-1]
+        assert router.name == "myapp"
+        assert router.effect == "mutating"
+        assert router.consequential is False
+
+
+class TestToolExecuteConsent:
+    """Tool.execute refuses a consequential command without stated consent."""
+
+    def test_unconsented_execute_is_refused(self):
+        tools = {t.name: t for t in _consent_app().as_tools()}
+        with pytest.raises(strictcli.InvokeError) as exc:
+            asyncio.run(tools["release"].execute())
+        assert str(exc.value) == (
+            "command 'release' is consequential: pass approve_consequential "
+            "to confirm"
+        )
+
+    def test_consented_execute_proceeds(self):
+        tools = {t.name: t for t in _consent_app().as_tools()}
+        result = asyncio.run(
+            tools["release"].execute(approve_consequential=True)
+        )
+        assert result == {"released": True}
+
+    def test_unaffected_commands_need_no_consent(self):
+        tools = {t.name: t for t in _consent_app().as_tools()}
+        assert asyncio.run(tools["look"].execute()) == {"looked": True}
+        assert asyncio.run(tools["build"].execute()) == {"built": True}
+
+    def test_router_forwards_consent(self):
+        router = _consent_app().as_tools()[-1]
+        with pytest.raises(strictcli.InvokeError):
+            asyncio.run(router.execute(command="release"))
+        result = asyncio.run(
+            router.execute(command="release", approve_consequential=True)
+        )
+        assert result == {"released": True}
