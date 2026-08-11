@@ -143,11 +143,12 @@ There are two kinds of declared infrastructure env vars; each is shown in help u
 
 ### Programmatic invocation
 
-`app.Call(commandPath, kwargs)` (Go) / `app.call(command_path, **kwargs)` (Python; async variant `app.acall(...)` runs the handler in a thread). Runs a command in-process with pre-typed values, bypassing CLI parsing, env var resolution, config loading, and stdin handling.
+`app.Call(commandPath, kwargs, opts...)` (Go) / `app.call(command_path, **kwargs)` (Python; async variant `app.acall(...)` runs the handler in a thread) / `app.call(commandPath, kwargs, opts)` (TypeScript). Runs a command in-process with pre-typed values, bypassing CLI parsing, env var resolution, config loading, and stdin handling.
 
 - `commandPath` is dot-separated (`"deploy"`, `"dns.zone.create"`). Kwargs use underscored parameter names. Passthrough commands take a single `_args` key with the raw argument list.
 - Returns the handler's structured data when present, else the exit code (Go) / the handler's return value (Python).
 - Failures (unknown command, missing required flags, mutex violations, dependency errors) produce `InvokeError` -- returned as the error in Go, raised as an exception in Python.
+- **Consent is explicit.** A command declared `consequential` is refused unless the call states consent: `approve_consequential=True` (Python keyword-only), `strictcli.WithApproveConsequential()` (Go `CallOption`), `{ approveConsequential: true }` (TypeScript `CallOptions`). The refusal is `command '<path>' is consequential: pass approve_consequential to confirm`. Read-only and plain mutating commands are unaffected, and `test()` is unaffected -- it takes argv, so it can carry `--approve-consequential` itself. Over MCP the same consent is a top-level `tools/call` param (`approve_consequential`), never a member of `arguments`. Tool descriptors and MCP `tools/list` publish `effect` and `consequential` beside the argument schema so a caller can see the requirement before it calls.
 
 ### Check system
 

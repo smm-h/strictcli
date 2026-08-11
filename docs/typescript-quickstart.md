@@ -704,8 +704,32 @@ $ mytool destroy prod < /dev/null
 error: stdin is not interactive; pass --approve-consequential to confirm
 ```
 
-The prompt never fires on the programmatic paths (`app.test()`, `app.call()`,
-MCP), which have no TTY contract. There is no bypass flag:
+The prompt never fires on the programmatic paths, which have no TTY contract.
+`app.test()` behaves as if `--approve-consequential` were passed; `app.call()`
+and the MCP server take the consent from the call instead and refuse a
+consequential command without it:
+
+```ts
+// Throws InvokeError:
+//   command 'destroy' is consequential: pass approve_consequential to confirm
+await app.call("destroy", { env: "prod" });
+
+// Proceeds
+await app.call("destroy", { env: "prod" }, { approveConsequential: true });
+```
+
+Over MCP the same consent is a top-level `tools/call` param, a sibling of
+`name` and `arguments`, never a member of `arguments`:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call",
+ "params":{"name":"destroy","arguments":{"env":"prod"},"approve_consequential":true}}
+```
+
+This is not human approval and is not meant to be: it makes the caller state,
+in the call, that it is proceeding without a human. Tool descriptors and MCP
+`tools/list` publish `effect` and `consequential` beside the argument schema so
+a caller can see the requirement before it calls. There is no bypass flag:
 `--approve-consequential` answers the prompt and does nothing else. Setting
 `consequential: true` on `defineReadOnlyCommand` throws at registration time --
 a command that changes nothing has nothing to confirm.
@@ -761,6 +785,27 @@ const result = await app.call("dns.zone.create", { name: "example.com" });
 ```
 
 Failures throw `InvokeError`.
+
+A third `CallOptions` argument carries the caller's consent. A command declared
+`consequential` is refused without it, because there is no terminal here to
+prompt:
+
+```typescript
+// Throws: command 'destroy' is consequential: pass approve_consequential to confirm
+await app.call("destroy", { env: "prod" });
+
+await app.call("destroy", { env: "prod" }, { approveConsequential: true });
+```
+
+`app.asTools()` publishes the same requirement on every descriptor, beside the
+argument schema rather than inside it, so a caller can see it before it calls:
+
+```typescript
+const release = app.asTools().find((t) => t.name === "release");
+release.effect; // "mutating"
+release.consequential; // true
+await release.execute({}, { approveConsequential: true });
+```
 
 ## TypeScript Type Safety
 

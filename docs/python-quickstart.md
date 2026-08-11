@@ -581,9 +581,33 @@ $ mytool destroy prod < /dev/null
 error: stdin is not interactive; pass --approve-consequential to confirm
 ```
 
-The prompt never fires on the programmatic paths (`app.test()`, `app.call()`,
-MCP), which have no TTY contract. There is no bypass flag: `--approve-consequential`
-answers the prompt and does nothing else. A `read_only` command cannot be
+The prompt never fires on the programmatic paths, which have no TTY contract.
+`app.test()` behaves as if `--approve-consequential` were passed; `app.call()`
+(and `acall()`, and the MCP server) take the consent from the call instead and
+refuse a consequential command without it:
+
+```python
+# Raises InvokeError:
+#   command 'destroy' is consequential: pass approve_consequential to confirm
+app.call("destroy", env="prod")
+
+# Proceeds
+app.call("destroy", approve_consequential=True, env="prod")
+```
+
+Over MCP the same consent is a top-level `tools/call` param, a sibling of
+`name` and `arguments`, never a member of `arguments`:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call",
+ "params":{"name":"destroy","arguments":{"env":"prod"},"approve_consequential":true}}
+```
+
+This is not human approval and is not meant to be: it makes the caller state,
+in the call, that it is proceeding without a human. Tool descriptors and MCP
+`tools/list` publish `effect` and `consequential` beside the argument schema so
+a caller can see the requirement before it calls. There is no bypass flag:
+`--approve-consequential` answers the prompt and does nothing else. A `read_only` command cannot be
 declared consequential -- a command that changes nothing has nothing to confirm --
 and trying raises `ValueError` at registration time.
 

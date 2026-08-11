@@ -401,7 +401,18 @@ It also carries the reserved quartet and the effects handle: `DryRun()`,
 
 ```go
 tools := app.AsTools()
-// Each Tool has: Name, Description, Parameters (JSON Schema), Execute
+// Each Tool has: Name, Description, Parameters (JSON Schema), Effect,
+// Consequential, Execute
+```
+
+`Effect` and `Consequential` publish the effects-regime classification beside
+the argument schema, so a caller can see before it calls that a tool changes
+things and that invoking it requires stating consent:
+
+```go
+_, err := release.Execute(nil)
+// err: command 'release' is consequential: pass approve_consequential to confirm
+_, err = release.Execute(nil, strictcli.WithApproveConsequential()) // proceeds
 ```
 
 ### MCP server
@@ -547,7 +558,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `app.Deprecated(name, message)` | Register a deprecated command |
 | `app.Run()` | Parse `os.Args` and execute |
 | `app.Test(argv)` | Run in-process, return `Result` |
-| `app.Call(commandPath, kwargs)` | Invoke a command programmatically; returns data (ExitData) or exit code |
+| `app.Call(commandPath, kwargs, opts...)` | Invoke a command programmatically; returns data (ExitData) or exit code. `WithApproveConsequential()` is the consent a consequential command requires |
 | `app.AsTools()` | Export commands as `Tool` descriptors |
 | `app.ServeMCP()` | Run MCP server on stdin/stdout |
 | `app.ConfigField(name, opts...)` | Declare a typed config field |

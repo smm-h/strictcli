@@ -465,8 +465,32 @@ $ mytool destroy prod < /dev/null
 error: stdin is not interactive; pass --approve-consequential to confirm
 ```
 
-The prompt never fires on the programmatic paths (`app.Test()`, `app.Call()`,
-MCP), which have no TTY contract. There is no bypass flag:
+The prompt never fires on the programmatic paths, which have no TTY contract.
+`app.Test()` behaves as if `--approve-consequential` were passed; `app.Call()`
+and the MCP server take the consent from the call instead and refuse a
+consequential command without it:
+
+```go
+// Refused: command 'destroy' is consequential: pass approve_consequential to confirm
+_, err := app.Call("destroy", map[string]interface{}{"env": "prod"})
+
+// Proceeds
+_, err = app.Call("destroy", map[string]interface{}{"env": "prod"},
+    strictcli.WithApproveConsequential())
+```
+
+Over MCP the same consent is a top-level `tools/call` param, a sibling of
+`name` and `arguments`, never a member of `arguments`:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call",
+ "params":{"name":"destroy","arguments":{"env":"prod"},"approve_consequential":true}}
+```
+
+This is not human approval and is not meant to be: it makes the caller state,
+in the call, that it is proceeding without a human. Tool descriptors and MCP
+`tools/list` publish `Effect` and `Consequential` beside the argument schema so
+a caller can see the requirement before it calls. There is no bypass flag:
 `--approve-consequential` answers the prompt and does nothing else. A read-only
 command cannot be declared consequential -- a command that changes nothing has
 nothing to confirm -- and trying panics at registration time.

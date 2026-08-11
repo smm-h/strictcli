@@ -372,7 +372,19 @@ Auto-registers a `check` command with tag DSL filtering
 
 ```python
 tools = app.as_tools()
-# Each Tool has: name, description, parameters (JSON Schema), execute
+# Each Tool has: name, description, parameters (JSON Schema), effect,
+# consequential, execute
+```
+
+`effect` and `consequential` publish the effects-regime classification beside
+the argument schema, so a caller can see before it calls that a tool changes
+things and that invoking it requires stating consent:
+
+```python
+release = next(t for t in tools if t.name == "release")
+release.consequential            # True
+await release.execute()          # InvokeError: ... pass approve_consequential to confirm
+await release.execute(approve_consequential=True)   # proceeds
 ```
 
 ### MCP server

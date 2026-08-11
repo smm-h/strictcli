@@ -1320,9 +1320,75 @@ interactive on Go -- is pathological and is left as an accepted ceiling.
 
 ### 8.4 Programmatic dispatch
 
-`test()`, `call()` / `Call()` / `invoke`, and the MCP server behave **as if
-`--approve-consequential` were passed**: they never prompt and never emit the non-TTY error. These
-paths have no TTY contract, and a prompt there would hang the caller.
+No programmatic path ever prompts and none emits the non-TTY error: these paths have no TTY
+contract, and a prompt there would hang the caller. What they do about the requirement itself
+splits in two (amended 2026-08-11, item 93):
+
+- **`test()` / `Test()`** behaves as if `--approve-consequential` were passed. It takes argv, so a
+  caller that wants the flag's semantics writes the flag.
+- **`call()` / `Call()` / `invoke` / `invokeApp`, and the MCP server** take the consent from the
+  call instead (§8.5). A consequential command reached without it is refused.
+
+### 8.5 Consent on the non-CLI channels
+
+Requiring confirmation is a property of the **command**, so every channel honours it. A command
+that requires confirmation is still exported as a tool -- hiding it would remove the capability
+rather than decline it -- but a caller must supply consent explicitly in the call and is refused
+without it. This does not produce human approval and is not meant to: it makes the caller **state**
+that it is proceeding without a human, in the call, where it can be recorded, instead of the
+framework deciding that silently on everyone's behalf.
+
+**Publication.** Every tool descriptor and every tool listing carries the classification beside the
+descriptor's other fields, never inside the argument schema -- it describes the tool, not one of
+its arguments. The field vocabulary is the schema dump's (§13): `effect` always, `consequential`
+only when true.
+
+| Surface | Where |
+|---------|-------|
+| `as_tools()` / `AsTools()` / `asTools()` | `Tool.effect` and `Tool.consequential` on the descriptor |
+| MCP `tools/list` | `effect` and `consequential` keys beside `name`, `description`, `inputSchema` |
+
+The router tool classifies `mutating` and is **not** consequential: the routed command's own
+requirement is checked when the call reaches it, and the router forwards the caller's consent
+unchanged. Marking the router consequential would demand consent for routing to a `read_only`
+command, which confirms nothing.
+
+**The consent argument**, spelled per-language because the call signatures differ. Behaviour is
+identical; only the spelling is idiomatic:
+
+| Implementation | Spelling |
+|----------------|----------|
+| Python | `app.call(path, approve_consequential=True, **kwargs)` -- keyword-only, and safe from collision because the name is framework-reserved so no command can declare it. `acall` and `Tool.execute` take the same keyword. |
+| Go | `app.Call(path, kwargs, strictcli.WithApproveConsequential())` -- a variadic `CallOption`. Go's kwargs are a map, so consent cannot ride in them; the variadic option is this package's existing shape for a declaration that is not data. `Tool.Execute` takes the same variadic. |
+| TypeScript | `app.call(path, kwargs, { approveConsequential: true })` -- a trailing options object (`CallOptions`). `Tool.execute` takes the same. |
+
+**MCP** expresses consent as a top-level `tools/call` param, a sibling of `name` and `arguments`:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call",
+ "params":{"name":"release","arguments":{},"approve_consequential":true}}
+```
+
+It is deliberately **not** a member of `arguments`. That object is the command's own argument
+namespace, published with `additionalProperties: false`; a reserved name appearing there is an
+unknown parameter and is reported as one, never promoted to consent. There is no server-side
+default: absent means "not consented". A non-boolean value is a `-32602` protocol error
+(`parameter 'approve_consequential' must be a boolean`); a refusal is ordinary `isError` tool-result
+content, like any other invocation failure.
+
+**The refusal**, byte-identical in all three implementations:
+
+```
+command '<path>' is consequential: pass approve_consequential to confirm
+```
+
+**Consent reaches the handler.** When it is given, `ctx.approve_consequential` /
+`ctx.ApproveConsequential()` / `ctx.approveConsequential` reports `true` on the programmatic path,
+exactly as it does when the CLI flag was passed -- so a handler or an audit record can see how the
+run was consented to.
+
+**Unaffected:** `read_only` and plain `mutating` commands. Consent is only ever demanded by the
+`consequential` declaration.
 
 **`--dry-run` reachability splits along the argv boundary, not the dispatch boundary** (amended
 2026-08-03, D1; the previous text said `--dry-run` was unreachable through all of them "because
@@ -3017,6 +3083,54 @@ central inference. This round is governed by the same precedence rule item 84 es
     payoff is that `errConfirmNonInteractive` stops being `coverage_deferred` and becomes an
     ordinary covered template in all three targets; the immediate cost was item 90, which the
     pinning is what found.
+
+### 18.8 Amendments made at the non-CLI consent round (2026-08-11)
+
+93. **The confirmation requirement is honoured on every channel, not only the terminal one (§8.4,
+    §8.5).** The shipped regime enforced it at exactly one entry point. Everywhere else the same
+    condition -- no terminal -- produced the opposite outcome: `exit 1` on the CLI path, silent
+    proceed on `call` and over MCP, with nothing announcing the difference. Worse, the two
+    non-CLI channels could not even see the declaration: the tool descriptors and the MCP
+    `tools/list` `inputSchema` carried flags and args only, so a consumer rendering a tool was
+    never told which ones were consequential.
+
+    The resolution keeps the declaration a property of the command and gives every channel a way
+    to honour it: publish the classification beside the descriptor (never inside the argument
+    schema), and require the programmatic caller to state consent in the call. The honest limit,
+    recorded so nobody mistakes this for approval: **a caller can always supply consent.** The
+    point is that it must now say so somewhere recordable, rather than the framework answering for
+    it.
+
+    **Rejected alternatives**, each recorded so the ruling is reversible:
+    - *Refuse consequential commands over MCP entirely.* Doctrinally cleanest -- consequential
+      means interrupt a human, and MCP has none -- but it removes the capability with no path back
+      short of a terminal.
+    - *Filter consequential commands out of the tool list*, the way `hidden` and `interactive`
+      already work. Same breakage, and it hides the capability rather than declining it.
+    - *Keep auto-approving and document it as terminal-only.* Nothing breaks, and the declaration
+      means nothing outside one caller.
+    - *Carry consent inside the MCP `arguments` object.* It would collide with the command's own
+      argument namespace, which is published with `additionalProperties: false`, and a strict
+      client would refuse to send a key the schema does not declare.
+    - *Make `consequential` a property of the (command, channel) pair.* A coherent alternative with
+      a very different downstream shape; it changes the registration surface in all three
+      implementations and was not needed to close this hole.
+
+94. **`test()` keeps its as-if-approved behaviour (§8.4, authored at this round).** It parses argv
+    exactly as the CLI does, so a caller who wants the flag's semantics can write the flag; and
+    every unit suite in the fleet drives consequential commands through it. Item 93 applies to the
+    argv-bypassing paths only.
+
+95. **Conformance grows a programmatic-call entry point and a case-level `stdin` (§14, authored at
+    this round).** The harness drove argv and subprocesses only, which cannot reach `call()` at
+    all and cannot feed the MCP server its JSON-RPC lines. Both extensions follow the `pre_test`
+    precedent: one app-definition field consumed by each language adapter in a few lines
+    (`pre_call`, plus `dump_tools` for the descriptor classification), and one case field
+    (`stdin`) that run.py hands to the subprocess. Item 92's property is preserved -- a pipe
+    carrying the case's own text is not a TTY either. The three MCP cases carry an
+    `acknowledged_divergence` for stdout: the JSON-RPC wire form is each language's own encoder
+    (Python spaces its separators, Go sorts map keys and renders an empty list as null), which was
+    never part of the contract.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
