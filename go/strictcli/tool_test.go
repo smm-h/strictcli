@@ -828,3 +828,123 @@ func TestJsonSchemaDefaultNilOptional(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Effects classification on the descriptor + programmatic consent
+// ---------------------------------------------------------------------------
+
+// consentToolApp is the shared fixture for the classification and consent
+// tests: one command per position in the regime (read_only, plain mutating,
+// consequential mutating).
+func consentToolApp() *App {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("look", "look at things", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return ExitData(0, map[string]interface{}{"looked": true})
+	}, WithEffect(EffectReadOnly))
+	app.Command("build", "build things", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return ExitData(0, map[string]interface{}{"built": true})
+	}, WithEffect(EffectMutating))
+	app.Command("release", "release things", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return ExitData(0, map[string]interface{}{"released": true})
+	}, WithEffect(EffectMutating), WithConsequential())
+	return app
+}
+
+func toolsByName(tools []Tool) map[string]Tool {
+	m := make(map[string]Tool, len(tools))
+	for _, tl := range tools {
+		m[tl.Name] = tl
+	}
+	return m
+}
+
+func TestAsToolsPublishesClassification(t *testing.T) {
+	tools := toolsByName(consentToolApp().AsTools())
+	cases := []struct {
+		name          string
+		effect        string
+		consequential bool
+	}{
+		{"look", EffectReadOnly, false},
+		{"build", EffectMutating, false},
+		{"release", EffectMutating, true},
+	}
+	for _, c := range cases {
+		tl, ok := tools[c.name]
+		if !ok {
+			t.Fatalf("no tool %q", c.name)
+		}
+		if tl.Effect != c.effect || tl.Consequential != c.consequential {
+			t.Errorf("%s: got (%q, %v) want (%q, %v)",
+				c.name, tl.Effect, tl.Consequential, c.effect, c.consequential)
+		}
+	}
+}
+
+func TestAsToolsClassificationIsNotInTheArgumentSchema(t *testing.T) {
+	tools := toolsByName(consentToolApp().AsTools())
+	props := tools["release"].Parameters["properties"].(map[string]interface{})
+	for _, banned := range []string{"effect", "consequential", "approve_consequential"} {
+		if _, ok := props[banned]; ok {
+			t.Errorf("%q must not appear in the argument schema", banned)
+		}
+	}
+}
+
+func TestRouterToolIsMutatingButNotConsequential(t *testing.T) {
+	tools := consentToolApp().AsTools()
+	router := tools[len(tools)-1]
+	if router.Name != "myapp" {
+		t.Fatalf("expected the router last, got %q", router.Name)
+	}
+	if router.Effect != EffectMutating || router.Consequential {
+		t.Errorf("router: got (%q, %v) want (%q, false)",
+			router.Effect, router.Consequential, EffectMutating)
+	}
+}
+
+func TestToolExecuteRefusesWithoutConsent(t *testing.T) {
+	tools := toolsByName(consentToolApp().AsTools())
+	_, err := tools["release"].Execute(nil)
+	if err == nil {
+		t.Fatal("an unconsented consequential Execute must be refused")
+	}
+	want := "command 'release' is consequential: pass approve_consequential to confirm"
+	if err.Error() != want {
+		t.Fatalf("got %q want %q", err.Error(), want)
+	}
+}
+
+func TestToolExecuteProceedsWithConsent(t *testing.T) {
+	tools := toolsByName(consentToolApp().AsTools())
+	result, err := tools["release"].Execute(nil, WithApproveConsequential())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, ok := result.(map[string]interface{})
+	if !ok || data["released"] != true {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestToolExecuteNeedsNoConsentForUnaffectedCommands(t *testing.T) {
+	tools := toolsByName(consentToolApp().AsTools())
+	for _, name := range []string{"look", "build"} {
+		if _, err := tools[name].Execute(nil); err != nil {
+			t.Errorf("%s: unexpected error: %v", name, err)
+		}
+	}
+}
+
+func TestRouterToolForwardsConsent(t *testing.T) {
+	tools := consentToolApp().AsTools()
+	router := tools[len(tools)-1]
+	if _, err := router.Execute(map[string]interface{}{"command": "release"}); err == nil {
+		t.Fatal("the router must not launder away the requirement")
+	}
+	_, err := router.Execute(
+		map[string]interface{}{"command": "release"}, WithApproveConsequential())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

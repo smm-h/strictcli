@@ -184,14 +184,24 @@ func collectMCPToolsFromGroup(group *Group, path []string, toolDefs *[]interface
 
 // buildMCPToolDef builds an MCP tool definition for a single command.
 // The tool name uses underscores (MCP convention) instead of dots.
+//
+// The classification sits BESIDE inputSchema, never inside it: it describes
+// the tool, not an argument the caller passes. Same emission rule as the
+// schema dump -- "effect" always, "consequential" only when true (absence
+// means "not consequential").
 func buildMCPToolDef(commandPath string, cmd *Command) map[string]interface{} {
 	// MCP tool names use underscores instead of dots for nested commands
 	toolName := strings.ReplaceAll(commandPath, ".", "_")
-	return map[string]interface{}{
+	def := map[string]interface{}{
 		"name":        toolName,
 		"description": cmd.Help,
+		"effect":      cmd.Effect,
 		"inputSchema": buildJSONSchema(cmd),
 	}
+	if cmd.Consequential {
+		def["consequential"] = true
+	}
+	return def
 }
 
 // handleMCPToolsCall validates params, calls the command, and returns the result.
@@ -245,8 +255,31 @@ func (a *App) handleMCPToolsCall(req mcpRequest) mcpResponse {
 		callArgs = map[string]interface{}{}
 	}
 
+	// Consent is a top-level param, a sibling of "name" and "arguments" --
+	// never a member of "arguments", which is the command's own argument
+	// namespace and is published with additionalProperties: false. There is no
+	// server-side default: absent means "not consented", and a consequential
+	// tool is then refused.
+	var callOpts []CallOption
+	if consentVal, ok := params["approve_consequential"]; ok {
+		consent, ok := consentVal.(bool)
+		if !ok {
+			return mcpResponse{
+				Jsonrpc: "2.0",
+				ID:      req.ID,
+				Error: &mcpError{
+					Code:    mcpErrInvalidParams,
+					Message: "parameter 'approve_consequential' must be a boolean",
+				},
+			}
+		}
+		if consent {
+			callOpts = append(callOpts, WithApproveConsequential())
+		}
+	}
+
 	// Call the command
-	result, err := a.Call(commandPath, callArgs)
+	result, err := a.Call(commandPath, callArgs, callOpts...)
 	if err != nil {
 		return mcpResponse{
 			Jsonrpc: "2.0",

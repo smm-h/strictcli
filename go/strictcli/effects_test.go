@@ -1071,9 +1071,10 @@ func TestConsequentialPassthroughIsNotExemptFromConfirm(t *testing.T) {
 }
 
 func TestProgrammaticDispatchNeverPrompts(t *testing.T) {
-	// Test() and Call() behave as if --approve-consequential were passed: a
-	// consequential command runs straight through with no prompt and no
-	// non-TTY error.
+	// Test() behaves as if --approve-consequential were passed, and Call()
+	// never prompts either -- it takes its consent as an option, so a
+	// consented call runs straight through with no prompt and no non-TTY
+	// error.
 	ran := false
 	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
 		ran = true
@@ -1083,8 +1084,61 @@ func TestProgrammaticDispatchNeverPrompts(t *testing.T) {
 		t.Fatalf("Test() must not prompt: exit=%d ran=%v stderr=%q", r.ExitCode, ran, r.Stderr)
 	}
 	ran = false
-	if _, err := app.Call("go", nil); err != nil || !ran {
+	if _, err := app.Call("go", nil, WithApproveConsequential()); err != nil || !ran {
 		t.Fatalf("Call() must not prompt: err=%v ran=%v", err, ran)
+	}
+}
+
+// TestCallRefusesAnUnconsentedConsequentialCommand pins the programmatic
+// channel's half of the requirement: there is no terminal to prompt, so the
+// caller has to state consent in the call or be refused.
+func TestCallRefusesAnUnconsentedConsequentialCommand(t *testing.T) {
+	ran := false
+	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
+		ran = true
+		return Exit(0)
+	}, WithConsequential())
+	_, err := app.Call("go", nil)
+	if err == nil {
+		t.Fatal("an unconsented consequential Call must be refused")
+	}
+	want := "command 'go' is consequential: pass approve_consequential to confirm"
+	if err.Error() != want {
+		t.Fatalf("got %q want %q", err.Error(), want)
+	}
+	if ran {
+		t.Fatal("the handler must not run")
+	}
+}
+
+// TestCallNeedsNoConsentForUnaffectedCommands: classification alone never
+// demands consent -- only the consequential declaration does.
+func TestCallNeedsNoConsentForUnaffectedCommands(t *testing.T) {
+	for _, effect := range []string{EffectReadOnly, EffectMutating} {
+		ran := false
+		app := effectsApp(effect, func(ctx *Context) Outcome {
+			ran = true
+			return Exit(0)
+		})
+		if _, err := app.Call("go", nil); err != nil || !ran {
+			t.Fatalf("%s: err=%v ran=%v", effect, err, ran)
+		}
+	}
+}
+
+// TestCallConsentReachesTheHandler: the caller's declaration is visible on the
+// Context, so a handler (or an audit record) can see it.
+func TestCallConsentReachesTheHandler(t *testing.T) {
+	var approved bool
+	app := effectsApp(EffectMutating, func(ctx *Context) Outcome {
+		approved = ctx.ApproveConsequential()
+		return Exit(0)
+	}, WithConsequential())
+	if _, err := app.Call("go", nil, WithApproveConsequential()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !approved {
+		t.Fatal("ctx.ApproveConsequential() must report the call's consent")
 	}
 }
 

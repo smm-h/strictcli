@@ -6,11 +6,19 @@ import (
 )
 
 // Tool is a descriptor for exposing CLI commands to tool-using LLM agents.
+//
+// Effect and Consequential publish the effects-regime classification BESIDE
+// the argument schema (never inside it): a consumer rendering this tool must
+// be able to see that the command changes things and that calling it requires
+// stating consent. Same vocabulary as the schema dump: Effect is mandatory,
+// Consequential defaults to false.
 type Tool struct {
-	Name        string
-	Description string
-	Parameters  map[string]interface{}
-	Execute     func(map[string]interface{}) (interface{}, error)
+	Name          string
+	Description   string
+	Parameters    map[string]interface{}
+	Effect        string
+	Consequential bool
+	Execute       func(map[string]interface{}, ...CallOption) (interface{}, error)
 }
 
 // jsonSchemaType maps scalar FlagType values to JSON Schema type strings.
@@ -201,11 +209,13 @@ func (a *App) collectToolsFromGroup(
 // makeTool builds a Tool for a single command.
 func (a *App) makeTool(commandPath string, cmd *Command) Tool {
 	return Tool{
-		Name:        commandPath,
-		Description: cmd.Help,
-		Parameters:  buildJSONSchema(cmd),
-		Execute: func(kwargs map[string]interface{}) (interface{}, error) {
-			return a.Call(commandPath, kwargs)
+		Name:          commandPath,
+		Description:   cmd.Help,
+		Parameters:    buildJSONSchema(cmd),
+		Effect:        cmd.Effect,
+		Consequential: cmd.Consequential,
+		Execute: func(kwargs map[string]interface{}, opts ...CallOption) (interface{}, error) {
+			return a.Call(commandPath, kwargs, opts...)
 		},
 	}
 }
@@ -236,11 +246,18 @@ func (a *App) makeRouterTool(commandPaths []string) Tool {
 		"additionalProperties": false,
 	}
 
+	// The router can reach a mutating command, so it classifies as mutating. It
+	// is NOT itself consequential: the routed command's own requirement is
+	// checked when the call reaches it, and the router forwards the caller's
+	// consent unchanged. Marking the router consequential would demand consent
+	// for routing to a read_only command, which confirms nothing.
 	return Tool{
-		Name:        a.Name,
-		Description: fmt.Sprintf("Route to %s commands", a.Name),
-		Parameters:  parameters,
-		Execute: func(kwargs map[string]interface{}) (interface{}, error) {
+		Name:          a.Name,
+		Description:   fmt.Sprintf("Route to %s commands", a.Name),
+		Parameters:    parameters,
+		Effect:        EffectMutating,
+		Consequential: false,
+		Execute: func(kwargs map[string]interface{}, opts ...CallOption) (interface{}, error) {
 			cmdVal, ok := kwargs["command"]
 			if !ok {
 				// No command specified -- return list of available commands
@@ -259,7 +276,7 @@ func (a *App) makeRouterTool(commandPaths []string) Tool {
 					fwd[k] = v
 				}
 			}
-			return a.Call(cmdPath, fwd)
+			return a.Call(cmdPath, fwd, opts...)
 		},
 	}
 }

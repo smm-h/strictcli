@@ -1307,6 +1307,17 @@ const errConfirmNonInteractive = "error: stdin is not interactive; pass --approv
 
 const errConfirmDeclined = "aborted"
 
+// errCallConsequentialUnconsented is the programmatic-path refusal (contract
+// §8.5).
+//
+// Requiring confirmation is a property of the COMMAND, so every channel has to
+// honour it -- but a programmatic caller has no terminal to prompt. The refusal
+// makes the caller state, in the call, that it is proceeding without a human,
+// instead of the framework deciding that silently on its behalf.
+func errCallConsequentialUnconsented(cmdPath string) string {
+	return fmt.Sprintf("command '%s' is consequential: pass approve_consequential to confirm", cmdPath)
+}
+
 // ---------------------------------------------------------------------------
 // strictcli.go — doParse dry-run refusal (parse-time)
 //

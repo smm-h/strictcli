@@ -30,6 +30,36 @@ func paramToFlagName(param string) string {
 	return strings.ReplaceAll(param, "_", "-")
 }
 
+// callOptions carries the per-call state that is NOT a handler kwarg.
+type callOptions struct {
+	approveConsequential bool
+}
+
+// CallOption configures one App.Call. Go's Call takes its kwargs as a map, so
+// consent cannot ride in them the way Python's keyword-only argument does --
+// it is a variadic option instead, which is this package's existing shape for
+// "a declaration that is not data".
+type CallOption func(*callOptions)
+
+// WithApproveConsequential is the caller's explicit consent on the
+// programmatic path, the counterpart of the CLI's --approve-consequential. A
+// command that declares itself consequential is refused without it; read-only
+// and plain mutating commands are unaffected.
+func WithApproveConsequential() CallOption {
+	return func(o *callOptions) { o.approveConsequential = true }
+}
+
+// buildCallOptions folds the variadic options into a value.
+func buildCallOptions(opts []CallOption) callOptions {
+	var o callOptions
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&o)
+		}
+	}
+	return o
+}
+
 // invoke executes a command programmatically by path and pre-typed kwargs,
 // bypassing CLI parsing, env var resolution, and config loading. The caller
 // provides fully-typed values for all non-defaultable parameters.
@@ -39,7 +69,12 @@ func paramToFlagName(param string) string {
 //
 // For passthrough commands, the special key "_args" must contain a []string
 // of raw arguments to forward to the handler.
-func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeResult {
+//
+// opts carries the caller's consent: a consequential command is refused
+// without WithApproveConsequential().
+func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...CallOption) invokeResult {
+	co := buildCallOptions(opts)
+
 	// Validate registrations
 	if errMsg := a.validateCheckRegistrations(); errMsg != "" {
 		return invokeResult{exitCode: 1, err: errMsg}
@@ -62,9 +97,18 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 
 	cmd := route.cmd
 
+	// The consent check (contract §8.5). There is no terminal here, so the
+	// confirm protocol's PROMPT cannot fire -- the caller must have said so in
+	// the call. Checked before anything is dispatched or recorded.
+	if cmd.Consequential && !co.approveConsequential {
+		return invokeResult{exitCode: 1, err: errCallConsequentialUnconsented(commandPath)}
+	}
+
 	// Programmatic dispatch: --dry-run is not reachable (argv parsing is
-	// bypassed entirely) and the confirm protocol never fires -- these paths
-	// have no TTY contract and a prompt there would hang the caller.
+	// bypassed entirely) and the confirm protocol's prompt never fires -- these
+	// paths have no TTY contract and a prompt there would hang the caller. The
+	// requirement itself is honoured above, and the caller's consent is
+	// delivered to the handler on the Context.
 	a.beginDispatch()
 
 	// Record test-coverage hit (command-level only).
@@ -114,7 +158,8 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 			}
 		}
 		ctx := newContext(io.Discard, io.Discard, nil, a.infraAccess(false),
-			reservedFlags{}, a.armEffects(cmd, commandPath, false))
+			reservedFlags{approveConsequential: co.approveConsequential},
+			a.armEffects(cmd, commandPath, false))
 		code, truncErr := a.invokeSealed(func() int {
 			return cmd.PassthroughHandler(ctx, cmd.Name, args, globalKwargs)
 		})
@@ -250,7 +295,8 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}) invokeRe
 	// Context is constructed unconditionally. For invoke, stdout/stderr are
 	// discarded -- structured data flows back through the Outcome, not stdout.
 	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess(false),
-		reservedFlags{}, a.armEffects(cmd, commandPath, false))
+		reservedFlags{approveConsequential: co.approveConsequential},
+		a.armEffects(cmd, commandPath, false))
 
 	// Call the handler under the runtime seal.
 	var outcome Outcome
@@ -373,8 +419,8 @@ func coerceInvokeDict(f *Flag, value interface{}) (interface{}, string) {
 //
 // Returns an InvokeError if invocation fails (unknown command, missing
 // required flags, mutex violations, dependency errors, etc.).
-func (a *App) Call(commandPath string, kwargs map[string]interface{}) (interface{}, error) {
-	ir := a.invoke(commandPath, kwargs)
+func (a *App) Call(commandPath string, kwargs map[string]interface{}, opts ...CallOption) (interface{}, error) {
+	ir := a.invoke(commandPath, kwargs, opts...)
 	if ir.err != "" {
 		return nil, &InvokeError{Message: ir.err}
 	}

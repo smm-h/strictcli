@@ -841,3 +841,131 @@ func mustJSON(v interface{}) string {
 	}
 	return string(data)
 }
+
+// ---------------------------------------------------------------------------
+// Effects classification and programmatic consent over MCP
+// ---------------------------------------------------------------------------
+
+func mcpToolDefsByName(t *testing.T, app *App) map[string]map[string]interface{} {
+	t.Helper()
+	resp, err := sendMCPRequest(app, "tools/list", 1, map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("tools/list failed: %v", err)
+	}
+	result := resp["result"].(map[string]interface{})
+	defs := map[string]map[string]interface{}{}
+	for _, raw := range result["tools"].([]interface{}) {
+		def := raw.(map[string]interface{})
+		defs[def["name"].(string)] = def
+	}
+	return defs
+}
+
+func mcpCall(t *testing.T, app *App, params map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	resp, err := sendMCPRequest(app, "tools/call", 1, params)
+	if err != nil {
+		t.Fatalf("tools/call failed: %v", err)
+	}
+	return resp
+}
+
+func TestMCPToolsListPublishesClassification(t *testing.T) {
+	defs := mcpToolDefsByName(t, consentToolApp())
+	if got := defs["look"]["effect"]; got != EffectReadOnly {
+		t.Errorf("look effect: got %v want %q", got, EffectReadOnly)
+	}
+	if got := defs["release"]["effect"]; got != EffectMutating {
+		t.Errorf("release effect: got %v want %q", got, EffectMutating)
+	}
+	if got := defs["release"]["consequential"]; got != true {
+		t.Errorf("release consequential: got %v want true", got)
+	}
+	// Absence means "not consequential", exactly as in the schema dump.
+	if _, ok := defs["look"]["consequential"]; ok {
+		t.Error("consequential must be omitted when false")
+	}
+	// The classification describes the tool, not one of its arguments.
+	schema := defs["release"]["inputSchema"].(map[string]interface{})
+	props := schema["properties"].(map[string]interface{})
+	for _, banned := range []string{"effect", "consequential", "approve_consequential"} {
+		if _, ok := props[banned]; ok {
+			t.Errorf("%q must not appear in inputSchema", banned)
+		}
+	}
+}
+
+func TestMCPToolsCallRefusesWithoutConsent(t *testing.T) {
+	resp := mcpCall(t, consentToolApp(), map[string]interface{}{"name": "release"})
+	result := resp["result"].(map[string]interface{})
+	if result["isError"] != true {
+		t.Fatalf("expected isError, got %#v", result)
+	}
+	content := result["content"].([]interface{})[0].(map[string]interface{})
+	want := "command 'release' is consequential: pass approve_consequential to confirm"
+	if content["text"] != want {
+		t.Fatalf("got %q want %q", content["text"], want)
+	}
+}
+
+func TestMCPToolsCallProceedsWithConsent(t *testing.T) {
+	resp := mcpCall(t, consentToolApp(), map[string]interface{}{
+		"name": "release", "approve_consequential": true,
+	})
+	result := resp["result"].(map[string]interface{})
+	if _, isErr := result["isError"]; isErr {
+		t.Fatalf("unexpected error result: %#v", result)
+	}
+	content := result["content"].([]interface{})[0].(map[string]interface{})
+	if content["text"] != `{"released":true}` {
+		t.Fatalf("unexpected content: %v", content["text"])
+	}
+}
+
+func TestMCPToolsCallExplicitFalseIsRefused(t *testing.T) {
+	resp := mcpCall(t, consentToolApp(), map[string]interface{}{
+		"name": "release", "approve_consequential": false,
+	})
+	result := resp["result"].(map[string]interface{})
+	if result["isError"] != true {
+		t.Fatalf("expected isError, got %#v", result)
+	}
+}
+
+func TestMCPToolsCallReadOnlyNeedsNoConsent(t *testing.T) {
+	resp := mcpCall(t, consentToolApp(), map[string]interface{}{"name": "look"})
+	result := resp["result"].(map[string]interface{})
+	if _, isErr := result["isError"]; isErr {
+		t.Fatalf("unexpected error result: %#v", result)
+	}
+}
+
+func TestMCPToolsCallNonBooleanConsentIsAProtocolError(t *testing.T) {
+	resp := mcpCall(t, consentToolApp(), map[string]interface{}{
+		"name": "release", "approve_consequential": "yes",
+	})
+	errObj, ok := resp["error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected a JSON-RPC error, got %#v", resp)
+	}
+	if errObj["code"] != float64(mcpErrInvalidParams) {
+		t.Errorf("code: got %v want %d", errObj["code"], mcpErrInvalidParams)
+	}
+	want := "parameter 'approve_consequential' must be a boolean"
+	if errObj["message"] != want {
+		t.Errorf("got %q want %q", errObj["message"], want)
+	}
+}
+
+func TestMCPConsentInsideArgumentsDoesNotConsent(t *testing.T) {
+	// The command's argument namespace is not a consent channel: no command
+	// can declare the reserved name, so it surfaces as an unknown parameter.
+	resp := mcpCall(t, consentToolApp(), map[string]interface{}{
+		"name":      "release",
+		"arguments": map[string]interface{}{"approve_consequential": true},
+	})
+	result := resp["result"].(map[string]interface{})
+	if result["isError"] != true {
+		t.Fatalf("expected isError, got %#v", result)
+	}
+}
