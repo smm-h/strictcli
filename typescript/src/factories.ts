@@ -29,6 +29,7 @@ import {
 	errArgHelpEmpty,
 	errArgIntDefaultTypeMismatch,
 	errArgListTypeOnArgsRequiresVariadicTrue,
+	errArgNameConsentReserved,
 	errArgStrDefaultTypeMismatch,
 	errCommandAtMostOneVariadic,
 	errCommandCoRequiredDuplicate,
@@ -73,6 +74,7 @@ import {
 	errFlagForceReserved,
 	errFlagHelpEmpty,
 	errFlagIntDefaultTypeMismatch,
+	errFlagNameConsentReserved,
 	errFlagNameReservedByFramework,
 	errFlagNameYesBanned,
 	errFlagNoPrefixReserved,
@@ -310,6 +312,21 @@ export const RESERVED_FRAMEWORK_FLAG_NAMES: ReadonlySet<string> = new Set([
  */
 export const BANNED_FLAG_NAMES: ReadonlySet<string> = new Set(["yes"]);
 
+/**
+ * The programmatic consent PARAMETER name, reserved on both the flag surface
+ * and the arg surface at every level.
+ *
+ * TS kwargs are an options object, so a parameter of this name cannot shadow
+ * `CallOptions.approveConsequential` the way Python's keyword-only consent
+ * parameter would -- but the name is framework vocabulary in every
+ * implementation (app.call, Tool.execute, the MCP tools/call param), and a
+ * command must mean the same thing on every channel and in every language.
+ * RESERVED_FRAMEWORK_FLAG_NAMES covers the FLAG spelling
+ * `approve-consequential`; this covers the underscore spelling the parameter
+ * surface uses, and it is the one reserved name that reaches positional args.
+ */
+export const RESERVED_CONSENT_PARAM_NAME = "approve_consequential";
+
 // Mirrors Python Flag.__post_init__ (the divergence ground truth), with the
 // TS carrier model: list carriers ARE the repeatable flags, dict carriers are
 // Map-backed, int is bigint, float is number.
@@ -326,6 +343,10 @@ function validateFlagConfig(
 	}
 	if (RESERVED_FRAMEWORK_FLAG_NAMES.has(name)) {
 		throw new RegistrationError(errFlagNameReservedByFramework(name));
+	}
+	// The consent parameter name, reserved on the flag surface too.
+	if (name === RESERVED_CONSENT_PARAM_NAME) {
+		throw new RegistrationError(errFlagNameConsentReserved());
 	}
 	if (BANNED_FLAG_NAMES.has(name)) {
 		throw new RegistrationError(errFlagNameYesBanned());
@@ -583,6 +604,11 @@ export function arg<
 	const o = opts as ArgOptsView;
 	if (typeof o.help !== "string" || o.help.trim() === "") {
 		throw new RegistrationError(errArgHelpEmpty());
+	}
+	// The consent parameter name is the one reserved name that reaches the
+	// positional-arg surface.
+	if (name === RESERVED_CONSENT_PARAM_NAME) {
+		throw new RegistrationError(errArgNameConsentReserved());
 	}
 	// required defaults to true; the type system steers toward valid shapes but
 	// cannot excess-property-check generic constraints, so enforce here too.

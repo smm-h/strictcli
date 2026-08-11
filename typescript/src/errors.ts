@@ -1701,6 +1701,20 @@ export function errFlagNameYesBanned(): string {
 	return "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential";
 }
 
+/**
+ * The consent PARAMETER ban (§12.1). `approve_consequential` is how a caller
+ * states consent programmatically and over MCP, so a command may not declare
+ * a flag or a positional arg of that name -- otherwise the same command means
+ * different things on different channels.
+ */
+export function errFlagNameConsentReserved(): string {
+	return "flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter";
+}
+
+export function errArgNameConsentReserved(): string {
+	return "arg name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter";
+}
+
 export function errCommandEffectMissing(name: string): string {
 	return `command ${q(name)}: effect classification is required (effect="read_only" or effect="mutating")`;
 }

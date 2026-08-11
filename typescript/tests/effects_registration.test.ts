@@ -126,6 +126,35 @@ test("reserved quartet: arg names are unaffected (an arg has no -- spelling)", (
 	assert.doesNotThrow(() => arg("verbose", t.str, { help: "h" }));
 });
 
+// --- §7.1 the consent PARAMETER name, reserved on both surfaces ---
+
+const CONSENT_FLAG_BAN =
+	"flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter";
+const CONSENT_ARG_BAN =
+	"arg name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter";
+
+test("consent parameter: flag() refuses the underscore spelling", () => {
+	assert.throws(
+		() => flag("approve_consequential", t.bool, { help: "h", default: false }),
+		{ name: "RegistrationError", message: CONSENT_FLAG_BAN },
+	);
+	assert.throws(() => flag("approve_consequential", t.str, { help: "h" }), {
+		message: CONSENT_FLAG_BAN,
+	});
+});
+
+test("consent parameter: arg() refuses it too", () => {
+	assert.throws(() => arg("approve_consequential", t.str, { help: "h" }), {
+		name: "RegistrationError",
+		message: CONSENT_ARG_BAN,
+	});
+});
+
+test("consent parameter: only that one name reaches the arg surface", () => {
+	assert.doesNotThrow(() => arg("approve", t.str, { help: "h" }));
+	assert.doesNotThrow(() => arg("approve-consequential", t.str, { help: "h" }));
+});
+
 // --- §1.1 mandatory classification ---
 
 test("classification: the twin factories splice in the effect", () => {
