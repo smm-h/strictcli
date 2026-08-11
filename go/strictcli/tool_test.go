@@ -1,6 +1,7 @@
 package strictcli
 
 import (
+	"encoding/json"
 	"reflect"
 	"sort"
 	"testing"
@@ -805,6 +806,47 @@ func TestJsonSchemaNoCommandFlags(t *testing.T) {
 	props := schema["properties"].(map[string]interface{})
 	if len(props) != 0 {
 		t.Errorf("expected empty properties for command with no flags, got %v", props)
+	}
+}
+
+// A command with no required parameters must publish an empty required LIST,
+// never JSON null: "required": null is not valid JSON Schema, and the Python
+// and TypeScript implementations emit [].
+func TestJsonSchemaNoRequiredEmitsEmptyList(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("noop", "does nothing", nopHandler, WithEffect(EffectReadOnly))
+
+	schema := app.JsonSchema("noop")
+
+	required, ok := schema["required"].([]interface{})
+	if !ok {
+		t.Fatalf("required: want []interface{}, got %#v", schema["required"])
+	}
+	if len(required) != 0 {
+		t.Fatalf("required: want empty, got %v", required)
+	}
+	blob, err := json.Marshal(schema["required"])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if string(blob) != "[]" {
+		t.Fatalf("required marshals to %s, want []", blob)
+	}
+}
+
+// Same requirement on the descriptor surface AsTools() publishes.
+func TestAsToolsParametersRequiredIsEmptyList(t *testing.T) {
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("noop", "does nothing", nopHandler, WithEffect(EffectReadOnly))
+
+	for _, tool := range app.AsTools() {
+		blob, err := json.Marshal(tool.Parameters["required"])
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if string(blob) == "null" {
+			t.Fatalf("tool %q: required marshals to null", tool.Name)
+		}
 	}
 }
 

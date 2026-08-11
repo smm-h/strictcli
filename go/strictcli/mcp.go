@@ -128,7 +128,11 @@ func (a *App) handleMCPInitialize(req mcpRequest) mcpResponse {
 // handleMCPToolsList responds with tool definitions for all non-hidden,
 // non-interactive commands.
 func (a *App) handleMCPToolsList(req mcpRequest) mcpResponse {
-	var toolDefs []interface{}
+	// Initialized rather than declared nil for the same reason buildJSONSchema
+	// initializes `required`: encoding/json renders a nil slice as null, and an
+	// app with no exportable command must publish an empty tools list, as
+	// Python and TypeScript do.
+	toolDefs := []interface{}{}
 
 	// Collect leaf commands from top-level in insertion order
 	for _, name := range a.cmdOrder {

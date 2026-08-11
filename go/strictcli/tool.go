@@ -33,7 +33,11 @@ var jsonSchemaType = map[FlagType]string{
 // flags and positional args.
 func buildJSONSchema(cmd *Command) map[string]interface{} {
 	properties := map[string]interface{}{}
-	var required []interface{}
+	// Initialized rather than declared nil: encoding/json renders a nil slice
+	// as null, and "required": null is not valid JSON Schema. A command with
+	// no required parameters must publish an empty list, as Python and
+	// TypeScript do.
+	required := []interface{}{}
 
 	for i := range cmd.flags {
 		f := &cmd.flags[i]

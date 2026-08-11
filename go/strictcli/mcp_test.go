@@ -195,6 +195,24 @@ func TestMCPToolsList(t *testing.T) {
 	}
 }
 
+// An app with no exportable command must publish an empty tools LIST, never
+// JSON null -- the sibling of the empty-required rule in buildJSONSchema.
+func TestMCPToolsListEmptyIsAList(t *testing.T) {
+	app := NewApp("empty", "1.0.0", "an app with no commands")
+	resp, err := sendMCPRequest(app, "tools/list", 2, nil)
+	if err != nil {
+		t.Fatalf("tools/list error: %v", err)
+	}
+	result := resp["result"].(map[string]interface{})
+	tools, ok := result["tools"].([]interface{})
+	if !ok {
+		t.Fatalf("tools: want an array, got %#v", result["tools"])
+	}
+	if len(tools) != 0 {
+		t.Fatalf("tools: want empty, got %v", tools)
+	}
+}
+
 func TestMCPToolsListSchema(t *testing.T) {
 	app := mcpTestApp()
 	resp, err := sendMCPRequest(app, "tools/list", 3, nil)
