@@ -1,6 +1,6 @@
 ---
 title: Go Quickstart
-description: "Build CLIs with strictcli in Go: apps, mandatory WithEffect classification, flags, args, groups, the reserved flag quartet, and consequential confirmations."
+description: "Build Go CLIs with strictcli: apps, WithEffect classification, flags, args, groups, the reserved quartet, and consequential consent on CLI, Call and MCP."
 nav_group: "Guides"
 nav_order: 1
 ---

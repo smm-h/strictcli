@@ -1,6 +1,6 @@
 ---
 title: Python Quickstart
-description: "Build CLIs with strictcli in Python: apps, mandatory effect classification, flags, args, groups, the reserved flag quartet, and consequential confirmations."
+description: "Build Python CLIs with strictcli: apps, effect classification, flags, args, groups, the reserved quartet, and consequential consent on CLI, call and MCP."
 nav_group: "Guides"
 nav_order: 2
 ---

@@ -1,6 +1,6 @@
 ---
 title: TypeScript Quickstart
-description: "Build CLIs with strictcli in TypeScript: the twin command factories, typed flags and args, groups, the reserved flag quartet, and consequential confirmations."
+description: "Build TypeScript CLIs with strictcli: command factories, typed flags, args, groups, the reserved quartet, and consequential consent on CLI, call and MCP."
 nav_group: "Guides"
 nav_order: 0
 ---
