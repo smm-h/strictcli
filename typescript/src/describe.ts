@@ -173,7 +173,14 @@ export const SURFACE = {
 		{ name: "Carrier", members: ["_out", "schema", "parse", "elem"] },
 		{
 			name: "Tool",
-			members: ["name", "description", "parameters", "execute"],
+			members: [
+				"name",
+				"description",
+				"parameters",
+				"effect",
+				"consequential",
+				"execute",
+			],
 		},
 		{ name: "ConfigFieldSpec", members: ["type", "help", "default"] },
 		{

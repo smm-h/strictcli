@@ -15,6 +15,7 @@
 import { createInterface } from "node:readline";
 import type { AppImpl } from "./app.js";
 import type { Writer } from "./context.js";
+import { commandClassification } from "./invoke.js";
 import { jsonCompact } from "./outcome.js";
 import { buildJSONSchema, collectToolCommands } from "./tool.js";
 
@@ -64,11 +65,23 @@ function handleInitialize(app: AppImpl, reqId: unknown): JsonObject {
 }
 
 function handleToolsList(app: AppImpl, reqId: unknown): JsonObject {
-	const tools = collectToolCommands(app).map(([dottedPath, cmd]) => ({
-		name: dottedPath,
-		description: cmd.help,
-		inputSchema: buildJSONSchema(cmd),
-	}));
+	// The classification sits BESIDE inputSchema, never inside it: it describes
+	// the tool, not an argument the caller passes. Same emission rule as the
+	// schema dump -- `effect` always, `consequential` only when true (absence
+	// means "not consequential").
+	const tools = collectToolCommands(app).map(([dottedPath, cmd]) => {
+		const { effect, consequential } = commandClassification(cmd);
+		const def: JsonObject = {
+			name: dottedPath,
+			description: cmd.help,
+			effect,
+			inputSchema: buildJSONSchema(cmd),
+		};
+		if (consequential) {
+			def.consequential = true;
+		}
+		return def;
+	});
 	return jsonrpcResult(reqId, { tools });
 }
 
@@ -108,9 +121,27 @@ async function handleToolsCall(
 		callArgs = argsVal;
 	}
 
+	// Consent is a top-level param, a sibling of `name` and `arguments` --
+	// never a member of `arguments`, which is the command's own argument
+	// namespace and is published with additionalProperties: false. There is no
+	// server-side default: absent means "not consented", and a consequential
+	// tool is then refused.
+	const consentVal = Object.hasOwn(params, "approve_consequential")
+		? params.approve_consequential
+		: false;
+	if (typeof consentVal !== "boolean") {
+		return jsonrpcError(
+			reqId,
+			MCP_ERR_INVALID_PARAMS,
+			"parameter 'approve_consequential' must be a boolean",
+		);
+	}
+
 	let result: unknown;
 	try {
-		result = await app.call(toolName, callArgs);
+		result = await app.call(toolName, callArgs, {
+			approveConsequential: consentVal,
+		});
 	} catch (e) {
 		return toolErrorResult(reqId, e instanceof Error ? e.message : String(e));
 	}

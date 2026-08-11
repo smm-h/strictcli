@@ -11,6 +11,7 @@ import { test } from "node:test";
 import type { App } from "../src/app.js";
 import {
 	createApp,
+	defineMutatingCommand,
 	defineReadOnlyCommand,
 	flag,
 	outcome,
@@ -743,4 +744,114 @@ test("mcp: successful calls carry no isError key", async () => {
 		params: { name: "ok", arguments: {} },
 	});
 	assert.equal("isError" in resultOf(resp), false);
+});
+
+// --- effects classification and programmatic consent over MCP ---
+
+function consentApp(): App {
+	const app = buildApp();
+	app.command(
+		defineReadOnlyCommand("look", {
+			help: "look at things",
+			handler: () => outcome(0, { looked: true }),
+		}),
+	);
+	app.command(
+		defineMutatingCommand("release", {
+			help: "release things",
+			consequential: true,
+			handler: () => outcome(0, { released: true }),
+		}),
+	);
+	return app;
+}
+
+async function toolDefs(
+	app: App,
+): Promise<Map<string, Record<string, unknown>>> {
+	const resp = await sendOne(app, {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "tools/list",
+		params: {},
+	});
+	return new Map(toolsOf(resp).map((def) => [def.name as string, def]));
+}
+
+function callRequest(params: Record<string, unknown>): unknown {
+	return { jsonrpc: "2.0", id: 1, method: "tools/call", params };
+}
+
+test("mcp: tools/list publishes effect and consequential", async () => {
+	const defs = await toolDefs(consentApp());
+	assert.equal(defs.get("look")?.effect, "read_only");
+	assert.equal(defs.get("release")?.effect, "mutating");
+	assert.equal(defs.get("release")?.consequential, true);
+	// Absence means "not consequential", exactly as in the schema dump.
+	assert.equal(Object.hasOwn(defs.get("look") ?? {}, "consequential"), false);
+});
+
+test("mcp: the classification is not in inputSchema", async () => {
+	const defs = await toolDefs(consentApp());
+	const schema = defs.get("release")?.inputSchema as Record<string, unknown>;
+	const properties = schema.properties as Record<string, unknown>;
+	for (const banned of ["effect", "consequential", "approve_consequential"]) {
+		assert.equal(Object.hasOwn(properties, banned), false);
+	}
+});
+
+test("mcp: tools/call refuses a consequential tool without consent", async () => {
+	const resp = await sendOne(consentApp(), callRequest({ name: "release" }));
+	assert.equal(resultOf(resp).isError, true);
+	assert.equal(
+		contentOf(resp)[0]?.text,
+		"command 'release' is consequential: pass approve_consequential to confirm",
+	);
+});
+
+test("mcp: tools/call proceeds with explicit consent", async () => {
+	const resp = await sendOne(
+		consentApp(),
+		callRequest({ name: "release", approve_consequential: true }),
+	);
+	assert.equal(Object.hasOwn(resultOf(resp), "isError"), false);
+	assert.equal(contentOf(resp)[0]?.text, '{"released":true}');
+});
+
+test("mcp: an explicit false consent is refused", async () => {
+	const resp = await sendOne(
+		consentApp(),
+		callRequest({ name: "release", approve_consequential: false }),
+	);
+	assert.equal(resultOf(resp).isError, true);
+});
+
+test("mcp: a read_only tool needs no consent", async () => {
+	const resp = await sendOne(consentApp(), callRequest({ name: "look" }));
+	assert.equal(Object.hasOwn(resultOf(resp), "isError"), false);
+});
+
+test("mcp: a non-boolean consent is a protocol error", async () => {
+	const resp = await sendOne(
+		consentApp(),
+		callRequest({ name: "release", approve_consequential: "yes" }),
+	);
+	assert.equal(errorOf(resp).code, -32602);
+	assert.equal(
+		errorOf(resp).message,
+		"parameter 'approve_consequential' must be a boolean",
+	);
+});
+
+test("mcp: consent inside arguments does not consent", async () => {
+	// The command's argument namespace is not a consent channel: no command
+	// can declare the reserved name, so it surfaces as an unknown parameter.
+	const resp = await sendOne(
+		consentApp(),
+		callRequest({
+			name: "release",
+			arguments: { approve_consequential: true },
+		}),
+	);
+	assert.equal(resultOf(resp).isError, true);
 });

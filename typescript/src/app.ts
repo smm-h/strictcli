@@ -138,7 +138,7 @@ import {
 	resolveInfraRootPath,
 	validateFlagInfraMarker,
 } from "./infra.js";
-import { invokeApp } from "./invoke.js";
+import { type CallOptions, invokeApp } from "./invoke.js";
 import { type McpIO, serveMcp } from "./mcp.js";
 import { interpretHandlerReturn, jsonCompact } from "./outcome.js";
 import { doParse, flagParamName, formatParseErrorOutput } from "./parse.js";
@@ -316,8 +316,15 @@ export interface App {
 	 * data when present, undefined for a bare void return, else the exit
 	 * code. Throws InvokeError on invocation failures (unknown command,
 	 * missing required flags, mutex violations, dependency errors).
+	 *
+	 * opts.approveConsequential is the caller's explicit consent: a command
+	 * that declares itself consequential is refused without it.
 	 */
-	call(commandPath: string, kwargs?: Record<string, unknown>): Promise<unknown>;
+	call(
+		commandPath: string,
+		kwargs?: Record<string, unknown>,
+		opts?: CallOptions,
+	): Promise<unknown>;
 	/**
 	 * Produces a JSON Schema parameters object for a command's flags and
 	 * positional args. Throws InvokeError if the path is invalid or resolves
@@ -1136,8 +1143,9 @@ export class AppImpl implements App {
 	call(
 		commandPath: string,
 		kwargs: Record<string, unknown> = {},
+		opts: CallOptions = {},
 	): Promise<unknown> {
-		return invokeApp(this, commandPath, kwargs);
+		return invokeApp(this, commandPath, kwargs, opts);
 	}
 
 	jsonSchema(commandPath: string): Record<string, unknown> {
@@ -1361,8 +1369,9 @@ export class AppImpl implements App {
 		err: Writer,
 	): DispatchResult | undefined {
 		if (mode !== "run") {
-			// test/call/invoke/MCP behave as if --approve-consequential were
-			// passed.
+			// test() behaves as if --approve-consequential were passed. The
+			// call/invoke/MCP channels honour the requirement in invokeApp
+			// instead, where consent comes from the call rather than a prompt.
 			return undefined;
 		}
 		const def = cmd.def as { readonly consequential?: boolean };

@@ -1984,6 +1984,18 @@ export function errConfirmDeclined(): string {
 	return "aborted";
 }
 
+/**
+ * The programmatic-path refusal (contract §8.5).
+ *
+ * Requiring confirmation is a property of the COMMAND, so every channel has to
+ * honour it -- but a programmatic caller has no terminal to prompt. The refusal
+ * makes the caller state, in the call, that it is proceeding without a human,
+ * instead of the framework deciding that silently on its behalf.
+ */
+export function errCallConsequentialUnconsented(cmdPath: string): string {
+	return `command '${cmdPath}' is consequential: pass approve_consequential to confirm`;
+}
+
 // ---------------------------------------------------------------------------
 // strictcli.go — doParse dry-run refusal (parse-time)
 //

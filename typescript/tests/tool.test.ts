@@ -9,6 +9,7 @@ import { test } from "node:test";
 import {
 	arg,
 	createApp,
+	defineMutatingCommand,
 	defineReadOnlyCommand,
 	flag,
 	outcome,
@@ -353,4 +354,101 @@ test("asTools: app with no commands yields only the router tool", () => {
 	assert.equal(tools[0]?.name, "myapp");
 	const cmdProp = props(tools[0]?.parameters as Record<string, unknown>);
 	assert.deepEqual(cmdProp.command?.enum, []);
+});
+
+// --- effects classification on the descriptor + programmatic consent ---
+
+/**
+ * One command per position in the regime: read_only, plain mutating, and
+ * consequential mutating.
+ */
+function consentApp() {
+	const app = buildApp();
+	app.command(
+		defineReadOnlyCommand("look", {
+			help: "look at things",
+			handler: () => outcome(0, { looked: true }),
+		}),
+	);
+	app.command(
+		defineMutatingCommand("build", {
+			help: "build things",
+			handler: () => outcome(0, { built: true }),
+		}),
+	);
+	app.command(
+		defineMutatingCommand("release", {
+			help: "release things",
+			consequential: true,
+			handler: () => outcome(0, { released: true }),
+		}),
+	);
+	return app;
+}
+
+function toolsByName(app: ReturnType<typeof consentApp>) {
+	return new Map(app.asTools().map((tl) => [tl.name, tl]));
+}
+
+test("asTools: every descriptor publishes effect and consequential", () => {
+	const tools = toolsByName(consentApp());
+	assert.equal(tools.get("look")?.effect, "read_only");
+	assert.equal(tools.get("look")?.consequential, false);
+	assert.equal(tools.get("build")?.effect, "mutating");
+	assert.equal(tools.get("build")?.consequential, false);
+	assert.equal(tools.get("release")?.effect, "mutating");
+	assert.equal(tools.get("release")?.consequential, true);
+});
+
+test("asTools: the classification is not in the argument schema", () => {
+	const schema = toolsByName(consentApp()).get("release")?.parameters;
+	assert.ok(schema !== undefined);
+	const p = props(schema);
+	for (const banned of ["effect", "consequential", "approve_consequential"]) {
+		assert.equal(Object.hasOwn(p, banned), false);
+	}
+});
+
+test("asTools: the router is mutating but not consequential", () => {
+	const tools = consentApp().asTools();
+	const router = tools[tools.length - 1];
+	assert.equal(router?.name, "myapp");
+	assert.equal(router?.effect, "mutating");
+	assert.equal(router?.consequential, false);
+});
+
+test("Tool.execute: an unconsented consequential tool is refused", async () => {
+	const release = toolsByName(consentApp()).get("release");
+	await assert.rejects(
+		() => release?.execute() as Promise<unknown>,
+		(e: Error) =>
+			e.message ===
+			"command 'release' is consequential: pass approve_consequential to confirm",
+	);
+});
+
+test("Tool.execute: a consented consequential tool proceeds", async () => {
+	const release = toolsByName(consentApp()).get("release");
+	const result = await release?.execute({}, { approveConsequential: true });
+	assert.deepEqual(result, { released: true });
+});
+
+test("Tool.execute: unaffected commands need no consent", async () => {
+	const tools = toolsByName(consentApp());
+	assert.deepEqual(await tools.get("look")?.execute(), { looked: true });
+	assert.deepEqual(await tools.get("build")?.execute(), { built: true });
+});
+
+test("Tool.execute: the router forwards consent without laundering it", async () => {
+	const tools = consentApp().asTools();
+	const router = tools[tools.length - 1];
+	await assert.rejects(
+		() => router?.execute({ command: "release" }) as Promise<unknown>,
+		(e: Error) => e.message.includes("is consequential"),
+	);
+	const result = await router?.execute(
+		{ command: "release" },
+		{ approveConsequential: true },
+	);
+	assert.deepEqual(result, { released: true });
 });

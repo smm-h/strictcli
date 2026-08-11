@@ -12,6 +12,7 @@
  */
 
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
+import type { Effect } from "./effects.js";
 import {
 	errJsonSchemaIsGroup,
 	errJsonSchemaRouteError,
@@ -19,16 +20,30 @@ import {
 	InvokeError,
 } from "./errors.js";
 import { elemSchemaOf, flagOpts, schemaKind } from "./factories.js";
+import { type CallOptions, commandClassification } from "./invoke.js";
 import { flagParamName } from "./parse.js";
 import { resolveCommand } from "./routing.js";
 import type { ScalarSchema } from "./types.js";
 
-/** A descriptor for exposing one CLI command to tool-using LLM agents. */
+/**
+ * A descriptor for exposing one CLI command to tool-using LLM agents.
+ *
+ * `effect` and `consequential` publish the effects-regime classification
+ * BESIDE the argument schema (never inside it): a consumer rendering this tool
+ * must be able to see that the command changes things and that calling it
+ * requires stating consent. Same vocabulary as the schema dump: `effect` is
+ * mandatory, `consequential` defaults to false.
+ */
 export interface Tool {
 	readonly name: string;
 	readonly description: string;
 	readonly parameters: Record<string, unknown>;
-	readonly execute: (kwargs?: Record<string, unknown>) => Promise<unknown>;
+	readonly effect: Effect;
+	readonly consequential: boolean;
+	readonly execute: (
+		kwargs?: Record<string, unknown>,
+		opts?: CallOptions,
+	) => Promise<unknown>;
 }
 
 /** Scalar schema -> JSON Schema type string. */
@@ -195,7 +210,8 @@ function makeTool(
 		name: commandPath,
 		description: cmd.help,
 		parameters: buildJSONSchema(cmd),
-		execute: (kwargs = {}) => app.call(commandPath, kwargs),
+		...commandClassification(cmd),
+		execute: (kwargs = {}, opts = {}) => app.call(commandPath, kwargs, opts),
 	};
 }
 
@@ -214,11 +230,18 @@ function makeRouterTool(app: AppImpl, commandPaths: readonly string[]): Tool {
 		required: ["command"],
 		additionalProperties: false,
 	};
+	// The router can reach a mutating command, so it classifies as mutating. It
+	// is NOT itself consequential: the routed command's own requirement is
+	// checked when the call reaches it, and the router forwards the caller's
+	// consent unchanged. Marking the router consequential would demand consent
+	// for routing to a read_only command, which confirms nothing.
 	return {
 		name: app.name,
 		description: `Route to ${app.name} commands`,
 		parameters,
-		execute: async (kwargs = {}) => {
+		effect: "mutating",
+		consequential: false,
+		execute: async (kwargs = {}, opts = {}) => {
 			if (!Object.hasOwn(kwargs, "command")) {
 				// No command specified -- return the list of available commands.
 				return [...paths];
@@ -229,7 +252,7 @@ function makeRouterTool(app: AppImpl, commandPaths: readonly string[]): Tool {
 			}
 			const fwd: Record<string, unknown> = { ...kwargs };
 			delete fwd.command;
-			return app.call(cmdPath, fwd);
+			return app.call(cmdPath, fwd, opts);
 		},
 	};
 }

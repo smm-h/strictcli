@@ -14,8 +14,15 @@
 import type { AppImpl, RegisteredCommand } from "./app.js";
 import { recordCoverage } from "./checks/coverage.js";
 import { validateCheckRegistrations } from "./checks/framework.js";
-import { Context, NO_RESERVED_FLAGS, type Writer } from "./context.js";
 import {
+	Context,
+	NO_RESERVED_FLAGS,
+	type ReservedFlags,
+	type Writer,
+} from "./context.js";
+import type { Effect } from "./effects.js";
+import {
+	errCallConsequentialUnconsented,
 	errCallPathIsGroup,
 	errDictFlagExpectedMapType,
 	errPassthroughArgsNotStringSlice,
@@ -42,6 +49,44 @@ import { SourcedStore } from "./sources.js";
 
 /** Sinks for invoke contexts: structured data flows back through the Outcome. */
 const discard: Writer = { write: () => {} };
+
+/**
+ * Per-call state that is NOT a handler kwarg. TS takes it as a trailing
+ * options object -- the idiomatic counterpart of Python's keyword-only
+ * argument and Go's variadic CallOption.
+ */
+export interface CallOptions {
+	/**
+	 * The caller's explicit consent, the programmatic counterpart of the CLI's
+	 * --approve-consequential. A command that declares itself consequential is
+	 * refused without it; read-only and plain mutating commands are
+	 * unaffected.
+	 */
+	readonly approveConsequential?: boolean;
+}
+
+/**
+ * Reads a registered command's effects-regime classification (schema.ts
+ * serializeCommand reads the same two carrier fields). Shared by the invoke
+ * consent check and the tool/MCP descriptors.
+ */
+export function commandClassification(cmd: RegisteredCommand): {
+	readonly effect: Effect;
+	readonly consequential: boolean;
+} {
+	const carrier = cmd.def as {
+		readonly effect: Effect;
+		readonly consequential?: boolean;
+	};
+	return {
+		effect: carrier.effect,
+		consequential: carrier.consequential === true,
+	};
+}
+
+function isConsequential(cmd: RegisteredCommand): boolean {
+	return commandClassification(cmd).consequential;
+}
 
 /** Converts a parameter name like "dry_run" back to a flag name "dry-run". */
 function paramToFlagName(param: string): string {
@@ -136,7 +181,15 @@ export async function invokeApp(
 	app: AppImpl,
 	commandPath: string,
 	kwargs: Readonly<Record<string, unknown>>,
+	opts: CallOptions = {},
 ): Promise<unknown> {
+	const approveConsequential = opts.approveConsequential === true;
+	// The caller's declaration is delivered to the handler on the Context, so a
+	// handler (or an audit record) can see how the run was consented to.
+	const reserved: ReservedFlags = {
+		...NO_RESERVED_FLAGS,
+		approveConsequential,
+	};
 	// Validate registrations (Go invoke: check registrations + tag contracts).
 	const checkErr = validateCheckRegistrations(app.checks);
 	if (checkErr !== undefined) {
@@ -156,6 +209,13 @@ export async function invokeApp(
 	}
 	const cmd = route.cmd;
 
+	// The consent check (contract §8.5). There is no terminal here, so the
+	// confirm protocol's PROMPT cannot fire -- the caller must have said so in
+	// the call. Checked before anything is dispatched or recorded.
+	if (isConsequential(cmd) && !approveConsequential) {
+		throw new InvokeError(errCallConsequentialUnconsented(commandPath));
+	}
+
 	// Start a new dispatch BEFORE coverage recording so pre-handler
 	// CACHE_WRITEs land in this dispatch's effect log.
 	app.beginDispatch();
@@ -165,7 +225,7 @@ export async function invokeApp(
 	}
 
 	if (cmd.kind === "passthrough") {
-		return invokePassthrough(app, cmd, commandPath, kwargs);
+		return invokePassthrough(app, cmd, commandPath, kwargs, reserved);
 	}
 	const def = cmd.def as AnyCommand;
 
@@ -254,11 +314,11 @@ export async function invokeApp(
 	// Stdout/stderr are discarded for invoke (Go io.Discard): structured data
 	// flows back through the return value, not the streams.
 	//
-	// Programmatic dispatch behaves AS IF --yes were passed: it never prompts
-	// and never emits the non-TTY error. --dry-run is likewise not reachable
-	// here (argv parsing is bypassed entirely), so the effects handle is armed
-	// in live mode -- but it IS armed, because the seal is mandatory at every
-	// ctx-construction site.
+	// Programmatic dispatch never PROMPTS and never emits the non-TTY error:
+	// the requirement is honoured by the consent check above instead.
+	// --dry-run is likewise not reachable here (argv parsing is bypassed
+	// entirely), so the effects handle is armed in live mode -- but it IS
+	// armed, because the seal is mandatory at every ctx-construction site.
 	const ctx = new Context(
 		discard,
 		discard,
@@ -269,7 +329,7 @@ export async function invokeApp(
 			app.connectionEnvs,
 			false,
 		),
-		NO_RESERVED_FLAGS,
+		reserved,
 		app.armEffects(cmd, commandPath, false),
 	);
 	const result = await def.handler(validated as never, ctx);
@@ -281,6 +341,7 @@ async function invokePassthrough(
 	cmd: RegisteredCommand,
 	commandPath: string,
 	kwargs: Readonly<Record<string, unknown>>,
+	reserved: ReservedFlags,
 ): Promise<unknown> {
 	let args: readonly string[] = [];
 	if (Object.hasOwn(kwargs, "_args")) {
@@ -332,7 +393,7 @@ async function invokePassthrough(
 			app.connectionEnvs,
 			false,
 		),
-		NO_RESERVED_FLAGS,
+		reserved,
 		app.armEffects(cmd, commandPath, false),
 	);
 	const def = cmd.def as PassthroughDef<string>;

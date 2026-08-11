@@ -44,12 +44,14 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // TS-only guard (errEffectsUnavailable) for a Context built outside a dispatch.
 // promptConfirmConsequential is deliberately NOT counted here: it is a prompt,
 // not an err* template, and the census filters on the err prefix.
+// errCallConsequentialUnconsented adds 1: the programmatic-path refusal, the
+// non-terminal counterpart of the confirm protocol's non-TTY error.
 // The dry-run declaration adds 4: three registration guards
 // (errCommandReadOnlyDryRunUnsupported, errCommandDryRunReasonMissing,
 // errCommandDryRunReasonWithoutDeclaration -- the last has no errors.go body,
 // because Go's WithDryRunUnsupported always sets both fields together) and the
 // parse-time refusal (errDryRunNotSupported).
-const EXPECTED_TEMPLATE_COUNT = 311;
+const EXPECTED_TEMPLATE_COUNT = 312;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

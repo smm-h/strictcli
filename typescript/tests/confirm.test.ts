@@ -349,21 +349,89 @@ test("confirm: the prompt names the DOTTED command path", async () => {
 	}
 });
 
-test("confirm: the programmatic paths behave as if --approve-consequential were passed", async () => {
+test("confirm: the programmatic paths never prompt", async () => {
 	const ran: string[] = [];
 	setConfirmIO(io("n", /* interactive */ false));
 	try {
-		// test(): never prompts, never emits the non-TTY error.
+		// test(): behaves as if --approve-consequential were passed.
 		const r = await ranApp(ran).test(["deploy"]);
 		assert.equal(r.stderr, "");
 		assert.deepEqual(ran, ["ran"]);
-		// call(): likewise.
+		// call(): takes its consent as an option, so a consented call runs
+		// straight through with no prompt and no non-TTY error.
 		ran.length = 0;
-		await ranApp(ran).call("deploy");
+		await ranApp(ran).call("deploy", {}, { approveConsequential: true });
 		assert.deepEqual(ran, ["ran"]);
 	} finally {
 		setConfirmIO(null);
 	}
+});
+
+test("confirm: an unconsented consequential call is refused", async () => {
+	// There is no terminal to prompt, so the caller has to state consent in
+	// the call or be refused.
+	const ran: string[] = [];
+	await assert.rejects(
+		() => ranApp(ran).call("deploy"),
+		(e: Error) =>
+			e.message ===
+			"command 'deploy' is consequential: pass approve_consequential to confirm",
+	);
+	assert.deepEqual(ran, []);
+});
+
+test("confirm: an unconsented consequential passthrough call is refused", async () => {
+	const ran: string[] = [];
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	app.command(
+		mutatingPassthrough("thru", {
+			help: "h",
+			consequential: true,
+			handler: () => {
+				ran.push("ran");
+				return 0;
+			},
+		}),
+	);
+	await assert.rejects(
+		() => app.call("thru", { _args: ["-x"] }),
+		(e: Error) => e.message.includes("is consequential"),
+	);
+	assert.deepEqual(ran, []);
+	assert.equal(
+		await app.call("thru", { _args: ["-x"] }, { approveConsequential: true }),
+		0,
+	);
+	assert.deepEqual(ran, ["ran"]);
+});
+
+test("confirm: a call needs no consent for unaffected commands", async () => {
+	const plain = createApp({ name: "t", version: "1", help: "h" });
+	plain.command(
+		defineMutatingCommand("deploy", { help: "h", handler: () => 0 }),
+	);
+	assert.equal(await plain.call("deploy"), 0);
+
+	const ro = createApp({ name: "t", version: "1", help: "h" });
+	ro.command(defineReadOnlyCommand("show", { help: "h", handler: () => 0 }));
+	assert.equal(await ro.call("show"), 0);
+});
+
+test("confirm: the call's consent reaches the handler", async () => {
+	const seen: boolean[] = [];
+	const app = createApp({ name: "t", version: "1", help: "h" });
+	app.command(
+		defineMutatingCommand("deploy", {
+			help: "h",
+			consequential: true,
+			handler: (_a, ctx) => {
+				seen.push(ctx.approveConsequential);
+				return 0;
+			},
+		}),
+	);
+	await app.call("deploy", {}, { approveConsequential: true });
+	assert.deepEqual(seen, [true]);
 });
 
 test("confirm: ctx.approveConsequential reflects the actual flag, not the dispatch path", async () => {
