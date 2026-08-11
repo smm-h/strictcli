@@ -975,6 +975,29 @@ def generate(app_def: dict) -> str:
     if app_def.get("pre_test"):
         lines.append("")
 
+    # Tool descriptor dump: the exported classification, one line per tool.
+    if app_def.get("dump_tools"):
+        lines.append("    for _tool in app.as_tools():")
+        lines.append("        print(f'tool: {_tool.name} effect={_tool.effect} "
+                     "consequential={str(_tool.consequential).lower()}')")
+        lines.append("")
+
+    # Programmatic calls: the app.call() channel, which argv cannot reach.
+    for pre_call in app_def.get("pre_call", []):
+        cmd = pre_call["command"]
+        kwargs = pre_call.get("kwargs", {})
+        approve = bool(pre_call.get("approve_consequential", False))
+        lines.append("    try:")
+        lines.append(
+            f"        app.call({cmd!r}, approve_consequential={approve!r}, "
+            f"**{kwargs!r})"
+        )
+        lines.append(f"        print('call ok: {cmd}')")
+        lines.append("    except strictcli.InvokeError as _ce:")
+        lines.append("        print(f'call error: {_ce}', file=sys.stderr)")
+    if app_def.get("pre_call"):
+        lines.append("")
+
     # The structured effect-log side channel (§14.3): the same env-var file
     # handoff as CONFORMANCE_APP_DEF. app.run() ends in sys.exit, so the write
     # rides atexit -- the Python counterpart of the Go harness's SetExitHook and

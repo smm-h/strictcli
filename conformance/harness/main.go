@@ -258,6 +258,35 @@ func main() {
 		}
 	}
 
+	// Tool descriptor dump: the exported classification, one line per tool.
+	if v, ok := appDef["dump_tools"]; ok && v == true {
+		for _, tl := range app.AsTools() {
+			fmt.Printf("tool: %s effect=%s consequential=%t\n",
+				tl.Name, tl.Effect, tl.Consequential)
+		}
+	}
+
+	// Programmatic calls: the App.Call() channel, which argv cannot reach.
+	if v, ok := appDef["pre_call"]; ok {
+		for _, item := range v.([]interface{}) {
+			spec := item.(map[string]interface{})
+			cmdPath := spec["command"].(string)
+			kwargs := map[string]interface{}{}
+			if raw, ok := spec["kwargs"]; ok {
+				kwargs = raw.(map[string]interface{})
+			}
+			var callOpts []strictcli.CallOption
+			if raw, ok := spec["approve_consequential"]; ok && raw == true {
+				callOpts = append(callOpts, strictcli.WithApproveConsequential())
+			}
+			if _, err := app.Call(cmdPath, kwargs, callOpts...); err != nil {
+				fmt.Fprintf(os.Stderr, "call error: %s\n", err.Error())
+			} else {
+				fmt.Printf("call ok: %s\n", cmdPath)
+			}
+		}
+	}
+
 	// The structured effect-log side channel (§14.3): the same env-var file
 	// handoff as CONFORMANCE_APP_DEF. App.Run ends in os.Exit, so the write
 	// rides SetExitHook -- the Go counterpart of the Python ref's atexit and

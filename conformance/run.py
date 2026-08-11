@@ -545,6 +545,14 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         env.update(test_env)
         env.update(extra_env)
 
+        # A case must never depend on the operator's terminal. /dev/null is
+        # definitively not a TTY, which is what makes the confirm protocol's
+        # non-interactive branch (effects contract §8.3) a pinnable,
+        # deterministic outcome instead of a hang. A case that declares stdin
+        # gets a pipe carrying exactly that text -- also not a TTY, so the
+        # property holds; it is how the --mcp cases deliver their JSON-RPC
+        # lines.
+        case_stdin = case.get("stdin")
         result = subprocess.run(
             argv,
             capture_output=True,
@@ -552,11 +560,8 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             env=env,
             cwd=run_cwd,
             timeout=10,
-            # A case must never depend on the operator's terminal. /dev/null is
-            # definitively not a TTY, which is what makes the confirm
-            # protocol's non-interactive branch (effects contract §8.3) a
-            # pinnable, deterministic outcome instead of a hang.
-            stdin=subprocess.DEVNULL,
+            input=case_stdin,
+            stdin=None if case_stdin is not None else subprocess.DEVNULL,
         )
         raw_result = result
 

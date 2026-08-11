@@ -910,6 +910,28 @@ async function main() {
 		await app.test(argv);
 	}
 
+	// Tool descriptor dump: the exported classification, one line per tool.
+	if (appDef.dump_tools === true) {
+		for (const tl of app.asTools()) {
+			process.stdout.write(
+				`tool: ${tl.name} effect=${tl.effect} consequential=${tl.consequential}\n`,
+			);
+		}
+	}
+
+	// Programmatic calls: the app.call() channel, which argv cannot reach.
+	for (const spec of appDef.pre_call ?? []) {
+		try {
+			await app.call(spec.command, spec.kwargs ?? {}, {
+				approveConsequential: spec.approve_consequential === true,
+			});
+			process.stdout.write(`call ok: ${spec.command}\n`);
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			process.stderr.write(`call error: ${msg}\n`);
+		}
+	}
+
 	// The structured effect-log side channel (§14.3): the same env-var file
 	// handoff as CONFORMANCE_APP_DEF. app.run() ends in process.exit, so the
 	// write rides process.on("exit") -- the TS counterpart of the Python ref's

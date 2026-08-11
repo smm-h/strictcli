@@ -72,6 +72,10 @@
           "additionalProperties": { "type": "string" },
           "description": "Environment variables to set before invoking the app."
         },
+        "stdin": {
+          "type": "string",
+          "description": "Text piped to the app's stdin. Absent means /dev/null, which is what keeps every other case independent of the operator's terminal; a pipe carrying this text is not a TTY either. Used by the --mcp cases, whose JSON-RPC lines arrive on stdin."
+        },
         "expect": {
           "$ref": "#/$defs/expect"
         }
@@ -188,6 +192,33 @@
             "items": { "type": "string" }
           },
           "description": "List of argv lists to run via app.test() before the main app.run(). Used by test_coverage cases to generate shard files."
+        },
+        "pre_call": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["command"],
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Dot-separated command path to invoke programmatically."
+              },
+              "kwargs": {
+                "type": "object",
+                "description": "Pre-typed handler kwargs, keyed by underscored parameter name."
+              },
+              "approve_consequential": {
+                "type": "boolean",
+                "description": "The caller's explicit consent, spelled per-language (Python keyword-only argument, Go CallOption, TS options object). Absent means no consent, so a consequential command is refused."
+              }
+            }
+          },
+          "description": "Programmatic calls to run via app.call()/App.Call() before the main app.run(). Each prints 'call ok: <command>' to stdout, or 'call error: <message>' to stderr when the call is refused. The argv-and-subprocess harness cannot otherwise reach the programmatic channel."
+        },
+        "dump_tools": {
+          "type": "boolean",
+          "description": "Print one 'tool: <name> effect=<effect> consequential=<bool>' line per as_tools()/AsTools() descriptor to stdout before the main app.run(). Pins the exported classification without serializing the whole descriptor, whose JSON shape is language-specific."
         },
         "coverage_manifest": {
           "type": "array",
