@@ -312,6 +312,12 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     "default_relative_to_root",
     "pre_test",
     "coverage_manifest",
+    # The non-CLI channel drivers (effects contract §8.5, §14): pre_call runs
+    # app.call() before the argv run and dump_tools prints the exported
+    # descriptors' classification. Both describe what the harness does with an
+    # app, not a field any implementation's App carries.
+    "pre_call",
+    "dump_tools",
 }
 
 # Shared name mappings (applied to any entity that uses them).
