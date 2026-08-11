@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "strictcli's flag and argument system: four types, defaults, boolean negation, repeatable flags, naming rules including the reserved quartet, and positional args."
+description: "strictcli's flag and argument system: four types, defaults, boolean negation, repeatable flags, the reserved quartet and consent parameter, and positional args."
 nav_group: "Guides"
 nav_order: 3
 ---
@@ -431,6 +431,30 @@ flag names that cannot be declared at any level. They never arrive as handler
 parameters -- their values are read from the context as `ctx.dry_run`,
 `ctx.approve_consequential`, `ctx.quiet` and `ctx.verbose`. Declaring a flag
 with any of those four names raises `ValueError` at registration time.
+
+### The consent parameter name
+
+`approve_consequential` -- the underscore spelling, the one the *parameter*
+surface uses -- is reserved separately, and it is the only reserved name that
+reaches positional args as well as flags. It is how a caller states consent
+programmatically (`app.call(..., approve_consequential=True)`,
+`WithApproveConsequential()`, `{ approveConsequential: true }`) and over MCP
+(a top-level `tools/call` param). Declaring a flag or an arg of that name is a
+registration-time hard error in every implementation:
+
+```
+flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter
+arg name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter
+```
+
+Without the reservation the same command would mean different things on
+different channels: in Python a positional arg of that name is swallowed by
+`call()`'s keyword-only consent parameter while MCP still reaches it. Go and
+TypeScript pass kwargs as a map and an options object, so they are structurally
+immune -- but the name is framework vocabulary everywhere, so all three refuse
+it identically. The hyphenated `approve-consequential` is already banned as a
+flag name by the quartet; as an *arg* name it stays legal, because an arg has
+no `--` spelling and never becomes that parameter.
 
 ### Provenance: ctx.source()
 
