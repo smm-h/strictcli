@@ -846,6 +846,12 @@ KNOWN_OPTION_FUNCS: set[str] = {
     # constructors and so are not part of this catalog.
     "WithEffect", "WithConsequential", "WithGrants", "WithForwarding",
     "WithProcObserveAllowlist", "WithDryRunUnsupported",
+    # The programmatic channel's consent (contract §8.5). It is a CallOption,
+    # not a CmdOption/AppOption -- Go's Call takes its kwargs as a map, so
+    # consent rides a variadic option where Python uses a keyword-only argument
+    # and TS a trailing options object. The describe_go dumper classifies it as
+    # an option constructor because its result type is a func(*T) named type.
+    "WithApproveConsequential",
 }
 
 
@@ -881,7 +887,7 @@ KNOWN_TS_PUBLIC_NAMES: set[str] = {
     "EffectFailed",
     # Type-only exports
     "AnyArg", "AnyCommand", "AnyFlag", "AnyFlagSet", "AnyMutexGroup",
-    "App", "AppSpec", "ArgDef", "ArgOpts", "Carrier",
+    "App", "AppSpec", "ArgDef", "ArgOpts", "CallOptions", "Carrier",
     "CheckContext", "CheckOutcome", "CheckProblem", "CheckSeverity",
     "ConnectionEnvReader",
     "CheckStatus", "CoRequired", "CommandDef",

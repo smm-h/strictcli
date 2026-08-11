@@ -108,6 +108,7 @@ export {
 export type { HandlerArgs, InferHandler, InferHandlerArgs } from "./infer.js";
 export type { InfraRootPath } from "./infra.js";
 export { relativeToRoot } from "./infra.js";
+export type { CallOptions } from "./invoke.js";
 export type { McpIO } from "./mcp.js";
 export type { Outcome } from "./outcome.js";
 export { outcome } from "./outcome.js";

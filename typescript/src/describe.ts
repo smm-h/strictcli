@@ -190,6 +190,7 @@ export const SURFACE = {
 		{ name: "Writer", members: ["write"] },
 		{ name: "InfraRootPath", members: ["envVar", "parts"] },
 		{ name: "McpIO", members: ["input", "output"] },
+		{ name: "CallOptions", members: ["approveConsequential"] },
 		{ name: "CheckContext", members: ["projectRoot"] },
 		{
 			name: "ConnectionEnvReader",
@@ -539,6 +540,7 @@ export const SURFACE = {
 		"AppSpec",
 		"ArgDef",
 		"ArgOpts",
+		"CallOptions",
 		"Carrier",
 		"CheckContext",
 		"CheckOutcome",

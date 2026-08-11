@@ -272,6 +272,7 @@ const typeWitness: Record<TypeName, unknown> = {
 			api.ArgDef<string, string, "str", api.ArgOpts<string, "str">>
 		>(),
 	ArgOpts: witnessType<api.ArgOpts<string, "str">>(),
+	CallOptions: witnessType<api.CallOptions>(),
 	Carrier: witnessType<api.Carrier<string, "str">>(),
 	CheckContext: witnessType<api.CheckContext>(),
 	CheckOutcome: witnessType<api.CheckOutcome>(),
