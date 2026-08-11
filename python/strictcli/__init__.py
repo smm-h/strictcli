@@ -3162,6 +3162,16 @@ _RESERVED_FRAMEWORK_FLAG_NAMES = frozenset({
 # at the replacement.
 _BANNED_FLAG_NAMES = frozenset({"yes"})
 
+# The programmatic consent PARAMETER name, reserved on both the flag surface
+# and the arg surface at every level. `call(..., approve_consequential=...)`
+# is keyword-only and framework-owned, so a command declaring a parameter of
+# this name would be unreachable over that channel while staying reachable
+# over MCP -- two channels disagreeing about the same command. The quartet ban
+# above covers the FLAG spelling `approve-consequential`; this covers the
+# underscore spelling the parameter surface actually uses, and it is the one
+# reserved name that reaches positional args too.
+_RESERVED_CONSENT_PARAM_NAME = "approve_consequential"
+
 # Names reserved by the framework for global flags. The pre-existing set is
 # also what a SHORT flag name is checked against (the framework quartet bans
 # long names only).
@@ -3198,6 +3208,22 @@ def _raise_flag_name_yes_banned():
     raise ValueError(
         "flag name 'yes' is banned by the framework: "
         "the confirmation skip is --approve-consequential"
+    )
+
+
+def _raise_flag_name_consent_reserved():
+    """Message template: a flag name collides with the consent parameter."""
+    raise ValueError(
+        "flag name 'approve_consequential' is reserved by the framework: "
+        "it names the programmatic consent parameter"
+    )
+
+
+def _raise_arg_name_consent_reserved():
+    """Message template: an arg name collides with the consent parameter."""
+    raise ValueError(
+        "arg name 'approve_consequential' is reserved by the framework: "
+        "it names the programmatic consent parameter"
     )
 
 
@@ -3348,6 +3374,8 @@ class Flag:
             )
         if self.name in _RESERVED_FRAMEWORK_FLAG_NAMES:
             _raise_flag_name_reserved_by_framework(self.name)
+        if self.name == _RESERVED_CONSENT_PARAM_NAME:
+            _raise_flag_name_consent_reserved()
         if self.name in _BANNED_FLAG_NAMES:
             _raise_flag_name_yes_banned()
         if self.name.startswith("no-"):
@@ -3574,6 +3602,8 @@ class Arg:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Arg")
+        if self.name == _RESERVED_CONSENT_PARAM_NAME:
+            _raise_arg_name_consent_reserved()
         if self.required and not isinstance(self.default, _MissingSentinel):
             raise ValueError("required arg cannot have a default")
 

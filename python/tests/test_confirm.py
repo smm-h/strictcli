@@ -364,6 +364,45 @@ class TestReservedNames:
             "(dry-run, approve-consequential, quiet, verbose)"
         )
 
+    def test_approve_consequential_is_a_reserved_flag_param_name(self):
+        """The underscore spelling is the programmatic consent parameter.
+
+        A flag of that name would reach the handler as the same kwarg
+        `call()` reserves for consent, so it is refused at registration.
+        """
+        with pytest.raises(ValueError) as exc:
+            sc.Flag(name="approve_consequential", type=bool, help="no")
+        assert str(exc.value) == (
+            "flag name 'approve_consequential' is reserved by the framework: "
+            "it names the programmatic consent parameter"
+        )
+
+    def test_approve_consequential_is_a_reserved_arg_name(self):
+        """A positional arg of that name is swallowed by call()'s keyword-only
+        consent parameter while MCP still reaches it -- two channels
+        disagreeing about the same command. Refused at registration."""
+        with pytest.raises(ValueError) as exc:
+            sc.Arg(name="approve_consequential", help="no")
+        assert str(exc.value) == (
+            "arg name 'approve_consequential' is reserved by the framework: "
+            "it names the programmatic consent parameter"
+        )
+
+    def test_other_arg_names_are_unaffected(self):
+        """Only the consent parameter is reserved on the arg surface: the
+        quartet's own names stay legal as positionals."""
+        assert sc.Arg(name="verbose", help="a positional").name == "verbose"
+        assert sc.Arg(name="approve", help="a positional").name == "approve"
+
+    def test_reserved_consent_name_is_rejected_through_the_command_decorator(self):
+        app = sc.App(name="app", version="1.0.0", help="app")
+        with pytest.raises(ValueError) as exc:
+            @app.command("cmd", help="c", effect="read_only",
+                         args=[sc.Arg(name="approve_consequential", help="x")])
+            def _c(ctx, approve_consequential):
+                return 0
+        assert "reserved by the framework" in str(exc.value)
+
     def test_yes_stays_banned(self):
         """`yes` owns no framework flag, but a private --yes would restate
         --approve-consequential in a spelling that IS muscle memory."""
