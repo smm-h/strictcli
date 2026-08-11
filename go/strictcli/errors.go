@@ -1133,6 +1133,15 @@ func errFlagNameReservedByFramework(name string) string {
 // exactly what the rename removed.
 const errFlagNameYesBanned = "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential"
 
+// errFlagNameConsentReserved and errArgNameConsentReserved are the consent
+// PARAMETER ban (§12.1). `approve_consequential` is how a caller states
+// consent programmatically and over MCP, so a command may not declare a flag
+// or a positional arg of that name -- otherwise the same command means
+// different things on different channels.
+const errFlagNameConsentReserved = "flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
+
+const errArgNameConsentReserved = "arg name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
+
 func errCommandEffectMissing(name string) string {
 	return fmt.Sprintf("command %q: effect classification is required (effect=\"read_only\" or effect=\"mutating\")", name)
 }

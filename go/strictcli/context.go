@@ -207,6 +207,17 @@ var bannedFlagNames = map[string]bool{
 	"yes": true,
 }
 
+// reservedConsentParamName is the programmatic consent PARAMETER name,
+// reserved on both the flag surface and the arg surface at every level.
+// Go's kwargs are a map, so a parameter of this name cannot shadow the
+// WithApproveConsequential() option the way Python's keyword-only consent
+// parameter would -- but the name is framework vocabulary in every
+// implementation (App.Call, Tool.Execute, the MCP tools/call param), and a
+// command must mean the same thing on every channel and in every language.
+// The quartet ban above covers the FLAG spelling `approve-consequential`;
+// this covers the underscore spelling the parameter surface uses.
+const reservedConsentParamName = "approve_consequential"
+
 // reservedGlobalShortNames are the pre-existing reserved names; they are also
 // what a SHORT flag name is checked against.
 var reservedGlobalShortNames = map[string]bool{

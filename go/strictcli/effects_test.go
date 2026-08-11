@@ -108,6 +108,39 @@ func TestReservedQuartetLeavesShortNamesAndArgsAlone(t *testing.T) {
 	}
 }
 
+// The programmatic consent PARAMETER name is reserved on both surfaces. Go's
+// map kwargs make it structurally harmless here, but the name is framework
+// vocabulary across every implementation, so registration refuses it
+// identically in all three.
+func TestConsentParamNameBannedOnFlags(t *testing.T) {
+	want := "flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
+	cases := []func(){
+		func() { BoolFlag("approve_consequential", "h", Default(false)) },
+		func() { StringFlag("approve_consequential", "h") },
+		func() { IntFlag("approve_consequential", "h") },
+	}
+	for i, fn := range cases {
+		if got := mustPanic(t, fn); got != want {
+			t.Fatalf("case %d: got %q want %q", i, got, want)
+		}
+	}
+}
+
+func TestConsentParamNameBannedOnArgs(t *testing.T) {
+	want := "arg name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
+	if got := mustPanic(t, func() { NewArg("approve_consequential", "h") }); got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestConsentParamBanLeavesOtherArgNamesAlone(t *testing.T) {
+	for _, name := range []string{"verbose", "approve", "approve-consequential"} {
+		if a := NewArg(name, "h"); a.Name != name {
+			t.Fatalf("arg %q must stay available", name)
+		}
+	}
+}
+
 func TestOutputIsNotReserved(t *testing.T) {
 	f := StringFlag("output", "h")
 	if f.Name != "output" {

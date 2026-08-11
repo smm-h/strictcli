@@ -1052,6 +1052,11 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 	if strings.TrimSpace(help) == "" {
 		panic(errArgHelpEmpty)
 	}
+	// The consent parameter name is the one reserved name that reaches the
+	// positional-arg surface.
+	if name == reservedConsentParamName {
+		panic(errArgNameConsentReserved)
+	}
 	a := Arg{
 		Name:     name,
 		Help:     help,
@@ -1237,6 +1242,10 @@ func validateFlagConfig(f *Flag) {
 	// Short names and positional arg names are unaffected.
 	if reservedFrameworkFlagNames[f.Name] {
 		panic(errFlagNameReservedByFramework(f.Name))
+	}
+	// The consent parameter name, reserved on the flag surface too.
+	if f.Name == reservedConsentParamName {
+		panic(errFlagNameConsentReserved)
 	}
 	if bannedFlagNames[f.Name] {
 		panic(errFlagNameYesBanned)
