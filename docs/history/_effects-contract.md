@@ -52,6 +52,17 @@ rendering; new §12.2a carries the four message templates; §13 gains the schema
 conformance-schema change; §16's bullet is struck through in place rather than deleted, so the
 record of what was once excluded, and why it stopped being excluded, stays readable.
 
+Amended 2026-08-13 at the **machine-interface round** (§18.9). This round adds machine mode and
+its envelope (§19) and the process trace store's contract items (§20), and amends §3, §7, §14 and
+§16 in place. The governing rule is the normal one -- this document wins until it is amended, and
+it is amended here rather than contradicted. The round's shape in one sentence: **outside machine
+mode nothing in this document changes at all**, and inside machine mode the envelope is the only
+document stdout carries, with §3's promises re-stated over it rather than dropped -- the preview
+is never absent, the truncation error and the abort marker become envelope members instead of
+stderr lines, and §14.2's structured effect log stops being a test-only diagnostic and becomes the
+preview's source. Sections are never renumbered in this document, so §19 and §20 sit physically
+after §18.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -586,6 +597,14 @@ just the header with an empty body**: a read-only command can only produce obser
 framework-blessed cache writes, and neither is ever logged (§3.2, §9.2). The header is still
 emitted, so the output is honest about the mode the run was in.
 
+> **Amendment (2026-08-13, machine-interface round): every "stdout" in §3 means human mode.**
+> In machine mode (§19) the would-do log is not written to stdout as text at all: the same
+> records, in the same order, from the same seam, are carried in the envelope's `preview` member
+> (§19.3), and the envelope is the only document stdout receives (§19.1). The read-only rule above
+> survives exactly: what is a header with an empty body in human mode is an empty `preview` array
+> in machine mode, and it is emitted just as unconditionally. Outside machine mode every sentence
+> in §3 is unchanged, and `--json --dry-run` is a legal combination (§19.1).
+
 ### 3.2 The log format
 
 Header line, verbatim:
@@ -690,9 +709,25 @@ error: dry-run preview ends at step N: <cmd> branched on unsettled value «step 
 Exit code is `1`. This is an honest failure, not a warning: the framework refuses to invent a
 value it cannot know.
 
+> **Amendment (2026-08-13, machine-interface round): in machine mode the truncation error is an
+> envelope member, not a stderr line.** The stream split above is a **human-mode** promise and is
+> narrowed to it, not withdrawn: it exists so a caller piping stdout gets the preview and nothing
+> else, and in machine mode the envelope delivers that property more strongly -- the preview and
+> the reason it stopped are two members of one parseable document, so a caller cannot get the
+> first without the second. The envelope's `preview_error` carries
+> `{"kind": "truncated", "step": N, "command": …, "brand": …, "message": …}` where `message` is
+> byte-identical to the §12.5 text above, `error: ` prefix included (§19.3). Exit code stays `1`,
+> the same records are still carried, and nothing about the human-mode rendering changes.
+
 ### 3.4 What `--quiet` does to the log
 
 Nothing. The would-do log is dry mode's primary output and is never suppressed (§7.4).
+
+> **Amendment (2026-08-13, machine-interface round): the same holds in machine mode, structurally.**
+> The envelope is not written through the quiet-gated writers at all (§19.2), so `--json --quiet`
+> emits the complete envelope, `preview` and `diagnostics` included. `--quiet` and `--verbose` gate
+> the **human** stream only; they never decide what an envelope contains. This is the same promise
+> §3.4 already made, restated over the other rendering.
 
 ### 3.5 Every exit path renders the log
 
@@ -738,6 +773,22 @@ skips every deferred function and Node tears the process down. This is a ceiling
 (§17), and it is the reason Python's `sys.exit` is *in* the table above -- it raises a catchable
 `SystemExit` rather than terminating, so the framework really can honour it, and it is the
 idiomatic way a Python handler reports failure.
+
+> **Amendment (2026-08-13, machine-interface round): the guarantee is unconditional; only the
+> rendering follows the mode.** §3.5's promise -- silence is the one answer the framework must
+> never give -- is **discharged, not contradicted**, by machine mode. In machine mode the table's
+> `stdout` column reads "the envelope, whose `preview` carries the log" on every row and its
+> `stderr` column reads "--", because the truncation error (§3.3) and the abort marker (§12.11)
+> become `preview_error` members (§19.3). Exit statuses are unchanged, and an unexpected unwind
+> still propagates untouched -- the envelope is written at the same seam, before the exception
+> continues. The one exit path outside the guarantee (`os.Exit` / `process.exit`) is outside it in
+> machine mode too, and for the identical reason.
+>
+> A second amendment lands on the same seam: a handler may **claim** the render
+> (`ctx.effects.recorded()`, §19.7), after which the framework's own end-of-dispatch emission is
+> suppressed and the handler's `render_log()` produces byte-identical bytes at a point of its
+> choosing. A run that claimed but never rendered is re-rendered at this seam, so the guarantee
+> survives the claim intact: claiming moves the render, it can never remove it.
 
 ---
 
@@ -1012,6 +1063,24 @@ mutex-group flags and app global flags -- not only to global flags. `--output` i
 The four flags have **no short forms**. Short-flag names are unaffected by this ban.
 Positional arg names are unaffected (an arg has no `--` spelling).
 
+> **Amendment (2026-08-13, machine-interface round): `json` joins the reserved set on the same
+> unconditional tier.** The framework owns `--json` (machine mode, §19). Its ban is the
+> **unconditional every-level** one described above -- command flags, flag-set flags, mutex-group
+> flags and app globals -- not the global-only tier, so a consumer's command-local `--json` is a
+> registration-time error exactly as a command-local `--dry-run` is. It shares §7.2's delivery
+> rules verbatim: extracted by the pre-scan, stripped from argv before command parsing, recognized
+> anywhere in argv with the same two boundaries (a bare `--`, a passthrough command's name),
+> repetition and mixed positions a union, no short form ever.
+>
+> **The quartet stays a quartet.** `--json` is not a fifth member: the four are the effects
+> regime's own flags and are named as a set throughout this document and across the fleet's
+> documentation. `--json` is reserved *beside* them and specified in §19, which is where its
+> semantics live. The only thing this amendment changes in §7 is the membership of the reserved
+> *name* lists (Python `_RESERVED_GLOBAL_FLAG_NAMES`, Go `reservedGlobalFlagNames`, TypeScript
+> `RESERVED_GLOBAL_FLAG_NAMES`) and the pre-scan's two-region table (§7.2), where `json` reads
+> exactly as the quartet does in both regions. Its Context accessor follows the quartet's shape:
+> `ctx.json` / `ctx.JSON()` / `ctx.json`.
+
 #### `approve-consequential` replaced `yes` (amended 2026-08-04, §18.7)
 
 The skip flag was `--yes`. It is now `--approve-consequential`, and **its unwieldiness is the
@@ -1142,10 +1211,32 @@ simply wins. There is no mutex registration between them.
 
 Never suppressed by `--quiet`, at any level:
 
-- structured handler data (the JSON that `outcome(data=...)` / `ExitData` prints to stdout);
+- ~~structured handler data (the JSON that `outcome(data=...)` / `ExitData` prints to stdout);~~
+  **amended 2026-08-13 -- see the box below;**
 - the would-do log (§3.2) and the truncation error (§3.3);
 - framework parse errors, registration errors and the confirm prompt;
 - `ctx.warn` and `ctx.error`.
+
+> **Amendment (2026-08-13, machine-interface round): the handler-data item is replaced by the
+> envelope's structural exemption.** The channel the struck bullet protected -- `outcome(data=...)`
+> / `ExitData(code, data)` printing bare JSON to stdout -- is **deleted** (§19.4). It had zero
+> consumers in the fleet, and it was one half of a collision the framework had with itself: a
+> command using it under `--dry-run` emitted the would-do log and a bare JSON document on the same
+> stream, producing unparseable stdout with no consumer involved. Handlers now supply the machine
+> payload through the dedicated payload API, which carries the declared schema binding (§19.4,
+> §19.5), and the payload is emitted **only** as the envelope's `payload` member in machine mode.
+>
+> The never-suppressed promise is not weakened by the deletion, it is strengthened: the envelope
+> is **structurally exempt** from quiet. It is not written through the quiet-gated writers at all,
+> so `--quiet` has no mechanism by which to reach it, and `--json --quiet` emits the complete
+> document -- `payload`, `preview` and `diagnostics` alike. This closes a live divergence the old
+> wording could not: one implementation routed its machine output through the quiet-suppressible
+> writer and emitted nothing whatsoever under quiet plus machine flags, while the other two printed
+> the data.
+>
+> The table above is otherwise untouched. `--quiet` / `--verbose` gate the **human** stream and
+> nothing else; they never decide the content of an envelope, and a diagnostic hidden from the
+> terminal still appears in `diagnostics` with its level (§19.2).
 
 ### 7.5 Check-command subsumption
 
@@ -2286,6 +2377,20 @@ optional, an absent key and an explicit `null` are equivalent under §14.1's com
 that is dry mode's stdout rendering (§3.2) and does not exist in live mode at all; the structured
 log is a diagnostic, read only through the §14.3 accessor, and changes nothing about the run.
 
+> **Amendment (2026-08-13, machine-interface round): the structured effect log graduates from
+> test-only diagnostic to the envelope's source.** The record shape above is unchanged and stays
+> the single definition -- what changes is its standing. It is no longer "a diagnostic read only
+> through the §14.3 accessor": in machine mode the same records are the envelope's `preview` member
+> (§19.3), and in either mode a handler may read them through `ctx.effects.recorded()` (§19.7).
+> "Changes nothing about the run" still holds and is now the important half of the sentence: the
+> log is produced identically whether or not anything reads it, and reading it never alters
+> behaviour.
+>
+> `$defs/effect_record` gains **one optional key**, `children`: an array of `effect_record`s,
+> making the shape recursive from day one for the compositional child previews of §19.8. It is
+> absent on every record today and stays absent until §19.8 is implemented; the recursion is
+> pinned now so the schema does not have to change shape when it is.
+
 Observes (§6.2) do not appear in the structured effect log at all. The `kind` and `verb` enums
 above have no observe member, and an observe recorded as a `proc_mutate`/`run` pair would be
 indistinguishable from a real mutation -- which is exactly the confusion the log exists to
@@ -2308,8 +2413,21 @@ as the existing `CONFORMANCE_APP_DEF`**:
 The framework accessor is `App.effect_log()` / `(*App).EffectLog()` / `app.effectLog()`, returning
 the ordered records for the most recent dispatch -- in **either** mode, since the log is populated
 in both (§14.2), which is what lets a case assert a live run's effects as readily as a dry run's.
-It sits beside the existing test-only surfaces (`test()`, `_last_sources`) and is excluded from
-the api-surface catalog the same way.
+~~It sits beside the existing test-only surfaces (`test()`, `_last_sources`) and is excluded from
+the api-surface catalog the same way.~~ **Amended 2026-08-13 -- see the box below.**
+
+> **Amendment (2026-08-13, machine-interface round): the accessor is public and its visibility
+> converges.** The accessor's visibility diverges across the three implementations today -- exported
+> public API in one, deliberately hidden in another, plain public in the third. Promotion makes it
+> **public in all three** with one spelling per language, and it leaves the test-only enclosure: it
+> is the envelope's source (§19.3), so it is part of the surface consumers may rely on and it joins
+> the api-surface catalog rather than being excluded from it. The catalog will flag the change,
+> which is correct -- it is a real surface addition.
+>
+> The file handoff above is unchanged and stays how conformance reads the log out of a subprocess.
+> A case may now assert the same records twice over -- once through `CONFORMANCE_EFFECT_LOG` and
+> once as the envelope's `preview` -- and that redundancy is the point: the two must agree
+> record-for-record, in both modes.
 
 This is deliberately **not** an env-var mode switch: it does not change any behavior, only where a
 diagnostic is written. It is not the deleted A9 token (§16).
@@ -2505,9 +2623,40 @@ already funnel through; the per-site work is passing the effects/reserved-flag s
 - **No compatibility shim** for pre-classification commands. Every consumer classifies at its
   lock bump.
 
+> **Amendment (2026-08-13, machine-interface round): the regime gains compositional child
+> previews (§19.8) -- designed here, implemented later -- and the first bullet survives them
+> intact.** A `spawn` or `run` declared **previewable** is, in dry mode, executed by the framework
+> with `--dry-run --json` appended to the child's argv; the child's envelope is validated and its
+> `preview` records are nested under the parent's record as `children` (§19.8, §14.2). Read the
+> first bullet again and note that this is *precisely what it prescribes*: the mode is passed
+> **explicitly in the child's argv, like any other flag**. Nothing is inherited, nothing is
+> ambient, no environment variable carries a mode, and the child cannot tell how its argv was
+> assembled. What stays forbidden is unchanged: a token that makes an unwitting child run dry.
+>
+> Two boundaries on the new capability, both fail-closed and both stated so the exclusion above is
+> not quietly widened. It applies **only to declared effects** -- there is no discovery, no
+> probing, and no attempt to guess whether an arbitrary child speaks the envelope. And a declared
+> previewable child that does not produce a valid envelope, or produces one whose own
+> `preview_error` is non-null, is a **hard error that truncates the parent's preview**: the
+> framework will not silently degrade to recording a bare spawn, because a preview that quietly
+> lost a subtree is exactly the "best-effort guess" the no-partial-fallback bullet forbids.
+>
+> **Status: designed, not implemented.** No implementation may adopt §19.8 partially. Its
+> implementation trigger is stated in §19.8 and is external to this repository: the first
+> envelope-speaking child in the fleet (the commit tool's migration) must exist before there is
+> anything to compose with. Until then `children` is absent from every record, the `previewable`
+> option is unregistered in all three implementations, and §12 carries no template for the
+> failure above -- that template is authored at the implementation round.
+
 `CONFORMANCE_EFFECT_LOG` (§14.3) is not an exception to the first bullet: it selects a diagnostic
 *destination*, changes no behavior, is read only by the conformance harnesses (never by the
 framework's dispatch path), and does not cross a process boundary as a mode.
+
+`STRICTCLI_TRACE_PARENT` (§20) is not an exception either, and the reason is stronger than
+`CONFORMANCE_EFFECT_LOG`'s. It carries an **identifier**, never a mode; the framework composes it
+into a child's environment and never reads it back into a decision; and §20.2 makes
+"no code path may branch on it" a ratified contract item enforced by conformance sweeps rather
+than a promise. A variable no behaviour can depend on cannot inherit a mode.
 
 ---
 
@@ -2560,8 +2709,9 @@ Recorded so implementors do not re-litigate them:
 
 ## 18. Decision provenance
 
-This section is **exhaustive**: every decision in §§1-17 that is not verbatim plan text is listed
-below, in one of three classes. If a statement in this document is not derivable from the ratified
+This section is **exhaustive**: every decision in §§1-17 -- and, since the machine-interface round,
+§§19-20, which are numbered after this section because sections here are never renumbered -- that
+is not verbatim plan text is listed below, in one of three classes. If a statement in this document is not derivable from the ratified
 pin list in the campaign ledger, it appears here.
 
 ### 18.1 User-ratified rulings folded in at the execution round (2026-08-02)
@@ -3147,5 +3297,531 @@ central inference. This round is governed by the same precedence rule item 84 es
     (Python spaces its separators, Go sorts map keys and renders an empty list as null), which was
     never part of the contract.
 
+### 18.9 Amendments made at the machine-interface round (2026-08-13)
+
+This round records rulings made upstream in a cross-repository campaign that resolved stream
+ownership, machine output and process ancestry together. Items 96-110 are **ruled upstream**, not
+authored here; items 111-112 are authored spellings in the §18.3 class (mechanical decisions
+forced by the ruled semantics, fixing spellings the rulings left open). The round writes §19 and
+§20 and amends §3.1, §3.3, §3.4, §3.5, §7.1, §7.4, §14.2, §14.3 and §16 in place.
+
+96. **In machine mode the envelope is the sole stdout document, and it owns the preview (§19.1,
+    §19.3).** The framework collided with itself before this ruling, with no consumer involved:
+    a command supplying handler data under `--dry-run` wrote the would-do log and a bare JSON
+    document to the same stream, and the auto-registered check command's own machine flag did the
+    same. The resolution is not to silence one of them but to relocate the log's *content* into
+    the document: one stream, one parseable object, both things inside it. A ten-option design
+    ladder was generated and compared before the ruling; its top two rungs (a full run-report and
+    event-stream redesign) were considered and deliberately **not** adopted, recorded here so a
+    later campaign knows the ladder's top exists.
+
+97. **`--json` and `--dry-run` stay a legal combination (§19.1).** Banning it was a live option
+    and evidence killed it: a fleet consumer already ships a tested dry-run-plus-machine-output
+    surface, and the correct fix for another consumer's preview depends on the combination
+    existing.
+
+98. **The stream-split items are narrowed to human mode; the never-conditional items are
+    discharged (§3.3, §3.4, §3.5).** Two ratified promises were in the way, and neither is
+    contradicted. The split (log to stdout, the sentence qualifying it to stderr) exists so a
+    caller piping stdout gets the preview and nothing else -- the envelope delivers that property
+    more strongly, since the preview and the reason it stopped are members of one document a
+    caller parses together. "Never conditional" is discharged the same way: the preview is never
+    absent in either mode, and only its *rendering* follows the declared output mode.
+
+99. **The envelope's field set, and no timing fields (§19.2).** Interface version, app identity,
+    command path, exit code, payload, preview flag, structured effects, diagnostics. Timing is
+    excluded deliberately, not forgotten: a duration is nondeterministic by construction, and this
+    document is compared byte-for-byte across three implementations.
+
+100. **Declared outer field order is optional and for readability only (§19.2).** Conformance
+     compares parsed structures, not serialized text -- key sets as sets, recursing on agreement --
+     so key order is irrelevant to correctness across three serializers that order keys three
+     different ways. The consequence for the payload's interior is the same and needs no rule at
+     all: there is nothing to normalize.
+
+101. **The envelope is structurally exempt from `--quiet` (§19.2, §7.4).** Not "exempted by a
+     check" -- it is not written through the quiet-gated writers, so no mechanism exists by which
+     quiet could reach it. This closes a shipped divergence in which one implementation emitted
+     nothing at all under quiet plus machine flags while the other two emitted the data.
+
+102. **`outcome(data=...)` / `ExitData(code, data)` is deleted and replaced by an explicit payload
+     API (§19.4).** The bare-JSON-print channel had zero users across the fleet and was one half
+     of item 96's self-collision. The replacement carries the schema binding, which the old
+     channel structurally could not.
+
+103. **Payload schemas are inline JSON Schema literals, with optional per-language builder sugar
+     (§19.5).** The literal is the only canonical artifact: registered, byte-compared across the
+     three implementations, published verbatim by the schema dump, enforced at emission. Builders
+     are pure constructors of literals -- Go regains compile-time help -- whose output passes the
+     identical registration-time validation.
+
+104. **The validator is in-house over a deliberately closed subset (§19.5).** Measured evidence:
+     across 1299 conformance tests the best third-party trio still disagrees on ten verdicts, and
+     every one of them falls in a keyword the subset excludes. `pattern` is unfixable in
+     principle -- Python `re`, Go RE2 and JavaScript `RegExp` are pairwise incompatible in seven
+     measured ways -- and two shipping JavaScript validators fail `required` on prototype-chain
+     keys today. An unknown keyword is a registration-time hard error, so subset creep is
+     structurally blocked rather than discouraged.
+
+105. **Payload numbers are IEEE-754 doubles, with an emission-time magnitude guard (§19.5).** Any
+     integer beyond ±2^53 is rejected at emission; big identifiers are strings by declaration. The
+     envelope is a public document and its consuming ecosystem is double-lossy regardless of what
+     three implementations preserve internally, so exactness machinery would protect nothing past
+     our own borders while adding a three-way divergence surface.
+
+106. **The escaping regime is plain UTF-8 with no HTML escaping (§19.5).** Escape only what JSON
+     mandates. The three implementations escape differently today and always have -- one escapes
+     non-ASCII, one HTML-escapes angle brackets and ampersands, one does neither -- with zero test
+     coverage, latent only because no case carries such a character. An envelope carrying app
+     names, command paths and diagnostic text hits it immediately.
+
+107. **Document-emitting commands declare stdout ownership (§19.6).** A command whose stdout *is*
+     an artifact -- SQL, SVG, a hash-verified JSON document -- says so, and in machine mode its
+     envelope and its diagnostics move to stderr so the artifact's bytes are untouched. The
+     alternative, wrapping the artifact, breaks its reader by construction: at least one fleet
+     consumer hash-verifies its own machine output.
+
+108. **Render ordering is settled by a claim, not by a fixed position (§19.7).**
+     `ctx.effects.recorded()` claims the render and suppresses the framework's own emission;
+     `render_log()` produces byte-identical bytes wherever the handler puts them; a run that
+     claimed but never rendered is re-rendered at the seam, so §3.5's guarantee survives.
+
+109. **Compositional child previews are designed now and implemented later (§19.8).** Designing
+     them in this round rather than deferring them is a deliberate user ruling: the preview schema
+     is recursive from day one so it never has to change shape, and the ordering constraint is
+     external -- an envelope-speaking child must exist before there is anything to compose with.
+     A consumer's recorded-spawn preview deliberately stays as it is until this rung is
+     implemented; no interim mechanism is built for a path this rung replaces.
+
+110. **The process trace store's two contract items (§20).** Observational-only: no code path may
+     branch on the ancestry stack, there is no accessor API, and conformance sweeps assert
+     byte-identical output under a forged parent ID and under a broken store. Best-effort by
+     declared design: a failure policy carve-out scoped to this store alone, with a write-once
+     marker, no retries, no counter, and auto-created directories -- ruled deliberately against
+     the husk pattern, because deleting operational telemetry should mean tracing resumes, not
+     that it dies.
+
+111. **Authored spellings for the envelope and the payload API (§19.2, §19.3, §19.4, §19.5,
+     §19.6, §19.7, §19.8, §7.1).** None changes a ruling; each fixes a spelling the rulings left
+     open, in the §18.3 class: the envelope's eight key names and the `preview_error` /
+     `diagnostics` record shapes; `interface_version: 1` as this round's value; `command: null`
+     for a run that resolved no command; the `--json` Context accessor names; the payload API's
+     names (`ctx.payload` / `ctx.Payload` / `ctx.payload`) and its call-once rule; the
+     `payload_schema` declaration's names; the `owns_stdout` declaration's names; the
+     `previewable` effect option, the `children` record key and the nested rendering's indent.
+     Where a ruling named a member without naming its shape -- "the truncation error and the abort
+     marker become envelope members" -- the shape here is the minimal one that carries the
+     existing §12.5 / §12.11 text verbatim rather than restating it in a second vocabulary.
+
+112. **Authored spellings for the trace store (§20, and the spec page).** `spawned_at`'s format,
+     the write-failure marker's filename and its content, and the store line's encoding are pinned
+     in the published spec page (`docs/process-trace-store.md`), which is the artifact other tools
+     implement against; §20 carries only the contract items. The entry's key names are **not** in
+     this class -- they are ruled upstream and reproduced verbatim.
+
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
+
+---
+
+## 19. Machine mode and the envelope
+
+Added 2026-08-13 at the machine-interface round (§18.9). This section is numbered after §18
+because sections in this document are never renumbered; it is normative exactly as §§1-17 are.
+
+### 19.1 The mode, its flag, and the one document
+
+**Machine mode is entered by the framework-owned `--json` flag.** The name is reserved
+unconditionally at every level (§7.1's amendment box): a consumer declaring `--json` on a command,
+a flag set, a mutex group or as an app global is a registration-time error, exactly as it is for
+`--dry-run`. Delivery follows §7.2 verbatim -- pre-scan extraction, stripped from argv before
+command parsing, recognized anywhere in argv, the same two boundaries (a bare `--`, a passthrough
+command's name), no short form -- and the value reaches the handler on the Context
+(`ctx.json` / `ctx.JSON()` / `ctx.json`).
+
+**In machine mode stdout carries exactly one document: the envelope**, serialized as JSON and
+terminated by a single `\n`. Nothing else the framework emits reaches stdout -- not the would-do
+log's text, not the truncation error, not the abort marker, not `ctx.info`. The framework's human
+output goes through the context writers, which in machine mode write nothing; what those writers
+were asked to say is carried in the envelope's `diagnostics` instead (§19.2). The single exception
+is a command declaring stdout ownership, where the envelope moves to stderr and the command's
+document owns stdout outright (§19.6).
+
+**`--json` and `--dry-run` combine.** A preview in machine mode is an envelope whose `dry_run` is
+true and whose `preview` carries the recorded effects. This combination is legal and is the point:
+it is how a caller gets a machine-readable answer to "what would this do".
+
+**Outside machine mode, nothing changes, ever.** Every promise §3 makes about the would-do log,
+every gating rule in §7.4, every stream in §3.5's table is exactly what it was before this round.
+There is no third mode and no per-command variation: a run is either in machine mode or it is not,
+and the flag is the only thing that decides.
+
+The framework governs what the framework emits. A handler that writes to the process's stdout
+directly bypasses this section exactly as it bypasses §7.4's gating today -- that is the same
+accepted ceiling, not a new one, and §19.6 is the declared way to do it deliberately.
+
+### 19.2 The envelope
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `interface_version` | integer | The envelope contract's own version. `1` at this round; changed only by a later amendment to this section. |
+| `app` | string | The app's declared name. |
+| `app_version` | string | The app's declared version (mandatory on every app). |
+| `command` | string \| null | The dotted command path (`release.run`), the same spelling §12.5's `<cmd>` uses. `null` when the run ended before a command resolved (a parse error, an unknown command, a pre-dispatch refusal). |
+| `exit_code` | integer | The process's exit status. |
+| `payload` | any \| null | The machine payload the handler supplied through §19.4's API, validated against the command's declared schema (§19.5). `null` when the handler supplied none. |
+| `dry_run` | boolean | The preview flag: whether the run was in dry mode (§3.1). |
+| `preview` | array of `effect_record` | The structured effects (§14.2, §19.3). Never absent; `[]` when nothing was recorded. |
+| `preview_error` | object \| null | The terminal condition of a preview that did not finish (§19.3). `null` when the dispatch completed. |
+| `diagnostics` | array of object | Every diagnostic the run emitted, in emission order: `{"level": "debug" \| "info" \| "warn" \| "error", "message": string}`. |
+
+**No timing fields.** No duration, no timestamps, no counters derived from the clock. This is a
+document three implementations must produce identically and a conformance suite compares
+structurally; a wall-clock number is nondeterminism with no reader who needs it. A consumer
+wanting timing measures the process it launched.
+
+**Declared field order is optional and for readability only.** The three implementations serialize
+differently -- one sorts keys, one preserves insertion order, one hand-writes -- and correctness is
+decided by structural comparison: key sets compared as sets, recursing where they agree. Declaring
+one logical order (the table's order) is cheap and reads better than alphabetical, and it is not a
+requirement on any implementation. The same reasoning covers the payload's interior: there is
+nothing to normalize and nothing to promise.
+
+**The envelope is structurally exempt from `--quiet`.** It is not written through the quiet-gated
+writers at all, so quiet has no mechanism by which to reach it (§7.4's amendment box). `--json
+--quiet` emits the complete document. `--quiet` and `--verbose` gate the human stream only: a
+`ctx.debug` line hidden from a default-mode terminal still appears in `diagnostics` with
+`"level": "debug"`, because the envelope's content is a function of what the run produced, never of
+how a terminal was configured.
+
+**Serialization** follows §19.5's escaping regime: plain UTF-8, escaping only what JSON mandates.
+
+### 19.3 The `preview` member
+
+`preview` is the structured effect log of §14.2, verbatim -- the same records, the same
+`$defs/effect_record` shape, the same order, produced by the same seam. Machine mode does not
+compute a second thing; it renders the one thing the framework already has, in the other form.
+The would-do log (§3.2) is the text rendering of these records; `preview` is the structured one.
+
+- **It is populated in both modes**, and `recorded` on each record says which happened (§14.2): a
+  live run's records carry `recorded: false`, a dry run's application effects carry
+  `recorded: true`, and framework-blessed cache writes carry `recorded: false` in either mode.
+- **It is never absent and never conditional.** A read-only dry run yields `[]` -- the machine-mode
+  equivalent of §3.1's header with an empty body, and emitted just as unconditionally. Silence
+  remains the one answer the framework never gives (§3.5).
+- **Observes never appear in it**, for §14.2's reason: the log is what would change.
+
+`preview_error` carries the terminal condition, and is the machine-mode home of the two texts that
+go to stderr in human mode:
+
+```json
+{
+  "kind": "truncated",
+  "step": 4,
+  "command": "release.run",
+  "brand": "«step 2 output»",
+  "message": "error: dry-run preview ends at step 4: release.run branched on unsettled value «step 2 output» — cannot preview past this point"
+}
+```
+
+- `kind` is `"truncated"` (§3.3: extraction or branching ended the preview) or `"aborted"` (§3.5:
+  the dispatch unwound). The two are mutually exclusive by §3.5's table.
+- `step` and `command` have exactly the meanings §12.5 and §12.11 give them: the would-do number
+  the preview reached, over rendered lines (§3.2), and the dotted command path.
+- `brand` is the offending carrier's brand form, present for `"truncated"` and `null` for
+  `"aborted"` -- §12.11's marker deliberately names no value.
+- `message` is the corresponding §12.5 / §12.11 text **byte-identical**, `error: ` prefix included.
+  It is carried rather than restated so there is one text per condition, checked by the existing
+  error-parity machinery, and a consumer that wants to print something has it.
+
+Behaviour around the two conditions is unchanged: truncation still exits `1`; an unexpected unwind
+still propagates untouched after the envelope is written at the same seam that renders the log in
+human mode.
+
+### 19.4 The payload API
+
+`outcome(data=...)` and Go's `ExitData(code, data)` are **deleted**. The exit-code forms remain
+(`outcome(exit_code)`, `Exit(code)`, a bare `int` / `undefined` return), and the JSON-printing
+behaviour they carried is gone with no shim: this is a pre-stable framework, and the deleted
+channel had zero consumers in the fleet.
+
+Handlers supply the machine payload through a dedicated API instead:
+
+| Impl | Call |
+|------|------|
+| Python | `ctx.payload(value)` |
+| Go | `ctx.Payload(value)` |
+| TypeScript | `ctx.payload(value)` |
+
+- **The command must declare a payload schema** (§19.5). Calling the API on a command that
+  declares none is a hard error at call time, naming the missing declaration -- registration cannot
+  see that a handler intends to call it, so this is the earliest honest point.
+- **At most once per dispatch.** A second call is a hard error at call time: two payloads are two
+  answers to a question with one slot, and picking either silently is exactly the kind of guess
+  this regime does not make.
+- **The value is validated at emission** against the declared schema (§19.5). A payload that
+  deviates fails the run rather than shipping a wrong shape.
+- **The call is mode-independent.** A handler calls it identically in both modes and never branches
+  on `ctx.json`; the framework decides what to do with the value. In machine mode it is the
+  envelope's `payload`. Outside machine mode it is **not printed at all** -- that is precisely what
+  deleting the bare-JSON-print channel means.
+- **The programmatic surfaces keep their capture.** `test()` / `call()` / `Call()` return the
+  payload the handler supplied where they previously returned the `data` it attached, so the
+  in-process surfaces lose nothing.
+- **Quiet cannot reach it**, for §19.2's structural reason.
+
+### 19.5 Declared payload schemas
+
+**Every command that can produce a payload declares that payload's JSON Schema at registration
+time**, and the framework enforces the declaration at emission. This turns the envelope from a
+shape held by convention into a contract each command states, and gives consumers something to
+generate against.
+
+| Impl | Declaration |
+|------|-------------|
+| Python | `payload_schema=` on the command decorator |
+| Go | `PayloadSchema(schema)`, an ordinary `CmdOption` |
+| TypeScript | `payloadSchema:` in the command definition object |
+
+**The inline literal is the sole canonical artifact.** A declaration is a JSON Schema *literal* --
+a dict / map / object written out in the source. It is registered as written, byte-compared across
+the three implementations by conformance for every framework-owned command, published **verbatim**
+by `--dump-schema`, and enforced at emission. There is no second representation that could drift.
+
+**Builder sugar is optional and per-language.** A language may offer pure constructor functions
+that *build* a literal (Go, which has no literal ergonomics to speak of, regains compile-time
+help this way). Builders add no vocabulary and no semantics: their output is a literal, it passes
+the identical registration-time validation, and a conformance case asserts that every builder
+construct maps one-to-one onto the closed subset below. A builder is a convenience for writing the
+canonical artifact, never an alternative to it.
+
+**The validator is in-house, in each implementation, over a deliberately closed subset:**
+
+| Keyword | Notes |
+|---------|-------|
+| `type` | including type **lists**, which is how nullability is expressed |
+| `properties` | |
+| `required` | |
+| `items` | |
+| `enum` | |
+| `const` | |
+| `additionalProperties` | boolean **or** schema; the schema form is how a dynamic-key map is declared |
+
+**An unknown keyword is a registration-time hard error.** Not ignored, not warned about --
+rejected, including near-miss typos. That is what keeps the subset closed: subset creep cannot
+happen by accident, only by amending this table.
+
+What the subset excludes and why it is not coming back: measured across 1299 conformance tests,
+the best third-party validator trio still disagrees on ten verdicts, and every one of those falls
+in an excluded keyword. `pattern` is unfixable in principle -- Python `re`, Go RE2 and JavaScript
+`RegExp` are pairwise incompatible in seven measured ways, so a regex in a cross-language contract
+means three contracts. Third-party validators are wired in as **dev-only cross-checks**
+(python-jsonschema, santhosh-tekuri v6, hyperjump), asserting verdict agreement on every shared
+vector; none is a runtime dependency of any implementation.
+
+**Numbers are IEEE-754 doubles.** Python coerces to the double model. The validator **rejects at
+emission** any integer whose magnitude exceeds 2^53: a big identifier -- a nanosecond timestamp, a
+64-bit id -- is a **string by declaration**, not a number the framework hopes survives. The
+envelope is a public document and its consuming ecosystem (`jq`, JavaScript) is double-lossy
+regardless of what our three implementations preserve internally; exactness machinery would add a
+three-way divergence surface protecting nothing past our own borders.
+
+**Committed vector families**, each closing a hazard the closed subset does not remove by itself:
+
+- the type matrix, including type lists;
+- Python's traps: `bool` is an `int`, and `1 == 1.0 == True`;
+- JavaScript prototype-chain keys (`__proto__`, `toString`, `constructor`) -- own-property
+  discipline, since two shipping JavaScript validators fail `required` on them today;
+- `enum` / `const` equality;
+- unknown-keyword rejection, including near-miss typos.
+
+**Escaping regime: plain UTF-8, no HTML escaping.** Escape exactly what JSON mandates -- quotes,
+backslashes, control characters -- and emit everything else literally. Concretely: Python passes
+`ensure_ascii=False`, Go sets `SetEscapeHTML(false)`, TypeScript is unchanged. This governs the
+**whole envelope**, not only the payload, and it closes a live three-way divergence that was latent
+only because no conformance case had ever carried a non-ASCII or HTML-special character. The
+rejected regimes (ASCII-escaping everything, HTML-escaping) defend against byte-mangling transports
+and raw HTML embedding -- contexts an envelope never enters -- at the cost of bloated, unreadable,
+three-way-divergent bytes.
+
+### 19.6 The owns-stdout declaration
+
+Some commands' stdout **is** the artifact: a SQL dump, an SVG, a JSON document whose reader
+hash-verifies it. Wrapping such a document in an envelope changes its bytes and breaks its reader.
+
+Those commands declare it:
+
+| Impl | Declaration |
+|------|-------------|
+| Python | `owns_stdout=True` |
+| Go | `OwnsStdout()`, an ordinary `CmdOption` |
+| TypeScript | `ownsStdout: true` |
+
+For a command carrying the declaration, **in machine mode**:
+
+- stdout carries the command's own document and nothing else, byte-exactly;
+- the envelope goes to **stderr**, together with every framework diagnostic -- the stderr variant of
+  framework output, scoped strictly to commands that declared it.
+
+The envelope moving with the diagnostics is not an extra: leaving it on stdout would re-create the
+exact two-documents-on-one-stream collision this round exists to remove. A caller of such a command
+reads the artifact from stdout and, if it wants the envelope, reads stderr.
+
+Outside machine mode the declaration changes nothing at all -- the command prints its document as
+it always did, and the framework's human output is where §7.4 puts it. The scope is exactly the
+declared commands: no other command's framework output ever moves to stderr.
+
+### 19.7 Claimed rendering
+
+The would-do log's position in the human stream was fixed: the framework rendered it at the end of
+dispatch, after everything the handler had already printed. A handler that wanted the preview
+*before* its own summary had no way to say so. It does now, and the mechanism is a **claim**:
+
+| Impl | Calls |
+|------|-------|
+| Python | `ctx.effects.recorded()`, `ctx.effects.render_log()` |
+| Go | `ctx.Effects().Recorded()`, `ctx.Effects().RenderLog()` |
+| TypeScript | `ctx.effects.recorded()`, `ctx.effects.renderLog()` |
+
+- `recorded()` returns the ordered records recorded so far in this dispatch -- the §14.2 shape,
+  the handler-facing view of what §14.3's accessor returns for the whole run.
+- **Calling `recorded()` claims the render.** The framework's own end-of-dispatch emission is
+  suppressed for the rest of the run.
+- `render_log()` renders those records in §3.2's exact form to the human stream, wherever the
+  handler chooses to call it. **Byte-identical either way**: one renderer, one record list, so a
+  handler that claims and renders produces exactly the bytes the framework would have produced,
+  only earlier in the stream. That is the whole feature -- ordering, not content.
+- **Claimed but never rendered is re-rendered at the seam.** A handler that reads the records and
+  then forgets (or returns early, or unwinds) does not silence the preview: §3.5's guarantee is
+  unconditional, and a claim can move the render but never remove it.
+- **In machine mode `render_log()` is a no-op**, and claiming changes nothing: there is no human
+  stream to order and the envelope's `preview` is unconditional either way. `recorded()` still
+  returns the records, so a handler that reads them to shape its own payload behaves identically in
+  both modes.
+
+### 19.8 Compositional child previews -- designed, not yet implemented
+
+A command that spawns another CLI can only record the spawn: the child's own effects are invisible
+to the parent's preview, so a preview of a wrapper is a preview of the wrapping. When the child is
+itself a strictcli app that speaks the envelope, that limit has an exact remedy, and this section
+designs it in full. **It is not implemented at this round** (see the status note at the end).
+
+**Declaration.** `run` and `spawn` gain one effect option, `previewable` (Python
+`previewable=True`; Go `Previewable(true)`, an ordinary `EffectOption`; TypeScript
+`previewable: true`), default false. It declares one fact the framework cannot know: *this argv
+names a CLI that speaks the envelope*. No other method accepts it.
+
+**Behaviour in dry mode.** For an effect declaring `previewable`, the framework does not merely
+record the spawn:
+
+1. it executes the child's argv with `--dry-run --json` appended;
+2. it parses and validates the child's envelope (`interface_version` recognized, shape conforming);
+3. it nests the child's `preview` records under the parent's own record as `children` -- an
+   optional array of `effect_record`s, making the record shape **recursive from day one** (§14.2's
+   amendment box).
+
+Outside dry mode `previewable` does nothing whatsoever: the child runs for real, exactly as it does
+today.
+
+**Rendering.** In the would-do log, a child's lines follow its parent's line, indented by two
+additional spaces per level, and numbered by the child's own 1-based counter. The parent's counter
+(§3.2, and therefore the `«step N output»` brand and truncation's `step`) is **unaffected** by
+nesting: a child's steps are the child's.
+
+**Failure is fail-closed.** A declared previewable child that does not produce a valid envelope --
+or produces one whose own `preview_error` is non-null -- is a hard error that truncates the
+parent's preview. The framework does not degrade to recording a bare spawn: a preview that silently
+lost a subtree is the "best-effort guess" §16 forbids.
+
+**Why this does not reopen §16's first exclusion.** The mode is passed explicitly, in the child's
+argv, exactly as a consumer would pass it by hand. No environment token carries a mode, nothing is
+inherited, nothing is probed, and no child is treated as previewable unless an effect said so.
+
+**Status and implementation trigger.** Designed at this round, implemented after an
+envelope-speaking child exists in the fleet -- the commit tool's migration to the envelope is the
+trigger. Until then: `children` is absent from every record, `previewable` is unregistered in all
+three implementations, and §12 carries no template for the failure above (that template is authored
+at the implementation round). No implementation may adopt this section partially, and no interim
+mechanism is built for the consumer previews this section will replace.
+
+---
+
+## 20. The process trace store
+
+Added 2026-08-13 at the machine-interface round (§18.9). The framework records process ancestry
+universally: at the effects spawn seam it mints an identifier, appends one line to a local
+append-only store, and composes the child's environment with that identifier so the child records
+itself as a descendant. **The normative specification -- the environment variable, the line format,
+the partition rules, the append discipline, the identifier profile and the failure marker -- is the
+published page `docs/process-trace-store.md`,** which is the artifact other tools implement
+against. This section carries only what belongs to the effects contract: two ratified items, and
+the relationship to §16.
+
+### 20.1 What the regime does
+
+- At the effects spawn seam the framework mints one identifier, appends **one entry describing the
+  spawning invocation** -- this app, this command, this process -- and composes
+  `STRICTCLI_TRACE_PARENT=<that id>` into the **child's** environment. One entry per spawn.
+  Nothing mutates in place: the spawning process's own environment is untouched, and the variable
+  is a value passed down, never a channel back up.
+- The entry's own `parent_id` is whatever `STRICTCLI_TRACE_PARENT` this process inherited, so
+  walking `parent_id` links leads to the root of the chain. A process that never spawns writes
+  nothing; a consumer at the leaf reads the variable from its own environment and resolves its
+  immediate caller from the store.
+- The entry describes the invocation, never its arguments: app, version, command path, the
+  reserved-flag state, the machine-mode flag, consent, effect classification, pid, and the parent
+  identifier. **Argv is never recorded** -- arguments carry secrets.
+- Recording happens in both modes. It is not an effect, does not appear in the effect log, and is
+  invisible to `--dry-run`: a dry run still records that it ran, because it did.
+
+### 20.2 Observational-only (ratified contract item)
+
+**No strictcli code path may branch on the content of the ancestry stack.** There is no accessor
+API -- the framework does not expose the parent identifier, the chain, or anything derived from
+them, and a consumer that wants ancestry parses the environment variable in its own capture seam
+and reads the store itself.
+
+This is enforced mechanically rather than promised. Two conformance sweeps:
+
+- a **forged-ID sweep**, running with `STRICTCLI_TRACE_PARENT` set to an identifier no store ever
+  minted;
+- a **broken-store sweep**, running with the store directory unwritable;
+
+both assert **byte-identical stdout, stderr and exit code** against the same runs without them.
+
+That is the entire spoofing defense, and it is sufficient because it is total: a forged ancestry is
+a false attribution claim, cross-checked by independently captured witnesses (parent process,
+session identity, environment), and never an input to behaviour. A mechanism nothing can branch on
+cannot be exploited by lying to it.
+
+### 20.3 Failure policy: a scoped carve-out (ratified contract item)
+
+The regime is fail-closed everywhere (§0). **This store is the one carve-out, it is scoped to this
+store alone, and it is written down here so nobody generalizes it:** tracing is **best-effort by
+declared design**.
+
+- A write failure never fails the run and never emits a diagnostic.
+- On the first write failure the framework creates a **write-once marker file** with `O_EXCL`,
+  containing the first-failure timestamp. No counter -- counters race. A disk-full condition blinds
+  the marker too, and that is accepted.
+- **No retries**, ever.
+- **Store directories are auto-created on write.** This is ruled deliberately against the husk
+  pattern (a tool re-creating state a user deleted): deleting operational telemetry should mean
+  tracing *resumes*, not that it dies permanently, and the store holds nothing a user is entitled
+  to have stay deleted.
+- The **primary detection channel is not the marker**: it is consumers noticing dangling parent
+  identifiers at capture time, which is a real signal from a real reader rather than a file nobody
+  opens.
+
+The justification for the carve-out is that the store's failure mode is *losing a record of what
+happened*, never *doing the wrong thing*. Nothing depends on it (§20.2 guarantees that
+structurally), so a store that cannot be written costs observability and nothing else. Fail-closed
+exists to stop the framework acting on what it cannot verify; here there is no action to stop.
+
+### 20.4 Relationship to §16
+
+`STRICTCLI_TRACE_PARENT` is not the deleted effects-mode token under a new name, and §16's first
+bullet stands unamended. It carries an identifier, never a mode; the framework writes it into a
+child's environment and never reads it back into a decision; and §20.2 makes that a contract item
+enforced by sweeps rather than an assurance. A variable no behaviour may depend on cannot inherit
+a mode.
