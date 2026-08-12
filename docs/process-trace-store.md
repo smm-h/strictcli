@@ -1,0 +1,239 @@
+---
+title: Process Trace Store
+description: "How strictcli records process ancestry: the STRICTCLI_TRACE_PARENT variable, an append-only JSONL store, ULID identifiers, and UTC time-range partitions."
+nav_group: "Guides"
+nav_order: 20
+---
+
+# Process Trace Store
+
+When one command-line tool runs another, the second one has no reliable way to say who invoked it.
+Every tool that has wanted the answer has invented its own channel -- an environment marker, a
+`--called-by` flag, a guess from the parent process -- and each of those answers is local to one
+pair of tools.
+
+strictcli records process ancestry **universally** instead: at the seam where it spawns a child, the
+framework writes one line describing the invocation doing the spawning and hands that line's
+identifier to the child. Anything that wants the chain reads it from a shared, append-only store.
+
+This page is the specification. It is written so that a tool which is not strictcli -- in any
+language -- can participate correctly by following it. The `STRICTCLI_` prefix names the store's
+home and its owner; it does not restrict who may write to it.
+
+**What this store is not:** it is not an input to behaviour. No strictcli code path branches on the
+ancestry stack, and the framework exposes no accessor for it. That is a ratified contract item,
+enforced by conformance sweeps, and it is what makes a forged identifier a harmless false claim
+rather than an exploit.
+
+## Propagation
+
+Ancestry travels through exactly one environment variable, and that variable carries exactly one
+value: the identifier of the entry describing the process that spawned this one. Everything else --
+the chain, the ancestors' identities, the depth -- is derived by reading the store, so the variable
+never grows and never needs to be trimmed, split or elided.
+
+```text
+STRICTCLI_TRACE_PARENT=01JZ8X4M6N7QK2WVBD3F5RTYAC
+```
+
+- **It carries exactly one thing: the parent entry's identifier.** Not a chain, not a serialized
+  stack, not a JSON object. The value is constant-size (26 characters), so nothing grows as a chain
+  deepens and no elision machinery is ever needed.
+- **It is composed into the child's environment**, at the spawn seam, as part of building that
+  child's environment. Nothing is mutated in place: the spawning process's own environment is never
+  modified, and the variable is never a channel back up.
+- **A foreign or dangling identifier is legal by design.** A parent id that resolves to no entry --
+  because the store was pruned, because the writer was another tool, because someone set the
+  variable by hand -- is not an error. Consumers record the dangling reference as an anomaly (see
+  [Consumers](#consumers)) and carry on.
+- **It rides `ssh` by command-prefixing**, since `ssh` does not forward arbitrary environment
+  variables:
+
+```bash
+ssh host STRICTCLI_TRACE_PARENT="$STRICTCLI_TRACE_PARENT" mytool subcommand
+```
+
+  The chain then spans machines, with the remote entries in the remote host's own store.
+
+## The store
+
+```text
+~/.local/share/strictcli/trace/
+```
+
+- **Append-only JSONL.** Each entry is one JSON object on one line.
+- **One entry is one `O_APPEND` `write()` of one line**, including its terminating newline. Not a
+  buffered stream flushed later, not two writes. A single `write()` to a file opened `O_APPEND` is
+  atomic against other concurrent writers on a local filesystem, and that atomicity is the store's only
+  concurrency mechanism: there is no lock, no coordinator, no daemon.
+- **Local filesystems only.** NFS breaks `O_APPEND` atomicity, so a store on NFS can interleave two
+  writers inside one line. Do not place the store on a network filesystem; a reader that finds a
+  torn line records it as an anomaly and skips it.
+- **Encoding:** UTF-8, compact JSON (no embedded newlines anywhere in the line), terminated by
+  exactly one `\n`. Escape only what JSON mandates -- quotes, backslashes, control characters -- and
+  emit everything else literally. Key order within the object is irrelevant; readers compare
+  structurally.
+- **Participation is open.** Any tool that writes conforming lines to this store, and propagates the
+  variable, is a participant. There is no registration and no issuing authority.
+- **Directories are created on write.** A missing store directory is created (mode `0700`) by
+  whoever writes next. Deleting the store is a supported thing to do: it means tracing resumes from
+  empty, not that tracing dies.
+
+## Partitions
+
+Entries live in files labelled with a UTC hour, but a label is a **range start**, not a promise
+about contents: a file covers everything from its own label until the next file's label begins.
+A busy machine produces one file per hour; an idle one produces a single file spanning days. Both
+are correct, and both are searchable the same way, because of the clamp invariant below.
+
+```text
+~/.local/share/strictcli/trace/2026-08-13T04.jsonl
+~/.local/share/strictcli/trace/2026-08-13T09.jsonl
+~/.local/share/strictcli/trace/2026-08-14T11.jsonl
+```
+
+- **The filename is the range's start**, formatted `YYYY-MM-DDTHH` in UTC, plus `.jsonl`.
+- **A file's range is half-open**: it starts at its own label and ends where the next file's label
+  begins. The greatest-named file's range is open-ended. A label is therefore *not* a promise that
+  the file holds only that hour -- an idle machine may write one file covering three days.
+- **Writers append to the greatest-named file.** That file is the active partition.
+- **Rolling.** Before appending, a writer creates the next partition when **both** conditions hold:
+  1. the active file's size is at least **8 MB**, and
+  2. the current UTC hour is **later** than the active file's label.
+
+  The new file is created with `O_EXCL` and named for the current UTC hour. If creation fails
+  because another writer won the race, the loser simply appends to the winner's file -- no retry
+  loop, no coordination. Worst-case file size is therefore the 8 MB threshold plus one hour of
+  writes.
+- **The clamp invariant.** A writer whose clock reads earlier than the active partition's range
+  start **clamps** its minted timestamp to that range start. Every entry's embedded timestamp
+  therefore lies within its file's range, without exception -- which is what makes lookup a
+  deterministic **binary search over filenames**: to find entries around an instant, binary-search
+  the sorted filenames for the greatest label not after it, and read that file. A clock that jumps
+  backwards (NTP correction, a VM resuming from a snapshot) costs a small ordering distortion inside
+  one file and never breaks the search.
+- **All date arithmetic is UTC epoch arithmetic.** No local time, no timezone database, no DST, no
+  calendar code. Formatting a label is integer division of an epoch-millisecond value by 3 600 000
+  and rendering the result; comparing labels is string comparison, which the format makes equivalent
+  to time order.
+- **Readers ignore any file in the directory that does not match the partition name pattern.** The
+  failure marker below is such a file.
+
+## Identifiers
+
+Entries are identified by ULIDs under a strict pinned profile. The profile exists because a
+lenient parser is how one identifier becomes two strings that fail to link: every rule below is
+either a rejection the base specification leaves optional, or a layout fact a partition lookup
+depends on. Writers mint independently, so the profile is the only thing keeping them consistent.
+
+- **26 characters**, Crockford base32, alphabet exactly
+  `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (no `I`, `L`, `O`, `U`).
+- **Canonical uppercase only.** A lowercase identifier is rejected on parse -- not
+  case-normalized. Crockford's own specification permits case-insensitive decoding; this profile
+  deliberately does not, because two spellings of one identifier means two strings that compare
+  unequal and one chain that fails to link.
+- **Overflow is rejected on parse.** 26 base32 characters encode 130 bits while a ULID is 128, so
+  the first character must not exceed `7`. Anything larger is invalid, not truncated.
+- **Layout**: the first 48 bits are the timestamp in milliseconds since the Unix epoch (UTC), the
+  remaining 80 bits are random.
+- **Every writer mints its own**, from its own clock plus 80 random bits from a cryptographically
+  secure source. There is **no issuing authority**, no sequence file and no coordination. Collision
+  probability for a thousand identifiers minted in the same millisecond is about 4e-19.
+- **The timestamp is the clamped one** (see the clamp invariant above): a writer clamps first, then
+  mints, so the identifier and the entry's `spawned_at` always agree and always fall inside the
+  file's range.
+- **Shared cross-language test vectors** pin encoding and parsing -- valid canonical forms, lowercase
+  rejection, overflow rejection, alphabet violations, and the timestamp round-trip.
+
+> **Informative aside, not a requirement.** A ULID is 128 bits, and so is a W3C `traceparent`
+> trace-id. A ULID re-encoded as 32 lowercase hex characters is therefore a spec-legal trace-id,
+> which leaves a bridge to distributed-tracing systems reachable later at zero cost today. (AWS
+> X-Ray's trace ids embed a timestamp the same way, so the shape has precedent.) Nothing in this
+> store emits or consumes `traceparent`.
+
+## The entry
+
+One JSON object per line, with every key always present -- an absent key is a malformed line, not a
+defaulted one. The object describes an invocation: which app, which command, under which
+reserved-flag state, in which process, at which instant, descending from which parent. It never
+describes what the invocation was asked to do beyond the command's own path.
+
+```json
+{"id":"01JZ8X4M6N7QK2WVBD3F5RTYAC","parent_id":null,"app":"rlsbl","version":"0.61.2","command":"release.run","dry_run":false,"machine_mode":false,"quiet":false,"verbose":true,"approve_consequential":true,"effect":"mutating","pid":48213,"spawned_at":"2026-08-13T04:17:52.913Z"}
+```
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `id` | string | This entry's ULID. The value a child receives as `STRICTCLI_TRACE_PARENT`. |
+| `parent_id` | string \| null | The `STRICTCLI_TRACE_PARENT` this process inherited; `null` when it inherited none (a root). May dangle. |
+| `app` | string | The spawning app's declared name. |
+| `version` | string | The spawning app's declared version. |
+| `command` | string \| null | The dotted command path being executed (`release.run`); `null` when no command resolved. |
+| `dry_run` | boolean | Whether the spawning invocation was in dry-run mode. |
+| `machine_mode` | boolean | Whether the spawning invocation was in machine-output mode. |
+| `quiet` | boolean | The spawning invocation's `--quiet` state. |
+| `verbose` | boolean | The spawning invocation's `--verbose` state. |
+| `approve_consequential` | boolean | Whether consent was given in advance. This is a consent audit trail: it records that a human or a caller accepted a consequential operation, at the moment they did. |
+| `effect` | string | The command's effect classification: `"read_only"` or `"mutating"`. |
+| `pid` | integer | The **spawning** process's own pid. A witness a consumer can cross-check; not the child's. |
+| `spawned_at` | string | The instant this entry was minted -- the moment of the spawn. RFC 3339 in UTC with exactly three fractional digits and a `Z` suffix (`2026-08-13T04:17:52.913Z`). It is exactly the clamped millisecond embedded in `id`, rendered. |
+
+**Never argv.** Arguments carry secrets -- tokens, passwords, private paths -- and a store that is
+written unconditionally, forever, in the background, must not be where they end up. The command path
+is recorded; what was passed to it is not.
+
+**There is no chain identifier.** No `trace_id`, no `root_id`, no depth counter. The chain is derived
+by walking `parent_id` to the root, and a derived value that is also stored is a value that can
+disagree with itself.
+
+**An entry describes the invocation doing the spawning.** A process that spawns three children writes
+three entries -- same identity, three identifiers -- so each child links to a distinct entry. A
+process that never spawns writes nothing; it is visible through the variable it inherited, which its
+own consumers read.
+
+## Failure policy
+
+**Tracing is best-effort by declared design.** This is deliberate and it is scoped to this store
+alone -- everything else in strictcli fails closed. The store's failure mode is losing a record of
+what happened, never doing the wrong thing, and nothing may depend on it, so a store that cannot be
+written costs observability and nothing else.
+
+- **A write failure never fails the run**, never prints a diagnostic, and never changes an exit code.
+- **No retries**, ever.
+- **A write-once marker.** On the first write failure, the writer creates
+  `~/.local/share/strictcli/trace/write-failure.marker` with `O_EXCL`, containing the first-failure
+  timestamp in `spawned_at`'s exact format followed by one `\n`. If the file already exists, nothing
+  happens -- that is the whole point of write-once. There is **no counter**: counters require
+  read-modify-write, which races, and the number would not change anyone's next action. A disk-full
+  condition blinds the marker too; that is accepted.
+- **Directories are auto-created**, as described above.
+- **The primary detection channel is not the marker.** It is consumers noticing dangling parent
+  identifiers when they capture -- a real signal from a real reader, rather than a file nobody opens.
+  The marker is the corroborating detail once someone goes looking.
+
+## Consumers
+
+A consumer is any tool that wants to record who invoked it -- an archival tool stamping a deletion,
+an audit log, a continuous-integration reporter. Consumers are the store's readers, and the rules
+below exist so that a record written today still means something after the store has been pruned,
+after the writing tool has been upgraded, and after a line somewhere turned out to be malformed.
+
+**Resolve at capture time.** When the consumer records its own event, it should:
+
+1. read `STRICTCLI_TRACE_PARENT` from its own environment;
+2. resolve that entry from the store, then walk `parent_id` to the root;
+3. **embed the flattened chain in its own record**, alongside the identifiers themselves.
+
+Embedding the resolved chain rather than only the identifiers makes the consumer's record
+self-contained forever. **Age-based pruning of the store -- compressing old partitions, deleting
+older ones -- can therefore never orphan a record.** Keeping the identifiers alongside it preserves
+correlation with any store data that still exists.
+
+**Malformed data is recorded verbatim as an anomaly.** A polluted environment variable, a torn final
+line, an entry missing a key, a parent that resolves to nothing: the consumer records what it saw,
+marks it anomalous, and continues. It must neither brick the tool nor discard the observation
+silently -- an anomaly that vanishes is indistinguishable from a chain that was fine.
+
+**Do not expect an API.** strictcli exposes no accessor for the ancestry stack, deliberately.
+Consumers parse the environment variable and read the store themselves, which is exactly what keeps
+the store observational: nothing in the framework can branch on data no framework code reads.
