@@ -1892,6 +1892,33 @@
       ]
     },
     {
+      "path": "index.md",
+      "title": "strictcli",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "strictcli",
+          "anchor": "strictcli"
+        },
+        {
+          "level": 2,
+          "text": "Start here",
+          "anchor": "start-here"
+        },
+        {
+          "level": 2,
+          "text": "Guides",
+          "anchor": "guides"
+        },
+        {
+          "level": 2,
+          "text": "Reference",
+          "anchor": "reference"
+        }
+      ]
+    },
+    {
       "path": "python-quickstart.md",
       "title": "Python Quickstart",
       "type": "doc",
@@ -7654,5 +7681,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-11T22:07:15.236898+00:00"
+  "last_gen": "2026-08-12T12:03:43.697437+00:00"
 }

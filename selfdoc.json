@@ -13,6 +13,7 @@
       "language": "typescript"
     }
   ],
+  "changelog": ".rlsbl-monorepo/releasables/py-strictcli/CHANGELOG.md",
   "base_url": "https://strictcli.smmh.dev",
   "search_engine": "pagefind",
   "author": {
