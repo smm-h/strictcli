@@ -52,7 +52,7 @@ check, and any divergence in these areas blocks a release:
 
 ### JSON test cases
 
-The core of the suite is 69 JSON files in `conformance/cases/`, containing 710
+The core of the suite is 71 JSON files in `conformance/cases/`, containing 731
 individual test cases organized by feature area (flags, config, checks, groups,
 etc.). Each case is a self-contained JSON object specifying an app definition,
 argv input, optional environment variables, and expected output assertions
@@ -61,9 +61,47 @@ including exit code, stdout content, and stderr content:
 - `app`: a declarative app definition (commands, flags, args, groups, config, checks)
 - `argv`: the command-line arguments to pass
 - `env`: optional environment variables to set
-- `expect`: assertions on exit code, stdout, and stderr (exact match, substring, regex, negation)
+- `stdin`: optional text piped to the app's stdin. Absent means `/dev/null`, which is what keeps every other case independent of the operator's terminal (a pipe carrying this text is not a TTY either). Used by the `--mcp` cases, whose JSON-RPC lines arrive on stdin.
+- `protocol_script`: an alternative to `stdin` for exchanges whose next request depends on the previous reply (see below). The two are mutually exclusive.
+- `expect`: assertions on exit code, stdout, and stderr (exact match, substring, regex, negation), plus structural assertions on the effect log (`effects_equals`) and on an emitted `--dump-schema` document (`schema_command_keys`)
+- `targets`: restricts which implementations run the case (see [Target restrictions](#target-restrictions))
+- `acknowledged_divergence`: declares intentionally language-specific output (see [Acknowledged divergence](#acknowledged-divergence))
 
 Every case is validated against `conformance/schema.json`, a JSON Schema that defines the full vocabulary of app definitions and expectations.
+
+#### Line-scripted protocol cases
+
+A `protocol_script` case drives a request/response exchange step by step instead
+of handing the whole input over up front. Each step writes one line to the
+child's stdin (`send`), and/or reads exactly one reply line from `stdout` or
+`stderr` (`stream`) and asserts on it (`expect_line`, with `equals`, `contains`,
+`matches`, or `json_equals`). A missing reply line within the step timeout is a
+failure, never a hang. The child's full streams are still available to the
+ordinary `expect` block and to the N-way comparison. This is what the MCP loop
+and its confirmation round-trip need, since their next request depends on the
+previous reply.
+
+#### Aborting handlers
+
+`handler_aborts: true` on a command makes the generated handler unwind instead
+of returning: it raises (Python), throws (TypeScript), or panics (Go) with the
+identical message `conformance: handler aborted`, after running its
+`handler_effects` and `handler_diagnostics`. This is the language-neutral way to
+reach the framework's unwinding paths, such as the aborted-preview marker --
+unlike `handler_returns` kind `bad`, which Go's `Outcome` type makes
+unrepresentable. Only `true` is declarable, and it excludes `handler_returns`:
+an aborting handler has no return.
+
+#### The `$ANY` wildcard
+
+Structural assertions (`effects_equals`, `schema_command_keys`, and
+`json_equals` inside a protocol step) compare parsed JSON, so key order and
+encoder whitespace are never part of the assertion -- which is what lets one
+expectation serve three different serializers. Within those comparisons the
+string `"$ANY"` is the per-field wildcard: it matches any actual value of any
+type, asserting that the field is present and nothing about what it holds. It
+exists for values that are nondeterministic by construction, such as a
+continuation signature or a timestamp.
 
 ### Per-target execution
 
@@ -90,12 +128,12 @@ the primary cross-language consistency gate. For each case:
 
 ### Acknowledged divergence
 
-Some outputs are intentionally language-specific (traceback formatting, type names in error messages). Cases can declare an `acknowledged_divergence` block that excludes specific targets from byte-identity comparison on specific streams while requiring a mandatory reason:
+Some outputs are intentionally language-specific (parser prose, type names in error messages, idiomatic API names). Cases can declare an `acknowledged_divergence` block that excludes specific targets from byte-identity comparison on specific streams while requiring a mandatory reason:
 
 ```json
 {
   "acknowledged_divergence": {
-    "reason": "Python prints a traceback; TypeScript prints a one-line error",
+    "reason": "Python names int/None and reports the offending type as 'list'; TypeScript names number/undefined and reports 'Array'",
     "streams": {
       "stderr": ["python", "typescript"]
     }
@@ -119,7 +157,9 @@ TypeScript's dynamic runtime):
 }
 ```
 
-This is used when a behavior is unrepresentable in a language's type system (e.g., returning an invalid type from a handler is impossible in Go but testable in Python and TypeScript).
+Exactly one case carries such a restriction today -- the bad-return hard error,
+which Go's `Outcome` type makes unrepresentable -- so Go runs 730 of the 731
+cases and Python and TypeScript run all 731.
 
 ### Differential argv fuzzing
 
@@ -285,6 +325,6 @@ If the new case has output that is legitimately language-specific, add an `ackno
 ## Architecture notes
 
 - The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 10 automated checks.
-- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 710 test cases across all 3 targets.
+- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 731 test cases across all 3 targets (730 on Go, whose type system cannot express the bad-return case).
 - The conformance tool itself is built with strictcli (dogfooding the check system). Its checks are declared in `conformance/conformance_tool/.strictcli/checks.toml`.
 - Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, and `check_schema_parity.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.
