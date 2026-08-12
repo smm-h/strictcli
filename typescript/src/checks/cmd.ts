@@ -1,12 +1,14 @@
 /**
  * The auto-registered `check` command plus the human-readable and JSON result
- * formatters, dispatching the list, help, no-match, dry-run, and run modes.
+ * formatters, dispatching the list, help, no-match and run modes -- where a
+ * run under --dry-run is the same run restricted to the purity partition,
+ * followed by the would-run plan for what it did not execute.
  *
  * Parity sources: go/strictcli/check_cmd.go and check_public.go (formatters)
  * with Python _register_check_command / _check_list_mode /
- * _check_dry_run_mode / format_check_results (~3419-3517, ~7092-7212) as the
- * divergence ground truth for the branch order (list -> help-when-unfiltered
- * -> no-match -> dry-run -> run) and the inline output strings.
+ * _check_dry_run_mode / format_check_results as the divergence ground truth
+ * for the branch order (list -> help-when-unfiltered -> no-match -> run) and
+ * the inline output strings.
  *
  * Errors raised below the handler (tag DSL, cycles, provider
  * materialization) propagate out of run()/test(), mirroring Python where
@@ -88,10 +90,10 @@ function registerCheckCommand(app: AppImpl): void {
 	];
 	// `verbose` and `dry-run` are NOT in the candidate list: both names are
 	// reserved by the framework (two flags cannot share a spelling), so the
-	// handler reads ctx.verbose and ctx.dryRun instead. The dropped flags'
-	// behavior is unchanged -- but `check --dry-run` now also puts the whole run
-	// in dry mode, so the framework emits the would-do header after the
-	// handler's listing output.
+	// handler reads ctx.verbose and ctx.dryRun instead. `check --dry-run` runs
+	// the checks declared pure and lists the impure remainder, and the whole run
+	// is in dry mode, so the framework emits the would-do header after the
+	// handler's own output.
 	// Candidates colliding with global flags are dropped -- the handler
 	// receives the global flag's value for that key instead (Python parity).
 	const flags: Record<string, AnyFlag> = {};
@@ -161,7 +163,7 @@ async function checkHandler(
 	ctx: Context,
 ): Promise<number> {
 	// Materialize provider-sourced checks before any registry read (covers
-	// the list, dry-run, and execution branches below).
+	// the list and execution branches below).
 	materializeCheckProviders(app.checks);
 
 	const runAll = kwargs.all === true;
@@ -199,12 +201,10 @@ async function checkHandler(
 	}
 	const order = resolveCheckOrder(app.checks.defs, selected);
 
-	if (dryRun) {
-		checkDryRunMode(app.checks.defs, order, ctx);
-		return 0;
-	}
-
-	// Execution mode: need a context.
+	// Both a full run and a dry run execute checks, so both need a context.
+	// --dry-run is not a separate branch: it selects the purity partition, so
+	// the checks declared pure really run and only the impure remainder is
+	// rendered as the would-run plan.
 	if (app.checks.contextFactory === undefined) {
 		ctx.error(
 			"error: no check context configured. " +
@@ -213,14 +213,12 @@ async function checkHandler(
 		return 1;
 	}
 	const context = wrapCheckContext(app, app.checks.contextFactory(), ctx);
-	// The check command executes all selected checks; the purity partition is
-	// an API-only mode (runChecks pureOnly), so nothing is ever listed here.
-	const { results, exitCode } = await runOrderedChecks(
+	const { results, impureListed, exitCode } = await runOrderedChecks(
 		app.checks.defs,
 		order,
 		context,
 		ignoreWarnings,
-		false,
+		dryRun,
 	);
 
 	if (jsonOut) {
@@ -230,6 +228,9 @@ async function checkHandler(
 		if (output !== "") {
 			ctx.info(output);
 		}
+	}
+	if (dryRun) {
+		checkDryRunPlan(app.checks.defs, impureListed, order, ctx);
 	}
 	return exitCode;
 }
@@ -278,16 +279,25 @@ function checkListMode(
 	ctx.info(lines.join("\n"));
 }
 
-/** The --dry-run mode: prints the execution plan without running checks. */
-function checkDryRunMode(
+/**
+ * Prints the would-run plan for the checks a dry run did NOT execute -- the
+ * purity partition's remainder (the impure checks and any check whose
+ * dependency was listed). `order` is the full selected order, used only to
+ * decide which dependencies are worth naming. The header is printed even when
+ * nothing was left over: an empty plan is a statement ("everything selected
+ * ran"), the same way the framework's own would-do log prints its header with
+ * an empty body.
+ */
+function checkDryRunPlan(
 	defs: ReadonlyMap<string, CheckDef>,
+	listed: readonly string[],
 	order: readonly string[],
 	ctx: Context,
 ): void {
-	const noun = order.length === 1 ? "check" : "checks";
-	const lines = [`Would run ${order.length} ${noun}:`];
+	const noun = listed.length === 1 ? "check" : "checks";
+	const lines = [`Would run ${listed.length} ${noun}:`];
 	const inOrder = new Set(order);
-	order.forEach((name, i) => {
+	listed.forEach((name, i) => {
 		const def = defs.get(name) as CheckDef;
 		const purity = checkIsPure(def) ? "pure" : "impure";
 		const deps = def.dependsOn.filter((d) => inOrder.has(d));

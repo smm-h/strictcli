@@ -254,17 +254,26 @@ test("check --dry-run with a non-matching filter prints no-match, not a plan", a
 	);
 });
 
-test("check --dry-run: singular noun for a single check", async () => {
+test("check --dry-run: singular noun for a single listed check", async () => {
 	const result = await mirrorApp().test([
 		"--dry-run",
 		"check",
 		"--name",
-		"lint",
+		"compile",
 	]);
 	assert.equal(result.exitCode, 0);
 	assert.equal(
 		result.stdout,
-		`Would run 1 check:\n  1. lint [pure]\n${DRY_RUN_HEADER}`,
+		`Would run 1 check:\n  1. compile [impure]\n${DRY_RUN_HEADER}`,
+	);
+});
+
+test("check --dry-run: a selected pure check really runs", async () => {
+	const result = await mirrorApp().test(["--dry-run", "check", "--name", "lint"]);
+	assert.equal(result.exitCode, 0);
+	assert.equal(
+		result.stdout,
+		`PASS  lint    all good\nWould run 0 checks:\n${DRY_RUN_HEADER}`,
 	);
 });
 
@@ -300,6 +309,47 @@ depends_on = []
 	assert.equal(
 		result.stdout,
 		`Would run 2 checks:\n  1. deploy [impure]\n  2. fetch [impure]\n${DRY_RUN_HEADER}`,
+	);
+});
+
+test("check --dry-run: a pure check that fails makes the rehearsal fail", async () => {
+	const toml = `app = "t"
+[checks.lint]
+tags = ["release"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
+[checks.deploy]
+tags = ["release"]
+severity = "error"
+fast = false
+pure = false
+needs_network = false
+depends_on = []
+`;
+	const app = createApp({
+		name: "t",
+		version: "1",
+		help: "h",
+		checksEmbed: toml,
+	});
+	app.errorCheck("lint", (_c, r) => {
+		r.error("lint errors found");
+		return r.found("lint errors found");
+	});
+	app.errorCheck("deploy", (_c, r) => r.passed("deployed"));
+	app.setCheckContext(() => CTX);
+	const result = await app.test(["--dry-run", "check", "--all"]);
+	assert.equal(result.exitCode, 1);
+	assert.equal(
+		result.stdout,
+		"FAIL  lint    lint errors found\n" +
+			"        [error] lint errors found\n" +
+			"Would run 1 check:\n  1. deploy [impure]\n" +
+			`${DRY_RUN_HEADER}`,
 	);
 });
 

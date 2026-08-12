@@ -98,16 +98,18 @@ scope = "changelog"
 	return app;
 }
 
-test("dry-run: Kahn order, dependency annotation, purity annotation", async () => {
+test("dry-run: the pure partition runs, the rest keeps Kahn order and annotations", async () => {
 	const result = await mirrorApp().test(["--dry-run", "check", "--all"]);
-	assert.equal(result.exitCode, 0);
+	// format WARNs, which is a real result and therefore a real nonzero exit.
+	assert.equal(result.exitCode, 1);
 	assert.equal(
 		result.stdout,
-		"Would run 4 checks:\n" +
+		"WARN  format    style issues\n" +
+			"        [warn] style issue A\n" +
+			"PASS  lint      all good\n" +
+			"Would run 2 checks:\n" +
 			"  1. compile [impure]\n" +
-			"  2. format [pure]\n" +
-			"  3. lint [pure]\n" +
-			"  4. deploy-gate (depends on: compile, lint) [impure]\n" +
+			"  2. deploy-gate (depends on: compile, lint) [impure]\n" +
 			// `check` is read_only, so the framework's would-do log is the
 			// header with an empty body.
 			`${DRY_RUN_HEADER}`,
