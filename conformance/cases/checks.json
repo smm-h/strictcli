@@ -292,32 +292,36 @@
     }
   },
   {
-    "name": "checks: dry-run shows plan and exits 0",
+    "name": "checks: dry-run runs the pure checks and lists the impure ones",
     "app": {
       "name": "testapp",
       "version": "1.0.0",
       "help": "test",
       "commands": [],
-      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.deploy]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = false\nneeds_network = false\ndepends_on = []\n\n",
       "checks": [
         {
           "name": "lint",
           "mint": "passed",
           "message": "all good"
+        },
+        {
+          "name": "deploy",
+          "mint": "passed",
+          "message": "deployed"
         }
       ]
     },
     "argv": [
       "--dry-run",
       "check",
-      "--all"
+      "--tag",
+      "release"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": [
-        "Would run",
-        "lint"
-      ]
+      "stdout_equals": "PASS  lint    all good\nWould run 1 check:\n  1. deploy [impure]\nDRY RUN \u2014 no changes were made. Would do:\n",
+      "stdout_not_contains": "deployed"
     }
   },
   {

@@ -162,5 +162,36 @@
         "(?m)^1 passed / 1 failed / 0 warned / 0 skipped$"
       ]
     }
+  },
+  {
+    "name": "check_abort: a pure check that raises under dry-run is contained too",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.broken]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.deploy]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = false\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "broken",
+          "aborts": true
+        },
+        {
+          "name": "deploy",
+          "mint": "passed",
+          "message": "deployed"
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "check",
+      "--tag",
+      "release"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "FAIL  broken    check \"broken\" aborted with CheckAborted: conformance: check aborted\n        [error] check \"broken\" aborted with CheckAborted: conformance: check aborted\nWould run 1 check:\n  1. deploy [impure]\nDRY RUN \u2014 no changes were made. Would do:\n"
+    }
   }
 ]

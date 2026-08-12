@@ -1,12 +1,12 @@
 [
   {
-    "name": "checks: dry-run annotates pure check as [pure]",
+    "name": "checks: dry-run executes a pure check and leaves an empty plan",
     "app": {
       "name": "testapp",
       "version": "1.0.0",
       "help": "test",
       "commands": [],
-      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n",
       "checks": [
         {
           "name": "lint",
@@ -18,25 +18,22 @@
     "argv": [
       "--dry-run",
       "check",
-      "--all"
+      "--tag",
+      "release"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": [
-        "Would run",
-        "lint",
-        "[pure]"
-      ]
+      "stdout_equals": "PASS  lint    all good\nWould run 0 checks:\nDRY RUN \u2014 no changes were made. Would do:\n"
     }
   },
   {
-    "name": "checks: dry-run annotates impure check (pure=false) as [impure]",
+    "name": "checks: dry-run lists an impure check (pure=false) without running it",
     "app": {
       "name": "testapp",
       "version": "1.0.0",
       "help": "test",
       "commands": [],
-      "checks_toml": "app = \"testapp\"\n[checks.deploy]\ntags = [\"release\"]\nseverity = \"error\"\nfast = false\npure = false\nneeds_network = false\ndepends_on = []\n",
+      "checks_toml": "app = \"testapp\"\n[checks.deploy]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = false\nneeds_network = false\ndepends_on = []\n\n",
       "checks": [
         {
           "name": "deploy",
@@ -48,25 +45,26 @@
     "argv": [
       "--dry-run",
       "check",
-      "--all"
+      "--tag",
+      "release"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": [
-        "Would run",
-        "deploy",
-        "[impure]"
+      "stdout_equals": "Would run 1 check:\n  1. deploy [impure]\nDRY RUN \u2014 no changes were made. Would do:\n",
+      "stdout_not_contains": [
+        "deployed",
+        "PASS"
       ]
     }
   },
   {
-    "name": "checks: dry-run annotates network check (needs_network=true) as [impure]",
+    "name": "checks: dry-run lists a network check (needs_network=true) without running it",
     "app": {
       "name": "testapp",
       "version": "1.0.0",
       "help": "test",
       "commands": [],
-      "checks_toml": "app = \"testapp\"\n[checks.fetch]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = true\ndepends_on = []\n",
+      "checks_toml": "app = \"testapp\"\n[checks.fetch]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = true\ndepends_on = []\n\n",
       "checks": [
         {
           "name": "fetch",
@@ -78,15 +76,117 @@
     "argv": [
       "--dry-run",
       "check",
-      "--all"
+      "--tag",
+      "release"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": [
-        "Would run",
-        "fetch",
-        "[impure]"
+      "stdout_equals": "Would run 1 check:\n  1. fetch [impure]\nDRY RUN \u2014 no changes were made. Would do:\n",
+      "stdout_not_contains": [
+        "fetched",
+        "PASS"
       ]
+    }
+  },
+  {
+    "name": "checks: dry-run lists a pure check whose dependency is impure, annotated [pure]",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.build]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = false\nneeds_network = false\ndepends_on = []\n\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = [\"build\"]\n\n",
+      "checks": [
+        {
+          "name": "build",
+          "mint": "passed",
+          "message": "built"
+        },
+        {
+          "name": "lint",
+          "mint": "passed",
+          "message": "all good"
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "check",
+      "--tag",
+      "release"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "Would run 2 checks:\n  1. build [impure]\n  2. lint (depends on: build) [pure]\nDRY RUN \u2014 no changes were made. Would do:\n",
+      "stdout_not_contains": [
+        "built",
+        "all good"
+      ]
+    }
+  },
+  {
+    "name": "checks: a pure check that fails under dry-run fails the run",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.deploy]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = false\nneeds_network = false\ndepends_on = []\n\n",
+      "checks": [
+        {
+          "name": "lint",
+          "mint": "found",
+          "message": "lint errors found",
+          "problems": [
+            {
+              "severity": "error",
+              "text": "lint errors found"
+            }
+          ]
+        },
+        {
+          "name": "deploy",
+          "mint": "passed",
+          "message": "deployed"
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "check",
+      "--tag",
+      "release"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "FAIL  lint    lint errors found\n        [error] lint errors found\nWould run 1 check:\n  1. deploy [impure]\nDRY RUN \u2014 no changes were made. Would do:\n"
+    }
+  },
+  {
+    "name": "checks: dry-run with no matching checks reports no match, not an empty plan",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n",
+      "checks": [
+        {
+          "name": "lint",
+          "mint": "passed",
+          "message": "all good"
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "check",
+      "--tag",
+      "nonexistent"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "No checks matched the given filters.\nDRY RUN \u2014 no changes were made. Would do:\n"
     }
   }
 ]

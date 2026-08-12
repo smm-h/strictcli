@@ -1157,12 +1157,27 @@ the framework-delivered values off the Context instead:
 
 - `verbose` -> `ctx.verbose` (or `ctx.Verbose()`); behavior unchanged (per-check notes, durations,
   the trailing count summary).
-- `dry_run` -> `ctx.dry_run` (or `ctx.DryRun()`); the handler's own behavior is unchanged (list
-  which checks would run without executing them).
+- `dry_run` -> `ctx.dry_run` (or `ctx.DryRun()`); the handler's own behavior was, at the time this
+  section was written, unchanged (list which checks would run without executing them). **Amended
+  2026-08-12 — see the box below.**
+
+> **Amendment (2026-08-12): `check --dry-run` runs the pure partition.** The list-without-running
+> behavior above is retired. The check command's `--dry-run` no longer has a branch of its own: it
+> selects the purity partition the programmatic surface already had (`run_checks(pure_only=True)` /
+> `RunChecksOptions.PureOnly` / `runChecks(pureOnly)`), so the checks declared **pure and free of
+> network** really execute and their results are printed exactly as in a full run, and only the
+> impure remainder (plus any check whose dependency was listed) is rendered as the would-run plan
+> under the unchanged `Would run N check(s):` header — printed even when the remainder is empty,
+> the same way the would-do log prints its header with an empty body. Consequences: the exit code
+> is now the executed partition's exit code (a rehearsal that finds a real failure fails), a check
+> context is required for `--dry-run` as it is for a run, and the no-match and help branches run
+> before the partition in all three implementations (Go previously printed `Would run 0 checks:`
+> for both). Nothing outside the check command changes, and the framework's own would-do header
+> still follows the handler's output.
 
 `check --dry-run` is **not** behaviorally unchanged overall, though, and implementors must not
 assume it is: `--dry-run` is now the framework flag, so passing it puts the whole run in dry mode
-(§3.1). The observable difference is that after the handler's listing output, the framework emits
+(§3.1). The observable difference is that after the handler's own output, the framework emits
 the would-do log to stdout -- for `check`, which is `read_only`, that is the header line
 `DRY RUN — no changes were made. Would do:` with an **empty body** (§3.1's read-only rule; the
 check command's cache writes are `CACHE_WRITE`s and are never logged). Exit code is unchanged.
