@@ -303,6 +303,7 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     "config_content_late",
     "config_fields_def",
     "handler_returns",
+    "handler_aborts",
     # The effects-regime handler vocabulary (effects contract §14.4): the
     # effect calls a *generated* handler issues. Like the handler_prints
     # family it describes the harness's synthetic handler body, not a field

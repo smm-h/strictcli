@@ -285,13 +285,6 @@
   },
   {
     "name": "effects_dry_run_log: an aborted dispatch still renders the log, marked incomplete",
-    "targets": ["python", "typescript"],
-    "acknowledged_divergence": {
-      "reason": "Python surfaces the aborted dispatch as an uncaught TypeError traceback (host paths, line numbers, Python type names); TypeScript prints the harness's one-line error. Both assert the framework's own aborted-preview marker via stderr_contains, which is the part under test.",
-      "streams": {
-        "stderr": ["python"]
-      }
-    },
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -305,7 +298,7 @@
             {"method": "mkdir", "path": "build"},
             {"method": "write", "path": "VERSION", "content": "1.2.3"}
           ],
-          "handler_returns": {"kind": "bad"}
+          "handler_aborts": true
         }
       ]
     },
@@ -319,13 +312,6 @@
   },
   {
     "name": "effects_dry_run_log: an aborted read-only preview is still header with empty body",
-    "targets": ["python", "typescript"],
-    "acknowledged_divergence": {
-      "reason": "Python surfaces the aborted dispatch as an uncaught TypeError traceback (host paths, line numbers, Python type names); TypeScript prints the harness's one-line error. Both assert the framework's own aborted-preview marker via stderr_contains, which is the part under test.",
-      "streams": {
-        "stderr": ["python"]
-      }
-    },
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -335,7 +321,7 @@
           "name": "show",
           "help": "show something",
           "effect": "read_only",
-          "handler_returns": {"kind": "bad"}
+          "handler_aborts": true
         }
       ]
     },
@@ -348,13 +334,6 @@
   },
   {
     "name": "effects_dry_run_log: an aborted dispatch outside dry mode renders neither log nor marker",
-    "targets": ["python", "typescript"],
-    "acknowledged_divergence": {
-      "reason": "Python surfaces the aborted dispatch as an uncaught TypeError traceback (host paths, line numbers, Python type names); TypeScript prints the harness's one-line error. Both assert the framework's own aborted-preview marker via stderr_contains, which is the part under test.",
-      "streams": {
-        "stderr": ["python"]
-      }
-    },
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -364,7 +343,7 @@
           "name": "show",
           "help": "show something",
           "effect": "read_only",
-          "handler_returns": {"kind": "bad"}
+          "handler_aborts": true
         }
       ]
     },

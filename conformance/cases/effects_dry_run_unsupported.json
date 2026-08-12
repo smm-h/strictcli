@@ -308,7 +308,6 @@
   },
   {
     "name": "effects_dry_run_unsupported: a reason without the declaration is rejected",
-    "targets": ["python", "typescript"],
     "app": {
       "name": "myapp",
       "version": "1.0.0",

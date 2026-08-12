@@ -12,6 +12,11 @@ import keyword
 import textwrap
 import tomllib
 
+# The message a `handler_aborts` handler carries, identical in all three
+# harnesses so the abort's surfaced stderr line is byte-identical across
+# targets. Every harness prints it as "error: <message>".
+HANDLER_ABORT_MESSAGE = "conformance: handler aborted"
+
 
 def _check_severities(checks_toml: str) -> dict[str, str]:
     """Parse the embedded checks_toml and return a name->severity map.
@@ -420,7 +425,11 @@ def _emit_command_registration(
         # Define the passthrough handler function first
         # Signature: func(ctx, name: str, args: list[str], globals: dict) -> int
         lines.append(f"{indent}def {handler_name}(ctx, name, args, globals):")
-        if global_flags:
+        pt_aborts = cmd_def.get("handler_aborts", False)
+        if pt_aborts:
+            # The handler unwinds instead of printing and returning.
+            lines.append(f"{indent}    raise ValueError({HANDLER_ABORT_MESSAGE!r})")
+        if global_flags and not pt_aborts:
             # Print global flag values first
             for gf in global_flags:
                 gf_name = gf["name"]
@@ -435,7 +444,9 @@ def _emit_command_registration(
                     )
         # Print using passthrough_handler_prints template, or default format
         pt_template = cmd_def.get("passthrough_handler_prints")
-        if pt_template:
+        if pt_aborts:
+            pass
+        elif pt_template:
             # Build the output by substituting {name} and {args} in the template
             lines.append(f'{indent}    _pt_out = {pt_template!r}')
             lines.append(f'{indent}    _pt_out = _pt_out.replace("{{name}}", name)')
@@ -443,7 +454,8 @@ def _emit_command_registration(
             lines.append(f'{indent}    print(_pt_out)')
         else:
             lines.append(f'{indent}    print(name + ":" + ",".join(args))')
-        lines.append(f"{indent}    return {exit_code}")
+        if not pt_aborts:
+            lines.append(f"{indent}    return {exit_code}")
         lines.append("")
 
         # Register the command with passthrough=Passthrough(handler=...)
@@ -731,7 +743,13 @@ def _emit_command_registration(
     lines.extend(diag_lines)
 
     handler_returns = cmd_def.get("handler_returns")
-    if handler_returns is not None:
+    if cmd_def.get("handler_aborts", False):
+        # The handler ABORTS rather than returning (§12.3's unwinding path).
+        # ValueError, not a bespoke type: the script's top-level catch prints
+        # it as "error: <msg>", which is byte-for-byte what the Go harness's
+        # recover and the TS harness's catch print for the same abort.
+        lines.append(f"{indent}    raise ValueError({HANDLER_ABORT_MESSAGE!r})")
+    elif handler_returns is not None:
         # Survivor-contract cases pin an explicit return value.
         lines.extend(_emit_handler_return(handler_returns, indent + "    "))
     else:
@@ -1014,8 +1032,21 @@ def generate(app_def: dict) -> str:
     lines.append("        atexit.register(_write_effect_log)")
     lines.append("")
     lines.append("    app.run()")
+    # The sibling harnesses both wrap the whole run: Go recovers any panic and
+    # TypeScript catches any throw, each printing "error: <msg>" and exiting 1.
+    # Python caught only ValueError, so the framework's OTHER hard-error type --
+    # the TypeError a bad handler return raises -- escaped as a traceback and
+    # made a language-neutral abort look like a language difference. The catch
+    # is widened to match the siblings' reach.
     lines.append("except ValueError as e:")
     lines.append("    print(f'error: {e}', file=sys.stderr)")
+    lines.append("    sys.exit(1)")
+    # ValueError is the framework's error vocabulary, which the siblings mirror
+    # verbatim, so it prints bare. Anything else is tagged with its type name:
+    # a genuine harness bug (a codegen TypeError) then stays distinguishable
+    # from a framework error instead of masquerading as one.
+    lines.append("except TypeError as e:")
+    lines.append("    print(f'error: {type(e).__name__}: {e}', file=sys.stderr)")
     lines.append("    sys.exit(1)")
     lines.append("")
 

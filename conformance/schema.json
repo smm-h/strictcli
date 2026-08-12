@@ -439,6 +439,11 @@
             "data": { "description": "Structured data payload for data/exit_data kinds. Author with sorted keys so compact JSON is byte-identical across languages." }
           }
         },
+        "handler_aborts": {
+          "const": true,
+          "description": "The generated handler ABORTS instead of returning: it raises (Python), throws (TypeScript) or panics (Go) with the identical message 'conformance: handler aborted', after running its handler_effects and handler_diagnostics. This is the language-neutral way to reach the framework's unwinding paths (the aborted-preview marker, effects contract §12.3) -- unlike handler_returns kind 'bad', which Go's Outcome type makes unrepresentable. Only true is declarable, and it excludes handler_returns: an aborting handler has no return.",
+          "default": false
+        },
         "passthrough": {
           "type": "boolean",
           "default": false,
@@ -483,6 +488,7 @@
           "handler_prints": false,
           "handler_exit_code": false,
           "handler_returns": false,
+          "handler_aborts": false,
           "handler_effects": false,
           "handler_diagnostics": false,
           "effect": false,
@@ -505,7 +511,8 @@
         }
       },
       "else": {
-        "required": ["effect"]
+        "required": ["effect"],
+        "not": { "required": ["handler_aborts", "handler_returns"] }
       }
     },
     "grant": {

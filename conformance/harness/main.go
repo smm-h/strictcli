@@ -784,12 +784,19 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 	}
 	// `dry_run_supported` is likewise NOT mandatory: absence means supported.
 	// Only false is declarable, and Go's single option carries the mandatory
-	// reason, so the two case keys collapse into one call here. A case that
-	// declares the reason without the flag is inexpressible in Go (its
-	// registration error has no Go analog) and restricts itself accordingly.
+	// reason, so the two case keys collapse into one call here.
 	if v, ok := cmdDef["dry_run_supported"]; ok && !v.(bool) {
 		reason, _ := cmdDef["dry_run_unsupported_reason"].(string)
 		opts = append(opts, strictcli.WithDryRunUnsupported(reason))
+	} else if reason, ok := cmdDef["dry_run_unsupported_reason"].(string); ok {
+		// The orphan state: a reason with no declaration. WithDryRunUnsupported
+		// cannot express it (it always sets both fields), but CmdOption is a
+		// plain func(*Command) over exported fields, which is exactly the route
+		// a consumer could take -- and exactly what the framework's guard
+		// rejects.
+		opts = append(opts, func(c *strictcli.Command) {
+			c.DryRunUnsupportedReason = reason
+		})
 	}
 	if v, ok := cmdDef["grants"]; ok {
 		var grants []strictcli.Grant
@@ -1018,14 +1025,47 @@ func collectAllFlagDefs(cmdDef map[string]interface{}, globalFlags []map[string]
 	return all
 }
 
+// handlerAbortMessage is what a `handler_aborts` handler panics with. The
+// sibling harnesses raise/throw the identical text, and all three surface it
+// as "error: <message>", so an aborting case's stderr is byte-identical
+// across targets.
+const handlerAbortMessage = "conformance: handler aborted"
+
 // makeHandler builds a normal command handler function from a command definition.
 func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interface{}) func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
+	// handler_aborts: the handler unwinds instead of returning, after its
+	// effects and diagnostics have run. This is the language-neutral way to
+	// reach the framework's aborted-preview path -- Go's Outcome type makes
+	// handler_returns kind "bad" unrepresentable, but a panic is not.
+	if v, ok := cmdDef["handler_aborts"]; ok && v.(bool) {
+		effects, _ := cmdDef["handler_effects"].([]interface{})
+		diags, _ := cmdDef["handler_diagnostics"].([]interface{})
+		return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
+			runHandlerEffects(ctx, effects)
+			runHandlerDiagnostics(ctx, diags)
+			panic(handlerAbortMessage)
+		}
+	}
+
 	// handler_returns pins an explicit Outcome (survivor-contract cases): an
 	// exit-only, data-only, exit+data, or None-equivalent return. When present,
 	// the template-printing path is skipped entirely.
 	if hrRaw, ok := cmdDef["handler_returns"]; ok {
 		hr := hrRaw.(map[string]interface{})
 		kind := hr["kind"].(string)
+		// Inexpressible kinds are a HARD ERROR at registration, never a silent
+		// mapping to something else. "bad" (a non-Outcome return) has no Go
+		// representation, and quietly falling through to Exit(0) would turn a
+		// case whose target restriction was dropped into a false pass.
+		switch kind {
+		case "exit", "data", "exit_data", "none":
+		default:
+			panic(fmt.Sprintf(
+				"conformance harness: handler_returns kind %q is inexpressible "+
+					"in Go's Outcome type; the case must restrict its targets",
+				kind,
+			))
+		}
 		code := 0
 		if v, ok := hr["code"]; ok {
 			code = int(v.(float64))
@@ -1221,6 +1261,14 @@ func makePassthroughHandler(cmdDef map[string]interface{}, globalFlags []map[str
 		exitCode = int(v.(float64))
 	}
 	ec := exitCode
+
+	// handler_aborts: the passthrough handler unwinds instead of printing and
+	// returning, exactly as the normal-command form does.
+	if v, ok := cmdDef["handler_aborts"]; ok && v.(bool) {
+		return func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
+			panic(handlerAbortMessage)
+		}
+	}
 
 	return func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
 		// Print global flag values.

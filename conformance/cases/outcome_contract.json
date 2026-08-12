@@ -115,7 +115,7 @@
       "typescript"
     ],
     "acknowledged_divergence": {
-      "reason": "Python surfaces the bad return as an uncaught TypeError traceback (host paths, line numbers, Python type names: int/None/list); TypeScript prints the framework's one-line error with JS type names (number/undefined/Array). Both assert the shared 'command handler must return' contract via stderr_contains.",
+      "reason": "The permitted-return vocabulary is language-specific and always will be: Python names int/None and reports the offending type as 'list', TypeScript names number/undefined and reports 'Array'. The Python harness additionally tags its non-ValueError catch with the type name ('error: TypeError: ...'), which is a deliberate harness marker, not framework output. Both assert the shared 'command handler must return' contract via stderr_contains.",
       "streams": {
         "stderr": [
           "python"

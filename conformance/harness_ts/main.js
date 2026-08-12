@@ -40,6 +40,10 @@ import {
 	warnCheckSpec,
 } from "../../typescript/dist/index.js";
 
+// The message a `handler_aborts` handler throws, identical in all three
+// harnesses so an aborting case's stderr line is byte-identical across targets.
+const HANDLER_ABORT_MESSAGE = "conformance: handler aborted";
+
 function underscore(name) {
 	return name.replaceAll("-", "_");
 }
@@ -433,6 +437,18 @@ function makeHandler(cmdDef, globalFlags) {
 	const handlerEffects = cmdDef.handler_effects ?? [];
 	const handlerDiagnostics = cmdDef.handler_diagnostics ?? [];
 
+	// handler_aborts: the handler unwinds instead of returning, after its
+	// effects and diagnostics have run. The sibling harnesses raise/panic with
+	// the identical message and surface it identically, which is what makes an
+	// aborting case comparable across all three targets.
+	if (cmdDef.handler_aborts === true) {
+		return (_args, ctx) => {
+			runHandlerEffects(ctx, handlerEffects);
+			runHandlerDiagnostics(ctx, handlerDiagnostics);
+			throw new Error(HANDLER_ABORT_MESSAGE);
+		};
+	}
+
 	// handler_returns pins an explicit return (survivor-contract cases): the
 	// template-printing path is skipped entirely. Kinds mirror ref_python's
 	// _emit_handler_return; "bad" returns a non-outcome to trigger the
@@ -503,6 +519,13 @@ function makeHandler(cmdDef, globalFlags) {
 
 function makePassthroughHandler(cmdDef, globalFlags) {
 	const exitCode = cmdDef.handler_exit_code ?? 0;
+	// handler_aborts: the passthrough handler unwinds instead of printing and
+	// returning, exactly as the normal-command form does.
+	if (cmdDef.handler_aborts === true) {
+		return () => {
+			throw new Error(HANDLER_ABORT_MESSAGE);
+		};
+	}
 	return (pt, ctx) => {
 		// Print global flag values (name=value lines) first. console.log, not
 		// ctx.info -- see makeHandler above.
