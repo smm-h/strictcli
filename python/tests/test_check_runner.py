@@ -386,6 +386,77 @@ class TestNonMintedOutcome:
             _run_checks(defs, ["a"], ctx, False)
 
 
+class TestRaisingImplContained:
+    """A raising impl is contained and reported as that check's own failure."""
+
+    @staticmethod
+    def _raiser(exc):
+        def impl(ctx):
+            raise exc
+        return impl
+
+    def test_raising_impl_fails_only_itself(self):
+        defs = {
+            "a": _make_check_def("a", impl=self._raiser(ValueError("boom"))),
+            "b": _make_check_def("b", impl=lambda ctx: pass_outcome("b ok")),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, _, exit_code = _run_checks(defs, ["a", "b"], ctx, False)
+        assert exit_code == 1
+        statuses = {name: outcome.status for name, outcome, _ in results}
+        assert statuses == {"a": "fail", "b": "pass"}
+        messages = {name: outcome.message for name, outcome, _ in results}
+        assert messages["a"] == 'check "a" aborted with ValueError: boom'
+        assert messages["b"] == "b ok"
+
+    def test_contained_failure_carries_an_error_problem(self):
+        defs = {"a": _make_check_def("a", impl=self._raiser(RuntimeError("nope")))}
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, _, _ = _run_checks(defs, ["a"], ctx, False)
+        _, outcome, _ = results[0]
+        assert [(p.severity, p.text) for p in outcome.problems] == [
+            ("error", 'check "a" aborted with RuntimeError: nope'),
+        ]
+
+    def test_empty_exception_message_drops_the_colon(self):
+        defs = {"a": _make_check_def("a", impl=self._raiser(ValueError()))}
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, _, _ = _run_checks(defs, ["a"], ctx, False)
+        assert results[0][1].message == 'check "a" aborted with ValueError'
+
+    def test_contained_failure_cascade_skips_dependents(self):
+        defs = {
+            "a": _make_check_def("a", impl=self._raiser(ValueError("boom"))),
+            "b": _make_check_def(
+                "b", depends_on=["a"], impl=lambda ctx: pass_outcome("b ok"),
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, _, exit_code = _run_checks(defs, ["a", "b"], ctx, False)
+        assert exit_code == 1
+        statuses = {name: outcome.status for name, outcome, _ in results}
+        assert statuses == {"a": "fail", "b": "skip"}
+
+    def test_a_warn_check_that_raises_still_fails(self):
+        # --ignore-warnings forgives warn RESULTS, never a broken check.
+        defs = {
+            "a": _make_check_def(
+                "a", severity="warn", impl=self._raiser(ValueError("boom")),
+            ),
+        }
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        results, _, exit_code = _run_checks(defs, ["a"], ctx, True)
+        assert exit_code == 1
+        assert results[0][1].status == "fail"
+
+    def test_keyboard_interrupt_is_not_contained(self):
+        # BaseException is the operator ending the process, not a broken check.
+        defs = {"a": _make_check_def("a", impl=self._raiser(KeyboardInterrupt()))}
+        ctx = SimpleContext(project_root=Path("/tmp"))
+        with pytest.raises(KeyboardInterrupt):
+            _run_checks(defs, ["a"], ctx, False)
+
+
 class TestFilterChecks:
     def setup_method(self):
         self.defs = {

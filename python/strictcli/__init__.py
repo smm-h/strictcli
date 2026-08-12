@@ -4243,6 +4243,36 @@ def _mint_skip(message: str) -> _CheckOutcome:
     return _CheckOutcome(kind="skipped", message=message, _token=_MINT_TOKEN)
 
 
+def _check_abort_text(name: str, type_name: str, message: str) -> str:
+    """Build the attribution line for a check whose impl aborted.
+
+    Names the check, the exception type (so a framework or harness bug stays
+    identifiable) and the exception's own message. An empty message drops the
+    colon rather than emitting a dangling one.
+    """
+    if message:
+        return f'check "{name}" aborted with {type_name}: {message}'
+    return f'check "{name}" aborted with {type_name}'
+
+
+def _mint_check_abort(name: str, exc: BaseException) -> _CheckOutcome:
+    """Runner-internal mint for a check whose impl raised.
+
+    The abort is reported as THAT check's own failure: a found outcome carrying
+    a single error-severity problem, so it derives FAIL, fails the run, and
+    cascade-skips its dependents exactly like any other failing check. Every
+    rendering surface (the result row, the problem line, both JSON fields)
+    carries the full attribution, so no reader loses it.
+    """
+    text = _check_abort_text(name, type(exc).__name__, str(exc))
+    return _CheckOutcome(
+        kind="found",
+        message=text,
+        problems=(_CheckProblem(text=text, severity="error"),),
+        _token=_MINT_TOKEN,
+    )
+
+
 def _derive_status(outcome: _CheckOutcome) -> str:
     """Map a minted outcome to its verdict label.
 
@@ -9839,7 +9869,19 @@ def _run_checks(
 
         # Capture wall-clock duration around the impl call only.
         _start = time.perf_counter()
-        outcome = cdef.impl(check_context)
+        try:
+            outcome = cdef.impl(check_context)
+        except Exception as exc:  # noqa: BLE001 -- containment is the point
+            # A raising impl is contained here and reported as that check's own
+            # failure: one broken check must not abort the whole run, and every
+            # other selected check still executes. BaseException (a
+            # KeyboardInterrupt, a SystemExit) is deliberately NOT contained --
+            # those are the operator ending the process, not a broken check.
+            duration_ms = int((time.perf_counter() - _start) * 1000)
+            outcome = _mint_check_abort(name, exc)
+            results.append((name, outcome, duration_ms))
+            record(name, outcome)
+            continue
         duration_ms = int((time.perf_counter() - _start) * 1000)
         # Belt-and-braces: an impl must return a reporter-minted outcome.
         if not isinstance(outcome, _CheckOutcome):
