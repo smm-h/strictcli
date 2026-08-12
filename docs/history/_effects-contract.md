@@ -724,9 +724,9 @@ value it cannot know.
 Nothing. The would-do log is dry mode's primary output and is never suppressed (§7.4).
 
 > **Amendment (2026-08-13, machine-interface round): the same holds in machine mode, structurally.**
-> The envelope is not written through the quiet-gated writers at all (§19.2), so `--json --quiet`
-> emits the complete envelope, `preview` and `diagnostics` included. `--quiet` and `--verbose` gate
-> the **human** stream only; they never decide what an envelope contains. This is the same promise
+> The envelope is not written through the writers `--quiet` suppresses (§19.2), so `--json --quiet`
+> emits the complete envelope, `preview` and `diagnostics` included. `--quiet` and `--verbose`
+> govern the **human** stream only; they never decide what an envelope contains. This is the same promise
 > §3.4 already made, restated over the other rendering.
 
 ### 3.5 Every exit path renders the log
@@ -784,7 +784,7 @@ idiomatic way a Python handler reports failure.
 > continues. The one exit path outside the guarantee (`os.Exit` / `process.exit`) is outside it in
 > machine mode too, and for the identical reason.
 >
-> A second amendment lands on the same seam: a handler may **claim** the render
+> A second amendment applies to the same seam: a handler may **claim** the render
 > (`ctx.effects.recorded()`, §19.7), after which the framework's own end-of-dispatch emission is
 > suppressed and the handler's `render_log()` produces byte-identical bytes at a point of its
 > choosing. A run that claimed but never rendered is re-rendered at this seam, so the guarantee
@@ -1227,14 +1227,14 @@ Never suppressed by `--quiet`, at any level:
 > §19.5), and the payload is emitted **only** as the envelope's `payload` member in machine mode.
 >
 > The never-suppressed promise is not weakened by the deletion, it is strengthened: the envelope
-> is **structurally exempt** from quiet. It is not written through the quiet-gated writers at all,
+> is **structurally exempt** from quiet. It is not written through the writers `--quiet` suppresses,
 > so `--quiet` has no mechanism by which to reach it, and `--json --quiet` emits the complete
 > document -- `payload`, `preview` and `diagnostics` alike. This closes a live divergence the old
 > wording could not: one implementation routed its machine output through the quiet-suppressible
 > writer and emitted nothing whatsoever under quiet plus machine flags, while the other two printed
 > the data.
 >
-> The table above is otherwise untouched. `--quiet` / `--verbose` gate the **human** stream and
+> The table above is otherwise untouched. `--quiet` / `--verbose` govern the **human** stream and
 > nothing else; they never decide the content of an envelope, and a diagnostic hidden from the
 > terminal still appears in `diagnostics` with its level (§19.2).
 
@@ -3340,8 +3340,8 @@ forced by the ruled semantics, fixing spellings the rulings left open). The roun
      all: there is nothing to normalize.
 
 101. **The envelope is structurally exempt from `--quiet` (§19.2, §7.4).** Not "exempted by a
-     check" -- it is not written through the quiet-gated writers, so no mechanism exists by which
-     quiet could reach it. This closes a shipped divergence in which one implementation emitted
+     check" -- it is not written through the writers `--quiet` suppresses, so no mechanism exists
+     by which quiet could reach it. This closes a shipped divergence in which one implementation emitted
      nothing at all under quiet plus machine flags while the other two emitted the data.
 
 102. **`outcome(data=...)` / `ExitData(code, data)` is deleted and replaced by an explicit payload
@@ -3413,11 +3413,19 @@ forced by the ruled semantics, fixing spellings the rulings left open). The roun
      marker become envelope members" -- the shape here is the minimal one that carries the
      existing §12.5 / §12.11 text verbatim rather than restating it in a second vocabulary.
 
-112. **Authored spellings for the trace store (§20, and the spec page).** `spawned_at`'s format,
-     the write-failure marker's filename and its content, and the store line's encoding are pinned
-     in the published spec page (`docs/process-trace-store.md`), which is the artifact other tools
-     implement against; §20 carries only the contract items. The entry's key names are **not** in
-     this class -- they are ruled upstream and reproduced verbatim.
+112. **Authored spellings and one forced reading for the trace store (§20, and the spec page).**
+     `spawned_at`'s format, the write-failure marker's filename and its content, and the store
+     line's encoding are pinned in the published spec page (`docs/process-trace-store.md`), which
+     is the artifact other tools implement against; §20 carries only the contract items. The
+     entry's key names are **not** in this class -- they are ruled upstream and reproduced verbatim.
+
+     The forced reading is §20.1's seam: the ruling says "the effects spawn seam" without saying
+     which effects reach it, and only one reading is consistent with the rest of this document. A
+     dry-mode `spawn` starts no process, so it can write no entry; an allowlisted observe really
+     executes in dry mode (§3.1) and therefore can. Any other reading either records a spawn that
+     did not happen or makes the entry's `dry_run` field permanently false. The same reading is what
+     keeps the trace write outside §3.1's "nothing runs" rule instead of becoming a second
+     framework-blessed exception to it.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
@@ -3452,12 +3460,13 @@ true and whose `preview` carries the recorded effects. This combination is legal
 it is how a caller gets a machine-readable answer to "what would this do".
 
 **Outside machine mode, nothing changes, ever.** Every promise §3 makes about the would-do log,
-every gating rule in §7.4, every stream in §3.5's table is exactly what it was before this round.
+every suppression rule in §7.4, every stream in §3.5's table is exactly what it was before this
+round.
 There is no third mode and no per-command variation: a run is either in machine mode or it is not,
 and the flag is the only thing that decides.
 
 The framework governs what the framework emits. A handler that writes to the process's stdout
-directly bypasses this section exactly as it bypasses §7.4's gating today -- that is the same
+directly bypasses this section exactly as it bypasses §7.4's suppression rules today -- that is the same
 accepted ceiling, not a new one, and §19.6 is the declared way to do it deliberately.
 
 ### 19.2 The envelope
@@ -3487,9 +3496,10 @@ one logical order (the table's order) is cheap and reads better than alphabetica
 requirement on any implementation. The same reasoning covers the payload's interior: there is
 nothing to normalize and nothing to promise.
 
-**The envelope is structurally exempt from `--quiet`.** It is not written through the quiet-gated
-writers at all, so quiet has no mechanism by which to reach it (§7.4's amendment box). `--json
---quiet` emits the complete document. `--quiet` and `--verbose` gate the human stream only: a
+**The envelope is structurally exempt from `--quiet`.** It is not written through the writers
+`--quiet` suppresses, so quiet has no mechanism by which to reach it (§7.4's amendment box).
+`--json --quiet` emits the complete document. `--quiet` and `--verbose` govern the human stream
+only: a
 `ctx.debug` line hidden from a default-mode terminal still appears in `diagnostics` with
 `"level": "debug"`, because the envelope's content is a function of what the run produced, never of
 how a terminal was configured.
@@ -3771,8 +3781,16 @@ the relationship to §16.
 - The entry describes the invocation, never its arguments: app, version, command path, the
   reserved-flag state, the machine-mode flag, consent, effect classification, pid, and the parent
   identifier. **Argv is never recorded** -- arguments carry secrets.
-- Recording happens in both modes. It is not an effect, does not appear in the effect log, and is
-  invisible to `--dry-run`: a dry run still records that it ran, because it did.
+- **The seam is the real start of a child process** -- `spawn`, and `run` including the allowlisted
+  observes of §6.2. This reading is forced by the rest of the regime rather than chosen: in dry
+  mode a *recorded* spawn starts nothing, so it writes no entry (where nothing runs, nothing is
+  traced), while an observe genuinely executes even in dry mode and therefore does write one,
+  carrying `dry_run: true`. That is what the entry's reserved-flag state is for, and it is the only
+  reading under which the flag can ever be true.
+- **The write is framework bookkeeping, not an effect.** It is never minted through the effects
+  handle, never appears in the structured effect log (§14.2), and is never rendered in the would-do
+  log. It therefore adds **no exception** to §3.1's "nothing runs" rule and is not a second
+  `CACHE_WRITE`-style carve-out: it accompanies real child-process starts and nothing else.
 
 ### 20.2 Observational-only (ratified contract item)
 
