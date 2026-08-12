@@ -1051,18 +1051,20 @@ def generate(app_def: dict) -> str:
     lines.append("    app.run()")
     # The sibling harnesses both wrap the whole run: Go recovers any panic and
     # TypeScript catches any throw, each printing "error: <msg>" and exiting 1.
-    # Python caught only ValueError, so the framework's OTHER hard-error type --
-    # the TypeError a bad handler return raises -- escaped as a traceback and
-    # made a language-neutral abort look like a language difference. The catch
-    # is widened to match the siblings' reach.
-    lines.append("except ValueError as e:")
+    # Python catches every Exception for the same reach. (SystemExit and the
+    # framework's _DryRunTruncated derive from BaseException and stay uncaught,
+    # exactly as before.)
+    #
+    # The framework's own error vocabulary prints bare, because the siblings
+    # mirror those messages verbatim: ValueError, and EffectFailed -- the
+    # effect-failure type whose Go and TypeScript equivalents also print bare.
+    # Everything else is tagged with its type name, so a genuine harness bug
+    # (a codegen TypeError, an AttributeError) stays distinguishable from a
+    # framework error instead of masquerading as one.
+    lines.append("except (ValueError, strictcli.EffectFailed) as e:")
     lines.append("    print(f'error: {e}', file=sys.stderr)")
     lines.append("    sys.exit(1)")
-    # ValueError is the framework's error vocabulary, which the siblings mirror
-    # verbatim, so it prints bare. Anything else is tagged with its type name:
-    # a genuine harness bug (a codegen TypeError) then stays distinguishable
-    # from a framework error instead of masquerading as one.
-    lines.append("except TypeError as e:")
+    lines.append("except Exception as e:")
     lines.append("    print(f'error: {type(e).__name__}: {e}', file=sys.stderr)")
     lines.append("    sys.exit(1)")
     lines.append("")
