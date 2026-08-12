@@ -198,6 +198,64 @@ def _check_equals(actual: str, expected: str, stream_name: str) -> list[str]:
     return errors
 
 
+# The per-field wildcard: an expected value of exactly this string matches any
+# actual value, of any type, at that position. It exists for the fields whose
+# value is nondeterministic by construction -- a continuation signature, a
+# timestamp -- where the CONTRACT is that the field is present and the
+# comparison of its content is meaningless.
+ANY_VALUE = "$ANY"
+
+
+def _structural_equal(actual, expected, path: str = "") -> list[str]:
+    """Compare two parsed JSON structures structurally. Returns mismatch lines.
+
+    Key order is never part of the comparison, so nothing is sorted and nothing
+    is canonicalized: two objects agree when their key SETS agree (checked as
+    sets, failing fast on the first difference and naming which side held the
+    extra keys) and every shared key's value agrees, recursively. An expected
+    value of ANY_VALUE matches anything.
+
+    This is the one comparison the structure-aware assertions share --
+    effects_equals, schema_command_keys and the scripted-protocol line matcher
+    all route through it, so the wildcard means the same thing everywhere.
+    """
+    where = path or "<root>"
+    if expected == ANY_VALUE:
+        return []
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return [f"    {where}: expected an object, got {type(actual).__name__}"]
+        missing = sorted(set(expected) - set(actual))
+        extra = sorted(set(actual) - set(expected))
+        if missing or extra:
+            parts = []
+            if missing:
+                parts.append(f"missing {missing}")
+            if extra:
+                parts.append(f"unexpected {extra}")
+            return [f"    {where}: key sets differ ({'; '.join(parts)})"]
+        errors: list[str] = []
+        for key in expected:
+            errors.extend(
+                _structural_equal(actual[key], expected[key], f"{where}.{key}")
+            )
+        return errors
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            return [f"    {where}: expected an array, got {type(actual).__name__}"]
+        if len(actual) != len(expected):
+            return [
+                f"    {where}: array length {len(actual)}, expected {len(expected)}"
+            ]
+        errors = []
+        for i, (a, e) in enumerate(zip(actual, expected)):
+            errors.extend(_structural_equal(a, e, f"{where}[{i}]"))
+        return errors
+    if actual != expected:
+        return [f"    {where}: {actual!r}, expected {expected!r}"]
+    return []
+
+
 # The optional keys of $defs/effect_record. Effects contract §14.1: absent
 # optional keys and explicit-null keys are equivalent, so both sides drop them
 # before comparison. `recorded` is deliberately NOT in this set -- it is a
@@ -231,10 +289,12 @@ def _check_effects_equals(log_path: str | None, expected: list) -> list[str]:
 
     actual_norm = [_normalize_effect_record(r) for r in actual]
     expected_norm = [_normalize_effect_record(r) for r in expected]
-    if actual_norm == expected_norm:
+    mismatches = _structural_equal(actual_norm, expected_norm, "effects")
+    if not mismatches:
         return []
     return [
         "  effects_equals mismatch:",
+        *mismatches,
         f"    expected: {json.dumps(expected_norm, sort_keys=True)}",
         f"    actual:   {json.dumps(actual_norm, sort_keys=True)}",
     ]
@@ -296,11 +356,14 @@ def _check_schema_commands(proj_dir: str | None, expect: dict) -> list[str]:
                     f"  schema_command_keys: {dotted}.{key} is absent, "
                     f"expected {want!r}"
                 )
-            elif entry[key] != want:
-                errors.append(
-                    f"  schema_command_keys: {dotted}.{key} is {entry[key]!r}, "
-                    f"expected {want!r}"
-                )
+                continue
+            # Structural, and wildcard-aware: a value declared ANY_VALUE
+            # asserts the key's presence and nothing about its content.
+            mismatches = _structural_equal(
+                entry[key], want, f"{dotted}.{key}"
+            )
+            for line in mismatches:
+                errors.append(f"  schema_command_keys:{line}")
     for dotted, keys in expect.get("schema_command_absent_keys", {}).items():
         entry = _resolve_schema_command(schema, dotted)
         if entry is None:

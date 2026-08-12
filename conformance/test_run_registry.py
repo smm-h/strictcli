@@ -290,6 +290,56 @@ def test_parity_mode_skips_single_target_case():
     assert report.exit_code == 0
 
 
+# --- the shared structural comparator ---------------------------------------
+#
+# One comparator backs every structure-aware assertion (effects_equals,
+# schema_command_keys, protocol_script line matching), so the wildcard and the
+# key-set rule mean the same thing in all of them.
+
+
+def test_structural_equal_ignores_key_order():
+    assert run._structural_equal({"b": 1, "a": 2}, {"a": 2, "b": 1}) == []
+
+
+def test_structural_equal_reports_key_set_difference():
+    errors = run._structural_equal({"a": 1}, {"a": 1, "b": 2})
+    assert len(errors) == 1
+    assert "missing ['b']" in errors[0]
+    errors = run._structural_equal({"a": 1, "b": 2}, {"a": 1})
+    assert len(errors) == 1
+    assert "unexpected ['b']" in errors[0]
+
+
+def test_structural_equal_wildcard_matches_any_value():
+    for actual in ("sig", 17, None, {"nested": True}, [1, 2]):
+        assert run._structural_equal({"sig": actual}, {"sig": run.ANY_VALUE}) == []
+
+
+def test_structural_equal_wildcard_still_requires_the_key():
+    errors = run._structural_equal({}, {"sig": run.ANY_VALUE})
+    assert len(errors) == 1
+    assert "missing ['sig']" in errors[0]
+
+
+def test_structural_equal_recurses_and_names_the_path():
+    errors = run._structural_equal(
+        {"a": {"b": [1, 2]}}, {"a": {"b": [1, 3]}}, "root"
+    )
+    assert len(errors) == 1
+    assert "root.a.b[1]" in errors[0]
+
+
+def test_structural_equal_array_length_mismatch():
+    errors = run._structural_equal([1], [1, 2])
+    assert len(errors) == 1
+    assert "array length 1" in errors[0]
+
+
+def test_structural_equal_type_mismatch():
+    assert run._structural_equal("x", {"a": 1})
+    assert run._structural_equal({"a": 1}, [1])
+
+
 if __name__ == "__main__":
     failures = 0
     for _name, _fn in sorted(globals().items()):
