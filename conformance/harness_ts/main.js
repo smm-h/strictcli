@@ -10,8 +10,9 @@
 // prerequisite is `cd typescript && npm run build`. Bare specifiers used by
 // the dist itself (smol-toml) resolve through typescript/node_modules via
 // Node's directory walk-up, because the imported files live under typescript/.
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, readSync, writeFileSync } from "node:fs";
 
+import { setConfirmIO } from "../../typescript/dist/confirm.js";
 import {
 	errCommandDuplicateFlag,
 	errCommandPassthroughCannotHave,
@@ -43,6 +44,37 @@ import {
 // The message a `handler_aborts` handler throws, identical in all three
 // harnesses so an aborting case's stderr line is byte-identical across targets.
 const HANDLER_ABORT_MESSAGE = "conformance: handler aborted";
+
+/**
+ * Reads one line from fd 0 synchronously, WITHOUT its trailing newline -- the
+ * contract of the ConfirmIO.readLine member. The framework's own reader is
+ * module-private in confirm.ts, so the harness carries its own copy; both stop
+ * at the first newline and both tolerate a non-blocking descriptor.
+ */
+function readLineFromStdin() {
+	const buf = Buffer.alloc(1);
+	let line = "";
+	for (;;) {
+		let n;
+		try {
+			n = readSync(0, buf, 0, 1, null);
+		} catch (e) {
+			if (e.code === "EAGAIN") {
+				continue;
+			}
+			break;
+		}
+		if (n === 0) {
+			break;
+		}
+		const ch = buf.toString("utf8", 0, 1);
+		if (ch === "\n") {
+			break;
+		}
+		line += ch;
+	}
+	return line;
+}
 
 function underscore(name) {
 	return name.replaceAll("-", "_");
@@ -929,6 +961,20 @@ async function main() {
 		"test_coverage" in appDef
 	) {
 		app.setCheckContext(() => ({ projectRoot: "." }));
+	}
+
+	// The confirm protocol's interactive branch is otherwise unreachable from a
+	// subprocess: a case's stdin is a pipe, and a pipe is not a TTY in any of
+	// the three implementations, so every consequential case would take the
+	// non-interactive error branch. The framework's test-only confirm seam says
+	// the answer channel IS interactive and leaves the answer itself coming from
+	// the case's real stdin -- WHERE the answer comes from, never WHETHER the
+	// protocol runs.
+	if (appDef.confirm_stdin_interactive === true) {
+		setConfirmIO({
+			isInteractive: () => true,
+			readLine: readLineFromStdin,
+		});
 	}
 
 	// Write config_content_late AFTER construction but BEFORE run.

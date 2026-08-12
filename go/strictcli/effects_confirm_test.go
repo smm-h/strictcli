@@ -15,6 +15,12 @@ import (
 
 const confirmArgvEnv = "STRICTCLI_CONFIRM_ARGV"
 
+// confirmSeamEnv arms the child to install SetConfirmIO, the test-only seam
+// that says the answer channel is interactive while leaving the answer itself
+// coming from the child's real (piped) stdin. Without it the interactive branch
+// is unreachable from a subprocess: a pipe is not a TTY.
+const confirmSeamEnv = "STRICTCLI_CONFIRM_SEAM"
+
 // TestConfirmRunHelper is the child process: it builds a two-command app and
 // dispatches through the real CLI path.
 func TestConfirmRunHelper(t *testing.T) {
@@ -48,6 +54,13 @@ func TestConfirmRunHelper(t *testing.T) {
 			ctx.Info("forwarded")
 			return 0
 		}, WithEffect(EffectMutating))
+
+	if _, seam := os.LookupEnv(confirmSeamEnv); seam {
+		app.SetConfirmIO(&ConfirmIO{
+			IsInteractive: func() bool { return true },
+			In:            os.Stdin,
+		})
+	}
 
 	os.Args = append([]string{"app"}, strings.Fields(argv)...)
 	app.Run()
@@ -199,5 +212,71 @@ func TestConfirmLineTerminatorStripping(t *testing.T) {
 		if got != tc.want {
 			t.Fatalf("readConfirmLine(%q) = %q, want %q", tc.raw, got, tc.want)
 		}
+	}
+}
+
+// runConfirmHelperInteractive re-invokes the test binary with the confirm seam
+// installed and the given answer on stdin.
+func runConfirmHelperInteractive(t *testing.T, argv, answer string) (stdout, stderr string, code int) {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestConfirmRunHelper$")
+	cmd.Env = append(os.Environ(), confirmArgvEnv+"="+argv, confirmSeamEnv+"=1")
+	cmd.Stdin = strings.NewReader(answer)
+	var out, errb strings.Builder
+	cmd.Stdout = &out
+	cmd.Stderr = &errb
+	if err := cmd.Run(); err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok {
+			t.Fatalf("helper failed: %v", err)
+		}
+		code = exitErr.ExitCode()
+	}
+	return out.String(), errb.String(), code
+}
+
+// The interactive branch end to end, through SetConfirmIO. The seam changes
+// WHERE the answer comes from, never WHETHER the protocol runs -- so the prompt
+// is still written, an empty answer still declines, and a leading space is
+// still a decline.
+func TestConfirmIOSeamDrivesTheInteractiveBranch(t *testing.T) {
+	const prompt = "about to run consequential command 'deploy'. Proceed? [y/N] "
+	cases := []struct {
+		answer   string
+		wantCode int
+		wantErr  string
+		ran      bool
+	}{
+		{"y\n", 0, prompt, true},
+		{"Y\n", 0, prompt, true},
+		{"y\r\n", 0, prompt, true},
+		{"n\n", 1, prompt + "aborted\n", false},
+		{"\n", 1, prompt + "aborted\n", false},
+		{"  y\n", 1, prompt + "aborted\n", false},
+	}
+	for _, tc := range cases {
+		stdout, stderr, code := runConfirmHelperInteractive(t, "deploy", tc.answer)
+		if code != tc.wantCode {
+			t.Fatalf("answer %q: exit %d, want %d (stderr=%q)", tc.answer, code, tc.wantCode, stderr)
+		}
+		if stderr != tc.wantErr {
+			t.Fatalf("answer %q: stderr=%q, want %q", tc.answer, stderr, tc.wantErr)
+		}
+		if got := strings.Contains(stdout, "deployed"); got != tc.ran {
+			t.Fatalf("answer %q: handler ran=%v, want %v", tc.answer, got, tc.ran)
+		}
+	}
+}
+
+// nil restores the real stdin reader, so a piped stdin is non-interactive again.
+func TestConfirmIOSeamNilRestoresTheRealReader(t *testing.T) {
+	app := NewApp("app", "1.0.0", "app")
+	app.SetConfirmIO(&ConfirmIO{IsInteractive: func() bool { return true }, In: strings.NewReader("y\n")})
+	if app.confirmIO == nil {
+		t.Fatal("the seam must be installed")
+	}
+	app.SetConfirmIO(nil)
+	if app.confirmIO != nil {
+		t.Fatal("nil must restore the real stdin reader")
 	}
 }

@@ -407,6 +407,10 @@ type App struct {
 	// exitHook runs immediately before Run's terminal os.Exit. Test-only
 	// surface; see SetExitHook.
 	exitHook func()
+
+	// confirmIO overrides the stdin side of the confirm protocol. Test-only
+	// surface; see SetConfirmIO. nil means the real stdin.
+	confirmIO *ConfirmIO
 }
 
 // SetExitHook registers a function to run immediately before Run's terminal

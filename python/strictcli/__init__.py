@@ -717,6 +717,27 @@ def _msg_confirm_declined() -> str:
     return "aborted"
 
 
+class _ConfirmIO:
+    """The stdin side of the confirm protocol, isolated so tests can drive it.
+
+    The TypeScript twin is the ``ConfirmIO`` interface in ``confirm.ts`` and the
+    Go twin is the ``ConfirmIO`` struct; the two members mean the same thing in
+    all three. Swapping it changes WHERE the answer comes from, never WHETHER
+    the protocol runs -- there is no bypass here and never will be.
+    """
+
+    def is_interactive(self) -> bool:
+        """True when stdin is a TTY."""
+        return sys.stdin.isatty()
+
+    def read_line(self) -> str:
+        """Read one line from stdin, terminator included."""
+        return sys.stdin.readline()
+
+
+_REAL_CONFIRM_IO = _ConfirmIO()
+
+
 def _msg_call_consequential_unconsented(cmd_path: str) -> str:
     """The programmatic-path refusal (contract §8.5).
 
@@ -4670,6 +4691,10 @@ class App:
         # recorded=False) in live mode, plus framework-blessed CACHE_WRITEs.
         self._effect_log = _EffectLog()
 
+        # The stdin side of the confirm protocol. Swappable through the
+        # test-only ``_set_confirm_io`` seam; the real reader by default.
+        self._confirm_io: _ConfirmIO = _REAL_CONFIRM_IO
+
         # Resolve infrastructure roots eagerly, at construction. Infra vars have
         # no argv dependency, so resolution is sound here -- and this is WHY it
         # is hermetic-immune: there is no argv yet to consult, so --hermetic
@@ -5857,12 +5882,13 @@ class App:
             return
         if self._last_dry_run or self._last_approve_consequential:
             return
-        if not sys.stdin.isatty():
+        io = self._confirm_io
+        if not io.is_interactive():
             print(_msg_confirm_non_interactive(), file=sys.stderr)
             sys.exit(1)
         print(_msg_confirm_prompt(cmd_path), file=sys.stderr, end="", flush=True)
         try:
-            answer = sys.stdin.readline()
+            answer = io.read_line()
         except (EOFError, KeyboardInterrupt):
             answer = ""
         if _strip_confirm_line(answer) not in ("y", "Y"):
@@ -5938,6 +5964,17 @@ class App:
         Test-only surface, beside ``test()`` and ``_last_sources``.
         """
         return self._effect_log.to_list()
+
+    def _set_confirm_io(self, io: "_ConfirmIO | None") -> None:
+        """Swap the stdin side of the confirm protocol (test-only seam).
+
+        ``None`` restores the real stdin reader. The TypeScript twin is
+        ``setConfirmIO`` in ``confirm.ts`` and the Go twin is
+        ``App.SetConfirmIO``; all three change WHERE the answer comes from,
+        never WHETHER the protocol runs. Private by name because Python has no
+        package-private visibility -- this is not public API.
+        """
+        self._confirm_io = io if io is not None else _REAL_CONFIRM_IO
 
     def _build_framework_command(
         self,

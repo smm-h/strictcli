@@ -977,6 +977,23 @@ def generate(app_def: dict) -> str:
         lines.append("    app.set_check_context(lambda: _CheckCtx())")
         lines.append("")
 
+    # The confirm protocol's interactive branch is otherwise unreachable from a
+    # subprocess: a case's stdin is a pipe, and a pipe is not a TTY in any of
+    # the three implementations. The framework's test-only confirm seam says the
+    # answer channel IS interactive and leaves the answer itself coming from the
+    # case's real stdin -- WHERE the answer comes from, never WHETHER the
+    # protocol runs.
+    if app_def.get("confirm_stdin_interactive", False):
+        lines.append("    class _ConfirmStdin:")
+        lines.append("        def is_interactive(self):")
+        lines.append("            return True")
+        lines.append("")
+        lines.append("        def read_line(self):")
+        lines.append("            return sys.stdin.readline()")
+        lines.append("")
+        lines.append("    app._set_confirm_io(_ConfirmStdin())")
+        lines.append("")
+
     # Write config_content_late AFTER construction but BEFORE run
     if "config_content_late" in app_def:
         late_content = app_def["config_content_late"]

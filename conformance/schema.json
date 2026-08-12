@@ -156,6 +156,11 @@
           "additionalProperties": { "type": "string" },
           "description": "Connection env vars: env var name -> help string. Hermetic-suppressed, read live at access time, no default."
         },
+        "confirm_stdin_interactive": {
+          "const": true,
+          "default": false,
+          "description": "Installs the framework's test-only confirm seam (Go App.SetConfirmIO, Python App._set_confirm_io, TypeScript setConfirmIO) so the confirm protocol treats the case's piped stdin as interactive and reads its answer from it. Without this the interactive branch is unreachable from a subprocess -- a pipe is not a TTY in any implementation, so every consequential case would take the non-interactive error branch. It changes WHERE the answer comes from, never WHETHER the protocol runs: there is no bypass here."
+        },
         "config_content": {
           "type": "string",
           "description": "Raw config file content to write before running the test"

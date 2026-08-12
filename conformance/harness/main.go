@@ -287,6 +287,20 @@ func main() {
 		}
 	}
 
+	// The confirm protocol's interactive branch is otherwise unreachable from a
+	// subprocess: a case's stdin is a pipe, and a pipe is not a TTY in any of
+	// the three implementations, so every consequential case would take the
+	// non-interactive error branch. The framework's test-only confirm seam
+	// says the answer channel IS interactive and leaves the answer itself
+	// coming from the case's real stdin -- WHERE the answer comes from, never
+	// WHETHER the protocol runs.
+	if v, ok := appDef["confirm_stdin_interactive"]; ok && v.(bool) {
+		app.SetConfirmIO(&strictcli.ConfirmIO{
+			IsInteractive: func() bool { return true },
+			In:            os.Stdin,
+		})
+	}
+
 	// The structured effect-log side channel (§14.3): the same env-var file
 	// handoff as CONFORMANCE_APP_DEF. App.Run ends in os.Exit, so the write
 	// rides SetExitHook -- the Go counterpart of the Python ref's atexit and

@@ -1189,6 +1189,34 @@ func stdinIsInteractive() bool {
 	return true
 }
 
+// ConfirmIO is the stdin side of the confirm protocol, isolated so a test
+// harness can drive it. Both members are required when it is installed.
+//
+// The TypeScript twin is the ConfirmIO interface in confirm.ts and the Python
+// twin is the _ConfirmIO class; the two members mean the same thing in all
+// three. Installing one changes WHERE the answer comes from, never WHETHER the
+// protocol runs -- it is not a bypass, and there is no bypass.
+type ConfirmIO struct {
+	// IsInteractive reports whether the answer channel is a terminal. The
+	// framework's own answer is stdinIsInteractive().
+	IsInteractive func() bool
+	// In is where the answer line is read from.
+	In io.Reader
+}
+
+// SetConfirmIO swaps the stdin side of the confirm protocol. Passing nil
+// restores the real stdin reader.
+//
+// Test-only surface, beside Test(), EffectLog() and SetExitHook(). Go's twins
+// in the other two implementations are package-internal (TypeScript's
+// setConfirmIO is never re-exported from index.ts; Python's is the
+// underscore-named App._set_confirm_io), but Go has no package-private
+// visibility that another package -- the conformance harness above all -- can
+// still reach, so this one is exported and documented as test-only.
+func (a *App) SetConfirmIO(io *ConfirmIO) {
+	a.confirmIO = io
+}
+
 // confirmConsequential is the framework-owned confirm protocol. It fires before
 // dispatching a command that DECLARES ITSELF consequential, on the real CLI
 // path, when neither --dry-run nor --approve-consequential was passed. A plain
@@ -1200,7 +1228,11 @@ func stdinIsInteractive() bool {
 // A consequential PASSTHROUGH is not exempt: the framework knows LESS about
 // what is about to happen, not more.
 func (a *App) confirmConsequential(cmd *Command, cmdPath string) {
-	switch a.confirmDecision(cmd, cmdPath, stdinIsInteractive(), os.Stdin, os.Stderr) {
+	interactive, in := stdinIsInteractive(), io.Reader(os.Stdin)
+	if a.confirmIO != nil {
+		interactive, in = a.confirmIO.IsInteractive(), a.confirmIO.In
+	}
+	switch a.confirmDecision(cmd, cmdPath, interactive, in, os.Stderr) {
 	case confirmNonInteractive:
 		fmt.Fprintln(os.Stderr, errConfirmNonInteractive)
 		os.Exit(1)

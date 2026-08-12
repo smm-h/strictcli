@@ -15,7 +15,9 @@
         }
       ]
     },
-    "argv": ["release"],
+    "argv": [
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "",
@@ -37,8 +39,14 @@
         }
       ]
     },
-    "argv": ["build"],
-    "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+    "argv": [
+      "build"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "built\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_consequential: an explicit consequential false never prompts",
@@ -56,8 +64,14 @@
         }
       ]
     },
-    "argv": ["build"],
-    "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+    "argv": [
+      "build"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "built\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_consequential: approve-consequential before the command name skips the prompt",
@@ -75,8 +89,15 @@
         }
       ]
     },
-    "argv": ["--approve-consequential", "release"],
-    "expect": {"exit_code": 0, "stdout_equals": "released\n", "stderr_equals": ""}
+    "argv": [
+      "--approve-consequential",
+      "release"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "released\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_consequential: approve-consequential after the command name skips the prompt",
@@ -94,8 +115,15 @@
         }
       ]
     },
-    "argv": ["release", "--approve-consequential"],
-    "expect": {"exit_code": 0, "stdout_equals": "released\n", "stderr_equals": ""}
+    "argv": [
+      "release",
+      "--approve-consequential"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "released\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_consequential: approve-consequential between a group and its subcommand skips the prompt",
@@ -127,8 +155,16 @@
         }
       ]
     },
-    "argv": ["release", "--approve-consequential", "run"],
-    "expect": {"exit_code": 0, "stdout_equals": "released\n", "stderr_equals": ""}
+    "argv": [
+      "release",
+      "--approve-consequential",
+      "run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "released\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_consequential: dry-run skips the prompt",
@@ -142,11 +178,19 @@
           "help": "a consequential command",
           "effect": "mutating",
           "consequential": true,
-          "handler_effects": [{"method": "mkdir", "path": "build/out"}]
+          "handler_effects": [
+            {
+              "method": "mkdir",
+              "path": "build/out"
+            }
+          ]
         }
       ]
     },
-    "argv": ["release", "--dry-run"],
+    "argv": [
+      "release",
+      "--dry-run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build/out\n",
@@ -170,7 +214,12 @@
         }
       ]
     },
-    "argv": ["exec", "rm", "-rf", "/"],
+    "argv": [
+      "exec",
+      "rm",
+      "-rf",
+      "/"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "",
@@ -193,8 +242,16 @@
         }
       ]
     },
-    "argv": ["exec", "ls", "-la"],
-    "expect": {"exit_code": 0, "stdout_equals": "exec:ls,-la\n", "stderr_equals": ""}
+    "argv": [
+      "exec",
+      "ls",
+      "-la"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "exec:ls,-la\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_consequential: a read_only command cannot be consequential",
@@ -213,7 +270,9 @@
         }
       ]
     },
-    "argv": ["look"],
+    "argv": [
+      "look"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"look\": a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)"
@@ -237,10 +296,175 @@
         }
       ]
     },
-    "argv": ["show", "x"],
+    "argv": [
+      "show",
+      "x"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"show\": a read_only command cannot be consequential (a command that changes nothing has nothing to confirm)"
+    }
+  },
+  {
+    "name": "effects_consequential: an interactive 'y' answers the prompt and the command runs",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "confirm_stdin_interactive": true,
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": [
+      "release"
+    ],
+    "stdin": "y\n",
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "released\n",
+      "stderr_equals": "about to run consequential command 'release'. Proceed? [y/N] "
+    }
+  },
+  {
+    "name": "effects_consequential: an interactive 'Y' answers the prompt too",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "confirm_stdin_interactive": true,
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": [
+      "release"
+    ],
+    "stdin": "Y\n",
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "released\n",
+      "stderr_equals": "about to run consequential command 'release'. Proceed? [y/N] "
+    }
+  },
+  {
+    "name": "effects_consequential: an interactive 'n' declines and nothing runs",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "confirm_stdin_interactive": true,
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": [
+      "release"
+    ],
+    "stdin": "n\n",
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "about to run consequential command 'release'. Proceed? [y/N] aborted\n"
+    }
+  },
+  {
+    "name": "effects_consequential: a bare newline declines (the prompt's default is No)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "confirm_stdin_interactive": true,
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": [
+      "release"
+    ],
+    "stdin": "\n",
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "about to run consequential command 'release'. Proceed? [y/N] aborted\n"
+    }
+  },
+  {
+    "name": "effects_consequential: a CRLF-terminated 'y' is still an answer",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "confirm_stdin_interactive": true,
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": [
+      "release"
+    ],
+    "stdin": "y\r\n",
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "released\n",
+      "stderr_equals": "about to run consequential command 'release'. Proceed? [y/N] "
+    }
+  },
+  {
+    "name": "effects_consequential: a leading space makes 'y' a decline",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "confirm_stdin_interactive": true,
+      "commands": [
+        {
+          "name": "release",
+          "help": "a consequential command",
+          "effect": "mutating",
+          "consequential": true,
+          "handler_prints": "released"
+        }
+      ]
+    },
+    "argv": [
+      "release"
+    ],
+    "stdin": "  y\n",
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "about to run consequential command 'release'. Proceed? [y/N] aborted\n"
     }
   }
 ]

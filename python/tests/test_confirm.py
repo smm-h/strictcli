@@ -448,3 +448,88 @@ class TestNoBypass:
             _app().run()
         assert exc.value.code == 1
         assert "unknown" in capsys.readouterr().err.lower()
+
+
+class FakeConfirmIO:
+    """A ConfirmIO stand-in: controllable interactivity and a scripted answer."""
+
+    def __init__(self, answer="", interactive=True):
+        self._answer = answer
+        self._interactive = interactive
+        self.read_count = 0
+
+    def is_interactive(self):
+        return self._interactive
+
+    def read_line(self):
+        self.read_count += 1
+        return self._answer
+
+
+class TestConfirmIOSeam:
+    """The test-only seam that swaps the protocol's stdin side.
+
+    It changes WHERE the answer comes from, never WHETHER the protocol runs --
+    the twins are Go's App.SetConfirmIO and TypeScript's setConfirmIO, and the
+    conformance suite drives all three through it so the interactive branch is
+    reachable from a subprocess whose stdin is a pipe.
+    """
+
+    def test_seam_supplies_the_answer_without_touching_stdin(
+        self, monkeypatch, capsys
+    ):
+        app = _app()
+        io = FakeConfirmIO(answer="y\n", interactive=True)
+        app._set_confirm_io(io)
+        # sys.stdin is deliberately a NON-interactive stand-in: if the protocol
+        # consulted it, this run would take the non-interactive error branch.
+        monkeypatch.setattr(sys, "argv", ["app", "deploy"])
+        monkeypatch.setattr(sys, "stdin", FakeStdin(answer="n\n", tty=False))
+        with pytest.raises(SystemExit) as exc:
+            app.run()
+        assert exc.value.code == 0
+        assert "ran" in capsys.readouterr().out
+        assert io.read_count == 1
+
+    def test_seam_declines_like_the_real_reader(self, monkeypatch, capsys):
+        app = _app()
+        app._set_confirm_io(FakeConfirmIO(answer="n\n", interactive=True))
+        monkeypatch.setattr(sys, "argv", ["app", "deploy"])
+        monkeypatch.setattr(sys, "stdin", FakeStdin(answer="y\n", tty=True))
+        with pytest.raises(SystemExit) as exc:
+            app.run()
+        assert exc.value.code == 1
+        assert "aborted" in capsys.readouterr().err
+
+    def test_seam_non_interactive_is_the_hard_error(self, monkeypatch, capsys):
+        app = _app()
+        app._set_confirm_io(FakeConfirmIO(answer="y\n", interactive=False))
+        monkeypatch.setattr(sys, "argv", ["app", "deploy"])
+        monkeypatch.setattr(sys, "stdin", FakeStdin(answer="y\n", tty=True))
+        with pytest.raises(SystemExit) as exc:
+            app.run()
+        assert exc.value.code == 1
+        assert "stdin is not interactive" in capsys.readouterr().err
+
+    def test_none_restores_the_real_reader(self, monkeypatch, capsys):
+        app = _app()
+        app._set_confirm_io(FakeConfirmIO(answer="n\n", interactive=True))
+        app._set_confirm_io(None)
+        monkeypatch.setattr(sys, "argv", ["app", "deploy"])
+        monkeypatch.setattr(sys, "stdin", FakeStdin(answer="y\n", tty=True))
+        with pytest.raises(SystemExit) as exc:
+            app.run()
+        assert exc.value.code == 0
+        assert "ran" in capsys.readouterr().out
+
+    def test_the_seam_is_not_a_bypass(self, monkeypatch, capsys):
+        # An installed seam still runs the whole protocol: an empty answer
+        # declines exactly as it would from a real terminal.
+        app = _app()
+        app._set_confirm_io(FakeConfirmIO(answer="", interactive=True))
+        monkeypatch.setattr(sys, "argv", ["app", "deploy"])
+        monkeypatch.setattr(sys, "stdin", FakeStdin(answer="y\n", tty=True))
+        with pytest.raises(SystemExit) as exc:
+            app.run()
+        assert exc.value.code == 1
+        assert "aborted" in capsys.readouterr().err
