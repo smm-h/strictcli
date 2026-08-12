@@ -3461,12 +3461,11 @@ it is how a caller gets a machine-readable answer to "what would this do".
 
 **Outside machine mode, nothing changes, ever.** Every promise §3 makes about the would-do log,
 every suppression rule in §7.4, every stream in §3.5's table is exactly what it was before this
-round.
-There is no third mode and no per-command variation: a run is either in machine mode or it is not,
+round. There is no third mode and no per-command variation: a run is either in machine mode or it is not,
 and the flag is the only thing that decides.
 
 The framework governs what the framework emits. A handler that writes to the process's stdout
-directly bypasses this section exactly as it bypasses §7.4's suppression rules today -- that is the same
+directly bypasses this section exactly as it bypasses §7.4's suppression rules today -- the same
 accepted ceiling, not a new one, and §19.6 is the declared way to do it deliberately.
 
 ### 19.2 The envelope
@@ -3499,8 +3498,7 @@ nothing to normalize and nothing to promise.
 **The envelope is structurally exempt from `--quiet`.** It is not written through the writers
 `--quiet` suppresses, so quiet has no mechanism by which to reach it (§7.4's amendment box).
 `--json --quiet` emits the complete document. `--quiet` and `--verbose` govern the human stream
-only: a
-`ctx.debug` line hidden from a default-mode terminal still appears in `diagnostics` with
+only: a `ctx.debug` line hidden from a default-mode terminal still appears in `diagnostics` with
 `"level": "debug"`, because the envelope's content is a function of what the run produced, never of
 how a terminal was configured.
 
