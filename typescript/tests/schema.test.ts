@@ -519,7 +519,7 @@ const EXPECTED_JSON = `{
       "commands": {
         "path": {
           "name": "path",
-          "help": "Print the absolute path to the config file for this application",
+          "help": "Print the absolute path to this application's config file and nothing else, so the value can be piped straight into another command. The path is $XDG_CONFIG_HOME/<app>/config.<toml|json> (falling back to ~/.config), or the explicit override the application was built with. Printing it does not create the file, and reports the same path whether or not one exists yet.",
           "effect": "read_only",
           "forwarding": {
             "reason": "framework-internal: absorbs app-defined global flag values"
@@ -527,7 +527,7 @@ const EXPECTED_JSON = `{
         },
         "show": {
           "name": "show",
-          "help": "Show all config values with their sources (config file, env, or default)",
+          "help": "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table or --json for a machine-readable object carrying each entry's type, default and help text.",
           "effect": "read_only",
           "flags": [
             {
@@ -560,7 +560,7 @@ const EXPECTED_JSON = `{
         },
         "set": {
           "name": "set",
-          "help": "Set a persistent config value that overrides the default for a flag",
+          "help": "Write a persistent value into the config file so it overrides a flag's declared default on every later run. The value is coerced to the flag's own type and rejected if it does not fit: repeatable flags take a comma-separated list (backslash-escape a literal comma) and are checked for duplicates, dict flags take a JSON object. Use --default to drop a key back to its default, and --clear to empty a repeatable flag.",
           "effect": "mutating",
           "flags": [
             {
@@ -595,7 +595,7 @@ const EXPECTED_JSON = `{
         },
         "edit": {
           "name": "edit",
-          "help": "Open the config file for manual editing in $EDITOR (creates if missing)",
+          "help": "Open this application's config file in the editor named by $EDITOR, falling back to vi. The parent directory and an empty config file are created first if they do not exist, so the editor always opens something. Launching the editor counts as a mutation: under --dry-run the command records the editor invocation and opens nothing.",
           "effect": "mutating",
           "interactive": true,
           "forwarding": {
@@ -604,7 +604,7 @@ const EXPECTED_JSON = `{
         },
         "init": {
           "name": "init",
-          "help": "Generate a template config file with documented fields and defaults",
+          "help": "Create a starter config file listing every flag and config field the application declares, each commented with its help text, type and default value, so the file documents itself. The format follows whichever of TOML or JSON the application was built for. Refuses with an error if a config file already exists rather than overwriting it; the created path is printed on success.",
           "effect": "mutating",
           "forwarding": {
             "reason": "framework-internal: absorbs app-defined global flag values"
