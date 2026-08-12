@@ -17,6 +17,11 @@ import tomllib
 # targets. Every harness prints it as "error: <message>".
 HANDLER_ABORT_MESSAGE = "conformance: handler aborted"
 
+# The message an `aborts` check impl carries. The three harnesses raise/throw/
+# panic a type spelled CheckAborted with this exact message, so the framework's
+# containment line -- which names the type -- is byte-identical across targets.
+CHECK_ABORT_MESSAGE = "conformance: check aborted"
+
 
 def _check_severities(checks_toml: str) -> dict[str, str]:
     """Parse the embedded checks_toml and return a name->severity map.
@@ -35,7 +40,12 @@ def _emit_check_impl_body(check_def: dict, indent: str) -> list[str]:
     and provider-sourced specs (``error_check_spec`` / ``warn_check_spec``
     impls). Both receive ``(ctx, reporter)``; the body mints any problems then
     returns a terminal outcome via the reporter.
+
+    With ``aborts`` the body mints nothing and unwinds instead, which is how a
+    case reaches the runner's per-check containment.
     """
+    if check_def.get("aborts", False):
+        return [f"{indent}raise CheckAborted({CHECK_ABORT_MESSAGE!r})"]
     mint = check_def["mint"]
     message = check_def["message"]
     problems = check_def.get("problems", [])
@@ -811,6 +821,14 @@ def generate(app_def: dict) -> str:
     lines.append("sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))")
     lines.append("import strictcli")
     lines.append("")
+
+    # The aborting-check exception type. Spelled identically in all three
+    # harnesses so the framework's containment line names the same type on
+    # every target.
+    if any(c.get("aborts", False) for c in app_def.get("checks", [])):
+        lines.append("class CheckAborted(Exception):")
+        lines.append("    pass")
+        lines.append("")
 
     # Write checks.toml to a temp file and pass via checks_path=
     if has_toml:

@@ -306,11 +306,17 @@
     },
     "check": {
       "type": "object",
-      "required": ["name", "mint", "message"],
+      "required": ["name"],
       "additionalProperties": false,
-      "description": "A check-impl stub for code generation. The registration form (error vs warn) is NOT specified here -- generators derive it from the check's severity in the embedded checks_toml. This object only describes what the impl mints via its reporter.",
+      "description": "A check-impl stub for code generation. The registration form (error vs warn) is NOT specified here -- generators derive it from the check's severity in the embedded checks_toml. This object only describes what the impl mints via its reporter -- or, with 'aborts', that it mints nothing and unwinds instead.",
       "properties": {
         "name": { "type": "string" },
+        "aborts": {
+          "const": true,
+          "default": false,
+          "description": "The check impl ABORTS instead of returning an outcome: it raises (Python), throws (TypeScript) or panics (Go) a harness-defined type named CheckAborted carrying the identical message 'conformance: check aborted'. The three type names coincide by construction, so the framework's containment line (which names the type) is byte-identical across targets. Only true is declarable, and it excludes mint / message / problems / notes: an aborting impl mints nothing.",
+          "$comment": "The check analog of a command's handler_aborts."
+        },
         "mint": {
           "enum": ["passed", "skipped", "found"],
           "description": "Which terminal outcome the reporter mints. 'found' requires at least one problem; 'passed'/'skipped' forbid problems."
@@ -337,6 +343,21 @@
           "items": { "type": "string" },
           "description": "Verdict-inert informational notes the reporter records via note()/Note(). They surface only under --verbose and in JSON, on any outcome including a pass."
         }
+      },
+      "if": {
+        "properties": { "aborts": { "const": true } },
+        "required": ["aborts"]
+      },
+      "then": {
+        "properties": {
+          "mint": false,
+          "message": false,
+          "problems": false,
+          "notes": false
+        }
+      },
+      "else": {
+        "required": ["mint", "message"]
       }
     },
     "provider_check": {
@@ -485,7 +506,7 @@
           "type": "object",
           "required": ["kind"],
           "additionalProperties": false,
-          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => outcome(data)/ExitData(0,data); 'exit_data' => outcome(exit_code,data)/ExitData(code,data); 'none' => return None (Python)/Exit(0) (Go); 'bad' => an invalid return (a hard error on Python and TypeScript; Go's type system makes it unrepresentable, so a 'bad' case must exclude the go target).",
+          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => outcome(data)/ExitData(0,data); 'exit_data' => outcome(exit_code,data)/ExitData(code,data); 'none' => return None (Python)/Exit(0) (Go)/return undefined (TypeScript); 'bad' => an invalid return (a hard error on Python and TypeScript; Go's type system makes it unrepresentable, so a 'bad' case must exclude the go target).",
           "properties": {
             "kind": { "enum": ["exit", "data", "exit_data", "none", "bad"] },
             "code": { "type": "integer" },

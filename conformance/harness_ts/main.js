@@ -793,12 +793,29 @@ function buildGroup(groupDef, parent, globalFlags) {
 // Checks
 // ---------------------------------------------------------------------------
 
+// The message an `aborts` check impl carries. The sibling harnesses raise and
+// panic the identical text carried by a type spelled the same, so the
+// framework's containment line (which names the type) is byte-identical.
+const CHECK_ABORT_MESSAGE = "conformance: check aborted";
+
+/**
+ * The thrown value an `aborts` check impl carries. Its NAME is part of the
+ * contract: Python raises a CheckAborted exception and Go panics with a
+ * CheckAborted value, and the framework prints the constructor name.
+ */
+class CheckAborted extends Error {}
+
 /**
  * Replays the case's notes and problems onto the reporter and mints the
  * requested terminal outcome. A warn-form reporter replays every problem as
  * a warn (it structurally lacks error-minting), mirroring mintWarnOutcome.
+ * An `aborts` impl mints nothing and throws instead, which is how a case
+ * reaches the runner's per-check containment.
  */
 function mintOutcome(reporter, warnForm, cd) {
+	if (cd.aborts === true) {
+		throw new CheckAborted(CHECK_ABORT_MESSAGE);
+	}
 	for (const n of cd.notes ?? []) {
 		reporter.note(n);
 	}

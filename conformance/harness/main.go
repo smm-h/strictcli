@@ -175,6 +175,20 @@ func main() {
 			for _, c := range checks.([]interface{}) {
 				cd := c.(map[string]interface{})
 				cname := cd["name"].(string)
+				// An aborting impl mints nothing: it panics instead, which is
+				// how a case reaches the runner's per-check containment.
+				if aborts, ok := cd["aborts"].(bool); ok && aborts {
+					if severities[cname] == "warn" {
+						app.RegisterWarnCheck(cname, func(ctx strictcli.CheckContext, r *strictcli.WarnReporter) strictcli.CheckOutcome {
+							panic(CheckAborted{msg: checkAbortMessage})
+						})
+					} else {
+						app.RegisterErrorCheck(cname, func(ctx strictcli.CheckContext, r *strictcli.ErrorReporter) strictcli.CheckOutcome {
+							panic(CheckAborted{msg: checkAbortMessage})
+						})
+					}
+					continue
+				}
 				// Capture for closure.
 				m, msg, probs, notes := cd["mint"].(string), cd["message"].(string), parseProblems(cd), parseNotes(cd)
 				if severities[cname] == "warn" {
@@ -415,6 +429,21 @@ func checkSeverities(tomlStr string) map[string]string {
 	}
 	return result
 }
+
+// checkAbortMessage is what an `aborts` check impl panics with. The sibling
+// harnesses raise/throw the identical text carried by a type spelled the same,
+// so the framework's containment line is byte-identical across targets.
+const checkAbortMessage = "conformance: check aborted"
+
+// CheckAborted is the panic value an `aborts` check impl carries. Its NAME is
+// part of the contract: Python raises a CheckAborted exception and TypeScript
+// throws a CheckAborted error, and the framework prints the unqualified type
+// name, so all three containment lines read the same.
+type CheckAborted struct{ msg string }
+
+// Error makes CheckAborted an error, which is how the Go framework recovers its
+// message (the sibling harnesses' types carry theirs the same way).
+func (e CheckAborted) Error() string { return e.msg }
 
 // mintErrorOutcome replays the case's problems onto an ErrorReporter and mints
 // the requested terminal outcome.

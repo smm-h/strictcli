@@ -1,0 +1,166 @@
+[
+  {
+    "name": "check_abort: a raising check fails as itself and the next check still runs",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.broken]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.fine]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "broken",
+          "aborts": true
+        },
+        {
+          "name": "fine",
+          "mint": "passed",
+          "message": "all good"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--tag",
+      "release"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "FAIL  broken    check \"broken\" aborted with CheckAborted: conformance: check aborted\n        [error] check \"broken\" aborted with CheckAborted: conformance: check aborted\nPASS  fine      all good\n"
+    }
+  },
+  {
+    "name": "check_abort: the contained failure carries its attribution into json output",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.broken]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.fine]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "broken",
+          "aborts": true
+        },
+        {
+          "name": "fine",
+          "mint": "passed",
+          "message": "all good"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--tag",
+      "release",
+      "--json"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_contains": [
+        "\"name\":\"broken\"",
+        "\"status\":\"fail\"",
+        "\"message\":\"check \\\"broken\\\" aborted with CheckAborted: conformance: check aborted\"",
+        "\"severity\":\"error\"",
+        "\"name\":\"fine\"",
+        "\"status\":\"pass\""
+      ]
+    }
+  },
+  {
+    "name": "check_abort: a dependent of a raising check cascade-skips",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.broken]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.dependent]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = [\"broken\"]\n",
+      "checks": [
+        {
+          "name": "broken",
+          "aborts": true
+        },
+        {
+          "name": "dependent",
+          "mint": "passed",
+          "message": "never runs"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--tag",
+      "release"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "FAIL  broken       check \"broken\" aborted with CheckAborted: conformance: check aborted\n        [error] check \"broken\" aborted with CheckAborted: conformance: check aborted\nSKIP  dependent    skipped: dependency \"broken\" failed\n"
+    }
+  },
+  {
+    "name": "check_abort: a warn-severity check that raises still fails, and the run completes",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.broken]\ntags = [\"release\"]\nseverity = \"warn\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.fine]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "broken",
+          "aborts": true
+        },
+        {
+          "name": "fine",
+          "mint": "passed",
+          "message": "all good"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--tag",
+      "release",
+      "--ignore-warnings"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "FAIL  broken    check \"broken\" aborted with CheckAborted: conformance: check aborted\n        [error] check \"broken\" aborted with CheckAborted: conformance: check aborted\nPASS  fine      all good\n"
+    }
+  },
+  {
+    "name": "check_abort: verbose shows the contained failure with a duration and the count summary",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.broken]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n\n[checks.fine]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "broken",
+          "aborts": true
+        },
+        {
+          "name": "fine",
+          "mint": "passed",
+          "message": "all good"
+        }
+      ]
+    },
+    "argv": [
+      "--verbose",
+      "check",
+      "--tag",
+      "release"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_matches": [
+        "(?m)^FAIL  broken    check \"broken\" aborted with CheckAborted: conformance: check aborted \\(\\d+ms\\)$",
+        "(?m)^        \\[error\\] check \"broken\" aborted with CheckAborted: conformance: check aborted$",
+        "(?m)^1 passed / 1 failed / 0 warned / 0 skipped$"
+      ]
+    }
+  }
+]
