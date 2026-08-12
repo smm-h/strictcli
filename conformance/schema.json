@@ -76,8 +76,56 @@
           "type": "string",
           "description": "Text piped to the app's stdin. Absent means /dev/null, which is what keeps every other case independent of the operator's terminal; a pipe carrying this text is not a TTY either. Used by the --mcp cases, whose JSON-RPC lines arrive on stdin."
         },
+        "protocol_script": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/protocol_step" },
+          "description": "A line-scripted request/response exchange with the running app, for protocols whose next request depends on the previous reply -- the MCP loop and its confirmation round-trip above all. The runner sends each step's line, then reads and asserts one reply line, step by step; the child's full streams are still available to the ordinary expect block and to the N-way comparison. Mutually exclusive with 'stdin', which hands the whole input over up front and can only express an exchange that never reacts."
+        },
         "expect": {
           "$ref": "#/$defs/expect"
+        }
+      },
+      "not": { "required": ["stdin", "protocol_script"] }
+    },
+    "protocol_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "One step of a line-scripted exchange: send a line, and/or read and assert one reply line. A step with only 'send' does not wait; a step with only 'expect_line' reads without sending.",
+      "properties": {
+        "send": {
+          "type": "string",
+          "description": "The line written to the child's stdin. The terminating newline is added by the runner."
+        },
+        "stream": {
+          "enum": ["stdout", "stderr"],
+          "default": "stdout",
+          "description": "Which of the child's streams the reply line is read from."
+        },
+        "expect_line": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Assertions on the one reply line this step reads (its trailing newline stripped). A missing line within the step timeout is a failure, never a hang.",
+          "properties": {
+            "equals": { "type": "string" },
+            "contains": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            },
+            "matches": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            },
+            "json_equals": {
+              "description": "Parse the line as JSON and compare it structurally against this document -- key order and encoder whitespace are therefore not part of the assertion, which is exactly what makes one expectation serve three different serializers. '$ANY' is the per-field wildcard, for a value that is nondeterministic by construction."
+            }
+          }
         }
       }
     },

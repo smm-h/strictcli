@@ -13,12 +13,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -381,6 +383,146 @@ def _check_schema_commands(proj_dir: str | None, expect: dict) -> list[str]:
     return errors
 
 
+# --- the line-scripted protocol driver ---------------------------------------
+#
+# A `stdin` case hands the child its whole input up front, which is enough for a
+# protocol whose requests never depend on an earlier response. A scripted case
+# is the interactive form: send one line, read the reply, decide, send the next.
+# That is what a request/response protocol -- the MCP loop above all, and its
+# confirmation round-trip -- actually is, and it cannot be expressed by a static
+# blob.
+#
+# The child's streams are drained by reader threads so a step that waits for a
+# line can never deadlock against a full pipe buffer, and every read carries its
+# own timeout so a missing reply is a named failure rather than a hang.
+
+_SCRIPT_STEP_TIMEOUT = 10.0
+
+
+def _drain(stream, sink: list[str], lines: "queue.Queue[str | None]" = None):
+    """Read a child stream line by line into `sink` (and optionally a queue)."""
+    for line in stream:
+        sink.append(line)
+        if lines is not None:
+            lines.put(line)
+    if lines is not None:
+        lines.put(None)  # sentinel: the stream closed
+    stream.close()
+
+
+def _check_protocol_line(line: str | None, expect: dict, step_no: int) -> list[str]:
+    """Assert one response line against a step's expectation block."""
+    where = f"  protocol_script step {step_no}"
+    if line is None:
+        return [f"{where}: the stream closed before a line arrived"]
+    text = line.rstrip("\n")
+    errors: list[str] = []
+    if "equals" in expect and text != expect["equals"]:
+        errors.append(f"{where}: line {text!r}, expected {expect['equals']!r}")
+    if "contains" in expect:
+        errors.extend(_check_contains(text, expect["contains"], f"{where} line"))
+    if "matches" in expect:
+        errors.extend(_check_matches(text, expect["matches"], f"{where} line"))
+    if "json_equals" in expect:
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as e:
+            errors.append(f"{where}: line is not valid JSON ({e}): {text!r}")
+        else:
+            mismatches = _structural_equal(
+                parsed, expect["json_equals"], f"step {step_no}"
+            )
+            if mismatches:
+                errors.append(f"{where}: json_equals mismatch:")
+                errors.extend(mismatches)
+    return errors
+
+
+def _run_protocol_script(
+    argv: list[str], env: dict, run_cwd: str, script: list[dict]
+) -> tuple[subprocess.CompletedProcess, list[str]]:
+    """Drive a child through a scripted request/response line exchange.
+
+    Returns a CompletedProcess carrying the child's full streams (so the case's
+    ordinary expect block and the N-way comparison work unchanged) plus the
+    per-step assertion failures.
+    """
+    errors: list[str] = []
+    proc = subprocess.Popen(
+        argv,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        cwd=run_cwd,
+        bufsize=1,
+    )
+    out_lines: "queue.Queue[str | None]" = queue.Queue()
+    err_lines: "queue.Queue[str | None]" = queue.Queue()
+    out_sink: list[str] = []
+    err_sink: list[str] = []
+    threads = [
+        threading.Thread(
+            target=_drain, args=(proc.stdout, out_sink, out_lines), daemon=True
+        ),
+        threading.Thread(
+            target=_drain, args=(proc.stderr, err_sink, err_lines), daemon=True
+        ),
+    ]
+    for t in threads:
+        t.start()
+
+    try:
+        for i, step in enumerate(script, start=1):
+            if "send" in step:
+                try:
+                    proc.stdin.write(step["send"] + "\n")
+                    proc.stdin.flush()
+                except (BrokenPipeError, ValueError):
+                    errors.append(
+                        f"  protocol_script step {i}: the child closed its stdin "
+                        f"before the line could be sent"
+                    )
+                    break
+            expect_line = step.get("expect_line")
+            if expect_line is None:
+                continue
+            source = err_lines if step.get("stream") == "stderr" else out_lines
+            try:
+                line = source.get(timeout=_SCRIPT_STEP_TIMEOUT)
+            except queue.Empty:
+                errors.append(
+                    f"  protocol_script step {i}: no line within "
+                    f"{_SCRIPT_STEP_TIMEOUT:g}s"
+                )
+                break
+            errors.extend(_check_protocol_line(line, expect_line, i))
+    finally:
+        try:
+            proc.stdin.close()
+        except (BrokenPipeError, ValueError):
+            pass
+        try:
+            proc.wait(timeout=_SCRIPT_STEP_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            errors.append("  protocol_script: the child did not exit after the script")
+        for t in threads:
+            t.join(timeout=_SCRIPT_STEP_TIMEOUT)
+
+    return (
+        subprocess.CompletedProcess(
+            args=argv,
+            returncode=proc.returncode,
+            stdout="".join(out_sink),
+            stderr="".join(err_sink),
+        ),
+        errors,
+    )
+
+
 # --- N-way target registry ---------------------------------------------------
 #
 # Each registered target is a self-contained descriptor that knows how to
@@ -616,16 +758,23 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         # property holds; it is how the --mcp cases deliver their JSON-RPC
         # lines.
         case_stdin = case.get("stdin")
-        result = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            env=env,
-            cwd=run_cwd,
-            timeout=10,
-            input=case_stdin,
-            stdin=None if case_stdin is not None else subprocess.DEVNULL,
-        )
+        script = case.get("protocol_script")
+        if script is not None:
+            result, script_errors = _run_protocol_script(
+                argv, env, run_cwd, script
+            )
+            errors.extend(script_errors)
+        else:
+            result = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                env=env,
+                cwd=run_cwd,
+                timeout=10,
+                input=case_stdin,
+                stdin=None if case_stdin is not None else subprocess.DEVNULL,
+            )
         raw_result = result
 
         # Check exit code

@@ -12,6 +12,7 @@ Runnable under pytest (auto-discovered) or standalone (`python3 test_run_registr
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -338,6 +339,91 @@ def test_structural_equal_array_length_mismatch():
 def test_structural_equal_type_mismatch():
     assert run._structural_equal("x", {"a": 1})
     assert run._structural_equal({"a": 1}, [1])
+
+
+# --- the line-scripted protocol driver ---------------------------------------
+#
+# Driven against a tiny in-process echo child rather than a real target, so the
+# driver's own contract (lock-step send/read, structural line assertions, a
+# named failure instead of a hang) is pinned independently of any harness.
+
+_ECHO_CHILD = (
+    "import sys\n"
+    "for line in sys.stdin:\n"
+    "    sys.stdout.write(line)\n"
+    "    sys.stdout.flush()\n"
+)
+
+_SILENT_CHILD = "import sys\nsys.stdin.read()\n"
+
+
+def _script(child_src: str, steps: list[dict]):
+    return run._run_protocol_script(
+        [sys.executable, "-c", child_src], dict(os.environ), str(run.CONFORMANCE_DIR), steps
+    )
+
+
+def test_protocol_script_asserts_each_reply_line_in_order():
+    result, errors = _script(
+        _ECHO_CHILD,
+        [
+            {"send": '{"id":1}', "expect_line": {"json_equals": {"id": 1}}},
+            {"send": '{"id":2}', "expect_line": {"equals": '{"id":2}'}},
+            {"send": "plain", "expect_line": {"contains": "plai"}},
+        ],
+    )
+    assert errors == [], errors
+    assert result.returncode == 0
+    assert result.stdout == '{"id":1}\n{"id":2}\nplain\n'
+
+
+def test_protocol_script_json_equals_ignores_key_order_and_spacing():
+    # The whole point: one expectation serves three different serializers.
+    result, errors = _script(
+        _ECHO_CHILD,
+        [{"send": '{"b": 2, "a": 1}', "expect_line": {"json_equals": {"a": 1, "b": 2}}}],
+    )
+    assert errors == [], errors
+
+
+def test_protocol_script_json_equals_supports_the_wildcard():
+    _, errors = _script(
+        _ECHO_CHILD,
+        [{"send": '{"sig":"whatever"}', "expect_line": {"json_equals": {"sig": run.ANY_VALUE}}}],
+    )
+    assert errors == []
+
+
+def test_protocol_script_reports_a_mismatched_line():
+    _, errors = _script(
+        _ECHO_CHILD,
+        [{"send": '{"id":1}', "expect_line": {"json_equals": {"id": 2}}}],
+    )
+    assert len(errors) == 2
+    assert "json_equals mismatch" in errors[0]
+
+
+def test_protocol_script_reports_a_missing_line_instead_of_hanging():
+    original = run._SCRIPT_STEP_TIMEOUT
+    run._SCRIPT_STEP_TIMEOUT = 1.0
+    try:
+        _, errors = _script(
+            _SILENT_CHILD,
+            [{"send": "anything", "expect_line": {"contains": "never"}}],
+        )
+    finally:
+        run._SCRIPT_STEP_TIMEOUT = original
+    assert len(errors) == 1
+    assert "no line within" in errors[0]
+
+
+def test_protocol_script_reports_a_non_json_line_under_json_equals():
+    _, errors = _script(
+        _ECHO_CHILD,
+        [{"send": "not json", "expect_line": {"json_equals": {"a": 1}}}],
+    )
+    assert len(errors) == 1
+    assert "not valid JSON" in errors[0]
 
 
 if __name__ == "__main__":
