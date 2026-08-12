@@ -1,6 +1,14 @@
 [
   {
     "name": "effects_call_errors: an option the method does not accept is a call-time error",
+    "acknowledged_divergence": {
+      "reason": "The Python framework raises TypeError for an unaccepted effect option, and the Python harness deliberately tags every non-framework-vocabulary exception with its type name ('error: TypeError: ...') so a genuine harness bug stays identifiable -- the harness cannot tell a framework-raised TypeError apart from one of its own. The tag is a harness marker, not framework output; the message after it is byte-identical to what Go and TypeScript print bare, and all three assert it via stderr_contains.",
+      "streams": {
+        "stderr": [
+          "python"
+        ]
+      }
+    },
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -31,6 +39,14 @@
   },
   {
     "name": "effects_call_errors: stream is refused by write as well",
+    "acknowledged_divergence": {
+      "reason": "The Python framework raises TypeError for an unaccepted effect option, and the Python harness deliberately tags every non-framework-vocabulary exception with its type name ('error: TypeError: ...') so a genuine harness bug stays identifiable -- the harness cannot tell a framework-raised TypeError apart from one of its own. The tag is a harness marker, not framework output; the message after it is byte-identical to what Go and TypeScript print bare, and all three assert it via stderr_contains.",
+      "streams": {
+        "stderr": [
+          "python"
+        ]
+      }
+    },
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -62,6 +78,14 @@
   },
   {
     "name": "effects_call_errors: stream is refused by http as well",
+    "acknowledged_divergence": {
+      "reason": "The Python framework raises TypeError for an unaccepted effect option, and the Python harness deliberately tags every non-framework-vocabulary exception with its type name ('error: TypeError: ...') so a genuine harness bug stays identifiable -- the harness cannot tell a framework-raised TypeError apart from one of its own. The tag is a harness marker, not framework output; the message after it is byte-identical to what Go and TypeScript print bare, and all three assert it via stderr_contains.",
+      "streams": {
+        "stderr": [
+          "python"
+        ]
+      }
+    },
     "app": {
       "name": "myapp",
       "version": "1.0.0",
