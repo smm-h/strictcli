@@ -18,6 +18,7 @@ import {
 	type CheckDef,
 	CheckOutcome,
 	CheckRunResult,
+	mintCheckAbort,
 	mintSkip,
 } from "./framework.js";
 import { matchTagExpr } from "./tagdsl.js";
@@ -295,7 +296,20 @@ export async function runOrderedChecks(
 
 		// Capture wall-clock duration around the impl call only.
 		const start = performance.now();
-		const outcome = await (def.impl as NonNullable<CheckDef["impl"]>)(ctx);
+		let outcome: CheckOutcome;
+		try {
+			outcome = await (def.impl as NonNullable<CheckDef["impl"]>)(ctx);
+		} catch (err) {
+			// A throwing impl is contained here and reported as that check's own
+			// failure: one broken check must not abort the whole run, and every
+			// other selected check still executes.
+			const durationMs = Math.trunc(performance.now() - start);
+			const aborted = mintCheckAbort(name, err);
+			results.push(new CheckRunResult(name, aborted, durationMs));
+			failedChecks.add(name);
+			exitCode = 1;
+			continue;
+		}
 		const durationMs = Math.trunc(performance.now() - start);
 		// Belt-and-braces: an impl must return a reporter-minted outcome.
 		if (!(outcome instanceof CheckOutcome)) {

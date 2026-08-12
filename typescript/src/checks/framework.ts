@@ -108,6 +108,61 @@ export function mintSkip(message: string): CheckOutcome {
 }
 
 /**
+ * Builds the attribution line for a check whose impl aborted: it names the
+ * check, the thrown value's type (so a framework bug stays identifiable) and
+ * the value's own message. An empty message drops the colon rather than
+ * emitting a dangling one.
+ */
+export function checkAbortText(
+	name: string,
+	typeName: string,
+	message: string,
+): string {
+	if (message === "") {
+		return `check "${name}" aborted with ${typeName}`;
+	}
+	return `check "${name}" aborted with ${typeName}: ${message}`;
+}
+
+/**
+ * Renders a thrown value's type name. An Error (or any object) reports its
+ * constructor name, matching Python's `type(exc).__name__` and Go's
+ * package-stripped `%T`; a thrown primitive reports its `typeof`.
+ */
+function thrownTypeName(err: unknown): string {
+	if (typeof err === "object" && err !== null) {
+		const ctor = (err as { constructor?: { name?: string } }).constructor;
+		if (typeof ctor?.name === "string" && ctor.name !== "") {
+			return ctor.name;
+		}
+		return "Object";
+	}
+	return typeof err;
+}
+
+/** Renders a thrown value's own message: an Error's message, else String(). */
+function thrownMessage(err: unknown): string {
+	if (err instanceof Error) {
+		return err.message;
+	}
+	return String(err);
+}
+
+/**
+ * Runner-internal mint for a check whose impl threw. The abort is reported as
+ * THAT check's own failure: a found outcome carrying a single error-severity
+ * problem, so it derives FAIL, fails the run, and cascade-skips its dependents
+ * exactly like any other failing check. Every rendering surface (the result
+ * row, the problem line, both JSON fields) carries the full attribution.
+ */
+export function mintCheckAbort(name: string, err: unknown): CheckOutcome {
+	const text = checkAbortText(name, thrownTypeName(err), thrownMessage(err));
+	return new CheckOutcome(MINT_TOKEN, "found", text, [
+		{ severity: "error", text },
+	], []);
+}
+
+/**
  * Problems grouped by severity: all error-severity problems first, then all
  * warn-severity problems. Insertion order is preserved within each group.
  */

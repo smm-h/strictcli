@@ -250,6 +250,98 @@ test("non-minted outcome is a hard error (belt-and-braces)", async () => {
 	});
 });
 
+class CheckAborted extends Error {}
+
+test("a throwing impl is contained as its own failure and the next check still runs", async () => {
+	const toml = `app = "t"\n[checks.broken]\n${checkBody("error")}\n[checks.fine]\n${checkBody("error")}`;
+	const app = createApp({
+		name: "t",
+		version: "1",
+		help: "h",
+		checksEmbed: toml,
+	});
+	app.errorCheck("broken", () => {
+		throw new CheckAborted("boom");
+	});
+	app.errorCheck("fine", (_c, r) => r.passed("all good"));
+	app.setCheckContext(() => CTX);
+	const result = await app.test(["check", "--tag", "release"]);
+	assert.equal(result.exitCode, 1);
+	assert.equal(
+		result.stdout,
+		'FAIL  broken    check "broken" aborted with CheckAborted: boom\n' +
+			'        [error] check "broken" aborted with CheckAborted: boom\n' +
+			"PASS  fine      all good\n",
+	);
+});
+
+test("a contained abort cascade-skips its dependents", async () => {
+	const toml = `app = "t"\n[checks.broken]\n${checkBody("error")}\n[checks.dependent]\n${checkBody("error", { depends_on: '["broken"]' })}`;
+	const app = createApp({
+		name: "t",
+		version: "1",
+		help: "h",
+		checksEmbed: toml,
+	});
+	app.errorCheck("broken", () => {
+		throw new CheckAborted("boom");
+	});
+	app.errorCheck("dependent", (_c, r) => r.passed("never runs"));
+	app.setCheckContext(() => CTX);
+	const { results, exitCode } = await app.runChecks(CTX, { runAll: true });
+	assert.equal(exitCode, 1);
+	assert.equal(results[0]?.status, "fail");
+	assert.equal(results[1]?.status, "skip");
+});
+
+test("a warn-severity check that throws still fails under --ignore-warnings", async () => {
+	const toml = `app = "t"\n[checks.broken]\n${checkBody("warn")}`;
+	const app = createApp({
+		name: "t",
+		version: "1",
+		help: "h",
+		checksEmbed: toml,
+	});
+	app.warnCheck("broken", () => {
+		throw new CheckAborted("boom");
+	});
+	app.setCheckContext(() => CTX);
+	const { results, exitCode } = await app.runChecks(CTX, {
+		runAll: true,
+		ignoreWarnings: true,
+	});
+	assert.equal(exitCode, 1);
+	assert.equal(results[0]?.status, "fail");
+});
+
+test("abort attribution: type names, an empty message, and a thrown primitive", async () => {
+	const toml = `app = "t"\n[checks.a]\n${checkBody("error")}`;
+	const thrown: [unknown, string][] = [
+		[new CheckAborted("boom"), 'check "a" aborted with CheckAborted: boom'],
+		[new TypeError("bad"), 'check "a" aborted with TypeError: bad'],
+		[new CheckAborted(""), 'check "a" aborted with CheckAborted'],
+		["boom", 'check "a" aborted with string: boom'],
+	];
+	for (const [value, want] of thrown) {
+		const app = createApp({
+			name: "t",
+			version: "1",
+			help: "h",
+			checksEmbed: toml,
+		});
+		app.errorCheck("a", () => {
+			throw value;
+		});
+		app.setCheckContext(() => CTX);
+		const { results } = await app.runChecks(CTX, { runAll: true });
+		assert.equal(results[0]?.outcome.message, want);
+		assert.deepEqual(
+			results[0]?.outcome.problems.map((p) => [p.severity, p.text]),
+			[["error", want]],
+		);
+	}
+});
+
 test("durationMs: integer wall-clock around the impl only; cascade-skips carry 0", async () => {
 	const toml = `app = "t"\n[checks.slow]\n${checkBody("error")}\n[checks.dep]\n${checkBody("error", { depends_on: '["slow"]' })}`;
 	const app = createApp({
