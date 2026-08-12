@@ -78,6 +78,7 @@ META_TEST_FILES = [
     "test_error_parity_extraction.py",
     "test_run_registry.py",
     "test_api_surface_registry.py",
+    "test_lock_pin.py",
 ]
 
 
