@@ -2,10 +2,6 @@
   {
     "name": "effects_classification: a command with no effect is a registration error",
     "skip_schema_validation": true,
-    "targets": [
-      "python",
-      "go"
-    ],
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -29,10 +25,6 @@
   {
     "name": "effects_classification: a grouped command with no effect is a registration error",
     "skip_schema_validation": true,
-    "targets": [
-      "python",
-      "go"
-    ],
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -71,10 +63,6 @@
   {
     "name": "effects_classification: a passthrough command with no effect is a registration error",
     "skip_schema_validation": true,
-    "targets": [
-      "python",
-      "go"
-    ],
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -100,10 +88,6 @@
   {
     "name": "effects_classification: an unknown effect value is a registration error",
     "skip_schema_validation": true,
-    "targets": [
-      "python",
-      "go"
-    ],
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -128,10 +112,6 @@
   {
     "name": "effects_classification: an empty effect value is a registration error",
     "skip_schema_validation": true,
-    "targets": [
-      "python",
-      "go"
-    ],
     "app": {
       "name": "myapp",
       "version": "1.0.0",

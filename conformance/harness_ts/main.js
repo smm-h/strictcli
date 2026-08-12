@@ -581,13 +581,18 @@ function registerCommand(cmdDef, target, globalFlags) {
 			spec.consequential = true;
 		}
 		spliceDryRun(spec, cmdDef);
-		// Classification is spliced into the factory name (§1.2): the twins are
-		// the sole mint, so an unclassified passthrough is inexpressible in TS
-		// and such a case restricts itself to the other two targets.
+		// Classification is spliced into the factory name (§1.2). The twins are
+		// the sole mint, so a missing or invalid classification is unreachable
+		// through them -- spliceEffect puts the case's declared (or absent)
+		// value back onto the minted carrier, exactly as the deprecated branch
+		// above does, so app.command()'s own guard is what rejects it.
 		target.command(
-			classificationOf(cmdDef, name) === "mutating"
-				? mutatingPassthrough(name, spec)
-				: readOnlyPassthrough(name, spec),
+			spliceEffect(
+				factoryClassification(cmdDef) === "mutating"
+					? mutatingPassthrough(name, spec)
+					: readOnlyPassthrough(name, spec),
+				cmdDef,
+			),
 		);
 		return;
 	}
@@ -644,9 +649,12 @@ function registerCommand(cmdDef, target, globalFlags) {
 		spec.forwarding = cmdDef.forwarding;
 	}
 	target.command(
-		classificationOf(cmdDef, name) === "mutating"
-			? defineMutatingCommand(name, spec)
-			: defineReadOnlyCommand(name, spec),
+		spliceEffect(
+			factoryClassification(cmdDef) === "mutating"
+				? defineMutatingCommand(name, spec)
+				: defineReadOnlyCommand(name, spec),
+			cmdDef,
+		),
 	);
 }
 
@@ -666,31 +674,34 @@ function spliceDryRun(spec, cmdDef) {
 }
 
 /**
- * The command's classification (§1.1). TS bakes it into the factory name, so
- * there is no unclassified state to represent: a case that omits `effect` is
- * asserting a registration hard error the twin factories make inexpressible,
- * and restricts itself to the Python and Go targets. Failing loudly here keeps
- * a case that merely FORGOT the field from silently running as read-only.
+ * Which twin factory mints the carrier. TS bakes the classification into the
+ * factory name, so a case declaring a missing or invalid `effect` has no twin
+ * to call: `mutating` is used as the carrier-building placeholder (it carries
+ * the fewest classification-specific factory guards, so the effect guard in
+ * app.command() is what such a case reaches), and spliceEffect then replaces
+ * the placeholder with what the case actually declared.
  */
-function classificationOf(cmdDef, name) {
+function factoryClassification(cmdDef) {
+	return cmdDef.effect === "read_only" ? "read_only" : "mutating";
+}
+
+/**
+ * Puts the case's declared classification back onto a twin-minted carrier.
+ * Absent `effect` => the key is removed; an invalid string => spliced verbatim.
+ * Same technique as the deprecated branch's `effect` splice: the factories are
+ * the sole mint and cannot express these states, but app.command() re-validates
+ * classification precisely so hand-forged carriers cannot bypass it, and that
+ * guard is what these cases assert.
+ */
+function spliceEffect(def, cmdDef) {
 	if (!("effect" in cmdDef)) {
-		throw new Error(
-			`conformance harness: command "${name}" declares no effect; ` +
-				"the TS twin factories cannot express an unclassified command",
-		);
+		const { effect: _dropped, ...rest } = def;
+		return rest;
 	}
-	// An INVALID effect string is inexpressible for the same reason a missing
-	// one is: the factory name IS the classification, so there is no string for
-	// the framework to reject. Fail loudly rather than silently defaulting a
-	// bad value to read-only.
 	if (cmdDef.effect !== "read_only" && cmdDef.effect !== "mutating") {
-		throw new Error(
-			`conformance harness: command "${name}" declares effect ` +
-				`"${cmdDef.effect}"; the TS twin factories cannot express an ` +
-				"invalid classification",
-		);
+		return { ...def, effect: cmdDef.effect };
 	}
-	return cmdDef.effect;
+	return def;
 }
 
 function buildGroup(groupDef, parent, globalFlags) {
