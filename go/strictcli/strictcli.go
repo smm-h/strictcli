@@ -3227,9 +3227,11 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		panic(errCommandReadOnlyConsequential(name))
 	}
 	// The dry-run declaration mirrors the guard above: illegal on read_only,
-	// and the reason it exists to carry is mandatory. Go has no third guard
-	// (a reason without the declaration) because WithDryRunUnsupported is the
-	// only way to set either field, and it always sets both.
+	// the reason it exists to carry is mandatory, and a reason without the
+	// declaration is rejected. WithDryRunUnsupported always sets both fields,
+	// but Command's fields are exported and CmdOption is a plain
+	// func(*Command), so the orphan state is reachable -- and silently
+	// ignoring it would tell an author --dry-run is refused when it is not.
 	if !cmd.DryRunSupported {
 		if cmd.Effect == EffectReadOnly {
 			panic(errCommandReadOnlyDryRunUnsupported(name))
@@ -3237,6 +3239,8 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		if strings.TrimSpace(cmd.DryRunUnsupportedReason) == "" {
 			panic(errCommandDryRunReasonMissing(name))
 		}
+	} else if cmd.DryRunUnsupportedReason != "" {
+		panic(errCommandDryRunReasonWithoutDeclaration(name))
 	}
 	cmd.Grants = validateGrants(name, cmd.Grants)
 	if cmd.Forwarding != nil && strings.TrimSpace(cmd.Forwarding.Reason) == "" {

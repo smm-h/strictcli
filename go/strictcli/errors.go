@@ -1176,6 +1176,15 @@ func errCommandDryRunReasonMissing(name string) string {
 	return fmt.Sprintf("command %q: dry_run_supported=false requires a non-empty dry_run_unsupported_reason (say what a preview cannot honestly show)", name)
 }
 
+// errCommandDryRunReasonWithoutDeclaration is the orphan-reason guard.
+// WithDryRunUnsupported always sets both fields, but Command's fields are
+// exported and CmdOption is a plain func(*Command), so a caller can reach the
+// reason-without-declaration state directly. Silently ignoring it would leave
+// an author believing --dry-run is refused when it is honored.
+func errCommandDryRunReasonWithoutDeclaration(name string) string {
+	return fmt.Sprintf("command %q: dry_run_unsupported_reason requires dry_run_supported=false (there is nothing to explain while dry run is supported)", name)
+}
+
 // errHandlerVarKeywordUndeclared exists for catalog parity only. Guard v2's
 // ENFORCEMENT is Python-only: a Go handler takes map[string]interface{}, which
 // carries no var-keyword parameter to introspect. The declaration

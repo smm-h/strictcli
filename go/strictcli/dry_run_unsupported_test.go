@@ -95,6 +95,38 @@ func TestDryRunUnsupportedRequiresANonEmptyReason(t *testing.T) {
 	}
 }
 
+// The orphan state: a reason with no declaration. WithDryRunUnsupported always
+// sets both fields, but Command's fields are exported and CmdOption is a plain
+// func(*Command), so a caller can reach it -- and used to reach it silently,
+// with --dry-run honored while the author believed it refused.
+func TestDryRunReasonWithoutTheDeclarationIsRejected(t *testing.T) {
+	for _, name := range []string{"run", "shell"} {
+		func() {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatalf("expected a panic for %q", name)
+				}
+				want := `command "` + name + `": dry_run_unsupported_reason requires dry_run_supported=false (there is nothing to explain while dry run is supported)`
+				if got, _ := r.(string); got != want {
+					t.Fatalf("panic = %q, want %q", got, want)
+				}
+			}()
+			orphan := func(c *Command) { c.DryRunUnsupportedReason = dryRunReason }
+			app := NewApp("app", "1.0.0", "app")
+			if name == "shell" {
+				app.Passthrough(name, "raw",
+					func(ctx *Context, n string, args []string, globals map[string]interface{}) int { return 0 },
+					WithEffect(EffectMutating), orphan)
+				return
+			}
+			app.Command(name, "run",
+				func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
+				WithEffect(EffectMutating), orphan)
+		}()
+	}
+}
+
 func TestDryRunIsSupportedByDefault(t *testing.T) {
 	app := newDryRunApp()
 	if !app.commands["plan"].DryRunSupported {
