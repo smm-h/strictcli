@@ -3040,6 +3040,121 @@ func TestRunChecks_NonMintedOutcome_Panics(t *testing.T) {
 	runChecks(defs, []string{"check-a"}, &testCheckContext{root: emptyProjectRoot}, false, false)
 }
 
+// checkAborted is a panic value with an Error() method, standing in for a
+// broken check impl in the containment tests below.
+type checkAborted struct{ msg string }
+
+func (e checkAborted) Error() string { return e.msg }
+
+func TestRunChecks_PanickingImpl_FailsOnlyItself(t *testing.T) {
+	defs := map[string]*checkDef{
+		"check-a": {
+			name: "check-a", tags: []string{"fast"}, severity: "error", fast: true, pure: true,
+			dependsOn: []string{},
+			impl: func(ctx CheckContext) CheckOutcome {
+				panic(checkAborted{msg: "boom"})
+			},
+		},
+		"check-b": {
+			name: "check-b", tags: []string{"fast"}, severity: "error", fast: true, pure: true,
+			dependsOn: []string{},
+			impl:      func(ctx CheckContext) CheckOutcome { return passOutcome("b ok") },
+		},
+	}
+	results, _, exitCode := runChecks(defs, []string{"check-a", "check-b"},
+		&testCheckContext{root: emptyProjectRoot}, false, false)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].Status() != "fail" {
+		t.Fatalf("expected the panicking check to fail, got %q", results[0].Status())
+	}
+	want := `check "check-a" aborted with checkAborted: boom`
+	if results[0].Outcome.message != want {
+		t.Fatalf("expected message %q, got %q", want, results[0].Outcome.message)
+	}
+	if len(results[0].Outcome.problems) != 1 ||
+		results[0].Outcome.problems[0].severity != "error" ||
+		results[0].Outcome.problems[0].text != want {
+		t.Fatalf("expected one error problem carrying the attribution, got %+v",
+			results[0].Outcome.problems)
+	}
+	if results[1].Status() != "pass" {
+		t.Fatalf("expected the second check to still run, got %q", results[1].Status())
+	}
+}
+
+func TestRunChecks_PanickingImpl_CascadeSkipsDependents(t *testing.T) {
+	defs := map[string]*checkDef{
+		"check-a": {
+			name: "check-a", tags: []string{"fast"}, severity: "error", fast: true, pure: true,
+			dependsOn: []string{},
+			impl:      func(ctx CheckContext) CheckOutcome { panic(checkAborted{msg: "boom"}) },
+		},
+		"check-b": {
+			name: "check-b", tags: []string{"fast"}, severity: "error", fast: true, pure: true,
+			dependsOn: []string{"check-a"},
+			impl:      func(ctx CheckContext) CheckOutcome { return passOutcome("b ok") },
+		},
+	}
+	results, _, exitCode := runChecks(defs, []string{"check-a", "check-b"},
+		&testCheckContext{root: emptyProjectRoot}, false, false)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if results[1].Status() != "skip" {
+		t.Fatalf("expected the dependent to cascade-skip, got %q", results[1].Status())
+	}
+}
+
+func TestRunChecks_PanickingWarnCheck_StillFails(t *testing.T) {
+	// --ignore-warnings forgives warn RESULTS, never a broken check.
+	defs := map[string]*checkDef{
+		"check-a": {
+			name: "check-a", tags: []string{"fast"}, severity: "warn", fast: true, pure: true,
+			dependsOn: []string{},
+			impl:      func(ctx CheckContext) CheckOutcome { panic(checkAborted{msg: "boom"}) },
+		},
+	}
+	results, _, exitCode := runChecks(defs, []string{"check-a"},
+		&testCheckContext{root: emptyProjectRoot}, true, false)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if results[0].Status() != "fail" {
+		t.Fatalf("expected fail, got %q", results[0].Status())
+	}
+}
+
+func TestCheckAbortAttribution_TypeAndMessageRendering(t *testing.T) {
+	cases := []struct {
+		name  string
+		value interface{}
+		want  string
+	}{
+		{"error value", checkAborted{msg: "boom"}, `check "c" aborted with checkAborted: boom`},
+		{"pointer to error", &checkAborted{msg: "boom"}, `check "c" aborted with checkAborted: boom`},
+		{"panicked string", "boom", `check "c" aborted with string: boom`},
+		{"empty message", checkAborted{msg: ""}, `check "c" aborted with checkAborted`},
+		{"non-error value", 42, `check "c" aborted with int: 42`},
+	}
+	for _, tc := range cases {
+		got := mintCheckAbort("c", tc.value)
+		if got.message != tc.want {
+			t.Fatalf("%s: expected %q, got %q", tc.name, tc.want, got.message)
+		}
+		if !got.minted {
+			t.Fatalf("%s: the contained outcome must be minted", tc.name)
+		}
+	}
+}
+
 func TestCheckRunResult_GatedWarnedConsistency(t *testing.T) {
 	cases := []struct {
 		outcome CheckOutcome

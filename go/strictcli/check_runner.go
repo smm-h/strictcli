@@ -200,6 +200,70 @@ func checkIsPure(def *checkDef) bool {
 	return def.pure && !def.needsNetwork
 }
 
+// checkAbortText builds the attribution line for a check whose impl aborted.
+// It names the check, the panic value's type (so a framework bug stays
+// identifiable) and the value's own message. An empty message drops the colon
+// rather than emitting a dangling one.
+func checkAbortText(name, typeName, message string) string {
+	if message == "" {
+		return fmt.Sprintf("check %q aborted with %s", name, typeName)
+	}
+	return fmt.Sprintf("check %q aborted with %s: %s", name, typeName, message)
+}
+
+// panicTypeName renders a recovered value's type WITHOUT its package
+// qualifier or pointer star, so the three implementations name the same type
+// the same way (Python's type(exc).__name__ and TypeScript's constructor name
+// carry no package either).
+func panicTypeName(r interface{}) string {
+	name := strings.TrimPrefix(fmt.Sprintf("%T", r), "*")
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		name = name[i+1:]
+	}
+	return name
+}
+
+// panicMessage renders a recovered value's own message: an error's Error(), a
+// panicked string as-is, anything else through %v.
+func panicMessage(r interface{}) string {
+	switch v := r.(type) {
+	case error:
+		return v.Error()
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", r)
+	}
+}
+
+// mintCheckAbort mints the outcome reported for a check whose impl panicked:
+// a found outcome carrying a single error-severity problem, so it derives
+// FAIL, fails the run, and cascade-skips its dependents exactly like any other
+// failing check. Every rendering surface (the result row, the problem line,
+// both JSON fields) carries the full attribution.
+func mintCheckAbort(name string, r interface{}) CheckOutcome {
+	text := checkAbortText(name, panicTypeName(r), panicMessage(r))
+	return CheckOutcome{
+		minted:   true,
+		kind:     "found",
+		message:  text,
+		problems: []checkProblem{{text: text, severity: "error"}},
+	}
+}
+
+// runCheckImpl invokes one check impl, containing a panic as that check's own
+// failure. One broken check must not abort the whole run: every other selected
+// check still executes, and the run still fails because this check failed.
+func runCheckImpl(name string, impl func(CheckContext) CheckOutcome, ctx CheckContext) (o CheckOutcome, aborted bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			o = mintCheckAbort(name, r)
+			aborted = true
+		}
+	}()
+	return impl(ctx), false
+}
+
 // runChecks executes checks in order, skipping dependents of failed checks.
 // Returns results, the ordered names of checks that were NOT executed because of
 // the purity partition (empty unless pureOnly is set), and an exit code (0 = all
@@ -271,10 +335,12 @@ func runChecks(checkDefs map[string]*checkDef, order []string, ctx CheckContext,
 
 		// Run the check, capturing wall-clock duration around the impl call only.
 		start := time.Now()
-		o := def.impl(ctx)
+		o, aborted := runCheckImpl(name, def.impl, ctx)
 		durationMs := time.Since(start).Milliseconds()
-		// Belt-and-braces: an impl must return a reporter-minted outcome.
-		if !o.minted {
+		// Belt-and-braces: an impl must return a reporter-minted outcome. A
+		// contained abort mints its own, so the assertion only reaches values
+		// the impl really returned.
+		if !aborted && !o.minted {
 			panic(errCheckOutcomeNotMinted(name))
 		}
 		r := CheckRunResult{Name: name, Outcome: o, DurationMs: durationMs}
