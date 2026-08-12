@@ -3092,6 +3092,16 @@
         },
         {
           "level": 3,
+          "text": "`_check_abort_text`",
+          "anchor": "_check_abort_text"
+        },
+        {
+          "level": 3,
+          "text": "`_mint_check_abort`",
+          "anchor": "_mint_check_abort"
+        },
+        {
+          "level": 3,
           "text": "`_derive_status`",
           "anchor": "_derive_status"
         },
@@ -4278,6 +4288,16 @@
           "level": 3,
           "text": "`mintSkip`",
           "anchor": "mintskip"
+        },
+        {
+          "level": 3,
+          "text": "`checkAbortText`",
+          "anchor": "checkaborttext"
+        },
+        {
+          "level": 3,
+          "text": "`mintCheckAbort`",
+          "anchor": "mintcheckabort"
         },
         {
           "level": 3,
@@ -7726,5 +7746,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-12T20:31:48.700304+00:00"
+  "last_gen": "2026-08-12T22:52:12.980001+00:00"
 }

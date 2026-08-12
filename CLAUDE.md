@@ -87,7 +87,7 @@ Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface
 
 **typescript/src/checks/**
 
-- **typescript/src/checks/cmd** (`typescript/src/checks/cmd.ts`): The auto-registered `check` command plus the human-readable and JSON result formatters, dispatching the list, help, no-match, dry-run, and run modes.
+- **typescript/src/checks/cmd** (`typescript/src/checks/cmd.ts`): The auto-registered `check` command plus the human-readable and JSON result formatters, dispatching the list, help, no-match and run modes -- where a run under --dry-run is the same run restricted to the purity partition, followed by the would-run plan for what it did not execute.
 - **typescript/src/checks/coverage** (`typescript/src/checks/coverage.ts`): CLI test-coverage instrumentation: per-process shard files recording which commands app.test() exercised, plus the built-in cli-test-coverage provider.
 - **typescript/src/checks/effects_bypass** (`typescript/src/checks/effects_bypass.ts`): The built-in `effects-bypass` check provider.
 - **typescript/src/checks/framework** (`typescript/src/checks/framework.ts`): Check framework core: sealed outcomes, reporters, definitions, checks.toml parsing, and the registration/double-entry machinery.
