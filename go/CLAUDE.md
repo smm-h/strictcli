@@ -18,7 +18,7 @@ Releases go through [rlsbl](https://github.com/smm-h/rlsbl) monorepo releases.
   (they land in `.rlsbl-monorepo/releasables/go-strictcli/changes/unreleased.jsonl`).
 - To release: from the repo root, run `rlsbl monorepo release init`, edit the
   scaffolded release file (bump type, description, and context live in the file),
-  then run `rlsbl monorepo release run --no-allow-dirty --watch --yes`.
+  then run `rlsbl monorepo release run --no-allow-dirty --watch --approve-consequential`.
 - Go library — no publish step. Tagged releases are available via `go get`.
 - Never push tags or publish manually.
 
