@@ -319,6 +319,11 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     # app, not a field any implementation's App carries.
     "pre_call",
     "dump_tools",
+    # Installs the framework's test-only confirm seam (SetConfirmIO /
+    # _set_confirm_io / setConfirmIO) so the confirm protocol treats the case's
+    # piped stdin as interactive. It describes what the harness does to an app,
+    # not a field any implementation's App carries.
+    "confirm_stdin_interactive",
 }
 
 # Shared name mappings (applied to any entity that uses them).
