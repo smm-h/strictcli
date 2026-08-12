@@ -240,6 +240,21 @@
           "anchor": "json-test-cases"
         },
         {
+          "level": 4,
+          "text": "Line-scripted protocol cases",
+          "anchor": "line-scripted-protocol-cases"
+        },
+        {
+          "level": 4,
+          "text": "Aborting handlers",
+          "anchor": "aborting-handlers"
+        },
+        {
+          "level": 4,
+          "text": "The `$ANY` wildcard",
+          "anchor": "the-any-wildcard"
+        },
+        {
           "level": 3,
           "text": "Per-target execution",
           "anchor": "per-target-execution"
@@ -7711,5 +7726,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-12T15:33:50.605713+00:00"
+  "last_gen": "2026-08-12T20:31:48.700304+00:00"
 }
