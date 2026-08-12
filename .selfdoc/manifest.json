@@ -1944,6 +1944,53 @@
       ]
     },
     {
+      "path": "process-trace-store.md",
+      "title": "Process Trace Store",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Process Trace Store",
+          "anchor": "process-trace-store"
+        },
+        {
+          "level": 2,
+          "text": "Propagation",
+          "anchor": "propagation"
+        },
+        {
+          "level": 2,
+          "text": "The store",
+          "anchor": "the-store"
+        },
+        {
+          "level": 2,
+          "text": "Partitions",
+          "anchor": "partitions"
+        },
+        {
+          "level": 2,
+          "text": "Identifiers",
+          "anchor": "identifiers"
+        },
+        {
+          "level": 2,
+          "text": "The entry",
+          "anchor": "the-entry"
+        },
+        {
+          "level": 2,
+          "text": "Failure policy",
+          "anchor": "failure-policy"
+        },
+        {
+          "level": 2,
+          "text": "Consumers",
+          "anchor": "consumers"
+        }
+      ]
+    },
+    {
       "path": "python-quickstart.md",
       "title": "Python Quickstart",
       "type": "doc",
@@ -7746,5 +7793,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-12T22:52:12.980001+00:00"
+  "last_gen": "2026-08-12T23:26:13.657776+00:00"
 }
