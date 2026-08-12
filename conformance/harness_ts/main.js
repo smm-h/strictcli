@@ -488,6 +488,17 @@ function makeHandler(cmdDef, globalFlags) {
 	if ("handler_returns" in cmdDef) {
 		const hr = cmdDef.handler_returns;
 		const code = hr.code ?? 0;
+		// An unrecognized kind is a HARD ERROR at registration, never a silent
+		// mapping to something else. Quietly returning a non-outcome for every
+		// unknown kind would turn a case this harness cannot express into a
+		// false pass, which is the defect the Go harness had removed.
+		if (!["exit", "data", "exit_data", "none", "bad"].includes(hr.kind)) {
+			throw new Error(
+				`conformance harness: handler_returns kind ${JSON.stringify(hr.kind)} ` +
+					"is unknown to the TypeScript harness; teach the harness the kind " +
+					"or the case must restrict its targets",
+			);
+		}
 		return (_args, ctx) => {
 			runHandlerEffects(ctx, handlerEffects);
 			runHandlerDiagnostics(ctx, handlerDiagnostics);
@@ -501,6 +512,8 @@ function makeHandler(cmdDef, globalFlags) {
 				case "none":
 					return undefined;
 				default:
+					// "bad": a return that is not a number, undefined, or an
+					// outcome -- the framework's hard error.
 					return ["not-an-outcome"];
 			}
 		};
