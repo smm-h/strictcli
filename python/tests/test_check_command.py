@@ -30,6 +30,26 @@ needs_network = false
 depends_on = []
 """
 
+PURE_AND_IMPURE_TOML = """\
+app = "testapp"
+
+[checks.lint-check]
+tags = ["code"]
+severity = "error"
+fast = true
+pure = true
+needs_network = false
+depends_on = []
+
+[checks.deploy-check]
+tags = ["release"]
+severity = "error"
+fast = false
+pure = false
+needs_network = false
+depends_on = []
+"""
+
 THREE_CHECKS_WITH_DEP_TOML = """\
 app = "testapp"
 
@@ -225,14 +245,8 @@ class TestCheckExecution:
 
 
 class TestCheckDryRun:
-    def test_dry_run_shows_plan(self, tmp_path, monkeypatch):
-        """--all --dry-run shows plan without executing."""
-        ran = []
-
-        app = _setup_checks_app(
-            tmp_path, monkeypatch, THREE_CHECKS_WITH_DEP_TOML,
-            register_impls=False,
-        )
+    @staticmethod
+    def _recording_impls(app, ran):
         for name in app._check_defs:
             def make_impl(n):
                 def impl(ctx):
@@ -241,13 +255,46 @@ class TestCheckDryRun:
                 return impl
             app._check_defs[name].impl = make_impl(name)
 
+    def test_dry_run_executes_the_pure_checks(self, tmp_path, monkeypatch):
+        """--dry-run runs the checks declared pure; the plan is what is left."""
+        ran = []
+        app = _setup_checks_app(
+            tmp_path, monkeypatch, THREE_CHECKS_WITH_DEP_TOML,
+            register_impls=False,
+        )
+        self._recording_impls(app, ran)
+
         result = app.test(["--dry-run", "check", "--all"])
         assert result.exit_code == 0
-        assert "Would run" in result.stdout
-        assert len(ran) == 0  # Nothing should have actually run
-        assert "version-check" in result.stdout
-        # version-check depends on base-check, so that dep should be shown
-        assert "depends on" in result.stdout
+        # Every check in this TOML is pure, so every one really ran.
+        assert sorted(ran) == ["base-check", "lint-check", "version-check"]
+        assert "PASS  version-check" in result.stdout
+        assert "Would run 0 checks:" in result.stdout
+
+    def test_dry_run_lists_the_impure_checks_without_running_them(
+        self, tmp_path, monkeypatch,
+    ):
+        ran = []
+        app = _setup_checks_app(
+            tmp_path, monkeypatch, PURE_AND_IMPURE_TOML, register_impls=False,
+        )
+        self._recording_impls(app, ran)
+
+        result = app.test(["--dry-run", "check", "--all"])
+        assert result.exit_code == 0
+        assert ran == ["lint-check"]  # the impure one never ran
+        assert "PASS  lint-check" in result.stdout
+        assert "Would run 1 check:\n  1. deploy-check [impure]" in result.stdout
+
+    def test_dry_run_reports_a_failing_pure_check(self, tmp_path, monkeypatch):
+        """A rehearsal that finds a real failure fails: exit code 1."""
+        app = _setup_checks_app(
+            tmp_path, monkeypatch, PURE_AND_IMPURE_TOML,
+            pass_results={"lint-check": fail_outcome("lint failed", "boom")},
+        )
+        result = app.test(["--dry-run", "check", "--all"])
+        assert result.exit_code == 1
+        assert "FAIL  lint-check" in result.stdout
 
 
 class TestCheckJsonOutput:
@@ -409,7 +456,8 @@ class TestCheckCommandVerboseNotes:
         assert result.stdout.endswith(
             "DRY RUN — no changes were made. Would do:\n"
         )
-        assert "Would run 2 checks:" in result.stdout
+        # Both checks are pure, so both ran and nothing is left to plan.
+        assert "Would run 0 checks:" in result.stdout
 
     def test_check_no_longer_declares_verbose_or_dry_run_flags(self, tmp_path, monkeypatch):
         """--verbose and --dry-run are framework-owned reserved names, so the

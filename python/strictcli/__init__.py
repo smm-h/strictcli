@@ -5700,11 +5700,11 @@ class App:
                 return 0
             order = _resolve_check_order(app_ref._check_defs, selected)
 
-            if dry_run:
-                _check_dry_run_mode(app_ref._check_defs, order)
-                return 0
-
-            # Execution mode: need a context
+            # Both a full run and a dry run execute checks, so both need a
+            # context. --dry-run selects the purity partition instead of a
+            # separate list-without-running branch: the checks declared pure
+            # really run (that is what makes a rehearsal mean something) and the
+            # impure remainder is rendered as the would-run plan.
             if app_ref._check_context_factory is None:
                 print(
                     "error: no check context configured. "
@@ -5713,12 +5713,9 @@ class App:
                 )
                 return 1
             context = app_ref._wrap_check_context(app_ref._check_context_factory())
-            # The check command executes all selected checks; the purity
-            # partition is an API-only mode (run_checks pure_only=), so nothing
-            # is ever left in the impure listing here.
-            raw_results, _impure_listed, exit_code = _run_checks(
+            raw_results, impure_listed, exit_code = _run_checks(
                 app_ref._check_defs, order, context, ignore_warnings,
-                scope_adapter=app_ref._scope_adapter,
+                scope_adapter=app_ref._scope_adapter, pure_only=dry_run,
             )
 
             results_wrapped = [
@@ -5731,6 +5728,8 @@ class App:
                 output = format_check_results(results_wrapped, verbose)
                 if output:
                     print(output)
+            if dry_run:
+                _check_dry_run_mode(app_ref._check_defs, impure_listed, order)
 
             return exit_code
 
@@ -9935,11 +9934,19 @@ def _check_list_mode(check_defs: dict[str, _CheckDef], json_mode: bool) -> None:
 
 
 def _check_dry_run_mode(
-    check_defs: dict[str, _CheckDef], order: list[str],
+    check_defs: dict[str, _CheckDef], listed: list[str], order: list[str],
 ) -> None:
-    """Print execution plan without running checks."""
-    print(f"Would run {len(order)} check{'s' if len(order) != 1 else ''}:")
-    for i, name in enumerate(order, 1):
+    """Print the would-run plan for the checks a dry run did NOT execute.
+
+    ``listed`` is the purity partition's remainder (the impure checks and any
+    check whose dependency was listed); ``order`` is the full selected order,
+    used only to decide which dependencies are worth naming. The header is
+    printed even when nothing was left over -- an empty plan is a statement
+    ("everything selected ran"), the same way the framework's own would-do log
+    prints its header with an empty body.
+    """
+    print(f"Would run {len(listed)} check{'s' if len(listed) != 1 else ''}:")
+    for i, name in enumerate(listed, 1):
         cdef = check_defs[name]
         purity = "pure" if _check_is_pure(cdef) else "impure"
         deps = [d for d in cdef.depends_on if d in set(order)]

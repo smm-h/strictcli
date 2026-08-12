@@ -622,11 +622,31 @@ class TestRunChecksPurityPartition:
         assert len(results) == 5  # every check executes
         assert impure_listed == []
 
-    def test_dry_run_annotates_purity(self, tmp_path):
-        app = _make_app(tmp_path, PARTITION_TOML)
+    def test_dry_run_runs_the_pure_partition_and_plans_the_rest(self, tmp_path):
+        """The check command's --dry-run IS the purity partition: the pure
+        checks execute and the remainder is rendered as the would-run plan,
+        each entry keeping its purity annotation."""
+        ran = []
+
+        impls = {}
+        for name in ("pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure"):
+            def make(n):
+                def impl(ctx):
+                    ran.append(n)
+                    return pass_outcome(f"{n} OK")
+                return impl
+            impls[name] = make(name)
+
+        app = _make_app(tmp_path, PARTITION_TOML, impls=impls)
+        app.set_check_context(lambda: SimpleContext(project_root=tmp_path))
         result = app.test(["--dry-run", "check", "--all"])
         assert result.exit_code == 0
-        assert "[pure]" in result.stdout
+        assert sorted(ran) == ["dep-on-pure", "pure-a"]
+        assert "PASS  pure-a" in result.stdout
+        assert "Would run 3 checks:" in result.stdout
+        # dep-on-impure is pure but joins the listing (its dependency did not
+        # run), so the annotation still distinguishes the two reasons.
+        assert "dep-on-impure (depends on: impure-c) [pure]" in result.stdout
         assert "[impure]" in result.stdout
 
     def test_failed_pure_dependency_cascades_over_listing(self, tmp_path):
