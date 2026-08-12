@@ -1565,36 +1565,93 @@ func TestCheckCommand_NameGlob(t *testing.T) {
 	// (though it may appear as a pulled-in dependency -- version-consistency has no deps on it)
 }
 
-func TestCheckCommand_DryRun(t *testing.T) {
+func TestCheckCommand_DryRun_RunsThePureChecks(t *testing.T) {
+	// --dry-run IS the purity partition: both checks in this TOML are pure, so
+	// both really run and the plan is empty.
 	checksPath := writeChecksFile(t, twoChecksToml)
 
 	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
 	dropBuiltinCheckProviders(app)
-	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
-		t.Fatal("should not run in dry-run mode")
-		return CheckOutcome{}
+	var ran []string
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, r *ErrorReporter) CheckOutcome {
+		ran = append(ran, "version-consistency")
+		return r.Passed("versions agree")
 	})
-	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, _ *ErrorReporter) CheckOutcome {
-		t.Fatal("should not run in dry-run mode")
-		return CheckOutcome{}
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, r *ErrorReporter) CheckOutcome {
+		ran = append(ran, "changelog-coverage")
+		return r.Passed("covered")
 	})
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
 
 	r := app.Test([]string{"--dry-run", "check", "--all"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, "Would run 2 checks") {
-		t.Fatalf("expected 'Would run 2 checks' in output, got %q", r.Stdout)
+	if len(ran) != 2 {
+		t.Fatalf("expected both pure checks to run, ran=%v", ran)
 	}
-	if !strings.Contains(r.Stdout, "version-consistency") {
-		t.Fatalf("expected version-consistency in plan, got %q", r.Stdout)
+	if !strings.Contains(r.Stdout, "PASS  version-consistency") {
+		t.Fatalf("expected the executed result rows, got %q", r.Stdout)
 	}
-	if !strings.Contains(r.Stdout, "changelog-coverage") {
-		t.Fatalf("expected changelog-coverage in plan, got %q", r.Stdout)
+	if !strings.Contains(r.Stdout, "Would run 0 checks:") {
+		t.Fatalf("expected an empty plan, got %q", r.Stdout)
 	}
-	// changelog-coverage should show dependency info
-	if !strings.Contains(r.Stdout, "depends on:") {
-		t.Fatalf("expected dependency info in plan, got %q", r.Stdout)
+}
+
+func TestCheckCommand_DryRun_ListsTheImpureChecks(t *testing.T) {
+	checksPath := writeChecksFile(t, partitionToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
+	var ran []string
+	for _, name := range []string{"pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure"} {
+		n := name
+		app.RegisterErrorCheck(n, func(ctx CheckContext, r *ErrorReporter) CheckOutcome {
+			ran = append(ran, n)
+			return r.Passed(n + " ok")
+		})
+	}
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
+
+	r := app.Test([]string{"--dry-run", "check", "--all"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	sort.Strings(ran)
+	if strings.Join(ran, ",") != "dep-on-pure,pure-a" {
+		t.Fatalf("expected only the pure partition to run, ran=%v", ran)
+	}
+	if !strings.Contains(r.Stdout, "Would run 3 checks:") {
+		t.Fatalf("expected three listed checks, got %q", r.Stdout)
+	}
+	// dep-on-impure is pure but joins the listing (its dependency did not run),
+	// so the annotation still distinguishes the two reasons.
+	if !strings.Contains(r.Stdout, "dep-on-impure (depends on: impure-c) [pure]") {
+		t.Fatalf("expected the listed pure dependent, got %q", r.Stdout)
+	}
+	if !strings.Contains(r.Stdout, "[impure]") {
+		t.Fatalf("expected an [impure] annotation, got %q", r.Stdout)
+	}
+}
+
+func TestCheckCommand_DryRun_FailingPureCheckFailsTheRun(t *testing.T) {
+	checksPath := writeChecksFile(t, twoChecksToml)
+	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
+	dropBuiltinCheckProviders(app)
+	app.RegisterErrorCheck("version-consistency", func(ctx CheckContext, r *ErrorReporter) CheckOutcome {
+		r.Error("versions disagree")
+		return r.Found("version mismatch")
+	})
+	app.RegisterErrorCheck("changelog-coverage", func(ctx CheckContext, r *ErrorReporter) CheckOutcome {
+		return r.Passed("covered")
+	})
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
+
+	r := app.Test([]string{"--dry-run", "check", "--all"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1 from a real failure found by the rehearsal, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stdout, "FAIL  version-consistency") {
+		t.Fatalf("expected the failing row, got %q", r.Stdout)
 	}
 }
 
@@ -3450,27 +3507,23 @@ func TestRunChecks_Partition_OffIsUnchanged(t *testing.T) {
 	}
 }
 
-func TestCheckCommand_DryRun_PurityAnnotation(t *testing.T) {
-	checksPath := writeChecksFile(t, partitionToml)
-	app := NewApp("testapp", "1.0.0", "test app", WithChecks(checksPath))
-	dropBuiltinCheckProviders(app)
-	registerAllPassing(t, app, "pure-a", "net-b", "impure-c", "dep-on-impure", "dep-on-pure")
+func TestCheckCommand_DryRun_NoMatchingChecks(t *testing.T) {
+	// An empty selection reports no match rather than an empty plan -- the
+	// no-match branch runs before the partition, exactly as in a full run.
+	checksPath := writeChecksFile(t, twoChecksToml)
+	app := makeAppWithChecks(t, checksPath)
+	registerAllPassing(t, app, "version-consistency", "changelog-coverage")
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: emptyProjectRoot} })
 
-	r := app.Test([]string{"--dry-run", "check", "--all"})
+	r := app.Test([]string{"--dry-run", "check", "--tag", "nonexistent"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stdout, "[pure]") {
-		t.Fatalf("expected a [pure] annotation, got %q", r.Stdout)
+	if !strings.Contains(r.Stdout, "No checks matched the given filters.") {
+		t.Fatalf("expected the no-match message, got %q", r.Stdout)
 	}
-	if !strings.Contains(r.Stdout, "[impure]") {
-		t.Fatalf("expected an [impure] annotation, got %q", r.Stdout)
-	}
-	// net-b needs network -> impure; pure-a -> pure. Assert the specific lines.
-	for _, want := range []string{"net-b", "impure-c"} {
-		if !strings.Contains(r.Stdout, want) {
-			t.Fatalf("expected %q listed, got %q", want, r.Stdout)
-		}
+	if strings.Contains(r.Stdout, "Would run") {
+		t.Fatalf("expected no plan for an empty selection, got %q", r.Stdout)
 	}
 }
 

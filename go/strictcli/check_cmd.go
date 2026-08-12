@@ -33,7 +33,7 @@ func (a *App) enableChecks() {
 func (a *App) registerCheckCommand() {
 	handler := func(ctx *Context, args map[string]interface{}) Outcome {
 		// Materialize provider-sourced checks before any registry read (covers
-		// the --list, --dry-run, and execution branches below).
+		// the --list and execution branches below).
 		a.materializeCheckProviders()
 
 		runAll := Get[bool](args, "all")
@@ -52,18 +52,17 @@ func (a *App) registerCheckCommand() {
 			return Exit(a.checkList(jsonOut))
 		}
 
-		if dryRun {
-			return Exit(a.checkDryRun(runAll, tagExpr, nameGlob))
+		if !(runAll || tagExpr != "" || nameGlob != "") {
+			// No flags: show help
+			cmd := a.commands["check"]
+			fmt.Println(formatCommandHelp(a, cmd, ""))
+			return Exit(0)
 		}
 
-		if runAll || tagExpr != "" || nameGlob != "" {
-			return Exit(a.checkRun(ctx, runAll, tagExpr, nameGlob, jsonOut, ignoreWarnings, verbose))
-		}
-
-		// No flags: show help
-		cmd := a.commands["check"]
-		fmt.Println(formatCommandHelp(a, cmd, ""))
-		return Exit(0)
+		// --dry-run is not a separate branch: it selects the purity partition,
+		// so the checks declared pure really run and only the impure remainder
+		// is rendered as the would-run plan.
+		return Exit(a.checkRun(ctx, runAll, tagExpr, nameGlob, jsonOut, ignoreWarnings, verbose, dryRun))
 	}
 	// Filter out candidate flags that already exist as global flags to avoid
 	// collisions -- the handler absorbs global flag values automatically.
@@ -200,26 +199,18 @@ func (a *App) checkListJSON() int {
 	return 0
 }
 
-// checkDryRun shows which checks would run and in what order.
-func (a *App) checkDryRun(runAll bool, tagExpr, nameGlob string) int {
-	selected, err := filterChecks(a.checkDefs, tagExpr, nameGlob, runAll)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
-		return 1
-	}
-
-	order, err := resolveCheckOrder(a.checkDefs, selected)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
-		return 1
-	}
-
+// checkDryRunPlan prints the would-run plan for the checks a dry run did NOT
+// execute -- the purity partition's remainder (the impure checks and any check
+// whose dependency was listed). The header is printed even when nothing was
+// left over: an empty plan is a statement ("everything selected ran"), the same
+// way the framework's own would-do log prints its header with an empty body.
+func (a *App) checkDryRunPlan(listed []string) {
 	noun := "checks"
-	if len(order) == 1 {
+	if len(listed) == 1 {
 		noun = "check"
 	}
-	fmt.Printf("Would run %d %s:\n", len(order), noun)
-	for i, name := range order {
+	fmt.Printf("Would run %d %s:\n", len(listed), noun)
+	for i, name := range listed {
 		def := a.checkDefs[name]
 		purity := "impure"
 		if checkIsPure(def) {
@@ -231,7 +222,6 @@ func (a *App) checkDryRun(runAll bool, tagExpr, nameGlob string) int {
 			fmt.Printf("  %d. %s [%s]\n", i+1, name, purity)
 		}
 	}
-	return 0
 }
 
 // checkRun executes checks and formats output. The framework *Context (which
@@ -239,36 +229,42 @@ func (a *App) checkDryRun(runAll bool, tagExpr, nameGlob string) int {
 // and the hermetic flag) is no longer discarded: the tool-supplied CheckContext
 // is wrapped so check functions can read declared connection envs via the
 // ConnectionEnvReader capability (hermetic-suppressed).
-func (a *App) checkRun(frameworkCtx *Context, runAll bool, tagExpr, nameGlob string, jsonOut, ignoreWarnings, verbose bool) int {
+// Under dryRun it runs the purity partition instead: the checks declared pure
+// (and free of network) execute, and the impure remainder is printed as the
+// would-run plan after the results.
+func (a *App) checkRun(frameworkCtx *Context, runAll bool, tagExpr, nameGlob string, jsonOut, ignoreWarnings, verbose, dryRun bool) int {
 	if a.checkContextFactory == nil {
 		fmt.Fprintln(os.Stderr, "error: no check context factory set (call SetCheckContext before running checks)")
 		return 1
 	}
 
 	ctx := a.wrapCheckContext(a.checkContextFactory(), frameworkCtx)
-	// The check command executes all selected checks; the purity partition is an
-	// API-only mode (RunChecksOptions.PureOnly) consumed programmatically, so no
-	// checks are ever left in the impure listing here.
-	results, _, exitCode, err := a.RunChecks(ctx, RunChecksOptions{
+	results, impureListed, exitCode, err := a.RunChecks(ctx, RunChecksOptions{
 		TagExpr:        tagExpr,
 		NameGlob:       nameGlob,
 		RunAll:         runAll,
 		IgnoreWarnings: ignoreWarnings,
+		PureOnly:       dryRun,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		return 1
 	}
 
-	if len(results) == 0 {
+	// Nothing executed AND nothing listed means the filters selected nothing --
+	// under the purity partition an empty result set alone does not.
+	if len(results) == 0 && len(impureListed) == 0 {
 		fmt.Println("No checks matched the given filters.")
 		return 0
 	}
 
 	if jsonOut {
 		fmt.Println(FormatCheckResultsJSON(results))
-	} else {
-		fmt.Println(FormatCheckResults(results, verbose))
+	} else if out := FormatCheckResults(results, verbose); out != "" {
+		fmt.Println(out)
+	}
+	if dryRun {
+		a.checkDryRunPlan(impureListed)
 	}
 
 	return exitCode
