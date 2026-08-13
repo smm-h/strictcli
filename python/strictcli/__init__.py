@@ -11814,12 +11814,23 @@ _MCP_CACHE_SCOPE = "public"
 
 # JSON-RPC and MCP error codes. -32020 (HeaderMismatch) belongs to the HTTP
 # transport, which this server does not speak; -32021
-# (MissingRequiredClientCapability) is fired by the confirmation round-trip.
+# (MissingRequiredClientCapability) is what a consequential call from a client
+# that cannot render the confirmation is answered with.
 _MCP_ERR_PARSE = -32700
 _MCP_ERR_METHOD_NOT_FOUND = -32601
 _MCP_ERR_INVALID_PARAMS = -32602
 _MCP_ERR_INTERNAL = -32603
+_MCP_ERR_MISSING_CLIENT_CAPABILITY = -32021
 _MCP_ERR_UNSUPPORTED_PROTOCOL_VERSION = -32022
+
+# The revision forbids a server sending an input request the client never said
+# it could fulfil, and assigns -32021 for saying so. `data.requiredCapabilities`
+# is a client-capabilities object, and this server names FORM mode: a client
+# that declared only URL-mode elicitation cannot render this question either.
+_MCP_MSG_MISSING_ELICITATION = (
+    "Server requires the elicitation capability for this request"
+)
+_MCP_REQUIRED_ELICITATION_CAPABILITIES = {"elicitation": {"form": {}}}
 
 _MCP_META_PREFIX_LABEL_RE = re.compile(r"^[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
 _MCP_META_NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
@@ -12371,9 +12382,13 @@ def _mcp_confirmation_exchange(
         return _mcp_input_required(
             app, req_id, tool_name, continuation.mint(principal, digest),
         )
-    # A client that cannot render the confirmation gets the refusal, which
-    # names what is required without teaching a way around it.
-    return consented
+    # A client that cannot render the confirmation is told what it would have
+    # to declare, in the code the revision assigns -- never how to proceed
+    # without confirming.
+    return _mcp_jsonrpc_error(
+        req_id, _MCP_ERR_MISSING_CLIENT_CAPABILITY, _MCP_MSG_MISSING_ELICITATION,
+        {"requiredCapabilities": dict(_MCP_REQUIRED_ELICITATION_CAPABILITIES)},
+    )
 
 
 def _mcp_handle_tools_call(

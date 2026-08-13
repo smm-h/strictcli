@@ -778,17 +778,15 @@ class TestMcpToolsCallConsent:
     """tools/call honours the confirmation requirement."""
 
     def test_unconsented_call_is_refused(self):
+        # These clients declare no capabilities at all, so the modern answer is
+        # the capability error rather than the seam's refusal, which is only
+        # reachable from the legacy era now.
         resp = _call(_consent_app(), "release")
-        result = resp["result"]
-        assert result["isError"] is True
-        assert result["content"][0]["text"] == (
-            "command 'release' is consequential: the call must carry "
-            "confirmation"
-        )
+        assert resp["error"]["code"] == -32021
 
     def test_explicit_false_is_refused(self):
         resp = _call(_consent_app(), "release", approve_consequential=False)
-        assert resp["result"]["isError"] is True
+        assert resp["error"]["code"] == -32021
 
     def test_consented_call_proceeds(self):
         resp = _call(_consent_app(), "release", approve_consequential=True)
@@ -818,8 +816,9 @@ class TestMcpToolsCallConsent:
                 "arguments": {"approve_consequential": True},
             },
         })
-        assert resp["result"]["isError"] is True
-        assert "is consequential" in resp["result"]["content"][0]["text"]
+        # The consent never registered, so the command was still unconfirmed
+        # and the call never reached it.
+        assert resp["error"]["code"] == -32021
 
 
 # ---------------------------------------------------------------------------
@@ -1239,16 +1238,44 @@ class TestMcpConfirmationRoundTrip:
         assert resp["result"]["resultType"] == "complete"
         assert "isError" not in resp["result"]
 
-    def test_a_client_without_elicitation_is_refused_not_asked(self):
+    def test_a_client_without_elicitation_gets_the_capability_error(self):
+        # The revision forbids sending an input request the client never said
+        # it could fulfil, and assigns the code for saying so.
         resp = _send_one(_confirming_app(), _call_request(
             1, name="release", arguments={}, _meta=dict(MODERN_META),
         ))
-        result = resp["result"]
-        assert result["resultType"] == "complete"
-        assert result["isError"] is True
-        assert result["content"][0]["text"] == (
-            "command 'release' is consequential: the call must carry confirmation"
+        assert "result" not in resp
+        assert resp["error"]["code"] == -32021
+        assert resp["error"]["message"] == (
+            "Server requires the elicitation capability for this request"
         )
+        assert resp["error"]["data"] == {
+            "requiredCapabilities": {"elicitation": {"form": {}}},
+        }
+
+    def test_a_url_only_client_gets_the_capability_error(self):
+        meta = dict(MODERN_META)
+        meta["io.modelcontextprotocol/clientCapabilities"] = {
+            "elicitation": {"url": {}},
+        }
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="release", arguments={}, _meta=meta,
+        ))
+        assert resp["error"]["code"] == -32021
+
+    def test_a_read_only_tool_needs_no_declared_capability(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="look", arguments={}, _meta=dict(MODERN_META),
+        ))
+        assert resp["result"]["resultType"] == "complete"
+
+    def test_a_stated_consent_needs_no_declared_capability(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="release", arguments={}, approve_consequential=True,
+            _meta=dict(MODERN_META),
+        ))
+        assert resp["result"]["resultType"] == "complete"
+        assert "isError" not in resp["result"]
 
 
 class TestMcpContinuationState:
