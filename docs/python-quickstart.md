@@ -112,7 +112,7 @@ def greet(ctx, name, loud):
 ```
 
 - `ctx` provides structured output (`ctx.info`, `ctx.warn`, `ctx.error`, `ctx.debug`), provenance (`ctx.source`), the four reserved-quartet values, and the effects handle (`ctx.effects`).
-- Return `int` for an exit code, `None` for exit 0, or `strictcli.outcome(exit_code, data)` for structured output. Any other return type is a hard error.
+- Return `int` for an exit code, `None` for exit 0, or `strictcli.outcome(exit_code)`. Any other return type is a hard error. Structured output goes through `ctx.payload(...)` instead (see below).
 
 ### Context Methods
 
@@ -148,13 +148,15 @@ programmatic consumption. The `outcome()` factory is the only way to construct
 a branded `Outcome` -- hand-forging the return value is rejected at runtime.
 
 ```python
-@app.command("status", help="Show status", effect="read_only")
+@app.command("status", help="Show status", effect="read_only",
+             payload_schema={"type": "object"})
 def status(ctx):
-    return strictcli.outcome(exit_code=0, data={"healthy": True, "uptime": 3600})
+    ctx.payload({"healthy": True, "uptime": 3600})
+    return strictcli.outcome(exit_code=0)
 ```
 
 ```
-$ mytool status
+$ mytool status --json
 {"healthy":true,"uptime":3600}
 ```
 
@@ -921,10 +923,11 @@ app = strictcli.App(
                 choices=["production", "staging", "dev"], help="Target environment")
 def status(ctx, color, environment):
     ctx.debug(f"Checking status for environment: {environment}")
-    return strictcli.outcome(exit_code=0, data={
+    ctx.payload({
         "environment": environment,
         "status": "healthy",
     })
+    return strictcli.outcome(exit_code=0)
 
 svc = app.group("service", help="Service management")
 

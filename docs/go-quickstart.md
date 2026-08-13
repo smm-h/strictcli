@@ -104,7 +104,7 @@ func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome
 
 - `ctx` provides structured output (`ctx.Info`, `ctx.Warn`, `ctx.Error`, `ctx.Debug`), provenance (`ctx.Source`), the four reserved-quartet values (`ctx.DryRun()`, `ctx.ApproveConsequential()`, `ctx.Quiet()`, `ctx.Verbose()`), and the effects handle (`ctx.Effects()`).
 - `kwargs` is a map of flag and arg values, keyed by parameter name (dashes converted to underscores: `--log-file` becomes `log_file`). The reserved quartet is never in `kwargs` -- it arrives on `ctx`.
-- Return `Exit(code)` for exit-code-only results, or `ExitData(code, data)` to emit structured JSON data to stdout.
+- Return `Exit(code)`. Structured output goes through `ctx.Payload(value)` on a command that declares `PayloadSchema(...)`, and is emitted under the framework-owned `--json`.
 
 Use the typed helpers `Get` and `GetOpt` to extract values from kwargs:
 
@@ -643,7 +643,7 @@ The schema includes all commands, flags, args, groups, and their metadata. It is
 
 Use `app.Test(argv)` to run the CLI in-process and capture output without
 shelling out. The `Result` struct contains `Stdout`, `Stderr`, `ExitCode`, and
-`Data` (structured data from `ExitData`). This is the standard way to test
+`Data` (the machine payload the handler supplied through `ctx.Payload`). This is the standard way to test
 strictcli apps in Go unit tests:
 
 ```go
@@ -667,7 +667,7 @@ func TestGreet(t *testing.T) {
 }
 ```
 
-The `Result` struct contains `Stdout`, `Stderr`, `ExitCode`, and `Data` (structured data from `ExitData`).
+The `Result` struct contains `Stdout`, `Stderr`, `ExitCode`, and `Data` (the machine payload the handler supplied through `ctx.Payload`).
 
 ## Deprecated Commands
 
@@ -721,11 +721,14 @@ func main() {
     app.Command("status", "Show deployment status", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
         env := strictcli.Get[string](kwargs, "environment")
         ctx.Debug(fmt.Sprintf("Checking status for environment: %s", env))
-        return strictcli.ExitData(0, map[string]interface{}{
+        ctx.Payload(map[string]interface{}{
             "environment": env,
             "status":      "healthy",
         })
-    }, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithFlags(
+        return strictcli.Exit(0)
+    }, strictcli.WithEffect(strictcli.EffectReadOnly),
+        strictcli.PayloadSchema(map[string]interface{}{"type": "object"}),
+        strictcli.WithFlags(
         strictcli.StringFlag("environment", "Target environment",
             strictcli.Default("production"),
             strictcli.Short("e"),

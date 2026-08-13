@@ -110,11 +110,13 @@ When adding a feature to one implementation, add it to all implementations and a
 
 ### Handler result contract
 
-Every handler receives a context (Go and Python are ctx-first; TypeScript is args-first); there is no legacy no-ctx signature and no `ctx.emit` -- structured data flows back only through the return value.
+Every handler receives a context (Go and Python are ctx-first; TypeScript is args-first); there is no legacy no-ctx signature and no `ctx.emit`. The return value carries the exit code and nothing else.
 
-- **Go**: `func(ctx *Context, kwargs map[string]interface{}) Outcome`. Return `Exit(code)` (exit code, no data) or `ExitData(code, data)` (data is JSON-marshaled to stdout and captured by `Test()`/`Call()`).
-- **Python**: `def handler(ctx, **kwargs)` returning `int` (exit code), `None` (exit 0), or `strictcli.outcome(exit_code, data)`. Any other return type is a hard error. `Outcome` is branded -- it cannot be constructed directly, only via the `outcome()` factory. When `data` is not None it is JSON-printed to stdout and captured by `test()`/`call()`.
-- **TypeScript**: `handler: (args, ctx) => ...` returning a `number` (exit code), `undefined`/no return (exit 0), or `outcome(exit_code, data)`. Any other return is a hard error. `outcome()` is the only mint -- hand-forged objects are rejected.
+- **Go**: `func(ctx *Context, kwargs map[string]interface{}) Outcome`. Return `Exit(code)`.
+- **Python**: `def handler(ctx, **kwargs)` returning `int` (exit code), `None` (exit 0), or `strictcli.outcome(exit_code)`. Any other return type is a hard error. `Outcome` is branded -- it cannot be constructed directly, only via the `outcome()` factory.
+- **TypeScript**: `handler: (args, ctx) => ...` returning a `number` (exit code), `undefined`/no return (exit 0), or `outcome(exitCode)`. Any other return is a hard error. `outcome()` is the only mint -- hand-forged objects are rejected.
+
+Structured output is a separate channel: a command declares its payload's JSON Schema (`payload_schema=` / `PayloadSchema(...)` / `payloadSchema:`) and its handler supplies the value through `ctx.payload(value)` / `ctx.Payload(value)`. At most one payload per dispatch, and calling it without a declared schema is a hard error at call time. The payload is printed only under the framework-owned `--json`, and `test()`/`call()` capture it in either mode.
 
 ### Provenance
 
@@ -156,7 +158,7 @@ Enabled via `WithChecks(path)` (Go) / `checks_path=` (Python), pointing to a TOM
 
 **TOML schema**: Required top-level `app` field (must match app name). `[checks.<name>]` sections with required fields: `tags` (list of strings), `severity` ("error"/"warn"), `fast` (bool), `pure` (bool), `needs_network` (bool), `depends_on` (list of check names). Check names: `[a-z][a-z0-9-]*`. Every field must be explicit -- no defaults section. The `[checks]` section is optional -- an `app` field with no checks is a valid TOML file.
 
-**Check command**: auto-registered when checks are enabled via `WithChecks(path)` (Go) or `checks_path=` (Python). 6 own flags: `--all`, `--tag <dsl>`, `--name <glob>`, `--list`, `--json`, `--ignore-warnings`. `--verbose` and `--dry-run` are NOT among them -- both names are framework-reserved (the quartet, §7.5) and their values reach the handler on the Context, so the check command subsumes them rather than declaring them. A candidate flag is also dropped when the app already declares a global flag of that name. No flags = show help. Hidden from help when no TOML exists.
+**Check command**: auto-registered when checks are enabled via `WithChecks(path)` (Go) or `checks_path=` (Python). 5 own flags: `--all`, `--tag <dsl>`, `--name <glob>`, `--list`, `--ignore-warnings`. `--verbose`, `--dry-run` and `--json` are NOT among them -- all three names are framework-reserved and their values reach the handler on the Context, so the check command subsumes them rather than declaring them. Its machine output is the command's payload, emitted under the framework-owned `--json`. A candidate flag is also dropped when the app already declares a global flag of that name. No flags = show help. Hidden from help when no TOML exists.
 
 **Tag DSL**: `--tag` accepts a set-operation expression. Operators by precedence (tightest first): `!` (NOT), `&` (AND), `^` (XOR), `|` (OR), `-` (DIFF). Parentheses for grouping. Example: `--tag "(release | changelog) & !slow"`.
 

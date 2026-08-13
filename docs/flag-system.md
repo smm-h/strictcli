@@ -490,7 +490,7 @@ contract prevents silent bugs where a handler accidentally returns a string,
 list, or other value that the framework would not know how to interpret:
 - `int` -- exit code (0 = success)
 - `None` -- exit 0
-- `strictcli.outcome(exit_code, data)` -- structured result with optional data
+- `strictcli.outcome(exit_code)` -- a branded exit-code result (structured output goes through `ctx.payload(...)`)
 
 Any other return type is a hard error. When `outcome()` includes `data`, it is JSON-printed to stdout and captured by `app.test()` and `app.call()`.
 

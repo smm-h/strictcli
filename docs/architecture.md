@@ -229,18 +229,21 @@ structured data. Any other return type is a hard error.
 
 - **Go**: `func(ctx *Context, kwargs map[string]interface{}) Outcome`
 - **Python**: `def handler(ctx, **kwargs)` returning `int`, `None`, or
-  `outcome(code, data)`
-- **TypeScript**: `(args, ctx) => number | undefined | outcome(code, data)`
+  `outcome(code)`
+- **TypeScript**: `(args, ctx) => number | undefined | outcome(code)`
 
 The return value is interpreted strictly. In Go, the handler must return an
-`Outcome` (created via `Exit(code)` or `ExitData(code, data)`). In Python, only
-`int`, `None`, or a branded `outcome(...)` are accepted; any other return type
-is a hard error. In TypeScript, the same contract applies with `number`,
-`undefined`, or a branded `outcome(...)`.
+`Outcome` (created via `Exit(code)`). In Python, only `int`, `None`, or a
+branded `outcome(...)` are accepted; any other return type is a hard error. In
+TypeScript, the same contract applies with `number`, `undefined`, or a branded
+`outcome(...)`.
 
-When a handler returns data (via `ExitData` / `outcome(...)`), the data is
-JSON-serialized to stdout. `Test()` / `test()` captures it in the result
-object.
+Structured output does not ride the return value. A command declares its
+payload's JSON Schema at registration time and its handler supplies the value
+through `ctx.payload(value)` / `ctx.Payload(value)` -- at most once per
+dispatch, and only on a command that declared a schema. The payload is printed
+only under the framework-owned `--json`; `Test()` / `test()` and `Call()` /
+`call()` capture it in either mode.
 
 ## Source provenance
 
