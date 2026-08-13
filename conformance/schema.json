@@ -673,6 +673,11 @@
           "type": "object",
           "description": "The command's machine payload contract (effects contract \u00a719.5): an inline JSON Schema literal, registered as written, validated at registration over the closed subset, enforced against the payload at emission, and published verbatim by --dump-schema. Absence means the command cannot produce a payload -- ctx.payload is then a call-time hard error. Most cases leave this key out: the harnesses declare the permissive literal {} for every command whose handler_returns supplies a payload, identically in all three languages. Write it explicitly when the case is ABOUT the declaration -- a non-empty literal published by the schema dump, or a payload validated against real keywords."
         },
+        "owns_stdout": {
+          "type": "boolean",
+          "default": false,
+          "description": "Declares that this command's stdout IS the artifact (effects contract \u00a719.6): in machine mode stdout carries the command's own document byte-exactly and the envelope moves to stderr, together with every framework diagnostic it carries. Outside machine mode the declaration changes nothing at all. Emitted by --dump-schema only when true; absence means the framework owns stdout, which is the baseline."
+        },
         "dry_run_unsupported_reason": {
           "type": "string",
           "minLength": 1,
@@ -854,6 +859,7 @@
           "dry_run_supported": false,
           "dry_run_unsupported_reason": false,
           "payload_schema": false,
+          "owns_stdout": false,
           "grants": false,
           "forwarding": false,
           "flags": false,

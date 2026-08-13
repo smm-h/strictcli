@@ -355,6 +355,10 @@ def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
         )
     elif _hr_kind in ("data", "exit_data"):
         lines.append(f"{indent}payload_schema={{}},")
+    # Stdout ownership (§19.6): the command's own document keeps stdout and the
+    # envelope moves to stderr in machine mode.
+    if cmd_def.get("owns_stdout", False):
+        lines.append(f"{indent}owns_stdout=True,")
     if cmd_def.get("grants"):
         exprs = [
             f"strictcli.Grant(name={g['name']!r}, reason={g['reason']!r}, "

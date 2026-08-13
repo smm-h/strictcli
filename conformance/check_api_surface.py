@@ -864,10 +864,11 @@ KNOWN_OPTION_FUNCS: set[str] = {
     # and TS a trailing options object. The describe_go dumper classifies it as
     # an option constructor because its result type is a func(*T) named type.
     "WithApproveConsequential",
-    # The machine payload's declared schema (contract §19.5). The contract pins
-    # the spelling WITHOUT a With- prefix (§18.9 item 111), which is why it
-    # reads unlike its neighbours here.
-    "PayloadSchema",
+    # The machine payload's declared schema (contract §19.5) and the
+    # stdout-ownership declaration (§19.6). The contract pins both spellings
+    # WITHOUT a With- prefix (§18.9 item 111), which is why they read unlike
+    # their neighbours here.
+    "PayloadSchema", "OwnsStdout",
 }
 
 

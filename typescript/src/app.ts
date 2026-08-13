@@ -1361,6 +1361,7 @@ export class AppImpl implements App {
 					out,
 					err,
 					ctx,
+					(outcome.cmd.def as PassthroughDef<string>).ownsStdout === true,
 				);
 			}
 			case "command": {
@@ -1396,6 +1397,7 @@ export class AppImpl implements App {
 					out,
 					err,
 					ctx,
+					(outcome.cmd.def as AnyCommand).ownsStdout === true,
 				);
 			}
 		}
@@ -1447,28 +1449,38 @@ export class AppImpl implements App {
 		out: Writer,
 		err: Writer,
 		ctx: Context,
+		ownsStdout: boolean,
 	): Promise<DispatchResult> {
 		let exitCode: number;
 		try {
 			const result = await invoke();
 			const swallowed = this.effectLogState.truncated;
 			if (swallowed !== null) {
-				return this.emitTruncated(swallowed, out, err, ctx);
+				return this.emitTruncated(swallowed, out, err, ctx, ownsStdout);
 			}
 			exitCode = interpretHandlerReturn(result).exitCode;
 		} catch (e) {
 			if (e instanceof DryRunTruncated) {
-				return this.emitTruncated(e, out, err, ctx);
+				return this.emitTruncated(e, out, err, ctx, ownsStdout);
 			}
 			// Every other way out of the dispatch still owes the operator the
 			// effects recorded so far: they asked for a preview and the
 			// framework has one. The marker says the list may not be all of it,
 			// because the dispatch did not finish. The throw continues
 			// untouched -- nothing here swallows it or changes the exit status.
-			this.finishDispatch(ctx, 1, dryRun, cmdPath, out, err, true);
+			this.finishDispatch(ctx, 1, dryRun, cmdPath, out, err, true, ownsStdout);
 			throw e;
 		}
-		return this.finishDispatch(ctx, exitCode, dryRun, cmdPath, out, err, false);
+		return this.finishDispatch(
+			ctx,
+			exitCode,
+			dryRun,
+			cmdPath,
+			out,
+			err,
+			false,
+			ownsStdout,
+		);
 	}
 
 	/**
@@ -1481,10 +1493,11 @@ export class AppImpl implements App {
 		out: Writer,
 		err: Writer,
 		ctx: Context,
+		ownsStdout: boolean,
 	): DispatchResult {
 		const supplied = contextPayload(ctx);
 		if (ctx.json) {
-			this.emitDispatchEnvelope(ctx, out, 1, ctx.dryRun, trunc.cmdPath, {
+			this.emitDispatchEnvelope(ctx, ownsStdout ? err : out, 1, ctx.dryRun, trunc.cmdPath, {
 				kind: "truncated",
 				step: trunc.step,
 				command: trunc.cmdPath,
@@ -1650,6 +1663,7 @@ export class AppImpl implements App {
 		out: Writer,
 		err: Writer,
 		aborted: boolean,
+		ownsStdout: boolean,
 	): DispatchResult {
 		const supplied = contextPayload(ctx);
 		if (ctx.json) {
@@ -1657,9 +1671,14 @@ export class AppImpl implements App {
 			// stream's would-do log and abort marker: those texts become the
 			// envelope's preview and preview_error members (§19.1, §19.3), and
 			// stdout carries exactly one document.
+			//
+			// A command that declared stdout ownership keeps stdout for its own
+			// document, and the envelope moves to stderr with the diagnostics it
+			// carries (§19.6). Leaving it on stdout would re-create the
+			// two-documents-on-one-stream collision §19.1 exists to remove.
 			this.emitDispatchEnvelope(
 				ctx,
-				out,
+				ownsStdout ? err : out,
 				exitCode,
 				dryRun,
 				cmdPath,

@@ -171,6 +171,11 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 	if cmd.PayloadSchema != nil {
 		m["payload_schema"] = cmd.PayloadSchema
 	}
+	// Emitted only when declared true; absence means the framework owns stdout,
+	// which is the baseline (contract §13's 2026-08-13 amendment, §19.6).
+	if cmd.OwnsStdout {
+		m["owns_stdout"] = true
+	}
 	// passthrough: default false (omit when false)
 	if cmd.Passthrough {
 		m["passthrough"] = true

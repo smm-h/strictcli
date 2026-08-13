@@ -4843,6 +4843,11 @@ class Command:
     # literal is validated at registration over the closed subset, and the
     # value ctx.payload supplies is validated against it at emission.
     payload_schema: dict | None = None
+    # Stdout ownership (contract §19.6). A command whose stdout IS the artifact
+    # -- a SQL dump, an SVG, a hash-verified JSON document -- declares it, and
+    # in machine mode the envelope moves to stderr so the artifact's bytes are
+    # untouched. Outside machine mode the declaration changes nothing at all.
+    owns_stdout: bool = False
     flags: tuple[Flag, ...] = ()
     args: tuple[Arg, ...] = ()
     flag_sets: tuple[FlagSet, ...] = ()
@@ -4968,6 +4973,7 @@ class Group:
         dry_run_supported: bool = True,
         dry_run_unsupported_reason: str | None = None,
         payload_schema: dict | None = None,
+        owns_stdout: bool = False,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -4993,6 +4999,7 @@ class Group:
                 dry_run_supported=dry_run_supported,
                 dry_run_unsupported_reason=dry_run_unsupported_reason,
                 payload_schema=payload_schema,
+                owns_stdout=owns_stdout,
                 handler=func, args=args, flag_sets=flag_sets, mutex=mutex,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
@@ -6681,6 +6688,7 @@ class App:
         dry_run_supported: bool = True,
         dry_run_unsupported_reason: str | None = None,
         payload_schema: dict | None = None,
+        owns_stdout: bool = False,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -6704,6 +6712,7 @@ class App:
                 dry_run_supported=dry_run_supported,
                 dry_run_unsupported_reason=dry_run_unsupported_reason,
                 payload_schema=payload_schema,
+                owns_stdout=owns_stdout,
                 handler=func,
                 args=args,
                 flag_sets=flag_sets,
@@ -6950,6 +6959,7 @@ class App:
         extra_flags: list[Flag] | None = None,
         interactive: bool = False,
         payload_schema: dict | None = None,
+        owns_stdout: bool = False,
     ) -> Command:
         """Build one of strictcli's own auto-registered commands.
 
@@ -6979,6 +6989,7 @@ class App:
             extra_flags=extra_flags,
             interactive=interactive,
             payload_schema=payload_schema,
+            owns_stdout=owns_stdout,
         )
 
     def _register_config_group(self) -> None:
@@ -8408,24 +8419,34 @@ class App:
             return self._finish_dispatch(
                 ctx, cmd_path, 1, out, err,
                 truncated=trunc, aborted=False,
+                owns_stdout=cmd.owns_stdout,
             )
         except SystemExit as e:
             code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
-            self._finish_dispatch(ctx, cmd_path, code, out, err, aborted=False)
+            self._finish_dispatch(
+                ctx, cmd_path, code, out, err, aborted=False,
+                owns_stdout=cmd.owns_stdout,
+            )
             if mode == "run":
                 # The real CLI path lets the exit propagate untouched, so a
                 # non-integer sys.exit() argument keeps printing itself.
                 raise
             return _DispatchResult(code, ctx._payload_value)
         except BaseException:
-            self._finish_dispatch(ctx, cmd_path, 1, out, err, aborted=True)
+            self._finish_dispatch(
+                ctx, cmd_path, 1, out, err, aborted=True,
+                owns_stdout=cmd.owns_stdout,
+            )
             raise
-        return self._finish_dispatch(ctx, cmd_path, exit_code, out, err)
+        return self._finish_dispatch(
+            ctx, cmd_path, exit_code, out, err,
+            owns_stdout=cmd.owns_stdout,
+        )
 
     def _finish_dispatch(
         self, ctx: "Context", cmd_path: str, exit_code: int, out, err,
         *, truncated: "_DryRunTruncated | None" = None,
-        aborted: bool = False,
+        aborted: bool = False, owns_stdout: bool = False,
     ) -> "_DispatchResult":
         """The ONE ordered exit step: payload, preview log, exit code.
 
@@ -8440,8 +8461,12 @@ class App:
         (§19.1, §19.3), and stdout carries exactly one document.
         """
         if ctx._json:
+            # A command that declared stdout ownership keeps stdout for its own
+            # document, and the envelope moves to stderr with the diagnostics
+            # it carries (contract §19.6). Leaving it on stdout would re-create
+            # the two-documents-on-one-stream collision §19.1 exists to remove.
             self._emit_envelope(
-                out,
+                err if owns_stdout else out,
                 command=cmd_path,
                 exit_code=exit_code,
                 dry_run=ctx._dry_run,
@@ -9719,6 +9744,7 @@ def _build_and_validate_command(
     dry_run_supported: bool = True,
     dry_run_unsupported_reason: str | None = None,
     payload_schema: dict | None = None,
+    owns_stdout: bool = False,
     handler: Callable,
     args: list[Arg] | None,
     flag_sets: list[FlagSet] | None,
@@ -9829,6 +9855,7 @@ def _build_and_validate_command(
             dry_run_supported=dry_run_supported,
             dry_run_unsupported_reason=dry_run_unsupported_reason,
             payload_schema=payload_schema,
+            owns_stdout=owns_stdout,
             passthrough=passthrough,
             tags=effective_tags,
             hidden=hidden,
@@ -10098,6 +10125,7 @@ def _build_and_validate_command(
         dry_run_supported=dry_run_supported,
         dry_run_unsupported_reason=dry_run_unsupported_reason,
         payload_schema=payload_schema,
+        owns_stdout=owns_stdout,
         flags=tuple(all_flags),
         args=tuple(all_args),
         flag_sets=tuple(resolved_flag_sets),
@@ -11238,6 +11266,10 @@ def _serialize_command(cmd: Command) -> dict:
     # written rather than a re-rendering of it.
     if cmd.payload_schema is not None:
         d["payload_schema"] = cmd.payload_schema
+    # Emitted only when declared true; absence means the framework owns stdout,
+    # which is the baseline (contract §13's 2026-08-13 amendment, §19.6).
+    if cmd.owns_stdout:
+        d["owns_stdout"] = True
     if cmd.passthrough is not None:
         d["passthrough"] = True
     flags = [_serialize_flag(f) for f in cmd.flags]

@@ -242,7 +242,12 @@ type Command struct {
 	// then a call-time hard error. The literal is validated at registration
 	// over the closed subset, and the value ctx.Payload supplies is
 	// validated against it at emission.
-	PayloadSchema      map[string]interface{}
+	PayloadSchema map[string]interface{}
+	// OwnsStdout declares that this command's stdout IS the artifact
+	// (contract §19.6) -- a SQL dump, an SVG, a hash-verified JSON document.
+	// In machine mode the envelope moves to stderr so the artifact's bytes are
+	// untouched. Outside machine mode the declaration changes nothing at all.
+	OwnsStdout         bool
 	Grants             []Grant
 	Forwarding         *Forwarding
 	flags              []Flag
@@ -881,6 +886,20 @@ func WithDryRunUnsupported(reason string) CmdOption {
 func PayloadSchema(schema map[string]interface{}) CmdOption {
 	return func(c *Command) {
 		c.PayloadSchema = schema
+	}
+}
+
+// OwnsStdout declares that this command's stdout is its own document
+// (contract §19.6): in machine mode stdout carries that document byte-exactly
+// and the envelope moves to stderr, together with every framework diagnostic
+// it carries. Outside machine mode the declaration changes nothing at all --
+// the command prints its document as it always did.
+//
+// The name is the contract's pinned spelling (§18.9 item 111), which is why it
+// carries no With- prefix.
+func OwnsStdout() CmdOption {
+	return func(c *Command) {
+		c.OwnsStdout = true
 	}
 }
 
@@ -2216,7 +2235,7 @@ func (a *App) Run() {
 	// The confirm protocol fires only on the real CLI path -- and a mutating
 	// PASSTHROUGH is not exempt.
 	a.confirmConsequential(pr.cmd, pr.cmdPath)
-	code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, ctx, func() int {
+	code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, ctx, pr.cmd.OwnsStdout, func() int {
 		if pr.cmd.Passthrough {
 			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		}
@@ -2260,16 +2279,16 @@ func (a *App) reservedFlagState() reservedFlags {
 //
 // A handler that calls os.Exit is outside this guarantee and outside Go: the
 // process is gone before any deferred function runs.
-func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, ctx *Context, fn func() int) (code int) {
+func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, ctx *Context, ownsStdout bool, fn func() int) (code int) {
 	defer func() {
 		r := recover()
 		if r == nil {
-			a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, code, nil, false)
+			a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, code, nil, false, ownsStdout)
 			return
 		}
 		if t, ok := r.(dryRunTruncation); ok {
 			code = 1
-			a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, 1, &t, false)
+			a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, 1, &t, false, ownsStdout)
 			return
 		}
 		// An unexpected unwind. The recorded effects are still owed to whoever
@@ -2282,7 +2301,7 @@ func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, c
 		// here would make the envelope contradict the process it describes.
 		// The two siblings report 1 on the same path for the same reason:
 		// an uncaught Python exception and an uncaught Node throw both exit 1.
-		a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, goPanicExitStatus, nil, true)
+		a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, goPanicExitStatus, nil, true, ownsStdout)
 		panic(r)
 	}()
 	return fn()
@@ -2347,9 +2366,17 @@ type previewError struct {
 // log, truncation error and abort marker: those texts become the envelope's
 // preview and preview_error members (§19.1, §19.3), and stdout carries exactly
 // one document.
-func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool, cmdPath string, exitCode int, trunc *dryRunTruncation, aborted bool) {
+func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool, cmdPath string, exitCode int, trunc *dryRunTruncation, aborted bool, ownsStdout bool) {
 	if ctx != nil && ctx.reserved.json {
-		a.emitEnvelope(ctx, stdout, &cmdPath, exitCode, dryRun, a.EffectLog(),
+		// A command that declared stdout ownership keeps stdout for its own
+		// document, and the envelope moves to stderr with the diagnostics it
+		// carries (contract §19.6). Leaving it on stdout would re-create the
+		// two-documents-on-one-stream collision §19.1 exists to remove.
+		dest := stdout
+		if ownsStdout {
+			dest = stderr
+		}
+		a.emitEnvelope(ctx, dest, &cmdPath, exitCode, dryRun, a.EffectLog(),
 			a.buildPreviewError(cmdPath, dryRun, trunc, aborted))
 		return
 	}
@@ -2520,7 +2547,7 @@ func (a *App) Test(argv []string) Result {
 	reserved := a.reservedFlagState()
 	ctx := a.newDispatchContext(stdoutW, stderrW, pr, reserved)
 
-	exitCode := a.runSealed(stdoutW, stderrW, reserved.dryRun, pr.cmdPath, ctx, func() int {
+	exitCode := a.runSealed(stdoutW, stderrW, reserved.dryRun, pr.cmdPath, ctx, pr.cmd.OwnsStdout, func() int {
 		if pr.cmd.Passthrough {
 			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		}

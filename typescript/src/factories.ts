@@ -861,6 +861,13 @@ export interface CommandDef<
 	 * is a later item.
 	 */
 	readonly payloadSchema: Readonly<Record<string, unknown>> | undefined;
+	/**
+	 * Declares that this command's stdout IS the artifact (contract §19.6).
+	 * In machine mode stdout carries the command's own document byte-exactly
+	 * and the envelope moves to stderr with the diagnostics it carries.
+	 * Outside machine mode the declaration changes nothing at all.
+	 */
+	readonly ownsStdout: boolean;
 	readonly flags: F;
 	readonly args: A;
 	readonly flagSets: FS;
@@ -889,6 +896,13 @@ export interface AnyCommand {
 	readonly dryRunSupported: boolean;
 	readonly dryRunUnsupportedReason: string | undefined;
 	readonly payloadSchema: Readonly<Record<string, unknown>> | undefined;
+	/**
+	 * Declares that this command's stdout IS the artifact (contract §19.6).
+	 * In machine mode stdout carries the command's own document byte-exactly
+	 * and the envelope moves to stderr with the diagnostics it carries.
+	 * Outside machine mode the declaration changes nothing at all.
+	 */
+	readonly ownsStdout: boolean;
 	readonly flags: FlagMap;
 	readonly args: readonly AnyArg[];
 	readonly flagSets: readonly AnyFlagSet[];
@@ -945,6 +959,13 @@ export interface ReadOnlyCommandSpec<
 	 * against. A command that declares none cannot produce a payload.
 	 */
 	readonly payloadSchema?: Readonly<Record<string, unknown>>;
+	/**
+	 * Declares that this command's stdout IS the artifact (contract §19.6):
+	 * in machine mode stdout carries the command's own document byte-exactly
+	 * and the envelope moves to stderr. Outside machine mode it changes
+	 * nothing.
+	 */
+	readonly ownsStdout?: boolean;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
@@ -990,6 +1011,13 @@ export interface MutatingCommandSpec<
 	 * against. A command that declares none cannot produce a payload.
 	 */
 	readonly payloadSchema?: Readonly<Record<string, unknown>>;
+	/**
+	 * Declares that this command's stdout IS the artifact (contract §19.6):
+	 * in machine mode stdout carries the command's own document byte-exactly
+	 * and the envelope moves to stderr. Outside machine mode it changes
+	 * nothing.
+	 */
+	readonly ownsStdout?: boolean;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
@@ -1315,6 +1343,7 @@ function buildCommandDef<
 		dryRunSupported: spec.dryRunSupported ?? true,
 		dryRunUnsupportedReason: spec.dryRunUnsupportedReason,
 		payloadSchema: spec.payloadSchema,
+		ownsStdout: spec.ownsStdout ?? false,
 		flags,
 		args,
 		flagSets,
@@ -1413,6 +1442,13 @@ export interface PassthroughDef<N extends string, C = MutatingContext> {
 	readonly dryRunUnsupportedReason: string | undefined;
 	/** Declared exactly as on an ordinary command (contract §19.5). */
 	readonly payloadSchema: Readonly<Record<string, unknown>> | undefined;
+	/**
+	 * Declares that this command's stdout IS the artifact (contract §19.6).
+	 * In machine mode stdout carries the command's own document byte-exactly
+	 * and the envelope moves to stderr with the diagnostics it carries.
+	 * Outside machine mode the declaration changes nothing at all.
+	 */
+	readonly ownsStdout: boolean;
 	readonly handler: PassthroughHandler<C>;
 	readonly tags: readonly string[];
 	readonly hidden: boolean;
@@ -1427,6 +1463,13 @@ interface PassthroughSpec<C> {
 	readonly dryRunSupported?: boolean;
 	readonly dryRunUnsupportedReason?: string;
 	readonly payloadSchema?: Readonly<Record<string, unknown>>;
+	/**
+	 * Declares that this command's stdout IS the artifact (contract §19.6):
+	 * in machine mode stdout carries the command's own document byte-exactly
+	 * and the envelope moves to stderr. Outside machine mode it changes
+	 * nothing.
+	 */
+	readonly ownsStdout?: boolean;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly grants?: readonly Grant[];
@@ -1460,6 +1503,7 @@ function buildPassthroughDef<N extends string, C>(
 		dryRunSupported: spec.dryRunSupported ?? true,
 		dryRunUnsupportedReason: spec.dryRunUnsupportedReason,
 		payloadSchema: spec.payloadSchema,
+		ownsStdout: spec.ownsStdout ?? false,
 		handler: spec.handler,
 		tags,
 		hidden: spec.hidden ?? false,

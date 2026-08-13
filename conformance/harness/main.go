@@ -887,6 +887,11 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 			opts = append(opts, strictcli.PayloadSchema(map[string]interface{}{}))
 		}
 	}
+	// Stdout ownership (§19.6): the command's own document keeps stdout and the
+	// envelope moves to stderr in machine mode.
+	if v, ok := cmdDef["owns_stdout"].(bool); ok && v {
+		opts = append(opts, strictcli.OwnsStdout())
+	}
 	if v, ok := cmdDef["grants"]; ok {
 		var grants []strictcli.Grant
 		for _, item := range v.([]interface{}) {

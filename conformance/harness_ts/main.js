@@ -742,6 +742,7 @@ function spliceDryRun(spec, cmdDef) {
 		spec.dryRunUnsupportedReason = cmdDef.dry_run_unsupported_reason;
 	}
 	splicePayloadSchema(spec, cmdDef);
+	spliceOwnsStdout(spec, cmdDef);
 }
 
 /**
@@ -763,6 +764,16 @@ function splicePayloadSchema(spec, cmdDef) {
 	const kind = cmdDef.handler_returns?.kind;
 	if (kind === "data" || kind === "exit_data") {
 		spec.payloadSchema = {};
+	}
+}
+
+/**
+ * Stdout ownership (§19.6): the command's own document keeps stdout and the
+ * envelope moves to stderr in machine mode.
+ */
+function spliceOwnsStdout(spec, cmdDef) {
+	if (cmdDef.owns_stdout === true) {
+		spec.ownsStdout = true;
 	}
 }
 

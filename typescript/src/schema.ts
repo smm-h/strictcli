@@ -244,6 +244,7 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 		readonly dryRunSupported?: boolean;
 		readonly dryRunUnsupportedReason?: string;
 		readonly payloadSchema?: Readonly<Record<string, unknown>>;
+		readonly ownsStdout?: boolean;
 		readonly grants?: readonly Grant[];
 		readonly forwarding?: Forwarding;
 	};
@@ -270,6 +271,11 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 	// rather than a re-rendering of it.
 	if (carrier.payloadSchema !== undefined) {
 		d.payload_schema = carrier.payloadSchema;
+	}
+	// Emitted only when declared true; absence means the framework owns stdout,
+	// which is the baseline (contract §13's 2026-08-13 amendment, §19.6).
+	if (carrier.ownsStdout === true) {
+		d.owns_stdout = true;
 	}
 	if (rc.kind === "passthrough") {
 		d.passthrough = true;

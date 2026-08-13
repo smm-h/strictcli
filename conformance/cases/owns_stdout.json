@@ -1,0 +1,193 @@
+[
+  {
+    "name": "owns_stdout: outside machine mode the declaration changes nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "dump",
+          "help": "emit the artifact",
+          "effect": "read_only",
+          "owns_stdout": true,
+          "handler_prints": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}"
+        }
+      ]
+    },
+    "argv": [
+      "dump"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "owns_stdout: in machine mode the document keeps stdout and the envelope moves to stderr",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "dump",
+          "help": "emit the artifact",
+          "effect": "read_only",
+          "owns_stdout": true,
+          "handler_prints": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}"
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "dump"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}\n",
+      "stderr_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "owns_stdout: the diagnostics move with the envelope, never onto the artifact's stream",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "dump",
+          "help": "emit the artifact",
+          "effect": "read_only",
+          "owns_stdout": true,
+          "handler_prints": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}",
+          "handler_diagnostics": [
+            {
+              "level": "info",
+              "message": "wrote 3 rows"
+            },
+            {
+              "level": "warn",
+              "message": "schema is provisional"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "dump"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}\n",
+      "stderr_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[{\"level\":\"info\",\"message\":\"wrote 3 rows\"},{\"level\":\"warn\",\"message\":\"schema is provisional\"}]}\n"
+    }
+  },
+  {
+    "name": "owns_stdout: a preview's envelope moves too, leaving stdout to the artifact",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "dump",
+          "help": "emit the artifact",
+          "effect": "mutating",
+          "owns_stdout": true,
+          "handler_prints": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}",
+          "handler_effects": [
+            {
+              "method": "write",
+              "path": "out.sql",
+              "content": "x"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "--dry-run",
+      "dump"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}\n",
+      "stderr_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":true,\"preview\":[{\"bytes\":1,\"detail\":\"out.sql (1 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"write\"}],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "owns_stdout: a declared payload still rides the envelope on stderr",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "dump",
+          "help": "emit the artifact",
+          "effect": "read_only",
+          "owns_stdout": true,
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "rows": 3
+            }
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "dump"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":{\"rows\":3},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "owns_stdout: the schema dump publishes the declaration only when true",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "dump",
+          "help": "emit the artifact",
+          "effect": "read_only",
+          "owns_stdout": true,
+          "handler_prints": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}"
+        },
+        {
+          "name": "plain",
+          "help": "an ordinary command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_keys": {
+        "dump": {
+          "owns_stdout": true
+        }
+      },
+      "schema_command_absent_keys": {
+        "plain": [
+          "owns_stdout"
+        ]
+      }
+    }
+  }
+]
