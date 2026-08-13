@@ -88,11 +88,13 @@ import {
 	errGrantNameInvalid,
 	errGrantReasonEmpty,
 	errInvalidTagName,
+	errPayloadSchemaInvalid,
 	errRequiredArgCannotHaveDefault,
 	RegistrationError,
 } from "./errors.js";
 import type { HandlerArgs } from "./infer.js";
 import { type InfraRootPath, isInfraRootPath } from "./infra.js";
+import { validatePayloadSchemaLiteral } from "./payload_schema.js";
 import type {
 	Carrier,
 	Context,
@@ -1059,6 +1061,29 @@ export function validateDryRunDeclaration(
 	}
 }
 
+/**
+ * Validates a declared payload schema at registration time (contract §19.5).
+ *
+ * The literal is validated as written over the closed subset: an unknown
+ * keyword anywhere is a hard error, which is what keeps the subset closed by
+ * construction. Shared by the ordinary and passthrough builders so both
+ * surfaces reject the same shapes with the same messages.
+ */
+export function validatePayloadSchemaDeclaration(
+	cmdName: string,
+	payloadSchema: Readonly<Record<string, unknown>> | undefined,
+): void {
+	if (payloadSchema === undefined) {
+		return;
+	}
+	const found = validatePayloadSchemaLiteral(payloadSchema);
+	if (found !== null) {
+		throw new RegistrationError(
+			errPayloadSchemaInvalid(cmdName, found.path, found.detail),
+		);
+	}
+}
+
 /** Validates a declared-forwarding declaration at registration time. */
 export function validateForwarding(
 	cmdName: string,
@@ -1136,6 +1161,7 @@ function buildCommandDef<
 		spec.dryRunSupported,
 		spec.dryRunUnsupportedReason,
 	);
+	validatePayloadSchemaDeclaration(name, spec.payloadSchema);
 	// The empty fallbacks are safe: the type params only default when the
 	// corresponding spec properties are absent.
 	const flags = spec.flags ?? ({} as F);
@@ -1423,6 +1449,7 @@ function buildPassthroughDef<N extends string, C>(
 		spec.dryRunSupported,
 		spec.dryRunUnsupportedReason,
 	);
+	validatePayloadSchemaDeclaration(name, spec.payloadSchema);
 	const tags = validateAndDedupTags(spec.tags ?? []);
 	return {
 		kind: "passthrough",

@@ -1987,6 +1987,35 @@ export function errPayloadAlreadySet(name: string): string {
 	return `command ${q(name)}: ctx.payload was already called (a dispatch carries at most one payload)`;
 }
 
+/**
+ * Fires at registration when a declared payload schema leaves the closed
+ * subset (§19.5). `path` names the position inside the declared literal
+ * (rooted at payload_schema) and `detail` names the violated rule; both are
+ * byte-identical across the three implementations, pinned by
+ * conformance/payload_schema_vectors.json.
+ */
+export function errPayloadSchemaInvalid(
+	name: string,
+	path: string,
+	detail: string,
+): string {
+	return `command ${q(name)}: payload schema is invalid at ${path}: ${detail}`;
+}
+
+/**
+ * Fires at emission when a payload deviates from its declared schema (§19.5).
+ * `path` names the position inside the value (rooted at payload) and `detail`
+ * names the violated constraint, so a wrong shape fails here instead of
+ * shipping.
+ */
+export function errPayloadInvalid(
+	name: string,
+	path: string,
+	detail: string,
+): string {
+	return `command ${q(name)}: payload does not satisfy the declared schema at ${path}: ${detail}`;
+}
+
 // ---------------------------------------------------------------------------
 // effects.go — effects handle availability (TS-only)
 //

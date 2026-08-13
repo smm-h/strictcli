@@ -55,7 +55,12 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // errArgNameConsentReserved, the registration-time ban on declaring a flag or
 // a positional arg named `approve_consequential` (the name the programmatic
 // and MCP channels use to state consent).
-const EXPECTED_TEMPLATE_COUNT = 317;
+// The declared payload schema adds 2: errPayloadSchemaInvalid (registration)
+// and errPayloadInvalid (emission), the two OUTER templates of §19.5's
+// validator. Its detail strings live in payload_schema.ts rather than here --
+// they are pinned across implementations by the shared vector file, not by the
+// error-parity catalog.
+const EXPECTED_TEMPLATE_COUNT = 319;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

@@ -14,8 +14,10 @@ import {
 	errInfraValueUndeclared,
 	errNoSourceInfo,
 	errPayloadAlreadySet,
+	errPayloadInvalid,
 	errPayloadNoSchema,
 } from "./errors.js";
+import { validatePayloadValue } from "./payload_schema.js";
 
 /** Minimal sink for output streams (process.stdout/stderr or test captures). */
 export interface Writer {
@@ -226,8 +228,10 @@ export class Context implements MutatingContext {
 	 * `call()` capture it either way.
 	 *
 	 * Throws when the command declared no payload schema (there is nothing to
-	 * validate the value against) and when a payload was already supplied in
-	 * this dispatch (one slot, one answer).
+	 * validate the value against), when a payload was already supplied in this
+	 * dispatch (one slot, one answer), and when the value does not satisfy the
+	 * declared schema (contract §19.5) -- a wrong shape fails here instead of
+	 * shipping.
 	 */
 	payload(value: unknown): void {
 		if (this.payloadSchema === null) {
@@ -235,6 +239,15 @@ export class Context implements MutatingContext {
 		}
 		if (this.payloadSet) {
 			throw new Error(errPayloadAlreadySet(this.commandName));
+		}
+		const found = validatePayloadValue(
+			value,
+			this.payloadSchema as Record<string, unknown>,
+		);
+		if (found !== null) {
+			throw new Error(
+				errPayloadInvalid(this.commandName, found.path, found.detail),
+			);
 		}
 		this.payloadValue = value;
 		this.payloadSet = true;

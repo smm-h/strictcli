@@ -90,12 +90,39 @@ test("test: outcome data prints one compact JSON line with BigInt tokens", async
 			},
 		}),
 	);
-	const r = await app.test(["run", "--count", "9007199254740993", "--json"]);
+	const r = await app.test(["run", "--count", "9007199254740992", "--json"]);
 	assert.equal(
 		r.stdout,
-		'{"interface_version":1,"app":"myapp","app_version":"1.0.0","command":"run","exit_code":0,"payload":{"count":9007199254740993,"name":"x"},"dry_run":false,"preview":[],"preview_error":null,"diagnostics":[]}\n',
+		'{"interface_version":1,"app":"myapp","app_version":"1.0.0","command":"run","exit_code":0,"payload":{"count":9007199254740992,"name":"x"},"dry_run":false,"preview":[],"preview_error":null,"diagnostics":[]}\n',
 	);
-	assert.deepEqual(r.data, { count: 9007199254740993n, name: "x" });
+	assert.deepEqual(r.data, { count: 9007199254740992n, name: "x" });
+});
+
+test("test: a BigInt payload past 2^53 is refused rather than emitted lossily", async () => {
+	// Decision 16 (contract §19.5): the envelope is a public document and its
+	// consuming ecosystem reads every number as a double, so a token no reader
+	// can round-trip is refused at emission. A big identifier is a string by
+	// declaration.
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			payloadSchema: {},
+			help: "run",
+			flags: { count: flag("count", t.int, { help: "count", default: 7n }) },
+			handler: (args, ctx) => {
+				ctx.payload({ count: args.count, name: "x" });
+				return outcome(0);
+			},
+		}),
+	);
+	await assert.rejects(
+		app.test(["run", "--count", "9007199254740993", "--json"]),
+		(err: Error) =>
+			err.message ===
+			'command "run": payload does not satisfy the declared schema at ' +
+				`payload["count"]: the number's magnitude exceeds 2^53 ` +
+				"(declare a big identifier as a string)",
+	);
 });
 
 test("test: bad handler returns are hard errors (propagate to the caller)", async () => {
