@@ -11750,6 +11750,146 @@ def _write_schema(app: App) -> str:
 
 
 # MCP server (--mcp)
+#
+# The server speaks two eras (effects contract §22):
+#
+#   MODERN (2026-07-28) -- stateless. There is no handshake: every request
+#   carries its protocol version and the client's capabilities in `_meta`,
+#   every result carries a `resultType`, and `server/discover` advertises the
+#   supported versions, the capabilities and the server identity that the
+#   handshake used to carry.
+#
+#   LEGACY (2024-11-05) -- the `initialize` handshake. It is selected by an
+#   `initialize` request and scoped to this process, which is exactly the
+#   dual-era rule the modern revision specifies for a server serving both.
+#
+# A request that carries neither the modern metadata nor a preceding
+# `initialize` is malformed and is refused. Nothing is inferred.
+
+_MCP_PROTOCOL_VERSION = "2026-07-28"
+_MCP_LEGACY_PROTOCOL_VERSION = "2024-11-05"
+
+# The reserved `_meta` keys of the modern revision.
+_MCP_META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion"
+_MCP_META_CLIENT_CAPABILITIES = "io.modelcontextprotocol/clientCapabilities"
+_MCP_META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
+_MCP_META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"
+_MCP_META_LOG_LEVEL = "io.modelcontextprotocol/logLevel"
+_MCP_META_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
+
+# A key under a prefix the protocol reserves for itself is either one this
+# revision defines or one this server does not speak; the second is refused
+# rather than ignored.
+_MCP_RECOGNIZED_RESERVED_META_KEYS = frozenset({
+    _MCP_META_PROTOCOL_VERSION,
+    _MCP_META_CLIENT_CAPABILITIES,
+    _MCP_META_CLIENT_INFO,
+    _MCP_META_LOG_LEVEL,
+    _MCP_META_SUBSCRIPTION_ID,
+})
+
+# The named feature the server declares (campaign decision 26). A NAME, never a
+# version number: a new name appears only if the confirmation dance changes
+# incompatibly.
+_MCP_FEATURE_CONSEQUENTIAL_CONFIRMATION = (
+    "dev.smmh.strictcli/consequential-confirmation"
+)
+
+# Cacheability of the list surfaces. The tool list is derived from the app's
+# static command registration, so it cannot vary per client (public) and cannot
+# change while the process runs.
+_MCP_CACHE_TTL_MS = 3600000
+_MCP_CACHE_SCOPE = "public"
+
+# JSON-RPC and MCP error codes. -32020 (HeaderMismatch) belongs to the HTTP
+# transport, which this server does not speak; -32021
+# (MissingRequiredClientCapability) is fired by the confirmation round-trip.
+_MCP_ERR_PARSE = -32700
+_MCP_ERR_METHOD_NOT_FOUND = -32601
+_MCP_ERR_INVALID_PARAMS = -32602
+_MCP_ERR_INTERNAL = -32603
+_MCP_ERR_UNSUPPORTED_PROTOCOL_VERSION = -32022
+
+_MCP_META_PREFIX_LABEL_RE = re.compile(r"^[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
+_MCP_META_NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
+
+
+def _mcp_meta_key_valid(key: str) -> bool:
+    """True when `key` matches the protocol's `_meta` key-name grammar.
+
+    A key is an optional dot-separated prefix, a slash, and a name. The name may
+    be empty; when it is not, it begins and ends alphanumeric and may carry
+    hyphens, underscores and dots in between.
+    """
+    parts = key.split("/")
+    if len(parts) == 1:
+        name = parts[0]
+    elif len(parts) == 2:
+        for label in parts[0].split("."):
+            if not _MCP_META_PREFIX_LABEL_RE.match(label):
+                return False
+        name = parts[1]
+    else:
+        return False
+    return name == "" or bool(_MCP_META_NAME_RE.match(name))
+
+
+def _mcp_meta_key_reserved(key: str) -> bool:
+    """True when `key` sits under a prefix the protocol reserves for itself.
+
+    Any prefix whose SECOND label is `modelcontextprotocol` or `mcp` is
+    reserved -- so `io.modelcontextprotocol/` and `com.mcp.tools/` are, and
+    `com.example.mcp/` is not.
+    """
+    parts = key.split("/")
+    if len(parts) != 2:
+        return False
+    labels = parts[0].split(".")
+    return len(labels) >= 2 and labels[1] in ("modelcontextprotocol", "mcp")
+
+
+def _mcp_validate_meta(meta: dict) -> str | None:
+    """Validate one request's `_meta` block; return the refusal, or None.
+
+    Called only once the block is known to carry the protocol version, which is
+    what selects the modern era in the first place.
+    """
+    for key in meta:
+        if not _mcp_meta_key_valid(key):
+            return f"invalid _meta key name: '{key}'"
+        if (
+            _mcp_meta_key_reserved(key)
+            and key not in _MCP_RECOGNIZED_RESERVED_META_KEYS
+        ):
+            return f"unrecognized reserved _meta key: '{key}'"
+    if not isinstance(meta[_MCP_META_PROTOCOL_VERSION], str):
+        return f"_meta['{_MCP_META_PROTOCOL_VERSION}'] must be a string"
+    if _MCP_META_CLIENT_CAPABILITIES not in meta:
+        return (
+            "missing required request metadata: "
+            f"_meta['{_MCP_META_CLIENT_CAPABILITIES}']"
+        )
+    if not isinstance(meta[_MCP_META_CLIENT_CAPABILITIES], dict):
+        return f"_meta['{_MCP_META_CLIENT_CAPABILITIES}'] must be an object"
+    if _MCP_META_CLIENT_INFO in meta and not isinstance(
+        meta[_MCP_META_CLIENT_INFO], dict,
+    ):
+        return f"_meta['{_MCP_META_CLIENT_INFO}'] must be an object"
+    return None
+
+
+def _mcp_server_info(app: App) -> dict:
+    """The identity every modern result carries in its own `_meta`."""
+    return {_MCP_META_SERVER_INFO: {"name": app.name, "version": app.version}}
+
+
+def _mcp_complete_result(app: App, req_id: object, body: dict) -> dict:
+    """Wrap a modern result body: `resultType` in front, server identity behind."""
+    result: dict = {"resultType": "complete"}
+    result.update(body)
+    result["_meta"] = _mcp_server_info(app)
+    return {"jsonrpc": "2.0", "id": req_id, "result": result}
+
 
 def _mcp_collect_commands(app: App) -> dict[str, tuple[Command, str]]:
     """Collect non-hidden, non-interactive leaf commands as {dotted_path: (cmd, help)}.
@@ -11783,23 +11923,31 @@ def _mcp_collect_commands(app: App) -> dict[str, tuple[Command, str]]:
 
 
 def _mcp_jsonrpc_error(
-    req_id: object, code: int, message: str,
+    req_id: object, code: int, message: str, data: object = None,
 ) -> dict:
     """Build a JSON-RPC 2.0 error response."""
+    error: dict = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = data
     return {
         "jsonrpc": "2.0",
         "id": req_id,
-        "error": {"code": code, "message": message},
+        "error": error,
     }
 
 
 def _mcp_handle_initialize(app: App, req_id: object) -> dict:
-    """Handle the MCP 'initialize' request."""
+    """Handle the legacy-era 'initialize' handshake, and select that era.
+
+    The modern revision has no handshake; this method is what a legacy client
+    opens with, and answering it is what puts this process into legacy
+    semantics for every later request that carries no modern metadata.
+    """
     return {
         "jsonrpc": "2.0",
         "id": req_id,
         "result": {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": _MCP_LEGACY_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
             "serverInfo": {
                 "name": app.name,
@@ -11809,8 +11957,32 @@ def _mcp_handle_initialize(app: App, req_id: object) -> dict:
     }
 
 
+def _mcp_handle_discover(app: App, req_id: object) -> dict:
+    """Handle 'server/discover' -- the modern era's mandatory discovery call.
+
+    It replaces the handshake: supported versions, capabilities and identity in
+    one request. The declared feature is a NAME rather than a version number,
+    so a client learns that this server runs the confirmation dance without
+    having to infer it from a revision date.
+    """
+    return _mcp_complete_result(app, req_id, {
+        "supportedVersions": [_MCP_PROTOCOL_VERSION],
+        "capabilities": {
+            "tools": {},
+            "extensions": {_MCP_FEATURE_CONSEQUENTIAL_CONFIRMATION: {}},
+        },
+        "instructions": app.help,
+        "ttlMs": _MCP_CACHE_TTL_MS,
+        "cacheScope": _MCP_CACHE_SCOPE,
+    })
+
+
 def _mcp_handle_tools_list(
-    app: App, commands: dict[str, tuple[Command, str]], req_id: object,
+    app: App,
+    commands: dict[str, tuple[Command, str]],
+    req_id: object,
+    *,
+    modern: bool,
 ) -> dict:
     """Handle the MCP 'tools/list' request."""
     tools = []
@@ -11828,17 +12000,37 @@ def _mcp_handle_tools_list(
         if cmd.consequential:
             entry["consequential"] = True
         tools.append(entry)
-    return {
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "result": {"tools": tools},
-    }
+    if not modern:
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"tools": tools},
+        }
+    return _mcp_complete_result(app, req_id, {
+        "tools": tools,
+        "ttlMs": _MCP_CACHE_TTL_MS,
+        "cacheScope": _MCP_CACHE_SCOPE,
+    })
+
+
+def _mcp_tool_result(
+    app: App, req_id: object, text: str, *, modern: bool, is_error: bool = False,
+) -> dict:
+    """Build a tool result -- the one place the two eras' shapes differ."""
+    body: dict = {"content": [{"type": "text", "text": text}]}
+    if is_error:
+        body["isError"] = True
+    if not modern:
+        return {"jsonrpc": "2.0", "id": req_id, "result": body}
+    return _mcp_complete_result(app, req_id, body)
 
 
 def _mcp_handle_tools_call(
     app: App,
     req_id: object,
     params: dict,
+    *,
+    modern: bool,
 ) -> dict:
     """Handle the MCP 'tools/call' request."""
     if "name" not in params:
@@ -11878,34 +12070,13 @@ def _mcp_handle_tools_call(
             approve_consequential=approve_consequential,
         )
     except InvokeError as e:
-        return {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "result": {
-                "content": [{"type": "text", "text": str(e)}],
-                "isError": True,
-            },
-        }
+        return _mcp_tool_result(app, req_id, str(e), modern=modern, is_error=True)
     except Exception as e:
-        return {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "result": {
-                "content": [{"type": "text", "text": str(e)}],
-                "isError": True,
-            },
-        }
+        return _mcp_tool_result(app, req_id, str(e), modern=modern, is_error=True)
 
-    return {
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "result": {
-            "content": [{
-                "type": "text",
-                "text": json.dumps(result, default=str),
-            }],
-        },
-    }
+    return _mcp_tool_result(
+        app, req_id, json.dumps(result, default=str), modern=modern,
+    )
 
 
 def _run_mcp_server(
@@ -11923,16 +12094,10 @@ def _run_mcp_server(
     out = output if output is not None else sys.stdout
 
     commands = _mcp_collect_commands(app)
-
-    _MCP_HANDLERS = {
-        "initialize": lambda req_id, _params: _mcp_handle_initialize(app, req_id),
-        "tools/list": lambda req_id, _params: _mcp_handle_tools_list(
-            app, commands, req_id,
-        ),
-        "tools/call": lambda req_id, params: _mcp_handle_tools_call(
-            app, req_id, params,
-        ),
-    }
+    # The one piece of connection state a dual-era server is allowed: an
+    # `initialize` request selects legacy semantics for this process. Modern
+    # requests carry everything they need and never consult it.
+    legacy_era = False
 
     for line in inp:
         line = line.strip()
@@ -11966,13 +12131,79 @@ def _run_mcp_server(
         if "id" not in msg:
             continue
 
-        handler = _MCP_HANDLERS.get(method)
-        if handler is not None:
-            resp = handler(req_id, params)
+        if not isinstance(params, dict):
+            params = {}
+
+        if method == "initialize":
+            legacy_era = True
+            resp = _mcp_handle_initialize(app, req_id)
+            out.write(json.dumps(resp) + "\n")
+            out.flush()
+            continue
+
+        meta = params.get("_meta")
+        if "_meta" in params and not isinstance(meta, dict):
+            resp = _mcp_jsonrpc_error(
+                req_id, _MCP_ERR_INVALID_PARAMS,
+                "parameter '_meta' must be an object",
+            )
+        elif isinstance(meta, dict) and _MCP_META_PROTOCOL_VERSION in meta:
+            resp = _mcp_dispatch_modern(app, commands, req_id, method, params, meta)
+        elif legacy_era:
+            resp = _mcp_dispatch_legacy(app, commands, req_id, method, params)
         else:
             resp = _mcp_jsonrpc_error(
-                req_id, -32601, f"Method not found: {method}",
+                req_id, _MCP_ERR_INVALID_PARAMS,
+                "missing required request metadata: "
+                f"_meta['{_MCP_META_PROTOCOL_VERSION}']",
             )
 
         out.write(json.dumps(resp) + "\n")
         out.flush()
+
+
+def _mcp_dispatch_modern(
+    app: App,
+    commands: dict[str, tuple[Command, str]],
+    req_id: object,
+    method: str,
+    params: dict,
+    meta: dict,
+) -> dict:
+    """Dispatch one modern-era request: metadata, then version, then method."""
+    invalid = _mcp_validate_meta(meta)
+    if invalid is not None:
+        return _mcp_jsonrpc_error(req_id, _MCP_ERR_INVALID_PARAMS, invalid)
+    version = meta[_MCP_META_PROTOCOL_VERSION]
+    if version != _MCP_PROTOCOL_VERSION:
+        return _mcp_jsonrpc_error(
+            req_id, _MCP_ERR_UNSUPPORTED_PROTOCOL_VERSION,
+            "Unsupported protocol version",
+            {"supported": [_MCP_PROTOCOL_VERSION], "requested": version},
+        )
+    if method == "server/discover":
+        return _mcp_handle_discover(app, req_id)
+    if method == "tools/list":
+        return _mcp_handle_tools_list(app, commands, req_id, modern=True)
+    if method == "tools/call":
+        return _mcp_handle_tools_call(app, req_id, params, modern=True)
+    return _mcp_jsonrpc_error(
+        req_id, _MCP_ERR_METHOD_NOT_FOUND, f"Method not found: {method}",
+    )
+
+
+def _mcp_dispatch_legacy(
+    app: App,
+    commands: dict[str, tuple[Command, str]],
+    req_id: object,
+    method: str,
+    params: dict,
+) -> dict:
+    """Dispatch one legacy-era request, unchanged from the handshake revision."""
+    if method == "tools/list":
+        return _mcp_handle_tools_list(app, commands, req_id, modern=False)
+    if method == "tools/call":
+        return _mcp_handle_tools_call(app, req_id, params, modern=False)
+    return _mcp_jsonrpc_error(
+        req_id, _MCP_ERR_METHOD_NOT_FOUND, f"Method not found: {method}",
+    )

@@ -12,10 +12,39 @@ def _build_app(**kwargs):
     return strictcli.App(name="myapp", version="1.0.0", help="test app", **kwargs)
 
 
-def _send_request(app, *requests):
-    """Send JSON-RPC requests to serve_mcp and return parsed responses."""
+#: The metadata every modern-era request carries (protocol 2026-07-28). The
+#: helpers below splice it into any request that does not bring its own, so a
+#: test that is not about the metadata itself reads as it always did.
+MODERN_META = {
+    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+    "io.modelcontextprotocol/clientCapabilities": {},
+}
+
+
+def _as_modern(req):
+    """Return `req` with the modern request metadata spliced in."""
+    if req.get("method") == "initialize" or "method" not in req:
+        return req
+    params = dict(req.get("params") or {})
+    if "_meta" in params:
+        return req
+    params["_meta"] = dict(MODERN_META)
+    out = dict(req)
+    out["params"] = params
+    return out
+
+
+def _send_request(app, *requests, era="modern"):
+    """Send JSON-RPC requests to serve_mcp and return parsed responses.
+
+    `era="modern"` splices the per-request metadata into every request that
+    does not carry its own; `era="legacy"` sends them exactly as written, which
+    is what a handshake-era client does.
+    """
     lines = []
     for req in requests:
+        if era == "modern":
+            req = _as_modern(req)
         lines.append(json.dumps(req))
     input_buf = io.StringIO("\n".join(lines) + "\n")
     output_buf = io.StringIO()
@@ -29,9 +58,9 @@ def _send_request(app, *requests):
     return responses
 
 
-def _send_one(app, request):
+def _send_one(app, request, era="modern"):
     """Send a single JSON-RPC request and return the single response."""
-    responses = _send_request(app, request)
+    responses = _send_request(app, request, era=era)
     assert len(responses) == 1
     return responses[0]
 
@@ -791,3 +820,257 @@ class TestMcpToolsCallConsent:
         })
         assert resp["result"]["isError"] is True
         assert "is consequential" in resp["result"]["content"][0]["text"]
+
+
+# ---------------------------------------------------------------------------
+# The modern era (protocol 2026-07-28)
+# ---------------------------------------------------------------------------
+
+
+def _meta(**overrides):
+    """The modern metadata block, with per-test overrides."""
+    block = dict(MODERN_META)
+    block.update(overrides)
+    return block
+
+
+def _modern_app():
+    app = _build_app()
+
+    @app.command("status", effect="read_only", help="show status")
+    def status(ctx):
+        return strictcli.outcome(0)
+
+    return app
+
+
+class TestMcpDiscover:
+    """server/discover is the modern era's mandatory discovery call."""
+
+    def test_discover_advertises_versions_capabilities_and_identity(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {},
+        })
+        result = resp["result"]
+        assert result["resultType"] == "complete"
+        assert result["supportedVersions"] == ["2026-07-28"]
+        assert result["capabilities"]["tools"] == {}
+        assert result["instructions"] == "test app"
+        assert result["ttlMs"] == 3600000
+        assert result["cacheScope"] == "public"
+        assert result["_meta"]["io.modelcontextprotocol/serverInfo"] == {
+            "name": "myapp", "version": "1.0.0",
+        }
+
+    def test_discover_declares_the_confirmation_feature_by_name(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {},
+        })
+        assert resp["result"]["capabilities"]["extensions"] == {
+            "dev.smmh.strictcli/consequential-confirmation": {},
+        }
+
+
+class TestMcpResultType:
+    """Every modern result carries a resultType; legacy results carry none."""
+
+    def test_tools_list_result_is_complete(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {},
+        })
+        assert resp["result"]["resultType"] == "complete"
+        assert resp["result"]["ttlMs"] == 3600000
+        assert resp["result"]["cacheScope"] == "public"
+
+    def test_tools_call_result_is_complete(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "status", "arguments": {}},
+        })
+        assert resp["result"]["resultType"] == "complete"
+        assert resp["result"]["_meta"]["io.modelcontextprotocol/serverInfo"][
+            "name"
+        ] == "myapp"
+
+    def test_tool_error_result_is_complete_and_flagged(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "nope", "arguments": {}},
+        })
+        assert resp["result"]["resultType"] == "complete"
+        assert resp["result"]["isError"] is True
+
+
+class TestMcpRequestMetadata:
+    """Per-request metadata is validated, never inferred."""
+
+    def test_a_request_without_metadata_is_refused(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {},
+        }, era="legacy")
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == (
+            "missing required request metadata: "
+            "_meta['io.modelcontextprotocol/protocolVersion']"
+        )
+
+    def test_meta_must_be_an_object(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": []},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == "parameter '_meta' must be an object"
+
+    def test_protocol_version_must_be_a_string(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{
+                "io.modelcontextprotocol/protocolVersion": 2026,
+            })},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == (
+            "_meta['io.modelcontextprotocol/protocolVersion'] must be a string"
+        )
+
+    def test_client_capabilities_are_required(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            }},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == (
+            "missing required request metadata: "
+            "_meta['io.modelcontextprotocol/clientCapabilities']"
+        )
+
+    def test_client_capabilities_must_be_an_object(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{
+                "io.modelcontextprotocol/clientCapabilities": "yes",
+            })},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == (
+            "_meta['io.modelcontextprotocol/clientCapabilities'] must be an object"
+        )
+
+    def test_client_info_must_be_an_object_when_present(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{
+                "io.modelcontextprotocol/clientInfo": "ExampleClient",
+            })},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == (
+            "_meta['io.modelcontextprotocol/clientInfo'] must be an object"
+        )
+
+    def test_a_malformed_key_name_is_refused(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{"-bad./key": 1})},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == "invalid _meta key name: '-bad./key'"
+
+    def test_an_unknown_reserved_key_is_refused(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{"io.modelcontextprotocol/whatever": 1})},
+        })
+        assert resp["error"]["code"] == -32602
+        assert resp["error"]["message"] == (
+            "unrecognized reserved _meta key: "
+            "'io.modelcontextprotocol/whatever'"
+        )
+
+    def test_a_vendor_key_is_carried_without_complaint(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{
+                "com.example.mcp/thing": 1,
+                "traceparent": "00-0af7651916cd43dd8448eb211c80319c"
+                               "-00f067aa0ba902b7-01",
+                "progressToken": 7,
+            })},
+        })
+        assert resp["result"]["resultType"] == "complete"
+
+    def test_client_info_and_log_level_are_accepted(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{
+                "io.modelcontextprotocol/clientInfo": {
+                    "name": "ExampleClient", "version": "1.0.0",
+                },
+                "io.modelcontextprotocol/logLevel": "debug",
+            })},
+        })
+        assert resp["result"]["resultType"] == "complete"
+
+
+class TestMcpVersionNegotiation:
+    """A version this server does not speak is named, with what it does speak."""
+
+    def test_unsupported_version_is_refused_with_the_supported_list(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{
+                "io.modelcontextprotocol/protocolVersion": "1900-01-01",
+            })},
+        })
+        assert resp["error"]["code"] == -32022
+        assert resp["error"]["message"] == "Unsupported protocol version"
+        assert resp["error"]["data"] == {
+            "supported": ["2026-07-28"], "requested": "1900-01-01",
+        }
+
+    def test_an_unknown_modern_method_is_method_not_found(self):
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "resources/list", "params": {},
+        })
+        assert resp["error"]["code"] == -32601
+        assert resp["error"]["message"] == "Method not found: resources/list"
+
+
+class TestMcpEraSelection:
+    """One process serves both eras; `initialize` selects the legacy one."""
+
+    def test_initialize_latches_the_legacy_era_for_later_requests(self):
+        responses = _send_request(
+            _modern_app(),
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            era="legacy",
+        )
+        assert responses[0]["result"]["protocolVersion"] == "2024-11-05"
+        legacy_list = responses[1]["result"]
+        assert "resultType" not in legacy_list
+        assert "ttlMs" not in legacy_list
+        assert [t["name"] for t in legacy_list["tools"]] == ["status"]
+
+    def test_a_modern_request_is_served_modern_after_a_handshake(self):
+        responses = _send_request(
+            _modern_app(),
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list",
+             "params": {"_meta": dict(MODERN_META)}},
+            era="legacy",
+        )
+        assert responses[1]["result"]["resultType"] == "complete"
+
+    def test_discover_is_not_reachable_from_the_legacy_era(self):
+        responses = _send_request(
+            _modern_app(),
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            {"jsonrpc": "2.0", "id": 2, "method": "server/discover",
+             "params": {}},
+            era="legacy",
+        )
+        assert responses[1]["error"]["code"] == -32601
