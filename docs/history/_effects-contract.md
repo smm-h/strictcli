@@ -52,7 +52,7 @@ rendering; new §12.2a carries the four message templates; §13 gains the schema
 conformance-schema change; §16's bullet is struck through in place rather than deleted, so the
 record of what was once excluded, and why it stopped being excluded, stays readable.
 
-Amended 2026-08-13 at the **machine-interface round** (§18.9). This round adds machine mode and
+Amended a ninth time 2026-08-13 at the **machine-interface round** (§18.9). This round adds machine mode and
 its envelope (§19) and the process trace store's contract items (§20), and amends §3, §7, §14 and
 §16 in place. The governing rule is the normal one -- this document wins until it is amended, and
 it is amended here rather than contradicted. The round's shape in one sentence: **outside machine
@@ -62,6 +62,20 @@ is never absent, the truncation error and the abort marker become envelope membe
 stderr lines, and §14.2's structured effect log stops being a test-only diagnostic and becomes the
 preview's source. Sections are never renumbered in this document, so §19 and §20 sit physically
 after §18.
+
+The ordinal above counts amendment **rounds**, not the paragraphs of this header: the fifth round
+(the adoption round, §18.6) and the eighth (the non-CLI consent round, §18.8) recorded their
+rulings in §18 without adding a paragraph here, which is why the header reads first, second,
+third, fourth, sixth, seventh, ninth. The sixth paragraph's own ordinal is the precedent -- it
+already counts a round that wrote no header paragraph.
+
+The machine-interface round was **swept** the same day, after an independent audit found sites
+that the round's own changes falsified and the round had left un-amended. Every sweep amendment
+is marked `Amendment (2026-08-13, machine-interface round -- sweep)` and they touch §0, §2.5,
+§7.2, §7.5, §9.2, §12.1, §13, §14.2, §18.2 and §20.1. **The sweep changed no decision**: it
+propagated decisions already made into the sites that still contradicted them, and it re-labelled
+one reading that had been presented as forced when it was authored (§20.1, item 112). §18.9
+records what the sweep authored.
 
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
@@ -84,7 +98,7 @@ as a page.
 | **Carrier** | An `Unsettled` value standing in for a result that cannot exist because nothing actually ran. |
 | **Forwarding (a carrier)** | Passing a carrier as an argument to a later `ctx.effects` call. Legal; renders the brand inline. |
 | **Extraction / branching** | Any attempt to read a concrete value out of a carrier, or to branch on it. Illegal; hard-errors and truncates the preview. |
-| **Would-do log** | Dry mode's primary stdout output: the ordered, numbered rendering of the recorded effects. |
+| **Would-do log** | ~~Dry mode's primary stdout output:~~ *(amended 2026-08-13, machine-interface round -- sweep)* Dry mode's primary **human-mode** stdout output: the ordered, numbered rendering of the recorded effects. In machine mode there is no text log on stdout at all: the same records are the envelope's `preview` member (§19.3), so the content is relocated into the envelope, never dropped -- and `render_log()` is a no-op there (§19.7). |
 | **Resource token** | An opaque string naming what an effect produces. Declared metadata; compared by string equality only; never gates execution. |
 | **Conditional annotation** | A `skip_if_current=` declaration. Preview-only: it renders a suffix in the would-do log and has no runtime behavior whatsoever. |
 | **Grant** | A per-command, per-effect-kind authorization with a mandatory human reason. |
@@ -364,6 +378,19 @@ object (`cwd`, `env`, `check`, `stream`, `body`, `headers` alongside `resource`,
 `Header(k, v string)` to the three of §2.3.
 `Spawned.wait()` accepts `check` and nothing else (Python `wait(check=True)`, Go
 `Wait(opts ...EffectOption)` honouring `Check(bool)` only, TypeScript `wait({ check? })`).
+
+> **Amendment (2026-08-13, machine-interface round -- sweep): `STRICTCLI_TRACE_PARENT` in a
+> handler-supplied `env` loses to the framework's ancestry composition.** `env` merges over the
+> inherited environment, and nothing stops a handler naming this variable in that mapping. The
+> framework's composition (§20.1) is applied **after** the handler's merge, on `run` and `spawn`
+> alike, so the value the child actually receives is always the identifier of the entry the
+> framework just wrote for this invocation. A handler therefore cannot sever the chain by clearing
+> the variable and cannot forge a different ancestor by setting it -- not because forging is
+> dangerous (§20.2 makes forged ancestry harmless), but because a link the framework writes and a
+> link a handler writes would be two answers to one question, and the framework's is the one it can
+> account for. Every other key the handler supplies keeps winning over the inherited environment
+> exactly as before; the framework composes no other variable into a child's environment. This
+> precedence is not derivable from a ruling -- it is an authored spelling, recorded in item 112.
 
 **Go's environment option is spelled `EffectEnv`, not `Env`** (amended 2026-08-03, ruling B). The
 package already exports `Env(varName string) FlagOption` and Go has no overloading, so the pinned
@@ -1137,8 +1164,28 @@ Everything else about §7.2 is unchanged, and the pre-scan now has two regions w
 
 | Region | What it recognizes |
 |--------|--------------------|
-| pre-command (before the first non-flag token) | every reserved flag: `--dump-schema`, `--mcp`, `--config`, `--hermetic` **and** the quartet. Known global flags and their values are skipped so a global-flag value that looks like a command name does not end the region early. |
-| command region | the **quartet only**. `--hermetic`, `--config`, `--dump-schema` and `--mcp` stay pre-command-only and remain unknown-flag errors after the command token. |
+| pre-command (before the first non-flag token) | every reserved flag: `--dump-schema`, `--mcp`, `--config`, `--hermetic` **and** the quartet *(and `--json` -- sweep, see the box below)*. Known global flags and their values are skipped so a global-flag value that looks like a command name does not end the region early. |
+| command region | ~~the **quartet only**~~ *(amended -- see the box below)* the **quartet and `--json`**. `--hermetic`, `--config`, `--dump-schema` and `--mcp` stay pre-command-only and remain unknown-flag errors after the command token. |
+
+> **Amendment (2026-08-13, machine-interface round -- sweep): `--json` reads identically in both
+> regions.** §7.1's amendment box already said so ("the pre-scan's two-region table (§7.2), where
+> `json` reads exactly as the quartet does in both regions"); the table itself still said
+> *quartet only*, which the box falsified. `--json` is recognized in the pre-command region as
+> every reserved flag is, and in the command region as the quartet is -- `app --json cmd` and
+> `app cmd --json` are equivalent, and `app grp --json sub` works like `app grp --dry-run sub`.
+>
+> Everything else in §7.2 reads with `--json` included and needs no separate statement: it is
+> stripped from argv before command parsing, delivered on the Context and never as a handler kwarg
+> (`ctx.json` / `ctx.JSON()` / `ctx.json`), a union under repetition and mixed positions, stopped
+> for good at the same two boundaries (a bare `--`, a passthrough command's name, §7.2.1), and it
+> pays the same accepted cost as `--help` and the quartet: a flag *value* spelled exactly
+> `--json` is eaten, with `--message=--json` and `--` as the literal spellings. It has no short
+> form and never will.
+>
+> `--json` is still **not** a fifth member of the quartet (§7.1): the quartet is named as a set
+> throughout this document, and `--json`'s semantics live in §19. Where a sentence below says
+> "the quartet" about *delivery*, read it as covering `--json` too; where it says "the quartet"
+> about the effects regime's own four flags, it means the four.
 
 The quartet is still stripped from argv before command parsing; delivery is still on the Context
 and never as handler kwargs; per-command applicability is unchanged (§3.1, §12.4 fire identically
@@ -1244,7 +1291,8 @@ The auto-registered `check` command currently declares its own `--verbose` and i
 `--dry-run` among its eight flags (Python `App._register_check_command`, Go
 `go/strictcli/check_cmd.go`, TypeScript `typescript/src/checks/cmd.ts`). Both names are now
 banned, so both local flags are **dropped from the candidate list** and the check command reads
-the framework-delivered values off the Context instead:
+the framework-delivered values off the Context instead *(**a third name joins them 2026-08-13** --
+`--json`; the counts in this section are corrected in the sweep box at its end)*:
 
 - `verbose` -> `ctx.verbose` (or `ctx.Verbose()`); behavior unchanged (per-check notes, durations,
   the trailing count summary).
@@ -1275,17 +1323,49 @@ check command's cache writes are `CACHE_WRITE`s and are never logged). Exit code
 Any conformance case or consumer test asserting `check --dry-run` stdout must be updated for the
 trailing header.
 
-The remaining six check flags (`all`, `tag`, `name`, `list`, `json`, `ignore-warnings`) are
-unaffected. The `check` command classifies as `read_only` (§9.2 covers its coverage-shard
-writes).
+~~The remaining six check flags (`all`, `tag`, `name`, `list`, `json`, `ignore-warnings`) are
+unaffected.~~ **Amended 2026-08-13 -- see the box below.** The `check` command classifies as
+`read_only` (§9.2 covers its coverage-shard writes).
 
 The mechanism already exists in two of the three implementations: Python and TypeScript filter
 their candidate check flags against the app's global flag names before registering. Go registers
-its eight flags unconditionally and **must gain the same filter** -- otherwise the two dropped
-names reappear as command flags and collide with the framework pre-scan.
+its eight flags unconditionally and **must gain the same filter** -- otherwise the ~~two~~ **three**
+dropped names reappear as command flags and collide with the framework pre-scan.
 
 `check --dry-run` subsumption is a forced consequence of the unconditional name ban, not a new
 ruling: two flags cannot share a spelling.
+
+> **Amendment (2026-08-13, machine-interface round -- sweep): `check --json` and
+> `config show --json` are subsumed by the reserved global flag, on identical grounds.** §7.1's
+> box put `json` on the same unconditional every-level tier as the quartet, so a command-local
+> `--json` is a registration-time error exactly as a command-local `--dry-run` is -- and the two
+> framework-internal commands that declare one are the check command and `config show`. Both local
+> flags are **dropped from their candidate lists**, which is §18.2 item 4's flag subsumption
+> applied to a third name, not a new ruling: two flags cannot share a spelling, and the framework
+> now owns this one.
+>
+> **The counts, corrected.** The check command declared eight local flags; the quartet's ban
+> removed two (`verbose`, `dry-run`); `json`'s ban removes a third. **Five** local flags remain --
+> `all`, `tag`, `name`, `list`, `ignore-warnings` -- and the struck sentence above ("the remaining
+> six ... are unaffected", which named `json` among them) is wrong in both the count and the claim.
+> Go's missing candidate filter must now drop **three** names, not two. `config show` loses its
+> single local `--json` and keeps the rest of its surface unchanged.
+>
+> **Nothing is lost, and the shapes converge.** What those two flags printed is exactly what
+> machine mode now yields as each command's `payload` (§19.4), validated against the command's
+> declared payload schema (§19.5). Their **differing** shapes go with them: check's compact array
+> and `config show`'s indented object were two hand-rolled spellings of machine output, and one
+> envelope replaces both. Because these are framework-internal commands (§10.4), their payload
+> schemas are framework-owned literals and are byte-compared across the three implementations by
+> conformance (§19.5).
+>
+> **Two consequences to implement, not to decide.** `--json` is delivered on the Context like the
+> quartet (§7.2), so neither handler receives it as a kwarg -- and neither needs to read it: the
+> payload call is mode-independent (§19.4), so both handlers call it unconditionally and the
+> framework decides what to do with the value. And `check --json --quiet` now emits the complete
+> envelope, because the envelope is structurally exempt from quiet (§19.2, §7.4's box); that closes
+> the shipped divergence in which one implementation routed check's machine output through the
+> quiet-suppressible writer and printed nothing at all under both flags.
 
 ---
 
@@ -1545,7 +1625,9 @@ The closed list of framework-blessed cache writes -- exactly these three, nothin
 | Test-coverage manifest | `.strictcli/test-coverage.json` | the merge step of the same subsystem |
 
 Everything else the framework writes is an ordinary mutation of a `mutating` command, not a cache
-write. Specifically, the five auto-registered `config` subcommands classify as:
+write. *(**Amended 2026-08-13, machine-interface round -- sweep:** one third class now exists --
+the process trace store's write; see the box after this section's tables.)* Specifically, the five
+auto-registered `config` subcommands classify as:
 
 | Subcommand | Classification |
 |------------|----------------|
@@ -1585,6 +1667,28 @@ reads an exit code off a carrier, which is what lets one handler body be right i
 
 An app-level cache write is an ordinary `FILE_WRITE` and requires a `mutating` command. There is
 no way for an application to mint a `CACHE_WRITE`.
+
+> **Amendment (2026-08-13, machine-interface round -- sweep): the trace-store write is a third
+> class, and this section's "everything else" no longer covers it.** The process trace store
+> (§20) appends one line to a file on disk at the effects spawn seam. That write is neither an
+> ordinary mutation of a `mutating` command nor a `CACHE_WRITE`:
+>
+> - it is **framework bookkeeping outside the effects handle** -- never minted through
+>   `ctx.effects`, so it has no kind, no verb, no `seq` and no record. It never appears in the
+>   structured effect log (§14.2, §19.3) and is never rendered in the would-do log (§3.2);
+> - it **fires in `read_only` commands**, and legitimately so: the seam includes the allowlisted
+>   observes of §6.2 (§20.1), which really start child processes and really execute in dry mode
+>   (§3.1). §9.1's read-only enforcement is untouched by this -- enforcement is about what is
+>   minted on the handle, and nothing here is minted;
+> - it is **not a fourth entry in the closed `CACHE_WRITE` list above**, which stays at exactly
+>   three sites. `CACHE_WRITE` is a kind on the effect log; the trace write is not on the log at
+>   all, so widening the list would misfile it as a thing conformance can assert with
+>   `effects_equals`, which it deliberately cannot;
+> - it is **best-effort**, which no other write in this document is (§20.3's scoped carve-out).
+>
+> Read this section's "everything else" sentence as governing what an application or a framework
+> command does *through the regime*. The trace write sits beside the regime and is specified in
+> §20 and in `docs/process-trace-store.md`.
 
 ---
 
@@ -1901,6 +2005,31 @@ flag name '<x>' is reserved by the framework (dry-run, approve-consequential, qu
 Function name: `errFlagNameReservedByFramework(name)`. Raised from the same
 `validateFlagConfig` / `Flag.__post_init__` sites as the `force` ban, and additionally from the
 global-flag validation path so app globals are covered by the same message.
+
+> **Amendment (2026-08-13, machine-interface round -- sweep): the rendered list gains `json`.**
+> `json` joined the reserved set on the same unconditional every-level tier (§7.1's box), and it is
+> refused from the same sites by the same template -- so the template that names the set must name
+> it, or a consumer whose command-local `--json` is rejected reads a message listing four names
+> that do not include the one it wrote. The text becomes, byte-exactly:
+>
+> ```
+> flag name '<x>' is reserved by the framework (dry-run, approve-consequential, quiet, verbose, json)
+> ```
+>
+> `json` is **appended after the quartet** rather than sorted in: the quartet's own order is
+> unchanged and stays readable as a set, and the newest reservation reads last. That ordering is an
+> authored spelling (item 111's sweep addition), not a ruling.
+>
+> **A separate `json`-specific template was considered and rejected.** The precedent for one exists
+> -- `errFlagNameYesBanned` below is exactly that -- but it applies for a reason `json` does not
+> share: `yes` names **no** framework flag, so a message listing the set the name is not in would
+> explain nothing, and the template has to state the reason and the replacement instead. `json`
+> names a framework flag, so it is in the set, and the set-listing template is the one that fits.
+> Two templates for one condition would also mean two texts to keep in parity for one registration
+> error. The function name, the raising sites
+> and the separate `errFlagNameYesBanned` template below are all unchanged, and the parity
+> extractor keys on the function name, so this is a one-line text change in three implementations
+> plus its parity vector.
 
 ```
 flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential
@@ -2315,6 +2444,43 @@ exclusion rationale.
 
 `conformance/check_schema_parity.py` needs no shape change -- the new keys are ordinary fields.
 
+> **Amendment (2026-08-13, machine-interface round -- sweep): the dumped schema gains
+> `payload_schema` and `owns_stdout`.** §19.5 promises that a command's payload-schema literal is
+> "published **verbatim** by `--dump-schema`", and §19.6 adds a registration-level declaration --
+> both are command-entry facts, and this section is where command-entry facts are pinned. Without
+> them the promise names an output key that no section defines.
+>
+> **On every command entry**, alongside the table above:
+>
+> | Key | Type | Emission |
+> |-----|------|----------|
+> | `payload_schema` | object | *Added 2026-08-13 (§19.5).* The registered literal, **as registered**: the same keys with the same values, with no normalization, no re-ordering pass and no round-trip through a builder. Omitted when the command declares none, and absence means the command produces no payload. Key order inside it is whatever the implementation's serializer does to every other object it writes (§19.2's optional-order reasoning applies unchanged); "verbatim" is a promise about content, since three serializers cannot promise bytes |
+> | `owns_stdout` | `true` | *Added 2026-08-13 (§19.6).* Emitted **only when declared true**; absence means the framework owns stdout, which is the baseline. The omit-when-baseline shape of `consequential` and `dry_run_supported`, not `effect`'s always-emitted one |
+>
+> **`previewable` is deliberately not here.** It is an *effect-call* option (§19.8) -- an argument
+> to a `run` or `spawn` inside a handler body -- and the dumped schema describes commands, groups,
+> flags and args, none of which can see a call the handler has not made yet. It stays absent from
+> the schema when §19.8 is implemented, for the same reason `resource=` and `grant=` are absent
+> while a command's *declared* `grants` are present: the regime publishes declarations, never call
+> sites.
+>
+> **The conformance case schema** (`conformance/schema.json`) mirrors the pair under
+> `$defs/command`, following the shape §13 already uses:
+>
+> - add `payload_schema` (`{"type": "object"}`) and `owns_stdout`
+>   (`{"type": "boolean", "default": false}`) to `$defs/command`'s `properties`;
+> - add both to the deprecated branch's `then.properties` as `false` -- a deprecated entry has no
+>   handler, so it can neither produce a payload nor own stdout, the same reasoning §1.1's
+>   exemption gives for `effect` and `consequential`;
+> - neither joins the top-level `required` nor the `else` branch's: almost every command declares
+>   neither, and demanding them would re-impose a per-registration answer to a question with one
+>   overwhelming default.
+>
+> `conformance/check_api_surface.py` gains the corresponding entity mappings on the `command`
+> `EntityDescriptor`, mirroring the existing `"command.grants": "grants"` entry
+> (`"command.payload_schema"` -> `payloadSchema`, `"command.owns_stdout"` -> `ownsStdout`).
+> `check_schema_parity.py` again needs no shape change: both are ordinary fields.
+
 ---
 
 ## 14. Conformance surface
@@ -2342,6 +2508,10 @@ expect key: a case may combine it with `stdout_equals` (asserting the rendered l
 
 ### 14.2 `$defs/effect_record`
 
+~~The literal below is superseded 2026-08-13 (machine-interface round -- sweep); it is kept
+unerased because the record shape it describes is otherwise unchanged, and because the reason it
+had to change is the point.~~
+
 ```json
 {
   "type": "object",
@@ -2360,6 +2530,43 @@ expect key: a case may combine it with `stdout_equals` (asserting the rendered l
   }
 }
 ```
+
+**Amended 2026-08-13 (machine-interface round -- sweep): the literal in force is the one below.**
+The struck literal declares `additionalProperties: false` and no `children` key, so under it a
+record carrying children -- the shape the amendment box further down pins "from day one" -- fails
+validation outright. A closed shape is exactly why the key had to be written into the literal
+rather than left to arrive as an extra property, so the closure **stays** and the key joins it:
+
+```json
+{
+  "type": "object",
+  "required": ["seq", "kind", "verb", "detail", "recorded"],
+  "additionalProperties": false,
+  "properties": {
+    "seq":             { "type": "integer" },
+    "kind":            { "enum": ["proc_mutate", "proc_spawn", "file_write", "net_mutate", "cache_write"] },
+    "verb":            { "enum": ["run", "spawn", "write", "mkdir", "remove", "rename", "chmod", "net", "cache"] },
+    "detail":          { "type": "string" },
+    "bytes":           { "type": ["integer", "null"] },
+    "resource":        { "type": "string" },
+    "skip_if_current": { "type": "string" },
+    "grant":           { "type": "string" },
+    "recorded":        { "type": "boolean" },
+    "children":        { "type": "array", "items": { "$ref": "#/$defs/effect_record" } }
+  }
+}
+```
+
+`children` is optional and absent from every record until §19.8 is implemented; nothing else in the
+shape moves. The self-`$ref` is what makes the recursion real rather than promised -- a nested
+child record is validated by the same definition at every depth, so the schema does not have to
+change shape when §19.8 ships.
+
+One thing this recursion is **not**: `$ref` is not in §19.5's closed validator subset, and it does
+not need to be. This literal is `conformance/schema.json`'s definition of a *case-file* record,
+consumed by the ordinary JSON Schema tooling the conformance suite already runs; §19.5's subset
+governs the payload schemas commands declare and the in-house validator enforces at emission. Two
+artifacts, two vocabularies, no overlap.
 
 `detail` is the same string the would-do log renders after the verb (so forwarded carriers appear
 in brand form). `bytes` is present only for `write`, and is `null` rather than an integer when that
@@ -2746,17 +2953,29 @@ Recorded so a reviewer does not mistake them for choices.
 4. **`check --verbose` and `check --dry-run` are subsumed** (§7.5). Two flags cannot share a
    spelling, and the ban is unconditional; Go's check command must additionally gain the
    candidate-filter Python and TypeScript already have.
+   *(Extended by item 111 / §7.1 and §7.5's sweep box: `json` joins the same unconditional tier, so
+   `check --json` and `config show --json` are subsumed on identical grounds. Three names drop from
+   the check command's candidate list, not two, and the data those flags printed is now the
+   command's payload, §19.4.)*
 5. **Guard v2 enforcement is Python-only** (§10.3). Go handlers take `map[string]interface{}` and
    TypeScript handlers a typed args object; neither can be introspected for a var-keyword
    parameter. The *declaration* exists in all three so the API surface stays in parity.
 6. **Truncation exits `1` and splits its streams** (§3.3): the already-recorded log to stdout, the
    pinned error text to stderr. Fail-closed admits no other outcome, and the log is dry mode's
    primary output so it must still be emitted.
+   *(Narrowed to human mode by item 98 / §19.3: in machine mode there is no split, because there
+   are no two streams to split -- the records are the envelope's `preview` and the pinned text is
+   `preview_error.message`, byte-identical, in one document. The exit code stays `1` and the
+   must-still-be-emitted half is what the narrowing preserves.)*
 7. **Observes execute in dry mode and are not logged** (§6.2, §3.2). An observe that did not
    execute could not return the real value the regime promises pre-mutation; an observe in the
    would-do log would misrepresent a read as a change.
 8. **`--quiet` never suppresses the would-do log** (§3.4, §7.4). It is dry mode's primary output,
    not a diagnostic.
+   *(Discharged more strongly by item 101 / §19.2 in machine mode: the preview rides the envelope,
+   which is structurally exempt from quiet -- not exempted by a check that could be forgotten, but
+   never written through the writers quiet suppresses. Outside machine mode this item is unchanged
+   and still governs.)*
 9. **Reserved-flag values are delivered on the Context, not as handler kwargs** (§7.2). Injecting
    four mandatory parameters into every handler would contradict guard v2 in the same release, and
    `Context` needs `quiet` / `verbose` / `dry_run` for its own gating regardless.
@@ -3305,6 +3524,13 @@ authored here; items 111-112 are authored spellings in the §18.3 class (mechani
 forced by the ruled semantics, fixing spellings the rulings left open). The round writes §19 and
 §20 and amends §3.1, §3.3, §3.4, §3.5, §7.1, §7.4, §14.2, §14.3 and §16 in place.
 
+**Swept 2026-08-13**, after an independent audit found sites the round's own changes falsified and
+had left standing. The sweep amended §0, §2.5, §7.2, §7.5, §9.2, §12.1, §13, §14.2's printed
+literal, §18.2's items 4/6/8 and §20.1, and added the status note and the literal-path rule to
+`docs/process-trace-store.md`. **It decided nothing new.** Items 96-110 are untouched by it; items
+111 and 112 gain the spellings it authored, marked below; and one sentence of item 112 is corrected,
+because a reading it presented as forced is authored (§20.1).
+
 96. **In machine mode the envelope is the sole stdout document, and it owns the preview (§19.1,
     §19.3).** The framework collided with itself before this ruling, with no consumer involved:
     a command supplying handler data under `--dry-run` wrote the would-do log and a bare JSON
@@ -3413,19 +3639,67 @@ forced by the ruled semantics, fixing spellings the rulings left open). The roun
      marker become envelope members" -- the shape here is the minimal one that carries the
      existing §12.5 / §12.11 text verbatim rather than restating it in a second vocabulary.
 
-112. **Authored spellings and one forced reading for the trace store (§20, and the spec page).**
-     `spawned_at`'s format, the write-failure marker's filename and its content, and the store
-     line's encoding are pinned in the published spec page (`docs/process-trace-store.md`), which
-     is the artifact other tools implement against; §20 carries only the contract items. The
-     entry's key names are **not** in this class -- they are ruled upstream and reproduced verbatim.
+     **Added at the sweep**, same class, none of them a ruling: the reserved-name error template's
+     rendered list order (§12.1) -- `json` appended after the quartet rather than sorted in, so the
+     quartet's order survives and the newest reservation reads last; the two schema-dump emission
+     shapes (§13) -- `payload_schema` omitted when undeclared and published as registered,
+     `owns_stdout` emitted only when true, both following `consequential`'s omit-when-baseline
+     shape and their case-schema mirroring following §13's existing deprecated-branch pattern;
+     and the `children` key's spelling in the printed `$defs/effect_record` literal (§14.2) --
+     a self-`$ref`, with `additionalProperties: false` deliberately kept, since a closed shape is
+     the reason the key had to be declared rather than tolerated.
 
-     The forced reading is §20.1's seam: the ruling says "the effects spawn seam" without saying
+112. **Authored spellings and one adopted reading for the trace store (§20, and the spec page).**
+     *(This item was headed "one forced reading" until the sweep; see the correction below.)*
+     `spawned_at`'s format, the write-failure marker's filename and its content, and
+     the store line's encoding are pinned in the published spec page
+     (`docs/process-trace-store.md`), which is the artifact other tools implement against; §20
+     carries only the contract items. The entry's key names are **not** in this class -- they are
+     ruled upstream and reproduced verbatim.
+
+     ~~The forced reading is §20.1's seam: the ruling says "the effects spawn seam" without saying
      which effects reach it, and only one reading is consistent with the rest of this document. A
      dry-mode `spawn` starts no process, so it can write no entry; an allowlisted observe really
      executes in dry mode (§3.1) and therefore can. Any other reading either records a spawn that
-     did not happen or makes the entry's `dry_run` field permanently false. The same reading is what
-     keeps the trace write outside §3.1's "nothing runs" rule instead of becoming a second
-     framework-blessed exception to it.
+     did not happen or makes the entry's `dry_run` field permanently false.~~ **Corrected at the
+     sweep:** §20.1's seam reading is **authored, not forced**. The ruling says "the effects spawn
+     seam" without saying which effects reach it; the reading adopted -- real child-process starts
+     only, so a recorded dry-mode spawn writes nothing and an allowlisted observe writes an entry
+     carrying `dry_run: true` -- is the one this document adopts and defends, not the only one the
+     regime permits. The "records a spawn that did not happen" objection does not close the
+     alternative, because the spec page's own definition says an entry describes the **spawning
+     invocation**, not the child; a dry-mode entry would therefore be a truthful record of an
+     invocation that previewed a spawn. What rules it out here is the argument in §20.1, weighed
+     and adopted, and it is reversible by amending that bullet. The half that *is* forced stands:
+     under any reading excluding observes, the entry's `dry_run` field could never be true. The
+     same reading keeps the trace write outside §3.1's "nothing runs" rule instead of making it a
+     second framework-blessed exception to it.
+
+     **Added at the sweep**, all page-level authored spellings that were in force but unlisted:
+     the store directory's creation mode (`0700`); the every-key-always-present rule and its
+     corollary that an absent key makes a line malformed rather than defaulted; `command: null`
+     for an invocation that resolved no command and `parent_id: null` for a root; `pid` being the
+     **spawning** process's own pid rather than the child's; the requirement that the identifier's
+     80 random bits come from a cryptographically secure source; the rule that readers ignore any
+     file in the trace directory not matching the partition-name pattern; and the failure marker
+     living inside the trace directory, which is what makes that reader rule necessary. Added by
+     the sweep itself: **the store path is the literal ruled path** -- `~/.local/share/strictcli/trace/`
+     with `~` expanded and nothing else consulted, explicitly **not** derived from `XDG_DATA_HOME`
+     or any other variable, because two conforming writers disagreeing about the location would
+     produce two stores on one machine and a chain dangling in both.
+
+     Two §19.4 derivations belong in this class too, and are recorded here rather than left
+     implicit: calling the payload API on a command that declares **no** payload schema is a
+     **call-time** hard error, because registration cannot see that a handler intends to call it,
+     which makes the call the earliest honest point; and the programmatic surfaces (`test()`,
+     `call()`, `Call()`) **keep their capture**, returning the payload the handler supplied exactly
+     where they previously returned the `data` it attached, so deleting the bare-JSON-print channel
+     costs the in-process surfaces nothing.
+
+     One further authored spelling, at §2.5.2: when a handler's `env` mapping names
+     `STRICTCLI_TRACE_PARENT`, the framework's ancestry composition is applied **after** the merge
+     and wins. Nothing in the rulings decides this, and the alternative (handler wins) would let a
+     handler sever or forge the chain through an ordinary environment override.
 
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
@@ -3780,15 +4054,48 @@ the relationship to §16.
   reserved-flag state, the machine-mode flag, consent, effect classification, pid, and the parent
   identifier. **Argv is never recorded** -- arguments carry secrets.
 - **The seam is the real start of a child process** -- `spawn`, and `run` including the allowlisted
-  observes of §6.2. This reading is forced by the rest of the regime rather than chosen: in dry
-  mode a *recorded* spawn starts nothing, so it writes no entry (where nothing runs, nothing is
-  traced), while an observe genuinely executes even in dry mode and therefore does write one,
-  carrying `dry_run: true`. That is what the entry's reserved-flag state is for, and it is the only
-  reading under which the flag can ever be true.
+  observes of §6.2. ~~This reading is forced by the rest of the regime rather than chosen:~~
+  *(amended 2026-08-13, machine-interface round -- sweep)* **This is the reading this document
+  adopts**, authored at the round and disclosed as authored (item 112), and reversible by amending
+  this bullet: in dry mode a *recorded* spawn starts nothing, so it writes no entry (where nothing
+  runs, nothing is traced), while an observe genuinely executes even in dry mode and therefore does
+  write one, carrying `dry_run: true`. That is what the entry's reserved-flag state is for, and no
+  reading that excludes observes can ever make the flag true -- **that** half is forced.
 - **The write is framework bookkeeping, not an effect.** It is never minted through the effects
   handle, never appears in the structured effect log (§14.2), and is never rendered in the would-do
   log. It therefore adds **no exception** to §3.1's "nothing runs" rule and is not a second
-  `CACHE_WRITE`-style carve-out: it accompanies real child-process starts and nothing else.
+  `CACHE_WRITE`-style carve-out: it accompanies real child-process starts and nothing else. §9.2's
+  sweep box records the same fact from the other side -- this is a third class of framework write,
+  outside both the effects handle and the closed `CACHE_WRITE` list, and it fires in `read_only`
+  commands through the observes above.
+
+> **Amendment (2026-08-13, machine-interface round -- sweep): why the adopted seam reading is
+> adopted, and what the alternative was.** The bullet above originally called the reading forced.
+> It is not, and saying so overstated the case: the alternative -- writing an entry for a
+> *recorded* dry-mode spawn as well -- is not self-contradictory. The spec page defines an entry as
+> describing the **spawning invocation**, never the child, so an entry written during a preview
+> would be a truthful record of an invocation that previewed a spawn rather than a claim that a
+> process started.
+>
+> The reading is adopted anyway, on three grounds, so that a later round weighs them rather than
+> re-deriving them:
+>
+> - **A parent identifier no child ever received links to nothing.** The entry's whole purpose is
+>   to be the target of some child's `parent_id`. In dry mode no child is launched, so the entry
+>   would be minted, written and then never referenced -- indistinguishable, to every reader, from
+>   an entry whose child crashed before writing its own.
+> - **It keeps the store's write set equal to the set of real process starts**, which is the
+>   sentence a consumer can reason about without knowing anything about dry mode. The alternative
+>   makes "one entry per spawn" mean "one entry per spawn or per previewed spawn", and every
+>   consumer then needs the `dry_run` field to interpret the *existence* of an entry rather than
+>   just its content.
+> - **It is what keeps the write outside §3.1.** A write that happens where the regime promises
+>   nothing runs would need its own carve-out from the "nothing runs" rule, alongside the
+>   framework-blessed `CACHE_WRITE`s -- a second exception bought for entries nothing links to.
+>
+> What survives unconditionally, under any reading: an observe genuinely executes in dry mode
+> (§3.1), so if observes are in the seam at all, `dry_run: true` is reachable, and if they are not,
+> the entry's `dry_run` field is dead weight that can never be true.
 
 ### 20.2 Observational-only (ratified contract item)
 
