@@ -100,19 +100,44 @@ Handlers receive two arguments:
 
 A handler can return one of three strictly validated types. Any other return
 type is a hard error that terminates the program. The `outcome()` factory is the
-only way to construct a branded structured result -- hand-forged objects are
-rejected at runtime:
+only way to construct a branded result -- hand-forged objects are rejected at
+runtime:
 
 - `undefined` (or no return) -- exit code 0
 - A `number` -- used as the exit code
-- `outcome(exitCode, data)` -- structured data emitted as one compact JSON line to stdout
+- `outcome(exitCode)` -- a branded exit-code result
 
 ```typescript
 import { outcome } from "strictcli";
 
 handler: (args) => {
-  return outcome(0, { count: 42, status: "done" });
+  return outcome(0);
 }
+```
+
+### Machine payloads
+
+Structured output does not ride the return value. A command declares its
+payload's JSON Schema with `payloadSchema:`, and its handler supplies the value
+through `ctx.payload(value)` -- at most once per dispatch, and only on a command
+that declared a schema (calling it without one is a hard error at call time).
+The payload is printed only under the framework-owned `--json`; `app.test()` and
+`app.call()` capture it in either mode.
+
+```typescript
+defineReadOnlyCommand("status", {
+  help: "Show status",
+  payloadSchema: { type: "object" },
+  handler: (args, ctx) => {
+    ctx.payload({ count: 42, status: "done" });
+    return outcome(0);
+  },
+});
+```
+
+```
+$ mytool status --json
+{"count":42,"status":"done"}
 ```
 
 ## Flag Types
@@ -756,9 +781,10 @@ console.log(JSON.stringify(schema, null, 2));
 ## Testing
 
 `app.test(argv)` runs the CLI in-process and captures stdout, stderr, exit
-code, and structured outcome data without shelling out. This is the standard way
+code, and the machine payload without shelling out. This is the standard way
 to test strictcli apps in TypeScript. The result object is fully typed and
-includes the `data` field when the handler returns `outcome()`.
+includes the `data` field when the handler supplied a payload through
+`ctx.payload()`, in either output mode.
 
 ```typescript
 import { strict as assert } from "node:assert";
@@ -901,13 +927,15 @@ app.command(
     },
     flagSets: [common],
     args: [arg("service", t.str, { help: "Service to deploy" })],
+    payloadSchema: { type: "object" },
     handler: (args, ctx) => {
       ctx.info(`Deploying ${args.service} to ${args.region}`);
       ctx.info(`Replicas: ${args.replicas}`);
       if (args.tag.length > 0) {
         ctx.info(`Tags: ${args.tag.join(", ")}`);
       }
-      return outcome(0, { service: args.service, replicas: args.replicas });
+      ctx.payload({ service: args.service, replicas: args.replicas });
+      return outcome(0);
     },
   }),
 );
