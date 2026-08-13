@@ -2508,9 +2508,10 @@ expect key: a case may combine it with `stdout_equals` (asserting the rendered l
 
 ### 14.2 `$defs/effect_record`
 
-~~The literal below is superseded 2026-08-13 (machine-interface round -- sweep); it is kept
-unerased because the record shape it describes is otherwise unchanged, and because the reason it
-had to change is the point.~~
+**The literal immediately below is superseded** (2026-08-13, machine-interface round -- sweep).
+It is kept unerased, per this document's convention: the record shape it describes is otherwise
+unchanged, and the reason it had to change is worth reading. The literal in force is the second
+one.
 
 ```json
 {
