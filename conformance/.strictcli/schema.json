@@ -55,6 +55,12 @@
       "name": "check",
       "help": "Run project checks registered via the check framework and report results",
       "effect": "read_only",
+      "payload_schema": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
       "flags": [
         {
           "name": "all",
@@ -79,13 +85,6 @@
           "name": "list",
           "type": "bool",
           "help": "List all registered checks with their tags and exit without running",
-          "default": false,
-          "negatable": true
-        },
-        {
-          "name": "json",
-          "type": "bool",
-          "help": "Output check results as machine-readable JSON instead of human text",
           "default": false,
           "negatable": true
         },

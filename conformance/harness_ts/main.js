@@ -504,9 +504,11 @@ function makeHandler(cmdDef, globalFlags) {
 			runHandlerDiagnostics(ctx, handlerDiagnostics);
 			switch (hr.kind) {
 				case "data":
-					return outcome(0, hr.data);
+					ctx.payload(hr.data);
+					return outcome(0);
 				case "exit_data":
-					return outcome(code, hr.data);
+					ctx.payload(hr.data);
+					return outcome(code);
 				case "exit":
 					return code;
 				case "none":
@@ -738,6 +740,22 @@ function spliceDryRun(spec, cmdDef) {
 	}
 	if ("dry_run_unsupported_reason" in cmdDef) {
 		spec.dryRunUnsupportedReason = cmdDef.dry_run_unsupported_reason;
+	}
+	splicePayloadSchema(spec, cmdDef);
+}
+
+/**
+ * Declares the machine payload's schema (§19.5) for the commands that supply
+ * one. A handler_returns of kind "data"/"exit_data" calls ctx.payload, which
+ * refuses to run on a command that declares no schema -- so the harness
+ * declares the permissive literal for exactly those commands. The literal is
+ * identical in all three harnesses, which is what keeps the schema dump in
+ * parity.
+ */
+function splicePayloadSchema(spec, cmdDef) {
+	const kind = cmdDef.handler_returns?.kind;
+	if (kind === "data" || kind === "exit_data") {
+		spec.payloadSchema = {};
 	}
 }
 

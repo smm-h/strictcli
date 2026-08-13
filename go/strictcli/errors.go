@@ -1131,9 +1131,7 @@ func errFlagNameReservedByFramework(name string) string {
 // --json is framework-owned: it selects machine mode and is delivered on the
 // Context, never as a handler kwarg. The ban is the unconditional every-level
 // one, exactly as the quartet's is.
-func errFlagNameJSONReserved() string {
-	return "flag name 'json' is reserved by the framework: --json selects machine mode"
-}
+const errFlagNameJSONReserved = "flag name 'json' is reserved by the framework: --json selects machine mode"
 
 // errFlagNameYesBanned is the outright `yes` ban (§12.1). `yes` owns no
 // framework flag any more -- --approve-consequential replaced --yes -- but a

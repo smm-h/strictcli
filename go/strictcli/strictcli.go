@@ -1272,7 +1272,7 @@ func validateFlagConfig(f *Flag) {
 	}
 	// The machine-mode flag, on the same unconditional tier (§7.1's amendment).
 	if f.Name == reservedMachineFlagName {
-		panic(errFlagNameJSONReserved())
+		panic(errFlagNameJSONReserved)
 	}
 	// The consent parameter name, reserved on the flag surface too.
 	if f.Name == reservedConsentParamName {
@@ -1996,7 +1996,7 @@ func (a *App) GlobalFlag(f Flag) {
 		panic(errFlagNameReservedByFramework(f.Name))
 	}
 	if f.Name == reservedMachineFlagName {
-		panic(errFlagNameJSONReserved())
+		panic(errFlagNameJSONReserved)
 	}
 	if bannedFlagNames[f.Name] {
 		panic(errFlagNameYesBanned)

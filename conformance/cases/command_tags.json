@@ -179,7 +179,7 @@
       "help": "test app",
       "tag_contracts": {
         "json": {
-          "requires_flag": "json"
+          "requires_flag": "as-json"
         }
       },
       "commands": [
@@ -193,7 +193,7 @@
           "handler_prints": "hello",
           "flags": [
             {
-              "name": "json",
+              "name": "as-json",
               "type": "bool",
               "help": "output as json",
               "default": false
@@ -218,7 +218,7 @@
       "help": "test app",
       "tag_contracts": {
         "json": {
-          "requires_flag": "json"
+          "requires_flag": "as-json"
         }
       },
       "commands": [
@@ -238,7 +238,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "command \"greet\": tag \"json\" requires flag \"--json\""
+      "stderr_contains": "command \"greet\": tag \"json\" requires flag \"--as-json\""
     }
   },
   {
@@ -249,7 +249,7 @@
       "help": "test app",
       "tag_contracts": {
         "json": {
-          "requires_flag": "json"
+          "requires_flag": "as-json"
         }
       },
       "commands": [
@@ -281,7 +281,7 @@
       "help": "test app",
       "global_flags": [
         {
-          "name": "json",
+          "name": "as-json",
           "type": "bool",
           "help": "output as json",
           "default": false
@@ -289,7 +289,7 @@
       ],
       "tag_contracts": {
         "json": {
-          "requires_flag": "json"
+          "requires_flag": "as-json"
         }
       },
       "commands": [

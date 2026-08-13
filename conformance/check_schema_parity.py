@@ -174,7 +174,7 @@ RICH_APP = {
                 {
                     "flags": [
                         {
-                            "name": "json",
+                            "name": "as-json",
                             "type": "bool",
                             "help": "JSON output",
                         },

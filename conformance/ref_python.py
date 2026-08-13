@@ -340,6 +340,14 @@ def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
             f"{indent}dry_run_unsupported_reason="
             f"{cmd_def['dry_run_unsupported_reason']!r},"
         )
+    # The machine payload's declared schema (§19.5). A handler_returns of kind
+    # "data"/"exit_data" supplies a payload, and ctx.payload refuses to run on a
+    # command that declares no schema -- so the harness declares the permissive
+    # literal for exactly those commands. The literal is identical in all three
+    # harnesses, which is what keeps the schema dump in parity.
+    _hr_kind = (cmd_def.get("handler_returns") or {}).get("kind")
+    if _hr_kind in ("data", "exit_data"):
+        lines.append(f"{indent}payload_schema={{}},")
     if cmd_def.get("grants"):
         exprs = [
             f"strictcli.Grant(name={g['name']!r}, reason={g['reason']!r}, "
@@ -779,18 +787,25 @@ def _emit_command_registration(
 def _emit_handler_return(hr: dict, indent: str) -> list[str]:
     """Emit the return statement for a handler_returns spec.
 
-    Kinds: 'exit' (outcome(exit_code)), 'data' (outcome(data)), 'exit_data'
-    (outcome(exit_code, data)), 'none' (return None -> exit 0), and 'bad'
-    (return an invalid value -> the framework's TypeError hard error).
+    Kinds: 'exit' (outcome(exit_code)), 'data' (ctx.payload + outcome()),
+    'exit_data' (ctx.payload + outcome(exit_code)), 'none' (return None ->
+    exit 0), and 'bad' (return an invalid value -> the framework's TypeError
+    hard error).
     """
     kind = hr["kind"]
     code = hr.get("code", 0)
     if kind == "exit":
         return [f"{indent}return strictcli.outcome(exit_code={code})"]
     if kind == "data":
-        return [f"{indent}return strictcli.outcome(data={hr['data']!r})"]
+        return [
+            f"{indent}ctx.payload({hr['data']!r})",
+            f"{indent}return strictcli.outcome()",
+        ]
     if kind == "exit_data":
-        return [f"{indent}return strictcli.outcome(exit_code={code}, data={hr['data']!r})"]
+        return [
+            f"{indent}ctx.payload({hr['data']!r})",
+            f"{indent}return strictcli.outcome(exit_code={code})",
+        ]
     if kind == "none":
         return [f"{indent}return None"]
     if kind == "bad":

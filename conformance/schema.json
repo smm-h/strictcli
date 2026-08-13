@@ -445,6 +445,10 @@
           "default": true,
           "description": "Declares whether --dry-run is honored for this command. Only false is declarable: true is the regime's baseline (a mutating command's effects are recorded rather than executed). A command that declares false is saying a preview of it would misrepresent the real run, so the framework refuses --dry-run for it at parse time. NOT mandatory -- absence means supported -- so it is neither in 'required' nor in the 'else' branch. Declaring false on a read_only command is a registration-time hard error, and it requires dry_run_unsupported_reason."
         },
+        "payload_schema": {
+          "type": "object",
+          "description": "The command's machine payload contract (effects contract \u00a719.5): an inline JSON Schema literal, registered as written and published verbatim by --dump-schema. Absence means the command cannot produce a payload -- ctx.payload is then a call-time hard error. Case authors do NOT write this key: the harnesses declare a permissive literal for every command whose handler_returns supplies a payload, identically in all three languages."
+        },
         "dry_run_unsupported_reason": {
           "type": "string",
           "minLength": 1,
@@ -569,6 +573,7 @@
           "consequential": false,
           "dry_run_supported": false,
           "dry_run_unsupported_reason": false,
+          "payload_schema": false,
           "grants": false,
           "forwarding": false,
           "flags": false,

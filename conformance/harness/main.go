@@ -841,6 +841,16 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 			c.DryRunUnsupportedReason = reason
 		})
 	}
+	// The machine payload's declared schema (§19.5). A handler_returns of kind
+	// "data"/"exit_data" supplies a payload, and ctx.Payload refuses to run on
+	// a command that declares no schema -- so the harness declares the
+	// permissive literal for exactly those commands. The literal is identical
+	// in all three harnesses, which is what keeps the schema dump in parity.
+	if hr, ok := cmdDef["handler_returns"].(map[string]interface{}); ok {
+		if k, _ := hr["kind"].(string); k == "data" || k == "exit_data" {
+			opts = append(opts, strictcli.PayloadSchema(map[string]interface{}{}))
+		}
+	}
 	if v, ok := cmdDef["grants"]; ok {
 		var grants []strictcli.Grant
 		for _, item := range v.([]interface{}) {
@@ -1121,9 +1131,11 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 			runHandlerDiagnostics(ctx, diags)
 			switch kind {
 			case "data":
-				return strictcli.ExitData(0, data)
+				ctx.Payload(data)
+				return strictcli.Exit(0)
 			case "exit_data":
-				return strictcli.ExitData(code, data)
+				ctx.Payload(data)
+				return strictcli.Exit(code)
 			default: // "exit" or "none" (Go has no None; None maps to Exit(0))
 				return strictcli.Exit(code)
 			}

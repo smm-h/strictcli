@@ -11,15 +11,29 @@
           "help": "a command",
           "effect": "read_only",
           "handler_diagnostics": [
-            {"level": "debug", "message": "debug-line"},
-            {"level": "info", "message": "info-line"},
-            {"level": "warn", "message": "warn-line"},
-            {"level": "error", "message": "error-line"}
+            {
+              "level": "debug",
+              "message": "debug-line"
+            },
+            {
+              "level": "info",
+              "message": "info-line"
+            },
+            {
+              "level": "warn",
+              "message": "warn-line"
+            },
+            {
+              "level": "error",
+              "message": "error-line"
+            }
           ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "info-line\n",
@@ -38,15 +52,30 @@
           "help": "a command",
           "effect": "read_only",
           "handler_diagnostics": [
-            {"level": "debug", "message": "debug-line"},
-            {"level": "info", "message": "info-line"},
-            {"level": "warn", "message": "warn-line"},
-            {"level": "error", "message": "error-line"}
+            {
+              "level": "debug",
+              "message": "debug-line"
+            },
+            {
+              "level": "info",
+              "message": "info-line"
+            },
+            {
+              "level": "warn",
+              "message": "warn-line"
+            },
+            {
+              "level": "error",
+              "message": "error-line"
+            }
           ]
         }
       ]
     },
-    "argv": ["--verbose", "cmd"],
+    "argv": [
+      "--verbose",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "debug-line\ninfo-line\n",
@@ -65,15 +94,30 @@
           "help": "a command",
           "effect": "read_only",
           "handler_diagnostics": [
-            {"level": "debug", "message": "debug-line"},
-            {"level": "info", "message": "info-line"},
-            {"level": "warn", "message": "warn-line"},
-            {"level": "error", "message": "error-line"}
+            {
+              "level": "debug",
+              "message": "debug-line"
+            },
+            {
+              "level": "info",
+              "message": "info-line"
+            },
+            {
+              "level": "warn",
+              "message": "warn-line"
+            },
+            {
+              "level": "error",
+              "message": "error-line"
+            }
           ]
         }
       ]
     },
-    "argv": ["--quiet", "cmd"],
+    "argv": [
+      "--quiet",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -92,15 +136,31 @@
           "help": "a command",
           "effect": "read_only",
           "handler_diagnostics": [
-            {"level": "debug", "message": "debug-line"},
-            {"level": "info", "message": "info-line"},
-            {"level": "warn", "message": "warn-line"},
-            {"level": "error", "message": "error-line"}
+            {
+              "level": "debug",
+              "message": "debug-line"
+            },
+            {
+              "level": "info",
+              "message": "info-line"
+            },
+            {
+              "level": "warn",
+              "message": "warn-line"
+            },
+            {
+              "level": "error",
+              "message": "error-line"
+            }
           ]
         }
       ]
     },
-    "argv": ["--quiet", "--verbose", "cmd"],
+    "argv": [
+      "--quiet",
+      "--verbose",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -119,17 +179,31 @@
           "help": "a command",
           "effect": "read_only",
           "handler_diagnostics": [
-            {"level": "debug", "message": "debug-line"},
-            {"level": "info", "message": "info-line"}
+            {
+              "level": "debug",
+              "message": "debug-line"
+            },
+            {
+              "level": "info",
+              "message": "info-line"
+            }
           ]
         }
       ]
     },
-    "argv": ["--verbose", "--quiet", "cmd"],
-    "expect": {"exit_code": 0, "stdout_equals": "", "stderr_equals": ""}
+    "argv": [
+      "--verbose",
+      "--quiet",
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": ""
+    }
   },
   {
-    "name": "effects_output_gating: quiet does not suppress structured handler data",
+    "name": "effects_output_gating: quiet does not suppress the machine payload",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -139,13 +213,30 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "handler_diagnostics": [{"level": "info", "message": "info-line"}],
-          "handler_returns": {"kind": "data", "data": {"ok": true}}
+          "handler_diagnostics": [
+            {
+              "level": "info",
+              "message": "info-line"
+            }
+          ],
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          }
         }
       ]
     },
-    "argv": ["--quiet", "cmd"],
-    "expect": {"exit_code": 0, "stdout_contains": "\"ok\""}
+    "argv": [
+      "--quiet",
+      "--json",
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "\"ok\""
+    }
   },
   {
     "name": "effects_output_gating: quiet does not suppress the would-do log or its diagnostics split",
@@ -158,15 +249,30 @@
           "name": "build",
           "help": "build something",
           "effect": "mutating",
-          "handler_effects": [{"method": "mkdir", "path": "build"}],
+          "handler_effects": [
+            {
+              "method": "mkdir",
+              "path": "build"
+            }
+          ],
           "handler_diagnostics": [
-            {"level": "info", "message": "info-line"},
-            {"level": "warn", "message": "warn-line"}
+            {
+              "level": "info",
+              "message": "info-line"
+            },
+            {
+              "level": "warn",
+              "message": "warn-line"
+            }
           ]
         }
       ]
     },
-    "argv": ["--quiet", "--dry-run", "build"],
+    "argv": [
+      "--quiet",
+      "--dry-run",
+      "build"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n",

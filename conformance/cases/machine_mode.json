@@ -1,0 +1,481 @@
+[
+  {
+    "name": "machine_mode: a command flag named json is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "json",
+              "type": "bool",
+              "help": "should be rejected"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'json' is reserved by the framework: --json selects machine mode"
+    }
+  },
+  {
+    "name": "machine_mode: a global flag named json is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "help": "should be rejected"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'json' is reserved by the framework: --json selects machine mode"
+    }
+  },
+  {
+    "name": "machine_mode: a flag-set flag named json is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flag_sets": [
+            {
+              "name": "common",
+              "flags": [
+                {
+                  "name": "json",
+                  "type": "bool",
+                  "help": "should be rejected"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'json' is reserved by the framework: --json selects machine mode"
+    }
+  },
+  {
+    "name": "machine_mode: a mutex-group flag named json is rejected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "json",
+                  "type": "bool",
+                  "help": "should be rejected"
+                },
+                {
+                  "name": "text",
+                  "type": "bool",
+                  "help": "text output"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag name 'json' is reserved by the framework: --json selects machine mode"
+    }
+  },
+  {
+    "name": "machine_mode: an arg named json is unaffected by the ban",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "got {json}",
+          "args": [
+            {
+              "name": "json",
+              "help": "a file named json"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "value"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "got value\n"
+    }
+  },
+  {
+    "name": "machine_mode: the payload is not printed outside machine mode",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          }
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": ""
+    }
+  },
+  {
+    "name": "machine_mode: --json before the command word prints the payload",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"ok\":true}\n"
+    }
+  },
+  {
+    "name": "machine_mode: --json after the command word prints the payload",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          }
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"ok\":true}\n"
+    }
+  },
+  {
+    "name": "machine_mode: --json is recognized between a group and its subcommand",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "groups": [
+        {
+          "name": "grp",
+          "help": "a group",
+          "commands": [
+            {
+              "name": "cmd",
+              "help": "a command",
+              "effect": "read_only",
+              "handler_returns": {
+                "kind": "data",
+                "data": {
+                  "ok": true
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "commands": []
+    },
+    "argv": [
+      "grp",
+      "--json",
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"ok\":true}\n"
+    }
+  },
+  {
+    "name": "machine_mode: a token after -- is data, never the machine flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "rest={rest}",
+          "args": [
+            {
+              "name": "rest",
+              "help": "the rest",
+              "variadic": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--",
+      "--json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rest=--json\n"
+    }
+  },
+  {
+    "name": "machine_mode: a passthrough command's args keep the machine flag opaque",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "exec",
+          "help": "run a child",
+          "effect": "read_only",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        }
+      ]
+    },
+    "argv": [
+      "exec",
+      "--json",
+      "child"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "exec:--json,child\n"
+    }
+  },
+  {
+    "name": "machine_mode: the payload survives --quiet (structurally exempt)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_diagnostics": [
+            {
+              "level": "info",
+              "message": "info-line"
+            }
+          ],
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--quiet",
+      "--json",
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"ok\":true}\n"
+    }
+  },
+  {
+    "name": "machine_mode: the payload's escaping is plain UTF-8 with no HTML escaping",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "text": "héllo <b>&</b> 日本語 — ünïcode"
+            }
+          }
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"text\":\"héllo <b>&</b> 日本語 — ünïcode\"}\n"
+    }
+  },
+  {
+    "name": "machine_mode: check's machine output survives --quiet",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [],
+      "checks_toml": "app = \"testapp\"\n[checks.lint]\ntags = [\"release\"]\nseverity = \"error\"\nfast = true\npure = true\nneeds_network = false\ndepends_on = []\n",
+      "checks": [
+        {
+          "name": "lint",
+          "mint": "passed",
+          "message": "all good"
+        }
+      ]
+    },
+    "argv": [
+      "check",
+      "--list",
+      "--json",
+      "--quiet"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "\"name\"",
+        "\"severity\"",
+        "lint"
+      ]
+    }
+  },
+  {
+    "name": "machine_mode: config show's machine output survives --quiet",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "run",
+          "help": "run",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "a count",
+              "default": 0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "config",
+      "show",
+      "--json",
+      "--quiet"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "\"count\"",
+        "\"source\":\"default\""
+      ]
+    }
+  }
+]

@@ -314,7 +314,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "nonexistent",
       "value"
@@ -351,7 +351,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "count",
       "abc"
@@ -388,7 +388,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "debug",
       "maybe"
@@ -484,16 +484,16 @@
       "exit_code": 0,
       "stdout_contains": [
         "\"count\"",
-        "\"source\": \"config\"",
-        "\"value\": 10",
+        "\"source\":\"config\"",
+        "\"value\":10",
         "\"name\"",
-        "\"source\": \"default\"",
-        "\"value\": \"world\""
+        "\"source\":\"default\"",
+        "\"value\":\"world\""
       ]
     }
   },
   {
-    "name": "config: config show no flags error",
+    "name": "config: config show without flags prints the human table",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -523,12 +523,12 @@
       "show"
     ],
     "expect": {
-      "exit_code": 1,
-      "stderr_contains": "one of --plain, --json is required"
+      "exit_code": 0,
+      "stdout_contains": "count = "
     }
   },
   {
-    "name": "config: config show with both --plain and --json fails",
+    "name": "config: config show --plain --json is legal and yields the payload",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -560,8 +560,8 @@
       "--json"
     ],
     "expect": {
-      "exit_code": 1,
-      "stderr_contains": "mutually exclusive"
+      "exit_code": 0,
+      "stdout_contains": "\"source\""
     }
   },
   {

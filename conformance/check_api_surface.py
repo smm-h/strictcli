@@ -864,6 +864,10 @@ KNOWN_OPTION_FUNCS: set[str] = {
     # and TS a trailing options object. The describe_go dumper classifies it as
     # an option constructor because its result type is a func(*T) named type.
     "WithApproveConsequential",
+    # The machine payload's declared schema (contract §19.5). The contract pins
+    # the spelling WITHOUT a With- prefix (§18.9 item 111), which is why it
+    # reads unlike its neighbours here.
+    "PayloadSchema",
 }
 
 
@@ -1075,7 +1079,9 @@ def check_outcome_api(go_api: dict, ts_api: dict) -> list[str]:
 
     # Go constructors (package-level funcs).
     go_func_names = {f["name"] for f in go_api["functions"]}
-    for gofn in ("Exit", "ExitData"):
+    # ExitData is deleted (contract §19.4): the machine payload is supplied
+    # through ctx.Payload, not attached to the outcome.
+    for gofn in ("Exit",):
         if gofn not in go_func_names:
             errors.append(f"Go constructor '{gofn}' not found")
 
@@ -1319,7 +1325,7 @@ def main() -> int:
     print(f"  Package functions (check runner): {len(CHECK_RUNNER_FUNCTIONS)}")
     print(f"  Shared check types (cross-impl): {len(CHECK_RUNNER_SHARED_TYPES)}")
     print(f"  Python-only check symbols: {len(PYTHON_ONLY_CHECK_SYMBOLS)}")
-    print(f"  Outcome API: Outcome type + outcome()/Exit/ExitData + Go accessors {OUTCOME_GO_ONLY_ACCESSORS}")
+    print(f"  Outcome API: Outcome type + outcome()/Exit + Go accessors {OUTCOME_GO_ONLY_ACCESSORS}")
     # New-target diagnostic
     stub = generate_target_stub("rust")
     print(f"  New-target stub: {len(dataclasses.fields(stub))} fields to fill per entity")

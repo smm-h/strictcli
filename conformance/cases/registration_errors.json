@@ -561,7 +561,7 @@
             {
               "flags": [
                 {
-                  "name": "json",
+                  "name": "as-json",
                   "type": "bool",
                   "help": "output as json"
                 },

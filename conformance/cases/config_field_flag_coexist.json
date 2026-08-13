@@ -87,7 +87,7 @@
       "exit_code": 0,
       "stdout_contains": [
         "\"deployed\"",
-        "\"source\": \"config\""
+        "\"source\":\"config\""
       ],
       "stdout_not_contains": "\"type\""
     }
