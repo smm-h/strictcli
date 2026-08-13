@@ -994,6 +994,15 @@ CHECK_RUNNER_APP_METHODS: list[tuple[str, str, str]] = [
     ("reset_check_provider_cache", "ResetCheckProviderCache", "resetCheckProviderCache"),
 ]
 
+# Methods on App that must exist in all implementations, beyond the check
+# runner's. The structured effect log's accessor is public API since the
+# machine-interface round (effects contract §14.3's amendment): it is the
+# envelope's source (§19.3), so it belongs in this catalog rather than in the
+# test-only enclosure it used to sit in.
+PUBLIC_APP_METHODS: list[tuple[str, str, str]] = [
+    ("effect_log", "EffectLog", "effectLog"),
+]
+
 # Module-level (Python) / package-level (Go) / module-export (TS) functions.
 CHECK_RUNNER_FUNCTIONS: list[tuple[str, str, str]] = [
     ("format_check_results", "FormatCheckResults", "formatCheckResults"),
@@ -1158,7 +1167,7 @@ def check_check_runner_types(
 
 
 def check_check_runner_methods(go_api: dict, ts_api: dict) -> list[str]:
-    """Check that App methods for the check runner exist in all implementations."""
+    """Check that the catalogued App methods exist in all implementations."""
     errors: list[str] = []
     py_methods = get_python_app_methods()
     go_methods = {
@@ -1170,7 +1179,9 @@ def check_check_runner_methods(go_api: dict, ts_api: dict) -> list[str]:
         if m["receiver"] == "App"
     }
 
-    for py_method, go_method, ts_method in CHECK_RUNNER_APP_METHODS:
+    for py_method, go_method, ts_method in (
+        CHECK_RUNNER_APP_METHODS + PUBLIC_APP_METHODS
+    ):
         if py_method not in py_methods:
             errors.append(f"Python App.{py_method}() not found")
         if go_method not in go_methods:
@@ -1321,7 +1332,10 @@ def main() -> int:
             f"  {py_cls}/{go_struct}/{ts_struct}: {len(field_map)} fields "
             f"(cross-impl parity)"
         )
-    print(f"  App methods (check runner): {len(CHECK_RUNNER_APP_METHODS)}")
+    print(
+        f"  App methods (check runner + public): "
+        f"{len(CHECK_RUNNER_APP_METHODS) + len(PUBLIC_APP_METHODS)}"
+    )
     print(f"  Package functions (check runner): {len(CHECK_RUNNER_FUNCTIONS)}")
     print(f"  Shared check types (cross-impl): {len(CHECK_RUNNER_SHARED_TYPES)}")
     print(f"  Python-only check symbols: {len(PYTHON_ONLY_CHECK_SYMBOLS)}")
