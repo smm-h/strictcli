@@ -49,17 +49,29 @@ func TestPayloadPrintsJSONAndCaptures(t *testing.T) {
 	}
 }
 
-func TestNoPayloadDoesNotPrint(t *testing.T) {
+func TestNoPayloadIsANullEnvelopeMember(t *testing.T) {
+	// The envelope is never conditional (§19.3): a run that supplied no
+	// payload still emits the document, with payload null.
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithEffect(EffectReadOnly))
 	r := app.Test([]string{"info", "--json"})
-	if r.Stdout != "" {
-		t.Fatalf("Stdout = %q, want empty when no payload was supplied", r.Stdout)
+	if want := envelopeText("info", 0, "null", false, "[]", "null", "[]"); r.Stdout != want {
+		t.Fatalf("Stdout = %q, want %q", r.Stdout, want)
 	}
 	if r.Data != nil {
 		t.Fatalf("Data = %v, want nil", r.Data)
+	}
+}
+
+func TestNoPayloadPrintsNothingOutsideMachineMode(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+	if r := app.Test([]string{"info"}); r.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty", r.Stdout)
 	}
 }
 

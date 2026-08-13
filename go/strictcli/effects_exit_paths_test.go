@@ -9,6 +9,7 @@ package strictcli
 // the same shape effects_confirm_test.go uses for the confirm protocol.
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -240,5 +241,52 @@ func TestRunSealedLeavesTheTruncationPathAlone(t *testing.T) {
 		"value «step 1 output» — cannot preview past this point\n"
 	if errb.String() != wantErr {
 		t.Fatalf("stderr=%q want %q", errb.String(), wantErr)
+	}
+}
+
+func TestMachineModeEnvelopeOnAnAbortedPreview(t *testing.T) {
+	// The envelope is written at the same seam that renders the log in human
+	// mode, and the abort marker's text rides preview_error instead of stderr
+	// (§19.3). The panic itself still continues untouched.
+	stdout, stderr, _ := runExitPathHelper(t, "--json --dry-run panics")
+	var env map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("stdout is not one JSON document: %v (stdout=%q)", err, stdout)
+	}
+	if env["dry_run"] != true || env["exit_code"].(float64) != 1 {
+		t.Fatalf("envelope = %v", env)
+	}
+	if n := len(env["preview"].([]interface{})); n != 1 {
+		t.Fatalf("preview holds %d records, want the one recorded before the panic", n)
+	}
+	pe, ok := env["preview_error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("preview_error = %v, want an object", env["preview_error"])
+	}
+	if pe["kind"] != "aborted" || pe["command"] != "panics" || pe["brand"] != nil {
+		t.Fatalf("preview_error = %v", pe)
+	}
+	want := "error: dry-run preview ends at step 2: panics aborted — the preview above may be incomplete"
+	if pe["message"] != want {
+		t.Fatalf("message = %q, want %q", pe["message"], want)
+	}
+	if strings.Contains(stderr, "dry-run preview ends") {
+		t.Fatalf("the marker rides the envelope in machine mode, stderr=%q", stderr)
+	}
+	if !strings.Contains(stderr, "kaboom") {
+		t.Fatalf("the panic must continue untouched, stderr=%q", stderr)
+	}
+}
+
+func TestMachineModeEnvelopeOnALiveAbort(t *testing.T) {
+	// The marker's text names a dry-run preview, so it is dry-mode-only --
+	// exactly as the human stream's marker is.
+	stdout, _, _ := runExitPathHelper(t, "--json panics")
+	var env map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("stdout is not one JSON document: %v (stdout=%q)", err, stdout)
+	}
+	if env["preview_error"] != nil {
+		t.Fatalf("preview_error = %v, want null on a live abort", env["preview_error"])
 	}
 }

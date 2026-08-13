@@ -4532,7 +4532,7 @@ func TestConfigShowJSON(t *testing.T) {
 		Value  interface{} `json:"value"`
 		Source string      `json:"source"`
 	}
-	if err := json.Unmarshal([]byte(r.Stdout), &data); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &data); err != nil {
 		t.Fatalf("failed to parse JSON: %s\nstdout=%q", err, r.Stdout)
 	}
 
@@ -5609,7 +5609,7 @@ func TestConfigShowJSONArray(t *testing.T) {
 		Value  interface{} `json:"value"`
 		Source string      `json:"source"`
 	}
-	if err := json.Unmarshal([]byte(r.Stdout), &data); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &data); err != nil {
 		t.Fatalf("failed to parse JSON: %s\nstdout=%q", err, r.Stdout)
 	}
 	entry, ok := data["tags"]
@@ -6091,7 +6091,7 @@ func TestConfigSetRoundTripJSON(t *testing.T) {
 		Value  interface{} `json:"value"`
 		Source string      `json:"source"`
 	}
-	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &result); err != nil {
 		t.Fatalf("invalid JSON output: %v", err)
 	}
 	entry, ok := result["tags"]

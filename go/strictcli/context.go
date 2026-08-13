@@ -29,6 +29,19 @@ type Context struct {
 	payloadSchema map[string]interface{}
 	payload       interface{}
 	payloadSet    bool
+
+	// The diagnostics this dispatch emitted, in emission order (contract
+	// §19.2). In machine mode the writers below record here instead of
+	// writing: what they were asked to say rides the envelope. Outside machine
+	// mode the slice stays empty and nothing changes.
+	diagnostics []diagnosticRecord
+}
+
+// diagnosticRecord is one entry of the envelope's diagnostics array (§19.2).
+// The field order is the serialized key order.
+type diagnosticRecord struct {
+	Level   string `json:"level"`
+	Message string `json:"message"`
 }
 
 // reservedFlags carries the values of the framework-owned reserved quartet --
@@ -183,6 +196,9 @@ func (c *Context) ConnectionEnvValue(envVar string) (string, bool) {
 
 // Info writes an informational message to stdout (hidden under --quiet).
 func (c *Context) Info(msg string) {
+	if c.diagnostic("info", msg) {
+		return
+	}
 	if c.reserved.quiet {
 		return
 	}
@@ -191,12 +207,18 @@ func (c *Context) Info(msg string) {
 
 // Warn writes a warning message to stderr (never suppressed).
 func (c *Context) Warn(msg string) {
+	if c.diagnostic("warn", msg) {
+		return
+	}
 	fmt.Fprintln(c.stderr, msg)
 }
 
 // Debug writes a debug message to stdout (shown only under --verbose).
 // --quiet DOMINATES --verbose: passing both hides debug output.
 func (c *Context) Debug(msg string) {
+	if c.diagnostic("debug", msg) {
+		return
+	}
 	if c.reserved.quiet || !c.reserved.verbose {
 		return
 	}
@@ -205,7 +227,23 @@ func (c *Context) Debug(msg string) {
 
 // Error writes an error message to stderr (never suppressed).
 func (c *Context) Error(msg string) {
+	if c.diagnostic("error", msg) {
+		return
+	}
 	fmt.Fprintln(c.stderr, msg)
+}
+
+// diagnostic records a diagnostic in machine mode, reporting whether it was
+// recorded. In machine mode the writers above write nothing and what they were
+// asked to say rides the envelope's diagnostics instead (§19.1). The recording
+// is NOT filtered by --quiet or --verbose: the envelope's content is a function
+// of what the run produced, never of how a terminal was configured (§19.2).
+func (c *Context) diagnostic(level, msg string) bool {
+	if !c.reserved.json {
+		return false
+	}
+	c.diagnostics = append(c.diagnostics, diagnosticRecord{Level: level, Message: msg})
+	return true
 }
 
 // Source returns the provenance source label for a flag.

@@ -646,7 +646,7 @@ func TestConfigShowJSONIncludesConfigFields(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %v\noutput: %s", err, r.Stdout)
 	}
 	// Config field with value from config file
@@ -1560,7 +1560,7 @@ func TestFieldFlagShowJSONRendersOnce(t *testing.T) {
 		t.Fatalf("expected exit 0, got %d: %s", r.ExitCode, r.Stderr)
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &result); err != nil {
 		t.Fatalf("bad json: %v\n%s", err, r.Stdout)
 	}
 	entry, ok := result["target"].(map[string]interface{})

@@ -283,7 +283,7 @@ func TestConfigShowReportsEnv(t *testing.T) {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %s\nstdout: %s", err, r.Stdout)
 	}
 	levelEntry, ok := result["level"].(map[string]interface{})
@@ -315,7 +315,7 @@ func TestConfigShowReportsConfig(t *testing.T) {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %s", err)
 	}
 	levelEntry := result["level"].(map[string]interface{})
@@ -339,7 +339,7 @@ func TestConfigShowReportsDefault(t *testing.T) {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(r.Stdout), &result); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %s", err)
 	}
 	levelEntry := result["level"].(map[string]interface{})

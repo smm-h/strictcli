@@ -335,7 +335,7 @@ func TestInfraConfigShowSurface(t *testing.T) {
 	// JSON mode
 	rj := app.Test([]string{"config", "show", "--json"})
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(rj.Stdout), &result); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, rj.Stdout), &result); err != nil {
 		t.Fatalf("json parse: %s\n%s", err, rj.Stdout)
 	}
 	infra, ok := result["__infrastructure__"].(map[string]interface{})

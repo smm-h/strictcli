@@ -89,6 +89,12 @@ const frameworkInternalForwardingReason = "framework-internal: absorbs app-defin
 type dryRunTruncation struct {
 	message string
 	log     *effectLog
+	// The three values §12.5's text is built from, kept apart from it so the
+	// envelope's preview_error can carry them as members (§19.3) without
+	// re-parsing the rendered message.
+	step    int
+	cmdPath string
+	brand   string
 }
 
 // --- carriers -------------------------------------------------------------
@@ -277,6 +283,9 @@ func truncationFor(log *effectLog, cmdPath, brand string) dryRunTruncation {
 	return dryRunTruncation{
 		message: errDryRunTruncated(step, cmdPath, brand),
 		log:     log,
+		step:    step,
+		cmdPath: cmdPath,
+		brand:   brand,
 	}
 }
 
@@ -1327,7 +1336,11 @@ func (a *App) recordCacheWrite(path string) {
 }
 
 // EffectLog returns the structured effect records of the most recent dispatch.
-// Test-only surface, beside Test() and the provenance accessors.
+//
+// Public API (contract §14.3's amendment). It is the envelope's source (§19.3),
+// so it is part of the surface consumers may rely on and it is in the
+// api-surface catalog rather than excluded from it. The records are populated
+// in both modes, so a live run's effects read as readily as a dry run's.
 func (a *App) EffectLog() []map[string]interface{} {
 	if a.effects == nil {
 		return []map[string]interface{}{}

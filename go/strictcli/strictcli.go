@@ -2204,6 +2204,7 @@ func (a *App) Run() {
 			prefix = a.Name
 		}
 		fmt.Fprintf(os.Stderr, "try '%s --help'\n", prefix)
+		a.emitPreDispatchEnvelope(os.Stdout)
 		os.Exit(1)
 	}
 
@@ -2262,31 +2263,89 @@ func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, c
 	defer func() {
 		r := recover()
 		if r == nil {
-			a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, false)
+			a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, code, nil, false)
 			return
 		}
 		if t, ok := r.(dryRunTruncation); ok {
-			a.emitPayload(ctx, stdout)
-			fmt.Fprintln(stdout, t.log.render())
-			fmt.Fprintln(stderr, t.message)
 			code = 1
+			a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, 1, &t, false)
 			return
 		}
 		// An unexpected unwind. The recorded effects are still owed to whoever
 		// asked for the preview; the marker says the list may not be all of it.
-		a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, true)
+		a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, 1, nil, true)
 		panic(r)
 	}()
 	return fn()
 }
 
-// finishDispatch is the ONE ordered exit step: payload first, then the would-do
-// log. Reachable from every way out of a dispatch (a normal return, an
-// unwinding abort, and -- through its two halves -- a truncated preview), so
+// emitPreDispatchEnvelope writes the envelope a run that ended before a command
+// resolved still owes machine mode, with a null command (§19.2). A no-op
+// outside machine mode.
+//
+// The parse error's own text stays on stderr: it does not go through the
+// context writers, so it is not one of the diagnostics the envelope carries.
+func (a *App) emitPreDispatchEnvelope(stdout io.Writer) {
+	if !a.lastJSON {
+		return
+	}
+	a.emitEnvelope(nil, stdout, nil, 1, a.lastDryRun, nil, nil)
+}
+
+// interfaceVersion is the envelope contract's own version (§19.2). Changed only
+// by a later amendment to that section.
+const interfaceVersion = 1
+
+// envelope is machine mode's sole stdout document (§19.2). The field order is
+// the table's order in that section: optional and for readability only, since
+// correctness is decided by structural comparison.
+type envelope struct {
+	InterfaceVersion int                      `json:"interface_version"`
+	App              string                   `json:"app"`
+	AppVersion       string                   `json:"app_version"`
+	Command          *string                  `json:"command"`
+	ExitCode         int                      `json:"exit_code"`
+	Payload          interface{}              `json:"payload"`
+	DryRun           bool                     `json:"dry_run"`
+	Preview          []map[string]interface{} `json:"preview"`
+	PreviewError     *previewError            `json:"preview_error"`
+	Diagnostics      []diagnosticRecord       `json:"diagnostics"`
+}
+
+// previewError is the terminal condition of a preview that did not finish
+// (§19.3). Brand is nil for an abort: §12.11's marker deliberately names no
+// value.
+type previewError struct {
+	Kind    string  `json:"kind"`
+	Step    int     `json:"step"`
+	Command string  `json:"command"`
+	Brand   *string `json:"brand"`
+	Message string  `json:"message"`
+}
+
+// finishDispatch is the ONE ordered exit step. Reachable from every way out of
+// a dispatch (a normal return, a truncated preview and an unwinding abort), so
 // there is exactly one place that decides what the framework emits at the end
 // of a run and in what order.
-func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool, cmdPath string, aborted bool) {
-	a.emitPayload(ctx, stdout)
+//
+// In machine mode it emits the envelope INSTEAD of the human stream's would-do
+// log, truncation error and abort marker: those texts become the envelope's
+// preview and preview_error members (§19.1, §19.3), and stdout carries exactly
+// one document.
+func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool, cmdPath string, exitCode int, trunc *dryRunTruncation, aborted bool) {
+	if ctx != nil && ctx.reserved.json {
+		a.emitEnvelope(ctx, stdout, &cmdPath, exitCode, dryRun, a.EffectLog(),
+			a.buildPreviewError(cmdPath, dryRun, trunc, aborted))
+		return
+	}
+	if trunc != nil {
+		// The truncation path ends the preview for its own pinned reason: it
+		// renders the log it already has and its own error, and never goes
+		// through the generic would-do rendering.
+		fmt.Fprintln(stdout, trunc.log.render())
+		fmt.Fprintln(stderr, trunc.message)
+		return
+	}
 	if !dryRun {
 		return
 	}
@@ -2296,22 +2355,76 @@ func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool
 	}
 }
 
-// emitPayload writes the dispatch's machine payload, if there is one (§19.4).
+// previewError builds the envelope's preview_error member (§19.3).
 //
-// Only in machine mode: outside it the payload is captured by the in-process
-// surfaces and printed nowhere. The encoder disables HTML escaping so the
-// bytes follow §19.5's regime -- plain UTF-8, escaping only what JSON mandates
-// -- and the write does not go through the quiet-suppressible writers, so
-// --quiet has no mechanism by which to reach it.
-func (a *App) emitPayload(ctx *Context, stdout io.Writer) {
-	if ctx == nil || !ctx.payloadSet || !ctx.reserved.json {
-		return
+// The two terminal conditions are mutually exclusive by §3.5's table. Each
+// carries the §12.5 / §12.11 text byte-identically rather than restating it, so
+// there is one text per condition.
+//
+// The abort branch is dry-mode-only, exactly as the human stream's marker is:
+// the message says "dry-run preview ends at step N", which is not a true
+// sentence about a live run.
+func (a *App) buildPreviewError(cmdPath string, dryRun bool, trunc *dryRunTruncation, aborted bool) *previewError {
+	if trunc != nil {
+		brand := trunc.brand
+		return &previewError{
+			Kind:    "truncated",
+			Step:    trunc.step,
+			Command: trunc.cmdPath,
+			Brand:   &brand,
+			Message: trunc.message,
+		}
+	}
+	if aborted && dryRun {
+		step := a.wouldDoSeq()
+		return &previewError{
+			Kind:    "aborted",
+			Step:    step,
+			Command: cmdPath,
+			Brand:   nil,
+			Message: errDryRunAborted(step, cmdPath),
+		}
+	}
+	return nil
+}
+
+// emitEnvelope writes the envelope, machine mode's sole stdout document
+// (§19.2).
+//
+// Field order follows §19.2's table (the struct's field order): optional and
+// for readability only, since conformance compares parsed structures. The
+// encoder disables HTML escaping so the bytes follow §19.5's regime -- plain
+// UTF-8, escaping only what JSON mandates -- and the write does not go through
+// the quiet-suppressible writers, so --quiet has no mechanism by which to
+// reach it.
+func (a *App) emitEnvelope(ctx *Context, stdout io.Writer, command *string, exitCode int, dryRun bool, preview []map[string]interface{}, prevErr *previewError) {
+	if preview == nil {
+		preview = []map[string]interface{}{}
+	}
+	env := envelope{
+		InterfaceVersion: interfaceVersion,
+		App:              a.Name,
+		AppVersion:       a.Version,
+		Command:          command,
+		ExitCode:         exitCode,
+		DryRun:           dryRun,
+		Preview:          preview,
+		PreviewError:     prevErr,
+		Diagnostics:      []diagnosticRecord{},
+	}
+	if ctx != nil {
+		if ctx.payloadSet {
+			env.Payload = ctx.payload
+		}
+		if len(ctx.diagnostics) > 0 {
+			env.Diagnostics = ctx.diagnostics
+		}
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(ctx.payload); err != nil {
-		fmt.Fprintf(ctx.stderr, "error: failed to marshal result data: %s\n", err)
+	if err := enc.Encode(env); err != nil {
+		fmt.Fprintf(os.Stderr, "error: failed to marshal the envelope: %s\n", err)
 		return
 	}
 	// Encode already terminates with a newline.
@@ -2355,7 +2468,9 @@ func (a *App) Test(argv []string) Result {
 			prefix = a.Name
 		}
 		stderr := fmt.Sprintf("error: %s\ntry '%s --help'\n", pr.parseErr, prefix)
-		return Result{Stderr: stderr, ExitCode: 1}
+		var stdout bytes.Buffer
+		a.emitPreDispatchEnvelope(&stdout)
+		return Result{Stdout: stdout.String(), Stderr: stderr, ExitCode: 1}
 	}
 
 	a.beginDispatch()
@@ -2694,6 +2809,11 @@ func (a *App) doParse(argv []string) parseResult {
 	// Reset stdin tracking for each parse invocation
 	a.stdinConsumedBy = nil
 
+	// Machine mode is not known until the pre-scan below runs, so the flag
+	// starts false on every parse: a stale value from an earlier run must
+	// never decide what this one emits.
+	a.lastJSON = false
+
 	// App-level --help/-h and --version/-v (no global flags present)
 	if len(argv) == 0 || (len(argv) == 1 && (argv[0] == "--help" || argv[0] == "-h")) {
 		return parseResult{helpText: formatAppHelp(a)}
@@ -2706,6 +2826,17 @@ func (a *App) doParse(argv []string) parseResult {
 	// in the pre-command region only (before the first non-flag token, before --).
 	// This replaces the old naive scans that checked ALL of argv.
 	preScan := a.preScanReservedFlags(argv)
+
+	// Record the reserved quartet -- and --json beside it -- for the dispatch
+	// ctx. This runs BEFORE the pre-scan's own exits so every parse error from
+	// here on knows whether the run is in machine mode and can emit the
+	// envelope the mode owes it (§19.2).
+	a.lastDryRun = preScan.reserved.dryRun
+	a.lastApproveConsequential = preScan.reserved.approveConsequential
+	a.lastQuiet = preScan.reserved.quiet
+	a.lastVerbose = preScan.reserved.verbose
+	a.lastJSON = preScan.reserved.json
+
 	if preScan.dumpSchema {
 		return parseResult{dumpSchema: true}
 	}
@@ -2715,13 +2846,6 @@ func (a *App) doParse(argv []string) parseResult {
 	if preScan.err != "" {
 		return parseResult{parseErr: preScan.err}
 	}
-
-	// Record the reserved quartet for the dispatch ctx.
-	a.lastDryRun = preScan.reserved.dryRun
-	a.lastApproveConsequential = preScan.reserved.approveConsequential
-	a.lastQuiet = preScan.reserved.quiet
-	a.lastVerbose = preScan.reserved.verbose
-	a.lastJSON = preScan.reserved.json
 
 	// --hermetic + --config mutual exclusion
 	if preScan.hermetic && preScan.configPath != "" {

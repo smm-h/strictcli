@@ -282,7 +282,7 @@ func TestProvider_ListJSON(t *testing.T) {
 		Name     string `json:"name"`
 		Severity string `json:"severity"`
 	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(r.Stdout)), &entries); err != nil {
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &entries); err != nil {
 		t.Fatalf("json parse: %v; out=%q", err, r.Stdout)
 	}
 	if len(entries) != 1 || entries[0].Name != "warn-prov" || entries[0].Severity != "warn" {

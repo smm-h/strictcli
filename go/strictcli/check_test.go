@@ -1446,7 +1446,7 @@ func TestCheckCommand_List_JSON(t *testing.T) {
 		Tags     []string `json:"tags"`
 		Severity string   `json:"severity"`
 	}
-	output := strings.TrimSpace(r.Stdout)
+	output := string(envelopePayload(t, r.Stdout))
 	if err := json.Unmarshal([]byte(output), &entries); err != nil {
 		t.Fatalf("failed to parse JSON: %v; output=%q", err, output)
 	}
@@ -1681,7 +1681,7 @@ func TestCheckCommand_All_JSON(t *testing.T) {
 		Message string   `json:"message"`
 		Details []string `json:"details"`
 	}
-	output := strings.TrimSpace(r.Stdout)
+	output := string(envelopePayload(t, r.Stdout))
 	if err := json.Unmarshal([]byte(output), &entries); err != nil {
 		t.Fatalf("failed to parse JSON: %v; output=%q", err, output)
 	}
