@@ -1,8 +1,7 @@
 ---
 title: typescript/src/payload_schema
-description: "The declared payload schema's validator (effects contract §19.5)."
+description: "The in-house payload schema validator over a closed JSON Schema subset, checked at registration and enforced against the payload at emission."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 28
 ---
