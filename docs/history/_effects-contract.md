@@ -3766,6 +3766,28 @@ because a reading it presented as forced is authored (§20.1).
      and wins. Nothing in the rulings decides this, and the alternative (handler wins) would let a
      handler sever or forge the chain through an ordinary environment override.
 
+     **Added at the implementation round (2026-08-13), all on the spec page and all marked there as
+     authored**, at points the page had been silent on and an implementation could not avoid
+     deciding:
+
+     - **The entry is written immediately before the child-start attempt**, so an entry exists even
+       when the start itself fails. Forced in ordering (the identifier must exist to be composed
+       into the environment the child starts with), authored in consequence (nothing retracts it).
+     - **A write failure removes the variable from the child's environment** rather than leaving
+       whatever this process inherited. The alternative re-attributes the child to its grandparent
+       -- a wrong link where an absent one is honest.
+     - **An inherited value that is not a valid identifier records `parent_id: null`.** The
+       alternative -- copying it verbatim, as the entry table's wording taken alone would allow --
+       puts a string no conforming reader can parse where every other identifier is profile-valid.
+       The cost is recorded rather than hidden: the store then cannot distinguish a real root from a
+       polluted variable, and the [Consumers] rule that malformed data is recorded verbatim as an
+       anomaly is what still catches it, at the consumer's own capture seam where the polluted
+       variable actually is.
+     - **Files are created with mode `0600`**, partitions and marker alike -- the page pinned the
+       directory's `0700` and said nothing about the files, which would otherwise follow the umask.
+     - **The marker's timestamp is unclamped**: no partition was selected when the write failed, so
+       there is no range to clamp into.
+
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
 
