@@ -147,5 +147,29 @@
         ]
       }
     }
+  },
+  {
+    "name": "dump-schema: the declared schema location wins over the framework's default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "schema_path": "build/cli-schema.json",
+      "commands": [
+        {
+          "name": "greet",
+          "help": "say hello",
+          "effect": "read_only",
+          "handler_prints": "hello"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "/build/cli-schema.json"
+    }
   }
 ]

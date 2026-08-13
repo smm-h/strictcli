@@ -17,7 +17,13 @@
  */
 
 import { strict as assert } from "node:assert";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -1147,6 +1153,68 @@ test("--dump-schema exits 0 and prints the absolute schema path", async () => {
 		assert.ok(res.stdout.includes(".strictcli/schema.json"));
 		assert.ok(res.stdout.startsWith("/"));
 		assert.equal(res.stdout, `${join(dir, ".strictcli", "schema.json")}\n`);
+	});
+});
+
+// --- The declared --dump-schema location ---
+
+test("--dump-schema writes the declared relative path, not the default", async () => {
+	await withTempCwd(async (dir) => {
+		writeFileSync("package.json", '{"name": "myapp"}\n');
+		const app = createApp({
+			name: "myapp",
+			version: "1.0.0",
+			help: "test app",
+			schemaPath: join("build", "cli-schema.json"),
+		});
+		app.command(
+			defineReadOnlyCommand("greet", { help: "say hello", handler: () => 0 }),
+		);
+		const res = await app.test(["--dump-schema"]);
+		assert.equal(res.exitCode, 0);
+		const want = join(dir, "build", "cli-schema.json");
+		assert.equal(res.stdout, `${want}\n`);
+		assert.ok(existsSync(want));
+		assert.ok(!existsSync(join(dir, ".strictcli")));
+	});
+});
+
+test("--dump-schema writes a declared relativeToRoot() location", async () => {
+	await withTempCwd(async (dir) => {
+		writeFileSync("package.json", '{"name": "myapp"}\n');
+		const root = join(dir, "root");
+		const app = createApp({
+			name: "myapp",
+			version: "1.0.0",
+			help: "test app",
+			infraRoot: { MYAPP_HOME: root },
+			schemaPath: relativeToRoot("MYAPP_HOME", "schema.json"),
+		});
+		app.command(
+			defineReadOnlyCommand("greet", { help: "say hello", handler: () => 0 }),
+		);
+		assert.equal((await app.test(["--dump-schema"])).exitCode, 0);
+		assert.ok(existsSync(join(root, "schema.json")));
+	});
+});
+
+test("the default --dump-schema location is anchored at construction", async () => {
+	await withTempCwd(async (dir) => {
+		writeFileSync("package.json", '{"name": "myapp"}\n');
+		const app = buildMinimalApp();
+		const elsewhere = mkdtempSync(join(tmpdir(), "strictcli-elsewhere-"));
+		// project_id is read from the cwd at dump time -- a separate cwd
+		// dependency this test is not about, so both directories carry one.
+		writeFileSync(join(elsewhere, "package.json"), '{"name": "myapp"}\n');
+		const back = process.cwd();
+		process.chdir(elsewhere);
+		try {
+			assert.equal((await app.test(["--dump-schema"])).exitCode, 0);
+		} finally {
+			process.chdir(back);
+		}
+		assert.ok(existsSync(join(dir, ".strictcli", "schema.json")));
+		assert.ok(!existsSync(join(elsewhere, ".strictcli")));
 	});
 });
 

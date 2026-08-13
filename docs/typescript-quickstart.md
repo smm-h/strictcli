@@ -771,6 +771,12 @@ declarations.
 mytool --dump-schema
 ```
 
+The location is declared, never discovered: `schemaPath: "build/cli-schema.json"`
+or `schemaPath: relativeToRoot("MYTOOL_HOME", "schema.json")` in `createApp`.
+With neither, the framework writes `.strictcli/schema.json` anchored at the
+working directory the app was CONSTRUCTED in, so a later `chdir` cannot move the
+file.
+
 Programmatically, use `app.dumpSchemaDict()` to get the schema as an object without writing to disk.
 
 ```typescript

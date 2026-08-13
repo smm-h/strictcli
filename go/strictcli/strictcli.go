@@ -374,6 +374,9 @@ type App struct {
 	infraRootOrder   []string          // env var names in declaration order
 	infraRootFromEnv map[string]bool   // env var -> value came from the env var (vs default)
 	configPathRef    *InfraRootPath    // set by WithConfigPathRelativeToRoot
+	schemaPath       string            // set by WithSchemaPath
+	schemaPathRef    *InfraRootPath    // set by WithSchemaPathRelativeToRoot
+	schemaOutPath    string            // resolved absolute --dump-schema target
 
 	// Handshake env vars: cross-tool protocol signals. No default, no eager
 	// resolution -- read live via os.LookupEnv at access time.
@@ -567,6 +570,27 @@ func WithConfigPathRelativeToRoot(envVar string, parts ...string) AppOption {
 	return func(a *App) {
 		ref := RelativeToRoot(envVar, parts...)
 		a.configPathRef = &ref
+	}
+}
+
+// WithSchemaPath declares where --dump-schema writes. The path may be absolute
+// or relative to the App's construction-time working directory. Undeclared, the
+// framework's own location applies: ".strictcli/schema.json" ANCHORED at the
+// construction-time working directory, so a chdir between construction and
+// dispatch cannot redirect the write into the caller's cwd.
+func WithSchemaPath(path string) AppOption {
+	return func(a *App) {
+		a.schemaPath = path
+	}
+}
+
+// WithSchemaPathRelativeToRoot declares the --dump-schema target as a location
+// relative to a declared infrastructure root. The marker is resolved eagerly at
+// construction, exactly as WithConfigPathRelativeToRoot is.
+func WithSchemaPathRelativeToRoot(envVar string, parts ...string) AppOption {
+	return func(a *App) {
+		ref := RelativeToRoot(envVar, parts...)
+		a.schemaPathRef = &ref
 	}
 }
 
@@ -1580,6 +1604,25 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 			panic(err.Error())
 		}
 		a.configPathOverride = resolved
+	}
+	// Resolve the --dump-schema target once, at construction: a declared
+	// marker through its root, a declared relative path and the framework's own
+	// default against the construction-time cwd.
+	if a.schemaPathRef != nil {
+		resolved, err := a.resolveInfraPath(*a.schemaPathRef)
+		if err != nil {
+			panic(err.Error())
+		}
+		a.schemaPath = resolved
+	}
+	schemaTarget := a.schemaPath
+	if schemaTarget == "" {
+		schemaTarget = filepath.Join(".strictcli", "schema.json")
+	}
+	if abs, err := filepath.Abs(schemaTarget); err == nil {
+		a.schemaOutPath = abs
+	} else {
+		a.schemaOutPath = schemaTarget
 	}
 
 	// Default config format to "json" if not set

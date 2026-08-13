@@ -938,6 +938,9 @@ async function main() {
 	if ("config_path" in appDef && appDef.config_path !== null) {
 		spec.configPath = appDef.config_path;
 	}
+	if ("schema_path" in appDef && appDef.schema_path !== null) {
+		spec.schemaPath = appDef.schema_path;
+	}
 	if ("config_format" in appDef && appDef.config_format !== "json") {
 		spec.configFormat = appDef.config_format;
 	}

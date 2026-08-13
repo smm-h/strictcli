@@ -637,6 +637,10 @@ $ mytool --dump-schema
 ```
 
 The schema includes all commands, flags, args, groups, and their metadata. It is used by tools like rlsbl to keep documentation in sync with the CLI surface.
+The location is declared, never discovered: `WithSchemaPath("build/cli-schema.json")`
+or `WithSchemaPathRelativeToRoot("MYTOOL_HOME", "schema.json")` on the app. With
+neither, the framework writes `.strictcli/schema.json` anchored at the working
+directory the app was CONSTRUCTED in, so a later `chdir` cannot move the file.
 
 ## Testing
 

@@ -1220,3 +1220,78 @@ class TestSchemaMarkerDefault:
         dumped = json.dumps(data)
         assert "/var/lib/myapp/global.sqlite" not in dumped
         assert "/var/lib/myapp/sub/db.sqlite" not in dumped
+
+
+class TestDeclaredSchemaLocation:
+    """--dump-schema writes where the App declared, not where the caller stands."""
+
+    def test_declared_relative_path(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app(schema_path=os.path.join("build", "cli-schema.json"))
+
+        @app.command("greet", effect="read_only", help="Say hello")
+        def greet(ctx):
+            pass
+
+        result = app.test(["--dump-schema"])
+        assert result.exit_code == 0
+        out = tmp_path / "build" / "cli-schema.json"
+        assert out.exists()
+        assert str(out) in result.stdout
+        assert not (tmp_path / ".strictcli").exists()
+
+    def test_declared_absolute_path(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        target = tmp_path / "out" / "schema.json"
+        app = _make_app(schema_path=str(target))
+
+        @app.command("greet", effect="read_only", help="Say hello")
+        def greet(ctx):
+            pass
+
+        assert app.test(["--dump-schema"]).exit_code == 0
+        assert target.exists()
+
+    def test_declared_relative_to_root(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        root = tmp_path / "root"
+        monkeypatch.setenv("MYAPP_HOME", str(root))
+        app = _make_app(
+            infra_root={"MYAPP_HOME": str(root)},
+            schema_path=strictcli.RelativeToRoot("MYAPP_HOME", "schema.json"),
+        )
+
+        @app.command("greet", effect="read_only", help="Say hello")
+        def greet(ctx):
+            pass
+
+        assert app.test(["--dump-schema"]).exit_code == 0
+        assert (root / "schema.json").exists()
+
+    def test_default_location_is_anchored_at_construction(self, tmp_path, monkeypatch):
+        """A chdir after construction does not redirect the write."""
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / "pyproject.toml").write_text(_PYPROJECT_TOML)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        # project_id is read from the cwd at dump time -- a separate cwd
+        # dependency this test is not about, so both directories carry one.
+        (elsewhere / "pyproject.toml").write_text(_PYPROJECT_TOML)
+
+        monkeypatch.chdir(home)
+        app = _make_app()
+
+        @app.command("greet", effect="read_only", help="Say hello")
+        def greet(ctx):
+            pass
+
+        monkeypatch.chdir(elsewhere)
+        assert app.test(["--dump-schema"]).exit_code == 0
+        assert (home / ".strictcli" / "schema.json").exists()
+        assert not (elsewhere / ".strictcli").exists()
+
+    def test_undeclared_root_in_schema_path_is_a_registration_error(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValueError, match="MYAPP_HOME"):
+            _make_app(schema_path=strictcli.RelativeToRoot("MYAPP_HOME", "schema.json"))

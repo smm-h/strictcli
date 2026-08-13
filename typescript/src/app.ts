@@ -15,6 +15,7 @@
  */
 
 import { readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { format } from "node:util";
 import { enableChecks } from "./checks/cmd.js";
 import { initTestCoverage, recordCoverage } from "./checks/coverage.js";
@@ -166,6 +167,15 @@ export interface AppSpec {
 	readonly config?: boolean;
 	/** Explicit config file path; a relativeToRoot() marker resolves eagerly. */
 	readonly configPath?: string | InfraRootPath;
+	/**
+	 * Where --dump-schema writes: an absolute path, a path relative to the
+	 * App's construction-time working directory, or a relativeToRoot() marker
+	 * (resolved eagerly). Undeclared, the framework's own location applies --
+	 * ".strictcli/schema.json" ANCHORED at the construction-time working
+	 * directory, so a chdir between construction and dispatch cannot redirect
+	 * the write into the caller's cwd.
+	 */
+	readonly schemaPath?: string | InfraRootPath;
 	readonly configFormat?: "json" | "toml";
 	readonly configConflictMode?: ConflictMode;
 	readonly noDefaultConfigPath?: boolean;
@@ -798,6 +808,8 @@ export class AppImpl implements App {
 	readonly configEnabled: boolean;
 	/** Explicit config path override, marker-resolved at construction. */
 	readonly configPathOverride: string | undefined;
+	/** Absolute --dump-schema target, resolved once at construction. */
+	readonly schemaOutPath: string;
 	readonly configFormat: "json" | "toml";
 	readonly configConflictMode: ConflictMode;
 	readonly noDefaultConfigPath: boolean;
@@ -923,6 +935,20 @@ export class AppImpl implements App {
 		} else {
 			this.configPathOverride = spec.configPath;
 		}
+		// Resolve the --dump-schema target once, at construction: a declared
+		// marker through its root, a declared relative path and the framework's
+		// own default against the construction-time cwd.
+		let schemaTarget: string;
+		if (spec.schemaPath !== undefined && isInfraRootPath(spec.schemaPath)) {
+			try {
+				schemaTarget = resolveInfraRootPath(spec.schemaPath, this.infraRoots);
+			} catch (e) {
+				throw new RegistrationError((e as Error).message);
+			}
+		} else {
+			schemaTarget = spec.schemaPath ?? join(".strictcli", "schema.json");
+		}
+		this.schemaOutPath = resolve(schemaTarget);
 		// Validate global-flag default markers now that the roots are resolved
 		// (mirroring Python __post_init__; registerCommand covers command flags).
 		for (const f of globals) {

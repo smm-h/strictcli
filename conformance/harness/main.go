@@ -84,6 +84,9 @@ func main() {
 	if v, ok := appDef["config_path"]; ok && v != nil {
 		appOpts = append(appOpts, strictcli.WithConfigPath(v.(string)))
 	}
+	if v, ok := appDef["schema_path"]; ok && v != nil {
+		appOpts = append(appOpts, strictcli.WithSchemaPath(v.(string)))
+	}
 	if v, ok := appDef["config_format"]; ok && v.(string) != "json" {
 		appOpts = append(appOpts, strictcli.WithConfigFormat(v.(string)))
 	}

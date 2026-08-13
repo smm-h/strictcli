@@ -640,7 +640,7 @@ func dumpSchema(app *App) (map[string]interface{}, error) {
 // DumpSchemaDict returns the app's full schema as a map, excluding project_id.
 //
 // This is the public, CWD-free accessor for the schema. Unlike the
-// --dump-schema flag (which writes .strictcli/schema.json and derives
+// --dump-schema flag (which writes the app's declared schema location and derives
 // project_id from go.mod in the current working directory), this method reads
 // only the in-memory App and performs no filesystem or CWD access, and cannot
 // fail. The returned map is equivalent to the written schema file with the
@@ -675,7 +675,11 @@ func checkSchemaProjectID(filePath string, newProjectID string) error {
 	return nil
 }
 
-// writeSchema writes the schema to .strictcli/schema.json and returns the path.
+// writeSchema writes the schema to the app's declared location and returns the
+// path. The location is decided once, at construction (WithSchemaPath /
+// WithSchemaPathRelativeToRoot, or the framework's ".strictcli/schema.json"
+// anchored at the construction-time cwd) -- never at the caller's working
+// directory at dump time.
 func writeSchema(app *App) (string, error) {
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -685,11 +689,12 @@ func writeSchema(app *App) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dirPath := filepath.Join(".", ".strictcli")
-	if err := os.MkdirAll(dirPath, 0o755); err != nil {
-		return "", err
+	filePath := app.schemaOutPath
+	if dirPath := filepath.Dir(filePath); dirPath != "" {
+		if err := os.MkdirAll(dirPath, 0o755); err != nil {
+			return "", err
+		}
 	}
-	filePath := filepath.Join(dirPath, "schema.json")
 	newProjectID, _ := schema["project_id"].(string)
 	if err := checkSchemaProjectID(filePath, newProjectID); err != nil {
 		return "", err

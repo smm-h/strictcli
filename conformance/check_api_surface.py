@@ -544,6 +544,9 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "app.groups": "groups",
                 "app.config": "configEnabled",
                 "app.config_path": "configPathOverride",
+                # Go resolves the declared schema location eagerly into one
+                # absolute field, as it does the config path override.
+                "app.schema_path": "schemaOutPath",
                 "app.config_format": "configFormat",
                 "app.no_default_config_path": "noDefaultConfigPath",
                 "app.config_conflict_mode": "configConflictMode",
@@ -853,6 +856,7 @@ KNOWN_OPTION_FUNCS: set[str] = {
     "WithNoDefaultConfigPath",
     "WithConfigConflictMode",
     "WithInfraRoot", "WithHandshakeEnv", "WithConfigPathRelativeToRoot",
+    "WithSchemaPath", "WithSchemaPathRelativeToRoot",
     "WithConnectionEnv", "ConnectionURLFlag",
     "RelativeToRoot",
     # ConfigFieldOption constructors (from describe_go, not matched by old regex)

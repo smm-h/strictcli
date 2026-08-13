@@ -389,6 +389,7 @@ export const SURFACE = {
 				"name",
 				"noDefaultConfigPath",
 				"procObserveAllowlist",
+				"schemaPath",
 				"testCoverage",
 				"version",
 			],

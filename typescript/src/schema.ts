@@ -25,7 +25,7 @@
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import type { ConfigFieldRt } from "./config.js";
 import type { Effect, Forwarding, Grant } from "./effects.js";
@@ -652,14 +652,16 @@ function checkSchemaProjectId(filePath: string, newProjectId: string): void {
 }
 
 /**
- * Writes the schema to .strictcli/schema.json (2-space indent, trailing
- * newline) in the current working directory and returns the absolute path.
+ * Writes the schema (2-space indent, trailing newline) to the app's declared
+ * location and returns the absolute path. The location is decided once, at
+ * construction (`schemaPath`, or the framework's ".strictcli/schema.json"
+ * anchored at the construction-time cwd) -- never at the caller's working
+ * directory at dump time.
  */
 export function writeSchema(app: AppImpl): string {
 	const schema = dumpSchema(app);
-	const dirPath = join(".", ".strictcli");
-	mkdirSync(dirPath, { recursive: true });
-	const filePath = join(dirPath, "schema.json");
+	const filePath = app.schemaOutPath;
+	mkdirSync(dirname(filePath), { recursive: true });
 	checkSchemaProjectId(filePath, schema.project_id as string);
 	writeFileSync(filePath, `${schemaJson(schema)}\n`);
 	// A framework-blessed CACHE_WRITE (the closed list of three sites).

@@ -5627,6 +5627,13 @@ class App:
     env_prefix: str | None = None
     config: bool = False
     config_path: str | None = None
+    # Where --dump-schema writes. A plain path (absolute, or relative to the
+    # App's construction-time working directory) or a RelativeToRoot marker
+    # resolved through a declared infra root. When undeclared, the framework's
+    # own location applies: ".strictcli/schema.json" ANCHORED at the
+    # construction-time working directory, so a chdir between construction and
+    # dispatch can no longer redirect the write into the caller's cwd.
+    schema_path: str | None = None
     config_format: str = "json"
     config_conflict_mode: str = "cli-wins"
     no_default_config_path: bool = False
@@ -5766,6 +5773,18 @@ class App:
         # Resolve the config-path marker (if any) now that roots exist.
         if isinstance(self.config_path, RelativeToRoot):
             self.config_path = _resolve_infra_root_path(self.config_path, self._infra_roots)
+        # Resolve the schema-dump location once, at construction: a declared
+        # marker through its root, a declared relative path and the framework's
+        # own default against the construction-time cwd.
+        if isinstance(self.schema_path, RelativeToRoot):
+            self.schema_path = _resolve_infra_root_path(
+                self.schema_path, self._infra_roots,
+            )
+        self._schema_out_path: str = os.path.abspath(
+            self.schema_path
+            if self.schema_path is not None
+            else os.path.join(".strictcli", "schema.json")
+        )
         # Validate global flag default markers against declared roots and
         # connection-URL bindings against declared connection envs.
         for f in self._global_flags:
@@ -11712,11 +11731,17 @@ def _check_schema_project_id(file_path: str, new_project_id: str) -> None:
 
 
 def _write_schema(app: App) -> str:
-    """Write the schema to .strictcli/schema.json and return the path."""
+    """Write the schema to the app's declared location and return the path.
+
+    The location is decided once, at App construction (``App.schema_path``, or
+    the framework's ``.strictcli/schema.json`` anchored at the construction-time
+    cwd) -- never at the caller's working directory at dump time.
+    """
     schema = _dump_schema(app)
-    dir_path = os.path.join(os.getcwd(), ".strictcli")
-    os.makedirs(dir_path, exist_ok=True)
-    file_path = os.path.join(dir_path, "schema.json")
+    file_path = app._schema_out_path
+    dir_path = os.path.dirname(file_path)
+    if dir_path:
+        os.makedirs(dir_path, exist_ok=True)
     _check_schema_project_id(file_path, schema["project_id"])
     with open(file_path, "w") as f:
         f.write(json.dumps(schema, indent=2) + "\n")

@@ -379,11 +379,24 @@ command tree.
 ## The schema format (`.strictcli/schema.json`)
 
 `--dump-schema` is a reserved flag on every strictcli app. It writes a JSON file
-to `.strictcli/schema.json` describing the entire CLI surface -- every command,
-group, flag, positional argument, constraint, and config field -- and prints the
-absolute path to stdout. External tools like rlsbl use this schema during
-release to verify that the CLI surface is up-to-date and that no flags or
-commands were silently removed.
+describing the entire CLI surface -- every command, group, flag, positional
+argument, constraint, and config field -- and prints the absolute path to
+stdout. External tools like rlsbl use this schema during release to verify that
+the CLI surface is up-to-date and that no flags or commands were silently
+removed.
+
+**Where it writes is declared, not discovered.** The location is decided once,
+at App construction:
+
+| Declaration | Result |
+|-------------|--------|
+| `schema_path="build/cli-schema.json"` (Python) / `WithSchemaPath(...)` (Go) / `schemaPath: ...` (TypeScript) | that path -- absolute, or relative to the construction-time working directory |
+| `schema_path=RelativeToRoot("MYAPP_HOME", "schema.json")` / `WithSchemaPathRelativeToRoot(...)` / `schemaPath: relativeToRoot(...)` | resolved through the declared infrastructure root, eagerly, at construction |
+| undeclared | `.strictcli/schema.json` **anchored at the construction-time working directory** |
+
+The anchor is what keeps the write off the caller's working directory: a `chdir`
+between construction and dispatch cannot move the file, exactly as it cannot
+move the test-coverage root.
 
 ### Top-level fields
 
