@@ -722,3 +722,77 @@ export function validatePayloadValue(
 	}
 	return validatePayloadInstance(normalized, normalizedSchema, "payload");
 }
+
+// ---------------------------------------------------------------------------
+// Builder sugar for the declared payload schema (contract §19.5, decision 14)
+//
+// Pure constructors of literals, and nothing more. They add no vocabulary and
+// no semantics: each one produces exactly the object an author could have
+// written, that object is the canonical artifact, and it passes the identical
+// registration-time validation. A builder is a convenience for writing the
+// canonical artifact, never an alternative to it -- which is why none of them
+// validates anything: an unknown type name written through `schemaType` is
+// rejected at registration exactly as a hand-written literal would be.
+//
+// The one-to-one mapping onto the closed subset is pinned across the three
+// implementations by conformance/payload_schema_builders.json.
+// ---------------------------------------------------------------------------
+
+/** `{"type": ...}` -- one name, or a list of them for nullability. */
+export function schemaType(
+	...names: readonly string[]
+): Record<string, unknown> {
+	if (names.length === 1) {
+		return { type: names[0] };
+	}
+	return { type: [...names] };
+}
+
+/** `{"type": "array", "items": ...}`. */
+export function schemaArray(
+	items: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+	return { type: "array", items };
+}
+
+/** The keywords `schemaObject` accepts, each emitted only when supplied. */
+export interface SchemaObjectOpts {
+	readonly properties?: Readonly<Record<string, unknown>>;
+	readonly required?: readonly string[];
+	readonly additionalProperties?: boolean | Readonly<Record<string, unknown>>;
+}
+
+/**
+ * `{"type": "object", ...}`.
+ *
+ * Each keyword is emitted only when supplied, so `schemaObject()` is the bare
+ * `{"type": "object"}` and an omitted `additionalProperties` means the keyword
+ * is absent rather than `true` -- the same behaviour, not the same declaration.
+ */
+export function schemaObject(
+	opts: SchemaObjectOpts = {},
+): Record<string, unknown> {
+	const out: Record<string, unknown> = { type: "object" };
+	if (opts.properties !== undefined) {
+		out.properties = opts.properties;
+	}
+	if (opts.required !== undefined) {
+		out.required = [...opts.required];
+	}
+	if (opts.additionalProperties !== undefined) {
+		out.additionalProperties = opts.additionalProperties;
+	}
+	return out;
+}
+
+/** `{"enum": [...]}`. */
+export function schemaEnum(
+	...values: readonly unknown[]
+): Record<string, unknown> {
+	return { enum: [...values] };
+}
+
+/** `{"const": ...}`. */
+export function schemaConst(value: unknown): Record<string, unknown> {
+	return { const: value };
+}

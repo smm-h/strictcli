@@ -926,7 +926,44 @@ KNOWN_TS_PUBLIC_NAMES: set[str] = {
     "ReadOnlyEffects", "MutatingEffects",
     "Completed", "Spawned", "Response",
     "Effect", "EffectKind", "Grant", "Forwarding",
+    # The payload-schema builder sugar (contract §19.5, decision 14): pure
+    # constructors of literals, one per subset keyword shape, plus the option
+    # bag `schemaObject` takes. Python spells them schema_type/schema_array/
+    # schema_object/schema_enum/schema_const; Go SchemaType/SchemaArray/
+    # SchemaObject/SchemaEnum/SchemaConst. Only TS carries an option-bag type,
+    # because only TS takes an options object -- Python uses keyword-only
+    # arguments and Go positional ones.
+    "schemaType", "schemaArray", "schemaObject", "schemaEnum", "schemaConst",
+    "SchemaObjectOpts",
 }
+
+# The payload-schema builders (contract §19.5, decision 14), one row per
+# construct: Python module function, Go package function, TS module export.
+# Checked in all three so a builder added to one implementation and forgotten
+# in the others fails here rather than in a consumer.
+PAYLOAD_SCHEMA_BUILDERS: list[tuple[str, str, str]] = [
+    ("schema_type", "SchemaType", "schemaType"),
+    ("schema_array", "SchemaArray", "schemaArray"),
+    ("schema_object", "SchemaObject", "schemaObject"),
+    ("schema_enum", "SchemaEnum", "schemaEnum"),
+    ("schema_const", "SchemaConst", "schemaConst"),
+]
+
+
+def check_payload_schema_builders(go_api: dict, ts_api: dict) -> list[str]:
+    """Every payload-schema builder exists in all three implementations."""
+    errors: list[str] = []
+    py_funcs = get_python_module_functions()
+    go_funcs = {f["name"] for f in go_api["functions"]}
+    ts_funcs = get_ts_function_names(ts_api)
+    for py_name, go_name, ts_name in PAYLOAD_SCHEMA_BUILDERS:
+        if py_name not in py_funcs:
+            errors.append(f"Python builder '{py_name}' not found")
+        if go_name not in go_funcs:
+            errors.append(f"Go builder '{go_name}' not found")
+        if ts_name not in ts_funcs:
+            errors.append(f"TS builder '{ts_name}' not found")
+    return errors
 
 
 def check_ts_public_names(ts_api: dict) -> list[str]:
@@ -1294,6 +1331,7 @@ def main() -> int:
     all_errors.extend(check_check_runner_types(go_api, go_fields, ts_structs))
     all_errors.extend(check_check_runner_methods(go_api, ts_api))
     all_errors.extend(check_check_runner_functions(go_api, ts_api))
+    all_errors.extend(check_payload_schema_builders(go_api, ts_api))
     all_errors.extend(check_check_runner_shared_types(go_api, ts_api))
     all_errors.extend(check_outcome_api(go_api, ts_api))
 

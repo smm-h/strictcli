@@ -424,3 +424,147 @@ func TestCheckPayloadSatisfiesItsDeclaration(t *testing.T) {
 		t.Fatalf("check payload violates its declaration at %s: %s", f.Path, f.Detail)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Builder sugar (contract §19.5, decision 14)
+// ---------------------------------------------------------------------------
+
+type builderConstruct struct {
+	Name    string          `json:"name"`
+	Literal json.RawMessage `json:"literal"`
+}
+
+type builderDoc struct {
+	ConstructCount int                `json:"construct_count"`
+	Constructs     []builderConstruct `json:"constructs"`
+}
+
+func buildersPath(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Join(filepath.Dir(thisFile), "..", "..",
+		"conformance", "payload_schema_builders.json")
+}
+
+// buildConstruct constructs one fixture entry through the builders.
+func buildConstruct(t *testing.T, name string) map[string]interface{} {
+	t.Helper()
+	switch name {
+	case "type: one name":
+		return SchemaType("string")
+	case "type: a list for nullability":
+		return SchemaType("string", "null")
+	case "type: every json type":
+		return SchemaType("array", "boolean", "integer", "null", "number", "object", "string")
+	case "array: items":
+		return SchemaArray(SchemaType("integer"))
+	case "array: items is itself a built object":
+		return SchemaArray(SchemaObject(map[string]interface{}{
+			"a": SchemaType("string"),
+		}, nil, nil))
+	case "object: bare":
+		return SchemaObject(nil, nil, nil)
+	case "object: properties only":
+		return SchemaObject(map[string]interface{}{
+			"a": SchemaType("string"),
+			"b": SchemaType("integer"),
+		}, nil, nil)
+	case "object: properties and required":
+		return SchemaObject(map[string]interface{}{
+			"a": SchemaType("string"),
+		}, []string{"a"}, nil)
+	case "object: closed":
+		return SchemaObject(map[string]interface{}{
+			"a": SchemaType("string"),
+		}, []string{"a"}, false)
+	case "object: open by declaration":
+		return SchemaObject(nil, nil, true)
+	case "object: a dynamic-key map":
+		return SchemaObject(nil, nil, SchemaType("number"))
+	case "object: empty required":
+		return SchemaObject(nil, []string{}, nil)
+	case "enum: strings":
+		return SchemaEnum("pass", "fail", "warn")
+	case "enum: mixed json values":
+		return SchemaEnum("a", 1, nil, true)
+	case "const: a scalar":
+		return SchemaConst("fixed")
+	case "const: a composite":
+		return SchemaConst(map[string]interface{}{"a": []interface{}{1, 2}})
+	}
+	t.Fatalf("no builder mapping for fixture %q", name)
+	return nil
+}
+
+func TestPayloadSchemaBuilders(t *testing.T) {
+	data, err := os.ReadFile(buildersPath(t))
+	if err != nil {
+		t.Fatalf("read builders fixture: %v", err)
+	}
+	var doc builderDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse builders fixture: %v", err)
+	}
+	if len(doc.Constructs) != doc.ConstructCount {
+		t.Fatalf("count mismatch: header says %d, got %d",
+			doc.ConstructCount, len(doc.Constructs))
+	}
+	for _, c := range doc.Constructs {
+		t.Run(c.Name, func(t *testing.T) {
+			built := buildConstruct(t, c.Name)
+			// Compare the emitted documents: the literal is the canonical
+			// artifact, and what the builder produces must BE that literal.
+			normalized, ok := normalizePayload(built)
+			if !ok {
+				t.Fatal("the built literal is not representable")
+			}
+			want := decodeVectorJSON(t, c.Literal)
+			if !payloadDeepEqual(normalized, want) {
+				gotJSON, _ := json.Marshal(built)
+				t.Fatalf("built literal:\n got %s\nwant %s", gotJSON, string(c.Literal))
+			}
+			// One-to-one onto the closed subset: nothing a builder emits is
+			// outside the vocabulary, and the result is a legal declaration.
+			for key := range built {
+				if !isPayloadKeyword(key) {
+					t.Errorf("builder emitted a keyword outside the subset: %q", key)
+				}
+			}
+			if f := validatePayloadSchemaLiteral(built); f != nil {
+				t.Errorf("built literal is not a legal declaration at %s: %s", f.Path, f.Detail)
+			}
+		})
+	}
+}
+
+func TestABuilderDoesNotValidateOnItsOwn(t *testing.T) {
+	// A builder is a constructor, not a check: an illegal type name is a legal
+	// literal to build and a registration-time hard error to declare.
+	built := SchemaType("strng")
+	f := validatePayloadSchemaLiteral(built)
+	if f == nil {
+		t.Fatal("unexpectedly accepted")
+	}
+	if !strings.HasPrefix(f.Detail, `unknown type "strng"`) {
+		t.Errorf("detail: got %q", f.Detail)
+	}
+}
+
+func TestBuiltSchemasAreDeclarable(t *testing.T) {
+	app := NewApp("t", "1", "t")
+	app.Command("run", "run", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		ctx.Payload(map[string]interface{}{"a": 1})
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), PayloadSchema(SchemaObject(
+		map[string]interface{}{"a": SchemaType("integer")},
+		[]string{"a"},
+		false,
+	)))
+	r := app.Test([]string{"run", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code %d, stderr %q", r.ExitCode, r.Stderr)
+	}
+}

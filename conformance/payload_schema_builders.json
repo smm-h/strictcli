@@ -1,0 +1,101 @@
+{
+  "_comment": "Hand-authored fixture for the payload-schema builder sugar (effects contract §19.5, decision 14). Each construct names one builder call and the exact literal it must produce. All three implementations replay this file in their own unit suites, which is what makes 'every builder construct maps one-to-one onto the closed subset' a checked fact rather than a claim: the literal is the canonical artifact, and a builder is only a convenience for writing it.",
+  "construct_count": 16,
+  "constructs": [
+    {
+      "name": "type: one name",
+      "literal": { "type": "string" }
+    },
+    {
+      "name": "type: a list for nullability",
+      "literal": { "type": ["string", "null"] }
+    },
+    {
+      "name": "type: every json type",
+      "literal": {
+        "type": [
+          "array",
+          "boolean",
+          "integer",
+          "null",
+          "number",
+          "object",
+          "string"
+        ]
+      }
+    },
+    {
+      "name": "array: items",
+      "literal": { "type": "array", "items": { "type": "integer" } }
+    },
+    {
+      "name": "array: items is itself a built object",
+      "literal": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": { "a": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "object: bare",
+      "literal": { "type": "object" }
+    },
+    {
+      "name": "object: properties only",
+      "literal": {
+        "type": "object",
+        "properties": { "a": { "type": "string" }, "b": { "type": "integer" } }
+      }
+    },
+    {
+      "name": "object: properties and required",
+      "literal": {
+        "type": "object",
+        "properties": { "a": { "type": "string" } },
+        "required": ["a"]
+      }
+    },
+    {
+      "name": "object: closed",
+      "literal": {
+        "type": "object",
+        "properties": { "a": { "type": "string" } },
+        "required": ["a"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "object: open by declaration",
+      "literal": { "type": "object", "additionalProperties": true }
+    },
+    {
+      "name": "object: a dynamic-key map",
+      "literal": {
+        "type": "object",
+        "additionalProperties": { "type": "number" }
+      }
+    },
+    {
+      "name": "object: empty required",
+      "literal": { "type": "object", "required": [] }
+    },
+    {
+      "name": "enum: strings",
+      "literal": { "enum": ["pass", "fail", "warn"] }
+    },
+    {
+      "name": "enum: mixed json values",
+      "literal": { "enum": ["a", 1, null, true] }
+    },
+    {
+      "name": "const: a scalar",
+      "literal": { "const": "fixed" }
+    },
+    {
+      "name": "const: a composite",
+      "literal": { "const": { "a": [1, 2] } }
+    }
+  ]
+}

@@ -346,6 +346,7 @@ const typeWitness: Record<TypeName, unknown> = {
 	RunChecksResult: witnessType<api.RunChecksResult>(),
 	ScalarSchema: witnessType<api.ScalarSchema>(),
 	Schema: witnessType<api.Schema>(),
+	SchemaObjectOpts: witnessType<api.SchemaObjectOpts>(),
 	Tool: witnessType<api.Tool>(),
 	WarnCheckSpecInit: witnessType<api.WarnCheckSpecInit>(),
 	Writer: witnessType<api.Writer>(),

@@ -1335,6 +1335,67 @@ def _validate_payload_value(value: object, schema: dict):
     return _validate_payload_instance(value, schema, "payload")
 
 
+# ---------------------------------------------------------------------------
+# Builder sugar for the declared payload schema (contract §19.5, decision 14)
+#
+# Pure constructors of literals, and nothing more. They add no vocabulary and
+# no semantics: each one produces exactly the dict an author could have
+# written, that dict is the canonical artifact, and it passes the identical
+# registration-time validation. A builder is a convenience for writing the
+# canonical artifact, never an alternative to it -- which is why none of them
+# validates anything: an unknown type name written through ``schema_type`` is
+# rejected at registration exactly as the hand-written literal would be.
+#
+# The one-to-one mapping onto the closed subset is pinned across the three
+# implementations by conformance/payload_schema_builders.json.
+# ---------------------------------------------------------------------------
+
+
+def schema_type(*names: str) -> dict:
+    """``{"type": ...}`` -- one name, or a list of them for nullability."""
+    if len(names) == 1:
+        return {"type": names[0]}
+    return {"type": list(names)}
+
+
+def schema_array(items: dict) -> dict:
+    """``{"type": "array", "items": ...}``."""
+    return {"type": "array", "items": items}
+
+
+def schema_object(
+    *,
+    properties: dict | None = None,
+    required: list[str] | None = None,
+    additional_properties: bool | dict | None = None,
+) -> dict:
+    """``{"type": "object", ...}``.
+
+    Each keyword is emitted only when supplied, so ``schema_object()`` is the
+    bare ``{"type": "object"}`` and an omitted ``additional_properties`` means
+    the keyword is absent rather than ``true`` -- absence and ``true`` are the
+    same behaviour but not the same declaration.
+    """
+    out: dict = {"type": "object"}
+    if properties is not None:
+        out["properties"] = properties
+    if required is not None:
+        out["required"] = required
+    if additional_properties is not None:
+        out["additionalProperties"] = additional_properties
+    return out
+
+
+def schema_enum(*values: object) -> dict:
+    """``{"enum": [...]}``."""
+    return {"enum": list(values)}
+
+
+def schema_const(value: object) -> dict:
+    """``{"const": ...}``."""
+    return {"const": value}
+
+
 def _msg_effect_argv_not_sequence(name: str, method: str, got: str) -> str:
     return (
         f'command "{name}": effects.{method} argv must be a '

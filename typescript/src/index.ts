@@ -112,6 +112,14 @@ export type { CallOptions } from "./invoke.js";
 export type { McpIO } from "./mcp.js";
 export type { Outcome } from "./outcome.js";
 export { outcome } from "./outcome.js";
+export type { SchemaObjectOpts } from "./payload_schema.js";
+export {
+	schemaArray,
+	schemaConst,
+	schemaEnum,
+	schemaObject,
+	schemaType,
+} from "./payload_schema.js";
 export type { Tool } from "./tool.js";
 export type {
 	Carrier,

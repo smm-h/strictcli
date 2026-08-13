@@ -22,7 +22,14 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createApp, defineReadOnlyCommand } from "../src/index.js";
 import {
+	PAYLOAD_SCHEMA_KEYWORDS,
+	schemaArray,
+	schemaConst,
+	schemaEnum,
+	schemaObject,
+	schemaType,
 	validatePayloadSchema,
+	validatePayloadSchemaLiteral,
 	validatePayloadValue,
 } from "../src/payload_schema.js";
 
@@ -356,4 +363,136 @@ test("the payload slot stays empty after a rejection", async () => {
 	const r = await app.test(["run", "--json"]);
 	assert.equal(r.exitCode, 0);
 	assert.deepEqual(JSON.parse(r.stdout).payload, [1, 2]);
+});
+
+// ---------------------------------------------------------------------------
+// Builder sugar (contract §19.5, decision 14)
+// ---------------------------------------------------------------------------
+
+const buildersPath = join(
+	dirname(fileURLToPath(import.meta.url)),
+	"..",
+	"..",
+	"..",
+	"conformance",
+	"payload_schema_builders.json",
+);
+
+interface BuilderDoc {
+	readonly construct_count: number;
+	readonly constructs: readonly {
+		readonly name: string;
+		readonly literal: Record<string, unknown>;
+	}[];
+}
+
+const builders = JSON.parse(readFileSync(buildersPath, "utf8")) as BuilderDoc;
+
+/** Constructs one fixture entry through the builders. */
+function buildConstruct(name: string): Record<string, unknown> {
+	switch (name) {
+		case "type: one name":
+			return schemaType("string");
+		case "type: a list for nullability":
+			return schemaType("string", "null");
+		case "type: every json type":
+			return schemaType(
+				"array",
+				"boolean",
+				"integer",
+				"null",
+				"number",
+				"object",
+				"string",
+			);
+		case "array: items":
+			return schemaArray(schemaType("integer"));
+		case "array: items is itself a built object":
+			return schemaArray(
+				schemaObject({ properties: { a: schemaType("string") } }),
+			);
+		case "object: bare":
+			return schemaObject();
+		case "object: properties only":
+			return schemaObject({
+				properties: { a: schemaType("string"), b: schemaType("integer") },
+			});
+		case "object: properties and required":
+			return schemaObject({
+				properties: { a: schemaType("string") },
+				required: ["a"],
+			});
+		case "object: closed":
+			return schemaObject({
+				properties: { a: schemaType("string") },
+				required: ["a"],
+				additionalProperties: false,
+			});
+		case "object: open by declaration":
+			return schemaObject({ additionalProperties: true });
+		case "object: a dynamic-key map":
+			return schemaObject({ additionalProperties: schemaType("number") });
+		case "object: empty required":
+			return schemaObject({ required: [] });
+		case "enum: strings":
+			return schemaEnum("pass", "fail", "warn");
+		case "enum: mixed json values":
+			return schemaEnum("a", 1, null, true);
+		case "const: a scalar":
+			return schemaConst("fixed");
+		case "const: a composite":
+			return schemaConst({ a: [1, 2] });
+		default:
+			throw new Error(`no builder mapping for fixture ${name}`);
+	}
+}
+
+test("the builder fixture's count matches its header", () => {
+	assert.equal(builders.construct_count, builders.constructs.length);
+});
+
+for (const c of builders.constructs) {
+	test(`builder construct: ${c.name}`, () => {
+		const built = buildConstruct(c.name);
+		assert.deepEqual(built, c.literal);
+		// One-to-one onto the closed subset: nothing a builder emits is outside
+		// the vocabulary, and the result is a legal declaration.
+		for (const key of Object.keys(built)) {
+			assert.ok(
+				(PAYLOAD_SCHEMA_KEYWORDS as readonly string[]).includes(key),
+				`builder emitted a keyword outside the subset: ${key}`,
+			);
+		}
+		assert.equal(validatePayloadSchemaLiteral(built), null);
+	});
+}
+
+test("a builder does not validate on its own", () => {
+	// A builder is a constructor, not a check: an illegal type name is a legal
+	// literal to build and a registration-time hard error to declare.
+	const built = schemaType("strng");
+	assert.deepEqual(built, { type: "strng" });
+	const found = validatePayloadSchemaLiteral(built);
+	assert.ok(found?.detail.startsWith('unknown type "strng"'));
+});
+
+test("built schemas are declarable", async () => {
+	const app = createApp({ name: "t", version: "1", help: "t" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run",
+			payloadSchema: schemaObject({
+				properties: { a: schemaType("integer") },
+				required: ["a"],
+				additionalProperties: false,
+			}),
+			handler: (_args, ctx) => {
+				ctx.payload({ a: 1 });
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["run", "--json"]);
+	assert.equal(r.exitCode, 0);
+	assert.deepEqual(JSON.parse(r.stdout).payload, { a: 1 });
 });

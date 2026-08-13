@@ -359,3 +359,111 @@ class TestFrameworkOwnedSchemas:
         assert strictcli._validate_payload_value(
             payload, strictcli._CONFIG_SHOW_PAYLOAD_SCHEMA
         ) is None
+
+
+# ---------------------------------------------------------------------------
+# Builder sugar (contract §19.5, decision 14)
+# ---------------------------------------------------------------------------
+
+BUILDERS_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "conformance"
+    / "payload_schema_builders.json"
+)
+_BUILDERS = json.loads(BUILDERS_PATH.read_text(encoding="utf-8"))
+
+
+def _build(name: str) -> dict:
+    """Construct one fixture entry through the builders."""
+    s = strictcli
+    if name == "type: one name":
+        return s.schema_type("string")
+    if name == "type: a list for nullability":
+        return s.schema_type("string", "null")
+    if name == "type: every json type":
+        return s.schema_type(
+            "array", "boolean", "integer", "null", "number", "object", "string"
+        )
+    if name == "array: items":
+        return s.schema_array(s.schema_type("integer"))
+    if name == "array: items is itself a built object":
+        return s.schema_array(
+            s.schema_object(properties={"a": s.schema_type("string")})
+        )
+    if name == "object: bare":
+        return s.schema_object()
+    if name == "object: properties only":
+        return s.schema_object(properties={
+            "a": s.schema_type("string"), "b": s.schema_type("integer"),
+        })
+    if name == "object: properties and required":
+        return s.schema_object(
+            properties={"a": s.schema_type("string")}, required=["a"],
+        )
+    if name == "object: closed":
+        return s.schema_object(
+            properties={"a": s.schema_type("string")}, required=["a"],
+            additional_properties=False,
+        )
+    if name == "object: open by declaration":
+        return s.schema_object(additional_properties=True)
+    if name == "object: a dynamic-key map":
+        return s.schema_object(additional_properties=s.schema_type("number"))
+    if name == "object: empty required":
+        return s.schema_object(required=[])
+    if name == "enum: strings":
+        return s.schema_enum("pass", "fail", "warn")
+    if name == "enum: mixed json values":
+        return s.schema_enum("a", 1, None, True)
+    if name == "const: a scalar":
+        return s.schema_const("fixed")
+    if name == "const: a composite":
+        return s.schema_const({"a": [1, 2]})
+    raise AssertionError(f"no builder mapping for fixture {name!r}")
+
+
+class TestBuilders:
+    def test_the_fixture_count_matches_its_header(self):
+        assert _BUILDERS["construct_count"] == len(_BUILDERS["constructs"])
+
+    @pytest.mark.parametrize(
+        "entry", _BUILDERS["constructs"], ids=lambda e: e["name"]
+    )
+    def test_construct_maps_onto_the_literal(self, entry):
+        built = _build(entry["name"])
+        assert built == entry["literal"]
+        # One-to-one onto the closed subset: nothing a builder emits is
+        # outside the vocabulary, and the result is a legal declaration.
+        assert strictcli._validate_payload_schema(built) is None
+
+    def test_builders_add_no_vocabulary(self):
+        for entry in _BUILDERS["constructs"]:
+            for key in _build(entry["name"]):
+                assert key in strictcli._PAYLOAD_SCHEMA_KEYWORDS
+
+    def test_a_builder_does_not_validate_on_its_own(self):
+        # A builder is a constructor, not a check: an illegal type name is a
+        # legal literal to build and a registration-time hard error to declare.
+        built = strictcli.schema_type("strng")
+        assert built == {"type": "strng"}
+        found = strictcli._validate_payload_schema(built)
+        assert found is not None
+        assert found[1].startswith('unknown type "strng"')
+
+    def test_built_schemas_are_declarable(self):
+        app = strictcli.App(name="t", help="t", version="1")
+
+        @app.command(
+            "run", effect="read_only", help="run",
+            payload_schema=strictcli.schema_object(
+                properties={"a": strictcli.schema_type("integer")},
+                required=["a"], additional_properties=False,
+            ),
+        )
+        def _run(ctx):
+            ctx.payload({"a": 1})
+            return 0
+
+        r = app.test(["run", "--json"])
+        assert r.exit_code == 0
+        assert json.loads(r.stdout)["payload"] == {"a": 1}

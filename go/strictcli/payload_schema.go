@@ -649,3 +649,81 @@ func validatePayloadValue(value interface{}, schema map[string]interface{}) *pay
 	schemaObj, _ := normalizedSchema.(map[string]interface{})
 	return validatePayloadInstance(normalized, schemaObj, "payload")
 }
+
+// ---------------------------------------------------------------------------
+// Builder sugar for the declared payload schema (contract §19.5, decision 14)
+//
+// Pure constructors of literals, and nothing more. They add no vocabulary and
+// no semantics: each one produces exactly the map an author could have
+// written, that map is the canonical artifact, and it passes the identical
+// registration-time validation. Go has no literal ergonomics to speak of --
+// map[string]interface{} nested four deep is unreadable -- so this is where the
+// compile-time help comes back.
+//
+// None of them validates anything: an unknown type name written through
+// SchemaType is rejected at registration exactly as a hand-written literal
+// would be. The one-to-one mapping onto the closed subset is pinned across the
+// three implementations by conformance/payload_schema_builders.json.
+// ---------------------------------------------------------------------------
+
+// SchemaType builds {"type": ...}: one name, or a list of them for
+// nullability.
+func SchemaType(names ...string) map[string]interface{} {
+	if len(names) == 1 {
+		return map[string]interface{}{"type": names[0]}
+	}
+	entries := make([]interface{}, len(names))
+	for i, n := range names {
+		entries[i] = n
+	}
+	return map[string]interface{}{"type": entries}
+}
+
+// SchemaArray builds {"type": "array", "items": ...}.
+func SchemaArray(items map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{"type": "array", "items": items}
+}
+
+// SchemaObject builds {"type": "object", ...}.
+//
+// Each keyword is emitted only when supplied: nil properties, nil required and
+// nil additionalProperties each omit their keyword, so SchemaObject(nil, nil,
+// nil) is the bare {"type": "object"}. An omitted additionalProperties means
+// the keyword is absent rather than true -- the same behaviour, not the same
+// declaration.
+//
+// additionalProperties takes the boolean-or-schema union the subset admits:
+// pass false, true, or a map.
+func SchemaObject(
+	properties map[string]interface{},
+	required []string,
+	additionalProperties interface{},
+) map[string]interface{} {
+	out := map[string]interface{}{"type": "object"}
+	if properties != nil {
+		out["properties"] = properties
+	}
+	if required != nil {
+		entries := make([]interface{}, len(required))
+		for i, n := range required {
+			entries[i] = n
+		}
+		out["required"] = entries
+	}
+	if additionalProperties != nil {
+		out["additionalProperties"] = additionalProperties
+	}
+	return out
+}
+
+// SchemaEnum builds {"enum": [...]}.
+func SchemaEnum(values ...interface{}) map[string]interface{} {
+	entries := make([]interface{}, len(values))
+	copy(entries, values)
+	return map[string]interface{}{"enum": entries}
+}
+
+// SchemaConst builds {"const": ...}.
+func SchemaConst(value interface{}) map[string]interface{} {
+	return map[string]interface{}{"const": value}
+}

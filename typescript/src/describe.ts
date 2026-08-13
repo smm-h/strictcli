@@ -468,6 +468,13 @@ export const SURFACE = {
 		"mutexGroup",
 		"outcome",
 		"relativeToRoot",
+		// The payload-schema builder sugar (§19.5, decision 14): pure
+		// constructors of literals, one per subset keyword shape.
+		"schemaArray",
+		"schemaConst",
+		"schemaEnum",
+		"schemaObject",
+		"schemaType",
 	],
 
 	methods: [
@@ -607,6 +614,7 @@ export const SURFACE = {
 		"RunChecksResult",
 		"ScalarSchema",
 		"Schema",
+		"SchemaObjectOpts",
 		"Spawned",
 		"Tool",
 		"WarnCheckSpecInit",
