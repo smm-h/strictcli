@@ -510,7 +510,7 @@
           "type": "object",
           "required": ["kind"],
           "additionalProperties": false,
-          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => outcome(data)/ExitData(0,data); 'exit_data' => outcome(exit_code,data)/ExitData(code,data); 'none' => return None (Python)/Exit(0) (Go)/return undefined (TypeScript); 'bad' => an invalid return (a hard error on Python and TypeScript; Go's type system makes it unrepresentable, so a 'bad' case must exclude the go target).",
+          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => ctx.payload(data) then outcome()/Exit(0); 'exit_data' => ctx.payload(data) then outcome(exit_code)/Exit(code); 'none' => return None (Python)/Exit(0) (Go)/return undefined (TypeScript); 'bad' => an invalid return (a hard error on Python and TypeScript; Go's type system makes it unrepresentable, so a 'bad' case must exclude the go target). The data kinds require the command to declare a payload_schema (contract §19.4).",
           "properties": {
             "kind": { "enum": ["exit", "data", "exit_data", "none", "bad"] },
             "code": { "type": "integer" },

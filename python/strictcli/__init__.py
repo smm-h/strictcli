@@ -249,7 +249,8 @@ class Context:
     Always injected as the first positional argument to every handler.
     Provides info/warn/debug/error methods that route to the correct stream,
     plus source/infra_value provenance accessors. To return structured data,
-    a handler returns ``strictcli.outcome(data=...)``.
+    a handler calls ``ctx.payload(value)`` against the command's declared
+    ``payload_schema=`` (contract §19.4).
     """
 
     def __init__(self, stdout=None, stderr=None, sources=None, infra=None,

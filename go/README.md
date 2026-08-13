@@ -437,14 +437,13 @@ func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome
 
 ### Outcome
 
-`Outcome` is an opaque, branded return type. It is constructed ONLY via two functions:
+`Outcome` is an opaque, branded return type. It carries the exit code and nothing else, and it is constructed ONLY via one function:
 
 ```go
-return strictcli.Exit(0)                                          // exit code, no data
-return strictcli.ExitData(0, map[string]interface{}{"ok": true})  // exit code + structured data
+return strictcli.Exit(0)  // exit code
 ```
 
-When data is present, the framework JSON-marshals it to stdout as one compact line and makes it available programmatically via `Test` (in `Result.Data`) and `Call`. Data emission is possible only through `ExitData` -- there is no other channel.
+Structured output is a separate channel: the command declares its payload's JSON Schema with `PayloadSchema(...)` and the handler supplies the value with `ctx.Payload(value)` (at most once per dispatch; calling it without a declared schema is a hard error). The payload is printed only under the framework-owned `--json`, as the envelope's `payload` member, and is available programmatically via `Test` (in `Result.Data`) and `Call` in either mode.
 
 ### Typed kwargs accessors
 
@@ -480,7 +479,7 @@ if !strings.Contains(result.Stdout, "HELLO, WORLD!") {
 }
 ```
 
-`Result` carries `Stdout`, `Stderr`, `ExitCode`, and `Data` (the structured value from an `ExitData` outcome, `nil` otherwise).
+`Result` carries `Stdout`, `Stderr`, `ExitCode`, and `Data` (the payload the handler supplied through `ctx.Payload`, `nil` otherwise).
 
 ## API reference
 
@@ -558,7 +557,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `app.Deprecated(name, message)` | Register a deprecated command |
 | `app.Run()` | Parse `os.Args` and execute |
 | `app.Test(argv)` | Run in-process, return `Result` |
-| `app.Call(commandPath, kwargs, opts...)` | Invoke a command programmatically; returns data (ExitData) or exit code. `WithApproveConsequential()` is the consent a consequential command requires |
+| `app.Call(commandPath, kwargs, opts...)` | Invoke a command programmatically; returns the handler's payload (`ctx.Payload`) or the exit code. `WithApproveConsequential()` is the consent a consequential command requires |
 | `app.AsTools()` | Export commands as `Tool` descriptors |
 | `app.ServeMCP()` | Run MCP server on stdin/stdout |
 | `app.ConfigField(name, opts...)` | Declare a typed config field |
@@ -582,7 +581,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `Implies` | Auto-set a bool flag from another |
 | `Result` | Return type of `app.Test()` (Stdout, Stderr, ExitCode, Data) |
 | `Tool` | LLM tool descriptor |
-| `Outcome` | Branded handler return type (via `Exit` / `ExitData` only) |
+| `Outcome` | Branded handler return type (via `Exit` only) |
 | `Context` | Structured output and provenance (Info/Warn/Debug/Error/Source/InfraValue) |
 | `CheckOutcome` | Check result, minted only via reporter methods |
 | `ErrorReporter` / `WarnReporter` | Problem accumulators passed to check handlers |
@@ -593,7 +592,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 
 - **Help is mandatory.** Every command, flag, and argument must have help text. Missing help panics at registration time.
 - **Four types only.** `str`, `bool`, `int`, `float` -- plus compound `list` and `dict`. No magic type coercion.
-- **One handler contract.** `func(ctx *Context, kwargs map[string]interface{}) Outcome`, with kwargs keyed by parameter name (hyphens become underscores) and exit codes/data flowing only through `Exit` / `ExitData`.
+- **One handler contract.** `func(ctx *Context, kwargs map[string]interface{}) Outcome`, with kwargs keyed by parameter name (hyphens become underscores), exit codes flowing only through `Exit`, and structured output only through `ctx.Payload` against a declared `PayloadSchema`.
 - **Effect classification is mandatory.** Every command declares `EffectReadOnly` or `EffectMutating`. There is no default and no inference.
 - **Registration-time errors.** Misconfigurations panic loud and early, not at parse time.
 - **Minimal dependencies.** One dependency ([go-toml-edit](https://github.com/smm-h/go-toml-edit)) for TOML support.
