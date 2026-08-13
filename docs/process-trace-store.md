@@ -1,6 +1,6 @@
 ---
 title: Process Trace Store
-description: "How strictcli records process ancestry: the STRICTCLI_TRACE_PARENT variable, an append-only JSONL store, strict-profile ULIDs and UTC-hour partitions."
+description: "How strictcli records process ancestry: the STRICTCLI_TRACE_PARENT variable, an append-only JSONL store, ULIDs, hour partitions and the lookup rule."
 nav_group: "Guides"
 nav_order: 20
 ---
@@ -137,8 +137,7 @@ ssh host STRICTCLI_TRACE_PARENT="$STRICTCLI_TRACE_PARENT" mytool subcommand
 Entries live in files labelled with a UTC hour, but a label is a **range start**, not a promise
 about contents: a file holds nothing older than its own label, and may hold entries newer than the
 next file's label. A busy machine produces one file per hour; an idle one produces a single file
-spanning days. Both are correct, and both are searched the same way -- binary search to the label,
-then backward through older partitions on a miss (see the lookup rule below).
+spanning days. Both are correct, and both are searched the same way (the lookup rule below).
 
 ```text
 ~/.local/share/strictcli/trace/2026-08-13T04.jsonl
