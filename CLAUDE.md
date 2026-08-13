@@ -82,6 +82,7 @@ Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface
 - **typescript/src/sources** (`typescript/src/sources.ts`): Per-parse provenance store, mirroring Go's sourcedStore (parse.go) and Python's _SourcedStore, where every resolved flag value carries a source label.
 - **typescript/src/toml** (`typescript/src/toml.ts`): TOML parsing and comment-preserving single-key editing for the config subsystem, gating input on TOML 1.0 and splicing edits byte-exactly at one key.
 - **typescript/src/tool** (`typescript/src/tool.ts`): Tool export: descriptors for exposing CLI commands to tool-using LLM agents, mirroring Go tool.go and Python _build_json_schema/as_tools.
+- **typescript/src/trace** (`typescript/src/trace.ts`): The process trace store.
 - **typescript/src/types** (`typescript/src/types.ts`): Type foundation: nominally-branded carriers pairing a phantom output type with a literal schema string, productionizing Solution 10 from a verified spike.
 - **typescript/src/values** (`typescript/src/values.ts`): Value engine: strict scalar parsing (bool/int/float), choices matching, error-message value formatting, and compound (list/dict) parsing.
 - **typescript/src/version** (`typescript/src/version.ts`): GENERATED FILE -- do not edit, and do not commit.

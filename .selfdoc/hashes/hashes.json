@@ -190,7 +190,6 @@
   "en/typescript-src-payload_schema.md": {
     "content": "bd995d7f0cbc285257c1b490a923d35dbf9afc4cc42ea3c8a35e4a0faf9b9a4f",
     "description": "3d27ea98e353cfb92bf52d09384bfba3ced1372598a57ec705dcd497b6f480c3",
-    "seed_hash": "074082381654cd582e838fe1db3cf5dc66f9584c33ef2ece8a8bc7fdcd88c518",
     "source_docstring": "2965999192cde467710c07f94dd456e7340265358a5e653fe1d91fe5bf79fee7"
   },
   "en/typescript-src-routing.md": {
@@ -217,6 +216,11 @@
     "content": "daf3f414f96c62b9098f740cfb4c33b15de377e084816cdcc353dab0368dac73",
     "description": "031000cb07645649b14bb74be054a716fc7960ab0a0ded7a8b189a0962e66cc7",
     "source_docstring": "d3f5c79cf78362047a6e314740a2cdfb54754c16f4eb25afd5c412d75a2616e3"
+  },
+  "en/typescript-src-trace.md": {
+    "content": "19fa6c7124e586507387de15856aca06a648d4ed7f3268d155d714bd26866ac8",
+    "description": "7f474f678a38eab0b88d99a725e33c82454159b05fa027ed3f12a0e374f085be",
+    "seed_hash": "7f474f678a38eab0b88d99a725e33c82454159b05fa027ed3f12a0e374f085be"
   },
   "en/typescript-src-types.md": {
     "content": "be0f2400c330a71a0d5f4eca36c631906fe91a84f38116303e6ce652d8d92a1a",

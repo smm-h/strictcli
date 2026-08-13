@@ -46,6 +46,7 @@ order: 90
 - [typescript/src/sources](../typescript-src-sources/)
 - [typescript/src/toml](../typescript-src-toml/)
 - [typescript/src/tool](../typescript-src-tool/)
+- [typescript/src/trace](../typescript-src-trace/)
 - [typescript/src/types](../typescript-src-types/)
 - [typescript/src/values](../typescript-src-values/)
 - [typescript/src/version](../typescript-src-version/)

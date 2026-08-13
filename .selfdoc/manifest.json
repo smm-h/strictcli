@@ -2684,6 +2684,61 @@
         },
         {
           "level": 3,
+          "text": "`_ulid_encode`",
+          "anchor": "_ulid_encode"
+        },
+        {
+          "level": 3,
+          "text": "`_ulid_mint`",
+          "anchor": "_ulid_mint"
+        },
+        {
+          "level": 3,
+          "text": "`_ulid_timestamp`",
+          "anchor": "_ulid_timestamp"
+        },
+        {
+          "level": 3,
+          "text": "`_trace_store_dir`",
+          "anchor": "_trace_store_dir"
+        },
+        {
+          "level": 3,
+          "text": "`_trace_label`",
+          "anchor": "_trace_label"
+        },
+        {
+          "level": 3,
+          "text": "`_trace_label_start_ms`",
+          "anchor": "_trace_label_start_ms"
+        },
+        {
+          "level": 3,
+          "text": "`_trace_timestamp`",
+          "anchor": "_trace_timestamp"
+        },
+        {
+          "level": 3,
+          "text": "`_trace_active_label`",
+          "anchor": "_trace_active_label"
+        },
+        {
+          "level": 3,
+          "text": "`_TraceIdentity`",
+          "anchor": "_traceidentity"
+        },
+        {
+          "level": 3,
+          "text": "`_trace_write_entry`",
+          "anchor": "_trace_write_entry"
+        },
+        {
+          "level": 3,
+          "text": "`_trace_mark_failure`",
+          "anchor": "_trace_mark_failure"
+        },
+        {
+          "level": 3,
           "text": "`_Effects`",
           "anchor": "_effects"
         },
@@ -2756,6 +2811,11 @@
           "level": 4,
           "text": "`_merged_env`",
           "anchor": "_merged_env"
+        },
+        {
+          "level": 4,
+          "text": "`_child_env`",
+          "anchor": "_child_env"
         },
         {
           "level": 3,
@@ -7978,6 +8038,88 @@
       ]
     },
     {
+      "path": "typescript-src-trace.md",
+      "title": "typescript/src/trace",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/trace",
+          "anchor": "typescriptsrctrace"
+        },
+        {
+          "level": 2,
+          "text": "`typescript/src/trace`",
+          "anchor": "typescriptsrctrace"
+        },
+        {
+          "level": 3,
+          "text": "`TRACE_PARENT_ENV`",
+          "anchor": "trace_parent_env"
+        },
+        {
+          "level": 3,
+          "text": "`TRACE_PARTITION_RE`",
+          "anchor": "trace_partition_re"
+        },
+        {
+          "level": 3,
+          "text": "`ulidEncode`",
+          "anchor": "ulidencode"
+        },
+        {
+          "level": 3,
+          "text": "`ulidMint`",
+          "anchor": "ulidmint"
+        },
+        {
+          "level": 3,
+          "text": "`ulidTimestamp`",
+          "anchor": "ulidtimestamp"
+        },
+        {
+          "level": 3,
+          "text": "`ulidValid`",
+          "anchor": "ulidvalid"
+        },
+        {
+          "level": 3,
+          "text": "`traceStoreDir`",
+          "anchor": "tracestoredir"
+        },
+        {
+          "level": 3,
+          "text": "`traceLabel`",
+          "anchor": "tracelabel"
+        },
+        {
+          "level": 3,
+          "text": "`traceLabelStartMs`",
+          "anchor": "tracelabelstartms"
+        },
+        {
+          "level": 3,
+          "text": "`traceTimestamp`",
+          "anchor": "tracetimestamp"
+        },
+        {
+          "level": 3,
+          "text": "`TraceIdentity`",
+          "anchor": "traceidentity"
+        },
+        {
+          "level": 3,
+          "text": "`traceWriteEntry`",
+          "anchor": "tracewriteentry"
+        },
+        {
+          "level": 3,
+          "text": "`traceChildEnv`",
+          "anchor": "tracechildenv"
+        }
+      ]
+    },
+    {
       "path": "typescript-src-types.md",
       "title": "typescript/src/types",
       "type": "doc",
@@ -8160,5 +8302,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-13T04:20:55.094880+00:00"
+  "last_gen": "2026-08-13T05:55:15.136376+00:00"
 }
