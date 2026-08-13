@@ -1,6 +1,6 @@
 ---
 title: Cross-Language Conformance
-description: "How the conformance suite's ten checks keep the Python, Go, and TypeScript strictcli implementations behaviorally identical, using JSON cases and parity mode."
+description: "How the conformance suite's ten checks keep the Python, Go, and TypeScript implementations behaviorally identical, using JSON cases and parity mode."
 nav_group: "Guides"
 nav_order: 10
 ---
@@ -22,7 +22,7 @@ three strictcli implementations:
 |-------|-----------------|
 | `api-surface` | Every public API field (flags, args, app options, etc.) exists in all three implementations and in the conformance schema, accounting for language-idiomatic name mappings |
 | `error-parity` | Error message templates in `python/strictcli/__init__.py`, `go/strictcli/errors.go`, and `typescript/src/errors.ts` produce identical user-facing messages for identical inputs |
-| `conformance-meta` | The suite's own meta-tests (`test_error_parity_extraction.py`, `test_run_registry.py`, `test_api_surface_registry.py`), which pin the extraction and registry surfaces whose silent drift produces a false PASS rather than a visible error |
+| `conformance-meta` | The suite's own meta-tests (`test_error_parity_extraction.py`, `test_run_registry.py`, `test_api_surface_registry.py`, `test_lock_pin.py`), which pin the extraction and registry surfaces whose silent drift produces a false PASS rather than a visible error, plus the lockfile's editable-sibling pin |
 | `conformance-python` | All JSON test cases pass against the Python implementation |
 | `conformance-go` | All JSON test cases pass against the Go implementation |
 | `conformance-typescript` | All JSON test cases pass against the TypeScript implementation |
@@ -47,12 +47,13 @@ check, and any divergence in these areas blocks a release:
 - **Config subsystem.** `config show`, `config set`, `config path`, `config edit`, `config init` produce identical output and behavior.
 - **Check system.** Tag DSL evaluation, DAG-ordered execution, dependency pull-in, cascade skips, and result formatting all behave identically.
 - **Hermetic mode.** `--hermetic` suppresses env and config identically; mutual exclusion with `--config` and config subcommands produces identical errors.
+- **Machine mode.** The framework-owned `--json` is refused identically at every declaration level (command flag, app global, flag-set, mutex group), is recognized in the same argv positions with the same two boundaries (a bare `--`, a passthrough command's name), and prints the same payload bytes -- plain UTF-8 with no HTML escaping, and structurally exempt from `--quiet`.
 
 ## How testing works
 
 ### JSON test cases
 
-The core of the suite is 71 JSON files in `conformance/cases/`, containing 731
+The core of the suite is 73 JSON files in `conformance/cases/`, containing 755
 individual test cases organized by feature area (flags, config, checks, groups,
 etc.). Each case is a self-contained JSON object specifying an app definition,
 argv input, optional environment variables, and expected output assertions
@@ -63,7 +64,7 @@ including exit code, stdout content, and stderr content:
 - `env`: optional environment variables to set
 - `stdin`: optional text piped to the app's stdin. Absent means `/dev/null`, which is what keeps every other case independent of the operator's terminal (a pipe carrying this text is not a TTY either). Used by the `--mcp` cases, whose JSON-RPC lines arrive on stdin.
 - `protocol_script`: an alternative to `stdin` for exchanges whose next request depends on the previous reply (see below). The two are mutually exclusive.
-- `expect`: assertions on exit code, stdout, and stderr (exact match, substring, regex, negation), plus structural assertions on the effect log (`effects_equals`) and on an emitted `--dump-schema` document (`schema_command_keys`)
+- `expect`: assertions on exit code, stdout, and stderr (exact match, substring, regex, negation), plus structural assertions on the effect log (`effects_equals`) and on an emitted `--dump-schema` document (`schema_command_keys`, `schema_command_absent_keys`)
 - `targets`: restricts which implementations run the case (see [Target restrictions](#target-restrictions))
 - `acknowledged_divergence`: declares intentionally language-specific output (see [Acknowledged divergence](#acknowledged-divergence))
 
@@ -158,8 +159,8 @@ TypeScript's dynamic runtime):
 ```
 
 Exactly one case carries such a restriction today -- the bad-return hard error,
-which Go's `Outcome` type makes unrepresentable -- so Go runs 730 of the 731
-cases and Python and TypeScript run all 731.
+which Go's `Outcome` type makes unrepresentable -- so Go runs 754 of the 755
+cases and Python and TypeScript run all 755.
 
 ### Differential argv fuzzing
 
@@ -325,6 +326,6 @@ If the new case has output that is legitimately language-specific, add an `ackno
 ## Architecture notes
 
 - The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 10 automated checks.
-- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 731 test cases across all 3 targets (730 on Go, whose type system cannot express the bad-return case).
+- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 755 test cases across all 3 targets (754 on Go, whose type system cannot express the bad-return case).
 - The conformance tool itself is built with strictcli (dogfooding the check system). Its checks are declared in `conformance/conformance_tool/.strictcli/checks.toml`.
 - Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, and `check_schema_parity.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.

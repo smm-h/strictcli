@@ -1,6 +1,6 @@
 ---
 title: typescript/src/checks/cmd
-description: "The auto-registered `check` command plus the human-readable and JSON result formatters, dispatching the list, help, no-match, dry-run, and run modes."
+description: "The auto-registered `check` command and its result formatters, dispatching the list, help, no-match and run modes; --dry-run runs the pure checks only."
 generated: true
 nav_group: "API Reference"
 nav_order: 3
