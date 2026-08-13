@@ -557,6 +557,21 @@
           "anchor": "mutex-groups"
         },
         {
+          "level": 3,
+          "text": "What elects a member",
+          "anchor": "what-elects-a-member"
+        },
+        {
+          "level": 3,
+          "text": "Env and config do not elect",
+          "anchor": "env-and-config-do-not-elect"
+        },
+        {
+          "level": 3,
+          "text": "Handlers test absence, never truthiness",
+          "anchor": "handlers-test-absence-never-truthiness"
+        },
+        {
           "level": 2,
           "text": "Dependencies",
           "anchor": "dependencies"
@@ -1338,6 +1353,16 @@
           "level": 3,
           "text": "`WithConfigPathRelativeToRoot`",
           "anchor": "withconfigpathrelativetoroot"
+        },
+        {
+          "level": 3,
+          "text": "`WithSchemaPath`",
+          "anchor": "withschemapath"
+        },
+        {
+          "level": 3,
+          "text": "`WithSchemaPathRelativeToRoot`",
+          "anchor": "withschemapathrelativetoroot"
         },
         {
           "level": 3,
@@ -2359,8 +2384,18 @@
         },
         {
           "level": 4,
-          "text": "`is_present_for_mutex`",
-          "anchor": "is_present_for_mutex"
+          "text": "`is_cli`",
+          "anchor": "is_cli"
+        },
+        {
+          "level": 4,
+          "text": "`is_env_or_config`",
+          "anchor": "is_env_or_config"
+        },
+        {
+          "level": 4,
+          "text": "`delete`",
+          "anchor": "delete"
         },
         {
           "level": 4,
@@ -2571,6 +2606,11 @@
           "level": 3,
           "text": "`_strip_confirm_line`",
           "anchor": "_strip_confirm_line"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_mutex_decline_clause`",
+          "anchor": "_msg_mutex_decline_clause"
         },
         {
           "level": 3,
@@ -6095,6 +6135,16 @@
         },
         {
           "level": 3,
+          "text": "`errMutexRedundantNegation`",
+          "anchor": "errmutexredundantnegation"
+        },
+        {
+          "level": 3,
+          "text": "`errMutexDeclineClause`",
+          "anchor": "errmutexdeclineclause"
+        },
+        {
+          "level": 3,
           "text": "`errImpliesConflict`",
           "anchor": "errimpliesconflict"
         },
@@ -8342,5 +8392,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-13T10:15:34.225540+00:00"
+  "last_gen": "2026-08-13T19:29:30.577374+00:00",
+  "theme": "minimal"
 }
