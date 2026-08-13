@@ -71,12 +71,13 @@
     ],
     "protocol_script": [
       {
-        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}",
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
         "expect_line": {
           "json_equals": {
             "jsonrpc": "2.0",
             "id": 1,
             "result": {
+              "resultType": "complete",
               "tools": [
                 {
                   "name": "status",
@@ -111,7 +112,15 @@
                     "additionalProperties": false
                   }
                 }
-              ]
+              ],
+              "ttlMs": 3600000,
+              "cacheScope": "public",
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "myapp",
+                  "version": "1.0.0"
+                }
+              }
             }
           }
         }
@@ -194,18 +203,25 @@
     ],
     "protocol_script": [
       {
-        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"dns.zone.create\",\"arguments\":{}}}",
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"dns.zone.create\",\"arguments\":{}}}",
         "expect_line": {
           "json_equals": {
             "jsonrpc": "2.0",
             "id": 1,
             "result": {
+              "resultType": "complete",
               "content": [
                 {
                   "type": "text",
                   "text": "$ANY"
                 }
-              ]
+              ],
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "myapp",
+                  "version": "1.0.0"
+                }
+              }
             }
           }
         }
@@ -288,19 +304,26 @@
     ],
     "protocol_script": [
       {
-        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"no_such_tool\",\"arguments\":{}}}",
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"no_such_tool\",\"arguments\":{}}}",
         "expect_line": {
           "json_equals": {
             "jsonrpc": "2.0",
             "id": 1,
             "result": {
+              "resultType": "complete",
               "content": [
                 {
                   "type": "text",
                   "text": "unknown command 'no_such_tool'"
                 }
               ],
-              "isError": true
+              "isError": true,
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "myapp",
+                  "version": "1.0.0"
+                }
+              }
             }
           }
         }
@@ -409,7 +432,7 @@
         }
       },
       {
-        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"no/such/method\"}",
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"no/such/method\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
         "expect_line": {
           "json_equals": {
             "jsonrpc": "2.0",
@@ -422,7 +445,7 @@
         }
       },
       {
-        "send": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{}}",
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
         "expect_line": {
           "json_equals": {
             "jsonrpc": "2.0",
@@ -435,7 +458,7 @@
         }
       },
       {
-        "send": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":7}}",
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":7}}",
         "expect_line": {
           "json_equals": {
             "jsonrpc": "2.0",
@@ -448,7 +471,7 @@
         }
       },
       {
-        "send": "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"status\",\"arguments\":[]}}",
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"status\",\"arguments\":[]}}",
         "expect_line": {
           "json_equals": {
             "jsonrpc": "2.0",

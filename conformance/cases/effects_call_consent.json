@@ -261,7 +261,7 @@
     "argv": [
       "--mcp"
     ],
-    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"release\"}}\n",
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"release\"}}\n",
     "expect": {
       "exit_code": 0,
       "stdout_matches": [
@@ -304,7 +304,7 @@
     "argv": [
       "--mcp"
     ],
-    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"release\",\"approve_consequential\":true}}\n",
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"release\",\"approve_consequential\":true}}\n",
     "expect": {
       "exit_code": 0,
       "stdout_matches": [
@@ -356,7 +356,7 @@
     "argv": [
       "--mcp"
     ],
-    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}\n",
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}\n",
     "expect": {
       "exit_code": 0,
       "stdout_matches": [
@@ -400,7 +400,7 @@
     "argv": [
       "--mcp"
     ],
-    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"release\",\"arguments\":{\"approve_consequential\":true}}}\n",
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"release\",\"arguments\":{\"approve_consequential\":true}}}\n",
     "expect": {
       "exit_code": 0,
       "stdout_matches": [
@@ -446,7 +446,7 @@
     "argv": [
       "--mcp"
     ],
-    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"release\",\"approve_consequential\":\"yes\"}}\n",
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"release\",\"approve_consequential\":\"yes\"}}\n",
     "expect": {
       "exit_code": 0,
       "stdout_matches": [
@@ -491,7 +491,7 @@
     "argv": [
       "--mcp"
     ],
-    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"build\",\"arguments\":{\"approve_consequential\":true}}}\n",
+    "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"build\",\"arguments\":{\"approve_consequential\":true}}}\n",
     "expect": {
       "exit_code": 0,
       "stdout_matches": [
