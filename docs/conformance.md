@@ -1,6 +1,6 @@
 ---
 title: Cross-Language Conformance
-description: "How the conformance suite's ten checks keep the Python, Go, and TypeScript implementations behaviorally identical, using JSON cases and parity mode."
+description: "How the conformance suite's eleven checks keep the Python, Go, and TypeScript implementations behaviorally identical, using JSON cases and parity mode."
 nav_group: "Guides"
 nav_order: 10
 ---
@@ -11,12 +11,13 @@ strictcli ships three independent implementations -- Python, Go, and TypeScript 
 
 ## What the suite covers
 
-The conformance suite enforces behavioral parity through ten checks, all gated
+The conformance suite enforces behavioral parity through eleven checks, all gated
 at error severity so that any failure blocks a release. These checks cover API
 surface consistency, error message parity, the suite's own extraction and
 registry surfaces, per-target test case execution, cross-target output
-comparison, schema structure identity, and canonical float formatting across all
-three strictcli implementations:
+comparison, schema structure identity, canonical float formatting, and the
+process trace store's observational-only sweeps across all three strictcli
+implementations:
 
 | Check | What it verifies |
 |-------|-----------------|
@@ -30,6 +31,7 @@ three strictcli implementations:
 | `schema-parity` | A rich app definition exercising all features produces identical `--dump-schema` JSON output from all three implementations |
 | `float-fuzz` | The strictcli canonical float format (SCF) produces byte-identical strings for a fixed set of double-precision bit patterns across all three implementations |
 | `schema-freshness` | The committed `.strictcli/schema.json` for the conformance tool itself matches its current in-memory schema |
+| `trace-sweeps` | The process trace store stays observational: a forged ancestry identifier and an unwritable store each leave stdout, stderr and the exit code byte-identical to the same run without them |
 
 ## Guaranteed-identical behaviors
 
@@ -188,7 +190,7 @@ consistency:
 
 All commands are run from the repository root unless otherwise noted. The test
 runner supports filtering by case name, verbose output for debugging, and parity
-mode for cross-target comparison. The full check gate runs all ten checks in
+mode for cross-target comparison. The full check gate runs all eleven checks in
 dependency order.
 
 ### Single target
@@ -212,18 +214,18 @@ python conformance/run.py --target python --filter "config" -v
 python conformance/run.py --both --filter "hermetic" -v
 ```
 
-### Full check gate (all ten checks)
+### Full check gate (all eleven checks)
 
-The full check gate runs all ten conformance checks in dependency order from the
+The full check gate runs all eleven conformance checks in dependency order from the
 `conformance/` directory. It starts with the fast pure checks (api-surface,
 error-parity and conformance-meta), then runs per-target conformance suites, then
-parity and schema checks. All ten checks must pass for a release to proceed:
+parity and schema checks. All eleven checks must pass for a release to proceed:
 
 ```bash
 uv run conformance check --tag pre-release
 ```
 
-This runs all ten checks in dependency order: `api-surface`, `error-parity` and `conformance-meta` first (fast, pure), then the per-target conformance runs, then parity and schema checks.
+This runs all eleven checks in dependency order: `api-surface`, `error-parity` and `conformance-meta` first (fast, pure), then the per-target conformance runs, then parity and schema checks.
 
 ### Individual supplementary checks
 
