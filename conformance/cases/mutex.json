@@ -792,5 +792,93 @@
       "exit_code": 1,
       "stderr_equals": "error: --profile and --all-profiles are mutually exclusive\ntry 'myapp run --help'"
     }
+  },
+  {
+    "name": "mutex A5: a config-file value elects nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"file\": \"from-config.txt\"}",
+      "commands": [
+        {
+          "name": "fetch",
+          "help": "fetch data",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "file",
+                  "type": "str",
+                  "help": "read from file",
+                  "default": null
+                },
+                {
+                  "name": "url",
+                  "type": "str",
+                  "help": "read from URL",
+                  "default": null
+                }
+              ]
+            }
+          ],
+          "handler_prints": "file={file} url={url}"
+        }
+      ]
+    },
+    "argv": [
+      "fetch"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: one of --file, --url is required\ntry 'myapp fetch --help'"
+    }
+  },
+  {
+    "name": "mutex A5: a config-file value beside a CLI election is suppressed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"file\": \"from-config.txt\"}",
+      "commands": [
+        {
+          "name": "fetch",
+          "help": "fetch data",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "file",
+                  "type": "str",
+                  "help": "read from file",
+                  "default": null
+                },
+                {
+                  "name": "url",
+                  "type": "str",
+                  "help": "read from URL",
+                  "default": null
+                }
+              ]
+            }
+          ],
+          "handler_prints": "file={file} url={url} file_source={source:file}"
+        }
+      ]
+    },
+    "argv": [
+      "fetch",
+      "--url",
+      "http://example.com"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "file=None url=http://example.com file_source=default"
+    }
   }
 ]
