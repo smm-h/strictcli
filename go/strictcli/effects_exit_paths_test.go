@@ -281,7 +281,9 @@ func TestMachineModeEnvelopeOnAnAbortedPreview(t *testing.T) {
 func TestMachineModeEnvelopeOnALiveAbort(t *testing.T) {
 	// The marker's text names a dry-run preview, so it is dry-mode-only --
 	// exactly as the human stream's marker is.
-	stdout, _, _ := runExitPathHelper(t, "--json panics")
+	// "looks" records nothing, so a live run of it writes no file into the
+	// package directory the way "panics" would.
+	stdout, _, _ := runExitPathHelper(t, "--json looks")
 	var env map[string]interface{}
 	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
 		t.Fatalf("stdout is not one JSON document: %v (stdout=%q)", err, stdout)
