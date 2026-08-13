@@ -320,17 +320,25 @@ class Context:
         emitted; outside machine mode it is not printed at all. ``test()`` and
         ``call()`` capture it either way.
 
-        Two hard errors, both at call time:
+        Three hard errors, all at call time:
 
         - the command declared no ``payload_schema=``, so there is nothing to
           validate the value against;
         - a payload was already supplied in this dispatch (one slot, one
-          answer).
+          answer);
+        - the value does not satisfy the declared schema (contract §19.5): a
+          wrong shape fails here instead of shipping.
         """
         if self._payload_schema is None:
             raise RuntimeError(_msg_payload_no_schema(self._command_name))
         if self._payload_value is not _MISSING:
             raise RuntimeError(_msg_payload_already_set(self._command_name))
+        found = _validate_payload_value(value, self._payload_schema)
+        if found is not None:
+            path, detail = found
+            raise RuntimeError(
+                _msg_payload_invalid(self._command_name, path, detail)
+            )
         self._payload_value = value
 
     @property
@@ -900,6 +908,431 @@ def _msg_payload_already_set(name: str) -> str:
         f'command "{name}": ctx.payload was already called '
         f"(a dispatch carries at most one payload)"
     )
+
+
+def _msg_payload_schema_invalid(name: str, path: str, detail: str) -> str:
+    """Message template: a declared payload schema is outside the subset (§19.5).
+
+    Registration time. ``path`` names the position inside the declared literal
+    (rooted at ``payload_schema``) and ``detail`` names the violated rule. Both
+    are byte-identical across the three implementations, pinned by
+    ``conformance/payload_schema_vectors.json``.
+    """
+    return (
+        f'command "{name}": payload schema is invalid at {path}: {detail}'
+    )
+
+
+def _msg_payload_invalid(name: str, path: str, detail: str) -> str:
+    """Message template: a payload deviates from its declared schema (§19.5).
+
+    Emission time. ``path`` names the position inside the value (rooted at
+    ``payload``) and ``detail`` names the violated constraint, so a wrong shape
+    fails here instead of shipping.
+    """
+    return (
+        f"command \"{name}\": payload does not satisfy the declared schema "
+        f"at {path}: {detail}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# The declared payload schema's validator (contract §19.5)
+#
+# Two duties over one deliberately closed subset:
+#
+#   * registration-time validation of the declared literal -- an unknown
+#     keyword anywhere is a hard error, which is what keeps the subset closed;
+#   * emission-time validation of the value a handler supplies through
+#     ctx.payload -- a payload that deviates from its declaration fails here
+#     rather than shipping a wrong shape.
+#
+# Every detail string below is byte-identical to the Go and TypeScript
+# validators'. They are deliberately NOT named ``_msg_*``: the error-parity
+# extractor reads only the two outer templates above, and the details are
+# pinned across implementations by the shared vectors instead.
+# ---------------------------------------------------------------------------
+
+# The closed subset, in the order the "unknown keyword" message lists it.
+_PAYLOAD_SCHEMA_KEYWORDS = (
+    "additionalProperties", "const", "enum", "items", "properties",
+    "required", "type",
+)
+
+# The JSON Schema type names the subset admits, sorted.
+_PAYLOAD_JSON_TYPES = (
+    "array", "boolean", "integer", "null", "number", "object", "string",
+)
+
+# Decision 16's guard. Every IEEE-754 double whose magnitude exceeds 2^53 is
+# already an integer (the spacing between representable doubles is at least 1
+# from 2^52 upward), so "any integer above 2^53" and "any number above 2^53"
+# are the same set -- which is why the guard is a plain magnitude test.
+_PAYLOAD_MAX_MAGNITUDE = 2 ** 53
+
+_PDETAIL_NOT_JSON = "the value is not representable in JSON"
+_PDETAIL_MAGNITUDE = (
+    "the number's magnitude exceeds 2^53 (declare a big identifier as a string)"
+)
+_PDETAIL_TYPE_SHAPE = '"type" must be a string or an array of strings'
+_PDETAIL_TYPE_EMPTY = '"type" must not be an empty array'
+_PDETAIL_PROPERTIES_SHAPE = '"properties" must be an object'
+_PDETAIL_REQUIRED_SHAPE = '"required" must be an array of strings'
+_PDETAIL_ENUM_SHAPE = '"enum" must be a non-empty array'
+_PDETAIL_ADDPROPS_SHAPE = (
+    '"additionalProperties" must be a boolean or a schema object'
+)
+_PDETAIL_ENUM_MISMATCH = "the value is not one of the declared enum values"
+_PDETAIL_CONST_MISMATCH = "the value does not equal the declared const"
+
+
+def _payload_quote(s: str) -> str:
+    """Quote a string for a message or a path segment.
+
+    §19.5's escaping regime, applied to one string: escape exactly what JSON
+    mandates and emit everything else literally. ``json.dumps`` with
+    ``ensure_ascii=False`` is precisely that; the Go and TypeScript validators
+    hand-roll the same rule.
+    """
+    return json.dumps(s, ensure_ascii=False)
+
+
+def _pdetail_unknown_keyword(kw: str) -> str:
+    subset = ", ".join(_PAYLOAD_SCHEMA_KEYWORDS)
+    return (
+        f"unknown keyword {_payload_quote(kw)} "
+        f"(the closed subset is: {subset})"
+    )
+
+
+def _pdetail_unknown_type(t: str) -> str:
+    types = ", ".join(_PAYLOAD_JSON_TYPES)
+    return (
+        f"unknown type {_payload_quote(t)} "
+        f"(the JSON Schema types are: {types})"
+    )
+
+
+def _pdetail_schema_not_object(got: str) -> str:
+    return f"a schema must be an object, got {got}"
+
+
+def _pdetail_type_duplicate(t: str) -> str:
+    return f'"type" has a duplicate entry {_payload_quote(t)}'
+
+
+def _pdetail_required_duplicate(k: str) -> str:
+    return f'"required" has a duplicate entry {_payload_quote(k)}'
+
+
+def _pdetail_expected_type(declared, got: str) -> str:
+    """The type-mismatch detail, in its single and its list form."""
+    if isinstance(declared, str):
+        return f"expected type {_payload_quote(declared)}, got {got}"
+    inner = ", ".join(_payload_quote(t) for t in declared)
+    return f"expected type [{inner}], got {got}"
+
+
+def _pdetail_required_missing(k: str) -> str:
+    return f"required property {_payload_quote(k)} is missing"
+
+
+def _pdetail_not_permitted(k: str) -> str:
+    return (
+        f"property {_payload_quote(k)} is not permitted "
+        f"(additionalProperties is false)"
+    )
+
+
+def _payload_path_key(path: str, key: str) -> str:
+    return f"{path}[{_payload_quote(key)}]"
+
+
+def _payload_path_index(path: str, index: int) -> str:
+    return f"{path}[{index}]"
+
+
+def _payload_kind(value: object) -> str | None:
+    """The JSON kind of a value, or None when it is not representable.
+
+    ``integer`` is reported for any number with a zero fractional part, which
+    is JSON Schema's own reading of the type and the only one three languages
+    can agree on -- TypeScript has no separate integer type at all.
+    ``bool`` is a subclass of ``int`` in Python and is deliberately classified
+    first, so a boolean is never a number.
+    """
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        return "integer" if value.is_integer() else "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, (list, tuple)):
+        return "array"
+    if isinstance(value, dict):
+        for k in value:
+            if not isinstance(k, str):
+                return None
+        return "object"
+    return None
+
+
+def _payload_over_magnitude(value: object) -> bool:
+    """True when a number exceeds decision 16's magnitude guard."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return abs(value) > _PAYLOAD_MAX_MAGNITUDE
+    if isinstance(value, float):
+        return abs(value) > float(_PAYLOAD_MAX_MAGNITUDE)
+    return False
+
+
+def _payload_scan_value(value: object, path: str):
+    """Document check: representability and the magnitude guard, recursively.
+
+    Runs over the WHOLE value before any keyword is consulted, so a payload
+    that could not be emitted at all is reported as that rather than as a type
+    mismatch. Traversal is deterministic in every implementation: arrays in
+    index order, objects in sorted-key order.
+
+    Returns ``(path, detail)`` for the first violation, or None.
+    """
+    kind = _payload_kind(value)
+    if kind is None:
+        return (path, _PDETAIL_NOT_JSON)
+    if _payload_over_magnitude(value):
+        return (path, _PDETAIL_MAGNITUDE)
+    if kind == "array":
+        for i, item in enumerate(value):
+            found = _payload_scan_value(item, _payload_path_index(path, i))
+            if found is not None:
+                return found
+    elif kind == "object":
+        for key in sorted(value):
+            found = _payload_scan_value(
+                value[key], _payload_path_key(path, key)
+            )
+            if found is not None:
+                return found
+    return None
+
+
+def _payload_deep_equal(a: object, b: object) -> bool:
+    """JSON-value equality, used by ``enum`` and ``const``.
+
+    Type-aware on purpose: a boolean is never equal to a number (Python's
+    ``True == 1`` is exactly the trap this closes), and two numbers are equal
+    when their values are, so ``1`` matches a declared ``1.0``.
+    """
+    ka = _payload_kind(a)
+    kb = _payload_kind(b)
+    if ka is None or kb is None:
+        return False
+    if ka in ("integer", "number") and kb in ("integer", "number"):
+        return float(a) == float(b)
+    if ka != kb:
+        return False
+    if ka == "null":
+        return True
+    if ka == "boolean":
+        return bool(a) is bool(b)
+    if ka == "string":
+        return a == b
+    if ka == "array":
+        if len(a) != len(b):
+            return False
+        return all(_payload_deep_equal(x, y) for x, y in zip(a, b))
+    # object
+    if set(a) != set(b):
+        return False
+    return all(_payload_deep_equal(a[k], b[k]) for k in a)
+
+
+def _payload_type_matches(declared: str, kind: str) -> bool:
+    if declared == "integer":
+        return kind == "integer"
+    if declared == "number":
+        return kind in ("integer", "number")
+    return declared == kind
+
+
+def _validate_payload_schema(schema: object, path: str = "payload_schema"):
+    """Registration-time validation of one declared schema literal (§19.5).
+
+    Returns ``(path, detail)`` for the first violation, or None. The keyword
+    scan is sorted, so which of several violations is reported never depends on
+    a dict's iteration order.
+    """
+    kind = _payload_kind(schema)
+    if kind != "object":
+        return (path, _pdetail_schema_not_object(kind or "unsupported"))
+
+    for kw in sorted(schema):
+        if kw not in _PAYLOAD_SCHEMA_KEYWORDS:
+            return (path, _pdetail_unknown_keyword(kw))
+
+    if "type" in schema:
+        t = schema["type"]
+        if isinstance(t, str):
+            if t not in _PAYLOAD_JSON_TYPES:
+                return (path, _pdetail_unknown_type(t))
+        elif isinstance(t, list):
+            if not t:
+                return (path, _PDETAIL_TYPE_EMPTY)
+            seen: list[str] = []
+            for entry in t:
+                if not isinstance(entry, str) or isinstance(entry, bool):
+                    return (path, _PDETAIL_TYPE_SHAPE)
+                if entry in seen:
+                    return (path, _pdetail_type_duplicate(entry))
+                seen.append(entry)
+            for entry in t:
+                if entry not in _PAYLOAD_JSON_TYPES:
+                    return (path, _pdetail_unknown_type(entry))
+        else:
+            return (path, _PDETAIL_TYPE_SHAPE)
+
+    if "required" in schema:
+        req = schema["required"]
+        if not isinstance(req, list):
+            return (path, _PDETAIL_REQUIRED_SHAPE)
+        seen_req: list[str] = []
+        for entry in req:
+            if not isinstance(entry, str) or isinstance(entry, bool):
+                return (path, _PDETAIL_REQUIRED_SHAPE)
+            if entry in seen_req:
+                return (path, _pdetail_required_duplicate(entry))
+            seen_req.append(entry)
+
+    if "enum" in schema:
+        values = schema["enum"]
+        if not isinstance(values, list) or not values:
+            return (path, _PDETAIL_ENUM_SHAPE)
+        for i, entry in enumerate(values):
+            found = _payload_scan_value(
+                entry, _payload_path_index(f"{path}.enum", i)
+            )
+            if found is not None:
+                return found
+
+    if "const" in schema:
+        found = _payload_scan_value(schema["const"], f"{path}.const")
+        if found is not None:
+            return found
+
+    if "properties" in schema:
+        props = schema["properties"]
+        if _payload_kind(props) != "object":
+            return (path, _PDETAIL_PROPERTIES_SHAPE)
+        for key in sorted(props):
+            found = _validate_payload_schema(
+                props[key], _payload_path_key(f"{path}.properties", key)
+            )
+            if found is not None:
+                return found
+
+    if "items" in schema:
+        found = _validate_payload_schema(schema["items"], f"{path}.items")
+        if found is not None:
+            return found
+
+    if "additionalProperties" in schema:
+        ap = schema["additionalProperties"]
+        if not isinstance(ap, bool):
+            if _payload_kind(ap) != "object":
+                return (path, _PDETAIL_ADDPROPS_SHAPE)
+            found = _validate_payload_schema(
+                ap, f"{path}.additionalProperties"
+            )
+            if found is not None:
+                return found
+
+    return None
+
+
+def _validate_payload_instance(value: object, schema: dict, path: str):
+    """Emission-time validation of one value against one declared schema.
+
+    Check order is pinned so that a value violating several constraints always
+    reports the same one: type, then const, then enum, then (for an object)
+    required, declared properties in sorted key order, and finally the
+    additional properties in sorted key order; then (for an array) the items.
+
+    Returns ``(path, detail)`` for the first violation, or None.
+    """
+    kind = _payload_kind(value)
+    if kind is None:
+        return (path, _PDETAIL_NOT_JSON)
+
+    if "type" in schema:
+        declared = schema["type"]
+        if isinstance(declared, str):
+            if not _payload_type_matches(declared, kind):
+                return (path, _pdetail_expected_type(declared, kind))
+        else:
+            if not any(_payload_type_matches(t, kind) for t in declared):
+                return (path, _pdetail_expected_type(list(declared), kind))
+
+    if "const" in schema:
+        if not _payload_deep_equal(value, schema["const"]):
+            return (path, _PDETAIL_CONST_MISMATCH)
+
+    if "enum" in schema:
+        if not any(_payload_deep_equal(value, e) for e in schema["enum"]):
+            return (path, _PDETAIL_ENUM_MISMATCH)
+
+    if kind == "object":
+        props = schema.get("properties")
+        declared_names = set(props) if isinstance(props, dict) else set()
+        for key in schema.get("required", ()):
+            if key not in value:
+                return (path, _pdetail_required_missing(key))
+        if isinstance(props, dict):
+            for key in sorted(props):
+                if key in value:
+                    found = _validate_payload_instance(
+                        value[key], props[key], _payload_path_key(path, key)
+                    )
+                    if found is not None:
+                        return found
+        if "additionalProperties" in schema:
+            ap = schema["additionalProperties"]
+            if ap is not True:
+                for key in sorted(value):
+                    if key in declared_names:
+                        continue
+                    if ap is False:
+                        return (path, _pdetail_not_permitted(key))
+                    found = _validate_payload_instance(
+                        value[key], ap, _payload_path_key(path, key)
+                    )
+                    if found is not None:
+                        return found
+
+    if kind == "array" and "items" in schema:
+        for i, item in enumerate(value):
+            found = _validate_payload_instance(
+                item, schema["items"], _payload_path_index(path, i)
+            )
+            if found is not None:
+                return found
+
+    return None
+
+
+def _validate_payload_value(value: object, schema: dict):
+    """The whole emission-time duty: the document check, then the keywords."""
+    found = _payload_scan_value(value, "payload")
+    if found is not None:
+        return found
+    return _validate_payload_instance(value, schema, "payload")
 
 
 def _msg_effect_argv_not_sequence(name: str, method: str, got: str) -> str:
@@ -4107,8 +4540,8 @@ class Command:
     # The command's machine payload contract (contract §19.5): an inline JSON
     # Schema literal, registered as written. Absence means the command cannot
     # produce a payload -- ctx.payload is then a call-time hard error. The
-    # literal is stored opaquely at this round; validating a payload against
-    # it is a later item.
+    # literal is validated at registration over the closed subset, and the
+    # value ctx.payload supplies is validated against it at emission.
     payload_schema: dict | None = None
     flags: tuple[Flag, ...] = ()
     args: tuple[Arg, ...] = ()
@@ -4137,6 +4570,15 @@ class Command:
             self.name, self.effect, self.dry_run_supported,
             self.dry_run_unsupported_reason,
         )
+        # The declared payload schema is validated as written, over the closed
+        # subset (§19.5). An unknown keyword anywhere in the literal is a hard
+        # error here, which is what keeps the subset closed by construction.
+        if self.payload_schema is not None:
+            found = _validate_payload_schema(self.payload_schema)
+            if found is not None:
+                raise ValueError(
+                    _msg_payload_schema_invalid(self.name, found[0], found[1])
+                )
         for tag in self.tags:
             if not _IDENTIFIER_RE.fullmatch(tag):
                 raise ValueError(f'invalid tag name "{tag}": must match [a-z][a-z0-9-]*')
@@ -7761,10 +8203,13 @@ class App:
             "preview_error": preview_error,
             "diagnostics": diagnostics,
         }
+        # No ``default=`` fallback: §19.5's emission-time validation already
+        # refused every value the encoder could not represent, so a coercion
+        # here could only invent a shape no declared schema describes. The two
+        # siblings have no such fallback either.
         print(
             json.dumps(
-                envelope, default=str,
-                separators=(",", ":"), ensure_ascii=False,
+                envelope, separators=(",", ":"), ensure_ascii=False,
             ),
             file=out,
         )

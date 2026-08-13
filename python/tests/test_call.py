@@ -144,10 +144,16 @@ class TestCallReturnsList:
         assert result.exit_code == 0
 
 
-class TestCallReturnsDataclass:
-    """Handler returning outcome(data=dataclass): call() returns dataclass."""
+class TestCallRejectsNonJSONPayloads:
+    """A payload must be a JSON value (contract §19.5).
 
-    def test_call_returns_dataclass(self):
+    A dataclass instance is not one, and no schema can describe it, so
+    ``ctx.payload`` refuses it at the call rather than letting the serializer
+    invent a shape for it. The declaration and the emitted document are the
+    same artifact; a value the declaration cannot describe has no place in it.
+    """
+
+    def test_call_rejects_a_dataclass(self):
         @dataclass
         class Status:
             healthy: bool
@@ -160,12 +166,14 @@ class TestCallReturnsDataclass:
             ctx.payload(Status(healthy=True, uptime=3600))
             return strictcli.outcome()
 
-        result = app.call("status")
-        assert isinstance(result, Status)
-        assert result.healthy is True
-        assert result.uptime == 3600
+        with pytest.raises(RuntimeError) as e:
+            app.call("status")
+        assert str(e.value) == (
+            'command "status": payload does not satisfy the declared schema '
+            "at payload: the value is not representable in JSON"
+        )
 
-    def test_test_data_is_dataclass(self):
+    def test_test_rejects_a_dataclass(self):
         @dataclass
         class Status:
             healthy: bool
@@ -178,11 +186,18 @@ class TestCallReturnsDataclass:
             ctx.payload(Status(healthy=True, uptime=3600))
             return strictcli.outcome()
 
-        result = app.test(["status"])
-        assert isinstance(result.data, Status)
-        assert result.data.healthy is True
-        assert result.data.uptime == 3600
-        assert result.exit_code == 0
+        with pytest.raises(RuntimeError, match="not representable in JSON"):
+            app.test(["status"])
+
+    def test_a_dict_of_the_same_fields_is_accepted(self):
+        app = _build_app()
+
+        @app.command("status", effect="read_only", help="get status", payload_schema={})
+        def status(ctx):
+            ctx.payload({"healthy": True, "uptime": 3600})
+            return strictcli.outcome()
+
+        assert app.call("status") == {"healthy": True, "uptime": 3600}
 
 
 class TestCallReturnsString:
@@ -350,8 +365,13 @@ class TestRunWithStructuredData:
         assert result.data == [1, 2, 3]
         assert payload(result) == [1, 2, 3]
 
-    def test_dataclass_serializes_via_default_str(self):
-        """Dataclass data serializes to stdout via json.dumps(default=str)."""
+    def test_a_dataclass_is_refused_instead_of_stringified(self):
+        """A dataclass payload fails at the call (contract §19.5).
+
+        The serializer used to fall back to ``str()`` here, which shipped a
+        JSON string where a consumer expected an object. Emission-time
+        validation replaces that with a refusal.
+        """
         @dataclass
         class Status:
             healthy: bool
@@ -364,15 +384,11 @@ class TestRunWithStructuredData:
             ctx.payload(Status(healthy=True, uptime=3600))
             return strictcli.outcome()
 
-        result = app.test(["status", "--json"])
-        parsed = payload(result)
-        # default=str converts the dataclass to its str() repr
-        assert isinstance(parsed, str)
-        assert "healthy=True" in parsed
-        assert "uptime=3600" in parsed
+        with pytest.raises(RuntimeError, match="not representable in JSON"):
+            app.test(["status", "--json"])
 
-    def test_nested_non_serializable_uses_default_str(self):
-        """Non-serializable values nested in data use default=str on stdout."""
+    def test_a_nested_non_serializable_value_is_refused_by_path(self):
+        """The refusal names the exact node that cannot be emitted."""
         app = _build_app()
 
         @app.command("info", effect="read_only", help="get info", payload_schema={})
@@ -384,9 +400,29 @@ class TestRunWithStructuredData:
             })
             return strictcli.outcome()
 
+        with pytest.raises(RuntimeError) as e:
+            app.test(["info", "--json"])
+        # Sorted traversal reaches "path" before "timestamp".
+        assert str(e.value) == (
+            'command "info": payload does not satisfy the declared schema at '
+            'payload["path"]: the value is not representable in JSON'
+        )
+
+    def test_an_isoformat_string_is_the_way_to_carry_a_timestamp(self):
+        app = _build_app()
+
+        @app.command("info", effect="read_only", help="get info", payload_schema={})
+        def info(ctx):
+            ctx.payload({
+                "timestamp": datetime(2025, 1, 15, 10, 30, 0).isoformat(),
+                "path": str(PurePosixPath("/usr/local/bin")),
+                "count": 42,
+            })
+            return strictcli.outcome()
+
         result = app.test(["info", "--json"])
         parsed = payload(result)
-        assert parsed["timestamp"] == "2025-01-15 10:30:00"
+        assert parsed["timestamp"] == "2025-01-15T10:30:00"
         assert parsed["path"] == "/usr/local/bin"
         assert parsed["count"] == 42
 
