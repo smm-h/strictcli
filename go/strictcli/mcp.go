@@ -187,17 +187,16 @@ func collectMCPToolsFromGroup(group *Group, path []string, toolDefs *[]interface
 }
 
 // buildMCPToolDef builds an MCP tool definition for a single command.
-// The tool name uses underscores (MCP convention) instead of dots.
+// The tool name IS the dotted command path: dots are legal in MCP tool names,
+// and the two sibling implementations have always published them unchanged.
 //
 // The classification sits BESIDE inputSchema, never inside it: it describes
 // the tool, not an argument the caller passes. Same emission rule as the
 // schema dump -- "effect" always, "consequential" only when true (absence
 // means "not consequential").
 func buildMCPToolDef(commandPath string, cmd *Command) map[string]interface{} {
-	// MCP tool names use underscores instead of dots for nested commands
-	toolName := strings.ReplaceAll(commandPath, ".", "_")
 	def := map[string]interface{}{
-		"name":        toolName,
+		"name":        commandPath,
 		"description": cmd.Help,
 		"effect":      cmd.Effect,
 		"inputSchema": buildJSONSchema(cmd),
@@ -236,8 +235,11 @@ func (a *App) handleMCPToolsCall(req mcpRequest) mcpResponse {
 		}
 	}
 
-	// Convert MCP tool name (underscores) back to command path (dots)
-	commandPath := mcpNameToCommandPath(a, toolName)
+	// The tool name is the command path verbatim -- there is no name mangling
+	// to undo, and therefore no ambiguity to guess at. An unresolvable name
+	// reaches Call unchanged and surfaces as a tool-result error naming what
+	// the caller actually sent.
+	commandPath := toolName
 
 	// Extract arguments (may be nil)
 	var callArgs map[string]interface{}
@@ -325,64 +327,6 @@ func (a *App) handleMCPToolsCall(req mcpRequest) mcpResponse {
 			},
 		},
 	}
-}
-
-// mcpNameToCommandPath converts an MCP tool name (underscores for nesting)
-// back to a dot-separated command path. It resolves ambiguity by checking
-// which interpretation matches an actual command in the app's tree.
-//
-// For example, with a group "dns" containing command "zone-list":
-//   - MCP name "dns_zone_list" could be "dns.zone.list" or "dns.zone-list"
-//   - We try all possible splits and return the first that resolves to a command
-func mcpNameToCommandPath(a *App, mcpName string) string {
-	// Fast path: if the name has no underscores, it's a top-level command
-	if !strings.Contains(mcpName, "_") {
-		return mcpName
-	}
-
-	// Try all possible interpretations by splitting underscores into dots or dashes.
-	// We use a recursive approach to try each underscore as either a dot (group separator)
-	// or a dash (within a command/group name).
-	parts := strings.Split(mcpName, "_")
-	result := findValidCommandPath(a, parts, 0, "")
-	if result != "" {
-		return result
-	}
-
-	// Fallback: replace all underscores with dots (original simple behavior)
-	return strings.ReplaceAll(mcpName, "_", ".")
-}
-
-// findValidCommandPath recursively tries to resolve MCP name parts into a
-// valid command path by treating each underscore as either a dot or a dash.
-func findValidCommandPath(a *App, parts []string, idx int, current string) string {
-	if idx >= len(parts) {
-		// Check if current resolves to a command
-		segments := strings.Split(current, ".")
-		route := a.resolveCommand(segments)
-		if route.err == "" && route.cmd != nil {
-			return current
-		}
-		return ""
-	}
-
-	if current == "" {
-		return findValidCommandPath(a, parts, idx+1, parts[idx])
-	}
-
-	// Try dot (group separator)
-	dotPath := findValidCommandPath(a, parts, idx+1, current+"."+parts[idx])
-	if dotPath != "" {
-		return dotPath
-	}
-
-	// Try dash (within-name separator)
-	dashPath := findValidCommandPath(a, parts, idx+1, current+"-"+parts[idx])
-	if dashPath != "" {
-		return dashPath
-	}
-
-	return ""
 }
 
 // writeMCPResponse marshals and writes a JSON-RPC response as a single line.

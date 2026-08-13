@@ -6,10 +6,10 @@
  *
  * Parity: Go mcp.go supplies the canonical error strings ("Parse error",
  * "Method not found: <m>", the three -32602 messages); Python
- * _run_mcp_server is the ground truth for behavior where the siblings
- * diverge -- tool names are dotted command paths (Python), not
- * underscore-mangled (Go), and a non-object JSON line is a -32700 parse
- * error exactly like malformed JSON.
+ * _run_mcp_server is the ground truth for behavior where the siblings once
+ * diverged -- a tool name is the dotted command path (Go's underscore
+ * mangling and its guessing reverse lookup are deleted), and a non-object
+ * JSON line is a -32700 parse error exactly like malformed JSON.
  */
 
 import { createInterface } from "node:readline";

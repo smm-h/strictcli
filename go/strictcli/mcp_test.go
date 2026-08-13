@@ -168,7 +168,7 @@ func TestMCPToolsList(t *testing.T) {
 		t.Fatalf("expected tools array, got %T", result["tools"])
 	}
 
-	// Should have: greet, status, dns_list (hidden/interactive excluded)
+	// Should have: greet, status, dns.list (hidden/interactive excluded)
 	if len(tools) != 3 {
 		t.Fatalf("expected 3 tools, got %d: %v", len(tools), toolNames(tools))
 	}
@@ -179,7 +179,7 @@ func TestMCPToolsList(t *testing.T) {
 		nameSet[toolMap["name"].(string)] = true
 	}
 
-	expectedNames := []string{"greet", "status", "dns_list"}
+	expectedNames := []string{"greet", "status", "dns.list"}
 	for _, name := range expectedNames {
 		if !nameSet[name] {
 			t.Errorf("expected tool %q in tools/list", name)
@@ -318,7 +318,7 @@ func TestMCPToolsCallGroupedCommand(t *testing.T) {
 	), WithEffect(EffectReadOnly))
 
 	resp, err := sendMCPRequest(app, "tools/call", 5, map[string]interface{}{
-		"name": "dns_list",
+		"name": "dns.list",
 		"arguments": map[string]interface{}{
 			"zone": "example.com",
 		},
@@ -709,10 +709,10 @@ func TestMCPNameResolutionDashedCommand(t *testing.T) {
 		StringFlag("filter", "filter zones", Default("all")),
 	), WithEffect(EffectReadOnly))
 
-	// MCP name would be "dns_zone_list" -- should resolve to "dns.zone-list"
-	// not "dns.zone.list" (which doesn't exist)
+	// The tool name IS the command path: a dash inside a command name and a
+	// dot between path segments mean what they say, with nothing to guess at.
 	resp, err := sendMCPRequest(app, "tools/call", 1, map[string]interface{}{
-		"name":      "dns_zone_list",
+		"name":      "dns.zone-list",
 		"arguments": map[string]interface{}{},
 	})
 	if err != nil {
@@ -727,6 +727,37 @@ func TestMCPNameResolutionDashedCommand(t *testing.T) {
 	}
 }
 
+// TestMCPUnderscoreNameIsNotResolved pins the deletion of the reverse lookup
+// and its silent fallback: an underscored name is no longer guessed back into
+// a command path, and the failure is reported under the name the caller sent
+// rather than under a rewritten guess.
+func TestMCPUnderscoreNameIsNotResolved(t *testing.T) {
+	var captured map[string]interface{}
+	app := NewApp("testapp", "1.0.0", "test application")
+	dns := app.Group("dns", "manage DNS")
+	dns.Command("zone-list", "list DNS zones", captureHandler(&captured), WithFlags(
+		StringFlag("filter", "filter zones", Default("all")),
+	), WithEffect(EffectReadOnly))
+
+	resp, err := sendMCPRequest(app, "tools/call", 1, map[string]interface{}{
+		"name":      "dns_zone_list",
+		"arguments": map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("tools/call error: %v", err)
+	}
+
+	result := resp["result"].(map[string]interface{})
+	if _, ok := result["isError"]; !ok {
+		t.Fatalf("expected a tool-result error, got %v", result)
+	}
+	content := result["content"].([]interface{})
+	item := content[0].(map[string]interface{})
+	if item["text"] != "unknown command 'dns_zone_list'" {
+		t.Fatalf("error text = %v, want it to name the sent name", item["text"])
+	}
+}
+
 func TestMCPNameResolutionNestedGroup(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("testapp", "1.0.0", "test application")
@@ -736,9 +767,9 @@ func TestMCPNameResolutionNestedGroup(t *testing.T) {
 		StringFlag("name", "zone name"),
 	), WithEffect(EffectReadOnly))
 
-	// MCP name "dns_zone_create" -> should resolve to "dns.zone.create"
+	// The dotted command path is the tool name, at any nesting depth.
 	resp, err := sendMCPRequest(app, "tools/call", 1, map[string]interface{}{
-		"name": "dns_zone_create",
+		"name": "dns.zone.create",
 		"arguments": map[string]interface{}{
 			"name": "example.com",
 		},
