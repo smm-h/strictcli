@@ -23,6 +23,7 @@ __all__ = [
 ]
 
 import ast
+import calendar
 import contextlib
 import decimal
 import keyword
@@ -1528,6 +1529,221 @@ def _raise_grant_kind_invalid(name: str, grant: str, kind: object):
 _CARRIER_TYPES = (Unsettled, Completed, Response, Spawned)
 
 
+# --- the process trace store ----------------------------------------------
+#
+# The normative specification is docs/process-trace-store.md; the effects
+# contract's §20 carries the two contract items (observational-only, and the
+# best-effort failure carve-out). Nothing below is ever read back into a
+# decision: the framework mints an identifier, appends one line, and composes
+# the identifier into the CHILD's environment. There is no accessor.
+
+_TRACE_PARENT_ENV = "STRICTCLI_TRACE_PARENT"
+
+# Crockford base32, the exact alphabet: no I, L, O or U.
+_CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_CROCKFORD_INDEX = {c: i for i, c in enumerate(_CROCKFORD)}
+_ULID_LEN = 26
+
+_TRACE_PARTITION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}\.jsonl$")
+_TRACE_ROLL_BYTES = 8 * 1024 * 1024
+_TRACE_MARKER_NAME = "write-failure.marker"
+_TRACE_FILE_MODE = 0o600
+_TRACE_DIR_MODE = 0o700
+_MS_PER_HOUR = 3_600_000
+
+
+def _ulid_encode(ms: int, randomness: bytes) -> str:
+    """Encode 48 timestamp bits + 80 random bits as 26 Crockford characters.
+
+    26 characters carry 130 bits, so the 128-bit value is left-padded with two
+    zero bits -- which is exactly why a canonical identifier's first character
+    never exceeds ``7``.
+    """
+    value = (ms << 80) | int.from_bytes(randomness, "big")
+    return "".join(
+        _CROCKFORD[(value >> shift) & 0x1F] for shift in range(125, -1, -5)
+    )
+
+
+def _ulid_mint(ms: int) -> str:
+    """Mint an identifier from this writer's clock plus 80 CSPRNG bits."""
+    return _ulid_encode(ms, os.urandom(10))
+
+
+def _ulid_timestamp(text: object) -> int | None:
+    """Parse under the strict profile; return the millisecond, or None.
+
+    Rejected, never repaired: any length but 26, any character outside the
+    canonical uppercase alphabet (lowercase included -- one identifier must
+    have exactly one spelling), and a 130-bit value that overflows 128 bits.
+    """
+    if not isinstance(text, str) or len(text) != _ULID_LEN:
+        return None
+    value = 0
+    for ch in text:
+        index = _CROCKFORD_INDEX.get(ch)
+        if index is None:
+            return None
+        value = (value << 5) | index
+    if value >> 128:
+        return None
+    return value >> 80
+
+
+def _ulid_valid(text: object) -> bool:
+    return _ulid_timestamp(text) is not None
+
+
+def _trace_store_dir() -> str:
+    """The literal store path. ``~`` is expanded and nothing else is consulted.
+
+    Deliberately NOT derived from XDG_DATA_HOME: two conforming writers that
+    disagreed about the location would produce two stores on one machine, and
+    a chain crossing them would dangle at both ends.
+    """
+    return os.path.join(
+        os.path.expanduser("~"), ".local", "share", "strictcli", "trace"
+    )
+
+
+def _trace_label(ms: int) -> str:
+    """The UTC-hour label for an instant: the partition's range start."""
+    return time.strftime("%Y-%m-%dT%H", time.gmtime((ms // _MS_PER_HOUR) * 3600))
+
+
+def _trace_label_start_ms(label: str) -> int:
+    """The inverse: a label's range start in epoch milliseconds."""
+    return calendar.timegm(time.strptime(label, "%Y-%m-%dT%H")) * 1000
+
+
+def _trace_timestamp(ms: int) -> str:
+    """RFC 3339 in UTC with exactly three fractional digits and a Z suffix."""
+    return "%s.%03dZ" % (
+        time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ms // 1000)),
+        ms % 1000,
+    )
+
+
+def _trace_active_label(store: str, now_ms: int) -> str:
+    """Select the partition to append to, rolling when both conditions hold.
+
+    The greatest-named file is the active partition; a new one is created with
+    O_EXCL when the active file is at least 8 MB AND the current UTC hour is
+    later than its label. Losing the creation race is not an error -- the loser
+    appends to the winner's file.
+    """
+    now_label = _trace_label(now_ms)
+    names = [n for n in os.listdir(store) if _TRACE_PARTITION_RE.match(n)]
+    if not names:
+        _trace_create_partition(store, now_label)
+        return now_label
+    active = max(names)
+    label = active[: -len(".jsonl")]
+    if now_label > label:
+        try:
+            size = os.path.getsize(os.path.join(store, active))
+        except OSError:
+            size = 0
+        if size >= _TRACE_ROLL_BYTES:
+            _trace_create_partition(store, now_label)
+            return now_label
+    return label
+
+
+def _trace_create_partition(store: str, label: str) -> None:
+    try:
+        os.close(
+            os.open(
+                os.path.join(store, label + ".jsonl"),
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                _TRACE_FILE_MODE,
+            )
+        )
+    except FileExistsError:
+        pass  # another writer won the race; append to its file
+
+
+class _TraceIdentity(NamedTuple):
+    """What an entry says about the invocation doing the spawning."""
+
+    app: str
+    version: str
+    command: str | None
+    dry_run: bool
+    machine_mode: bool
+    quiet: bool
+    verbose: bool
+    approve_consequential: bool
+    effect: str
+
+
+def _trace_write_entry(identity: _TraceIdentity) -> str | None:
+    """Append one entry for a real child-process start; return its identifier.
+
+    Returns None when anything at all went wrong: tracing is best-effort by
+    declared design (contract §20.3), so a failure never fails the run, never
+    prints, and is never retried. The first failure leaves a write-once marker.
+    """
+    try:
+        store = _trace_store_dir()
+        os.makedirs(store, mode=_TRACE_DIR_MODE, exist_ok=True)
+        now_ms = int(time.time() * 1000)
+        label = _trace_active_label(store, now_ms)
+        # The clamp invariant: an entry always lies inside its file's range,
+        # which is what makes lookup a binary search over filenames.
+        ms = max(now_ms, _trace_label_start_ms(label))
+        entry_id = _ulid_mint(ms)
+        inherited = os.environ.get(_TRACE_PARENT_ENV)
+        entry = {
+            "id": entry_id,
+            "parent_id": inherited if _ulid_valid(inherited) else None,
+            "app": identity.app,
+            "version": identity.version,
+            "command": identity.command,
+            "dry_run": identity.dry_run,
+            "machine_mode": identity.machine_mode,
+            "quiet": identity.quiet,
+            "verbose": identity.verbose,
+            "approve_consequential": identity.approve_consequential,
+            "effect": identity.effect,
+            "pid": os.getpid(),
+            "spawned_at": _trace_timestamp(ms),
+        }
+        line = json.dumps(entry, separators=(",", ":"), ensure_ascii=False) + "\n"
+        fd = os.open(
+            os.path.join(store, label + ".jsonl"),
+            os.O_WRONLY | os.O_APPEND | os.O_CREAT,
+            _TRACE_FILE_MODE,
+        )
+        try:
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            os.close(fd)
+        return entry_id
+    except Exception:
+        _trace_mark_failure()
+        return None
+
+
+def _trace_mark_failure() -> None:
+    """Create the write-once failure marker. No counter, no retry, no noise."""
+    try:
+        fd = os.open(
+            os.path.join(_trace_store_dir(), _TRACE_MARKER_NAME),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            _TRACE_FILE_MODE,
+        )
+        try:
+            os.write(
+                fd,
+                (_trace_timestamp(int(time.time() * 1000)) + "\n").encode("utf-8"),
+            )
+        finally:
+            os.close(fd)
+    except Exception:
+        pass  # a disk-full condition blinds the marker too; that is accepted
+
+
 class _Effects:
     """The effects handle reached as ``ctx.effects``.
 
@@ -1536,10 +1752,11 @@ class _Effects:
     """
 
     __slots__ = ("_cmd", "_cmd_path", "_dry_run", "_log", "_allowlist",
-                 "_grants", "_mutation_recorded")
+                 "_grants", "_mutation_recorded", "_trace")
 
     def __init__(self, *, cmd: "Command", cmd_path: str, dry_run: bool,
-                 log: _EffectLog, allowlist: tuple) -> None:
+                 log: _EffectLog, allowlist: tuple,
+                 trace: "_TraceIdentity") -> None:
         self._cmd = cmd
         self._cmd_path = cmd_path
         self._dry_run = dry_run
@@ -1547,6 +1764,7 @@ class _Effects:
         self._allowlist = allowlist
         self._grants = {g.name: g for g in cmd.grants}
         self._mutation_recorded = False
+        self._trace = trace
 
     # -- helpers ---------------------------------------------------------
 
@@ -1767,9 +1985,9 @@ class _Effects:
             kind=PROC_SPAWN, verb="spawn", detail=joined, resource=resource,
             skip_if_current=skip_if_current, grant=declared, recorded=False,
         )
+        argv_settled = self._settled_argv(runtime, joined, "spawn")
         proc = subprocess.Popen(
-            self._settled_argv(runtime, joined, "spawn"),
-            cwd=cwd, env=self._merged_env(env),
+            argv_settled, cwd=cwd, env=self._child_env(env),
         )
         return Spawned(pid=proc.pid, _proc=proc, _cmd_path=self._cmd_path)
 
@@ -1967,10 +2185,30 @@ class _Effects:
         merged.update({str(k): str(v) for k, v in env.items()})
         return merged
 
+    def _child_env(self, env):
+        """Compose the child's environment at a real child-process start.
+
+        The handler's ``env`` merge happens first; the framework's ancestry
+        composition is applied AFTER it and wins (contract §2.5), so a handler
+        can neither sever the chain by clearing the variable nor forge a
+        different ancestor by setting it. When the entry could not be written
+        the variable is REMOVED rather than left inherited: a lost record must
+        not silently re-attribute the child to its grandparent.
+        """
+        merged = self._merged_env(env)
+        if merged is None:
+            merged = dict(os.environ)
+        entry_id = _trace_write_entry(self._trace)
+        if entry_id is None:
+            merged.pop(_TRACE_PARENT_ENV, None)
+        else:
+            merged[_TRACE_PARENT_ENV] = entry_id
+        return merged
+
     def _exec_run(self, runtime, joined, cwd, env, check, stream, method):
         argv = self._settled_argv(runtime, joined, method)
         proc = subprocess.run(
-            argv, cwd=cwd, env=self._merged_env(env),
+            argv, cwd=cwd, env=self._child_env(env),
             capture_output=not stream,
         )
         if stream:
@@ -6620,6 +6858,17 @@ class App:
             dry_run=dry_run,
             log=self._effect_log,
             allowlist=self._proc_observe_allowlist,
+            trace=_TraceIdentity(
+                app=self.name,
+                version=self.version,
+                command=cmd_path,
+                dry_run=dry_run,
+                machine_mode=self._last_json,
+                quiet=self._last_quiet,
+                verbose=self._last_verbose,
+                approve_consequential=self._last_approve_consequential,
+                effect=cmd.effect,
+            ),
         )
 
     def _begin_dispatch(self) -> None:
