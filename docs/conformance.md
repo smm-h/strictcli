@@ -327,7 +327,7 @@ If the new case has output that is legitimately language-specific, add an `ackno
 
 ## Architecture notes
 
-- The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 10 automated checks.
+- The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 11 automated checks.
 - CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 755 test cases across all 3 targets (754 on Go, whose type system cannot express the bad-return case).
 - The conformance tool itself is built with strictcli (dogfooding the check system). Its checks are declared in `conformance/conformance_tool/.strictcli/checks.toml`.
 - Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, and `check_schema_parity.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.
