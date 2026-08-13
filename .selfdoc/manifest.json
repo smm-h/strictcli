@@ -306,8 +306,8 @@
         },
         {
           "level": 3,
-          "text": "Full check gate (all ten checks)",
-          "anchor": "full-check-gate-all-ten-checks"
+          "text": "Full check gate (all eleven checks)",
+          "anchor": "full-check-gate-all-eleven-checks"
         },
         {
           "level": 3,
@@ -8392,6 +8392,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-13T19:29:30.577374+00:00",
+  "last_gen": "2026-08-13T21:28:19.146562+00:00",
   "theme": "minimal"
 }
