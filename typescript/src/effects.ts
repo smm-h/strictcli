@@ -54,6 +54,7 @@ import {
 	errEffectRunFailed,
 	errEffectRunNotAllowlisted,
 } from "./errors.js";
+import { type TraceIdentity, traceChildEnv } from "./trace.js";
 
 // --- Effect kinds ---
 
@@ -638,6 +639,7 @@ export class Effects implements MutatingEffects {
 	private readonly dryRun: boolean;
 	private readonly log: EffectLog;
 	private readonly allowlist: readonly (readonly string[])[];
+	private readonly trace: TraceIdentity;
 	private mutationRecorded = false;
 
 	constructor(
@@ -645,6 +647,7 @@ export class Effects implements MutatingEffects {
 		dryRun: boolean,
 		log: EffectLog,
 		allowlist: readonly (readonly string[])[],
+		trace: TraceIdentity,
 	) {
 		this.cmdPath = cmd.cmdPath;
 		this.effect = cmd.effect;
@@ -652,6 +655,7 @@ export class Effects implements MutatingEffects {
 		this.dryRun = dryRun;
 		this.log = log;
 		this.allowlist = allowlist;
+		this.trace = trace;
 	}
 
 	// -- helpers ---------------------------------------------------------
@@ -1004,7 +1008,7 @@ export class Effects implements MutatingEffects {
 		const child = spawnConcurrent(
 			this.settledArgv(runtime, "spawn"),
 			opts.cwd,
-			this.mergedEnv(opts.env),
+			traceChildEnv(this.mergedEnv(opts.env), this.trace),
 		);
 		return new SpawnedResult(child.pid, child, this.cmdPath, joined);
 	}
@@ -1278,7 +1282,7 @@ export class Effects implements MutatingEffects {
 		const stream = opts.stream === true;
 		const res = spawnSync(argv[0] as string, argv.slice(1), {
 			cwd: opts.cwd,
-			env: this.mergedEnv(opts.env),
+			env: traceChildEnv(this.mergedEnv(opts.env), this.trace),
 			stdio: stream ? "inherit" : "pipe",
 			maxBuffer: 256 * 1024 * 1024,
 		});

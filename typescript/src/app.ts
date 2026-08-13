@@ -1336,6 +1336,7 @@ export class AppImpl implements App {
 						outcome.cmd,
 						outcome.cmdPath,
 						outcome.reserved.dryRun,
+						outcome.reserved,
 					),
 					outcome.cmd.name,
 					(outcome.cmd.def as PassthroughDef<string>).payloadSchema ?? null,
@@ -1378,6 +1379,7 @@ export class AppImpl implements App {
 						outcome.cmd,
 						outcome.cmdPath,
 						outcome.reserved.dryRun,
+						outcome.reserved,
 					),
 					outcome.cmd.name,
 					(outcome.cmd.def as AnyCommand).payloadSchema ?? null,
@@ -1577,6 +1579,7 @@ export class AppImpl implements App {
 		cmd: RegisteredCommand,
 		cmdPath: string,
 		dryRun: boolean,
+		reserved: ReservedFlags,
 	): Effects {
 		const def = cmd.def as {
 			readonly effect: Effect;
@@ -1587,6 +1590,17 @@ export class AppImpl implements App {
 			dryRun,
 			this.effectLogState,
 			this.procObserveAllowlist,
+			{
+				app: this.name,
+				version: this.version,
+				command: cmdPath,
+				dryRun,
+				machineMode: reserved.json,
+				quiet: reserved.quiet,
+				verbose: reserved.verbose,
+				approveConsequential: reserved.approveConsequential,
+				effect: def.effect,
+			},
 		);
 	}
 

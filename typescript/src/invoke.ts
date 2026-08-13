@@ -332,7 +332,7 @@ export async function invokeApp(
 			false,
 		),
 		reserved,
-		app.armEffects(cmd, commandPath, false),
+		app.armEffects(cmd, commandPath, false, reserved),
 		cmd.name,
 		def.payloadSchema ?? null,
 	);
@@ -398,7 +398,7 @@ async function invokePassthrough(
 			false,
 		),
 		reserved,
-		app.armEffects(cmd, commandPath, false),
+		app.armEffects(cmd, commandPath, false, reserved),
 		cmd.name,
 		(cmd.def as PassthroughDef<string>).payloadSchema ?? null,
 	);
