@@ -239,9 +239,13 @@ function toolFixture() {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("deploy", {
+			payloadSchema: {},
 			help: "deploy the app",
 			flags: { target: flag("target", t.str, { help: "deploy target" }) },
-			handler: (args) => outcome(0, { deployed: args.target }),
+			handler: (args, ctx) => {
+				ctx.payload({ deployed: args.target });
+				return outcome(0);
+			},
 		}),
 	);
 	app.command(
@@ -366,21 +370,33 @@ function consentApp() {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("look", {
+			payloadSchema: {},
 			help: "look at things",
-			handler: () => outcome(0, { looked: true }),
+			handler: (_args, ctx) => {
+				ctx.payload({ looked: true });
+				return outcome(0);
+			},
 		}),
 	);
 	app.command(
 		defineMutatingCommand("build", {
+			payloadSchema: {},
 			help: "build things",
-			handler: () => outcome(0, { built: true }),
+			handler: (_args, ctx) => {
+				ctx.payload({ built: true });
+				return outcome(0);
+			},
 		}),
 	);
 	app.command(
 		defineMutatingCommand("release", {
+			payloadSchema: {},
 			help: "release things",
 			consequential: true,
-			handler: () => outcome(0, { released: true }),
+			handler: (_args, ctx) => {
+				ctx.payload({ released: true });
+				return outcome(0);
+			},
 		}),
 	);
 	return app;

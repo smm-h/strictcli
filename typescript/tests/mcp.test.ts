@@ -294,8 +294,12 @@ test("mcp: tools/call returns outcome data as JSON text", async () => {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("info", {
+			payloadSchema: {},
 			help: "get info",
-			handler: () => outcome(0, { version: "1.0.0", status: "ok" }),
+			handler: (_args, ctx) => {
+				ctx.payload({ version: "1.0.0", status: "ok" });
+				return outcome(0);
+			},
 		}),
 	);
 	const resp = await sendOne(app, {
@@ -318,15 +322,17 @@ test("mcp: tools/call passes arguments through to the handler", async () => {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("deploy", {
+			payloadSchema: {},
 			help: "deploy",
 			flags: {
 				target: flag("target", t.str, { help: "deploy target" }),
 				count: flag("count", t.int, { help: "instance count", default: 1n }),
 			},
-			handler: (args) => {
+			handler: (args, ctx) => {
 				captured.target = args.target;
 				captured.count = args.count;
-				return outcome(0, { deployed: args.target, count: args.count });
+				ctx.payload({ deployed: args.target, count: args.count });
+				return outcome(0);
 			},
 		}),
 	);
@@ -382,6 +388,7 @@ test("mcp: tools/call resolves dotted grouped-command names", async () => {
 	const grp = app.group("db", { help: "database commands" });
 	grp.command(
 		defineReadOnlyCommand("migrate", {
+			payloadSchema: {},
 			help: "run migrations",
 			flags: {
 				sim_run: flag("sim-run", t.bool, {
@@ -389,7 +396,10 @@ test("mcp: tools/call resolves dotted grouped-command names", async () => {
 					default: false,
 				}),
 			},
-			handler: (args) => outcome(0, { migrated: true, sim_run: args.sim_run }),
+			handler: (args, ctx) => {
+				ctx.payload({ migrated: true, sim_run: args.sim_run });
+				return outcome(0);
+			},
 		}),
 	);
 	const resp = await sendOne(app, {
@@ -489,8 +499,12 @@ test("mcp: omitted arguments key defaults to an empty object", async () => {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("noop", {
+			payloadSchema: {},
 			help: "does nothing",
-			handler: () => outcome(0, "ok"),
+			handler: (_args, ctx) => {
+				ctx.payload("ok");
+				return outcome(0);
+			},
 		}),
 	);
 	const resp = await sendOne(app, {
@@ -585,11 +599,13 @@ test("mcp: full conversation: initialize, notification, list, call", async () =>
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("greet", {
+			payloadSchema: {},
 			help: "greet someone",
 			flags: { name: flag("name", t.str, { help: "person to greet" }) },
-			handler: (args) => {
+			handler: (args, ctx) => {
 				captured.name = args.name;
-				return outcome(0, { greeting: `hello ${args.name}` });
+				ctx.payload({ greeting: `hello ${args.name}` });
+				return outcome(0);
 			},
 		}),
 	);
@@ -657,9 +673,13 @@ test("mcp: deeply nested commands list and call by dotted path", async () => {
 	const grp2 = grp1.group("storage", { help: "storage commands" });
 	grp2.command(
 		defineReadOnlyCommand("upload", {
+			payloadSchema: {},
 			help: "upload a file",
 			flags: { bucket: flag("bucket", t.str, { help: "target bucket" }) },
-			handler: (args) => outcome(0, { uploaded_to: args.bucket }),
+			handler: (args, ctx) => {
+				ctx.payload({ uploaded_to: args.bucket });
+				return outcome(0);
+			},
 		}),
 	);
 
@@ -733,8 +753,12 @@ test("mcp: successful calls carry no isError key", async () => {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("ok", {
+			payloadSchema: {},
 			help: "always succeeds",
-			handler: () => outcome(0, "success"),
+			handler: (_args, ctx) => {
+				ctx.payload("success");
+				return outcome(0);
+			},
 		}),
 	);
 	const resp = await sendOne(app, {
@@ -752,15 +776,23 @@ function consentApp(): App {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("look", {
+			payloadSchema: {},
 			help: "look at things",
-			handler: () => outcome(0, { looked: true }),
+			handler: (_args, ctx) => {
+				ctx.payload({ looked: true });
+				return outcome(0);
+			},
 		}),
 	);
 	app.command(
 		defineMutatingCommand("release", {
+			payloadSchema: {},
 			help: "release things",
 			consequential: true,
-			handler: () => outcome(0, { released: true }),
+			handler: (_args, ctx) => {
+				ctx.payload({ released: true });
+				return outcome(0);
+			},
 		}),
 	);
 	return app;

@@ -243,6 +243,7 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 		readonly consequential?: boolean;
 		readonly dryRunSupported?: boolean;
 		readonly dryRunUnsupportedReason?: string;
+		readonly payloadSchema?: Readonly<Record<string, unknown>>;
 		readonly grants?: readonly Grant[];
 		readonly forwarding?: Forwarding;
 	};
@@ -263,6 +264,12 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 	if (carrier.dryRunSupported === false) {
 		d.dry_run_supported = false;
 		d.dry_run_unsupported_reason = carrier.dryRunUnsupportedReason;
+	}
+	// The payload contract, published verbatim (contract §19.5): the inline
+	// literal is the sole canonical artifact, so the dump carries it as written
+	// rather than a re-rendering of it.
+	if (carrier.payloadSchema !== undefined) {
+		d.payload_schema = carrier.payloadSchema;
 	}
 	if (rc.kind === "passthrough") {
 		d.passthrough = true;

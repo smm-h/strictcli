@@ -467,7 +467,7 @@ test("registry: runtime keys of factory-built carriers match declaration order",
 	const fs = api.flagSet("common", { target: f });
 	assert.deepEqual(Object.keys(fs), runtimeMembers("FlagSet"));
 	const mg = api.mutexGroup({
-		json: api.flag("json", api.t.bool, { help: "h", default: false }),
+		as_json: api.flag("as-json", api.t.bool, { help: "h", default: false }),
 		plain: api.flag("plain", api.t.bool, { help: "h", default: false }),
 	});
 	assert.deepEqual(Object.keys(mg), runtimeMembers("MutexGroup"));

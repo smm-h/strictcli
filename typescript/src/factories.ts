@@ -75,6 +75,7 @@ import {
 	errFlagHelpEmpty,
 	errFlagIntDefaultTypeMismatch,
 	errFlagNameConsentReserved,
+	errFlagNameJsonReserved,
 	errFlagNameReservedByFramework,
 	errFlagNameYesBanned,
 	errFlagNoPrefixReserved,
@@ -313,6 +314,15 @@ export const RESERVED_FRAMEWORK_FLAG_NAMES: ReadonlySet<string> = new Set([
 export const BANNED_FLAG_NAMES: ReadonlySet<string> = new Set(["yes"]);
 
 /**
+ * The machine-mode flag name, reserved on the SAME unconditional every-level
+ * tier as the quartet (contract §7.1's 2026-08-13 amendment). It is NOT a
+ * fifth member of the quartet -- the four are the effects regime's own flags
+ * and are named as a set throughout the contract -- so it carries its own
+ * reserved-name message and its own pre-scan token entry.
+ */
+export const RESERVED_MACHINE_FLAG_NAME = "json";
+
+/**
  * The programmatic consent PARAMETER name, reserved on both the flag surface
  * and the arg surface at every level.
  *
@@ -343,6 +353,10 @@ function validateFlagConfig(
 	}
 	if (RESERVED_FRAMEWORK_FLAG_NAMES.has(name)) {
 		throw new RegistrationError(errFlagNameReservedByFramework(name));
+	}
+	// The machine-mode flag, on the same unconditional tier (§7.1's amendment).
+	if (name === RESERVED_MACHINE_FLAG_NAME) {
+		throw new RegistrationError(errFlagNameJsonReserved());
 	}
 	// The consent parameter name, reserved on the flag surface too.
 	if (name === RESERVED_CONSENT_PARAM_NAME) {
@@ -837,6 +851,14 @@ export interface CommandDef<
 	readonly dryRunSupported: boolean;
 	/** Mandatory when dryRunSupported is false; shown in help and the refusal. */
 	readonly dryRunUnsupportedReason: string | undefined;
+	/**
+	 * The command's machine payload contract (contract §19.5): an inline JSON
+	 * Schema literal, registered as written. Absence means the command cannot
+	 * produce a payload -- ctx.payload is then a call-time hard error. The
+	 * literal is stored opaquely at this round; validating a payload against it
+	 * is a later item.
+	 */
+	readonly payloadSchema: Readonly<Record<string, unknown>> | undefined;
 	readonly flags: F;
 	readonly args: A;
 	readonly flagSets: FS;
@@ -864,6 +886,7 @@ export interface AnyCommand {
 	readonly consequential: boolean;
 	readonly dryRunSupported: boolean;
 	readonly dryRunUnsupportedReason: string | undefined;
+	readonly payloadSchema: Readonly<Record<string, unknown>> | undefined;
 	readonly flags: FlagMap;
 	readonly args: readonly AnyArg[];
 	readonly flagSets: readonly AnyFlagSet[];
@@ -914,6 +937,12 @@ export interface ReadOnlyCommandSpec<
 	 */
 	readonly dryRunSupported?: boolean;
 	readonly dryRunUnsupportedReason?: string;
+	/**
+	 * The command's machine payload contract (contract §19.5): the inline JSON
+	 * Schema literal a payload supplied through ctx.payload is registered
+	 * against. A command that declares none cannot produce a payload.
+	 */
+	readonly payloadSchema?: Readonly<Record<string, unknown>>;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
@@ -953,6 +982,12 @@ export interface MutatingCommandSpec<
 	readonly dryRunSupported?: boolean;
 	/** Mandatory when dryRunSupported is false; shown in help and the refusal. */
 	readonly dryRunUnsupportedReason?: string;
+	/**
+	 * The command's machine payload contract (contract §19.5): the inline JSON
+	 * Schema literal a payload supplied through ctx.payload is registered
+	 * against. A command that declares none cannot produce a payload.
+	 */
+	readonly payloadSchema?: Readonly<Record<string, unknown>>;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly interactive?: boolean;
@@ -1253,6 +1288,7 @@ function buildCommandDef<
 		consequential: spec.consequential ?? false,
 		dryRunSupported: spec.dryRunSupported ?? true,
 		dryRunUnsupportedReason: spec.dryRunUnsupportedReason,
+		payloadSchema: spec.payloadSchema,
 		flags,
 		args,
 		flagSets,
@@ -1349,6 +1385,8 @@ export interface PassthroughDef<N extends string, C = MutatingContext> {
 	/** Declared exactly as on an ordinary command. */
 	readonly dryRunSupported: boolean;
 	readonly dryRunUnsupportedReason: string | undefined;
+	/** Declared exactly as on an ordinary command (contract §19.5). */
+	readonly payloadSchema: Readonly<Record<string, unknown>> | undefined;
 	readonly handler: PassthroughHandler<C>;
 	readonly tags: readonly string[];
 	readonly hidden: boolean;
@@ -1362,6 +1400,7 @@ interface PassthroughSpec<C> {
 	readonly consequential?: boolean;
 	readonly dryRunSupported?: boolean;
 	readonly dryRunUnsupportedReason?: string;
+	readonly payloadSchema?: Readonly<Record<string, unknown>>;
 	readonly tags?: readonly string[];
 	readonly hidden?: boolean;
 	readonly grants?: readonly Grant[];
@@ -1393,6 +1432,7 @@ function buildPassthroughDef<N extends string, C>(
 		consequential: spec.consequential ?? false,
 		dryRunSupported: spec.dryRunSupported ?? true,
 		dryRunUnsupportedReason: spec.dryRunUnsupportedReason,
+		payloadSchema: spec.payloadSchema,
 		handler: spec.handler,
 		tags,
 		hidden: spec.hidden ?? false,

@@ -1511,11 +1511,41 @@ function configSetFlag(
 
 // --- config show handler ---
 
-function configShowHandler(
-	app: AppImpl,
-	useJson: boolean,
-	ctx: Context,
-): number {
+/**
+ * Recursively sorts object keys, matching Go's map marshaling. Used by the
+ * framework's own machine payloads so the three implementations emit
+ * byte-identical documents; a consumer's payload is emitted as supplied.
+ */
+function deepSorted(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map(deepSorted);
+	}
+	if (typeof value === "object" && value !== null) {
+		const src = value as Record<string, unknown>;
+		const out: Record<string, unknown> = {};
+		for (const key of Object.keys(src).sort()) {
+			out[key] = deepSorted(src[key]);
+		}
+		return out;
+	}
+	return value;
+}
+
+/**
+ * config show's machine payload contract (contract §19.5): one object keyed by
+ * flag/config-field name, plus the "__infrastructure__" entry. The keys are
+ * dynamic, so the declaration names the container only. Framework-owned
+ * literal, byte-identical across the three implementations.
+ */
+const CONFIG_SHOW_PAYLOAD_SCHEMA: Readonly<Record<string, unknown>> = {
+	type: "object",
+};
+
+function configShowHandler(app: AppImpl, ctx: Context): number {
+	// --json is framework-owned (contract §19.1): machine mode is read off the
+	// Context and the object below is this command's payload, not a
+	// locally-flagged print.
+	const useJson = ctx.json;
 	if (app.configParseErr !== undefined) {
 		ctx.error(`error: ${app.configParseErr}`);
 		return 1;
@@ -1599,7 +1629,10 @@ function configShowHandler(
 			}
 			result.__infrastructure__ = infra;
 		}
-		ctx.info(jsonDumpsPy(result, 2, true));
+		// Sorted keys at every level: the three implementations build this
+		// object in three orders (Go marshals a map, which sorts recursively),
+		// and the payload is compared byte-for-byte by conformance.
+		ctx.payload(deepSorted(result));
 		return 0;
 	}
 
@@ -1714,21 +1747,19 @@ export function registerConfigGroup(app: AppImpl): void {
 
 	install(
 		defineFrameworkCommand("show", "read_only", {
-			help: "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table or --json for a machine-readable object carrying each entry's type, default and help text.",
-			mutex: [
-				mutexGroup({
-					plain: flag("plain", t.bool, {
-						help: "Display config values in a human-readable table format",
-						default: false,
-					}),
-					json: flag("json", t.bool, {
-						help: "Display config values as a JSON object with source metadata",
-						default: false,
-					}),
+			help: "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table; the framework-owned --json yields the same information as a machine-readable object carrying each entry's type, default and help text.",
+			// --plain is the only local flag left: the machine form moved to the
+			// framework-owned --json (contract §7.5's sweep box), which cannot
+			// be declared here, so the two-flag mutex group went with it.
+			flags: {
+				plain: flag("plain", t.bool, {
+					help: "Display config values in a human-readable table format",
+					default: false,
 				}),
-			],
-			handler: markFrameworkHandler((args: { json: boolean }, ctx: Context) =>
-				configShowHandler(app, args.json, ctx),
+			},
+			payloadSchema: CONFIG_SHOW_PAYLOAD_SCHEMA,
+			handler: markFrameworkHandler((_args: unknown, ctx: Context) =>
+				configShowHandler(app, ctx),
 			) as never,
 		}),
 	);

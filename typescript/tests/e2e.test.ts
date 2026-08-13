@@ -324,11 +324,15 @@ test("e2e 12: data outcome prints one compact JSON line", async () => {
 	});
 	app.command(
 		defineReadOnlyCommand("run", {
+			payloadSchema: {},
 			help: "Return a data-only outcome",
-			handler: () => outcome(0, { count: 3, name: "strictcli" }),
+			handler: (_args, ctx) => {
+				ctx.payload({ count: 3, name: "strictcli" });
+				return outcome(0);
+			},
 		}),
 	);
-	const r = await app.test(["run"]);
+	const r = await app.test(["run", "--json"]);
 	assert.equal(r.stdout, '{"count":3,"name":"strictcli"}\n');
 	assert.equal(r.stderr, "");
 	assert.equal(r.exitCode, 0);

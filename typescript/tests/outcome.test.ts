@@ -10,19 +10,18 @@ import {
 // --- Branding ---
 
 test("outcome: factory mints, forged shapes are rejected", () => {
-	const o = outcome(3, { ok: true });
+	const o = outcome(3);
 	assert.equal(isOutcome(o), true);
 	// Structural clones are NOT outcomes -- only the factory mints.
-	assert.equal(isOutcome({ exitCode: 3, data: { ok: true } }), false);
+	assert.equal(isOutcome({ exitCode: 3 }), false);
 	assert.equal(isOutcome({ ...o }), false);
 	assert.equal(isOutcome(null), false);
 	assert.equal(isOutcome(3), false);
 });
 
-test("outcome: defaults to exit 0 with no data, and is frozen", () => {
+test("outcome: defaults to exit 0 and is frozen", () => {
 	const o = outcome();
 	assert.equal(o.exitCode, 0);
-	assert.equal(o.data, undefined);
 	assert.equal(Object.isFrozen(o), true);
 });
 
@@ -41,36 +40,19 @@ test("outcome: non-integer exit codes are hard errors", () => {
 
 // --- interpretHandlerReturn: permitted returns ---
 
-test("interpretHandlerReturn: undefined means exit 0, no data", () => {
-	assert.deepEqual(interpretHandlerReturn(undefined), {
-		exitCode: 0,
-		hasData: false,
-		data: undefined,
-	});
+test("interpretHandlerReturn: undefined means exit 0", () => {
+	assert.deepEqual(interpretHandlerReturn(undefined), { exitCode: 0 });
 });
 
 test("interpretHandlerReturn: integer numbers are exit codes", () => {
-	assert.deepEqual(interpretHandlerReturn(3), {
-		exitCode: 3,
-		hasData: false,
-		data: undefined,
-	});
+	assert.deepEqual(interpretHandlerReturn(3), { exitCode: 3 });
 	assert.equal(interpretHandlerReturn(0).exitCode, 0);
 	assert.equal(interpretHandlerReturn(-1).exitCode, -1);
 });
 
-test("interpretHandlerReturn: outcome carries exit code and data", () => {
-	const withData = interpretHandlerReturn(outcome(2, { ok: false }));
-	assert.deepEqual(withData, {
-		exitCode: 2,
-		hasData: true,
-		data: { ok: false },
-	});
-	const exitOnly = interpretHandlerReturn(outcome(3));
-	assert.deepEqual(exitOnly, { exitCode: 3, hasData: false, data: undefined });
-	// null data means "no data", matching Python's `data is None` and Go's nil.
-	const nullData = interpretHandlerReturn(outcome(0, null));
-	assert.equal(nullData.hasData, false);
+test("interpretHandlerReturn: outcome carries the exit code", () => {
+	assert.deepEqual(interpretHandlerReturn(outcome(2)), { exitCode: 2 });
+	assert.deepEqual(interpretHandlerReturn(outcome(3)), { exitCode: 3 });
 });
 
 // --- interpretHandlerReturn: hard errors ---

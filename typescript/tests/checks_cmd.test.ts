@@ -227,7 +227,6 @@ test("check with no flags shows the command help (Python branch order)", async (
 		"  --tag <str>                                Tag DSL expression to select checks (e.g. 'changelog & !quality') [default: ]\n" +
 		"  --name <str>                               Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*') [default: ]\n" +
 		"  --list, --no-list                          List all registered checks with their tags and exit without running [default: false]\n" +
-		"  --json, --no-json                          Output check results as machine-readable JSON instead of human text [default: false]\n" +
 		"  --ignore-warnings, --no-ignore-warnings    Treat warn-severity results as passing so they do not cause nonzero exit [default: false]\n";
 	const bare = await mirrorApp().test(["check"]);
 	assert.equal(bare.exitCode, 0);
@@ -422,8 +421,8 @@ test("a global flag colliding with a check flag is dropped from the command", as
 		version: "1",
 		help: "h",
 		flags: {
-			json: flag("json", t.bool, {
-				help: "Global JSON toggle",
+			all: flag("all", t.bool, {
+				help: "Global all toggle",
 				default: false,
 			}),
 		},
@@ -431,11 +430,13 @@ test("a global flag colliding with a check flag is dropped from the command", as
 	});
 	app.errorCheck("a", (_c, r) => r.passed("ok"));
 	app.setCheckContext(() => CTX);
-	// The candidate `json` check flag is dropped; the global's value reaches
+	// The candidate `all` check flag is dropped; the global's value reaches
 	// the handler under the same key.
 	const human = await app.test(["check", "--all"]);
 	assert.equal(human.exitCode, 0);
 	assert.match(human.stdout, /PASS {2}a/);
+	// The machine output is the command's payload, reached through the
+	// framework-owned --json (contract §7.5's sweep box).
 	const asJson = await app.test(["--json", "check", "--all"]);
 	assert.equal(asJson.exitCode, 0);
 	assert.match(asJson.stdout, /"name":"a"/);

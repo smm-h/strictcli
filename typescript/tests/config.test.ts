@@ -392,14 +392,16 @@ test("config show --plain source attribution (config vs default), byte-exact", a
 	);
 });
 
-test("config show --json output, byte-exact (sorted keys, indent 2)", async () => {
+test("config show --json output, byte-exact (the payload, sorted keys)", async () => {
 	const { dir } = freshXdg();
 	writeFileSync(join(dir, "config.json"), '{"count": 10}\n');
 	const r = await basicApp().test(["config", "show", "--json"]);
 	assert.equal(r.exitCode, 0);
+	// The indented hand-rolled object is gone: this is the command's machine
+	// payload now (contract §7.5's sweep box), one compact line.
 	assert.equal(
 		r.stdout,
-		'{\n  "count": {\n    "source": "config",\n    "value": 10\n  },\n  "name": {\n    "source": "default",\n    "value": "world"\n  }\n}\n',
+		'{"count":{"source":"config","value":10},"name":{"source":"default","value":"world"}}\n',
 	);
 });
 
@@ -437,17 +439,17 @@ test("config set: unknown key / bad int / bad bool errors", async () => {
 	assert.match(r.stderr, /^config set: key 'debug': /);
 });
 
-test("config show without flags / with both flags: mutex enforcement", async () => {
+test("config show without flags prints the table; --plain --json is legal", async () => {
 	freshXdg();
+	// The old "one of --plain, --json is required" mutex is gone with the local
+	// --json flag: --json is framework-owned now (contract §7.5's sweep box),
+	// so it cannot take part in a command-local mutex group.
 	let r = await basicApp().test(["config", "show"]);
-	assert.equal(r.exitCode, 1);
-	assert.equal(
-		r.stderr,
-		"error: one of --plain, --json is required\ntry 'myapp config show --help'\n",
-	);
+	assert.equal(r.exitCode, 0);
+	assert.match(r.stdout, /name = /);
 	r = await basicApp().test(["config", "show", "--plain", "--json"]);
-	assert.equal(r.exitCode, 1);
-	assert.match(r.stderr, /mutually exclusive/);
+	assert.equal(r.exitCode, 0);
+	assert.match(r.stdout, /"source"/);
 });
 
 test("parse-time loading: late-written config is honored", async () => {
@@ -1080,7 +1082,7 @@ test("config fields: show --plain and --json render the Config fields section, b
 	assert.equal(json.exitCode, 0);
 	assert.equal(
 		json.stdout,
-		'{\n  "api.key": {\n    "help": "API key",\n    "required": true,\n    "source": "config",\n    "type": "str",\n    "value": "sekrit"\n  },\n  "port": {\n    "default": 8080,\n    "help": "server port",\n    "required": false,\n    "source": "default",\n    "type": "int",\n    "value": 8080\n  }\n}\n',
+		'{"api.key":{"help":"API key","required":true,"source":"config","type":"str","value":"sekrit"},"port":{"default":8080,"help":"server port","required":false,"source":"default","type":"int","value":8080}}\n',
 	);
 });
 
@@ -1136,7 +1138,7 @@ test("field-flag coexist: show --json renders colliding key once (flag entry sha
 	const r = await coexistApp().test(["config", "show", "--json"]);
 	assert.equal(r.exitCode, 0);
 	assert.ok(r.stdout.includes('"deployed"'));
-	assert.ok(r.stdout.includes('"source": "config"'));
+	assert.ok(r.stdout.includes('"source":"config"'));
 	assert.ok(!r.stdout.includes('"type"'));
 });
 

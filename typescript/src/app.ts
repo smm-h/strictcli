@@ -53,6 +53,7 @@ import {
 import { confirmConsequential } from "./confirm.js";
 import {
 	Context,
+	contextPayload,
 	type InfraAccess,
 	type ReservedFlags,
 	type Writer,
@@ -94,6 +95,7 @@ import {
 	errDeprecatedNameEmpty,
 	errDryRunAborted,
 	errFlagConnectionEnvUndeclared,
+	errFlagNameJsonReserved,
 	errFlagNameReservedByFramework,
 	errFlagNameYesBanned,
 	errFrameworkInternalHandlerForeign,
@@ -126,6 +128,7 @@ import {
 	type PassthroughDef,
 	pyRepr,
 	RESERVED_FRAMEWORK_FLAG_NAMES,
+	RESERVED_MACHINE_FLAG_NAME,
 	type ReadOnlyCommandSpec,
 	validateAndDedupTags,
 } from "./factories.js";
@@ -406,6 +409,7 @@ export const RESERVED_GLOBAL_SHORT_NAMES: ReadonlySet<string> = new Set([
 export const RESERVED_GLOBAL_FLAG_NAMES: ReadonlySet<string> = new Set([
 	...RESERVED_GLOBAL_SHORT_NAMES,
 	...RESERVED_FRAMEWORK_FLAG_NAMES,
+	RESERVED_MACHINE_FLAG_NAME,
 ]);
 
 /**
@@ -460,6 +464,7 @@ export function defineFrameworkCommand(
 		readonly args?: readonly AnyArg[];
 		readonly mutex?: readonly AnyMutexGroup[];
 		readonly interactive?: boolean;
+		readonly payloadSchema?: Readonly<Record<string, unknown>>;
 		readonly handler: (
 			args: never,
 			ctx: never,
@@ -839,6 +844,11 @@ export class AppImpl implements App {
 				// message for any other construction route.
 				throw new RegistrationError(errFlagNameReservedByFramework(f.name));
 			}
+			if (f.name === RESERVED_MACHINE_FLAG_NAME) {
+				// Likewise unreachable through flag(); the machine-mode flag is
+				// banned on the same unconditional tier (§7.1's amendment).
+				throw new RegistrationError(errFlagNameJsonReserved());
+			}
 			if (BANNED_FLAG_NAMES.has(f.name)) {
 				// Likewise unreachable through flag(); kept for parity with the
 				// quartet's own belt-and-braces check on this path.
@@ -1215,7 +1225,7 @@ export class AppImpl implements App {
 			stdout: stdoutChunks.join(""),
 			stderr: stderrChunks.join(""),
 			exitCode: r.exitCode,
-			...(r.hasData ? { data: r.data } : {}),
+			...(r.hasPayload ? { data: r.payload } : {}),
 		};
 	}
 
@@ -1229,12 +1239,12 @@ export class AppImpl implements App {
 		const checkErr = validateCheckRegistrations(this.checks);
 		if (checkErr !== undefined) {
 			err.write(`error: ${checkErr}\n`);
-			return { exitCode: 1, hasData: false, data: undefined };
+			return { exitCode: 1, hasPayload: false, payload: undefined };
 		}
 		const tagErr = this.validateTagContracts();
 		if (tagErr !== undefined) {
 			err.write(`error: ${tagErr}\n`);
-			return { exitCode: 1, hasData: false, data: undefined };
+			return { exitCode: 1, hasPayload: false, payload: undefined };
 		}
 
 		const outcome = doParse(this, argv, { config: makeConfigProvider(this) });
@@ -1252,37 +1262,37 @@ export class AppImpl implements App {
 					text = formatCommandHelp(this, target.cmd, prefix);
 				}
 				out.write(`${text}\n`);
-				return { exitCode: 0, hasData: false, data: undefined };
+				return { exitCode: 0, hasPayload: false, payload: undefined };
 			}
 			case "version":
 				out.write(`${outcome.text}\n`);
-				return { exitCode: 0, hasData: false, data: undefined };
+				return { exitCode: 0, hasPayload: false, payload: undefined };
 			case "dump-schema": {
 				let path: string;
 				try {
 					path = writeSchema(this);
 				} catch (e) {
 					err.write(`error: ${(e as Error).message}\n`);
-					return { exitCode: 1, hasData: false, data: undefined };
+					return { exitCode: 1, hasPayload: false, payload: undefined };
 				}
 				out.write(`${path}\n`);
-				return { exitCode: 0, hasData: false, data: undefined };
+				return { exitCode: 0, hasPayload: false, payload: undefined };
 			}
 			case "mcp":
 				if (mode === "test") {
 					// Python's in-process test surface (the divergence ground truth).
 					err.write("error: --mcp requires interactive stdin/stdout\n");
-					return { exitCode: 1, hasData: false, data: undefined };
+					return { exitCode: 1, hasPayload: false, payload: undefined };
 				}
 				// Run mode: serve MCP over stdin and this dispatch's stdout until
 				// EOF, then exit 0 (Python: serve_mcp() then sys.exit(0)).
 				await serveMcp(this, { output: out });
-				return { exitCode: 0, hasData: false, data: undefined };
+				return { exitCode: 0, hasPayload: false, payload: undefined };
 			case "parse-error":
 				err.write(
 					formatParseErrorOutput(this, outcome.message, outcome.commandPrefix),
 				);
-				return { exitCode: 1, hasData: false, data: undefined };
+				return { exitCode: 1, hasPayload: false, payload: undefined };
 			case "passthrough": {
 				// beginDispatch runs BEFORE coverage recording so pre-handler
 				// CACHE_WRITEs land in this dispatch's log.
@@ -1302,6 +1312,8 @@ export class AppImpl implements App {
 						outcome.cmdPath,
 						outcome.reserved.dryRun,
 					),
+					outcome.cmd.name,
+					(outcome.cmd.def as PassthroughDef<string>).payloadSchema ?? null,
 				);
 				const def = outcome.cmd.def as PassthroughDef<string>;
 				const declined = this.runConfirm(mode, outcome.cmd, outcome, err);
@@ -1322,6 +1334,7 @@ export class AppImpl implements App {
 					outcome.cmdPath,
 					out,
 					err,
+					ctx,
 				);
 			}
 			case "command": {
@@ -1341,6 +1354,8 @@ export class AppImpl implements App {
 						outcome.cmdPath,
 						outcome.reserved.dryRun,
 					),
+					outcome.cmd.name,
+					(outcome.cmd.def as AnyCommand).payloadSchema ?? null,
 				);
 				const def = outcome.cmd.def as AnyCommand;
 				const declined = this.runConfirm(mode, outcome.cmd, outcome, err);
@@ -1353,6 +1368,7 @@ export class AppImpl implements App {
 					outcome.cmdPath,
 					out,
 					err,
+					ctx,
 				);
 			}
 		}
@@ -1387,7 +1403,7 @@ export class AppImpl implements App {
 		if (confirmConsequential(outcome.cmdPath, err)) {
 			return undefined;
 		}
-		return { exitCode: 1, hasData: false, data: undefined };
+		return { exitCode: 1, hasPayload: false, payload: undefined };
 	}
 
 	/**
@@ -1403,49 +1419,49 @@ export class AppImpl implements App {
 		cmdPath: string,
 		out: Writer,
 		err: Writer,
+		ctx: Context,
 	): Promise<DispatchResult> {
-		let interpreted: DispatchResult;
+		let exitCode: number;
 		try {
 			const result = await invoke();
 			const swallowed = this.effectLogState.truncated;
 			if (swallowed !== null) {
-				return this.emitTruncated(swallowed, out, err);
+				return this.emitTruncated(swallowed, out, err, ctx);
 			}
-			interpreted = this.emitInterpreted(result, out);
+			exitCode = interpretHandlerReturn(result).exitCode;
 		} catch (e) {
 			if (e instanceof DryRunTruncated) {
-				return this.emitTruncated(e, out, err);
+				return this.emitTruncated(e, out, err, ctx);
 			}
 			// Every other way out of the dispatch still owes the operator the
 			// effects recorded so far: they asked for a preview and the
 			// framework has one. The marker says the list may not be all of it,
 			// because the dispatch did not finish. The throw continues
 			// untouched -- nothing here swallows it or changes the exit status.
-			if (dryRun) {
-				out.write(`${this.effectLogState.render()}\n`);
-				err.write(
-					`${errDryRunAborted(this.effectLogState.nextSeq(), cmdPath)}\n`,
-				);
-			}
+			this.finishDispatch(ctx, 1, dryRun, cmdPath, out, err, true);
 			throw e;
 		}
-		if (dryRun) {
-			// The would-do log is dry mode's primary output and is NEVER
-			// suppressed by --quiet.
-			out.write(`${this.effectLogState.render()}\n`);
-		}
-		return interpreted;
+		return this.finishDispatch(ctx, exitCode, dryRun, cmdPath, out, err, false);
 	}
 
-	/** Prints the already-recorded log to stdout and the error to stderr. */
+	/**
+	 * The truncation half of the exit step: the payload, then the log it
+	 * already has and its own pinned error. It ends the preview for its own
+	 * reason and never goes through the generic would-do rendering.
+	 */
 	private emitTruncated(
 		trunc: DryRunTruncated,
 		out: Writer,
 		err: Writer,
+		ctx: Context,
 	): DispatchResult {
+		const supplied = contextPayload(ctx);
+		if (supplied.set && ctx.json) {
+			out.write(`${jsonCompact(supplied.value)}\n`);
+		}
 		out.write(`${this.effectLogState.render()}\n`);
 		err.write(`${trunc.message}\n`);
-		return { exitCode: 1, hasData: false, data: undefined };
+		return { exitCode: 1, hasPayload: supplied.set, payload: supplied.value };
 	}
 
 	/** Starts a new dispatch: resets the structured effect log. */
@@ -1506,17 +1522,50 @@ export class AppImpl implements App {
 	}
 
 	/** Interprets a handler return and prints the data line when present. */
-	private emitInterpreted(result: unknown, out: Writer): DispatchResult {
-		const interpreted = interpretHandlerReturn(result);
-		if (interpreted.hasData) {
-			out.write(`${jsonCompact(interpreted.data)}\n`);
+	/**
+	 * The ONE ordered exit step: payload, then the would-do log. Reachable from
+	 * every way out of a dispatch (a normal return, a truncated preview and an
+	 * unwinding abort), so there is exactly one place that decides what the
+	 * framework emits at the end of a run and in what order.
+	 */
+	private finishDispatch(
+		ctx: Context,
+		exitCode: number,
+		dryRun: boolean,
+		cmdPath: string,
+		out: Writer,
+		err: Writer,
+		aborted: boolean,
+	): DispatchResult {
+		const supplied = contextPayload(ctx);
+		if (supplied.set && ctx.json) {
+			// Only in machine mode: outside it the payload is captured by the
+			// in-process surfaces and printed nowhere. The write does not go
+			// through the quiet-suppressible writers, so --quiet has no
+			// mechanism by which to reach it.
+			out.write(`${jsonCompact(supplied.value)}\n`);
 		}
-		return interpreted;
+		if (dryRun) {
+			// The would-do log is dry mode's primary output and is NEVER
+			// suppressed by --quiet.
+			out.write(`${this.effectLogState.render()}\n`);
+			if (aborted) {
+				err.write(
+					`${errDryRunAborted(this.effectLogState.nextSeq(), cmdPath)}\n`,
+				);
+			}
+		}
+		return {
+			exitCode,
+			hasPayload: supplied.set,
+			payload: supplied.value,
+		};
 	}
 }
 
 interface DispatchResult {
 	readonly exitCode: number;
-	readonly hasData: boolean;
-	readonly data: unknown;
+	/** False when the handler supplied no machine payload (contract §19.4). */
+	readonly hasPayload: boolean;
+	readonly payload: unknown;
 }

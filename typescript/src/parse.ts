@@ -1004,19 +1004,26 @@ export interface PreScanResult {
 	readonly approveConsequential: boolean;
 	readonly quiet: boolean;
 	readonly verbose: boolean;
+	/** Machine mode (contract §19.1), reserved beside the quartet. */
+	readonly json: boolean;
 	/** argv with --config/--config=value/--hermetic/the quartet stripped out. */
 	readonly cleanedArgv: readonly string[];
 }
 
-/** argv token -> pre-scan result key for the reserved quartet. */
+/**
+ * argv token -> pre-scan result key. The quartet plus --json, which reads
+ * exactly as the quartet does in BOTH argv regions (contract §7.1's amendment,
+ * §7.2) without joining the set.
+ */
 const RESERVED_QUARTET_TOKENS: ReadonlyMap<
 	string,
-	"dryRun" | "approveConsequential" | "quiet" | "verbose"
+	"dryRun" | "approveConsequential" | "quiet" | "verbose" | "json"
 > = new Map([
 	["--dry-run", "dryRun" as const],
 	["--approve-consequential", "approveConsequential" as const],
 	["--quiet", "quiet" as const],
 	["--verbose", "verbose" as const],
+	["--json", "json" as const],
 ]);
 
 /**
@@ -1062,6 +1069,7 @@ export function preScanReservedFlags(
 		approveConsequential: false,
 		quiet: false,
 		verbose: false,
+		json: false,
 	};
 	const excludeIndices = new Set<number>();
 	const done = (err?: string): PreScanResult => {
@@ -1219,6 +1227,7 @@ function scanCommandRegionQuartet(
 		approveConsequential: boolean;
 		quiet: boolean;
 		verbose: boolean;
+		json: boolean;
 	},
 	excludeIndices: Set<number>,
 ): void {
@@ -1261,13 +1270,14 @@ function scanCommandRegionQuartet(
 	}
 }
 
-/** Narrows a pre-scan result to the four Context-delivered flag values. */
+/** Narrows a pre-scan result to the Context-delivered flag values. */
 export function reservedFlagsOf(pre: PreScanResult): ReservedFlags {
 	return {
 		dryRun: pre.dryRun,
 		approveConsequential: pre.approveConsequential,
 		quiet: pre.quiet,
 		verbose: pre.verbose,
+		json: pre.json,
 	};
 }
 

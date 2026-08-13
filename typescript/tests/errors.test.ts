@@ -55,7 +55,7 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // errArgNameConsentReserved, the registration-time ban on declaring a flag or
 // a positional arg named `approve_consequential` (the name the programmatic
 // and MCP channels use to state consent).
-const EXPECTED_TEMPLATE_COUNT = 314;
+const EXPECTED_TEMPLATE_COUNT = 317;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

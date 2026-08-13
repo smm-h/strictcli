@@ -13,6 +13,8 @@ import {
 	errEffectsUnavailable,
 	errInfraValueUndeclared,
 	errNoSourceInfo,
+	errPayloadAlreadySet,
+	errPayloadNoSchema,
 } from "./errors.js";
 
 /** Minimal sink for output streams (process.stdout/stderr or test captures). */
@@ -69,6 +71,11 @@ export interface ReservedFlags {
 	readonly approveConsequential: boolean;
 	readonly quiet: boolean;
 	readonly verbose: boolean;
+	/**
+	 * Machine mode (contract §19.1). Reserved BESIDE the quartet on the same
+	 * unconditional tier, not as a fifth member of it.
+	 */
+	readonly json: boolean;
 }
 
 /** The quartet's all-false value: the programmatic dispatch paths' state. */
@@ -77,6 +84,7 @@ export const NO_RESERVED_FLAGS: ReservedFlags = {
 	approveConsequential: false,
 	quiet: false,
 	verbose: false,
+	json: false,
 };
 
 /**
@@ -93,6 +101,10 @@ interface ContextBase {
 	readonly quiet: boolean;
 	/** True when the framework-owned --verbose flag was passed. */
 	readonly verbose: boolean;
+	/** True when the framework-owned --json flag was passed (machine mode). */
+	readonly json: boolean;
+	/** Supplies this dispatch's machine payload (contract §19.4). */
+	payload(value: unknown): void;
 	info(msg: string): void;
 	warn(msg: string): void;
 	debug(msg: string): void;
@@ -126,6 +138,12 @@ export class Context implements MutatingContext {
 	private readonly infra: InfraAccess | null;
 	private readonly reserved: ReservedFlags;
 	private readonly effectsHandle: MutatingEffects | null;
+	// The payload slot (contract §19.4): at most one value per dispatch,
+	// settable only on a command that declared a payload schema.
+	private readonly commandName: string;
+	private readonly payloadSchema: Readonly<Record<string, unknown>> | null;
+	private payloadValue: unknown = undefined;
+	private payloadSet = false;
 
 	constructor(
 		stdout: Writer,
@@ -134,6 +152,8 @@ export class Context implements MutatingContext {
 		infra: InfraAccess | null,
 		reserved: ReservedFlags = NO_RESERVED_FLAGS,
 		effects: MutatingEffects | null = null,
+		commandName = "",
+		payloadSchema: Readonly<Record<string, unknown>> | null = null,
 	) {
 		this.stdout = stdout;
 		this.stderr = stderr;
@@ -141,6 +161,8 @@ export class Context implements MutatingContext {
 		this.infra = infra;
 		this.reserved = reserved;
 		this.effectsHandle = effects;
+		this.commandName = commandName;
+		this.payloadSchema = payloadSchema;
 	}
 
 	/** True when the framework-owned --dry-run flag was passed. */
@@ -161,6 +183,42 @@ export class Context implements MutatingContext {
 	/** True when the framework-owned --verbose flag was passed. */
 	get verbose(): boolean {
 		return this.reserved.verbose;
+	}
+
+	/**
+	 * True when the framework-owned --json flag was passed, which is what
+	 * selects machine mode (contract §19.1).
+	 *
+	 * Handlers do not branch on it to decide whether to build a payload --
+	 * `payload()` is mode-independent and the framework decides what to do with
+	 * the value -- but it is exposed for symmetry with the quartet and for apps
+	 * that propagate it to a child process.
+	 */
+	get json(): boolean {
+		return this.reserved.json;
+	}
+
+	/**
+	 * Supplies this dispatch's machine payload (contract §19.4).
+	 *
+	 * The call is mode-independent: a handler calls it identically in both
+	 * modes and never branches on `json`. In machine mode the value is
+	 * emitted; outside machine mode it is not printed at all. `test()` and
+	 * `call()` capture it either way.
+	 *
+	 * Throws when the command declared no payload schema (there is nothing to
+	 * validate the value against) and when a payload was already supplied in
+	 * this dispatch (one slot, one answer).
+	 */
+	payload(value: unknown): void {
+		if (this.payloadSchema === null) {
+			throw new Error(errPayloadNoSchema(this.commandName));
+		}
+		if (this.payloadSet) {
+			throw new Error(errPayloadAlreadySet(this.commandName));
+		}
+		this.payloadValue = value;
+		this.payloadSet = true;
 	}
 
 	/**
@@ -270,6 +328,19 @@ export class Context implements MutatingContext {
 		}
 		throw new Error(errConnectionValueUndeclared(envVar));
 	}
+}
+
+/**
+ * Package-internal accessor (NOT re-exported from index.ts): the machine
+ * payload a dispatch's handler supplied, read by the one exit step in app.ts
+ * and by the programmatic invocation path.
+ */
+export function contextPayload(ctx: Context): {
+	readonly set: boolean;
+	readonly value: unknown;
+} {
+	const c = ctx as unknown as { payloadSet: boolean; payloadValue: unknown };
+	return { set: c.payloadSet, value: c.payloadValue };
 }
 
 /**

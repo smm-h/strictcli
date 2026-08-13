@@ -45,8 +45,12 @@ test("call: outcome data is returned as-is", async () => {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("status", {
+			payloadSchema: {},
 			help: "get status",
-			handler: () => outcome(0, { healthy: true, uptime: 3600n }),
+			handler: (_args, ctx) => {
+				ctx.payload({ healthy: true, uptime: 3600n });
+				return outcome(0);
+			},
 		}),
 	);
 	assert.deepEqual(await app.call("status"), { healthy: true, uptime: 3600n });
@@ -399,9 +403,13 @@ test("call: dot-separated paths resolve nested group commands", async () => {
 	const zone = dns.group("zone", { help: "zones" });
 	zone.command(
 		defineReadOnlyCommand("create", {
+			payloadSchema: {},
 			help: "create zone",
 			flags: { name: flag("name", t.str, { help: "zone name" }) },
-			handler: (args) => outcome(0, { created: args.name }),
+			handler: (args, ctx) => {
+				ctx.payload({ created: args.name });
+				return outcome(0);
+			},
 		}),
 	);
 	assert.deepEqual(await app.call("dns.zone.create", { name: "example.org" }), {

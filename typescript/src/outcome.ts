@@ -27,7 +27,6 @@ declare const OutcomeBrand: unique symbol;
 export interface Outcome {
 	readonly [OutcomeBrand]: true;
 	readonly exitCode: number;
-	readonly data: unknown;
 }
 
 // Module-private mint registry: the runtime analog of Python's _OUTCOME_TOKEN.
@@ -35,14 +34,15 @@ const MINTED = new WeakSet<object>();
 
 /**
  * Builds an Outcome for a command handler to return. `exitCode` defaults to 0.
- * When `data` is not undefined/null it is JSON-printed to stdout as one
- * compact line and captured by test()/call().
+ * It carries an exit code and nothing else: the bare-JSON-print data channel
+ * was deleted (contract §19.4) and machine payloads are supplied through
+ * ctx.payload.
  */
-export function outcome(exitCode = 0, data?: unknown): Outcome {
+export function outcome(exitCode = 0): Outcome {
 	if (typeof exitCode !== "number" || !Number.isInteger(exitCode)) {
 		throw new TypeError(errOutcomeExitCodeNotInteger(returnTypeName(exitCode)));
 	}
-	const o = Object.freeze({ exitCode, data });
+	const o = Object.freeze({ exitCode });
 	MINTED.add(o);
 	return o as unknown as Outcome;
 }
@@ -51,12 +51,9 @@ export function isOutcome(v: unknown): v is Outcome {
 	return typeof v === "object" && v !== null && MINTED.has(v);
 }
 
-/** Interpreted handler return: exit code plus the optional data payload. */
+/** Interpreted handler return: the exit code. */
 export interface InterpretedReturn {
 	readonly exitCode: number;
-	/** False when there is no structured payload to emit (Python's _MISSING). */
-	readonly hasData: boolean;
-	readonly data: unknown;
 }
 
 /** Runtime type name for the bad-return error message (TS vocabulary). */
@@ -86,22 +83,19 @@ function returnTypeName(v: unknown): string {
  */
 export function interpretHandlerReturn(result: unknown): InterpretedReturn {
 	if (result === undefined) {
-		return { exitCode: 0, hasData: false, data: undefined };
+		return { exitCode: 0 };
 	}
 	if (isOutcome(result)) {
-		// undefined AND null both mean "no data", matching Python's `data is
-		// None` and Go's nil-data checks -- neither sibling can emit JSON null.
-		const hasData = result.data !== undefined && result.data !== null;
-		return { exitCode: result.exitCode, hasData, data: result.data };
+		return { exitCode: result.exitCode };
 	}
 	if (typeof result === "number" && Number.isInteger(result)) {
-		return { exitCode: result, hasData: false, data: undefined };
+		return { exitCode: result };
 	}
 	throw new TypeError(errHandlerReturnInvalid(returnTypeName(result)));
 }
 
 /**
- * Serializes outcome data as one compact JSON line (no whitespace). BigInt
+ * Serializes a machine payload as one compact JSON line (no whitespace). BigInt
  * values become bare integer tokens; Maps become objects with sorted keys;
  * plain objects keep insertion order and skip undefined-valued properties
  * (JSON.stringify semantics).

@@ -6289,10 +6289,11 @@ class App:
                             conn_entry["value"] = os.environ[ev]
                         infra[ev] = conn_entry
                     result["__infrastructure__"] = infra
-                # Sorted keys: the three implementations build this object in
-                # three orders (Go marshals a map, which sorts), and the
-                # payload is compared byte-for-byte by conformance.
-                ctx.payload(dict(sorted(result.items())))
+                # Sorted keys at every level: the three implementations build
+                # this object in three orders (Go marshals a map, which sorts
+                # recursively), and the payload is compared byte-for-byte by
+                # conformance.
+                ctx.payload(_deep_sorted(result))
                 return 0
             # --plain
             for f in all_flags:
@@ -10279,6 +10280,20 @@ def _serialize_arg(a: Arg) -> dict:
     if a.choices is not None:
         d["choices"] = a.choices
     return d
+
+
+def _deep_sorted(value: object) -> object:
+    """Recursively sort dict keys, matching Go's map marshaling.
+
+    Used by the framework's own machine payloads so the three implementations
+    emit byte-identical documents; a consumer's payload is emitted exactly as
+    it was supplied.
+    """
+    if isinstance(value, dict):
+        return {k: _deep_sorted(value[k]) for k in sorted(value)}
+    if isinstance(value, list):
+        return [_deep_sorted(v) for v in value]
+    return value
 
 
 def _serialize_command(cmd: Command) -> dict:

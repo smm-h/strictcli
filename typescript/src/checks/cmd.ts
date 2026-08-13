@@ -60,6 +60,17 @@ export function enableChecks(app: AppImpl): void {
 	app.checks.providerMaterializedCwd = undefined;
 }
 
+/**
+ * The check command's machine payload contract (contract §19.5). Both of the
+ * command's machine shapes -- the listing (--list) and the run results -- are
+ * arrays of objects. Framework-owned literal, byte-identical across the three
+ * implementations.
+ */
+const CHECK_PAYLOAD_SCHEMA: Readonly<Record<string, unknown>> = {
+	type: "array",
+	items: { type: "object" },
+};
+
 /** Registers the auto-generated `check` command (called from enableChecks). */
 function registerCheckCommand(app: AppImpl): void {
 	const candidates: AnyFlag[] = [
@@ -79,18 +90,16 @@ function registerCheckCommand(app: AppImpl): void {
 			help: "List all registered checks with their tags and exit without running",
 			default: false,
 		}),
-		flag("json", t.bool, {
-			help: "Output check results as machine-readable JSON instead of human text",
-			default: false,
-		}),
 		flag("ignore-warnings", t.bool, {
 			help: "Treat warn-severity results as passing so they do not cause nonzero exit",
 			default: false,
 		}),
 	];
-	// `verbose` and `dry-run` are NOT in the candidate list: both names are
-	// reserved by the framework (two flags cannot share a spelling), so the
-	// handler reads ctx.verbose and ctx.dryRun instead. `check --dry-run` runs
+	// `verbose`, `dry-run` and `json` are NOT in the candidate list: all three
+	// names are reserved by the framework (two flags cannot share a spelling),
+	// so the handler reads ctx.verbose, ctx.dryRun and ctx.json instead. The
+	// machine output is this command's payload (contract §19.4, §7.5's
+	// 2026-08-13 sweep box), not a locally-flagged print. `check --dry-run` runs
 	// the checks declared pure and lists the impure remainder, and the whole run
 	// is in dry mode, so the framework emits the would-do header after the
 	// handler's own output.
@@ -115,6 +124,7 @@ function registerCheckCommand(app: AppImpl): void {
 		defineFrameworkCommand("check", "read_only", {
 			help: "Run project checks registered via the check framework and report results",
 			flags,
+			payloadSchema: CHECK_PAYLOAD_SCHEMA,
 			handler: handler as never,
 		}),
 	);
@@ -168,11 +178,11 @@ async function checkHandler(
 
 	const runAll = kwargs.all === true;
 	const listMode = kwargs.list === true;
-	const jsonOut = kwargs.json === true;
 	const ignoreWarnings = kwargs.ignore_warnings === true;
-	// Framework-delivered, not command flags (both names are reserved).
+	// Framework-delivered, not command flags (all three names are reserved).
 	const verbose = ctx.verbose;
 	const dryRun = ctx.dryRun;
+	const jsonOut = ctx.json;
 	// Treat empty strings as "not provided".
 	const tagRaw = typeof kwargs.tag === "string" ? kwargs.tag : "";
 	const nameRaw = typeof kwargs.name === "string" ? kwargs.name : "";
@@ -222,7 +232,9 @@ async function checkHandler(
 	);
 
 	if (jsonOut) {
-		ctx.info(formatCheckResultsJSON(results));
+		// The payload is NOT routed through ctx.info: machine output is
+		// structurally exempt from --quiet (contract §19.2).
+		ctx.payload(checkResultItems(results));
 	} else {
 		const output = formatCheckResults(results, verbose);
 		if (output !== "") {
@@ -252,7 +264,7 @@ function checkListMode(
 			// Scope is emitted only when non-empty (omitempty parity).
 			...(def.scope !== "" ? { scope: def.scope } : {}),
 		}));
-		ctx.info(JSON.stringify(items));
+		ctx.payload(items);
 		return;
 	}
 
@@ -392,7 +404,18 @@ export function formatCheckResults(
 export function formatCheckResultsJSON(
 	results: readonly CheckRunResult[],
 ): string {
-	const items = results.map((r) => ({
+	return JSON.stringify(checkResultItems(results));
+}
+
+/**
+ * Check results as machine data (the check command's run payload, contract
+ * §19.4): the same records formatCheckResultsJSON serializes, handed to the
+ * framework as data instead of as a string.
+ */
+function checkResultItems(
+	results: readonly CheckRunResult[],
+): readonly Record<string, unknown>[] {
+	return results.map((r) => ({
 		name: r.name,
 		status: r.status,
 		message: r.message,
@@ -400,5 +423,4 @@ export function formatCheckResultsJSON(
 		notes: [...r.notes],
 		duration_ms: r.durationMs,
 	}));
-	return JSON.stringify(items);
 }

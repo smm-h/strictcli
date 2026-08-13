@@ -51,6 +51,7 @@ export function buildApp(): App {
 
 	app.command(
 		defineReadOnlyCommand("status", {
+			payloadSchema: {},
 			help: "Show what a release would start from",
 			handler: (_args, ctx) => {
 				// An observe returns a real value here in BOTH modes: read_only
@@ -58,11 +59,12 @@ export function buildApp(): App {
 				const head = ctx.effects.run(HEAD_ARGV);
 				const dirty = ctx.effects.run(DIRTY_ARGV, { check: false });
 				ctx.info(`head: ${head.stdout}`);
-				return outcome(0, {
+				ctx.payload({
 					head: head.stdout,
 					clean: dirty.stdout === "",
 					exit_code: head.exitCode,
 				});
+				return outcome(0);
 			},
 		}),
 	);

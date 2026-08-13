@@ -162,13 +162,6 @@ const EXPECTED_JSON = `{
           "negatable": true
         },
         {
-          "name": "json",
-          "type": "bool",
-          "help": "Output check results as machine-readable JSON instead of human text",
-          "default": false,
-          "negatable": true
-        },
-        {
           "name": "ignore-warnings",
           "type": "bool",
           "help": "Treat warn-severity results as passing so they do not cause nonzero exit",
@@ -176,6 +169,12 @@ const EXPECTED_JSON = `{
           "negatable": true
         }
       ],
+      "payload_schema": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
       "forwarding": {
         "reason": "framework-internal: absorbs app-defined global flag values"
       }
@@ -275,7 +274,7 @@ const EXPECTED_JSON = `{
       "effect": "read_only",
       "flags": [
         {
-          "name": "json",
+          "name": "as-json",
           "type": "bool",
           "help": "JSON output",
           "negatable": true
@@ -297,7 +296,7 @@ const EXPECTED_JSON = `{
         {
           "type": "mutex",
           "flags": [
-            "json",
+            "as-json",
             "yaml",
             "text"
           ]
@@ -527,7 +526,7 @@ const EXPECTED_JSON = `{
         },
         "show": {
           "name": "show",
-          "help": "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table or --json for a machine-readable object carrying each entry's type, default and help text.",
+          "help": "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table; the framework-owned --json yields the same information as a machine-readable object carrying each entry's type, default and help text.",
           "effect": "read_only",
           "flags": [
             {
@@ -536,24 +535,11 @@ const EXPECTED_JSON = `{
               "help": "Display config values in a human-readable table format",
               "default": false,
               "negatable": true
-            },
-            {
-              "name": "json",
-              "type": "bool",
-              "help": "Display config values as a JSON object with source metadata",
-              "default": false,
-              "negatable": true
             }
           ],
-          "constraints": [
-            {
-              "type": "mutex",
-              "flags": [
-                "plain",
-                "json"
-              ]
-            }
-          ],
+          "payload_schema": {
+            "type": "object"
+          },
           "forwarding": {
             "reason": "framework-internal: absorbs app-defined global flag values"
           }
@@ -885,7 +871,7 @@ function buildRichApp(): App {
 			help: "Test mutex flags",
 			mutex: [
 				mutexGroup({
-					json: flag("json", t.bool, { help: "JSON output" }),
+					as_json: flag("as-json", t.bool, { help: "JSON output" }),
 					yaml: flag("yaml", t.bool, { help: "YAML output" }),
 					text: flag("text", t.bool, { help: "Text output" }),
 				}),

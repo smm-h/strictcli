@@ -58,15 +58,17 @@ test("test: async handlers are awaited", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
 		defineReadOnlyCommand("run", {
+			payloadSchema: {},
 			help: "run",
 			handler: async (_args, ctx) => {
 				await new Promise((resolve) => setTimeout(resolve, 5));
 				ctx.info("after-await");
-				return outcome(2, { done: true });
+				ctx.payload({ done: true });
+				return outcome(2);
 			},
 		}),
 	);
-	const r = await app.test(["run"]);
+	const r = await app.test(["run", "--json"]);
 	assert.equal(r.stdout, 'after-await\n{"done":true}\n');
 	assert.equal(r.exitCode, 2);
 	assert.deepEqual(r.data, { done: true });
@@ -76,12 +78,16 @@ test("test: outcome data prints one compact JSON line with BigInt tokens", async
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
 		defineReadOnlyCommand("run", {
+			payloadSchema: {},
 			help: "run",
 			flags: { count: flag("count", t.int, { help: "count", default: 7n }) },
-			handler: (args) => outcome(0, { count: args.count, name: "x" }),
+			handler: (args, ctx) => {
+				ctx.payload({ count: args.count, name: "x" });
+				return outcome(0);
+			},
 		}),
 	);
-	const r = await app.test(["run", "--count", "9007199254740993"]);
+	const r = await app.test(["run", "--count", "9007199254740993", "--json"]);
 	assert.equal(r.stdout, '{"count":9007199254740993,"name":"x"}\n');
 	assert.deepEqual(r.data, { count: 9007199254740993n, name: "x" });
 });
@@ -123,14 +129,16 @@ test("test: passthrough handlers flow through the result contract", async () => 
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
 		readOnlyPassthrough("exec", {
+			payloadSchema: {},
 			help: "exec",
 			handler: (pt, ctx: ReadOnlyContext) => {
 				ctx.info(`${pt.name}:${pt.args.join(",")}`);
-				return outcome(4, { forwarded: pt.args.length });
+				ctx.payload({ forwarded: pt.args.length });
+				return outcome(4);
 			},
 		}),
 	);
-	const r = await app.test(["exec", "-x", "y"]);
+	const r = await app.test(["--json", "exec", "-x", "y"]);
 	assert.equal(r.stdout, 'exec:-x,y\n{"forwarded":2}\n');
 	assert.equal(r.exitCode, 4);
 	assert.deepEqual(r.data, { forwarded: 2 });
@@ -187,7 +195,7 @@ test("test: tag contracts satisfied by command or global flags pass", async () =
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			json: flag("json", t.bool, { help: "json output", default: false }),
+			as_json: flag("as-json", t.bool, { help: "json output", default: false }),
 		},
 	});
 	app.command(
@@ -200,7 +208,7 @@ test("test: tag contracts satisfied by command or global flags pass", async () =
 			},
 		}),
 	);
-	app.tagContract("json", "json");
+	app.tagContract("json", "as-json");
 	const r = await app.test(["greet"]);
 	assert.equal(r.stdout, "hello\n");
 	assert.equal(r.exitCode, 0);
@@ -244,10 +252,12 @@ test("run: writes to process streams and sets process.exitCode", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
 		defineReadOnlyCommand("run", {
+			payloadSchema: {},
 			help: "run",
 			handler: (_args, ctx) => {
 				ctx.info("hello-from-run");
-				return outcome(5, { via: "run" });
+				ctx.payload({ via: "run" });
+				return outcome(5);
 			},
 		}),
 	);
@@ -263,7 +273,7 @@ test("run: writes to process streams and sets process.exitCode", async () => {
 		return true;
 	}) as typeof process.stdout.write;
 	try {
-		await app.run(["run"]);
+		await app.run(["run", "--json"]);
 	} finally {
 		process.stdout.write = orig;
 	}

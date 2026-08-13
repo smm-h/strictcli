@@ -16,6 +16,7 @@ import { recordCoverage } from "./checks/coverage.js";
 import { validateCheckRegistrations } from "./checks/framework.js";
 import {
 	Context,
+	contextPayload,
 	NO_RESERVED_FLAGS,
 	type ReservedFlags,
 	type Writer,
@@ -152,14 +153,15 @@ function applyFlagDefaultForInvoke(
 
 /**
  * Interprets the handler's (awaited) return for call():
- * - outcome with data -> the data
+ * - a payload supplied through ctx.payload -> the payload (contract §19.4)
  * - bare undefined -> undefined (Python's None; Go handlers cannot express it)
- * - otherwise -> the exit code (integer returns and data-less outcomes)
+ * - otherwise -> the exit code
  */
-function interpretForCall(result: unknown): unknown {
+function interpretForCall(result: unknown, ctx: Context): unknown {
 	const interpreted = interpretHandlerReturn(result);
-	if (interpreted.hasData) {
-		return interpreted.data;
+	const supplied = contextPayload(ctx);
+	if (supplied.set) {
+		return supplied.value;
 	}
 	if (result === undefined) {
 		return undefined;
@@ -331,9 +333,11 @@ export async function invokeApp(
 		),
 		reserved,
 		app.armEffects(cmd, commandPath, false),
+		cmd.name,
+		def.payloadSchema ?? null,
 	);
 	const result = await def.handler(validated as never, ctx);
-	return interpretForCall(result);
+	return interpretForCall(result, ctx);
 }
 
 async function invokePassthrough(
@@ -395,8 +399,10 @@ async function invokePassthrough(
 		),
 		reserved,
 		app.armEffects(cmd, commandPath, false),
+		cmd.name,
+		(cmd.def as PassthroughDef<string>).payloadSchema ?? null,
 	);
 	const def = cmd.def as PassthroughDef<string>;
 	const result = await def.handler({ name: cmd.name, args, globals }, ctx);
-	return interpretForCall(result);
+	return interpretForCall(result, ctx);
 }

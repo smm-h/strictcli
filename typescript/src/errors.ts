@@ -1692,6 +1692,16 @@ export function errFlagNameReservedByFramework(name: string): string {
 }
 
 /**
+ * The machine-mode flag's ban (§12.1, §19.1). --json is framework-owned: it
+ * selects machine mode and is delivered on the Context, never as a handler
+ * kwarg. The ban is the unconditional every-level one, exactly as the
+ * quartet's is.
+ */
+export function errFlagNameJsonReserved(): string {
+	return "flag name 'json' is reserved by the framework: --json selects machine mode";
+}
+
+/**
  * The outright `yes` ban (§12.1). `yes` owns no framework flag any more --
  * --approve-consequential replaced --yes -- but a private --yes would restate
  * it in a spelling that IS muscle memory, which is exactly what the rename
@@ -1940,6 +1950,29 @@ export function errEffectHTTPMethodNotString(
 	gotType: string,
 ): string {
 	return `command ${q(name)}: effects.http parameter 'method' must be a string, got ${gotType}`;
+}
+
+// ---------------------------------------------------------------------------
+// context.ts — the payload API's call-time errors (§19.4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fires when a handler calls ctx.payload on a command that declares no payload
+ * schema. Registration cannot see that a handler intends to call it, so call
+ * time is the earliest honest point at which the missing declaration can be
+ * named.
+ */
+export function errPayloadNoSchema(name: string): string {
+	return `command ${q(name)}: ctx.payload requires a declared payload schema`;
+}
+
+/**
+ * Fires on a second payload call in one dispatch. Two payloads are two answers
+ * to a question with one slot; picking either silently is the kind of guess
+ * this regime does not make.
+ */
+export function errPayloadAlreadySet(name: string): string {
+	return `command ${q(name)}: ctx.payload was already called (a dispatch carries at most one payload)`;
 }
 
 // ---------------------------------------------------------------------------
