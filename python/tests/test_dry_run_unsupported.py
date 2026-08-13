@@ -245,19 +245,22 @@ class TestSchemaEmission:
         """--dump-schema needs a project_id, which comes from pyproject.toml."""
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproject"\n')
 
-    def _schema(self, app, tmp_path, monkeypatch):
+    def _schema(self, build_app, tmp_path, monkeypatch):
+        # The app must be BUILT after the chdir: --dump-schema writes to the
+        # location the App resolved at construction time, so an app built in
+        # the repo's cwd would dump into the repo rather than into tmp_path.
         monkeypatch.chdir(tmp_path)
-        app.test(["--dump-schema"])
+        build_app().test(["--dump-schema"])
         return json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
 
     def test_emitted_when_declared(self, tmp_path, monkeypatch):
-        schema = self._schema(_app_with_refusing_command(), tmp_path, monkeypatch)
+        schema = self._schema(_app_with_refusing_command, tmp_path, monkeypatch)
         run = schema["commands"]["run"]
         assert run["dry_run_supported"] is False
         assert run["dry_run_unsupported_reason"] == REASON
 
     def test_omitted_when_not_declared(self, tmp_path, monkeypatch):
-        schema = self._schema(_app_with_refusing_command(), tmp_path, monkeypatch)
+        schema = self._schema(_app_with_refusing_command, tmp_path, monkeypatch)
         plan = schema["commands"]["plan"]
         assert "dry_run_supported" not in plan
         assert "dry_run_unsupported_reason" not in plan
