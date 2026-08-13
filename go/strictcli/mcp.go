@@ -44,13 +44,29 @@ type mcpError struct {
 
 // JSON-RPC and MCP error codes. -32020 (HeaderMismatch) belongs to the HTTP
 // transport, which this server does not speak; -32021
-// (MissingRequiredClientCapability) is fired by the confirmation round-trip.
+// (MissingRequiredClientCapability) is what a consequential call from a client
+// that cannot render the confirmation is answered with.
 const (
 	mcpErrMethodNotFound             = -32601
 	mcpErrInvalidParams              = -32602
 	mcpErrInternal                   = -32603
+	mcpErrMissingClientCapability    = -32021
 	mcpErrUnsupportedProtocolVersion = -32022
 )
+
+// The revision forbids a server sending an input request the client never said
+// it could fulfil, and assigns -32021 for saying so. `data.requiredCapabilities`
+// is a client-capabilities object, and this server names FORM mode: a client
+// that declared only URL-mode elicitation cannot render this question either.
+const mcpMsgMissingElicitation = "Server requires the elicitation capability for this request"
+
+func mcpRequiredElicitationCapabilities() map[string]interface{} {
+	return map[string]interface{}{
+		"elicitation": map[string]interface{}{
+			"form": map[string]interface{}{},
+		},
+	}
+}
 
 // The server speaks two eras (effects contract §22):
 //
@@ -988,9 +1004,12 @@ func (a *App) mcpConfirmationExchange(
 		resp := a.mcpInputRequired(req.ID, toolName, continuation.mint(principal, digest, now))
 		return &resp, false
 	}
-	// A client that cannot render the confirmation gets the refusal, which
-	// names what is required without teaching a way around it.
-	return nil, consented
+	// A client that cannot render the confirmation is told what it would have
+	// to declare, in the code the revision assigns -- never how to proceed
+	// without confirming.
+	resp := mcpErrorResponse(req.ID, mcpErrMissingClientCapability, mcpMsgMissingElicitation,
+		map[string]interface{}{"requiredCapabilities": mcpRequiredElicitationCapabilities()})
+	return &resp, false
 }
 
 // lookupMCPCommand resolves a dotted tool name to its command, or nil.

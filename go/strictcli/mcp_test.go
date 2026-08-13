@@ -979,15 +979,13 @@ func TestMCPToolsListPublishesClassification(t *testing.T) {
 }
 
 func TestMCPToolsCallRefusesWithoutConsent(t *testing.T) {
+	// These clients declare no capabilities at all, so the modern answer is the
+	// capability error rather than the seam's refusal, which is only reachable
+	// from the legacy era now.
 	resp := mcpCall(t, consentToolApp(), map[string]interface{}{"name": "release"})
-	result := resp["result"].(map[string]interface{})
-	if result["isError"] != true {
-		t.Fatalf("expected isError, got %#v", result)
-	}
-	content := result["content"].([]interface{})[0].(map[string]interface{})
-	want := "command 'release' is consequential: the call must carry confirmation"
-	if content["text"] != want {
-		t.Fatalf("got %q want %q", content["text"], want)
+	errObj := mcpErrorOf(t, resp)
+	if errObj["code"] != float64(mcpErrMissingClientCapability) {
+		t.Fatalf("code: got %v want %d", errObj["code"], mcpErrMissingClientCapability)
 	}
 }
 
@@ -1009,9 +1007,8 @@ func TestMCPToolsCallExplicitFalseIsRefused(t *testing.T) {
 	resp := mcpCall(t, consentToolApp(), map[string]interface{}{
 		"name": "release", "approve_consequential": false,
 	})
-	result := resp["result"].(map[string]interface{})
-	if result["isError"] != true {
-		t.Fatalf("expected isError, got %#v", result)
+	if code := mcpErrorOf(t, resp)["code"]; code != float64(mcpErrMissingClientCapability) {
+		t.Fatalf("code: got %v want %d", code, mcpErrMissingClientCapability)
 	}
 }
 
@@ -1047,9 +1044,10 @@ func TestMCPConsentInsideArgumentsDoesNotConsent(t *testing.T) {
 		"name":      "release",
 		"arguments": map[string]interface{}{"approve_consequential": true},
 	})
-	result := resp["result"].(map[string]interface{})
-	if result["isError"] != true {
-		t.Fatalf("expected isError, got %#v", result)
+	// The consent never registered, so the command was still unconfirmed and
+	// the call never reached it.
+	if code := mcpErrorOf(t, resp)["code"]; code != float64(mcpErrMissingClientCapability) {
+		t.Fatalf("code: got %v want %d", code, mcpErrMissingClientCapability)
 	}
 }
 
@@ -1523,22 +1521,67 @@ func TestMCPReadOnlyToolIsNeverAskedAbout(t *testing.T) {
 	}
 }
 
-func TestMCPClientWithoutElicitationIsRefusedNotAsked(t *testing.T) {
+// TestMCPClientWithoutElicitationGetsTheCapabilityError pins the revision's own
+// answer: a server may not send an input request the client never said it could
+// fulfil, and -32021 is the code for saying so.
+func TestMCPClientWithoutElicitationGetsTheCapabilityError(t *testing.T) {
 	resp, err := sendMCPRequestRaw(confirmingApp(), "tools/call", 1, map[string]interface{}{
 		"_meta": modernMeta(), "name": "release", "arguments": map[string]interface{}{},
 	})
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	result := mcpResultOf(t, resp)
-	if result["resultType"] != "complete" || result["isError"] != true {
-		t.Fatalf("expected the refusal, got %v", result)
+	errObj := mcpErrorOf(t, resp)
+	if errObj["code"] != float64(mcpErrMissingClientCapability) {
+		t.Fatalf("code: got %v want %d", errObj["code"], mcpErrMissingClientCapability)
 	}
-	content, _ := result["content"].([]interface{})
-	first, _ := content[0].(map[string]interface{})
-	want := errCallConsequentialUnconsented("release")
-	if first["text"] != want {
-		t.Errorf("text: got %q, want %q", first["text"], want)
+	if errObj["message"] != mcpMsgMissingElicitation {
+		t.Errorf("message: got %q, want %q", errObj["message"], mcpMsgMissingElicitation)
+	}
+	data, _ := errObj["data"].(map[string]interface{})
+	required, _ := data["requiredCapabilities"].(map[string]interface{})
+	elicitation, ok := required["elicitation"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("requiredCapabilities: got %v", data["requiredCapabilities"])
+	}
+	if _, ok := elicitation["form"].(map[string]interface{}); !ok {
+		t.Errorf("requiredCapabilities names form mode: got %v", elicitation)
+	}
+}
+
+// TestMCPURLOnlyClientGetsTheCapabilityError: a client that can only open a URL
+// cannot render this question either.
+func TestMCPURLOnlyClientGetsTheCapabilityError(t *testing.T) {
+	meta := metaWith(map[string]interface{}{
+		mcpMetaClientCapabilities: map[string]interface{}{
+			"elicitation": map[string]interface{}{"url": map[string]interface{}{}},
+		},
+	})
+	resp, err := sendMCPRequestRaw(confirmingApp(), "tools/call", 1, map[string]interface{}{
+		"_meta": meta, "name": "release", "arguments": map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if code := mcpErrorOf(t, resp)["code"]; code != float64(mcpErrMissingClientCapability) {
+		t.Fatalf("code: got %v want %d", code, mcpErrMissingClientCapability)
+	}
+}
+
+func TestMCPStatedConsentNeedsNoDeclaredCapability(t *testing.T) {
+	resp, err := sendMCPRequestRaw(confirmingApp(), "tools/call", 1, map[string]interface{}{
+		"_meta": modernMeta(), "name": "release", "arguments": map[string]interface{}{},
+		"approve_consequential": true,
+	})
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	result := mcpResultOf(t, resp)
+	if result["resultType"] != "complete" {
+		t.Fatalf("resultType: got %v", result["resultType"])
+	}
+	if _, isError := result["isError"]; isError {
+		t.Errorf("expected the call to proceed, got %v", result)
 	}
 }
 
