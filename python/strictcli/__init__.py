@@ -190,12 +190,27 @@ class _SourcedStore:
         """Update the value of an existing entry, keeping its source."""
         self._entries[name].value = value
 
-    def is_present_for_mutex(self, name: str) -> bool:
-        """Present for mutex: only cli, env, config. NOT default or implied."""
+    def is_cli(self, name: str) -> bool:
+        """True when the value came from a command-line token.
+
+        Mutex election is CLI-only (contract §21.3): env and config sources
+        neither elect a member nor supply its value.
+        """
         e = self._entries.get(name)
         if e is None:
             return False
-        return e.source in (_Source.CLI, _Source.ENV, _Source.CONFIG)
+        return e.source == _Source.CLI
+
+    def is_env_or_config(self, name: str) -> bool:
+        """True when the value came from an env var or the config file."""
+        e = self._entries.get(name)
+        if e is None:
+            return False
+        return e.source in (_Source.ENV, _Source.CONFIG)
+
+    def delete(self, name: str) -> None:
+        """Drop an entry entirely, so defaults apply to it later."""
+        self._entries.pop(name, None)
 
     def is_present_for_deps(self, name: str) -> bool:
         """Present for deps (CoRequired, Requires): everything except default."""
@@ -816,6 +831,17 @@ def _msg_confirm_non_interactive() -> str:
 
 def _msg_confirm_declined() -> str:
     return "aborted"
+
+
+def _msg_mutex_decline_clause(name: str) -> str:
+    """The teaching clause both mutex-decline errors carry (contract §21.4).
+
+    Appended to the unsatisfied-group error and repeated inside the
+    redundant-negation error, so the two teach with one sentence. Spelled as a
+    ``_msg_*`` function because it is a message template shared by two raise
+    sites, which is how the Go and TypeScript catalogs carry it too.
+    """
+    return f" (--no-{name} declines an option; it does not choose one)"
 
 
 class _ConfirmIO:
@@ -9208,16 +9234,41 @@ def _validate_and_build_kwargs(
     flag param names to source labels (cli/env/config/default/implied).
     """
     # Step 4.5: enforce mutex group constraints (before defaults are applied).
-    # Only cli/env/config sources count as "present" for mutex evaluation.
-    # Default and implied sources do NOT trigger mutex violations.
+    # Election is CLI-only and value-aware (contract §21):
+    #   - a bool member elects only when the typed token resolved to true;
+    #     `--no-x` DECLINES (it names the member and says it is not the choice)
+    #   - every other type elects on presence with any value, including ""
+    #   - env and config elect nothing AND supply nothing: their entries are
+    #     dropped here, before dependency validation, so an unelected member
+    #     delivers its declared default (or None) and never a stale env value
     for mg in cmd.mutex:
-        set_flags = [f for f in mg.flags if store.is_present_for_mutex(f.name)]
-        if len(set_flags) > 1:
-            names = " and ".join(f"--{f.name}" for f in set_flags)
+        elected: list[Flag] = []
+        declined: list[Flag] = []
+        for f in mg.flags:
+            if store.is_env_or_config(f.name):
+                store.delete(f.name)
+                continue
+            if not store.is_cli(f.name):
+                continue
+            if f.type is bool and store[f.name] is not True:
+                declined.append(f)
+            else:
+                elected.append(f)
+        clause = (
+            _msg_mutex_decline_clause(declined[0].name) if declined else ""
+        )
+        if len(elected) > 1:
+            names = " and ".join(f"--{f.name}" for f in elected)
             raise _ParseError(f"{names} are mutually exclusive")
-        if len(set_flags) == 0:
+        if len(elected) == 1 and declined:
+            declined_names = " and ".join(f"--no-{f.name}" for f in declined)
+            raise _ParseError(
+                f"{declined_names} cannot be combined with "
+                f"--{elected[0].name}{clause}"
+            )
+        if not elected:
             names = ", ".join(f"--{f.name}" for f in mg.flags)
-            raise _ParseError(f"one of {names} is required")
+            raise _ParseError(f"one of {names} is required{clause}")
 
     # Step 4.55: resolve Implies dependencies (before dependency checks, so
     # implied values participate in downstream CoRequired/Requires validation).

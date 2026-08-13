@@ -246,8 +246,13 @@ def test_required_mutex_shown_in_help():
 # ---------------------------------------------------------------------------
 
 
-def test_mutex_env_sets_one_cli_sets_another_error(monkeypatch):
-    """Env sets one flag, CLI sets another in the same mutex group -> error."""
+def test_mutex_env_sets_one_cli_sets_another_ok(monkeypatch):
+    """Env sets one member, CLI elects another: the env member is suppressed.
+
+    Contract §21.3 -- env neither elects nor supplies a mutex member's value,
+    so the CLI election stands alone and the env-named member delivers its
+    declared default (None here) rather than the environment's value.
+    """
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(
@@ -264,16 +269,20 @@ def test_mutex_env_sets_one_cli_sets_another_error(monkeypatch):
 
     @app.command("fetch", effect="read_only", help="fetch data", mutex=[mg])
     def fetch(ctx, file, url):
-        pass
+        print(f"file={file} url={url} file_source={ctx.source('file')}")
 
     monkeypatch.setenv("TEST_FILE", "data.txt")
     r = app.test(["fetch", "--url", "http://example.com"])
-    assert r.exit_code == 1
-    assert "mutually exclusive" in r.stderr
+    assert r.exit_code == 0
+    assert "file=None url=http://example.com" in r.stdout
+    assert "file_source=default" in r.stdout
 
 
-def test_mutex_env_sets_one_only_ok(monkeypatch):
-    """Env sets one flag in mutex group, nothing else -> OK."""
+def test_mutex_env_sets_one_only_is_error(monkeypatch):
+    """Env sets one member and nothing is typed: the group is unsatisfied.
+
+    Contract §21.3 -- election is CLI-only, so an env value satisfies nothing.
+    """
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(
@@ -294,8 +303,178 @@ def test_mutex_env_sets_one_only_ok(monkeypatch):
 
     monkeypatch.setenv("TEST_FILE2", "data.txt")
     r = app.test(["fetch"])
+    assert r.exit_code == 1
+    assert "error: one of --file, --url is required\n" in r.stderr
+
+
+def test_mutex_config_value_does_not_elect(tmp_path, monkeypatch):
+    """A config-file value on a mutex member elects nothing (§21.3)."""
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"file": "from-config.txt"}\n')
+    mg = strictcli.MutexGroup(
+        flags=[
+            strictcli.Flag(name="file", type=str, help="read from file", default=None),
+            strictcli.Flag(name="url", type=str, help="read from URL", default=None),
+        ],
+    )
+    app = strictcli.App(
+        name="test", version="1.0.0", help="test app", config=True,
+    )
+
+    @app.command("fetch", effect="read_only", help="fetch data", mutex=[mg])
+    def fetch(ctx, file, url):
+        print(f"file={file} url={url}")
+
+    r = app.test(["--config", str(cfg), "fetch"])
+    assert r.exit_code == 1
+    assert "error: one of --file, --url is required\n" in r.stderr
+
+    # And beside a real election the config value is suppressed, not delivered.
+    r = app.test(["--config", str(cfg), "fetch", "--url", "u"])
     assert r.exit_code == 0
-    assert "file=data.txt" in r.stdout
+    assert "file=None url=u" in r.stdout
+
+
+# ---------------------------------------------------------------------------
+# Election semantics (contract §21; campaign rulings A1-A5)
+# ---------------------------------------------------------------------------
+
+
+def _election_app():
+    """App with one mixed mutex group: str + negatable bool + negatable bool."""
+    mg = strictcli.MutexGroup(
+        flags=[
+            strictcli.Flag(name="profile", type=str, help="a profile", default=None),
+            strictcli.Flag(
+                name="all-profiles", type=bool, negatable=True,
+                help="every profile", default=None,
+            ),
+            strictcli.Flag(
+                name="current-profile", type=bool, negatable=True,
+                help="the current profile", default=None,
+            ),
+        ],
+    )
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it", mutex=[mg])
+    def run(ctx, profile, all_profiles, current_profile):
+        print(f"profile={profile} all={all_profiles} current={current_profile}")
+
+    return app
+
+
+def test_a1_negated_bool_member_elects_nothing():
+    """A1: --no-<x> on a bool member elects nothing; the group is unsatisfied."""
+    app = _election_app()
+    r = app.test(["run", "--no-all-profiles"])
+    assert r.exit_code == 1
+    assert (
+        "error: one of --profile, --all-profiles, --current-profile is required "
+        "(--no-all-profiles declines an option; it does not choose one)\n"
+    ) in r.stderr
+
+
+def test_a1_negated_bool_beside_a_real_election_of_another_bool():
+    """A1: a true bool elects; the declined one is not a second election."""
+    app = _election_app()
+    r = app.test(["run", "--all-profiles"])
+    assert r.exit_code == 0
+    assert "profile=None all=True current=None" in r.stdout
+
+
+def test_a1_all_members_declined_is_unsatisfied():
+    """A1/A3: every bool member declined -> required error, clause names the first."""
+    app = _election_app()
+    r = app.test(["run", "--no-current-profile", "--no-all-profiles"])
+    assert r.exit_code == 1
+    assert (
+        "error: one of --profile, --all-profiles, --current-profile is required "
+        "(--no-all-profiles declines an option; it does not choose one)\n"
+    ) in r.stderr
+
+
+def test_a2_string_member_elects_on_empty_string():
+    """A2: a string member elects on presence with any value, including ''."""
+    app = _election_app()
+    r = app.test(["run", "--profile", ""])
+    assert r.exit_code == 0
+    assert "profile= all=None current=None" in r.stdout
+
+
+def test_a3_clause_absent_when_nothing_was_declined():
+    """A3: the teaching clause appears only when a member was declined."""
+    app = _election_app()
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert (
+        "error: one of --profile, --all-profiles, --current-profile is required\n"
+    ) in r.stderr
+
+
+def test_a4_redundant_negation_beside_an_election_is_an_error():
+    """A4: a declined member beside a real election is a parse error."""
+    app = _election_app()
+    r = app.test(["run", "--profile", "work", "--no-all-profiles"])
+    assert r.exit_code == 1
+    assert (
+        "error: --no-all-profiles cannot be combined with --profile "
+        "(--no-all-profiles declines an option; it does not choose one)\n"
+    ) in r.stderr
+
+
+def test_a4_multiple_declined_members_are_all_named():
+    """A4: every declined member is listed, in group-declaration order."""
+    app = _election_app()
+    r = app.test(
+        ["run", "--profile", "work", "--no-current-profile", "--no-all-profiles"],
+    )
+    assert r.exit_code == 1
+    assert (
+        "error: --no-all-profiles and --no-current-profile cannot be combined "
+        "with --profile "
+        "(--no-all-profiles declines an option; it does not choose one)\n"
+    ) in r.stderr
+
+
+def test_two_elections_are_still_mutually_exclusive():
+    """Two real elections keep the unchanged mutually-exclusive message."""
+    app = _election_app()
+    r = app.test(["run", "--profile", "work", "--all-profiles"])
+    assert r.exit_code == 1
+    assert (
+        "error: --profile and --all-profiles are mutually exclusive\n"
+    ) in r.stderr
+
+
+def test_a1_call_with_false_bool_declines():
+    """A1 holds on the programmatic path: an explicit False declines."""
+    app = _election_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        app.call("run", all_profiles=False)
+    assert "one of --profile, --all-profiles, --current-profile is required" in str(
+        exc.value
+    )
+    assert "declines an option" in str(exc.value)
+
+
+def test_bool_member_with_declared_default_still_defaults():
+    """A declared default still applies to an unelected member (§18.10 item 118)."""
+    mg = strictcli.MutexGroup(
+        flags=[
+            strictcli.Flag(name="loud", type=bool, default=False, help="loud"),
+            strictcli.Flag(name="hushed", type=bool, default=False, help="hushed"),
+        ],
+    )
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
+    def cmd(ctx, loud, hushed):
+        print(f"loud={loud} hushed={hushed}")
+
+    r = app.test(["cmd", "--loud"])
+    assert r.exit_code == 0
+    assert "loud=True hushed=False" in r.stdout
 
 
 # ---------------------------------------------------------------------------
