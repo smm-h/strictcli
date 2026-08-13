@@ -79,16 +79,17 @@ def test_mutex_implied_source_not_present():
 
 
 # ---------------------------------------------------------------------------
-# Test 3: Mutex cli + config -- SHOULD trigger (trivially passes for now)
+# Test 3: two CLI-sourced elections in one mutex group -- SHOULD error
 # ---------------------------------------------------------------------------
 
 def test_mutex_cli_and_config_both_present():
-    """When both CLI and config values are in a mutex group, it should error.
+    """Two CLI-sourced elections in one group are mutually exclusive.
 
-    Since config is temporarily marked as _Source.CLI (Phase 2a will give
-    it _Source.CONFIG), this test passes trivially because both flags
-    will be seen as SourceCLI. The test documents the intended behavior
-    and will become meaningful after Phase 2a.
+    Values passed through app.call() carry the `cli` source, so both members
+    elect and the group reports the mutually-exclusive error. Config plays no
+    part in it: under contract §21.3 election is command-line-only, so a config
+    value never elects a member and never reaches one -- there is no
+    "cli + config both present" state for a mutex group to refuse.
     """
     mg = strictcli.MutexGroup(
         flags=[
