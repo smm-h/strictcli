@@ -229,7 +229,7 @@
     }
   },
   {
-    "name": "effects_call_consent: MCP tools/call refuses a consequential tool without consent",
+    "name": "effects_call_consent: MCP tools/call refuses a consequential tool the client cannot be asked about",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -265,10 +265,14 @@
     "expect": {
       "exit_code": 0,
       "stdout_matches": [
-        "\"isError\":\\s*true",
-        "command 'release' is consequential: the call must carry confirmation"
+        "\"code\":\\s*-32021",
+        "Server requires the elicitation capability for this request",
+        "\"requiredCapabilities\":\\s*\\{\"elicitation\":\\s*\\{\"form\":\\s*\\{\\}\\}\\}"
       ],
-      "stderr_equals": ""
+      "stderr_equals": "",
+      "stdout_not_contains": [
+        "released"
+      ]
     }
   },
   {
@@ -404,8 +408,9 @@
     "expect": {
       "exit_code": 0,
       "stdout_matches": [
-        "\"isError\":\\s*true",
-        "command 'release' is consequential: the call must carry confirmation"
+        "\"code\":\\s*-32021",
+        "Server requires the elicitation capability for this request",
+        "\"requiredCapabilities\":\\s*\\{\"elicitation\":\\s*\\{\"form\":\\s*\\{\\}\\}\\}"
       ],
       "stdout_not_contains": [
         "released"
