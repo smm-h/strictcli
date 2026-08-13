@@ -217,7 +217,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "{\"ok\":true}\n"
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"ok\":true},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
     }
   },
   {
@@ -246,7 +246,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "{\"ok\":true}\n"
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"ok\":true},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
     }
   },
   {
@@ -283,7 +283,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "{\"ok\":true}\n"
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"grp.cmd\",\"exit_code\":0,\"payload\":{\"ok\":true},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
     }
   },
   {
@@ -377,7 +377,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "{\"ok\":true}\n"
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"ok\":true},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[{\"level\":\"info\",\"message\":\"info-line\"}]}\n"
     }
   },
   {
@@ -406,7 +406,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "{\"text\":\"héllo <b>&</b> 日本語 — ünïcode\"}\n"
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"text\":\"héllo <b>&</b> 日本語 — ünïcode\"},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
     }
   },
   {
