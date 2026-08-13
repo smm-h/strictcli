@@ -3835,7 +3835,9 @@ member** (campaign decisions A1-A5). Items 113-117 are ruled upstream, not autho
 is an authored spelling in the §18.3 class, fixing the message texts and the value-delivery
 consequence the rulings left open. The round writes §21 and amends nothing else: mutex election is
 a parse-time constraint, not an effects-regime one, and it touches this document only because
-this document is where cross-language spellings are pinned.
+this document is where cross-language spellings are pinned. Item 119 was added afterwards and is
+neither a ruling nor a spelling: it records a carve-out to §21.3's wording that every
+implementation already had, and changed no code.
 
 The evidence behind the round, measured across six consumer projects: 18 production mutex groups,
 15 of them containing a bool, 14 carrying the present-false hole, 8 carrying hand-written
