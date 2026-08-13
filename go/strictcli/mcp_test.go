@@ -34,8 +34,40 @@ func mcpTestApp() *App {
 	return app
 }
 
-// sendMCPRequest sends a JSON-RPC request and reads the response.
+// modernMeta is the metadata every modern-era request carries (protocol
+// 2026-07-28). The helpers below splice it into any request that does not bring
+// its own, so a test that is not about the metadata itself reads as it always
+// did.
+func modernMeta() map[string]interface{} {
+	return map[string]interface{}{
+		mcpMetaProtocolVersion:    mcpProtocolVersion,
+		mcpMetaClientCapabilities: map[string]interface{}{},
+	}
+}
+
+// asModern returns params carrying the modern request metadata.
+func asModern(params map[string]interface{}) map[string]interface{} {
+	out := map[string]interface{}{}
+	for k, v := range params {
+		out[k] = v
+	}
+	if _, ok := out["_meta"]; !ok {
+		out["_meta"] = modernMeta()
+	}
+	return out
+}
+
+// sendMCPRequest sends a modern-era JSON-RPC request and reads the response.
 func sendMCPRequest(app *App, method string, id interface{}, params map[string]interface{}) (map[string]interface{}, error) {
+	if method != "initialize" {
+		params = asModern(params)
+	}
+	return sendMCPRequestRaw(app, method, id, params)
+}
+
+// sendMCPRequestRaw sends a JSON-RPC request exactly as written -- no metadata
+// is spliced in, which is what a handshake-era client sends.
+func sendMCPRequestRaw(app *App, method string, id interface{}, params map[string]interface{}) (map[string]interface{}, error) {
 	req := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  method,
@@ -1017,5 +1049,266 @@ func TestMCPConsentInsideArgumentsDoesNotConsent(t *testing.T) {
 	result := resp["result"].(map[string]interface{})
 	if result["isError"] != true {
 		t.Fatalf("expected isError, got %#v", result)
+	}
+}
+
+// --- The modern era (protocol 2026-07-28) ---
+
+// metaWith returns the modern metadata block with per-test overrides applied.
+func metaWith(overrides map[string]interface{}) map[string]interface{} {
+	meta := modernMeta()
+	for k, v := range overrides {
+		meta[k] = v
+	}
+	return meta
+}
+
+// mcpErrorOf returns a response's error object, failing the test when the
+// response carries a result instead.
+func mcpErrorOf(t *testing.T, resp map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	errObj, ok := resp["error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected an error response, got %v", resp)
+	}
+	return errObj
+}
+
+// mcpResultOf returns a response's result object, failing the test when the
+// response carries an error instead.
+func mcpResultOf(t *testing.T, resp map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	result, ok := resp["result"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected a result response, got %v", resp)
+	}
+	return result
+}
+
+func TestMCPDiscoverAdvertisesVersionsCapabilitiesAndIdentity(t *testing.T) {
+	resp, err := sendMCPRequest(mcpTestApp(), "server/discover", 1, nil)
+	if err != nil {
+		t.Fatalf("discover error: %v", err)
+	}
+	result := mcpResultOf(t, resp)
+	if result["resultType"] != "complete" {
+		t.Errorf("resultType: got %v", result["resultType"])
+	}
+	versions, _ := result["supportedVersions"].([]interface{})
+	if len(versions) != 1 || versions[0] != mcpProtocolVersion {
+		t.Errorf("supportedVersions: got %v", result["supportedVersions"])
+	}
+	if result["instructions"] != "test application" {
+		t.Errorf("instructions: got %v", result["instructions"])
+	}
+	if result["ttlMs"] != float64(mcpCacheTTLMs) || result["cacheScope"] != mcpCacheScope {
+		t.Errorf("cacheability: got %v / %v", result["ttlMs"], result["cacheScope"])
+	}
+	meta, _ := result["_meta"].(map[string]interface{})
+	info, _ := meta[mcpMetaServerInfo].(map[string]interface{})
+	if info["name"] != "testapp" || info["version"] != "1.0.0" {
+		t.Errorf("serverInfo: got %v", meta[mcpMetaServerInfo])
+	}
+}
+
+func TestMCPDiscoverDeclaresTheConfirmationFeatureByName(t *testing.T) {
+	resp, err := sendMCPRequest(mcpTestApp(), "server/discover", 1, nil)
+	if err != nil {
+		t.Fatalf("discover error: %v", err)
+	}
+	caps, _ := mcpResultOf(t, resp)["capabilities"].(map[string]interface{})
+	exts, _ := caps["extensions"].(map[string]interface{})
+	if _, ok := exts[mcpFeatureConsequentialConfirmation]; !ok {
+		t.Errorf("expected the %s feature, got %v", mcpFeatureConsequentialConfirmation, exts)
+	}
+}
+
+func TestMCPModernResultsCarryTheirResultType(t *testing.T) {
+	app := mcpTestApp()
+
+	list, err := sendMCPRequest(app, "tools/list", 1, nil)
+	if err != nil {
+		t.Fatalf("tools/list error: %v", err)
+	}
+	result := mcpResultOf(t, list)
+	if result["resultType"] != "complete" {
+		t.Errorf("tools/list resultType: got %v", result["resultType"])
+	}
+	if result["ttlMs"] != float64(mcpCacheTTLMs) || result["cacheScope"] != mcpCacheScope {
+		t.Errorf("tools/list cacheability: got %v / %v", result["ttlMs"], result["cacheScope"])
+	}
+
+	call, err := sendMCPRequest(app, "tools/call", 2, map[string]interface{}{
+		"name":      "status",
+		"arguments": map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("tools/call error: %v", err)
+	}
+	if mcpResultOf(t, call)["resultType"] != "complete" {
+		t.Errorf("tools/call resultType: got %v", mcpResultOf(t, call)["resultType"])
+	}
+}
+
+func TestMCPRequestMetadataIsValidated(t *testing.T) {
+	cases := []struct {
+		name    string
+		params  map[string]interface{}
+		message string
+	}{
+		{
+			name:    "meta must be an object",
+			params:  map[string]interface{}{"_meta": []interface{}{}},
+			message: "parameter '_meta' must be an object",
+		},
+		{
+			name: "protocol version must be a string",
+			params: map[string]interface{}{"_meta": metaWith(map[string]interface{}{
+				mcpMetaProtocolVersion: 2026,
+			})},
+			message: "_meta['io.modelcontextprotocol/protocolVersion'] must be a string",
+		},
+		{
+			name: "client capabilities are required",
+			params: map[string]interface{}{"_meta": map[string]interface{}{
+				mcpMetaProtocolVersion: mcpProtocolVersion,
+			}},
+			message: "missing required request metadata: _meta['io.modelcontextprotocol/clientCapabilities']",
+		},
+		{
+			name: "client capabilities must be an object",
+			params: map[string]interface{}{"_meta": metaWith(map[string]interface{}{
+				mcpMetaClientCapabilities: "yes",
+			})},
+			message: "_meta['io.modelcontextprotocol/clientCapabilities'] must be an object",
+		},
+		{
+			name: "client info must be an object",
+			params: map[string]interface{}{"_meta": metaWith(map[string]interface{}{
+				mcpMetaClientInfo: "ExampleClient",
+			})},
+			message: "_meta['io.modelcontextprotocol/clientInfo'] must be an object",
+		},
+		{
+			name: "a malformed key name is refused",
+			params: map[string]interface{}{"_meta": metaWith(map[string]interface{}{
+				"-bad./key": 1,
+			})},
+			message: "invalid _meta key name: '-bad./key'",
+		},
+		{
+			name: "an unknown reserved key is refused",
+			params: map[string]interface{}{"_meta": metaWith(map[string]interface{}{
+				"io.modelcontextprotocol/whatever": 1,
+			})},
+			message: "unrecognized reserved _meta key: 'io.modelcontextprotocol/whatever'",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := sendMCPRequestRaw(mcpTestApp(), "tools/list", 1, tc.params)
+			if err != nil {
+				t.Fatalf("error: %v", err)
+			}
+			errObj := mcpErrorOf(t, resp)
+			if errObj["code"] != float64(mcpErrInvalidParams) {
+				t.Errorf("code: got %v", errObj["code"])
+			}
+			if errObj["message"] != tc.message {
+				t.Errorf("message: got %q, want %q", errObj["message"], tc.message)
+			}
+		})
+	}
+}
+
+func TestMCPRequestWithoutMetadataIsRefused(t *testing.T) {
+	resp, err := sendMCPRequestRaw(mcpTestApp(), "tools/list", 1, nil)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	errObj := mcpErrorOf(t, resp)
+	if errObj["code"] != float64(mcpErrInvalidParams) {
+		t.Errorf("code: got %v", errObj["code"])
+	}
+	want := "missing required request metadata: _meta['io.modelcontextprotocol/protocolVersion']"
+	if errObj["message"] != want {
+		t.Errorf("message: got %q, want %q", errObj["message"], want)
+	}
+}
+
+func TestMCPVendorAndOptionalMetaKeysAreAccepted(t *testing.T) {
+	resp, err := sendMCPRequestRaw(mcpTestApp(), "tools/list", 1, map[string]interface{}{
+		"_meta": metaWith(map[string]interface{}{
+			"com.example.mcp/thing": 1,
+			"traceparent":           "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01",
+			"progressToken":         7,
+			mcpMetaClientInfo:       map[string]interface{}{"name": "ExampleClient", "version": "1.0.0"},
+			mcpMetaLogLevel:         "debug",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if mcpResultOf(t, resp)["resultType"] != "complete" {
+		t.Errorf("expected a complete result, got %v", resp)
+	}
+}
+
+func TestMCPUnsupportedProtocolVersionIsRefused(t *testing.T) {
+	resp, err := sendMCPRequestRaw(mcpTestApp(), "tools/list", 1, map[string]interface{}{
+		"_meta": metaWith(map[string]interface{}{
+			mcpMetaProtocolVersion: "1900-01-01",
+		}),
+	})
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	errObj := mcpErrorOf(t, resp)
+	if errObj["code"] != float64(mcpErrUnsupportedProtocolVersion) {
+		t.Errorf("code: got %v", errObj["code"])
+	}
+	if errObj["message"] != "Unsupported protocol version" {
+		t.Errorf("message: got %v", errObj["message"])
+	}
+	data, _ := errObj["data"].(map[string]interface{})
+	supported, _ := data["supported"].([]interface{})
+	if len(supported) != 1 || supported[0] != mcpProtocolVersion || data["requested"] != "1900-01-01" {
+		t.Errorf("data: got %v", data)
+	}
+}
+
+func TestMCPEraSelection(t *testing.T) {
+	app := mcpTestApp()
+	lines := []string{
+		mustJSON(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "method": "initialize"}),
+		mustJSON(map[string]interface{}{"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+		mustJSON(map[string]interface{}{
+			"jsonrpc": "2.0", "id": 3, "method": "tools/list",
+			"params": map[string]interface{}{"_meta": modernMeta()},
+		}),
+		mustJSON(map[string]interface{}{"jsonrpc": "2.0", "id": 4, "method": "server/discover"}),
+	}
+	responses, err := sendMCPMulti(app, lines)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if len(responses) != 4 {
+		t.Fatalf("expected 4 responses, got %d", len(responses))
+	}
+	if mcpResultOf(t, responses[0])["protocolVersion"] != mcpLegacyProtocolVersion {
+		t.Errorf("handshake version: got %v", mcpResultOf(t, responses[0])["protocolVersion"])
+	}
+	legacyList := mcpResultOf(t, responses[1])
+	if _, ok := legacyList["resultType"]; ok {
+		t.Errorf("legacy result carries a resultType: %v", legacyList)
+	}
+	if _, ok := legacyList["ttlMs"]; ok {
+		t.Errorf("legacy result carries cacheability: %v", legacyList)
+	}
+	if mcpResultOf(t, responses[2])["resultType"] != "complete" {
+		t.Errorf("modern request after a handshake: got %v", responses[2])
+	}
+	if mcpErrorOf(t, responses[3])["code"] != float64(mcpErrMethodNotFound) {
+		t.Errorf("discover from the legacy era: got %v", responses[3])
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -32,12 +34,176 @@ type mcpError struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// JSON-RPC error codes
+// JSON-RPC and MCP error codes. -32020 (HeaderMismatch) belongs to the HTTP
+// transport, which this server does not speak; -32021
+// (MissingRequiredClientCapability) is fired by the confirmation round-trip.
 const (
-	mcpErrMethodNotFound = -32601
-	mcpErrInvalidParams  = -32602
-	mcpErrInternal       = -32603
+	mcpErrMethodNotFound             = -32601
+	mcpErrInvalidParams              = -32602
+	mcpErrInternal                   = -32603
+	mcpErrUnsupportedProtocolVersion = -32022
 )
+
+// The server speaks two eras (effects contract §22):
+//
+//	MODERN (2026-07-28) -- stateless. There is no handshake: every request
+//	carries its protocol version and the client's capabilities in `_meta`,
+//	every result carries a `resultType`, and `server/discover` advertises the
+//	supported versions, the capabilities and the server identity that the
+//	handshake used to carry.
+//
+//	LEGACY (2024-11-05) -- the `initialize` handshake. It is selected by an
+//	`initialize` request and scoped to this process, which is exactly the
+//	dual-era rule the modern revision specifies for a server serving both.
+//
+// A request that carries neither the modern metadata nor a preceding
+// `initialize` is malformed and is refused. Nothing is inferred.
+const (
+	mcpProtocolVersion       = "2026-07-28"
+	mcpLegacyProtocolVersion = "2024-11-05"
+)
+
+// The reserved `_meta` keys of the modern revision.
+const (
+	mcpMetaProtocolVersion    = "io.modelcontextprotocol/protocolVersion"
+	mcpMetaClientCapabilities = "io.modelcontextprotocol/clientCapabilities"
+	mcpMetaClientInfo         = "io.modelcontextprotocol/clientInfo"
+	mcpMetaServerInfo         = "io.modelcontextprotocol/serverInfo"
+	mcpMetaLogLevel           = "io.modelcontextprotocol/logLevel"
+	mcpMetaSubscriptionID     = "io.modelcontextprotocol/subscriptionId"
+)
+
+// mcpRecognizedReservedMetaKeys are the keys this revision defines under a
+// prefix the protocol reserves for itself. Any other key under a reserved
+// prefix is refused rather than ignored.
+var mcpRecognizedReservedMetaKeys = map[string]bool{
+	mcpMetaProtocolVersion:    true,
+	mcpMetaClientCapabilities: true,
+	mcpMetaClientInfo:         true,
+	mcpMetaLogLevel:           true,
+	mcpMetaSubscriptionID:     true,
+}
+
+// mcpFeatureConsequentialConfirmation is the named feature the server declares
+// (campaign decision 26). A NAME, never a version number: a new name appears
+// only if the confirmation dance changes incompatibly.
+const mcpFeatureConsequentialConfirmation = "dev.smmh.strictcli/consequential-confirmation"
+
+// Cacheability of the list surfaces. The tool list is derived from the app's
+// static command registration, so it cannot vary per client (public) and cannot
+// change while the process runs.
+const (
+	mcpCacheTTLMs = 3600000
+	mcpCacheScope = "public"
+)
+
+var (
+	mcpMetaPrefixLabelRe = regexp.MustCompile(`^[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?$`)
+	mcpMetaNameRe        = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$`)
+)
+
+// mcpMetaKeyValid reports whether key matches the protocol's `_meta` key-name
+// grammar: an optional dot-separated prefix, a slash, and a name. The name may
+// be empty; when it is not, it begins and ends alphanumeric and may carry
+// hyphens, underscores and dots in between.
+func mcpMetaKeyValid(key string) bool {
+	parts := strings.Split(key, "/")
+	var name string
+	switch len(parts) {
+	case 1:
+		name = parts[0]
+	case 2:
+		for _, label := range strings.Split(parts[0], ".") {
+			if !mcpMetaPrefixLabelRe.MatchString(label) {
+				return false
+			}
+		}
+		name = parts[1]
+	default:
+		return false
+	}
+	return name == "" || mcpMetaNameRe.MatchString(name)
+}
+
+// mcpMetaKeyReserved reports whether key sits under a prefix the protocol
+// reserves for itself: any prefix whose SECOND label is `modelcontextprotocol`
+// or `mcp`. So `io.modelcontextprotocol/` and `com.mcp.tools/` are reserved and
+// `com.example.mcp/` is not.
+func mcpMetaKeyReserved(key string) bool {
+	parts := strings.Split(key, "/")
+	if len(parts) != 2 {
+		return false
+	}
+	labels := strings.Split(parts[0], ".")
+	return len(labels) >= 2 && (labels[1] == "modelcontextprotocol" || labels[1] == "mcp")
+}
+
+// mcpValidateMeta validates one request's `_meta` block, returning the refusal
+// text or "". It is called only once the block is known to carry the protocol
+// version, which is what selects the modern era in the first place.
+func mcpValidateMeta(meta map[string]interface{}) string {
+	// Sorted so the refusal is deterministic when a request carries more than
+	// one offending key: Go map iteration is randomized.
+	keys := make([]string, 0, len(meta))
+	for key := range meta {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if !mcpMetaKeyValid(key) {
+			return fmt.Sprintf("invalid _meta key name: '%s'", key)
+		}
+		if mcpMetaKeyReserved(key) && !mcpRecognizedReservedMetaKeys[key] {
+			return fmt.Sprintf("unrecognized reserved _meta key: '%s'", key)
+		}
+	}
+	if _, ok := meta[mcpMetaProtocolVersion].(string); !ok {
+		return fmt.Sprintf("_meta['%s'] must be a string", mcpMetaProtocolVersion)
+	}
+	caps, ok := meta[mcpMetaClientCapabilities]
+	if !ok {
+		return fmt.Sprintf("missing required request metadata: _meta['%s']", mcpMetaClientCapabilities)
+	}
+	if _, ok := caps.(map[string]interface{}); !ok {
+		return fmt.Sprintf("_meta['%s'] must be an object", mcpMetaClientCapabilities)
+	}
+	if info, present := meta[mcpMetaClientInfo]; present {
+		if _, ok := info.(map[string]interface{}); !ok {
+			return fmt.Sprintf("_meta['%s'] must be an object", mcpMetaClientInfo)
+		}
+	}
+	return ""
+}
+
+// mcpServerInfo is the identity every modern result carries in its own `_meta`.
+func (a *App) mcpServerInfo() map[string]interface{} {
+	return map[string]interface{}{
+		mcpMetaServerInfo: map[string]interface{}{
+			"name":    a.Name,
+			"version": a.Version,
+		},
+	}
+}
+
+// mcpCompleteResult wraps a modern result body with its result type and the
+// server identity.
+func (a *App) mcpCompleteResult(reqID interface{}, body map[string]interface{}) mcpResponse {
+	result := map[string]interface{}{"resultType": "complete"}
+	for k, v := range body {
+		result[k] = v
+	}
+	result["_meta"] = a.mcpServerInfo()
+	return mcpResponse{Jsonrpc: "2.0", ID: reqID, Result: result}
+}
+
+// mcpErrorResponse builds a JSON-RPC error response, with optional data.
+func mcpErrorResponse(reqID interface{}, code int, message string, data interface{}) mcpResponse {
+	return mcpResponse{
+		Jsonrpc: "2.0",
+		ID:      reqID,
+		Error:   &mcpError{Code: code, Message: message, Data: data},
+	}
+}
 
 // ServeMCP starts a JSON-RPC 2.0 server on stdin/stdout implementing the
 // Model Context Protocol. It reads one JSON object per line from stdin and
@@ -53,6 +219,11 @@ func (a *App) serveMCPIO(in io.Reader, out io.Writer) {
 	scanner := bufio.NewScanner(in)
 	// Increase buffer size for large JSON objects
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+
+	// The one piece of connection state a dual-era server is allowed: an
+	// `initialize` request selects legacy semantics for this process. Modern
+	// requests carry everything they need and never consult it.
+	legacyEra := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -81,39 +252,93 @@ func (a *App) serveMCPIO(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		resp := a.handleMCPRequest(req)
+		resp := a.handleMCPRequest(req, &legacyEra)
 		writeMCPResponse(out, resp)
 	}
 }
 
-// handleMCPRequest dispatches a JSON-RPC request to the appropriate handler.
-func (a *App) handleMCPRequest(req mcpRequest) mcpResponse {
-	switch req.Method {
-	case "initialize":
+// handleMCPRequest routes one request to its era and dispatches it there.
+func (a *App) handleMCPRequest(req mcpRequest, legacyEra *bool) mcpResponse {
+	if req.Method == "initialize" {
+		*legacyEra = true
 		return a.handleMCPInitialize(req)
-	case "tools/list":
-		return a.handleMCPToolsList(req)
-	case "tools/call":
-		return a.handleMCPToolsCall(req)
+	}
+
+	metaVal, present := req.Params["_meta"]
+	meta, isObject := metaVal.(map[string]interface{})
+	switch {
+	case present && !isObject:
+		return mcpErrorResponse(req.ID, mcpErrInvalidParams,
+			"parameter '_meta' must be an object", nil)
+	case isObject && hasKey(meta, mcpMetaProtocolVersion):
+		return a.dispatchMCPModern(req, meta)
+	case *legacyEra:
+		return a.dispatchMCPLegacy(req)
 	default:
-		return mcpResponse{
-			Jsonrpc: "2.0",
-			ID:      req.ID,
-			Error: &mcpError{
-				Code:    mcpErrMethodNotFound,
-				Message: fmt.Sprintf("Method not found: %s", req.Method),
-			},
-		}
+		return mcpErrorResponse(req.ID, mcpErrInvalidParams,
+			fmt.Sprintf("missing required request metadata: _meta['%s']", mcpMetaProtocolVersion), nil)
 	}
 }
 
-// handleMCPInitialize responds to the initialize request with server capabilities.
+// hasKey reports whether a decoded JSON object carries a key at all, including
+// one whose value is null.
+func hasKey(obj map[string]interface{}, key string) bool {
+	_, ok := obj[key]
+	return ok
+}
+
+// dispatchMCPModern dispatches one modern-era request: metadata, then version,
+// then method.
+func (a *App) dispatchMCPModern(req mcpRequest, meta map[string]interface{}) mcpResponse {
+	if invalid := mcpValidateMeta(meta); invalid != "" {
+		return mcpErrorResponse(req.ID, mcpErrInvalidParams, invalid, nil)
+	}
+	version, _ := meta[mcpMetaProtocolVersion].(string)
+	if version != mcpProtocolVersion {
+		return mcpErrorResponse(req.ID, mcpErrUnsupportedProtocolVersion,
+			"Unsupported protocol version", map[string]interface{}{
+				"supported": []interface{}{mcpProtocolVersion},
+				"requested": version,
+			})
+	}
+	switch req.Method {
+	case "server/discover":
+		return a.handleMCPDiscover(req)
+	case "tools/list":
+		return a.handleMCPToolsList(req, true)
+	case "tools/call":
+		return a.handleMCPToolsCall(req, true)
+	default:
+		return mcpErrorResponse(req.ID, mcpErrMethodNotFound,
+			fmt.Sprintf("Method not found: %s", req.Method), nil)
+	}
+}
+
+// dispatchMCPLegacy dispatches one legacy-era request, unchanged from the
+// handshake revision.
+func (a *App) dispatchMCPLegacy(req mcpRequest) mcpResponse {
+	switch req.Method {
+	case "tools/list":
+		return a.handleMCPToolsList(req, false)
+	case "tools/call":
+		return a.handleMCPToolsCall(req, false)
+	default:
+		return mcpErrorResponse(req.ID, mcpErrMethodNotFound,
+			fmt.Sprintf("Method not found: %s", req.Method), nil)
+	}
+}
+
+// handleMCPInitialize answers the legacy-era handshake, and selects that era.
+//
+// The modern revision has no handshake; this method is what a legacy client
+// opens with, and answering it is what puts this process into legacy semantics
+// for every later request that carries no modern metadata.
 func (a *App) handleMCPInitialize(req mcpRequest) mcpResponse {
 	return mcpResponse{
 		Jsonrpc: "2.0",
 		ID:      req.ID,
 		Result: map[string]interface{}{
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": mcpLegacyProtocolVersion,
 			"capabilities": map[string]interface{}{
 				"tools": map[string]interface{}{},
 			},
@@ -125,9 +350,29 @@ func (a *App) handleMCPInitialize(req mcpRequest) mcpResponse {
 	}
 }
 
+// handleMCPDiscover answers `server/discover`, the modern era's mandatory
+// discovery call. It replaces the handshake: supported versions, capabilities
+// and identity in one request. The declared feature is a NAME rather than a
+// version number, so a client learns that this server runs the confirmation
+// dance without having to infer it from a revision date.
+func (a *App) handleMCPDiscover(req mcpRequest) mcpResponse {
+	return a.mcpCompleteResult(req.ID, map[string]interface{}{
+		"supportedVersions": []interface{}{mcpProtocolVersion},
+		"capabilities": map[string]interface{}{
+			"tools": map[string]interface{}{},
+			"extensions": map[string]interface{}{
+				mcpFeatureConsequentialConfirmation: map[string]interface{}{},
+			},
+		},
+		"instructions": a.Help,
+		"ttlMs":        mcpCacheTTLMs,
+		"cacheScope":   mcpCacheScope,
+	})
+}
+
 // handleMCPToolsList responds with tool definitions for all non-hidden,
 // non-interactive commands.
-func (a *App) handleMCPToolsList(req mcpRequest) mcpResponse {
+func (a *App) handleMCPToolsList(req mcpRequest, modern bool) mcpResponse {
 	// Initialized rather than declared nil for the same reason buildJSONSchema
 	// initializes `required`: encoding/json renders a nil slice as null, and an
 	// app with no exportable command must publish an empty tools list, as
@@ -152,13 +397,20 @@ func (a *App) handleMCPToolsList(req mcpRequest) mcpResponse {
 		collectMCPToolsFromGroup(grp, []string{groupName}, &toolDefs)
 	}
 
-	return mcpResponse{
-		Jsonrpc: "2.0",
-		ID:      req.ID,
-		Result: map[string]interface{}{
-			"tools": toolDefs,
-		},
+	if !modern {
+		return mcpResponse{
+			Jsonrpc: "2.0",
+			ID:      req.ID,
+			Result: map[string]interface{}{
+				"tools": toolDefs,
+			},
+		}
 	}
+	return a.mcpCompleteResult(req.ID, map[string]interface{}{
+		"tools":      toolDefs,
+		"ttlMs":      mcpCacheTTLMs,
+		"cacheScope": mcpCacheScope,
+	})
 }
 
 // collectMCPToolsFromGroup recursively collects MCP tool definitions from
@@ -207,8 +459,25 @@ func buildMCPToolDef(commandPath string, cmd *Command) map[string]interface{} {
 	return def
 }
 
+// mcpToolResult builds a tool result -- the one place the two eras' shapes
+// differ.
+func (a *App) mcpToolResult(reqID interface{}, text string, modern, isError bool) mcpResponse {
+	body := map[string]interface{}{
+		"content": []interface{}{
+			map[string]interface{}{"type": "text", "text": text},
+		},
+	}
+	if isError {
+		body["isError"] = true
+	}
+	if !modern {
+		return mcpResponse{Jsonrpc: "2.0", ID: reqID, Result: body}
+	}
+	return a.mcpCompleteResult(reqID, body)
+}
+
 // handleMCPToolsCall validates params, calls the command, and returns the result.
-func (a *App) handleMCPToolsCall(req mcpRequest) mcpResponse {
+func (a *App) handleMCPToolsCall(req mcpRequest, modern bool) mcpResponse {
 	params := req.Params
 
 	// Extract tool name
@@ -287,46 +556,17 @@ func (a *App) handleMCPToolsCall(req mcpRequest) mcpResponse {
 	// Call the command
 	result, err := a.Call(commandPath, callArgs, callOpts...)
 	if err != nil {
-		return mcpResponse{
-			Jsonrpc: "2.0",
-			ID:      req.ID,
-			Result: map[string]interface{}{
-				"content": []interface{}{
-					map[string]interface{}{
-						"type": "text",
-						"text": err.Error(),
-					},
-				},
-				"isError": true,
-			},
-		}
+		return a.mcpToolResult(req.ID, err.Error(), modern, true)
 	}
 
 	// Marshal result to JSON text
 	resultJSON, jsonErr := json.Marshal(result)
 	if jsonErr != nil {
-		return mcpResponse{
-			Jsonrpc: "2.0",
-			ID:      req.ID,
-			Error: &mcpError{
-				Code:    mcpErrInternal,
-				Message: fmt.Sprintf("failed to marshal result: %s", jsonErr),
-			},
-		}
+		return mcpErrorResponse(req.ID, mcpErrInternal,
+			fmt.Sprintf("failed to marshal result: %s", jsonErr), nil)
 	}
 
-	return mcpResponse{
-		Jsonrpc: "2.0",
-		ID:      req.ID,
-		Result: map[string]interface{}{
-			"content": []interface{}{
-				map[string]interface{}{
-					"type": "text",
-					"text": string(resultJSON),
-				},
-			},
-		},
-	}
+	return a.mcpToolResult(req.ID, string(resultJSON), modern, false)
 }
 
 // writeMCPResponse marshals and writes a JSON-RPC response as a single line.
