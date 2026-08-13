@@ -991,8 +991,8 @@ class TestToolExecuteConsent:
         with pytest.raises(strictcli.InvokeError) as exc:
             asyncio.run(tools["release"].execute())
         assert str(exc.value) == (
-            "command 'release' is consequential: pass approve_consequential "
-            "to confirm"
+            "command 'release' is consequential: the call must carry "
+            "confirmation"
         )
 
     def test_consented_execute_proceeds(self):

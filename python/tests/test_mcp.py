@@ -782,8 +782,8 @@ class TestMcpToolsCallConsent:
         result = resp["result"]
         assert result["isError"] is True
         assert result["content"][0]["text"] == (
-            "command 'release' is consequential: pass approve_consequential "
-            "to confirm"
+            "command 'release' is consequential: the call must carry "
+            "confirmation"
         )
 
     def test_explicit_false_is_refused(self):
@@ -1074,3 +1074,310 @@ class TestMcpEraSelection:
             era="legacy",
         )
         assert responses[1]["error"]["code"] == -32601
+
+
+# ---------------------------------------------------------------------------
+# The confirmation round-trip and its continuation state
+# ---------------------------------------------------------------------------
+
+
+class _Session:
+    """A live MCP session in which a request may depend on an earlier reply.
+
+    The continuation key and its spent-id set live in the server process, so a
+    round-trip has to be driven through ONE serve_mcp call: a second call is a
+    second server, and its state is deliberately worthless to the first.
+    """
+
+    def __init__(self, app):
+        self.app = app
+        self.out = io.StringIO()
+        self.responses = []
+        self._read = 0
+
+    def run(self, *steps):
+        def lines():
+            for step in steps:
+                request = step(self.responses) if callable(step) else step
+                yield json.dumps(request) + "\n"
+                self._drain()
+
+        self.app.serve_mcp(input=lines(), output=self.out)
+        self._drain()
+        return self.responses
+
+    def _drain(self):
+        text = self.out.getvalue()[self._read:]
+        self._read += len(text)
+        for line in text.splitlines():
+            if line.strip():
+                self.responses.append(json.loads(line))
+
+
+def _confirming_app():
+    app = _build_app()
+
+    @app.command(
+        "release", effect="mutating", consequential=True, help="release it",
+        payload_schema={},
+    )
+    def release(ctx):
+        ctx.payload({"released": True})
+        return strictcli.outcome()
+
+    @app.command("look", effect="read_only", help="look around",
+                 payload_schema={})
+    def look(ctx):
+        ctx.payload({"looked": True})
+        return strictcli.outcome()
+
+    return app
+
+
+#: A client that can render a form elicitation, and one that cannot.
+_ELICITING = {
+    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+    "io.modelcontextprotocol/clientCapabilities": {"elicitation": {"form": {}}},
+    "io.modelcontextprotocol/clientInfo": {"name": "cli", "version": "1.0.0"},
+}
+
+
+def _call_request(req_id, **params):
+    params.setdefault("_meta", dict(_ELICITING))
+    return {
+        "jsonrpc": "2.0", "id": req_id, "method": "tools/call", "params": params,
+    }
+
+
+def _accept(proceed=True):
+    return {
+        "consequential-confirmation": {
+            "action": "accept", "content": {"proceed": proceed},
+        },
+    }
+
+
+def _state_of(response):
+    return response["result"]["requestState"]
+
+
+def _drive_confirmation(app, answers, *, tool="release", arguments=None, meta=None):
+    """Ask, then answer: the two halves of one confirmation, in one session."""
+    args = {} if arguments is None else arguments
+    extra = {"_meta": meta} if meta is not None else {}
+    return _Session(app).run(
+        _call_request(1, name=tool, arguments=args, **extra),
+        lambda seen: _call_request(
+            2, name=tool, arguments=args,
+            requestState=_state_of(seen[0]), inputResponses=answers, **extra,
+        ),
+    )
+
+
+class TestMcpConfirmationRoundTrip:
+    """A consequential tool asks, through the client, before it runs."""
+
+    def test_an_unconsented_call_asks_for_confirmation(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="release", arguments={},
+        ))
+        result = resp["result"]
+        assert result["resultType"] == "input_required"
+        request = result["inputRequests"]["consequential-confirmation"]
+        assert request["method"] == "elicitation/create"
+        assert request["params"]["mode"] == "form"
+        assert request["params"]["message"] == (
+            "about to run consequential command 'release'. Proceed?"
+        )
+        assert request["params"]["requestedSchema"]["required"] == ["proceed"]
+        assert isinstance(result["requestState"], str)
+        assert result["requestState"] != ""
+
+    def test_a_retry_carrying_acceptance_proceeds(self):
+        responses = _drive_confirmation(_confirming_app(), _accept())
+        result = responses[1]["result"]
+        assert result["resultType"] == "complete"
+        assert "isError" not in result
+        assert json.loads(result["content"][0]["text"]) == {"released": True}
+
+    def test_a_declined_confirmation_aborts(self):
+        responses = _drive_confirmation(
+            _confirming_app(),
+            {"consequential-confirmation": {"action": "decline"}},
+        )
+        result = responses[1]["result"]
+        assert result["isError"] is True
+        assert result["content"][0]["text"] == "aborted"
+
+    def test_a_cancelled_confirmation_aborts(self):
+        responses = _drive_confirmation(
+            _confirming_app(),
+            {"consequential-confirmation": {"action": "cancel"}},
+        )
+        assert responses[1]["result"]["isError"] is True
+
+    def test_an_acceptance_that_says_no_aborts(self):
+        responses = _drive_confirmation(_confirming_app(), _accept(proceed=False))
+        assert responses[1]["result"]["isError"] is True
+
+    def test_a_missing_answer_asks_again_with_fresh_state(self):
+        responses = _drive_confirmation(_confirming_app(), {})
+        second = responses[1]["result"]
+        assert second["resultType"] == "input_required"
+        assert second["requestState"] != _state_of(responses[0])
+
+    def test_a_read_only_tool_is_never_asked_about(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="look", arguments={},
+        ))
+        assert resp["result"]["resultType"] == "complete"
+
+    def test_a_stated_consent_still_proceeds_without_the_round_trip(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="release", arguments={}, approve_consequential=True,
+        ))
+        assert resp["result"]["resultType"] == "complete"
+        assert "isError" not in resp["result"]
+
+    def test_a_client_without_elicitation_is_refused_not_asked(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="release", arguments={}, _meta=dict(MODERN_META),
+        ))
+        result = resp["result"]
+        assert result["resultType"] == "complete"
+        assert result["isError"] is True
+        assert result["content"][0]["text"] == (
+            "command 'release' is consequential: the call must carry confirmation"
+        )
+
+
+class TestMcpContinuationState:
+    """The state is attacker-controlled input, and is checked as such."""
+
+    def test_a_tampered_state_is_refused(self):
+        def tamper(seen):
+            state = _state_of(seen[0])
+            broken = state[:-1] + ("A" if state[-1] != "A" else "B")
+            return _call_request(
+                2, name="release", arguments={},
+                requestState=broken, inputResponses=_accept(),
+            )
+
+        responses = _Session(_confirming_app()).run(
+            _call_request(1, name="release", arguments={}), tamper,
+        )
+        assert responses[1]["error"]["code"] == -32602
+        assert responses[1]["error"]["message"] == (
+            "requestState failed verification"
+        )
+
+    def test_a_forged_state_is_refused(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="release", arguments={},
+            requestState="not-a-state", inputResponses=_accept(),
+        ))
+        assert resp["error"]["message"] == "requestState failed verification"
+
+    def test_a_state_is_single_use(self):
+        def retry(seen):
+            return _call_request(
+                2, name="release", arguments={},
+                requestState=_state_of(seen[0]), inputResponses=_accept(),
+            )
+
+        def replay(seen):
+            return _call_request(
+                3, name="release", arguments={},
+                requestState=_state_of(seen[0]), inputResponses=_accept(),
+            )
+
+        responses = _Session(_confirming_app()).run(
+            _call_request(1, name="release", arguments={}), retry, replay,
+        )
+        assert responses[1]["result"]["resultType"] == "complete"
+        assert responses[2]["error"]["message"] == (
+            "requestState has already been used"
+        )
+
+    def test_a_state_does_not_travel_to_another_request(self):
+        responses = _Session(_confirming_app()).run(
+            _call_request(1, name="release", arguments={}),
+            lambda seen: _call_request(
+                2, name="release", arguments={"unexpected": 1},
+                requestState=_state_of(seen[0]), inputResponses=_accept(),
+            ),
+        )
+        assert responses[1]["error"]["message"] == (
+            "requestState does not match this request"
+        )
+
+    def test_a_state_does_not_travel_to_another_client(self):
+        other = dict(_ELICITING)
+        other["io.modelcontextprotocol/clientInfo"] = {
+            "name": "someone-else", "version": "1.0.0",
+        }
+        responses = _Session(_confirming_app()).run(
+            _call_request(1, name="release", arguments={}),
+            lambda seen: _call_request(
+                2, name="release", arguments={}, _meta=other,
+                requestState=_state_of(seen[0]), inputResponses=_accept(),
+            ),
+        )
+        assert responses[1]["error"]["message"] == (
+            "requestState was issued to a different client"
+        )
+
+    def test_an_answer_without_its_state_is_refused(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="release", arguments={}, inputResponses=_accept(),
+        ))
+        assert resp["error"]["message"] == (
+            "parameter 'inputResponses' requires the requestState it was "
+            "issued with"
+        )
+
+    def test_a_non_string_state_is_a_protocol_error(self):
+        resp = _send_one(_confirming_app(), _call_request(
+            1, name="release", arguments={}, requestState=7,
+        ))
+        assert resp["error"]["message"] == (
+            "parameter 'requestState' must be a string"
+        )
+
+    def test_a_malformed_answer_is_a_protocol_error(self):
+        responses = _Session(_confirming_app()).run(
+            _call_request(1, name="release", arguments={}),
+            lambda seen: _call_request(
+                2, name="release", arguments={},
+                requestState=_state_of(seen[0]),
+                inputResponses={
+                    "consequential-confirmation": {"action": "shrug"},
+                },
+            ),
+        )
+        assert responses[1]["error"]["message"] == (
+            "inputResponses['consequential-confirmation'] is not an "
+            "elicitation result"
+        )
+
+    def test_an_expired_state_is_refused(self):
+        """No clock reaches the wire, so expiry is driven at the mint."""
+        continuation = strictcli._MCPContinuation()
+        now = 1_000_000.0
+        ttl = strictcli._MCP_CONTINUATION_TTL_SECONDS
+        state = continuation.mint("cli/1.0.0", "digest", now=now)
+        assert continuation.verify(
+            state, "cli/1.0.0", "digest", now=now + ttl - 1,
+        ) is None
+        fresh = continuation.mint("cli/1.0.0", "digest", now=now)
+        assert continuation.verify(
+            fresh, "cli/1.0.0", "digest", now=now + ttl + 1,
+        ) == "requestState has expired"
+
+    def test_a_state_is_worthless_to_another_process(self):
+        one = strictcli._MCPContinuation()
+        other = strictcli._MCPContinuation()
+        state = one.mint("cli/1.0.0", "digest")
+        assert other.verify(state, "cli/1.0.0", "digest") == (
+            "requestState failed verification"
+        )

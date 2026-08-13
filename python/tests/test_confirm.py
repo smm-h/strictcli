@@ -122,8 +122,8 @@ class TestNonInteractive:
         out = capsys.readouterr()
         assert "ran" not in out.out
         assert out.err == (
-            "error: stdin is not interactive; "
-            "pass --approve-consequential to confirm\n"
+            "error: stdin is not interactive; a consequential command must be "
+            "confirmed at a terminal\n"
         )
         assert stdin.read_count == 0
 
@@ -217,8 +217,8 @@ class TestCallConsent:
         with pytest.raises(sc.InvokeError) as exc:
             _app().call("deploy")
         assert str(exc.value) == (
-            "command 'deploy' is consequential: pass approve_consequential "
-            "to confirm"
+            "command 'deploy' is consequential: the call must carry "
+            "confirmation"
         )
 
     def test_consented_call_proceeds(self, capsys):

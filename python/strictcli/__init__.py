@@ -23,11 +23,15 @@ __all__ = [
 ]
 
 import ast
+import base64
+import binascii
 import calendar
 import contextlib
 import decimal
 import keyword
 import fnmatch
+import hashlib
+import hmac
 import inspect
 import io
 import json
@@ -824,8 +828,16 @@ def _strip_confirm_line(answer: str) -> str:
 
 
 def _msg_confirm_non_interactive() -> str:
+    """The non-interactive refusal (contract §8.3).
+
+    It names what is required -- confirmation, at a terminal -- and never the
+    token that lifts the requirement. A refusal that prints its own override
+    is not a seam: the reflex it teaches is to append the override and re-run,
+    which is the opposite of the judgement the declaration asks for.
+    """
     return (
-        "error: stdin is not interactive; pass --approve-consequential to confirm"
+        "error: stdin is not interactive; a consequential command must be "
+        "confirmed at a terminal"
     )
 
 
@@ -873,10 +885,7 @@ def _msg_call_consequential_unconsented(cmd_path: str) -> str:
     refusal makes the caller state, in the call, that it is proceeding without
     a human, instead of the framework deciding that silently on its behalf.
     """
-    return (
-        f"command '{cmd_path}' is consequential: pass approve_consequential "
-        f"to confirm"
-    )
+    return f"command '{cmd_path}' is consequential: the call must carry confirmation"
 
 
 def _consequential_grant_warning(cmd_path: str, grant: str, kind: str) -> str:
@@ -11891,6 +11900,179 @@ def _mcp_complete_result(app: App, req_id: object, body: dict) -> dict:
     return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
 
+# --- The continuation primitive (contract §22.4) ----------------------------
+#
+# The protocol is stateless: a server that needs more input answers with an
+# input-required result and whatever it must remember, and the client echoes
+# that back on a retry that is otherwise a fresh, independent request. The
+# state therefore travels THROUGH the client, which makes it attacker-
+# controlled input rather than server memory.
+
+#: How long a minted continuation stays usable. Long enough for a human to
+#: answer the confirmation the client renders, short enough that a captured
+#: blob is worth little.
+_MCP_CONTINUATION_TTL_SECONDS = 300
+
+#: The key the confirmation elicitation is filed under, in both directions.
+_MCP_CONFIRMATION_KEY = "consequential-confirmation"
+
+
+def _b64url(raw: bytes) -> str:
+    """Unpadded base64url -- the blob is a URL-safe opaque token."""
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(text: str) -> bytes | None:
+    """Decode unpadded base64url, or None when the text is not one."""
+    padding = "=" * (-len(text) % 4)
+    try:
+        return base64.urlsafe_b64decode(text + padding)
+    except (ValueError, binascii.Error):
+        return None
+
+
+def _mcp_canonical_json(value: object) -> str:
+    """A canonical encoding of a JSON value, for digesting.
+
+    Keys are sorted, there is no insignificant whitespace, and floats take the
+    framework's canonical form -- so the digest depends on what the caller
+    said, never on how their encoder spelled it.
+    """
+    if value is None:
+        return "null"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, float):
+        return _format_float_canonical(value)
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, list):
+        return "[" + ",".join(_mcp_canonical_json(v) for v in value) + "]"
+    if isinstance(value, dict):
+        parts = [
+            json.dumps(str(k), ensure_ascii=False) + ":" + _mcp_canonical_json(v)
+            for k, v in sorted(value.items(), key=lambda kv: str(kv[0]))
+        ]
+        return "{" + ",".join(parts) + "}"
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _mcp_request_digest(method: str, tool_name: str, arguments: dict) -> str:
+    """Digest the originating request: the method and its salient parameters."""
+    material = "\n".join([method, tool_name, _mcp_canonical_json(arguments)])
+    return _b64url(hashlib.sha256(material.encode("utf-8")).digest())
+
+
+def _mcp_principal(meta: dict) -> str:
+    """The client this state is minted for, as the client declares itself.
+
+    On this transport there is no authenticated principal; the declaration is
+    self-reported and the binding is a consistency check, not authentication.
+    What actually contains a stolen blob is the per-process key.
+    """
+    info = meta.get(_MCP_META_CLIENT_INFO)
+    if not isinstance(info, dict):
+        return ""
+    name = info.get("name")
+    version = info.get("version")
+    return "{}/{}".format(
+        name if isinstance(name, str) else "",
+        version if isinstance(version, str) else "",
+    )
+
+
+class _MCPContinuation:
+    """Mints and verifies the integrity-protected continuation state blob.
+
+    The blob is `<payload>.<mac>`, both unpadded base64url, where the MAC is
+    HMAC-SHA256 over the payload bytes under a key minted for this process and
+    never emitted. A blob is therefore unforgeable without reading this
+    process's memory, and worthless to any other process.
+
+    The payload binds three things the protocol requires be checked on receipt
+    -- the principal it was issued to, an expiry, and a digest of the
+    originating request -- plus a unique id, which is what makes single use
+    enforceable: those three bound the replay window but do not close it.
+    """
+
+    def __init__(self) -> None:
+        self._key = os.urandom(32)
+        self._consumed: dict[str, int] = {}
+
+    def _mac(self, payload: bytes) -> bytes:
+        return hmac.new(self._key, payload, hashlib.sha256).digest()
+
+    def mint(self, principal: str, digest: str, now: float | None = None) -> str:
+        moment = time.time() if now is None else now
+        payload = {
+            "v": 1,
+            "jti": _b64url(os.urandom(16)),
+            "prin": principal,
+            "exp": int(moment) + _MCP_CONTINUATION_TTL_SECONDS,
+            "req": digest,
+        }
+        raw = json.dumps(
+            payload, separators=(",", ":"), ensure_ascii=False,
+        ).encode("utf-8")
+        return f"{_b64url(raw)}.{_b64url(self._mac(raw))}"
+
+    def verify(
+        self,
+        blob: str,
+        principal: str,
+        digest: str,
+        now: float | None = None,
+    ) -> str | None:
+        """Verify and CONSUME a blob; return None when good, else the refusal.
+
+        A blob that passes every check is consumed here, so a second
+        presentation of the same blob is refused even though it is still
+        perfectly well-formed, unexpired and correctly bound.
+        """
+        moment = int(time.time() if now is None else now)
+        parts = blob.split(".")
+        if len(parts) != 2:
+            return "requestState failed verification"
+        raw = _b64url_decode(parts[0])
+        mac = _b64url_decode(parts[1])
+        if raw is None or mac is None:
+            return "requestState failed verification"
+        if not hmac.compare_digest(mac, self._mac(raw)):
+            return "requestState failed verification"
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return "requestState failed verification"
+        if not isinstance(payload, dict) or payload.get("v") != 1:
+            return "requestState failed verification"
+        jti = payload.get("jti")
+        if not isinstance(jti, str):
+            return "requestState failed verification"
+        expiry = payload.get("exp")
+        if not isinstance(expiry, int) or isinstance(expiry, bool):
+            return "requestState failed verification"
+        self._prune(moment)
+        if expiry <= moment:
+            return "requestState has expired"
+        if payload.get("prin") != principal:
+            return "requestState was issued to a different client"
+        if payload.get("req") != digest:
+            return "requestState does not match this request"
+        if jti in self._consumed:
+            return "requestState has already been used"
+        self._consumed[jti] = expiry
+        return None
+
+    def _prune(self, moment: int) -> None:
+        """Forget consumed ids that can no longer be replayed anyway."""
+        for jti in [j for j, exp in self._consumed.items() if exp <= moment]:
+            del self._consumed[jti]
+
+
 def _mcp_collect_commands(app: App) -> dict[str, tuple[Command, str]]:
     """Collect non-hidden, non-interactive leaf commands as {dotted_path: (cmd, help)}.
 
@@ -12025,12 +12207,182 @@ def _mcp_tool_result(
     return _mcp_complete_result(app, req_id, body)
 
 
+def _mcp_client_declares_elicitation(meta: dict) -> bool:
+    """True when the client declared it can render a form elicitation.
+
+    An empty `elicitation` object means form mode, which the protocol states
+    for compatibility with clients written before the modes existed.
+    """
+    caps = meta.get(_MCP_META_CLIENT_CAPABILITIES)
+    if not isinstance(caps, dict):
+        return False
+    elicitation = caps.get("elicitation")
+    if not isinstance(elicitation, dict):
+        return False
+    if not elicitation:
+        return True
+    return isinstance(elicitation.get("form"), dict)
+
+
+def _mcp_confirmation_request(cmd_path: str) -> dict:
+    """The elicitation that asks a human, through the client, to confirm.
+
+    Same words as the terminal prompt (§12.6) minus its keystroke hint: one
+    vocabulary for one question, however it is delivered.
+    """
+    return {
+        "method": "elicitation/create",
+        "params": {
+            "mode": "form",
+            "message": f"about to run consequential command '{cmd_path}'. Proceed?",
+            "requestedSchema": {
+                "type": "object",
+                "properties": {
+                    "proceed": {
+                        "type": "boolean",
+                        "title": "Proceed",
+                        "description": "Whether to run the consequential command.",
+                    },
+                },
+                "required": ["proceed"],
+            },
+        },
+    }
+
+
+def _mcp_input_required(
+    app: App, req_id: object, cmd_path: str, request_state: str,
+) -> dict:
+    """The interim result: what is needed, and the state to echo back with it."""
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "result": {
+            "resultType": "input_required",
+            "inputRequests": {
+                _MCP_CONFIRMATION_KEY: _mcp_confirmation_request(cmd_path),
+            },
+            "requestState": request_state,
+            "_meta": _mcp_server_info(app),
+        },
+    }
+
+
+def _mcp_confirmation_verdict(answer: object) -> str:
+    """Read one elicitation result: 'accept', 'reject', 'absent' or 'malformed'.
+
+    An `accept` carrying `proceed: false` is a refusal, not an approval: the
+    action names what the client did with the dialogue, and the field is the
+    answer to the question.
+    """
+    if answer is None:
+        return "absent"
+    if not isinstance(answer, dict):
+        return "malformed"
+    action = answer.get("action")
+    if action in ("decline", "cancel"):
+        return "reject"
+    if action != "accept":
+        return "malformed"
+    content = answer.get("content")
+    if not isinstance(content, dict):
+        return "malformed"
+    return "accept" if content.get("proceed") is True else "reject"
+
+
+def _mcp_confirmation_exchange(
+    app: App,
+    req_id: object,
+    params: dict,
+    tool_name: str,
+    arguments: dict,
+    *,
+    commands: dict[str, tuple[Command, str]],
+    meta: dict,
+    continuation: _MCPContinuation | None,
+    already_consented: bool,
+) -> dict | bool:
+    """Run the confirmation round-trip for one call.
+
+    Returns a response to send back (a refusal, or the interim result asking
+    for confirmation), or the consent the call may proceed with.
+    """
+    principal = _mcp_principal(meta)
+    digest = _mcp_request_digest("tools/call", tool_name, arguments)
+    consented = already_consented
+
+    if "requestState" in params:
+        state = params["requestState"]
+        if not isinstance(state, str):
+            return _mcp_jsonrpc_error(
+                req_id, _MCP_ERR_INVALID_PARAMS,
+                "parameter 'requestState' must be a string",
+            )
+        responses = params.get("inputResponses", {})
+        if not isinstance(responses, dict):
+            return _mcp_jsonrpc_error(
+                req_id, _MCP_ERR_INVALID_PARAMS,
+                "parameter 'inputResponses' must be an object",
+            )
+        if continuation is None:
+            return _mcp_jsonrpc_error(
+                req_id, _MCP_ERR_INVALID_PARAMS, "requestState failed verification",
+            )
+        refusal = continuation.verify(state, principal, digest)
+        if refusal is not None:
+            return _mcp_jsonrpc_error(req_id, _MCP_ERR_INVALID_PARAMS, refusal)
+        verdict = _mcp_confirmation_verdict(responses.get(_MCP_CONFIRMATION_KEY))
+        if verdict == "malformed":
+            return _mcp_jsonrpc_error(
+                req_id, _MCP_ERR_INVALID_PARAMS,
+                f"inputResponses['{_MCP_CONFIRMATION_KEY}'] is not an "
+                f"elicitation result",
+            )
+        if verdict == "reject":
+            return _mcp_tool_result(
+                app, req_id, _msg_confirm_declined(), modern=True, is_error=True,
+            )
+        if verdict == "accept":
+            consented = True
+        else:
+            # The state was good but the answer never came. The protocol says
+            # to ask again rather than error -- with a fresh state, since the
+            # one just presented is spent.
+            return _mcp_input_required(
+                app, req_id, tool_name, continuation.mint(principal, digest),
+            )
+    elif "inputResponses" in params:
+        # An answer whose state is missing cannot be verified, and an
+        # unverifiable answer is not an answer.
+        return _mcp_jsonrpc_error(
+            req_id, _MCP_ERR_INVALID_PARAMS,
+            "parameter 'inputResponses' requires the requestState it was "
+            "issued with",
+        )
+
+    if consented:
+        return True
+    entry = commands.get(tool_name)
+    if entry is None or not entry[0].consequential:
+        return consented
+    if continuation is not None and _mcp_client_declares_elicitation(meta):
+        return _mcp_input_required(
+            app, req_id, tool_name, continuation.mint(principal, digest),
+        )
+    # A client that cannot render the confirmation gets the refusal, which
+    # names what is required without teaching a way around it.
+    return consented
+
+
 def _mcp_handle_tools_call(
     app: App,
     req_id: object,
     params: dict,
     *,
     modern: bool,
+    commands: dict[str, tuple[Command, str]] | None = None,
+    meta: dict | None = None,
+    continuation: _MCPContinuation | None = None,
 ) -> dict:
     """Handle the MCP 'tools/call' request."""
     if "name" not in params:
@@ -12063,6 +12415,18 @@ def _mcp_handle_tools_call(
             req_id, -32602,
             "parameter 'approve_consequential' must be a boolean",
         )
+
+    if modern:
+        outcome_or_consent = _mcp_confirmation_exchange(
+            app, req_id, params, tool_name, arguments,
+            commands=commands or {},
+            meta=meta or {},
+            continuation=continuation,
+            already_consented=approve_consequential,
+        )
+        if isinstance(outcome_or_consent, dict):
+            return outcome_or_consent
+        approve_consequential = outcome_or_consent
 
     try:
         result = app._call_with_kwargs(
@@ -12098,6 +12462,9 @@ def _run_mcp_server(
     # `initialize` request selects legacy semantics for this process. Modern
     # requests carry everything they need and never consult it.
     legacy_era = False
+    # The continuation minting key and the spent-id set. Both are per process:
+    # a blob is unforgeable outside this process and unusable twice inside it.
+    continuation = _MCPContinuation()
 
     for line in inp:
         line = line.strip()
@@ -12148,7 +12515,9 @@ def _run_mcp_server(
                 "parameter '_meta' must be an object",
             )
         elif isinstance(meta, dict) and _MCP_META_PROTOCOL_VERSION in meta:
-            resp = _mcp_dispatch_modern(app, commands, req_id, method, params, meta)
+            resp = _mcp_dispatch_modern(
+                app, commands, req_id, method, params, meta, continuation,
+            )
         elif legacy_era:
             resp = _mcp_dispatch_legacy(app, commands, req_id, method, params)
         else:
@@ -12169,6 +12538,7 @@ def _mcp_dispatch_modern(
     method: str,
     params: dict,
     meta: dict,
+    continuation: _MCPContinuation,
 ) -> dict:
     """Dispatch one modern-era request: metadata, then version, then method."""
     invalid = _mcp_validate_meta(meta)
@@ -12186,7 +12556,10 @@ def _mcp_dispatch_modern(
     if method == "tools/list":
         return _mcp_handle_tools_list(app, commands, req_id, modern=True)
     if method == "tools/call":
-        return _mcp_handle_tools_call(app, req_id, params, modern=True)
+        return _mcp_handle_tools_call(
+            app, req_id, params, modern=True,
+            commands=commands, meta=meta, continuation=continuation,
+        )
     return _mcp_jsonrpc_error(
         req_id, _MCP_ERR_METHOD_NOT_FOUND, f"Method not found: {method}",
     )
