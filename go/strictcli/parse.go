@@ -85,15 +85,29 @@ func (s *sourcedStore) has(name string) bool {
 	return ok
 }
 
-// isPresentForMutex returns true if the flag is "present" for mutex
-// evaluation. Only cli, env, and config sources count. Default and
-// implied values do NOT trigger mutex violations.
-func (s *sourcedStore) isPresentForMutex(name string) bool {
+// isCLI reports whether the value came from a command-line token. Mutex
+// election is CLI-only (effects contract §21.3): env and config sources
+// neither elect a member nor supply its value.
+func (s *sourcedStore) isCLI(name string) bool {
 	e, ok := s.entries[name]
 	if !ok {
 		return false
 	}
-	return e.source == SourceCLI || e.source == SourceEnv || e.source == SourceConfig
+	return e.source == SourceCLI
+}
+
+// isEnvOrConfig reports whether the value came from an env var or config file.
+func (s *sourcedStore) isEnvOrConfig(name string) bool {
+	e, ok := s.entries[name]
+	if !ok {
+		return false
+	}
+	return e.source == SourceEnv || e.source == SourceConfig
+}
+
+// delete drops an entry entirely, so defaults apply to it later.
+func (s *sourcedStore) delete(name string) {
+	delete(s.entries, name)
 }
 
 // isPresentForDeps returns true if the flag is "present" for dependency
@@ -641,24 +655,54 @@ func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string, ro
 // Returns (kwargs, postGlobalValues, errorString).
 func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []string, globalFlagNames map[string]bool, infraRoots map[string]string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
 	// Enforce mutex group constraints (before defaults).
-	// Only cli/env/config sources count as "present" for mutex evaluation.
-	// Default and implied sources do NOT trigger mutex violations.
+	// Election is CLI-only and value-aware (effects contract §21):
+	//   - a bool member elects only when the typed token resolved to true;
+	//     `--no-x` DECLINES (it names the member and says it is not the choice)
+	//   - every other type elects on presence with any value, including ""
+	//   - env and config elect nothing AND supply nothing: their entries are
+	//     dropped here, before dependency validation, so an unelected member
+	//     delivers its declared default (or nil) and never a stale env value
 	for _, mg := range cmd.mutex {
-		var setFlags []string
+		var elected []string
+		var declined []string
+		var firstDeclined string
 		for _, f := range mg.Flags {
-			if store.isPresentForMutex(f.Name) {
-				setFlags = append(setFlags, "--"+f.Name)
+			if store.isEnvOrConfig(f.Name) {
+				store.delete(f.Name)
+				continue
 			}
+			if !store.isCLI(f.Name) {
+				continue
+			}
+			if v, _ := store.get(f.Name); f.Type == TypeBool && v != true {
+				declined = append(declined, "--no-"+f.Name)
+				if firstDeclined == "" {
+					firstDeclined = f.Name
+				}
+				continue
+			}
+			elected = append(elected, "--"+f.Name)
 		}
-		if len(setFlags) > 1 {
-			return nil, nil, nil, errMutuallyExclusive(strings.Join(setFlags, " and "))
+		clause := ""
+		if firstDeclined != "" {
+			clause = errMutexDeclineClause(firstDeclined)
 		}
-		if len(setFlags) == 0 {
+		if len(elected) > 1 {
+			return nil, nil, nil, errMutuallyExclusive(strings.Join(elected, " and "))
+		}
+		if len(elected) == 1 && len(declined) > 0 {
+			return nil, nil, nil, errMutexRedundantNegation(
+				strings.Join(declined, " and "),
+				strings.TrimPrefix(elected[0], "--"),
+				clause,
+			)
+		}
+		if len(elected) == 0 {
 			names := make([]string, len(mg.Flags))
 			for j, f := range mg.Flags {
 				names[j] = "--" + f.Name
 			}
-			return nil, nil, nil, errOneOfRequired(strings.Join(names, ", "))
+			return nil, nil, nil, errOneOfRequired(strings.Join(names, ", "), clause)
 		}
 	}
 

@@ -658,8 +658,16 @@ func errMutuallyExclusive(setFlags string) string {
 	return fmt.Sprintf("%s are mutually exclusive", setFlags)
 }
 
-func errOneOfRequired(names string) string {
-	return fmt.Sprintf("one of %s is required", names)
+func errOneOfRequired(names string, clause string) string {
+	return fmt.Sprintf("one of %s is required%s", names, clause)
+}
+
+func errMutexRedundantNegation(declined string, elected string, clause string) string {
+	return fmt.Sprintf("%s cannot be combined with --%s%s", declined, elected, clause)
+}
+
+func errMutexDeclineClause(name string) string {
+	return fmt.Sprintf(" (--no-%s declines an option; it does not choose one)", name)
 }
 
 func errImpliesConflict(flag string, neg string, target string, explicitNeg string) string {
