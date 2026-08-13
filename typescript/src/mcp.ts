@@ -57,13 +57,12 @@ const MCP_ERR_UNSUPPORTED_PROTOCOL_VERSION = -32022;
 //
 // A request that carries neither the modern metadata nor a preceding
 // `initialize` is malformed and is refused. Nothing is inferred.
-export const MCP_PROTOCOL_VERSION = "2026-07-28";
+const MCP_PROTOCOL_VERSION = "2026-07-28";
 const MCP_LEGACY_PROTOCOL_VERSION = "2024-11-05";
 
 // The reserved `_meta` keys of the modern revision.
-export const MCP_META_PROTOCOL_VERSION =
-	"io.modelcontextprotocol/protocolVersion";
-export const MCP_META_CLIENT_CAPABILITIES =
+const MCP_META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion";
+const MCP_META_CLIENT_CAPABILITIES =
 	"io.modelcontextprotocol/clientCapabilities";
 const MCP_META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo";
 const MCP_META_SERVER_INFO = "io.modelcontextprotocol/serverInfo";
