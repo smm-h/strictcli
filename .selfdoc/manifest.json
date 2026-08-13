@@ -2609,6 +2609,11 @@
         },
         {
           "level": 3,
+          "text": "`_msg_confirm_non_interactive`",
+          "anchor": "_msg_confirm_non_interactive"
+        },
+        {
+          "level": 3,
           "text": "`_msg_mutex_decline_clause`",
           "anchor": "_msg_mutex_decline_clause"
         },
@@ -4134,6 +4139,76 @@
         },
         {
           "level": 3,
+          "text": "`_mcp_meta_key_valid`",
+          "anchor": "_mcp_meta_key_valid"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_meta_key_reserved`",
+          "anchor": "_mcp_meta_key_reserved"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_validate_meta`",
+          "anchor": "_mcp_validate_meta"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_server_info`",
+          "anchor": "_mcp_server_info"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_complete_result`",
+          "anchor": "_mcp_complete_result"
+        },
+        {
+          "level": 3,
+          "text": "`_b64url`",
+          "anchor": "_b64url"
+        },
+        {
+          "level": 3,
+          "text": "`_b64url_decode`",
+          "anchor": "_b64url_decode"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_canonical_json`",
+          "anchor": "_mcp_canonical_json"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_request_digest`",
+          "anchor": "_mcp_request_digest"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_principal`",
+          "anchor": "_mcp_principal"
+        },
+        {
+          "level": 3,
+          "text": "`_MCPContinuation`",
+          "anchor": "_mcpcontinuation"
+        },
+        {
+          "level": 4,
+          "text": "`mint`",
+          "anchor": "mint"
+        },
+        {
+          "level": 4,
+          "text": "`verify`",
+          "anchor": "verify"
+        },
+        {
+          "level": 4,
+          "text": "`_prune`",
+          "anchor": "_prune"
+        },
+        {
+          "level": 3,
           "text": "`_mcp_collect_commands`",
           "anchor": "_mcp_collect_commands"
         },
@@ -4149,8 +4224,43 @@
         },
         {
           "level": 3,
+          "text": "`_mcp_handle_discover`",
+          "anchor": "_mcp_handle_discover"
+        },
+        {
+          "level": 3,
           "text": "`_mcp_handle_tools_list`",
           "anchor": "_mcp_handle_tools_list"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_tool_result`",
+          "anchor": "_mcp_tool_result"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_client_declares_elicitation`",
+          "anchor": "_mcp_client_declares_elicitation"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_confirmation_request`",
+          "anchor": "_mcp_confirmation_request"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_input_required`",
+          "anchor": "_mcp_input_required"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_confirmation_verdict`",
+          "anchor": "_mcp_confirmation_verdict"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_confirmation_exchange`",
+          "anchor": "_mcp_confirmation_exchange"
         },
         {
           "level": 3,
@@ -4161,6 +4271,16 @@
           "level": 3,
           "text": "`_run_mcp_server`",
           "anchor": "_run_mcp_server"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_dispatch_modern`",
+          "anchor": "_mcp_dispatch_modern"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_dispatch_legacy`",
+          "anchor": "_mcp_dispatch_legacy"
         },
         {
           "level": 3,
@@ -7676,8 +7796,33 @@
         },
         {
           "level": 3,
+          "text": "`MCP_PROTOCOL_VERSION`",
+          "anchor": "mcp_protocol_version"
+        },
+        {
+          "level": 3,
+          "text": "`MCP_META_PROTOCOL_VERSION`",
+          "anchor": "mcp_meta_protocol_version"
+        },
+        {
+          "level": 3,
+          "text": "`MCP_META_CLIENT_CAPABILITIES`",
+          "anchor": "mcp_meta_client_capabilities"
+        },
+        {
+          "level": 3,
           "text": "`serveMcp`",
           "anchor": "servemcp"
+        },
+        {
+          "level": 3,
+          "text": "`MCP_CONTINUATION_TTL_SECONDS`",
+          "anchor": "mcp_continuation_ttl_seconds"
+        },
+        {
+          "level": 3,
+          "text": "`McpContinuation`",
+          "anchor": "mcpcontinuation"
         }
       ]
     },
@@ -8392,6 +8537,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-13T21:28:19.146562+00:00",
+  "last_gen": "2026-08-13T22:54:07.636441+00:00",
   "theme": "minimal"
 }
