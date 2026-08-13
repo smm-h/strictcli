@@ -225,7 +225,7 @@ The handler is called with the resolved context and the kwargs map once all flag
 values have been resolved and constraints validated. Each implementation has its
 own handler signature, but all share the same strict contract: the return value
 must be an exit code, nothing (implicit exit 0), or a branded outcome carrying
-structured data. Any other return type is a hard error.
+the exit code. Any other return type is a hard error.
 
 - **Go**: `func(ctx *Context, kwargs map[string]interface{}) Outcome`
 - **Python**: `def handler(ctx, **kwargs)` returning `int`, `None`, or

@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "strictcli's flag and argument system: four types, defaults, boolean negation, repeatable flags, the reserved quartet and consent parameter, and positional args."
+description: "strictcli's flag and argument system: four types, defaults, boolean negation, repeatable flags, the reserved quartet, the consent parameter, positionals."
 nav_group: "Guides"
 nav_order: 3
 ---
@@ -492,7 +492,7 @@ list, or other value that the framework would not know how to interpret:
 - `None` -- exit 0
 - `strictcli.outcome(exit_code)` -- a branded exit-code result (structured output goes through `ctx.payload(...)`)
 
-Any other return type is a hard error. When `outcome()` includes `data`, it is JSON-printed to stdout and captured by `app.test()` and `app.call()`.
+Any other return type is a hard error. Structured output is a separate channel: a command declares its payload's JSON Schema with `payload_schema=` and its handler supplies the value through `ctx.payload(...)`, which is printed only under the framework-owned `--json` and captured by `app.test()` and `app.call()` in either mode.
 
 ## Global flags
 

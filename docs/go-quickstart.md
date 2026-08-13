@@ -95,8 +95,7 @@ passing an effect to `app.Deprecated(...)` is a registration-time error.
 
 Every command handler has a fixed signature that receives a context for
 structured output and provenance, a map of parsed flag and arg values, and
-returns a branded `Outcome` type that wraps the exit code and optional
-structured data:
+returns a branded `Outcome` type that wraps the exit code:
 
 ```go
 func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome

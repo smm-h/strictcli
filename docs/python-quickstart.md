@@ -97,8 +97,9 @@ Every command handler receives `ctx` as its first argument, providing structured
 output methods and provenance introspection. Flag and arg values arrive as
 keyword arguments with dashes converted to underscores (`--log-file` becomes
 `log_file`). The return value must be `int` (exit code), `None` (exit 0), or
-`strictcli.outcome()` for structured data -- any other return type is a hard
-error.
+`strictcli.outcome(exit_code)` -- any other return type is a hard error.
+Structured output is a separate channel (see [Returning Structured
+Data](#returning-structured-data)).
 
 ```python
 @app.command("greet", help="Greet someone", effect="read_only")
@@ -142,10 +143,12 @@ what makes a preview honest.
 
 ### Returning Structured Data
 
-Use `strictcli.outcome()` to return structured data from a command handler. The
-data is JSON-printed to stdout and captured by `test()` and `call()` for
-programmatic consumption. The `outcome()` factory is the only way to construct
-a branded `Outcome` -- hand-forging the return value is rejected at runtime.
+Structured data is a separate channel from the return value. A command declares
+its payload's JSON Schema with `payload_schema=`, and its handler supplies the
+value through `ctx.payload(...)` -- at most once per dispatch, and only on a
+command that declared a schema (calling it without one is a hard error at call
+time). The payload is printed only under the framework-owned `--json`; `test()`
+and `call()` capture it in either mode.
 
 ```python
 @app.command("status", help="Show status", effect="read_only",
@@ -813,8 +816,8 @@ The schema includes all commands, flags, args, groups, and their metadata. It is
 
 Use `app.test(argv)` to run the CLI in-process and capture output without
 shelling out. The `Result` object contains `stdout`, `stderr`, `exit_code`, and
-`data` (structured data from `outcome()`). This is the standard way to test
-strictcli apps:
+`data` (the machine payload the handler supplied through `ctx.payload()`). This
+is the standard way to test strictcli apps:
 
 ```python
 def test_greet():
@@ -830,7 +833,7 @@ def test_greet():
     assert "Hello, Alice!" in r.stdout
 ```
 
-The `Result` object contains `stdout`, `stderr`, `exit_code`, and `data` (structured data from `outcome()`).
+The `Result` object contains `stdout`, `stderr`, `exit_code`, and `data` (the machine payload the handler supplied through `ctx.payload()`).
 
 ### Programmatic Invocation
 
@@ -918,7 +921,8 @@ app = strictcli.App(
     ],
 )
 
-@app.command("status", help="Show deployment status", effect="read_only")
+@app.command("status", help="Show deployment status", effect="read_only",
+             payload_schema={"type": "object"})
 @strictcli.flag("environment", short="e", type=str, default="production",
                 choices=["production", "staging", "dev"], help="Target environment")
 def status(ctx, color, environment):
