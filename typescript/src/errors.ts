@@ -69,9 +69,21 @@ export class EffectFailed extends Error {
  * swallowed truncation still fails closed.
  */
 export class DryRunTruncated extends Error {
-	constructor(message: string) {
+	/**
+	 * The three values §12.5's text is built from, kept apart from it so the
+	 * envelope's preview_error can carry them as members (§19.3) without
+	 * re-parsing the rendered message.
+	 */
+	readonly step: number;
+	readonly cmdPath: string;
+	readonly brand: string;
+
+	constructor(message: string, step: number, cmdPath: string, brand: string) {
 		super(message);
 		this.name = "DryRunTruncated";
+		this.step = step;
+		this.cmdPath = cmdPath;
+		this.brand = brand;
 	}
 }
 

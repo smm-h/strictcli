@@ -69,7 +69,10 @@ test("test: async handlers are awaited", async () => {
 		}),
 	);
 	const r = await app.test(["run", "--json"]);
-	assert.equal(r.stdout, 'after-await\n{"done":true}\n');
+	assert.equal(
+		r.stdout,
+		'{"interface_version":1,"app":"myapp","app_version":"1.0.0","command":"run","exit_code":2,"payload":{"done":true},"dry_run":false,"preview":[],"preview_error":null,"diagnostics":[{"level":"info","message":"after-await"}]}\n',
+	);
 	assert.equal(r.exitCode, 2);
 	assert.deepEqual(r.data, { done: true });
 });
@@ -88,7 +91,10 @@ test("test: outcome data prints one compact JSON line with BigInt tokens", async
 		}),
 	);
 	const r = await app.test(["run", "--count", "9007199254740993", "--json"]);
-	assert.equal(r.stdout, '{"count":9007199254740993,"name":"x"}\n');
+	assert.equal(
+		r.stdout,
+		'{"interface_version":1,"app":"myapp","app_version":"1.0.0","command":"run","exit_code":0,"payload":{"count":9007199254740993,"name":"x"},"dry_run":false,"preview":[],"preview_error":null,"diagnostics":[]}\n',
+	);
 	assert.deepEqual(r.data, { count: 9007199254740993n, name: "x" });
 });
 
@@ -139,7 +145,10 @@ test("test: passthrough handlers flow through the result contract", async () => 
 		}),
 	);
 	const r = await app.test(["--json", "exec", "-x", "y"]);
-	assert.equal(r.stdout, 'exec:-x,y\n{"forwarded":2}\n');
+	assert.equal(
+		r.stdout,
+		'{"interface_version":1,"app":"myapp","app_version":"1.0.0","command":"exec","exit_code":4,"payload":{"forwarded":2},"dry_run":false,"preview":[],"preview_error":null,"diagnostics":[{"level":"info","message":"exec:-x,y"}]}\n',
+	);
 	assert.equal(r.exitCode, 4);
 	assert.deepEqual(r.data, { forwarded: 2 });
 });
@@ -277,7 +286,10 @@ test("run: writes to process streams and sets process.exitCode", async () => {
 	} finally {
 		process.stdout.write = orig;
 	}
-	assert.equal(chunks.join(""), 'hello-from-run\n{"via":"run"}\n');
+	assert.equal(
+		chunks.join(""),
+		'{"interface_version":1,"app":"myapp","app_version":"1.0.0","command":"run","exit_code":5,"payload":{"via":"run"},"dry_run":false,"preview":[],"preview_error":null,"diagnostics":[{"level":"info","message":"hello-from-run"}]}\n',
+	);
 	assert.equal(process.exitCode, 5);
 	process.exitCode = origExitCode;
 });

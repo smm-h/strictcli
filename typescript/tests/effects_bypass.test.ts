@@ -16,6 +16,7 @@ import {
 	createApp,
 	defineMutatingCommand,
 } from "../src/index.js";
+import { envelopePayload } from "./envelope_helpers.js";
 
 function project(files: Record<string, string>): string {
 	const root = mkdtempSync(join(tmpdir(), "sc-bypass-"));
@@ -521,7 +522,7 @@ test("breadth: the check is registered with warn severity", async () => {
 	const app = breadthApp([]);
 	const r = await app.test(["check", "--list", "--json"]);
 	const entry = (
-		JSON.parse(r.stdout.trim()) as { name: string; severity: string }[]
+		envelopePayload(r.stdout) as { name: string; severity: string }[]
 	).find((e) => e.name === "observe-allowlist-breadth");
 	assert.equal(entry?.severity, "warn");
 });
@@ -660,7 +661,7 @@ test("grant agreement: the check is registered with warn severity", async () => 
 		"--json",
 	]);
 	const entry = (
-		JSON.parse(r.stdout.trim()) as {
+		envelopePayload(r.stdout) as {
 			name: string;
 			severity: string;
 			tags: string[];

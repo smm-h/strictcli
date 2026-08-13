@@ -23,6 +23,7 @@ import {
 	readOnlyPassthrough,
 	t,
 } from "../src/index.js";
+import { envelopePayloadText } from "./envelope_helpers.js";
 
 interface Expected {
 	readonly stdout: string;
@@ -333,7 +334,10 @@ test("e2e 12: data outcome prints one compact JSON line", async () => {
 		}),
 	);
 	const r = await app.test(["run", "--json"]);
-	assert.equal(r.stdout, '{"count":3,"name":"strictcli"}\n');
+	assert.equal(
+		envelopePayloadText(r.stdout),
+		'{"count":3,"name":"strictcli"}\n',
+	);
 	assert.equal(r.stderr, "");
 	assert.equal(r.exitCode, 0);
 	assert.deepEqual(r.data, { count: 3, name: "strictcli" });

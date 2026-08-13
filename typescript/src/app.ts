@@ -53,7 +53,9 @@ import {
 import { confirmConsequential } from "./confirm.js";
 import {
 	Context,
+	contextDiagnostics,
 	contextPayload,
+	type DiagnosticRecord,
 	type InfraAccess,
 	type ReservedFlags,
 	type Writer,
@@ -355,6 +357,13 @@ export interface App {
 	run(argv?: readonly string[]): Promise<void>;
 	/** Runs the CLI in-process, capturing stdout/stderr/exit code (and data). */
 	test(argv: readonly string[]): Promise<Result>;
+	/**
+	 * The structured effect records of the most recent dispatch, in either
+	 * mode (contract §14.3's amendment). It is the envelope's source (§19.3),
+	 * so it is public API rather than a test-only surface, and a live run's
+	 * effects read as readily as a dry run's.
+	 */
+	effectLog(): Record<string, unknown>[];
 }
 
 /** Options for App.runChecks (Go RunChecksOptions / Python run_checks kwargs). */
@@ -1292,6 +1301,22 @@ export class AppImpl implements App {
 				err.write(
 					formatParseErrorOutput(this, outcome.message, outcome.commandPrefix),
 				);
+				// A run that ended before a command resolved still owes machine
+				// mode its one document, with a null command (§19.2). The parse
+				// error's own text stays on stderr: it does not go through the
+				// context writers, so it is not one of the diagnostics the
+				// envelope carries.
+				if (outcome.reserved.json) {
+					this.emitEnvelope(out, {
+						command: null,
+						exitCode: 1,
+						dryRun: outcome.reserved.dryRun,
+						payload: null,
+						preview: [],
+						previewError: null,
+						diagnostics: [],
+					});
+				}
 				return { exitCode: 1, hasPayload: false, payload: undefined };
 			case "passthrough": {
 				// beginDispatch runs BEFORE coverage recording so pre-handler
@@ -1456,12 +1481,86 @@ export class AppImpl implements App {
 		ctx: Context,
 	): DispatchResult {
 		const supplied = contextPayload(ctx);
-		if (supplied.set && ctx.json) {
-			out.write(`${jsonCompact(supplied.value)}\n`);
+		if (ctx.json) {
+			this.emitDispatchEnvelope(ctx, out, 1, ctx.dryRun, trunc.cmdPath, {
+				kind: "truncated",
+				step: trunc.step,
+				command: trunc.cmdPath,
+				brand: trunc.brand,
+				message: trunc.message,
+			});
+			return { exitCode: 1, hasPayload: supplied.set, payload: supplied.value };
 		}
 		out.write(`${this.effectLogState.render()}\n`);
 		err.write(`${trunc.message}\n`);
 		return { exitCode: 1, hasPayload: supplied.set, payload: supplied.value };
+	}
+
+	/**
+	 * Writes the envelope for a dispatch that reached a command: the preview is
+	 * the effect log this dispatch produced, and the payload and diagnostics
+	 * come off the Context.
+	 */
+	private emitDispatchEnvelope(
+		ctx: Context,
+		out: Writer,
+		exitCode: number,
+		dryRun: boolean,
+		cmdPath: string,
+		previewError: PreviewError | null,
+	): void {
+		const supplied = contextPayload(ctx);
+		this.emitEnvelope(out, {
+			command: cmdPath,
+			exitCode,
+			dryRun,
+			payload: supplied.set ? supplied.value : null,
+			preview: this.effectLogState.toList(),
+			previewError,
+			diagnostics: contextDiagnostics(ctx),
+		});
+	}
+
+	/**
+	 * Writes the envelope, machine mode's sole stdout document (§19.2).
+	 *
+	 * Key order follows §19.2's table: optional and for readability only, since
+	 * conformance compares parsed structures. Record keys are sorted so the
+	 * three implementations' serializers agree byte-for-byte. The write does
+	 * not go through the quiet-suppressible writers, so --quiet has no
+	 * mechanism by which to reach it.
+	 */
+	private emitEnvelope(
+		out: Writer,
+		parts: {
+			readonly command: string | null;
+			readonly exitCode: number;
+			readonly dryRun: boolean;
+			readonly payload: unknown;
+			readonly preview: readonly Record<string, unknown>[];
+			readonly previewError: PreviewError | null;
+			readonly diagnostics: readonly DiagnosticRecord[];
+		},
+	): void {
+		const envelope = {
+			interface_version: INTERFACE_VERSION,
+			app: this.name,
+			app_version: this.version,
+			command: parts.command,
+			exit_code: parts.exitCode,
+			payload: parts.payload ?? null,
+			dry_run: parts.dryRun,
+			preview: parts.preview.map((rec) => {
+				const sorted: Record<string, unknown> = {};
+				for (const key of Object.keys(rec).sort()) {
+					sorted[key] = rec[key];
+				}
+				return sorted;
+			}),
+			preview_error: parts.previewError,
+			diagnostics: parts.diagnostics,
+		};
+		out.write(`${jsonCompact(envelope)}\n`);
 	}
 
 	/** Starts a new dispatch: resets the structured effect log. */
@@ -1504,8 +1603,9 @@ export class AppImpl implements App {
 
 	/**
 	 * The structured effect records of the most recent dispatch, in either
-	 * mode. Test-only surface (beside test()); deliberately NOT on the public
-	 * App interface, so it stays out of the api-surface catalog.
+	 * mode. Public API (contract §14.3's amendment): it is the envelope's
+	 * source (§19.3), so it is part of the surface consumers may rely on and it
+	 * joins the api-surface catalog rather than being excluded from it.
 	 */
 	effectLog(): Record<string, unknown>[] {
 		return this.effectLogState.toList();
@@ -1538,12 +1638,35 @@ export class AppImpl implements App {
 		aborted: boolean,
 	): DispatchResult {
 		const supplied = contextPayload(ctx);
-		if (supplied.set && ctx.json) {
-			// Only in machine mode: outside it the payload is captured by the
-			// in-process surfaces and printed nowhere. The write does not go
-			// through the quiet-suppressible writers, so --quiet has no
-			// mechanism by which to reach it.
-			out.write(`${jsonCompact(supplied.value)}\n`);
+		if (ctx.json) {
+			// In machine mode this step emits the envelope INSTEAD of the human
+			// stream's would-do log and abort marker: those texts become the
+			// envelope's preview and preview_error members (§19.1, §19.3), and
+			// stdout carries exactly one document.
+			this.emitDispatchEnvelope(
+				ctx,
+				out,
+				exitCode,
+				dryRun,
+				cmdPath,
+				// The abort branch is dry-mode-only, exactly as the human
+				// stream's marker is: the message says "dry-run preview ends at
+				// step N", which is not a true sentence about a live run.
+				aborted && dryRun
+					? {
+							kind: "aborted",
+							step: this.effectLogState.nextSeq(),
+							command: cmdPath,
+							brand: null,
+							message: errDryRunAborted(this.effectLogState.nextSeq(), cmdPath),
+						}
+					: null,
+			);
+			return {
+				exitCode,
+				hasPayload: supplied.set,
+				payload: supplied.value,
+			};
 		}
 		if (dryRun) {
 			// The would-do log is dry mode's primary output and is NEVER
@@ -1561,6 +1684,25 @@ export class AppImpl implements App {
 			payload: supplied.value,
 		};
 	}
+}
+
+/**
+ * The envelope contract's own version (§19.2). Changed only by a later
+ * amendment to that section.
+ */
+const INTERFACE_VERSION = 1;
+
+/**
+ * The terminal condition of a preview that did not finish (§19.3). `brand` is
+ * null for an abort: §12.11's marker deliberately names no value. The property
+ * order is the serialized key order.
+ */
+interface PreviewError {
+	readonly kind: "truncated" | "aborted";
+	readonly step: number;
+	readonly command: string;
+	readonly brand: string | null;
+	readonly message: string;
 }
 
 interface DispatchResult {

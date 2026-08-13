@@ -20,6 +20,7 @@ import {
 	formatCheckResultsJSON,
 	t,
 } from "../src/index.js";
+import { envelopePayloadText } from "./envelope_helpers.js";
 import { createTestApp as createApp, EMPTY_PROJECT_ROOT } from "./helpers.js";
 
 /** The framework's would-do log header (dry mode's primary output). */
@@ -111,7 +112,7 @@ test("check --list --json: compact entries, scope only when non-empty", async ()
 	const result = await mirrorApp().test(["check", "--list", "--json"]);
 	assert.equal(result.exitCode, 0);
 	assert.equal(
-		result.stdout,
+		envelopePayloadText(result.stdout),
 		'[{"name":"compile","tags":["release"],"severity":"error"},' +
 			'{"name":"deploy-gate","tags":["release"],"severity":"error","scope":"changelog"},' +
 			'{"name":"format","tags":["dev","quality"],"severity":"warn"},' +
@@ -171,7 +172,10 @@ test("check --all --json: notes and duration_ms always present", async () => {
 	const result = await mirrorApp().test(["check", "--all", "--json"]);
 	assert.equal(result.exitCode, 1);
 	assert.equal(
-		result.stdout.replaceAll(/"duration_ms":\d+/g, '"duration_ms":0'),
+		envelopePayloadText(result.stdout).replaceAll(
+			/"duration_ms":\d+/g,
+			'"duration_ms":0',
+		),
 		'[{"name":"compile","status":"fail","message":"compile failed","problems":[{"severity":"error","text":"compile failed hard"},{"severity":"warn","text":"also a warning"}],"notes":[],"duration_ms":0},' +
 			'{"name":"format","status":"warn","message":"style issues","problems":[{"severity":"warn","text":"style issue A"}],"notes":[],"duration_ms":0},' +
 			'{"name":"lint","status":"pass","message":"all good","problems":[],"notes":["scanned 5 files"],"duration_ms":0},' +
@@ -268,7 +272,12 @@ test("check --dry-run: singular noun for a single listed check", async () => {
 });
 
 test("check --dry-run: a selected pure check really runs", async () => {
-	const result = await mirrorApp().test(["--dry-run", "check", "--name", "lint"]);
+	const result = await mirrorApp().test([
+		"--dry-run",
+		"check",
+		"--name",
+		"lint",
+	]);
 	assert.equal(result.exitCode, 0);
 	assert.equal(
 		result.stdout,

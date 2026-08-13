@@ -36,6 +36,7 @@ import {
 	flag,
 	t,
 } from "../src/index.js";
+import { envelopePayloadText } from "./envelope_helpers.js";
 
 // --- Environment scaffolding -------------------------------------------
 
@@ -400,7 +401,7 @@ test("config show --json output, byte-exact (the payload, sorted keys)", async (
 	// The indented hand-rolled object is gone: this is the command's machine
 	// payload now (contract §7.5's sweep box), one compact line.
 	assert.equal(
-		r.stdout,
+		envelopePayloadText(r.stdout),
 		'{"count":{"source":"config","value":10},"name":{"source":"default","value":"world"}}\n',
 	);
 });
@@ -1081,7 +1082,7 @@ test("config fields: show --plain and --json render the Config fields section, b
 	const json = await fieldsApp().test(["config", "show", "--json"]);
 	assert.equal(json.exitCode, 0);
 	assert.equal(
-		json.stdout,
+		envelopePayloadText(json.stdout),
 		'{"api.key":{"help":"API key","required":true,"source":"config","type":"str","value":"sekrit"},"port":{"default":8080,"help":"server port","required":false,"source":"default","type":"int","value":8080}}\n',
 	);
 });

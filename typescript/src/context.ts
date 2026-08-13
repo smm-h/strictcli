@@ -78,6 +78,18 @@ export interface ReservedFlags {
 	readonly json: boolean;
 }
 
+/** The four levels a context writer carries (contract §19.2). */
+export type DiagnosticLevel = "debug" | "info" | "warn" | "error";
+
+/**
+ * One entry of the envelope's diagnostics array (§19.2). The property order is
+ * the serialized key order.
+ */
+export interface DiagnosticRecord {
+	readonly level: DiagnosticLevel;
+	readonly message: string;
+}
+
 /** The quartet's all-false value: the programmatic dispatch paths' state. */
 export const NO_RESERVED_FLAGS: ReservedFlags = {
 	dryRun: false,
@@ -144,6 +156,13 @@ export class Context implements MutatingContext {
 	private readonly payloadSchema: Readonly<Record<string, unknown>> | null;
 	private payloadValue: unknown = undefined;
 	private payloadSet = false;
+	/**
+	 * The diagnostics this dispatch emitted, in emission order (contract
+	 * §19.2). In machine mode the writers below record here instead of
+	 * writing: what they were asked to say rides the envelope. Outside machine
+	 * mode the array stays empty and nothing changes.
+	 */
+	private readonly diagnosticRecords: DiagnosticRecord[] = [];
 
 	constructor(
 		stdout: Writer,
@@ -233,8 +252,27 @@ export class Context implements MutatingContext {
 		return this.effectsHandle;
 	}
 
+	/**
+	 * Records a diagnostic in machine mode, reporting whether it was recorded.
+	 * In machine mode the writers below write nothing and what they were asked
+	 * to say rides the envelope's diagnostics instead (§19.1). The recording is
+	 * NOT filtered by --quiet or --verbose: the envelope's content is a
+	 * function of what the run produced, never of how a terminal was
+	 * configured (§19.2).
+	 */
+	#diagnostic(level: DiagnosticLevel, msg: string): boolean {
+		if (!this.reserved.json) {
+			return false;
+		}
+		this.diagnosticRecords.push({ level, message: msg });
+		return true;
+	}
+
 	/** Writes an informational message to stdout (hidden under --quiet). */
 	info(msg: string): void {
+		if (this.#diagnostic("info", msg)) {
+			return;
+		}
 		if (this.reserved.quiet) {
 			return;
 		}
@@ -243,6 +281,9 @@ export class Context implements MutatingContext {
 
 	/** Writes a warning message to stderr (never suppressed). */
 	warn(msg: string): void {
+		if (this.#diagnostic("warn", msg)) {
+			return;
+		}
 		this.stderr.write(`${msg}\n`);
 	}
 
@@ -251,6 +292,9 @@ export class Context implements MutatingContext {
 	 * --quiet DOMINATES --verbose: passing both hides debug output.
 	 */
 	debug(msg: string): void {
+		if (this.#diagnostic("debug", msg)) {
+			return;
+		}
 		if (this.reserved.quiet || !this.reserved.verbose) {
 			return;
 		}
@@ -259,6 +303,9 @@ export class Context implements MutatingContext {
 
 	/** Writes an error message to stderr (never suppressed). */
 	error(msg: string): void {
+		if (this.#diagnostic("error", msg)) {
+			return;
+		}
 		this.stderr.write(`${msg}\n`);
 	}
 
@@ -341,6 +388,16 @@ export function contextPayload(ctx: Context): {
 } {
 	const c = ctx as unknown as { payloadSet: boolean; payloadValue: unknown };
 	return { set: c.payloadSet, value: c.payloadValue };
+}
+
+/**
+ * Package-internal accessor (NOT re-exported from index.ts): the diagnostics a
+ * dispatch emitted, in emission order, read by the one exit step in app.ts when
+ * it builds the envelope's `diagnostics` member (§19.2).
+ */
+export function contextDiagnostics(ctx: Context): readonly DiagnosticRecord[] {
+	return (ctx as unknown as { diagnosticRecords: DiagnosticRecord[] })
+		.diagnosticRecords;
 }
 
 /**

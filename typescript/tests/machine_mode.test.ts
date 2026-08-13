@@ -10,6 +10,7 @@ import { test } from "node:test";
 import {
 	arg,
 	createApp,
+	defineMutatingCommand,
 	defineReadOnlyCommand,
 	flag,
 	flagSet,
@@ -90,12 +91,12 @@ test("--json is absent by default and the payload is not printed", async () => {
 
 test("--json is recognized before the command word", async () => {
 	const r = await machineFlagApp().test(["--json", "run"]);
-	assert.equal(r.stdout, '{"json":true}\n');
+	assert.equal(r.stdout, envelopeText("run", 0, '{"json":true}'));
 });
 
 test("--json is recognized after the command word", async () => {
 	const r = await machineFlagApp().test(["run", "--json"]);
-	assert.equal(r.stdout, '{"json":true}\n');
+	assert.equal(r.stdout, envelopeText("run", 0, '{"json":true}'));
 });
 
 test("--json never reaches the handler as a kwarg", async () => {
@@ -166,7 +167,7 @@ test("call() returns the payload the handler supplied", async () => {
 
 test("--quiet cannot reach the payload", async () => {
 	const r = await machineFlagApp().test(["--quiet", "--json", "run"]);
-	assert.equal(r.stdout, '{"json":true}\n');
+	assert.equal(r.stdout, envelopeText("run", 0, '{"json":true}'));
 });
 
 test("payload escaping is plain UTF-8", async () => {
@@ -182,5 +183,215 @@ test("payload escaping is plain UTF-8", async () => {
 		}),
 	);
 	const r = await app.test(["run", "--json"]);
-	assert.equal(r.stdout, '{"text":"héllo <b>&</b> 日本語"}\n');
+	assert.equal(
+		r.stdout,
+		envelopeText("run", 0, '{"text":"héllo <b>&</b> 日本語"}'),
+	);
+});
+
+// --- the envelope (contract §19.2) and its preview member (§19.3) ----------
+
+/**
+ * The exact document an a/1 run emits, so a test pins the bytes rather than a
+ * parsed shape. A null command is a run that ended before one resolved.
+ */
+function envelopeText(
+	command: string | null,
+	exitCode: number,
+	payload = "null",
+	opts: {
+		dryRun?: boolean;
+		preview?: string;
+		previewError?: string;
+		diagnostics?: string;
+	} = {},
+): string {
+	const cmd = command === null ? "null" : JSON.stringify(command);
+	return (
+		`{"interface_version":1,"app":"a","app_version":"1","command":${cmd},` +
+		`"exit_code":${exitCode},"payload":${payload},` +
+		`"dry_run":${opts.dryRun ?? false},"preview":${opts.preview ?? "[]"},` +
+		`"preview_error":${opts.previewError ?? "null"},` +
+		`"diagnostics":${opts.diagnostics ?? "[]"}}\n`
+	);
+}
+
+function plainApp() {
+	const app = createApp({ name: "a", version: "1", help: "h" });
+	app.command(defineReadOnlyCommand("run", { help: "run", handler: () => 0 }));
+	return app;
+}
+
+function diagnosticsApp() {
+	const app = createApp({ name: "a", version: "1", help: "h" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run",
+			handler: (_args, ctx) => {
+				ctx.info("starting");
+				ctx.warn("careful");
+				ctx.debug("detail");
+				ctx.error("bad");
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+const ALL_DIAGNOSTICS =
+	'[{"level":"info","message":"starting"},' +
+	'{"level":"warn","message":"careful"},' +
+	'{"level":"debug","message":"detail"},' +
+	'{"level":"error","message":"bad"}]';
+
+test("the envelope is the sole stdout document on a plain exit", async () => {
+	const r = await plainApp().test(["--json", "run"]);
+	assert.equal(r.stdout, envelopeText("run", 0));
+	assert.equal(r.stderr, "");
+});
+
+test("the envelope carries the exit code", async () => {
+	const app = createApp({ name: "a", version: "1", help: "h" });
+	app.command(defineReadOnlyCommand("run", { help: "run", handler: () => 3 }));
+	const r = await app.test(["--json", "run"]);
+	assert.equal(r.exitCode, 3);
+	assert.equal(r.stdout, envelopeText("run", 3));
+});
+
+test("the envelope carries the dotted command path", async () => {
+	const app = createApp({ name: "a", version: "1", help: "h" });
+	const grp = app.group("grp", { help: "a group" });
+	grp.command(defineReadOnlyCommand("run", { help: "run", handler: () => 0 }));
+	const r = await app.test(["--json", "grp", "run"]);
+	assert.equal(r.stdout, envelopeText("grp.run", 0));
+});
+
+test("the envelope carries the dry-run flag", async () => {
+	const r = await plainApp().test(["--json", "--dry-run", "run"]);
+	assert.equal(r.stdout, envelopeText("run", 0, "null", { dryRun: true }));
+});
+
+test("the envelope carries every diagnostic in emission order", async () => {
+	const r = await diagnosticsApp().test(["--json", "run"]);
+	assert.equal(
+		r.stdout,
+		envelopeText("run", 0, "null", { diagnostics: ALL_DIAGNOSTICS }),
+	);
+	assert.equal(r.stderr, "");
+});
+
+test("quiet cannot reach the envelope", async () => {
+	// Contract §19.2: structurally exempt -- quiet governs the human stream,
+	// and debug rides without --verbose.
+	const r = await diagnosticsApp().test(["--quiet", "--json", "run"]);
+	assert.equal(
+		r.stdout,
+		envelopeText("run", 0, "null", { diagnostics: ALL_DIAGNOSTICS }),
+	);
+});
+
+test("diagnostics are unchanged outside machine mode", async () => {
+	const r = await diagnosticsApp().test(["run"]);
+	assert.equal(r.stdout, "starting\n");
+	assert.equal(r.stderr, "careful\nbad\n");
+});
+
+test("an unknown command emits an envelope with a null command", async () => {
+	const r = await plainApp().test(["--json", "nope"]);
+	assert.equal(r.exitCode, 1);
+	assert.equal(r.stdout, envelopeText(null, 1));
+	assert.ok(r.stderr.includes("unknown command 'nope'"));
+});
+
+test("a parse error after the machine flag emits an envelope", async () => {
+	const r = await plainApp().test(["run", "--json", "--nope"]);
+	assert.equal(r.stdout, envelopeText(null, 1));
+	assert.ok(r.stderr.includes("unknown flag '--nope'"));
+});
+
+test("help beats machine mode and emits no envelope", async () => {
+	const r = await plainApp().test(["--json", "run", "--help"]);
+	assert.equal(r.exitCode, 0);
+	assert.ok(!r.stdout.includes("interface_version"));
+});
+
+test("the envelope's preview agrees with the effect log", async () => {
+	const app = createApp({ name: "a", version: "1", help: "h" });
+	app.command(
+		defineMutatingCommand("rel", {
+			help: "rel",
+			handler: (_args, ctx) => {
+				ctx.effects.mkdir("build");
+				ctx.effects.write("VERSION", "1.2.3");
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["--json", "--dry-run", "rel"]);
+	const env = JSON.parse(r.stdout) as { preview: unknown };
+	assert.deepEqual(env.preview, app.effectLog());
+	assert.ok(!r.stdout.includes("DRY RUN"));
+});
+
+test("a live run's preview agrees with the effect log", async () => {
+	const app = createApp({ name: "a", version: "1", help: "h" });
+	app.command(
+		defineMutatingCommand("clean", {
+			help: "clean",
+			handler: (_args, ctx) => {
+				ctx.effects.remove("no-such-path-envelope-ts");
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["--json", "clean"]);
+	const env = JSON.parse(r.stdout) as {
+		preview: { recorded: boolean }[];
+	};
+	assert.deepEqual(env.preview, app.effectLog());
+	assert.equal(env.preview[0]?.recorded, false);
+});
+
+test("a truncated preview carries preview_error and no stderr text", async () => {
+	const app = createApp({ name: "a", version: "1", help: "h" });
+	app.command(
+		defineMutatingCommand("rel", {
+			help: "rel",
+			handler: (_args, ctx) => {
+				const out = ctx.effects.run(["git", "tag", "v1"]);
+				void out.stdout;
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["--json", "--dry-run", "rel"]);
+	assert.equal(r.exitCode, 1);
+	const env = JSON.parse(r.stdout) as {
+		preview_error: Record<string, unknown>;
+	};
+	assert.deepEqual(env.preview_error, {
+		kind: "truncated",
+		step: 2,
+		command: "rel",
+		brand: "«step 1 output»",
+		message:
+			"error: dry-run preview ends at step 2: rel branched on unsettled " +
+			"value «step 1 output» — cannot preview past this point",
+	});
+	assert.equal(r.stderr, "");
+});
+
+test("an aborted dry run carries preview_error kind aborted", async () => {
+	const app = createApp({ name: "a", version: "1", help: "h" });
+	app.command(
+		defineMutatingCommand("rel", {
+			help: "rel",
+			handler: (_args, ctx) => {
+				ctx.effects.mkdir("build");
+				throw new Error("boom");
+			},
+		}),
+	);
+	await assert.rejects(() => app.test(["--json", "--dry-run", "rel"]));
 });

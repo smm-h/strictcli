@@ -1305,6 +1305,12 @@ export type ParseOutcome =
 			readonly kind: "parse-error";
 			readonly message: string;
 			readonly commandPrefix?: string;
+			/**
+			 * The reserved-flag state the pre-scan resolved, carried so a run
+			 * that ended before a command resolved still knows whether it is in
+			 * machine mode and owes an envelope (contract §19.2).
+			 */
+			readonly reserved: ReservedFlags;
 	  }
 	| {
 			readonly kind: "command";
@@ -1343,12 +1349,17 @@ export function tokensContainHelp(tokens: readonly string[]): boolean {
 	return false;
 }
 
-function parseErrorOutcome(e: unknown, commandPrefix?: string): ParseOutcome {
+function parseErrorOutcome(
+	e: unknown,
+	reserved: ReservedFlags,
+	commandPrefix?: string,
+): ParseOutcome {
 	if (e instanceof ParseError) {
 		return {
 			kind: "parse-error",
 			message: e.message,
 			...(commandPrefix !== undefined ? { commandPrefix } : {}),
+			reserved,
 		};
 	}
 	throw e;
@@ -1386,12 +1397,17 @@ export function doParse(
 		return { kind: "mcp" };
 	}
 	if (pre.err !== undefined) {
-		return { kind: "parse-error", message: pre.err };
+		return {
+			kind: "parse-error",
+			message: pre.err,
+			reserved: reservedFlagsOf(pre),
+		};
 	}
 	if (pre.hermetic && pre.configPath !== undefined) {
 		return {
 			kind: "parse-error",
 			message: errHermeticConfigMutuallyExclusive(),
+			reserved: reservedFlagsOf(pre),
 		};
 	}
 
@@ -1428,7 +1444,7 @@ export function doParse(
 			cfg,
 		);
 	} catch (e) {
-		return parseErrorOutcome(e);
+		return parseErrorOutcome(e, reservedFlagsOf(pre));
 	}
 
 	// If global flag parsing stopped at --, strip it before routing
@@ -1456,6 +1472,7 @@ export function doParse(
 			...(route.commandPrefix !== undefined
 				? { commandPrefix: route.commandPrefix }
 				: {}),
+			reserved: reservedFlagsOf(pre),
 		};
 	}
 	if (route.helpAtGroup) {
@@ -1497,6 +1514,7 @@ export function doParse(
 				cmdPath,
 				dryRunDef.dryRunUnsupportedReason ?? "",
 			),
+			reserved: reservedFlagsOf(pre),
 		};
 	}
 
@@ -1505,10 +1523,18 @@ export function doParse(
 	// stashed configLoadErr on the app at load time for `config show`.
 	const isConfigSubcommand = path.length > 0 && path[0] === "config";
 	if (pre.hermetic && isConfigSubcommand) {
-		return { kind: "parse-error", message: errHermeticWithConfigCommands() };
+		return {
+			kind: "parse-error",
+			message: errHermeticWithConfigCommands(),
+			reserved: reservedFlagsOf(pre),
+		};
 	}
 	if (configLoadErr !== undefined && !isConfigSubcommand) {
-		return { kind: "parse-error", message: configLoadErr };
+		return {
+			kind: "parse-error",
+			message: configLoadErr,
+			reserved: reservedFlagsOf(pre),
+		};
 	}
 
 	// Step 2.5 (Python): validate declared config fields, exempting config
@@ -1516,7 +1542,11 @@ export function doParse(
 	if (cfg !== null && !isConfigSubcommand) {
 		const fieldErr = provider.validateFields(cmd.configFields, cfg.data ?? {});
 		if (fieldErr !== undefined) {
-			return { kind: "parse-error", message: fieldErr };
+			return {
+				kind: "parse-error",
+				message: fieldErr,
+				reserved: reservedFlagsOf(pre),
+			};
 		}
 	}
 
@@ -1545,7 +1575,11 @@ export function doParse(
 			app.infraRoots,
 		);
 	} catch (e) {
-		return parseErrorOutcome(e, [app.name, ...path, cmd.name].join(" "));
+		return parseErrorOutcome(
+			e,
+			reservedFlagsOf(pre),
+			[app.name, ...path, cmd.name].join(" "),
+		);
 	}
 
 	// Merge global values: post-command globals override pre-command ones

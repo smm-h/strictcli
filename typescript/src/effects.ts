@@ -385,8 +385,12 @@ export class EffectLog {
 
 	/** Mints (and remembers) the truncation error for a carrier extraction. */
 	truncate(cmdPath: string, brand: string): DryRunTruncated {
+		const step = this.nextSeq();
 		const err = new DryRunTruncated(
-			errDryRunTruncated(this.nextSeq(), cmdPath, brand),
+			errDryRunTruncated(step, cmdPath, brand),
+			step,
+			cmdPath,
+			brand,
 		);
 		this.truncated ??= err;
 		return err;

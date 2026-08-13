@@ -338,7 +338,7 @@ export const SURFACE = {
 				"interactive",
 				"mutex",
 				"payloadSchema",
-				"tags"
+				"tags",
 			],
 		},
 		{
@@ -361,7 +361,7 @@ export const SURFACE = {
 				"interactive",
 				"mutex",
 				"payloadSchema",
-				"tags"
+				"tags",
 			],
 		},
 		{
@@ -489,6 +489,7 @@ export const SURFACE = {
 		{ receiver: "App", name: "serveMcp" },
 		{ receiver: "App", name: "run" },
 		{ receiver: "App", name: "test" },
+		{ receiver: "App", name: "effectLog" },
 		{ receiver: "Group", name: "command" },
 		{ receiver: "Group", name: "group" },
 		{ receiver: "Group", name: "deprecate" },
