@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 
 import pytest
+from conftest import payload
 
 import strictcli
 
@@ -334,7 +335,7 @@ class TestRunWithStructuredData:
         result = app.test(["status", "--json"])
         assert result.exit_code == 0
         assert result.data == {"healthy": True, "count": 5}
-        assert json.loads(result.stdout) == {"healthy": True, "count": 5}
+        assert payload(result) == {"healthy": True, "count": 5}
 
     def test_prints_json_for_list(self):
         app = _build_app()
@@ -347,7 +348,7 @@ class TestRunWithStructuredData:
         result = app.test(["list-items", "--json"])
         assert result.exit_code == 0
         assert result.data == [1, 2, 3]
-        assert json.loads(result.stdout) == [1, 2, 3]
+        assert payload(result) == [1, 2, 3]
 
     def test_dataclass_serializes_via_default_str(self):
         """Dataclass data serializes to stdout via json.dumps(default=str)."""
@@ -364,7 +365,7 @@ class TestRunWithStructuredData:
             return strictcli.outcome()
 
         result = app.test(["status", "--json"])
-        parsed = json.loads(result.stdout)
+        parsed = payload(result)
         # default=str converts the dataclass to its str() repr
         assert isinstance(parsed, str)
         assert "healthy=True" in parsed
@@ -384,7 +385,7 @@ class TestRunWithStructuredData:
             return strictcli.outcome()
 
         result = app.test(["info", "--json"])
-        parsed = json.loads(result.stdout)
+        parsed = payload(result)
         assert parsed["timestamp"] == "2025-01-15 10:30:00"
         assert parsed["path"] == "/usr/local/bin"
         assert parsed["count"] == 42
@@ -399,7 +400,7 @@ class TestRunWithStructuredData:
             return strictcli.outcome()
 
         result = app.test(["greet", "--json"])
-        assert json.loads(result.stdout) == "hello world"
+        assert payload(result) == "hello world"
 
 
 class TestAcall:

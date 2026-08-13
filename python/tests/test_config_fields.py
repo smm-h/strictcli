@@ -4,6 +4,7 @@ import json
 import os
 
 import pytest
+from conftest import payload
 
 import strictcli
 
@@ -645,7 +646,7 @@ class TestConfigShowWithFields:
 
         result = app.test(["config", "show", "--json"])
         assert result.exit_code == 0
-        data = json.loads(result.stdout)
+        data = payload(result)
         assert "db.url" in data
         assert data["db.url"]["value"] == "pg://x"
         assert data["db.url"]["source"] == "config"
@@ -665,7 +666,7 @@ class TestConfigShowWithFields:
             pass
 
         result = app.test(["config", "show", "--json"])
-        data = json.loads(result.stdout)
+        data = payload(result)
         assert data["db.url"]["source"] == "not set"
         assert data["db.url"]["value"] is None
 
@@ -1049,7 +1050,7 @@ class TestConfigFieldFlagCoexistence:
         app = self._app_field_after_flag(tmp_path, config_data={"target": "prod"})
         result = app.test(["config", "show", "--json"])
         assert result.exit_code == 0
-        data = json.loads(result.stdout)
+        data = payload(result)
         # Single entry: the flag entry (value + source), not the config-field entry.
         assert data["target"]["value"] == "prod"
         assert data["target"]["source"] == "config"

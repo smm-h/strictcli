@@ -10,7 +10,7 @@ import pytest
 
 import strictcli
 from strictcli import CheckSpec, error_check_spec, warn_check_spec
-from conftest import drop_builtin_check_providers, pass_outcome
+from conftest import drop_builtin_check_providers, pass_outcome, payload
 
 
 TOML = """\
@@ -272,7 +272,7 @@ def test_list_json_severity():
     )])
     drop_builtin_check_providers(app)
     r = app.test(["check", "--list", "--json"])
-    entries = json.loads(r.stdout.strip())
+    entries = payload(r)
     assert len(entries) == 1
     assert entries[0]["name"] == "warn-prov"
     assert entries[0]["severity"] == "warn"

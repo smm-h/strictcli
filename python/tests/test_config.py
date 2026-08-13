@@ -5,6 +5,7 @@ import os
 import tomllib
 
 import pytest
+from conftest import payload
 
 import strictcli
 
@@ -741,7 +742,7 @@ def test_config_show_json(tmp_path, monkeypatch):
     app = _make_config_app(config=True)
     r = app.test(["config", "show", "--json"])
     assert r.exit_code == 0
-    data = json.loads(r.stdout)
+    data = payload(r)
     assert data["target"] == {"value": "from-config", "source": "config"}
     assert data["count"] == {"value": 1, "source": "default"}
     assert data["loud"] == {"value": False, "source": "default"}
@@ -757,7 +758,7 @@ def test_config_show_json_bool_values(tmp_path, monkeypatch):
     app = _make_config_app(config=True)
     r = app.test(["config", "show", "--json"])
     assert r.exit_code == 0
-    data = json.loads(r.stdout)
+    data = payload(r)
     assert data["loud"]["value"] is True
     assert data["loud"]["source"] == "config"
     assert data["count"]["value"] == 42
@@ -786,7 +787,7 @@ def test_config_show_plain_with_machine_mode_yields_the_payload(tmp_path, monkey
     app = _make_config_app(config=True)
     r = app.test(["config", "show", "--plain", "--json"])
     assert r.exit_code == 0
-    data = json.loads(r.stdout)
+    data = payload(r)
     assert data["target"]["source"] == "default"
 
 
@@ -997,7 +998,7 @@ def test_config_show_json_array(tmp_path, monkeypatch):
 
     r = app.test(["config", "show", "--json"])
     assert r.exit_code == 0
-    data = json.loads(r.stdout)
+    data = payload(r)
     assert data["tags"]["value"] == ["x", "y"]
     assert data["tags"]["source"] == "config"
 
@@ -1214,7 +1215,7 @@ def test_config_set_round_trip_json(tmp_path, monkeypatch):
 
     r = app.test(["config", "show", "--json"])
     assert r.exit_code == 0
-    data = json.loads(r.stdout)
+    data = payload(r)
     assert data["tags"]["value"] == ["x", "y"]
     assert data["tags"]["source"] == "config"
 

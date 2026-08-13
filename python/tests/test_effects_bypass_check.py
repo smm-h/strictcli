@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from conftest import payload
 
 import strictcli
 
@@ -41,7 +42,7 @@ class TestRegistration:
         app, _ = _app(tmp_path)
         r = app.test(["check", "--list", "--json"])
         entry = next(
-            e for e in json.loads(r.stdout.strip()) if e["name"] == "effects-bypass"
+            e for e in payload(r) if e["name"] == "effects-bypass"
         )
         assert entry["severity"] == "error"
         assert sorted(entry["tags"]) == ["effects", "quality"]
@@ -501,7 +502,7 @@ class TestObserveAllowlistBreadth:
         app = self._app(tmp_path, [])
         r = app.test(["check", "--list", "--json"])
         entry = next(
-            e for e in json.loads(r.stdout.strip())
+            e for e in payload(r)
             if e["name"] == "observe-allowlist-breadth"
         )
         assert entry["severity"] == "warn"
@@ -575,7 +576,7 @@ class TestConsequentialGrantAgreement:
                         consequential=True)
         r = app.test(["check", "--list", "--json"])
         entry = next(
-            e for e in json.loads(r.stdout.strip())
+            e for e in payload(r)
             if e["name"] == "consequential-grant-agreement"
         )
         assert entry["severity"] == "warn"

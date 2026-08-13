@@ -58,6 +58,10 @@ class _MissingSentinel:
 
 _MISSING = _MissingSentinel()
 
+# The envelope contract's own version (effects contract §19.2). Changed only by
+# a later amendment to that section.
+_INTERFACE_VERSION = 1
+
 
 class RelativeToRoot:
     """Opaque marker: a filesystem path relative to a declared infrastructure root.
@@ -270,6 +274,11 @@ class Context:
         self._command_name = command_name
         self._payload_schema = payload_schema
         self._payload_value: object = _MISSING
+        # The diagnostics this dispatch emitted, in emission order (contract
+        # §19.2). In machine mode the context writers record here instead of
+        # writing: what they were asked to say rides the envelope. Outside
+        # machine mode the list stays empty and nothing changes.
+        self._diagnostics: list[dict] = []
 
     @property
     def dry_run(self) -> bool:
@@ -331,14 +340,32 @@ class Context:
             raise RuntimeError(_msg_effects_unavailable())
         return self._effects
 
+    def _diagnostic(self, level: str, msg: str) -> bool:
+        """Record a diagnostic in machine mode. True when it was recorded.
+
+        In machine mode the writers below write nothing and what they were
+        asked to say rides the envelope's ``diagnostics`` instead (§19.1).
+        The recording is NOT filtered by ``--quiet`` or ``--verbose``: the
+        envelope's content is a function of what the run produced, never of how
+        a terminal was configured (§19.2).
+        """
+        if not self._json:
+            return False
+        self._diagnostics.append({"level": level, "message": msg})
+        return True
+
     def info(self, msg: str) -> None:
         """Write an informational message to stdout (hidden under --quiet)."""
+        if self._diagnostic("info", msg):
+            return
         if self._quiet:
             return
         print(msg, file=self._stdout)
 
     def warn(self, msg: str) -> None:
         """Write a warning message to stderr (never suppressed)."""
+        if self._diagnostic("warn", msg):
+            return
         print(msg, file=self._stderr)
 
     def debug(self, msg: str) -> None:
@@ -346,12 +373,16 @@ class Context:
 
         ``--quiet`` dominates ``--verbose``: passing both hides debug output.
         """
+        if self._diagnostic("debug", msg):
+            return
         if self._quiet or not self._verbose:
             return
         print(msg, file=self._stdout)
 
     def error(self, msg: str) -> None:
         """Write an error message to stderr (never suppressed)."""
+        if self._diagnostic("error", msg):
+            return
         print(msg, file=self._stderr)
 
     def source(self, name: str) -> str:
@@ -470,10 +501,17 @@ class _DryRunTruncated(BaseException):
     with a value the framework refuses to invent.
     """
 
-    def __init__(self, message: str, log: "_EffectLog") -> None:
+    def __init__(self, message: str, log: "_EffectLog", *,
+                 step: int, cmd_path: str, brand: str) -> None:
         super().__init__(message)
         self.message = message
         self.log = log
+        # The three values §12.5's text is built from, kept apart from it so
+        # the envelope's preview_error can carry them as members (§19.3)
+        # without re-parsing the rendered message.
+        self.step = step
+        self.cmd_path = cmd_path
+        self.brand = brand
 
 
 @dataclass(frozen=True)
@@ -588,6 +626,7 @@ class Unsettled:
         return _DryRunTruncated(
             _msg_dry_run_truncated(step, self._cmd_path, self._brand),
             self._log,
+            step=step, cmd_path=self._cmd_path, brand=self._brand,
         )
 
 
@@ -6128,7 +6167,11 @@ class App:
     def effect_log(self) -> list[dict]:
         """Return the structured effect records of the most recent dispatch.
 
-        Test-only surface, beside ``test()`` and ``_last_sources``.
+        Public API (contract §14.3's amendment). It is the envelope's source
+        (§19.3), so it is part of the surface consumers may rely on and it is
+        in the api-surface catalog rather than excluded from it. The records
+        are populated in both modes, so a live run's effects read as readily as
+        a dry run's.
         """
         return self._effect_log.to_list()
 
@@ -6850,6 +6893,19 @@ class App:
         # Position-aware pre-scan: intercept --dump-schema, --mcp, --config, --hermetic
         # in the pre-command region only (before command name, before --).
         pre_scan = self._pre_scan_reserved_flags(argv)
+
+        # Record the reserved quartet -- and --json beside it -- for the
+        # dispatch ctx. This runs BEFORE the pre-scan's own exits so every
+        # parse error from here on knows whether the run is in machine mode
+        # and can emit the envelope the mode owes it (§19.2).
+        self._last_dry_run = bool(pre_scan.get("dry_run"))
+        self._last_approve_consequential = bool(
+            pre_scan.get("approve_consequential")
+        )
+        self._last_quiet = bool(pre_scan.get("quiet"))
+        self._last_json = bool(pre_scan.get("json"))
+        self._last_verbose = bool(pre_scan.get("verbose"))
+
         if pre_scan.get("dump_schema"):
             raise _DumpSchemaRequested()
         if pre_scan.get("serve_mcp"):
@@ -6861,15 +6917,6 @@ class App:
         # Record for the dispatch ctx: connection env access is suppressed under
         # --hermetic so connection-dependent behavior (incl. checks) skips.
         self._last_hermetic = is_hermetic
-
-        # Record the reserved quartet for the dispatch ctx.
-        self._last_dry_run = bool(pre_scan.get("dry_run"))
-        self._last_approve_consequential = bool(
-            pre_scan.get("approve_consequential")
-        )
-        self._last_quiet = bool(pre_scan.get("quiet"))
-        self._last_json = bool(pre_scan.get("json"))
-        self._last_verbose = bool(pre_scan.get("verbose"))
 
         # --hermetic + --config mutual exclusion
         if is_hermetic and pre_scan.get("config_path"):
@@ -7492,6 +7539,14 @@ class App:
         ordered exit step (:meth:`_finish_dispatch`), which owns the payload,
         the would-do log and the exit code on every path out of the handler.
         """
+        # Machine mode is not known until the pre-scan runs inside _parse, so
+        # the flag starts false on every dispatch: a stale value from an
+        # earlier run must never decide what this one emits. The registration
+        # validations below run BEFORE the pre-scan and therefore cannot reach
+        # machine mode at all -- they are app-definition errors, not run
+        # results, and they emit no envelope.
+        self._last_json = False
+
         check_err = self._validate_check_registrations()
         if check_err:
             print(f"error: {check_err}", file=err)
@@ -7534,6 +7589,17 @@ class App:
             print(f"error: {e}", file=err)
             prefix = e.command_prefix or self.name
             print(f"try '{prefix} --help'", file=err)
+            # A run that ended before a command resolved still owes machine
+            # mode its one document, with a null command (§19.2). The parse
+            # error's own text stays on stderr: it does not go through the
+            # context writers, so it is not one of the diagnostics the
+            # envelope carries.
+            if self._last_json:
+                self._emit_envelope(
+                    out, command=None, exit_code=1,
+                    dry_run=self._last_dry_run, payload=_MISSING,
+                    preview=[], preview_error=None, diagnostics=[],
+                )
             return _DispatchResult(1)
 
         self._begin_dispatch()
@@ -7602,8 +7668,26 @@ class App:
         explicit ``sys.exit``, a truncated preview and an unwinding abort), so
         there is exactly one place that decides what the framework emits at the
         end of a run and in what order.
+
+        In machine mode this step emits the envelope INSTEAD of the human
+        stream's would-do log, truncation error and abort marker: those texts
+        become the envelope's ``preview`` and ``preview_error`` members
+        (§19.1, §19.3), and stdout carries exactly one document.
         """
-        self._emit_payload(ctx, out)
+        if ctx._json:
+            self._emit_envelope(
+                out,
+                command=cmd_path,
+                exit_code=exit_code,
+                dry_run=ctx._dry_run,
+                payload=ctx._payload_value,
+                preview=self._effect_log.to_list(),
+                preview_error=self._preview_error(
+                    cmd_path, ctx._dry_run, truncated, aborted,
+                ),
+                diagnostics=ctx._diagnostics,
+            )
+            return _DispatchResult(exit_code, ctx._payload_value)
         if truncated is not None:
             # The truncation path ends the preview for its own pinned reason:
             # it renders the log it already has and its own error, and never
@@ -7614,20 +7698,72 @@ class App:
             self._render_dry_log(cmd_path, out, err, aborted=aborted)
         return _DispatchResult(exit_code, ctx._payload_value)
 
-    def _emit_payload(self, ctx: "Context", out) -> None:
-        """Emit the dispatch's machine payload, if there is one (§19.4).
+    def _preview_error(
+        self, cmd_path: str, dry_run: bool,
+        truncated: "_DryRunTruncated | None", aborted: bool,
+    ) -> dict | None:
+        """Build the envelope's ``preview_error`` member (§19.3).
 
-        Only in machine mode: outside it the payload is captured by the
-        in-process surfaces and printed nowhere. The serialization follows
-        §19.5's escaping regime -- plain UTF-8, escaping only what JSON
-        mandates -- and it is NOT written through the quiet-suppressible
-        writers, so ``--quiet`` has no mechanism by which to reach it.
+        The two terminal conditions are mutually exclusive by §3.5's table.
+        Each carries the §12.5 / §12.11 text byte-identically rather than
+        restating it, so there is one text per condition.
+
+        The abort branch is dry-mode-only, exactly as the human stream's
+        marker is: the message says "dry-run preview ends at step N", which is
+        not a true sentence about a live run.
         """
-        if ctx._payload_value is _MISSING or not ctx._json:
-            return
+        if truncated is not None:
+            return {
+                "kind": "truncated",
+                "step": truncated.step,
+                "command": truncated.cmd_path,
+                "brand": truncated.brand,
+                "message": truncated.message,
+            }
+        if aborted and dry_run:
+            step = self._effect_log.next_seq()
+            return {
+                "kind": "aborted",
+                "step": step,
+                "command": cmd_path,
+                "brand": None,
+                "message": _msg_dry_run_aborted(step, cmd_path),
+            }
+        return None
+
+    def _emit_envelope(
+        self, out, *, command: str | None, exit_code: int, dry_run: bool,
+        payload: object, preview: list[dict], preview_error: dict | None,
+        diagnostics: list[dict],
+    ) -> None:
+        """Write the envelope, machine mode's sole stdout document (§19.2).
+
+        Field order follows §19.2's table: optional and for readability only,
+        since conformance compares parsed structures. Record keys are sorted so
+        the three implementations' serializers agree byte-for-byte.
+
+        The serialization follows §19.5's escaping regime -- plain UTF-8,
+        escaping only what JSON mandates -- and it is NOT written through the
+        quiet-suppressible writers, so ``--quiet`` has no mechanism by which to
+        reach it.
+        """
+        envelope = {
+            "interface_version": _INTERFACE_VERSION,
+            "app": self.name,
+            "app_version": self.version,
+            "command": command,
+            "exit_code": exit_code,
+            "payload": None if payload is _MISSING else payload,
+            "dry_run": dry_run,
+            "preview": [
+                {key: rec[key] for key in sorted(rec)} for rec in preview
+            ],
+            "preview_error": preview_error,
+            "diagnostics": diagnostics,
+        }
         print(
             json.dumps(
-                ctx._payload_value, default=str,
+                envelope, default=str,
                 separators=(",", ":"), ensure_ascii=False,
             ),
             file=out,

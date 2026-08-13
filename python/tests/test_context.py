@@ -4,6 +4,7 @@ import io
 import json
 
 import pytest
+from conftest import payload
 
 import strictcli
 from strictcli import Context
@@ -145,7 +146,7 @@ class TestOutcomeDataViaTest:
         result = app.test(["data", "--json"])
         assert result.exit_code == 0
         assert result.data == {"result": 42}
-        assert json.loads(result.stdout) == {"result": 42}
+        assert payload(result) == {"result": 42}
 
     def test_payload_is_captured_but_not_printed_outside_machine_mode(self):
         app = _build_app()
@@ -184,7 +185,7 @@ class TestOutcomeDataViaTest:
         result = app.test(["both", "--json"])
         assert result.exit_code == 1
         assert result.data == [1, 2, 3]
-        assert json.loads(result.stdout) == [1, 2, 3]
+        assert payload(result) == [1, 2, 3]
 
     def test_outcome_data_none_not_printed(self):
         app = _build_app()

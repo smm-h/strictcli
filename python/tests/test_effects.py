@@ -166,7 +166,8 @@ class TestWouldDoLog:
         assert "DRY RUN — no changes were made. Would do:" in r.stdout
         assert "  1. mkdir: build" in r.stdout
 
-    def test_log_follows_structured_handler_output(self):
+    def test_machine_mode_carries_the_log_in_the_envelope(self):
+        """Contract §19.1/§19.3: one document, and the log rides inside it."""
         app = _app()
 
         @app.command("rel", help="rel", effect="mutating", payload_schema={})
@@ -176,9 +177,15 @@ class TestWouldDoLog:
             return sc.outcome()
 
         r = app.test(["--dry-run", "--json", "rel"])
-        lines = r.stdout.splitlines()
-        assert lines[0] == '{"planned":true}'
-        assert lines[1] == "DRY RUN — no changes were made. Would do:"
+        assert len(r.stdout.splitlines()) == 1
+        env = json.loads(r.stdout)
+        assert env["payload"] == {"planned": True}
+        assert env["dry_run"] is True
+        assert env["preview"] == [{
+            "seq": 1, "kind": "file_write", "verb": "mkdir",
+            "detail": "build", "recorded": True,
+        }]
+        assert "DRY RUN" not in r.stdout
 
     def test_dry_run_exits_with_the_handler_exit_code(self):
         app = _app()

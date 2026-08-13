@@ -49,3 +49,19 @@ def drop_builtin_check_providers(app):
     ]
     app._provider_materialized_cwd = None
     return app
+
+
+def envelope(result):
+    """Parse a machine-mode run's stdout as the envelope (contract §19.2).
+
+    In machine mode stdout carries exactly one document, so every test that
+    used to parse a bare payload document reads the envelope through this
+    helper and takes the member it means.
+    """
+    import json
+    return json.loads(result.stdout)
+
+
+def payload(result):
+    """The ``payload`` member of a machine-mode run's envelope (§19.4)."""
+    return envelope(result)["payload"]

@@ -4,6 +4,7 @@ import json
 import os
 
 import pytest
+from conftest import payload
 
 import strictcli
 from strictcli import App, Context, RelativeToRoot
@@ -250,7 +251,7 @@ def test_infra_config_show_surface(monkeypatch, tmp_path):
     assert "CI_TOKEN (handshake) = <unset>" in r.stdout
 
     rj = app.test(["config", "show", "--json"])
-    result = json.loads(rj.stdout)
+    result = payload(rj)
     infra = result["__infrastructure__"]
     assert infra["MYAPP_HOME"]["resolved"] == "/opt/data"
     assert infra["MYAPP_HOME"]["source"] == "env"

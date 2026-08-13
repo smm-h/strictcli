@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import strictcli
-from conftest import drop_builtin_check_providers, pass_outcome, fail_outcome, warn_outcome
+from conftest import drop_builtin_check_providers, pass_outcome, fail_outcome, warn_outcome, payload
 
 
 TWO_CHECKS_TOML = """\
@@ -170,7 +170,7 @@ class TestCheckList:
         app = _setup_checks_app(tmp_path, monkeypatch, TWO_CHECKS_TOML)
         result = app.test(["check", "--list", "--json"])
         assert result.exit_code == 0
-        data = json.loads(result.stdout.strip())
+        data = payload(result)
         assert isinstance(data, list)
         assert len(data) == 2
         names = {item["name"] for item in data}
@@ -303,7 +303,7 @@ class TestCheckJsonOutput:
         app = _setup_checks_app(tmp_path, monkeypatch, TWO_CHECKS_TOML)
         result = app.test(["check", "--all", "--json"])
         assert result.exit_code == 0
-        data = json.loads(result.stdout.strip())
+        data = payload(result)
         assert isinstance(data, list)
         assert len(data) == 2
         for item in data:
@@ -480,7 +480,7 @@ class TestCheckCommandVerboseNotes:
         )
         result = app.test(["check", "--all", "--json"])
         assert result.exit_code == 0
-        data = json.loads(result.stdout.strip())
+        data = payload(result)
         by_name = {item["name"]: item for item in data}
         assert by_name["version-check"]["notes"] == ["a verbose-only note"]
         for item in data:

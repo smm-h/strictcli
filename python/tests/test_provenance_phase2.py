@@ -4,6 +4,8 @@ import json
 import os
 import tempfile
 
+from conftest import payload
+
 import strictcli
 
 
@@ -250,7 +252,7 @@ def test_config_show_reports_env(monkeypatch):
 
     r = app.test(["config", "show", "--json"])
     assert r.exit_code == 0, r.stderr
-    result = json.loads(r.stdout)
+    result = payload(r)
     assert result["level"]["source"] == "env"
 
 
@@ -271,7 +273,7 @@ def test_config_show_reports_config():
 
         r = app.test(["config", "show", "--json"])
         assert r.exit_code == 0, r.stderr
-        result = json.loads(r.stdout)
+        result = payload(r)
         assert result["level"]["source"] == "config"
     finally:
         os.unlink(config_path)
@@ -289,7 +291,7 @@ def test_config_show_reports_default():
 
     r = app.test(["config", "show", "--json"])
     assert r.exit_code == 0, r.stderr
-    result = json.loads(r.stdout)
+    result = payload(r)
     assert result["level"]["source"] == "default"
 
 
