@@ -77,6 +77,12 @@ propagated decisions already made into the sites that still contradicted them, a
 one reading that had been presented as forced when it was authored (§20.1, item 112). §18.9
 records what the sweep authored.
 
+One sweep spelling was **reversed the same day** by a post-sweep ruling: §12.1's reserved-name ban
+for `json` keeps the separate `json`-specific template the three implementations carry, instead of
+the sweep's appended-to-the-quartet rendering. The superseded box stays in place under a
+superseded marker, the reversal is recorded in item 111's ledger, and nothing else the sweep
+touched changes.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -2007,6 +2013,11 @@ Function name: `errFlagNameReservedByFramework(name)`. Raised from the same
 global-flag validation path so app globals are covered by the same message.
 
 > **Amendment (2026-08-13, machine-interface round -- sweep): the rendered list gains `json`.**
+> **Superseded by the next box (2026-08-13, post-sweep ruling).** The spelling below was never
+> implemented: all three implementations carry a separate `json`-specific template instead, and the
+> ruling is that the separate template stands. This box is kept in place because the reasoning the
+> ruling reverses is recorded in it.
+>
 > `json` joined the reserved set on the same unconditional every-level tier (§7.1's box), and it is
 > refused from the same sites by the same template -- so the template that names the set must name
 > it, or a consumer whose command-local `--json` is rejected reads a message listing four names
@@ -2030,6 +2041,42 @@ global-flag validation path so app globals are covered by the same message.
 > and the separate `errFlagNameYesBanned` template below are all unchanged, and the parity
 > extractor keys on the function name, so this is a one-line text change in three implementations
 > plus its parity vector.
+
+> **Amendment (2026-08-13, post-sweep ruling): the `json` ban is its own template, and the
+> quartet's rendered list is unchanged.** This reverses the box above. The reserved-name ban for
+> `json` is, byte-exactly:
+>
+> ```
+> flag name 'json' is reserved by the framework: --json selects machine mode
+> ```
+>
+> Python `_raise_flag_name_json_reserved()`, Go `errFlagNameJSONReserved` (a parameterless `const`,
+> per this section's Go declaration form), TypeScript `errFlagNameJsonReserved()`. Registration-time,
+> raised from the same two sites as the quartet's ban -- `Flag.__post_init__` /
+> `validateFlagConfig` and the global-flag validation path -- and covered by its own parity vector
+> (`conformance/cases/machine_mode.json`). The quartet's template keeps its four names and is
+> untouched:
+>
+> ```
+> flag name '<x>' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)
+> ```
+>
+> **Why the reversal.** The sweep box argued that `json` names a framework flag, so it belongs in
+> the set the set-listing template renders, and that the `yes` precedent does not transfer because
+> `yes` names no framework flag. Two things outweigh that. First, the separate template **names the
+> remedy**: a consumer told only that `json` is in a list of five reserved names learns that its
+> flag is refused, while `--json selects machine mode` also tells it what owns the name and why it
+> can never have it -- the same service `errFlagNameYesBanned` performs, which is why that template
+> is modeled on it. Second, §7.1's and §7.2's own amendments insist that **`json` is not a fifth
+> member of the quartet**; a template that enumerates it inside the quartet's parenthesized set is
+> the one place the framework would say otherwise, in the message a consumer is most likely to read
+> about the reserved names. Keeping `json` out of that enumeration is the spelling consistent with
+> the rest of §7.
+>
+> The cost the sweep box named -- two texts in parity for one registration condition -- is real and
+> accepted: it is the cost `yes` already pays, both are parameterless, and the parity extractor keys
+> on function names, so the pair is checked as two templates in three languages exactly as every
+> other pair is. Item 111's ledger records the reversal.
 
 ```
 flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential
@@ -3640,15 +3687,32 @@ because a reading it presented as forced is authored (§20.1).
      marker become envelope members" -- the shape here is the minimal one that carries the
      existing §12.5 / §12.11 text verbatim rather than restating it in a second vocabulary.
 
-     **Added at the sweep**, same class, none of them a ruling: the reserved-name error template's
+     **Added at the sweep**, same class, none of them a ruling: ~~the reserved-name error template's
      rendered list order (§12.1) -- `json` appended after the quartet rather than sorted in, so the
-     quartet's order survives and the newest reservation reads last; the two schema-dump emission
+     quartet's order survives and the newest reservation reads last~~ *(reversed -- see below)*; the two schema-dump emission
      shapes (§13) -- `payload_schema` omitted when undeclared and published as registered,
      `owns_stdout` emitted only when true, both following `consequential`'s omit-when-baseline
      shape and their case-schema mirroring following §13's existing deprecated-branch pattern;
      and the `children` key's spelling in the printed `$defs/effect_record` literal (§14.2) --
      a self-`$ref`, with `additionalProperties: false` deliberately kept, since a closed shape is
      the reason the key had to be declared rather than tolerated.
+
+     **Reversed after the sweep (2026-08-13), same class:** the sweep's `json`-in-the-rendered-list
+     spelling (§12.1) is withdrawn, and the **separate `json`-specific template** the three
+     implementations already carry stands instead --
+     `flag name 'json' is reserved by the framework: --json selects machine mode`, modeled on
+     `errFlagNameYesBanned`. The sweep authored an ordering rule for a list `json` no longer joins,
+     so that spelling is void rather than superseded by another ordering. Two reasons, recorded so a
+     later round does not re-derive the sweep's version: the separate template **names the remedy**
+     (what owns the name, and that it selects machine mode) where the set-listing template only
+     places the name in a list; and §7.1's and §7.2's amendments both insist `json` is **not** a
+     fifth member of the quartet, which an enumeration reading
+     `(dry-run, approve-consequential, quiet, verbose, json)` would contradict in the message a
+     consumer most often reads about reserved names. The accepted cost is a second parameterless
+     template in three languages -- the cost `yes` already pays -- and it buys the parity extractor
+     two separately keyed function names rather than one text that has to serve two conditions.
+     The sweep's own counter-argument (a set-listing template fits a name that IS in the set) is
+     preserved verbatim in §12.1's superseded box.
 
 112. **Authored spellings and one adopted reading for the trace store (§20, and the spec page).**
      *(This item was headed "one forced reading" until the sweep; see the correction below.)*
