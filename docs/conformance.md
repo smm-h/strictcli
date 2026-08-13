@@ -53,7 +53,7 @@ check, and any divergence in these areas blocks a release:
 
 ### JSON test cases
 
-The core of the suite is 73 JSON files in `conformance/cases/`, containing 755
+The core of the suite is 77 JSON files in `conformance/cases/`, containing 812
 individual test cases organized by feature area (flags, config, checks, groups,
 etc.). Each case is a self-contained JSON object specifying an app definition,
 argv input, optional environment variables, and expected output assertions
