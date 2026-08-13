@@ -825,110 +825,101 @@ func (a *App) registerConfigGroup() {
 			ctx.Error(fmt.Sprintf("error: %s", a.configParseErr))
 			return Exit(1)
 		}
-		// --json is framework-owned (contract §19.1): machine mode is read off
-		// the Context and the object below is this command's payload, not a
-		// locally-flagged print.
-		//
-		// This branch is NOT the double-document compensation the check
-		// command's was -- machine mode here already emits one document -- and
-		// it cannot be removed without a ruling. §19.5's emission-time
-		// magnitude guard refuses any number above 2^53, and a config file may
-		// legitimately hold one (a float flag set to 1e16). Building the
-		// payload unconditionally therefore turns a latent `config show --json`
-		// failure into an unconditional `config show` failure. The collision
-		// between §19.4's mode-independent payload call and §19.5's guard is
-		// real and is recorded here rather than resolved by an implementation.
-		useJSON := ctx.JSON()
+		// --json is framework-owned (contract §19.1): the object below is this
+		// command's payload, not a locally-flagged print, and it is supplied
+		// UNCONDITIONALLY (§19.4). Instance validation lives at the emission
+		// seam, so a config value machine mode could not carry -- a float above
+		// 2^53 -- costs the human rendering nothing.
 		configData := a.configData
 		allFlags := a.collectAllFlags()
 		colliding := a.collidingConfigFields()
 
-		if useJSON {
-			result := make(map[string]interface{})
-			for _, f := range allFlags {
-				param := flagParamName(f.Name)
-				value, source := resolveFlagShowSource(&f, configData)
-				result[param] = map[string]interface{}{
-					"value":  value,
-					"source": source,
-				}
+		result := make(map[string]interface{})
+		for _, f := range allFlags {
+			param := flagParamName(f.Name)
+			value, source := resolveFlagShowSource(&f, configData)
+			result[param] = map[string]interface{}{
+				"value":  value,
+				"source": source,
 			}
-			// Include config fields (skip those colliding with a flag: they are
-			// validation-only and render once, on the flag entry).
-			for _, name := range a.configFieldOrder {
-				if _, isColliding := colliding[name]; isColliding {
-					continue
-				}
-				cf := a.configFields[name]
-				var value interface{}
-				var source string
-				if v, ok := nestedGet(configData, name); ok {
-					value = v
-					source = "config"
-				} else if cf.HasDefault {
-					value = cf.Default
-					source = "default"
-				} else {
-					value = nil
-					source = "not set"
-				}
-				cfEntry := map[string]interface{}{
-					"value":    value,
-					"source":   source,
-					"type":     flagTypeName[cf.Type],
-					"required": cf.Required,
-					"help":     cf.Help,
-				}
-				if cf.HasDefault {
-					cfEntry["default"] = cf.Default
-				}
-				result[name] = cfEntry
-			}
-			// Infrastructure section (roots + handshakes + connections)
-			if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 || len(a.connectionOrder) > 0 {
-				infra := make(map[string]interface{})
-				for _, ev := range a.infraRootOrder {
-					src := "default"
-					if a.infraRootFromEnv[ev] {
-						src = "env"
-					}
-					infra[ev] = map[string]interface{}{
-						"kind":     "root",
-						"source":   src,
-						"resolved": a.infraRoots[ev],
-					}
-				}
-				for _, ev := range a.handshakeOrder {
-					val, isSet := os.LookupEnv(ev)
-					entry := map[string]interface{}{
-						"kind": "handshake",
-						"set":  isSet,
-						"help": a.handshakeEnvs[ev],
-					}
-					if isSet {
-						entry["value"] = val
-					}
-					infra[ev] = entry
-				}
-				for _, ev := range a.connectionOrder {
-					val, isSet := os.LookupEnv(ev)
-					entry := map[string]interface{}{
-						"kind": "connection",
-						"set":  isSet,
-						"help": a.connectionEnvs[ev],
-					}
-					if isSet {
-						entry["value"] = val
-					}
-					infra[ev] = entry
-				}
-				result["__infrastructure__"] = infra
-			}
-			ctx.Payload(result)
-			return Exit(0)
 		}
+		// Include config fields (skip those colliding with a flag: they are
+		// validation-only and render once, on the flag entry).
+		for _, name := range a.configFieldOrder {
+			if _, isColliding := colliding[name]; isColliding {
+				continue
+			}
+			cf := a.configFields[name]
+			var value interface{}
+			var source string
+			if v, ok := nestedGet(configData, name); ok {
+				value = v
+				source = "config"
+			} else if cf.HasDefault {
+				value = cf.Default
+				source = "default"
+			} else {
+				value = nil
+				source = "not set"
+			}
+			cfEntry := map[string]interface{}{
+				"value":    value,
+				"source":   source,
+				"type":     flagTypeName[cf.Type],
+				"required": cf.Required,
+				"help":     cf.Help,
+			}
+			if cf.HasDefault {
+				cfEntry["default"] = cf.Default
+			}
+			result[name] = cfEntry
+		}
+		// Infrastructure section (roots + handshakes + connections)
+		if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 || len(a.connectionOrder) > 0 {
+			infra := make(map[string]interface{})
+			for _, ev := range a.infraRootOrder {
+				src := "default"
+				if a.infraRootFromEnv[ev] {
+					src = "env"
+				}
+				infra[ev] = map[string]interface{}{
+					"kind":     "root",
+					"source":   src,
+					"resolved": a.infraRoots[ev],
+				}
+			}
+			for _, ev := range a.handshakeOrder {
+				val, isSet := os.LookupEnv(ev)
+				entry := map[string]interface{}{
+					"kind": "handshake",
+					"set":  isSet,
+					"help": a.handshakeEnvs[ev],
+				}
+				if isSet {
+					entry["value"] = val
+				}
+				infra[ev] = entry
+			}
+			for _, ev := range a.connectionOrder {
+				val, isSet := os.LookupEnv(ev)
+				entry := map[string]interface{}{
+					"kind": "connection",
+					"set":  isSet,
+					"help": a.connectionEnvs[ev],
+				}
+				if isSet {
+					entry["value"] = val
+				}
+				infra[ev] = entry
+			}
+			result["__infrastructure__"] = infra
+		}
+		ctx.Payload(result)
 
-		// --plain
+		// The human rendering is unconditional too, and goes through the
+		// context writers, so in machine mode the same lines ride the
+		// envelope's diagnostics (§19.1) exactly as the check command's table
+		// does.
 		for _, f := range allFlags {
 			param := flagParamName(f.Name)
 			value, source := resolveFlagShowSource(&f, configData)

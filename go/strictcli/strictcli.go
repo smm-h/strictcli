@@ -2368,6 +2368,11 @@ type previewError struct {
 // one document.
 func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool, cmdPath string, exitCode int, trunc *dryRunTruncation, aborted bool, ownsStdout bool) {
 	if ctx != nil && ctx.reserved.json {
+		// The emission seam owns instance validation (§19.4, §19.5): the value
+		// is checked here, where the envelope is about to carry it, and nowhere
+		// else. A human-mode run never reaches this line, so a payload the
+		// envelope could not represent costs it nothing.
+		validateEmittedPayload(ctx)
 		// A command that declared stdout ownership keeps stdout for its own
 		// document, and the envelope moves to stderr with the diagnostics it
 		// carries (contract §19.6). Leaving it on stdout would re-create the
@@ -2401,6 +2406,19 @@ func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool
 	}
 	if aborted {
 		fmt.Fprintln(stderr, errDryRunAborted(a.wouldDoSeq(), cmdPath))
+	}
+}
+
+// validateEmittedPayload validates the payload the envelope is about to carry
+// (§19.5). The schema check, JSON representability and the 2^53 magnitude guard
+// all live here, at the one seam where the value becomes a document. A deviation
+// fails the run rather than shipping a wrong shape.
+func validateEmittedPayload(ctx *Context) {
+	if !ctx.payloadSet {
+		return
+	}
+	if f := validatePayloadValue(ctx.payload, ctx.payloadSchema); f != nil {
+		panic(errPayloadInvalid(ctx.commandName, f.Path, f.Detail))
 	}
 }
 

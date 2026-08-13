@@ -58,6 +58,7 @@ import {
 	type DiagnosticRecord,
 	type InfraAccess,
 	type ReservedFlags,
+	validateEmittedPayload,
 	type Writer,
 } from "./context.js";
 import {
@@ -1535,6 +1536,10 @@ export class AppImpl implements App {
 		cmdPath: string,
 		previewError: PreviewError | null,
 	): void {
+		// The emission seam owns instance validation (§19.4, §19.5): the value
+		// is checked here, where the envelope is about to carry it, and nowhere
+		// else.
+		validateEmittedPayload(ctx);
 		const supplied = contextPayload(ctx);
 		this.emitEnvelope(out, {
 			command: cmdPath,

@@ -379,6 +379,50 @@ func TestPayloadEmissionPanicsOnADeviatingValue(t *testing.T) {
 	app.Test([]string{"run", "--json"})
 }
 
+func TestPayloadHumanModeNeverValidatesTheValue(t *testing.T) {
+	// §19.4's call-unconditionally rule: a handler builds its payload the same
+	// way in both modes, so a value machine mode could not carry must not fail
+	// a run that was never going to emit an envelope.
+	app := NewApp("t", "1", "t")
+	app.Command("run", "run", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		ctx.Payload(map[string]interface{}{"a": "x"})
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{
+		"type":       "object",
+		"properties": map[string]interface{}{"a": map[string]interface{}{"type": "integer"}},
+	}))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code %d, stderr %q", r.ExitCode, r.Stderr)
+	}
+}
+
+func TestPayloadSlotIsTakenByTheFirstCallEvenWhenItDeviates(t *testing.T) {
+	// The one-slot rule (§19.4) is a call-time rule and is independent of the
+	// value: the second call is refused whatever the first one carried.
+	app := NewApp("t", "1", "t")
+	var second string
+	app.Command("run", "run", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		ctx.Payload(map[string]interface{}{"a": 1})
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					second, _ = r.(string)
+				}
+			}()
+			ctx.Payload([]interface{}{1, 2})
+		}()
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{"type": "array"}))
+	func() {
+		defer func() { _ = recover() }()
+		app.Test([]string{"run"})
+	}()
+	if second != errPayloadAlreadySet("run") {
+		t.Fatalf("second call panic: got %q, want %q", second, errPayloadAlreadySet("run"))
+	}
+}
+
 func TestPayloadEmissionAcceptsAMatchingValue(t *testing.T) {
 	app := NewApp("t", "1", "t")
 	app.Command("run", "run", func(ctx *Context, kwargs map[string]interface{}) Outcome {
@@ -538,6 +582,58 @@ func TestPayloadSchemaBuilders(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- config show with an unrepresentable config value ----------------------
+//
+// The case that moved instance validation to the emission seam. A config file
+// may legitimately hold a float above 2^53, which §19.5's magnitude guard
+// refuses. The human rendering must be unaffected -- and it is, because the
+// guard runs only where the envelope is written.
+
+func configShowBigFloatApp(t *testing.T) *App {
+	t.Helper()
+	dir := t.TempDir()
+	configFile := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configFile, []byte(`{"size": 1e17}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp("t", "1", "t", WithConfig(), WithConfigPath(configFile))
+	app.Command("run", "run", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectReadOnly),
+		WithFlags(FloatFlag("size", "how big", Default(0.0))))
+	return app
+}
+
+func TestConfigShowHumanRenderingSurvivesAnUnrepresentableValue(t *testing.T) {
+	r := configShowBigFloatApp(t).Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit code %d, stderr %q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "size = 100000000000000000.0  (source: config)") {
+		t.Fatalf("stdout: %q", r.Stdout)
+	}
+	if r.Stderr != "" {
+		t.Fatalf("stderr: %q", r.Stderr)
+	}
+}
+
+func TestConfigShowMachineModeRefusesAnUnrepresentableValue(t *testing.T) {
+	app := configShowBigFloatApp(t)
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected a panic")
+		}
+		want := `command "show": payload does not satisfy the declared schema ` +
+			`at payload["size"]["value"]: the number's magnitude exceeds 2^53 ` +
+			`(declare a big identifier as a string)`
+		if got, _ := r.(string); got != want {
+			t.Errorf("panic:\n got %q\nwant %q", got, want)
+		}
+	}()
+	app.Test([]string{"config", "show", "--json"})
 }
 
 func TestABuilderDoesNotValidateOnItsOwn(t *testing.T) {

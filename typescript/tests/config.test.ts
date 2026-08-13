@@ -406,6 +406,53 @@ test("config show --json output, byte-exact (the payload, sorted keys)", async (
 	);
 });
 
+// --- config show with an unrepresentable config value ------------------
+//
+// The case that moved instance validation to the emission seam. A config file
+// may legitimately hold a float above 2^53, which the payload schema's
+// magnitude guard (contract §19.5) refuses. The human rendering must be
+// unaffected -- and it is, because the guard runs only where the envelope is
+// written.
+
+function bigFloatApp(): App {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "test app",
+		config: true,
+	});
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run command",
+			flags: { size: flag("size", t.float, { help: "how big", default: 0 }) },
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("config show --plain survives a value machine mode could not carry", async () => {
+	const { dir } = freshXdg();
+	writeFileSync(join(dir, "config.json"), '{"size": 1e17}\n');
+	const r = await bigFloatApp().test(["config", "show", "--plain"]);
+	assert.equal(r.exitCode, 0);
+	assert.equal(r.stdout, "size = 100000000000000000.0  (source: config)\n");
+	assert.equal(r.stderr, "");
+});
+
+test("config show --json refuses a config value above 2^53", async () => {
+	const { dir } = freshXdg();
+	writeFileSync(join(dir, "config.json"), '{"size": 1e17}\n');
+	await assert.rejects(
+		bigFloatApp().test(["config", "show", "--json"]),
+		(err: Error) =>
+			err.message ===
+			'command "show": payload does not satisfy the declared schema at ' +
+				'payload["size"]["value"]: the number\'s magnitude exceeds 2^53 ' +
+				"(declare a big identifier as a string)",
+	);
+});
+
 test("config show env source attribution coerces the display value", async () => {
 	freshXdg();
 	await withEnv({ APP_PORT: "7070" }, async () => {

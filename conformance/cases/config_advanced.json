@@ -565,6 +565,45 @@
     }
   },
   {
+    "name": "config: config show --plain renders a value the machine channel could not carry",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_format": "toml",
+      "config_content": "size = 1e17",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "size",
+              "help": "how big",
+              "type": "float",
+              "default": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "config",
+      "show",
+      "--plain"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "size = 100000000000000000.0  (source: config)"
+      ],
+      "stderr": ""
+    }
+  },
+  {
     "name": "config: parse-time loading - late-written config is honored",
     "app": {
       "name": "myapp",

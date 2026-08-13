@@ -299,7 +299,7 @@ test("a nested unknown keyword names its path", () => {
 	);
 });
 
-test("a deviating payload fails at the call", async () => {
+test("a deviating payload fails at the emission seam", async () => {
 	const app = createApp({ name: "t", version: "1", help: "t" });
 	app.command(
 		defineReadOnlyCommand("run", {
@@ -323,6 +323,28 @@ test("a deviating payload fails at the call", async () => {
 	);
 });
 
+test("human mode never validates the value", async () => {
+	// §19.4's call-unconditionally rule: a handler builds its payload the same
+	// way in both modes, so a value machine mode could not carry must not fail a
+	// run that was never going to emit an envelope.
+	const app = createApp({ name: "t", version: "1", help: "t" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run",
+			payloadSchema: {
+				type: "object",
+				properties: { a: { type: "integer" } },
+			},
+			handler: (_args, ctx) => {
+				ctx.payload({ a: "x" });
+				return 0;
+			},
+		}),
+	);
+	const r = await app.test(["run"]);
+	assert.equal(r.exitCode, 0);
+});
+
 test("a matching payload rides the envelope", async () => {
 	const app = createApp({ name: "t", version: "1", help: "t" });
 	app.command(
@@ -343,26 +365,35 @@ test("a matching payload rides the envelope", async () => {
 	assert.deepEqual(JSON.parse(r.stdout).payload, { a: 1 });
 });
 
-test("the payload slot stays empty after a rejection", async () => {
+test("the slot is taken by the first call even when it deviates", async () => {
+	// The one-slot rule (§19.4) is a call-time rule and is independent of the
+	// value: the second call is refused whatever the first one carried, and the
+	// deviating first value is what the emission seam then refuses.
 	const app = createApp({ name: "t", version: "1", help: "t" });
+	let second = "";
 	app.command(
 		defineReadOnlyCommand("run", {
 			help: "run",
 			payloadSchema: { type: "array" },
 			handler: (_args, ctx) => {
+				ctx.payload({ a: 1 });
 				try {
-					ctx.payload({ a: 1 });
-				} catch {
-					// The refusal leaves the one slot untouched.
+					ctx.payload([1, 2]);
+				} catch (err) {
+					second = (err as Error).message;
 				}
-				ctx.payload([1, 2]);
 				return 0;
 			},
 		}),
 	);
-	const r = await app.test(["run", "--json"]);
-	assert.equal(r.exitCode, 0);
-	assert.deepEqual(JSON.parse(r.stdout).payload, [1, 2]);
+	await assert.rejects(app.test(["run", "--json"]), (err: Error) =>
+		err.message.includes("does not satisfy"),
+	);
+	assert.equal(
+		second,
+		'command "run": ctx.payload was already called ' +
+			"(a dispatch carries at most one payload)",
+	);
 });
 
 // ---------------------------------------------------------------------------

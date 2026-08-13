@@ -273,7 +273,7 @@ class TestEmissionWiring:
         )
         assert app.test(["run", "--json"]).exit_code == 0
 
-    def test_a_deviating_payload_fails_at_the_call(self):
+    def test_a_deviating_payload_fails_at_the_emission_seam(self):
         app = self._app(
             {"type": "object", "properties": {"a": {"type": "integer"}}},
             {"a": "x"},
@@ -285,34 +285,44 @@ class TestEmissionWiring:
             'payload["a"]: expected type "integer", got string'
         )
 
-    def test_validation_is_mode_independent(self):
+    def test_human_mode_never_validates_the_value(self):
+        # §19.4's call-unconditionally rule: a handler builds its payload the
+        # same way in both modes, so a value machine mode could not carry must
+        # not fail a run that was never going to emit an envelope.
         app = self._app({"type": "array"}, {"a": 1})
-        with pytest.raises(RuntimeError, match="does not satisfy"):
-            app.test(["run"])
+        assert app.test(["run"]).exit_code == 0
 
-    def test_the_slot_stays_empty_after_a_rejection(self):
+    def test_the_slot_is_taken_by_the_first_call_even_when_it_deviates(self):
+        # The one-slot rule (§19.4) is a call-time rule and is independent of
+        # the value: the second call is refused, and the deviating first value
+        # is what the emission seam then refuses.
         app = strictcli.App(name="t", help="t", version="1")
+        seen = {}
 
         @app.command(
             "run", effect="read_only", help="run",
             payload_schema={"type": "array"},
         )
         def _run(ctx):
+            ctx.payload({"a": 1})
             try:
-                ctx.payload({"a": 1})
-            except RuntimeError:
-                pass
-            ctx.payload([1, 2])
+                ctx.payload([1, 2])
+            except RuntimeError as exc:
+                seen["second"] = str(exc)
             return 0
 
-        r = app.test(["run", "--json"])
-        assert r.exit_code == 0
-        assert json.loads(r.stdout)["payload"] == [1, 2]
-
-    def test_call_validates_too(self):
-        app = self._app({"type": "string"}, 1)
         with pytest.raises(RuntimeError, match="does not satisfy"):
-            app.call("run")
+            app.test(["run", "--json"])
+        assert seen["second"] == (
+            'command "run": ctx.payload was already called '
+            "(a dispatch carries at most one payload)"
+        )
+
+    def test_call_captures_without_validating(self):
+        # call() writes no envelope, so there is no emission seam to validate
+        # at: it returns the value the handler supplied.
+        app = self._app({"type": "string"}, 1)
+        assert app.call("run") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +369,45 @@ class TestFrameworkOwnedSchemas:
         assert strictcli._validate_payload_value(
             payload, strictcli._CONFIG_SHOW_PAYLOAD_SCHEMA
         ) is None
+
+
+class TestConfigShowWithAnUnrepresentableConfigValue:
+    """The case that moved instance validation to the emission seam.
+
+    A config file may legitimately hold a float above 2^53, which §19.5's
+    magnitude guard refuses. The human rendering must be unaffected -- and it
+    is, because the guard runs only where the envelope is written.
+    """
+
+    def _app(self, tmp_path):
+        cfg = tmp_path / "config.json"
+        cfg.write_text('{"size": 1e17}', encoding="utf-8")
+        app = strictcli.App(
+            name="t", help="t", version="1", config=True, config_path=str(cfg),
+        )
+
+        @app.command("run", effect="read_only", help="run")
+        @strictcli.flag("size", type=float, help="how big", default=0.0)
+        def _run(ctx, size):
+            return 0
+
+        return app
+
+    def test_the_human_rendering_is_unaffected(self, tmp_path):
+        r = self._app(tmp_path).test(["config", "show", "--plain"])
+        assert r.exit_code == 0
+        assert "size = 100000000000000000.0  (source: config)" in r.stdout
+        assert r.stderr == ""
+
+    def test_machine_mode_refuses_it_with_the_magnitude_message(self, tmp_path):
+        app = self._app(tmp_path)
+        with pytest.raises(RuntimeError) as e:
+            app.test(["config", "show", "--json"])
+        assert str(e.value) == (
+            'command "show": payload does not satisfy the declared schema at '
+            'payload["size"]["value"]: the number\'s magnitude exceeds 2^53 '
+            "(declare a big identifier as a string)"
+        )
 
 
 # ---------------------------------------------------------------------------

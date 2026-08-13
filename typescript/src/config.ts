@@ -1542,10 +1542,11 @@ const CONFIG_SHOW_PAYLOAD_SCHEMA: Readonly<Record<string, unknown>> = {
 };
 
 function configShowHandler(app: AppImpl, ctx: Context): number {
-	// --json is framework-owned (contract §19.1): machine mode is read off the
-	// Context and the object below is this command's payload, not a
-	// locally-flagged print.
-	const useJson = ctx.json;
+	// --json is framework-owned (contract §19.1): the object below is this
+	// command's payload, not a locally-flagged print, and it is supplied
+	// UNCONDITIONALLY (§19.4). Instance validation lives at the emission seam,
+	// so a config value machine mode could not carry -- a float above 2^53 --
+	// costs the human rendering nothing.
 	if (app.configParseErr !== undefined) {
 		ctx.error(`error: ${app.configParseErr}`);
 		return 1;
@@ -1554,89 +1555,88 @@ function configShowHandler(app: AppImpl, ctx: Context): number {
 	const allFlags = collectAllFlags(app);
 	const colliding = collidingConfigFields(app);
 
-	if (useJson) {
-		const result: Record<string, unknown> = Object.create(null);
-		for (const f of allFlags) {
-			const param = flagParamName(f.name);
-			const [value, source] = resolveFlagShowSource(f, configData);
-			result[param] = { value: value ?? null, source };
-		}
-		for (const [cfName, cf] of app.configFields) {
-			if (colliding.has(cfName)) {
-				continue; // validation-only: rendered once, on the flag entry
-			}
-			const found = nestedGet(configData, cfName);
-			let value: unknown;
-			let source: string;
-			if (found.ok) {
-				value = found.value;
-				source = "config";
-			} else if (cf.hasDefault) {
-				value = cf.default;
-				source = "default";
-			} else {
-				value = null;
-				source = "not set";
-			}
-			const entry: Record<string, unknown> = {
-				value: value ?? null,
-				source,
-				type: cf.schema,
-				required: cf.required,
-				help: cf.help,
-			};
-			if (cf.hasDefault) {
-				entry.default = cf.default;
-			}
-			result[cfName] = entry;
-		}
-		if (
-			app.infraRoots.size > 0 ||
-			app.handshakeEnvs.size > 0 ||
-			app.connectionEnvs.size > 0
-		) {
-			const infra: Record<string, unknown> = Object.create(null);
-			for (const [ev, resolved] of app.infraRoots) {
-				infra[ev] = {
-					kind: "root",
-					source: app.infraRootFromEnv.get(ev) === true ? "env" : "default",
-					resolved,
-				};
-			}
-			for (const [ev, helpText] of app.handshakeEnvs) {
-				const live = process.env[ev];
-				const entry: Record<string, unknown> = {
-					kind: "handshake",
-					set: live !== undefined,
-					help: helpText,
-				};
-				if (live !== undefined) {
-					entry.value = live;
-				}
-				infra[ev] = entry;
-			}
-			for (const [ev, helpText] of app.connectionEnvs) {
-				const live = process.env[ev];
-				const entry: Record<string, unknown> = {
-					kind: "connection",
-					set: live !== undefined,
-					help: helpText,
-				};
-				if (live !== undefined) {
-					entry.value = live;
-				}
-				infra[ev] = entry;
-			}
-			result.__infrastructure__ = infra;
-		}
-		// Sorted keys at every level: the three implementations build this
-		// object in three orders (Go marshals a map, which sorts recursively),
-		// and the payload is compared byte-for-byte by conformance.
-		ctx.payload(deepSorted(result));
-		return 0;
+	const result: Record<string, unknown> = Object.create(null);
+	for (const f of allFlags) {
+		const param = flagParamName(f.name);
+		const [value, source] = resolveFlagShowSource(f, configData);
+		result[param] = { value: value ?? null, source };
 	}
+	for (const [cfName, cf] of app.configFields) {
+		if (colliding.has(cfName)) {
+			continue; // validation-only: rendered once, on the flag entry
+		}
+		const found = nestedGet(configData, cfName);
+		let value: unknown;
+		let source: string;
+		if (found.ok) {
+			value = found.value;
+			source = "config";
+		} else if (cf.hasDefault) {
+			value = cf.default;
+			source = "default";
+		} else {
+			value = null;
+			source = "not set";
+		}
+		const entry: Record<string, unknown> = {
+			value: value ?? null,
+			source,
+			type: cf.schema,
+			required: cf.required,
+			help: cf.help,
+		};
+		if (cf.hasDefault) {
+			entry.default = cf.default;
+		}
+		result[cfName] = entry;
+	}
+	if (
+		app.infraRoots.size > 0 ||
+		app.handshakeEnvs.size > 0 ||
+		app.connectionEnvs.size > 0
+	) {
+		const infra: Record<string, unknown> = Object.create(null);
+		for (const [ev, resolved] of app.infraRoots) {
+			infra[ev] = {
+				kind: "root",
+				source: app.infraRootFromEnv.get(ev) === true ? "env" : "default",
+				resolved,
+			};
+		}
+		for (const [ev, helpText] of app.handshakeEnvs) {
+			const live = process.env[ev];
+			const entry: Record<string, unknown> = {
+				kind: "handshake",
+				set: live !== undefined,
+				help: helpText,
+			};
+			if (live !== undefined) {
+				entry.value = live;
+			}
+			infra[ev] = entry;
+		}
+		for (const [ev, helpText] of app.connectionEnvs) {
+			const live = process.env[ev];
+			const entry: Record<string, unknown> = {
+				kind: "connection",
+				set: live !== undefined,
+				help: helpText,
+			};
+			if (live !== undefined) {
+				entry.value = live;
+			}
+			infra[ev] = entry;
+		}
+		result.__infrastructure__ = infra;
+	}
+	// Sorted keys at every level: the three implementations build this
+	// object in three orders (Go marshals a map, which sorts recursively),
+	// and the payload is compared byte-for-byte by conformance.
+	ctx.payload(deepSorted(result));
 
-	// --plain
+	// The human rendering is unconditional too, and goes through the context
+	// writers, so in machine mode the same lines ride the envelope's
+	// diagnostics (§19.1) exactly as the check command's table does.
 	for (const f of allFlags) {
 		const param = flagParamName(f.name);
 		const [value, source] = resolveFlagShowSource(f, configData);

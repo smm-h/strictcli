@@ -322,25 +322,23 @@ class Context:
         emitted; outside machine mode it is not printed at all. ``test()`` and
         ``call()`` capture it either way.
 
-        Three hard errors, all at call time:
+        Two hard errors, both at call time, and both §19.4's own rules:
 
         - the command declared no ``payload_schema=``, so there is nothing to
           validate the value against;
         - a payload was already supplied in this dispatch (one slot, one
-          answer);
-        - the value does not satisfy the declared schema (contract §19.5): a
-          wrong shape fails here instead of shipping.
+          answer).
+
+        The value itself is validated against the declared schema at the
+        EMISSION seam (§19.4, §19.5) -- only where machine mode actually writes
+        the envelope. Validating here instead would make a payload that is
+        legal in human mode fail a run that was never going to emit it, which
+        §19.4's call-unconditionally rule forbids.
         """
         if self._payload_schema is None:
             raise RuntimeError(_msg_payload_no_schema(self._command_name))
         if self._payload_value is not _MISSING:
             raise RuntimeError(_msg_payload_already_set(self._command_name))
-        found = _validate_payload_value(value, self._payload_schema)
-        if found is not None:
-            path, detail = found
-            raise RuntimeError(
-                _msg_payload_invalid(self._command_name, path, detail)
-            )
         self._payload_value = value
 
     @property
@@ -7090,93 +7088,84 @@ class App:
             if app_ref._config_parse_err:
                 ctx.error(f"error: {app_ref._config_parse_err}")
                 return 1
-            # --json is framework-owned (contract §19.1): machine mode is read
-            # off the Context and the object below is this command's payload,
-            # not a locally-flagged print.
-            #
-            # This branch is NOT the double-document compensation the check
-            # command's was -- machine mode here already emits one document --
-            # and it cannot be removed without a ruling. §19.5's emission-time
-            # magnitude guard refuses any number above 2^53, and a config file
-            # may legitimately hold one (a float flag set to 1e16). Building
-            # the payload unconditionally therefore turns a latent `config show
-            # --json` failure into an unconditional `config show` failure. The
-            # collision between §19.4's mode-independent payload call and
-            # §19.5's guard is real and is recorded here rather than resolved
-            # by an implementation.
-            use_json = ctx.json
+            # --json is framework-owned (contract §19.1): the object below is
+            # this command's payload, not a locally-flagged print, and it is
+            # supplied UNCONDITIONALLY (§19.4). Instance validation lives at the
+            # emission seam, so a config value machine mode could not carry --
+            # a float above 2^53 -- costs the human rendering nothing.
             config_data = app_ref._config_data
             all_flags = app_ref._collect_all_flags()
             colliding = app_ref._colliding_config_fields()
-            if use_json:
-                result = {}
-                for f in all_flags:
-                    param = _flag_param_name(f.name)
-                    value, source = _resolve_flag_show_source(f, config_data)
-                    result[param] = {"value": value, "source": source}
-                # Include config fields (skip those colliding with a flag: they
-                # are validation-only and render once, on the flag entry).
-                for cf_name, cf in app_ref._config_fields.items():
-                    if cf_name in colliding:
-                        continue
-                    found, value = _nested_get(config_data, cf_name)
-                    if found:
-                        source = "config"
-                    elif not isinstance(cf.default, _MissingSentinel):
-                        value = cf.default
-                        source = "default"
-                    else:
-                        value = None
-                        source = "not set"
-                    entry: dict = {
-                        "value": value,
-                        "source": source,
-                        "type": cf.type.__name__,
-                        "required": cf.required,
-                        "help": cf.help,
+            result = {}
+            for f in all_flags:
+                param = _flag_param_name(f.name)
+                value, source = _resolve_flag_show_source(f, config_data)
+                result[param] = {"value": value, "source": source}
+            # Include config fields (skip those colliding with a flag: they
+            # are validation-only and render once, on the flag entry).
+            for cf_name, cf in app_ref._config_fields.items():
+                if cf_name in colliding:
+                    continue
+                found, value = _nested_get(config_data, cf_name)
+                if found:
+                    source = "config"
+                elif not isinstance(cf.default, _MissingSentinel):
+                    value = cf.default
+                    source = "default"
+                else:
+                    value = None
+                    source = "not set"
+                entry: dict = {
+                    "value": value,
+                    "source": source,
+                    "type": cf.type.__name__,
+                    "required": cf.required,
+                    "help": cf.help,
+                }
+                if not isinstance(cf.default, _MissingSentinel):
+                    entry["default"] = cf.default
+                result[cf_name] = entry
+            # Infrastructure section (roots + handshakes + connections)
+            if app_ref._infra_root_order or app_ref._handshake_order or app_ref._connection_order:
+                infra: dict = {}
+                for ev in app_ref._infra_root_order:
+                    infra[ev] = {
+                        "kind": "root",
+                        "source": "env" if app_ref._infra_root_from_env[ev] else "default",
+                        "resolved": app_ref._infra_roots[ev],
                     }
-                    if not isinstance(cf.default, _MissingSentinel):
-                        entry["default"] = cf.default
-                    result[cf_name] = entry
-                # Infrastructure section (roots + handshakes + connections)
-                if app_ref._infra_root_order or app_ref._handshake_order or app_ref._connection_order:
-                    infra: dict = {}
-                    for ev in app_ref._infra_root_order:
-                        infra[ev] = {
-                            "kind": "root",
-                            "source": "env" if app_ref._infra_root_from_env[ev] else "default",
-                            "resolved": app_ref._infra_roots[ev],
-                        }
-                    for ev in app_ref._handshake_order:
-                        is_set = ev in os.environ
-                        hs_entry: dict = {
-                            "kind": "handshake",
-                            "set": is_set,
-                            "help": app_ref._handshake_envs[ev],
-                        }
-                        if is_set:
-                            hs_entry["value"] = os.environ[ev]
-                        infra[ev] = hs_entry
-                    for ev in app_ref._connection_order:
-                        is_set = ev in os.environ
-                        conn_entry: dict = {
-                            "kind": "connection",
-                            "set": is_set,
-                            "help": app_ref._connection_envs[ev],
-                        }
-                        if is_set:
-                            conn_entry["value"] = os.environ[ev]
-                        infra[ev] = conn_entry
-                    result["__infrastructure__"] = infra
-                # Sorted keys at every level: the three implementations build
-                # this object in three orders (Go marshals a map, which sorts
-                # recursively), and the payload is compared byte-for-byte by
-                # conformance.
-                ctx.payload(_deep_sorted(result))
-                return 0
+                for ev in app_ref._handshake_order:
+                    is_set = ev in os.environ
+                    hs_entry: dict = {
+                        "kind": "handshake",
+                        "set": is_set,
+                        "help": app_ref._handshake_envs[ev],
+                    }
+                    if is_set:
+                        hs_entry["value"] = os.environ[ev]
+                    infra[ev] = hs_entry
+                for ev in app_ref._connection_order:
+                    is_set = ev in os.environ
+                    conn_entry: dict = {
+                        "kind": "connection",
+                        "set": is_set,
+                        "help": app_ref._connection_envs[ev],
+                    }
+                    if is_set:
+                        conn_entry["value"] = os.environ[ev]
+                    infra[ev] = conn_entry
+                result["__infrastructure__"] = infra
+            # Sorted keys at every level: the three implementations build
+            # this object in three orders (Go marshals a map, which sorts
+            # recursively), and the payload is compared byte-for-byte by
+            # conformance.
+            ctx.payload(_deep_sorted(result))
 
-            # --plain, through the context writers: one info call per line, so
-            # nothing here can put a second document on stdout.
+            # The human rendering is unconditional too, and goes through the
+            # context writers: one info call per line, so nothing here can put a
+            # second document on stdout, and in machine mode the same lines ride
+            # the envelope's diagnostics (§19.1) exactly as the check command's
+            # table does.
             for f in all_flags:
                 param = _flag_param_name(f.name)
                 value, source = _resolve_flag_show_source(f, config_data)
@@ -8523,6 +8512,11 @@ class App:
         (§19.1, §19.3), and stdout carries exactly one document.
         """
         if ctx._json:
+            # The emission seam owns instance validation (§19.4, §19.5): the
+            # value is checked here, where the envelope is about to carry it,
+            # and nowhere else. A human-mode run never reaches this line, so a
+            # payload the envelope could not represent costs it nothing.
+            self._validate_emitted_payload(ctx)
             # A command that declared stdout ownership keeps stdout for its own
             # document, and the envelope moves to stderr with the diagnostics
             # it carries (contract §19.6). Leaving it on stdout would re-create
@@ -8550,6 +8544,22 @@ class App:
         else:
             self._render_dry_log(cmd_path, out, err, aborted=aborted)
         return _DispatchResult(exit_code, ctx._payload_value)
+
+    def _validate_emitted_payload(self, ctx: "Context") -> None:
+        """Validate the payload the envelope is about to carry (§19.5).
+
+        The schema check, JSON representability and the 2^53 magnitude guard
+        all live here, at the one seam where the value becomes a document. A
+        deviation fails the run rather than shipping a wrong shape.
+        """
+        if ctx._payload_value is _MISSING:
+            return
+        found = _validate_payload_value(ctx._payload_value, ctx._payload_schema)
+        if found is not None:
+            path, detail = found
+            raise RuntimeError(
+                _msg_payload_invalid(ctx._command_name, path, detail)
+            )
 
     def _preview_error(
         self, cmd_path: str, dry_run: bool,

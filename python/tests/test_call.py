@@ -144,16 +144,17 @@ class TestCallReturnsList:
         assert result.exit_code == 0
 
 
-class TestCallRejectsNonJSONPayloads:
-    """A payload must be a JSON value (contract §19.5).
+class TestNonJSONPayloadsAreRefusedAtEmission:
+    """A payload must be a JSON value where it becomes one (contract §19.5).
 
-    A dataclass instance is not one, and no schema can describe it, so
-    ``ctx.payload`` refuses it at the call rather than letting the serializer
-    invent a shape for it. The declaration and the emitted document are the
-    same artifact; a value the declaration cannot describe has no place in it.
+    A dataclass instance is not one, and no schema can describe it, so the
+    envelope refuses it rather than letting the serializer invent a shape.
+    The refusal is at the EMISSION seam (§19.4): a run that never writes an
+    envelope never inspects the value, and the programmatic surfaces return
+    whatever the handler supplied.
     """
 
-    def test_call_rejects_a_dataclass(self):
+    def _status_app(self):
         @dataclass
         class Status:
             healthy: bool
@@ -166,28 +167,26 @@ class TestCallRejectsNonJSONPayloads:
             ctx.payload(Status(healthy=True, uptime=3600))
             return strictcli.outcome()
 
+        return app, Status
+
+    def test_machine_mode_rejects_a_dataclass(self):
+        app, _ = self._status_app()
         with pytest.raises(RuntimeError) as e:
-            app.call("status")
+            app.test(["status", "--json"])
         assert str(e.value) == (
             'command "status": payload does not satisfy the declared schema '
             "at payload: the value is not representable in JSON"
         )
 
-    def test_test_rejects_a_dataclass(self):
-        @dataclass
-        class Status:
-            healthy: bool
-            uptime: int
+    def test_call_captures_it_without_validating(self):
+        app, Status = self._status_app()
+        assert app.call("status") == Status(healthy=True, uptime=3600)
 
-        app = _build_app()
-
-        @app.command("status", effect="read_only", help="get status", payload_schema={})
-        def status(ctx):
-            ctx.payload(Status(healthy=True, uptime=3600))
-            return strictcli.outcome()
-
-        with pytest.raises(RuntimeError, match="not representable in JSON"):
-            app.test(["status"])
+    def test_human_mode_never_inspects_it(self):
+        app, Status = self._status_app()
+        r = app.test(["status"])
+        assert r.exit_code == 0
+        assert r.data == Status(healthy=True, uptime=3600)
 
     def test_a_dict_of_the_same_fields_is_accepted(self):
         app = _build_app()

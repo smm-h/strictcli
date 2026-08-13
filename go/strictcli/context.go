@@ -120,20 +120,21 @@ func (c *Context) JSON() bool { return c.reserved.json }
 // and never branches on JSON(). In machine mode the value is emitted; outside
 // machine mode it is not printed at all. Test and Call capture it either way.
 //
-// It PANICS when the command declared no payload schema (there is nothing to
-// validate the value against), when a payload was already supplied in this
-// dispatch (one slot, one answer), and when the value does not satisfy the
-// declared schema (contract §19.5) -- a wrong shape fails here instead of
-// shipping.
+// It PANICS at call time on §19.4's own two rules: when the command declared no
+// payload schema (there is nothing to validate the value against) and when a
+// payload was already supplied in this dispatch (one slot, one answer).
+//
+// The value itself is validated against the declared schema at the EMISSION
+// seam (§19.4, §19.5) -- only where machine mode actually writes the envelope.
+// Validating here instead would make a payload that is legal in human mode fail
+// a run that was never going to emit it, which §19.4's call-unconditionally rule
+// forbids.
 func (c *Context) Payload(value interface{}) {
 	if c.payloadSchema == nil {
 		panic(errPayloadNoSchema(c.commandName))
 	}
 	if c.payloadSet {
 		panic(errPayloadAlreadySet(c.commandName))
-	}
-	if f := validatePayloadValue(value, c.payloadSchema); f != nil {
-		panic(errPayloadInvalid(c.commandName, f.Path, f.Detail))
 	}
 	c.payload = value
 	c.payloadSet = true

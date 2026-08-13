@@ -227,11 +227,15 @@ export class Context implements MutatingContext {
 	 * emitted; outside machine mode it is not printed at all. `test()` and
 	 * `call()` capture it either way.
 	 *
-	 * Throws when the command declared no payload schema (there is nothing to
-	 * validate the value against), when a payload was already supplied in this
-	 * dispatch (one slot, one answer), and when the value does not satisfy the
-	 * declared schema (contract §19.5) -- a wrong shape fails here instead of
-	 * shipping.
+	 * Throws at call time on §19.4's own two rules: when the command declared no
+	 * payload schema (there is nothing to validate the value against) and when a
+	 * payload was already supplied in this dispatch (one slot, one answer).
+	 *
+	 * The value itself is validated against the declared schema at the EMISSION
+	 * seam (§19.4, §19.5) -- only where machine mode actually writes the
+	 * envelope. Validating here instead would make a payload that is legal in
+	 * human mode fail a run that was never going to emit it, which §19.4's
+	 * call-unconditionally rule forbids.
 	 */
 	payload(value: unknown): void {
 		if (this.payloadSchema === null) {
@@ -239,15 +243,6 @@ export class Context implements MutatingContext {
 		}
 		if (this.payloadSet) {
 			throw new Error(errPayloadAlreadySet(this.commandName));
-		}
-		const found = validatePayloadValue(
-			value,
-			this.payloadSchema as Record<string, unknown>,
-		);
-		if (found !== null) {
-			throw new Error(
-				errPayloadInvalid(this.commandName, found.path, found.detail),
-			);
 		}
 		this.payloadValue = value;
 		this.payloadSet = true;
@@ -401,6 +396,33 @@ export function contextPayload(ctx: Context): {
 } {
 	const c = ctx as unknown as { payloadSet: boolean; payloadValue: unknown };
 	return { set: c.payloadSet, value: c.payloadValue };
+}
+
+/**
+ * Package-internal (NOT re-exported from index.ts): validates the payload the
+ * envelope is about to carry (contract §19.5). The schema check, JSON
+ * representability and the 2^53 magnitude guard all live at this one seam,
+ * where the value becomes a document -- a human-mode run never reaches it, so a
+ * payload the envelope could not represent costs it nothing. A deviation fails
+ * the run rather than shipping a wrong shape.
+ */
+export function validateEmittedPayload(ctx: Context): void {
+	const c = ctx as unknown as {
+		payloadSet: boolean;
+		payloadValue: unknown;
+		payloadSchema: Readonly<Record<string, unknown>> | null;
+		commandName: string;
+	};
+	if (!c.payloadSet || c.payloadSchema === null) {
+		return;
+	}
+	const found = validatePayloadValue(
+		c.payloadValue,
+		c.payloadSchema as Record<string, unknown>,
+	);
+	if (found !== null) {
+		throw new Error(errPayloadInvalid(c.commandName, found.path, found.detail));
+	}
 }
 
 /**
