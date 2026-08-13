@@ -118,6 +118,19 @@ Every handler receives a context (Go and Python are ctx-first; TypeScript is arg
 
 Structured output is a separate channel: a command declares its payload's JSON Schema (`payload_schema=` / `PayloadSchema(...)` / `payloadSchema:`) and its handler supplies the value through `ctx.payload(value)` / `ctx.Payload(value)`. At most one payload per dispatch, and calling it without a declared schema is a hard error at call time. The payload is printed only under the framework-owned `--json`, and `test()`/`call()` capture it in either mode.
 
+### Declared payload schemas
+
+The declaration is an inline JSON Schema literal over a **closed subset**: `type` (including type lists for nullability), `properties`, `required`, `items`, `enum`, `const`, and `additionalProperties` (boolean **or** schema — the schema form is how a dynamic-key map is declared). Both duties are hard errors:
+
+- **Registration time** — the literal is validated as written. An unknown keyword anywhere in it is rejected, including near-miss typos, which is what keeps the subset closed by construction.
+- **Emission time** — `ctx.payload(value)` validates the value against the declaration and refuses a deviation, naming the path into the value (`payload["a"][1]`) and the violated constraint.
+
+Numbers are IEEE-754 doubles and any number whose magnitude exceeds 2^53 is refused at emission: a big identifier (a nanosecond timestamp, a 64-bit id) is a **string by declaration**. Every implementation validates the document it will actually write, so Go sees a struct through its `json` tags (`omitempty` included) and TypeScript sees BigInt as an integer token and a `Map` as an object.
+
+Optional builder sugar constructs the same literal, one constructor per subset keyword shape: `schema_type` / `schema_array` / `schema_object` / `schema_enum` / `schema_const` (Python), `SchemaType` / `SchemaArray` / `SchemaObject` / `SchemaEnum` / `SchemaConst` (Go), `schemaType` / `schemaArray` / `schemaObject` / `schemaEnum` / `schemaConst` (TypeScript). Builders add no vocabulary and validate nothing themselves — their output is the canonical literal and passes the identical registration-time validation.
+
+The cross-language vectors live at `conformance/payload_schema_vectors.json` (verdicts and exact error texts) and `conformance/payload_schema_builders.json` (each builder construct's literal); all three unit suites replay both. python-jsonschema, santhosh-tekuri/jsonschema v6 and hyperjump are wired as dev-only cross-checks asserting verdict agreement, and are never runtime dependencies.
+
 ### Provenance
 
 Every resolved flag value carries a source label: `cli`, `env`, `config`, `default`, `implied` (injected by an Implies dependency), or `infra` (a `RelativeToRoot` default resolved through a declared infrastructure root).
