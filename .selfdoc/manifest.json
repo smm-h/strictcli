@@ -1226,11 +1226,6 @@
         },
         {
           "level": 3,
-          "text": "`ExitData`",
-          "anchor": "exitdata"
-        },
-        {
-          "level": 3,
           "text": "`IsScalarType`",
           "anchor": "isscalartype"
         },
@@ -1481,6 +1476,11 @@
         },
         {
           "level": 3,
+          "text": "`PayloadSchema`",
+          "anchor": "payloadschema"
+        },
+        {
+          "level": 3,
           "text": "`WithGrants`",
           "anchor": "withgrants"
         },
@@ -1633,6 +1633,16 @@
           "level": 3,
           "text": "`Context.Verbose`",
           "anchor": "contextverbose"
+        },
+        {
+          "level": 3,
+          "text": "`Context.JSON`",
+          "anchor": "contextjson"
+        },
+        {
+          "level": 3,
+          "text": "`Context.Payload`",
+          "anchor": "contextpayload"
         },
         {
           "level": 3,
@@ -2359,6 +2369,16 @@
         },
         {
           "level": 4,
+          "text": "`json`",
+          "anchor": "json"
+        },
+        {
+          "level": 4,
+          "text": "`payload`",
+          "anchor": "payload"
+        },
+        {
+          "level": 4,
           "text": "`effects`",
           "anchor": "effects"
         },
@@ -2531,6 +2551,16 @@
           "level": 3,
           "text": "`_observe_allowlist_breadth_warning`",
           "anchor": "_observe_allowlist_breadth_warning"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_payload_no_schema`",
+          "anchor": "_msg_payload_no_schema"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_payload_already_set`",
+          "anchor": "_msg_payload_already_set"
         },
         {
           "level": 3,
@@ -2984,6 +3014,11 @@
         },
         {
           "level": 3,
+          "text": "`_raise_flag_name_json_reserved`",
+          "anchor": "_raise_flag_name_json_reserved"
+        },
+        {
+          "level": 3,
           "text": "`_raise_flag_name_yes_banned`",
           "anchor": "_raise_flag_name_yes_banned"
         },
@@ -3106,6 +3141,11 @@
           "level": 3,
           "text": "`Result`",
           "anchor": "result"
+        },
+        {
+          "level": 3,
+          "text": "`_DispatchResult`",
+          "anchor": "_dispatchresult"
         },
         {
           "level": 3,
@@ -3554,6 +3594,21 @@
         },
         {
           "level": 4,
+          "text": "`_dispatch`",
+          "anchor": "_dispatch"
+        },
+        {
+          "level": 4,
+          "text": "`_finish_dispatch`",
+          "anchor": "_finish_dispatch"
+        },
+        {
+          "level": 4,
+          "text": "`_emit_payload`",
+          "anchor": "_emit_payload"
+        },
+        {
+          "level": 4,
           "text": "`_invoke`",
           "anchor": "_invoke"
         },
@@ -3734,6 +3789,11 @@
         },
         {
           "level": 3,
+          "text": "`_check_list_items`",
+          "anchor": "_check_list_items"
+        },
+        {
+          "level": 3,
           "text": "`_check_list_mode`",
           "anchor": "_check_list_mode"
         },
@@ -3749,6 +3809,11 @@
         },
         {
           "level": 3,
+          "text": "`_check_result_items`",
+          "anchor": "_check_result_items"
+        },
+        {
+          "level": 3,
           "text": "`format_check_results_json`",
           "anchor": "format_check_results_json"
         },
@@ -3761,6 +3826,11 @@
           "level": 3,
           "text": "`_serialize_arg`",
           "anchor": "_serialize_arg"
+        },
+        {
+          "level": 3,
+          "text": "`_deep_sorted`",
+          "anchor": "_deep_sorted"
         },
         {
           "level": 3,
@@ -4787,6 +4857,11 @@
           "level": 3,
           "text": "`Context`",
           "anchor": "context"
+        },
+        {
+          "level": 3,
+          "text": "`contextPayload`",
+          "anchor": "contextpayload"
         },
         {
           "level": 3,
@@ -6360,6 +6435,11 @@
         },
         {
           "level": 3,
+          "text": "`errFlagNameJsonReserved`",
+          "anchor": "errflagnamejsonreserved"
+        },
+        {
+          "level": 3,
           "text": "`errFlagNameYesBanned`",
           "anchor": "errflagnameyesbanned"
         },
@@ -6530,6 +6610,16 @@
         },
         {
           "level": 3,
+          "text": "`errPayloadNoSchema`",
+          "anchor": "errpayloadnoschema"
+        },
+        {
+          "level": 3,
+          "text": "`errPayloadAlreadySet`",
+          "anchor": "errpayloadalreadyset"
+        },
+        {
+          "level": 3,
           "text": "`errEffectsUnavailable`",
           "anchor": "erreffectsunavailable"
         },
@@ -6694,6 +6784,11 @@
           "level": 3,
           "text": "`BANNED_FLAG_NAMES`",
           "anchor": "banned_flag_names"
+        },
+        {
+          "level": 3,
+          "text": "`RESERVED_MACHINE_FLAG_NAME`",
+          "anchor": "reserved_machine_flag_name"
         },
         {
           "level": 3,
@@ -7793,5 +7888,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-12T23:26:13.657776+00:00"
+  "last_gen": "2026-08-13T01:53:33.366374+00:00"
 }
