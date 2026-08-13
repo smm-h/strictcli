@@ -3898,6 +3898,19 @@ uses were found.
        layer does. A *declared default* still applies to an unelected member -- a default is a
        property of the flag, not an election, and item 117 says nothing about it.
 
+119. **Clarification (not a semantics change): `config_conflict_mode="error"` still fires on an
+     elected member (§21.3).** §21.3's "not consulted at all" was written about election and
+     value delivery, and read literally it also denies the both-sources conflict check, which
+     was never true of any implementation. The conflict check is a value-hygiene rule about the
+     operator's own configuration -- it runs before mutex suppression, elects nothing and
+     delivers nothing -- so an app with `config_conflict_mode="error"`, a config value for a
+     member, and a diverging command-line election of that same member reports the conflict and
+     exits. On an unelected member no conflict is reachable: nothing on the command line can
+     diverge from the config value. The behaviour predates the mutex-election round, is pinned
+     by `test_conflict_mode_fires_before_mutex` (Python) and
+     `TestConfigConflictModeFiresBeforeMutex` (Go), and no implementation changed for this item
+     -- §21.3 gained the carve-out paragraph, and nothing else.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -4418,6 +4431,19 @@ justification is that a mutex group exists to make the operator choose *in the i
 an inherited environment is not that choice. The cost is stated rather than hidden: an operator
 who wants a default choice for such a group cannot express it through env or config, and must
 either type the flag or the application must stop using a mutex group for that decision.
+
+**One carve-out: `config_conflict_mode="error"` still fires on an elected member.** "Not
+consulted at all" describes value *delivery* and election. It does not describe the
+both-sources conflict check, which is a value-hygiene rule about the operator's own
+configuration and runs **before** mutex suppression. So an app configured with
+`config_conflict_mode="error"` that has a config value for a member the command line then
+elects with a diverging value reports the conflict (`... is set in both ...`) and exits, rather
+than suppressing the config value silently. The conflict check never elects anything and never
+delivers a value: on an *unelected* member no conflict is possible, because the command line
+supplied nothing to diverge from. This is pre-existing behaviour, pinned by
+`test_conflict_mode_fires_before_mutex` in the Python suite and by
+`TestConfigConflictModeFiresBeforeMutex` in the Go suite, and it is recorded here as a
+clarification of §21.3's wording, not as a change to it (§18.10 item 119).
 
 ### 21.4 The three errors
 
