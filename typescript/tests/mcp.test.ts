@@ -44,8 +44,43 @@ async function serveRaw(
 		.map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
-/** Sends JSON-RPC requests and returns the parsed responses. */
+/**
+ * The metadata every modern-era request carries (protocol 2026-07-28). The
+ * helpers below splice it into any request that does not bring its own, so a
+ * test that is not about the metadata itself reads as it always did.
+ */
+const MODERN_META: Record<string, unknown> = {
+	"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+	"io.modelcontextprotocol/clientCapabilities": {},
+};
+
+/** Returns `req` with the modern request metadata spliced in. */
+function asModern(req: unknown): unknown {
+	if (typeof req !== "object" || req === null) {
+		return req;
+	}
+	const obj = req as Record<string, unknown>;
+	if (obj.method === "initialize" || !Object.hasOwn(obj, "method")) {
+		return req;
+	}
+	const params = { ...((obj.params ?? {}) as Record<string, unknown>) };
+	if (Object.hasOwn(params, "_meta")) {
+		return req;
+	}
+	params._meta = { ...MODERN_META };
+	return { ...obj, params };
+}
+
+/** Sends modern-era JSON-RPC requests and returns the parsed responses. */
 async function sendRequests(
+	app: App,
+	...requests: unknown[]
+): Promise<Record<string, unknown>[]> {
+	return sendRequestsRaw(app, ...requests.map(asModern));
+}
+
+/** Sends JSON-RPC requests exactly as written -- no metadata is spliced in. */
+async function sendRequestsRaw(
 	app: App,
 	...requests: unknown[]
 ): Promise<Record<string, unknown>[]> {
@@ -59,6 +94,16 @@ async function sendOne(
 	request: unknown,
 ): Promise<Record<string, unknown>> {
 	const responses = await sendRequests(app, request);
+	assert.equal(responses.length, 1);
+	return responses[0] as Record<string, unknown>;
+}
+
+/** Sends one request as written and asserts exactly one response came back. */
+async function sendOneRaw(
+	app: App,
+	request: unknown,
+): Promise<Record<string, unknown>> {
+	const responses = await sendRequestsRaw(app, request);
 	assert.equal(responses.length, 1);
 	return responses[0] as Record<string, unknown>;
 }
@@ -886,4 +931,223 @@ test("mcp: consent inside arguments does not consent", async () => {
 		}),
 	);
 	assert.equal(resultOf(resp).isError, true);
+});
+
+// ---------------------------------------------------------------------------
+// The modern era (protocol 2026-07-28)
+// ---------------------------------------------------------------------------
+
+/** The modern metadata block with per-test overrides applied. */
+function metaWith(overrides: Record<string, unknown>): Record<string, unknown> {
+	return { ...MODERN_META, ...overrides };
+}
+
+function modernApp(): App {
+	const app = buildApp();
+	app.command(
+		defineReadOnlyCommand("status", {
+			help: "show status",
+			handler: () => outcome(0),
+		}),
+	);
+	return app;
+}
+
+test("mcp: server/discover advertises versions, capabilities and identity", async () => {
+	const resp = await sendOne(modernApp(), {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "server/discover",
+		params: {},
+	});
+	const result = resultOf(resp);
+	assert.equal(result.resultType, "complete");
+	assert.deepEqual(result.supportedVersions, ["2026-07-28"]);
+	assert.equal(result.instructions, "test app");
+	assert.equal(result.ttlMs, 3600000);
+	assert.equal(result.cacheScope, "public");
+	assert.deepEqual(
+		(result._meta as Record<string, unknown>)[
+			"io.modelcontextprotocol/serverInfo"
+		],
+		{ name: "myapp", version: "1.0.0" },
+	);
+});
+
+test("mcp: server/discover declares the confirmation feature by name", async () => {
+	const resp = await sendOne(modernApp(), {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "server/discover",
+		params: {},
+	});
+	const caps = resultOf(resp).capabilities as Record<string, unknown>;
+	assert.deepEqual(caps.extensions, {
+		"dev.smmh.strictcli/consequential-confirmation": {},
+	});
+});
+
+test("mcp: modern results carry their result type", async () => {
+	const app = modernApp();
+	const list = await sendOne(app, {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "tools/list",
+		params: {},
+	});
+	assert.equal(resultOf(list).resultType, "complete");
+	assert.equal(resultOf(list).ttlMs, 3600000);
+	assert.equal(resultOf(list).cacheScope, "public");
+
+	const call = await sendOne(app, {
+		jsonrpc: "2.0",
+		id: 2,
+		method: "tools/call",
+		params: { name: "status", arguments: {} },
+	});
+	assert.equal(resultOf(call).resultType, "complete");
+});
+
+test("mcp: a request without the protocol metadata is refused", async () => {
+	const resp = await sendOneRaw(modernApp(), {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "tools/list",
+		params: {},
+	});
+	assert.equal(errorOf(resp).code, -32602);
+	assert.equal(
+		errorOf(resp).message,
+		"missing required request metadata: _meta['io.modelcontextprotocol/protocolVersion']",
+	);
+});
+
+test("mcp: the request metadata is validated key by key", async () => {
+	const cases: [Record<string, unknown>, string][] = [
+		[{ _meta: [] }, "parameter '_meta' must be an object"],
+		[
+			{
+				_meta: metaWith({
+					"io.modelcontextprotocol/protocolVersion": 2026,
+				}),
+			},
+			"_meta['io.modelcontextprotocol/protocolVersion'] must be a string",
+		],
+		[
+			{ _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } },
+			"missing required request metadata: _meta['io.modelcontextprotocol/clientCapabilities']",
+		],
+		[
+			{
+				_meta: metaWith({
+					"io.modelcontextprotocol/clientCapabilities": "yes",
+				}),
+			},
+			"_meta['io.modelcontextprotocol/clientCapabilities'] must be an object",
+		],
+		[
+			{
+				_meta: metaWith({
+					"io.modelcontextprotocol/clientInfo": "ExampleClient",
+				}),
+			},
+			"_meta['io.modelcontextprotocol/clientInfo'] must be an object",
+		],
+		[
+			{ _meta: metaWith({ "-bad./key": 1 }) },
+			"invalid _meta key name: '-bad./key'",
+		],
+		[
+			{ _meta: metaWith({ "io.modelcontextprotocol/whatever": 1 }) },
+			"unrecognized reserved _meta key: 'io.modelcontextprotocol/whatever'",
+		],
+	];
+	for (const [params, message] of cases) {
+		const resp = await sendOneRaw(modernApp(), {
+			jsonrpc: "2.0",
+			id: 1,
+			method: "tools/list",
+			params,
+		});
+		assert.equal(errorOf(resp).code, -32602);
+		assert.equal(errorOf(resp).message, message);
+	}
+});
+
+test("mcp: vendor and optional metadata keys are accepted", async () => {
+	const resp = await sendOneRaw(modernApp(), {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "tools/list",
+		params: {
+			_meta: metaWith({
+				"com.example.mcp/thing": 1,
+				traceparent: "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01",
+				progressToken: 7,
+				"io.modelcontextprotocol/clientInfo": {
+					name: "ExampleClient",
+					version: "1.0.0",
+				},
+				"io.modelcontextprotocol/logLevel": "debug",
+			}),
+		},
+	});
+	assert.equal(resultOf(resp).resultType, "complete");
+});
+
+test("mcp: an unsupported protocol version is refused with the supported list", async () => {
+	const resp = await sendOneRaw(modernApp(), {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "tools/list",
+		params: {
+			_meta: metaWith({
+				"io.modelcontextprotocol/protocolVersion": "1900-01-01",
+			}),
+		},
+	});
+	assert.equal(errorOf(resp).code, -32022);
+	assert.equal(errorOf(resp).message, "Unsupported protocol version");
+	assert.deepEqual(errorOf(resp).data, {
+		supported: ["2026-07-28"],
+		requested: "1900-01-01",
+	});
+});
+
+test("mcp: an unknown modern method is method-not-found", async () => {
+	const resp = await sendOne(modernApp(), {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "resources/list",
+		params: {},
+	});
+	assert.equal(errorOf(resp).code, -32601);
+	assert.equal(errorOf(resp).message, "Method not found: resources/list");
+});
+
+test("mcp: initialize selects the legacy era for later requests", async () => {
+	const responses = await sendRequestsRaw(
+		modernApp(),
+		{ jsonrpc: "2.0", id: 1, method: "initialize", params: {} },
+		{ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+		{
+			jsonrpc: "2.0",
+			id: 3,
+			method: "tools/list",
+			params: { _meta: { ...MODERN_META } },
+		},
+		{ jsonrpc: "2.0", id: 4, method: "server/discover", params: {} },
+	);
+	assert.equal(
+		resultOf(responses[0] as Record<string, unknown>).protocolVersion,
+		"2024-11-05",
+	);
+	const legacyList = resultOf(responses[1] as Record<string, unknown>);
+	assert.equal(Object.hasOwn(legacyList, "resultType"), false);
+	assert.equal(Object.hasOwn(legacyList, "ttlMs"), false);
+	assert.equal(
+		resultOf(responses[2] as Record<string, unknown>).resultType,
+		"complete",
+	);
+	assert.equal(errorOf(responses[3] as Record<string, unknown>).code, -32601);
 });
