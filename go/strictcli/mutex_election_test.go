@@ -169,6 +169,62 @@ func TestMutexA5EnvValueSuppressedBesideAnElection(t *testing.T) {
 	}
 }
 
+func TestMutexA5ConfigDoesNotElect(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"file": "from-config.txt"})
+
+	makeApp := func() *App {
+		app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+		app.Command("fetch", "fetch data", func(ctx *Context, args map[string]interface{}) Outcome {
+			fmt.Print("file=" + formatValue(args["file"]) +
+				" url=" + formatValue(args["url"]))
+			return Exit(0)
+		}, WithMutex(MutexGroup{
+			Flags: []Flag{
+				StringFlag("file", "read from file", Default(nil)),
+				StringFlag("url", "read from URL", Default(nil)),
+			},
+		}), WithEffect(EffectReadOnly))
+		return app
+	}
+
+	// A config value elects nothing, so the group is unsatisfied.
+	r := makeApp().Test([]string{"fetch"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	if !strings.Contains(r.Stderr, "error: one of --file, --url is required\n") {
+		t.Fatalf("stderr = %q", r.Stderr)
+	}
+
+	// Beside a real election the config value is suppressed, not delivered.
+	r = makeApp().Test([]string{"fetch", "--url", "u"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "file=None url=u") {
+		t.Fatalf("stdout = %q", r.Stdout)
+	}
+}
+
+func TestMutexA1CallWithFalseBoolDeclines(t *testing.T) {
+	app := electionApp()
+	_, err := app.Call("run", map[string]interface{}{"all_profiles": false})
+	if err == nil {
+		t.Fatal("expected an error from Call, got nil")
+	}
+	if !strings.Contains(
+		err.Error(),
+		"one of --profile, --all-profiles, --current-profile is required",
+	) {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "declines an option") {
+		t.Fatalf("error = %q, want the teaching clause", err.Error())
+	}
+}
+
 func TestMutexDeclaredDefaultStillApplies(t *testing.T) {
 	app := simpleApp("cmd", "a command", "loud={loud} hushed={hushed}",
 		WithMutex(MutexGroup{
