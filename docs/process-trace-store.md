@@ -1,11 +1,31 @@
 ---
 title: Process Trace Store
-description: "How strictcli records process ancestry: the STRICTCLI_TRACE_PARENT variable, an append-only JSONL store, ULID identifiers, and UTC time-range partitions."
+description: "Specification, not yet implemented: how strictcli records process ancestry via STRICTCLI_TRACE_PARENT, an append-only JSONL store, ULIDs, UTC partitions."
 nav_group: "Guides"
 nav_order: 20
 ---
 
 # Process Trace Store
+
+> **Status: specified, not yet implemented.** This page is normative and complete, and it is
+> written in the present tense throughout -- but no released strictcli version writes to this store
+> today. It ships with the framework's machine-interface release, alongside machine mode and the
+> envelope; until then, every rule below describes what a conforming writer must do, not what any
+> installed tool is currently doing. The convention is the effects contract's own: §19.8 of the
+> contract (`docs/history/_effects-contract.md`) designs compositional child previews in full and
+> says plainly that they are not implemented, for the same reason -- a specification that is
+> complete before its code exists is what lets three implementations and any outside participant
+> arrive at the same behaviour instead of converging afterwards.
+>
+> Two consequences while that remains true. A tool that implements this page today writes into a
+> store nothing else writes yet: that is harmless and expected, because participation is open and a
+> dangling or absent parent identifier is legal by design. And a consumer that reads the store today
+> finds it empty or missing, which is the same case as a store that was pruned -- handled by the
+> [Consumers](#consumers) rules, not by a special case.
+>
+> The contract items governing the store -- observational-only, and the best-effort failure
+> carve-out -- are §20 of the effects contract. This page owns everything else: the variable, the
+> line, the partitions, the identifiers and the failure marker.
 
 When one command-line tool runs another, the second one has no reliable way to say who invoked it.
 Every tool that has wanted the answer has invented its own channel -- an environment marker, a
@@ -61,6 +81,14 @@ ssh host STRICTCLI_TRACE_PARENT="$STRICTCLI_TRACE_PARENT" mytool subcommand
 ~/.local/share/strictcli/trace/
 ```
 
+- **The path is literal.** The store is exactly `~/.local/share/strictcli/trace/`: expand `~` to
+  the invoking user's home directory, and consult nothing else. It is deliberately **not** derived
+  from `XDG_DATA_HOME`, and not from any other environment variable, despite matching the XDG
+  default -- a writer that honoured `XDG_DATA_HOME` and one that did not would write to two
+  different stores on the same machine, and a chain crossing them would dangle at both ends while
+  both writers were behaving correctly. One literal path is the entire location rule, and it is the
+  reason two implementations can be written independently and still link. The same literalness
+  covers the failure marker, which lives inside this directory.
 - **Append-only JSONL.** Each entry is one JSON object on one line.
 - **One entry is one `O_APPEND` `write()` of one line**, including its terminating newline. Not a
   buffered stream flushed later, not two writes. A single `write()` to a file opened `O_APPEND` is
