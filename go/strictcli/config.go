@@ -809,7 +809,7 @@ func (a *App) registerConfigGroup() {
 
 	// config path
 	registerFrameworkSubcommand(grp, "path", "Print the absolute path to this application's config file and nothing else, so the value can be piped straight into another command. The path is $XDG_CONFIG_HOME/<app>/config.<toml|json> (falling back to ~/.config), or the explicit override the application was built with. Printing it does not create the file, and reports the same path whether or not one exists yet.", EffectReadOnly, func(ctx *Context, args map[string]interface{}) Outcome {
-		fmt.Println(configPath(a.Name, a.configPathOverride, a.configFormat))
+		ctx.Info(configPath(a.Name, a.configPathOverride, a.configFormat))
 		return Exit(0)
 	})
 
@@ -822,12 +822,22 @@ func (a *App) registerConfigGroup() {
 	registerFrameworkSubcommand(grp, "show", "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table; the framework-owned --json yields the same information as a machine-readable object carrying each entry's type, default and help text.", EffectReadOnly, func(ctx *Context, args map[string]interface{}) Outcome {
 		// If there was a config parse error, show it instead of values
 		if a.configParseErr != "" {
-			fmt.Fprintf(os.Stderr, "error: %s\n", a.configParseErr)
+			ctx.Error(fmt.Sprintf("error: %s", a.configParseErr))
 			return Exit(1)
 		}
 		// --json is framework-owned (contract §19.1): machine mode is read off
 		// the Context and the object below is this command's payload, not a
 		// locally-flagged print.
+		//
+		// This branch is NOT the double-document compensation the check
+		// command's was -- machine mode here already emits one document -- and
+		// it cannot be removed without a ruling. §19.5's emission-time
+		// magnitude guard refuses any number above 2^53, and a config file may
+		// legitimately hold one (a float flag set to 1e16). Building the
+		// payload unconditionally therefore turns a latent `config show --json`
+		// failure into an unconditional `config show` failure. The collision
+		// between §19.4's mode-independent payload call and §19.5's guard is
+		// real and is recorded here rather than resolved by an implementation.
 		useJSON := ctx.JSON()
 		configData := a.configData
 		allFlags := a.collectAllFlags()
@@ -927,7 +937,7 @@ func (a *App) registerConfigGroup() {
 			if cf, isColliding := colliding[param]; isColliding {
 				line += fmt.Sprintf("  -- %s", cf.Help)
 			}
-			fmt.Println(line)
+			ctx.Info(line)
 		}
 		// Include config fields (skip colliding ones: rendered as an annotation
 		// on the flag line above).
@@ -938,8 +948,8 @@ func (a *App) registerConfigGroup() {
 			}
 		}
 		if len(nonColliding) > 0 {
-			fmt.Println()
-			fmt.Println("Config fields:")
+			ctx.Info("")
+			ctx.Info("Config fields:")
 			for _, name := range nonColliding {
 				cf := a.configFields[name]
 				var value interface{}
@@ -958,35 +968,35 @@ func (a *App) registerConfigGroup() {
 				if !cf.Required {
 					reqStr = "optional"
 				}
-				fmt.Printf("  %s (%s, %s) = %v  (source: %s)  -- %s\n",
-					name, flagTypeName[cf.Type], reqStr, formatConfigValue(value), source, cf.Help)
+				ctx.Info(fmt.Sprintf("  %s (%s, %s) = %v  (source: %s)  -- %s",
+					name, flagTypeName[cf.Type], reqStr, formatConfigValue(value), source, cf.Help))
 			}
 		}
 		// Infrastructure section (roots + handshakes + connections)
 		if len(a.infraRootOrder) > 0 || len(a.handshakeOrder) > 0 || len(a.connectionOrder) > 0 {
-			fmt.Println()
-			fmt.Println("Infrastructure:")
+			ctx.Info("")
+			ctx.Info("Infrastructure:")
 			for _, ev := range a.infraRootOrder {
 				src := "default"
 				if a.infraRootFromEnv[ev] {
 					src = "env-set"
 				}
-				fmt.Printf("  %s (root) = %s  (source: %s)\n", ev, a.infraRoots[ev], src)
+				ctx.Info(fmt.Sprintf("  %s (root) = %s  (source: %s)", ev, a.infraRoots[ev], src))
 			}
 			for _, ev := range a.handshakeOrder {
 				val, isSet := os.LookupEnv(ev)
 				if isSet {
-					fmt.Printf("  %s (handshake) = %s  (set)  -- %s\n", ev, val, a.handshakeEnvs[ev])
+					ctx.Info(fmt.Sprintf("  %s (handshake) = %s  (set)  -- %s", ev, val, a.handshakeEnvs[ev]))
 				} else {
-					fmt.Printf("  %s (handshake) = <unset>  -- %s\n", ev, a.handshakeEnvs[ev])
+					ctx.Info(fmt.Sprintf("  %s (handshake) = <unset>  -- %s", ev, a.handshakeEnvs[ev]))
 				}
 			}
 			for _, ev := range a.connectionOrder {
 				val, isSet := os.LookupEnv(ev)
 				if isSet {
-					fmt.Printf("  %s (connection) = %s  (set)  -- %s\n", ev, val, a.connectionEnvs[ev])
+					ctx.Info(fmt.Sprintf("  %s (connection) = %s  (set)  -- %s", ev, val, a.connectionEnvs[ev]))
 				} else {
-					fmt.Printf("  %s (connection) = <unset>  -- %s\n", ev, a.connectionEnvs[ev])
+					ctx.Info(fmt.Sprintf("  %s (connection) = <unset>  -- %s", ev, a.connectionEnvs[ev]))
 				}
 			}
 		}
@@ -1247,7 +1257,7 @@ func (a *App) registerConfigGroup() {
 			fmt.Fprintf(os.Stderr, "error: cannot write config file: %s\n", err)
 			return Exit(1)
 		}
-		fmt.Println(path)
+		ctx.Info(path)
 		return Exit(0)
 	})
 }

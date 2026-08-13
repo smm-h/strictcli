@@ -2,7 +2,6 @@ package strictcli
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -44,25 +43,28 @@ func (a *App) registerCheckCommand() {
 		// so the check command declares none of them and reads their values off
 		// the Context instead. The machine output is this command's payload
 		// (contract §19.4), which is why --json is not a flag here any more.
+		// Nothing below branches on ctx.JSON(): the payload call is
+		// mode-independent (§19.4) and every human line goes through a context
+		// writer, so machine mode carries the text as diagnostics and stdout
+		// keeps exactly one document (§19.1).
 		verbose := ctx.Verbose()
 		dryRun := ctx.DryRun()
-		jsonOut := ctx.JSON()
 
 		if list {
-			return Exit(a.checkList(ctx, jsonOut))
+			return Exit(a.checkList(ctx))
 		}
 
 		if !(runAll || tagExpr != "" || nameGlob != "") {
 			// No flags: show help
 			cmd := a.commands["check"]
-			fmt.Println(formatCommandHelp(a, cmd, ""))
+			ctx.Info(formatCommandHelp(a, cmd, ""))
 			return Exit(0)
 		}
 
 		// --dry-run is not a separate branch: it selects the purity partition,
 		// so the checks declared pure really run and only the impure remainder
 		// is rendered as the would-run plan.
-		return Exit(a.checkRun(ctx, runAll, tagExpr, nameGlob, jsonOut, ignoreWarnings, verbose, dryRun))
+		return Exit(a.checkRun(ctx, runAll, tagExpr, nameGlob, ignoreWarnings, verbose, dryRun))
 	}
 	// Filter out candidate flags that already exist as global flags to avoid
 	// collisions -- the handler absorbs global flag values automatically.
@@ -143,17 +145,19 @@ var checkPayloadSchema = map[string]interface{}{
 	"items": map[string]interface{}{"type": "object"},
 }
 
-// checkList implements the --list mode.
-func (a *App) checkList(ctx *Context, jsonOut bool) int {
-	if jsonOut {
-		ctx.Payload(a.checkListItems())
-		return 0
-	}
-	return a.checkListHuman()
+// checkList implements the --list mode. The payload is supplied
+// unconditionally (§19.4) and the human table goes through the context writer,
+// so machine mode carries it as one diagnostic instead of a second stdout
+// document.
+func (a *App) checkList(ctx *Context) int {
+	ctx.Payload(a.checkListItems())
+	return a.checkListHuman(ctx)
 }
 
-// checkListHuman prints an aligned table of checks.
-func (a *App) checkListHuman() int {
+// checkListHuman writes an aligned table of checks through the context writer.
+// The whole table is ONE Info call, so machine mode carries it as a single
+// diagnostic rather than one per row.
+func (a *App) checkListHuman(ctx *Context) int {
 	order := a.checkOrder
 
 	// Compute column widths
@@ -170,13 +174,13 @@ func (a *App) checkListHuman() int {
 		}
 	}
 
-	// Print header
-	fmt.Printf("%-*s   %-*s   %s\n", maxName, "NAME", maxTags, "TAGS", "SEVERITY")
+	lines := []string{fmt.Sprintf("%-*s   %-*s   %s", maxName, "NAME", maxTags, "TAGS", "SEVERITY")}
 	for _, name := range order {
 		def := a.checkDefs[name]
 		tagsStr := strings.Join(def.tags, ", ")
-		fmt.Printf("%-*s   %-*s   %s\n", maxName, name, maxTags, tagsStr, def.severity)
+		lines = append(lines, fmt.Sprintf("%-*s   %-*s   %s", maxName, name, maxTags, tagsStr, def.severity))
 	}
+	ctx.Info(strings.Join(lines, "\n"))
 	return 0
 }
 
@@ -207,12 +211,15 @@ func (a *App) checkListItems() []checkEntry {
 // whose dependency was listed). The header is printed even when nothing was
 // left over: an empty plan is a statement ("everything selected ran"), the same
 // way the framework's own would-do log prints its header with an empty body.
-func (a *App) checkDryRunPlan(listed []string) {
+//
+// The whole plan is ONE Info call, so machine mode carries it as a single
+// diagnostic (contract §19.1).
+func (a *App) checkDryRunPlan(ctx *Context, listed []string) {
 	noun := "checks"
 	if len(listed) == 1 {
 		noun = "check"
 	}
-	fmt.Printf("Would run %d %s:\n", len(listed), noun)
+	lines := []string{fmt.Sprintf("Would run %d %s:", len(listed), noun)}
 	for i, name := range listed {
 		def := a.checkDefs[name]
 		purity := "impure"
@@ -220,11 +227,12 @@ func (a *App) checkDryRunPlan(listed []string) {
 			purity = "pure"
 		}
 		if len(def.dependsOn) > 0 {
-			fmt.Printf("  %d. %s (depends on: %s) [%s]\n", i+1, name, strings.Join(def.dependsOn, ", "), purity)
+			lines = append(lines, fmt.Sprintf("  %d. %s (depends on: %s) [%s]", i+1, name, strings.Join(def.dependsOn, ", "), purity))
 		} else {
-			fmt.Printf("  %d. %s [%s]\n", i+1, name, purity)
+			lines = append(lines, fmt.Sprintf("  %d. %s [%s]", i+1, name, purity))
 		}
 	}
+	ctx.Info(strings.Join(lines, "\n"))
 }
 
 // checkRun executes checks and formats output. The framework *Context (which
@@ -235,9 +243,9 @@ func (a *App) checkDryRunPlan(listed []string) {
 // Under dryRun it runs the purity partition instead: the checks declared pure
 // (and free of network) execute, and the impure remainder is printed as the
 // would-run plan after the results.
-func (a *App) checkRun(frameworkCtx *Context, runAll bool, tagExpr, nameGlob string, jsonOut, ignoreWarnings, verbose, dryRun bool) int {
+func (a *App) checkRun(frameworkCtx *Context, runAll bool, tagExpr, nameGlob string, ignoreWarnings, verbose, dryRun bool) int {
 	if a.checkContextFactory == nil {
-		fmt.Fprintln(os.Stderr, "error: no check context factory set (call SetCheckContext before running checks)")
+		frameworkCtx.Error("error: no check context factory set (call SetCheckContext before running checks)")
 		return 1
 	}
 
@@ -250,24 +258,23 @@ func (a *App) checkRun(frameworkCtx *Context, runAll bool, tagExpr, nameGlob str
 		PureOnly:       dryRun,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		frameworkCtx.Error(fmt.Sprintf("error: %s", err))
 		return 1
 	}
 
 	// Nothing executed AND nothing listed means the filters selected nothing --
 	// under the purity partition an empty result set alone does not.
 	if len(results) == 0 && len(impureListed) == 0 {
-		fmt.Println("No checks matched the given filters.")
+		frameworkCtx.Info("No checks matched the given filters.")
 		return 0
 	}
 
-	if jsonOut {
-		frameworkCtx.Payload(checkResultItems(results))
-	} else if out := FormatCheckResults(results, verbose); out != "" {
-		fmt.Println(out)
+	frameworkCtx.Payload(checkResultItems(results))
+	if out := FormatCheckResults(results, verbose); out != "" {
+		frameworkCtx.Info(out)
 	}
 	if dryRun {
-		a.checkDryRunPlan(impureListed)
+		a.checkDryRunPlan(frameworkCtx, impureListed)
 	}
 
 	return exitCode
