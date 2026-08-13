@@ -451,14 +451,15 @@ def test_protocol_script_captures_a_value_and_splices_it_into_a_later_line():
     assert errors == [], errors
 
 
-def test_protocol_script_tamper_changes_the_captured_value():
+def test_protocol_script_tamper_changes_the_captured_values_first_character():
+    """The FIRST character: a base64 blob's last character may carry no bits."""
     _, errors = _script(
         _ECHO_CHILD,
         [
             {"send": '{"state":"abc"}', "capture": {"state": "state"}},
             {
                 "send": '{"echo":"{{state|tamper}}"}',
-                "expect_line": {"json_equals": {"echo": "abA"}},
+                "expect_line": {"json_equals": {"echo": "Abc"}},
             },
         ],
     )

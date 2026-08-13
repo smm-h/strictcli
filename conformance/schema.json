@@ -133,7 +133,7 @@
       "properties": {
         "send": {
           "type": "string",
-          "description": "The line written to the child's stdin. The terminating newline is added by the runner. A '{{name}}' placeholder splices in a value an earlier step captured, and '{{name|tamper}}' splices it with its last character changed -- which is how a case asserts that an integrity-protected value is actually checked."
+          "description": "The line written to the child's stdin. The terminating newline is added by the runner. A '{{name}}' placeholder splices in a value an earlier step captured, and '{{name|tamper}}' splices it with its FIRST character changed -- which is how a case asserts that an integrity-protected value is actually checked. The first character and not the last, because base64 decoders ignore the trailing bits of a final character that does not fill a byte, so changing the last character of a base64url blob can decode to the identical bytes."
         },
         "capture": {
           "type": "object",

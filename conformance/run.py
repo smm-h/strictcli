@@ -440,8 +440,13 @@ _SCRIPT_STEP_TIMEOUT = 10.0
 #
 # `capture` maps a name to a dotted path into the parsed reply. The
 # substitution vocabulary is closed: a bare `{{name}}` splices the captured
-# text, and `{{name|tamper}}` splices it with its last character changed, which
-# is how a case asserts that an integrity-protected value is actually checked.
+# text, and `{{name|tamper}}` splices it with its FIRST character changed,
+# which is how a case asserts that an integrity-protected value is actually
+# checked. The first character and not the last: base64 decoders ignore the
+# trailing bits of a final character that does not fill a byte, so changing the
+# last character of a base64url blob can decode to the identical bytes -- which
+# is exactly what a Go run of the tamper case hit, passing verification and
+# running the command the case was asserting it would not.
 
 _CAPTURE_RE = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_]*)(\|tamper)?\}\}")
 
@@ -479,8 +484,8 @@ def _splice_captures(text: str, captured: dict) -> tuple[str, list[str]]:
             return match.group(0)
         value = str(captured[name])
         if match.group(2) and value:
-            last = value[-1]
-            return value[:-1] + ("A" if last != "A" else "B")
+            first = value[0]
+            return ("A" if first != "A" else "B") + value[1:]
         return value
 
     return _CAPTURE_RE.sub(replace, text), errors

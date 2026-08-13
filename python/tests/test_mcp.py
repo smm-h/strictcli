@@ -1256,8 +1256,11 @@ class TestMcpContinuationState:
 
     def test_a_tampered_state_is_refused(self):
         def tamper(seen):
+            # The FIRST character: base64 decoders ignore the trailing bits of
+            # a final character that does not fill a byte, so changing the last
+            # character of the blob can decode to the identical bytes.
             state = _state_of(seen[0])
-            broken = state[:-1] + ("A" if state[-1] != "A" else "B")
+            broken = ("A" if state[0] != "A" else "B") + state[1:]
             return _call_request(
                 2, name="release", arguments={},
                 requestState=broken, inputResponses=_accept(),

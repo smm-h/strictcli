@@ -1344,8 +1344,11 @@ test("mcp: a tampered continuation is refused", async () => {
 		confirmingApp(),
 		() => toolCall(1, { name: "release", arguments: {} }),
 		(seen) => {
+			// The FIRST character: base64 decoders ignore the trailing bits of
+			// a final character that does not fill a byte, so changing the last
+			// character of the blob can decode to the identical bytes.
 			const state = stateOf(seen[0] as Record<string, unknown>);
-			const broken = `${state.slice(0, -1)}${state.endsWith("A") ? "B" : "A"}`;
+			const broken = `${state.startsWith("A") ? "B" : "A"}${state.slice(1)}`;
 			return toolCall(2, {
 				name: "release",
 				arguments: {},

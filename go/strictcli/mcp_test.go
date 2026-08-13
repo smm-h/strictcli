@@ -1549,10 +1549,13 @@ func TestMCPTamperedStateIsRefused(t *testing.T) {
 			return callRequest(1, map[string]interface{}{"name": "release", "arguments": map[string]interface{}{}})
 		},
 		func(seen []map[string]interface{}) map[string]interface{} {
+			// The FIRST character: base64 decoders ignore the trailing bits
+			// of a final character that does not fill a byte, so changing the
+			// last character of the blob can decode to the identical bytes.
 			state := stateOf(t, seen[0])
-			broken := state[:len(state)-1] + "A"
-			if strings.HasSuffix(state, "A") {
-				broken = state[:len(state)-1] + "B"
+			broken := "A" + state[1:]
+			if strings.HasPrefix(state, "A") {
+				broken = "B" + state[1:]
 			}
 			return callRequest(2, map[string]interface{}{
 				"name": "release", "arguments": map[string]interface{}{},
