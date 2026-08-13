@@ -164,7 +164,7 @@ Structured output is a separate channel: a command declares its payload's JSON S
 The declaration is an inline JSON Schema literal over a **closed subset**: `type` (including type lists for nullability), `properties`, `required`, `items`, `enum`, `const`, and `additionalProperties` (boolean **or** schema — the schema form is how a dynamic-key map is declared). Both duties are hard errors:
 
 - **Registration time** — the literal is validated as written. An unknown keyword anywhere in it is rejected, including near-miss typos, which is what keeps the subset closed by construction.
-- **Emission time** — `ctx.payload(value)` validates the value against the declaration and refuses a deviation, naming the path into the value (`payload["a"][1]`) and the violated constraint.
+- **Emission time** — the framework validates the value against the declaration where machine mode writes the envelope, and refuses a deviation, naming the path into the value (`payload["a"][1]`) and the violated constraint. Not at the `ctx.payload(...)` call: a handler supplies its payload unconditionally in both modes, so a value the envelope could not carry never fails a human-mode run.
 
 Numbers are IEEE-754 doubles and any number whose magnitude exceeds 2^53 is refused at emission: a big identifier (a nanosecond timestamp, a 64-bit id) is a **string by declaration**. Every implementation validates the document it will actually write, so Go sees a struct through its `json` tags (`omitempty` included) and TypeScript sees BigInt as an integer token and a `Map` as an object.
 

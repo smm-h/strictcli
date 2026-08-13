@@ -1506,6 +1506,11 @@
         },
         {
           "level": 3,
+          "text": "`OwnsStdout`",
+          "anchor": "ownsstdout"
+        },
+        {
+          "level": 3,
           "text": "`WithGrants`",
           "anchor": "withgrants"
         },
@@ -1768,6 +1773,16 @@
           "level": 3,
           "text": "`Response.Header`",
           "anchor": "responseheader"
+        },
+        {
+          "level": 3,
+          "text": "`Effects.Recorded`",
+          "anchor": "effectsrecorded"
+        },
+        {
+          "level": 3,
+          "text": "`Effects.RenderLog`",
+          "anchor": "effectsrenderlog"
         },
         {
           "level": 3,
@@ -2533,6 +2548,11 @@
           "anchor": "to_list"
         },
         {
+          "level": 4,
+          "text": "`seam_suppressed`",
+          "anchor": "seam_suppressed"
+        },
+        {
           "level": 3,
           "text": "`_msg_dry_run_truncated`",
           "anchor": "_msg_dry_run_truncated"
@@ -2741,6 +2761,16 @@
           "level": 3,
           "text": "`_Effects`",
           "anchor": "_effects"
+        },
+        {
+          "level": 4,
+          "text": "`recorded`",
+          "anchor": "recorded"
+        },
+        {
+          "level": 4,
+          "text": "`render_log`",
+          "anchor": "render_log"
         },
         {
           "level": 4,
@@ -3771,6 +3801,11 @@
           "level": 4,
           "text": "`_finish_dispatch`",
           "anchor": "_finish_dispatch"
+        },
+        {
+          "level": 4,
+          "text": "`_validate_emitted_payload`",
+          "anchor": "_validate_emitted_payload"
         },
         {
           "level": 4,
@@ -5052,6 +5087,11 @@
           "level": 3,
           "text": "`contextPayload`",
           "anchor": "contextpayload"
+        },
+        {
+          "level": 3,
+          "text": "`validateEmittedPayload`",
+          "anchor": "validateemittedpayload"
         },
         {
           "level": 3,
@@ -8302,5 +8342,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-13T05:55:15.136376+00:00"
+  "last_gen": "2026-08-13T10:15:34.225540+00:00"
 }
