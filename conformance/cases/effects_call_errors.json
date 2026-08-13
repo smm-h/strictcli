@@ -34,6 +34,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"build\": effects.mkdir does not accept option 'stream'"
     }
   },
@@ -73,6 +76,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"build\": effects.write does not accept option 'stream'"
     }
   },
@@ -112,6 +118,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"publish\": effects.http does not accept option 'stream'"
     }
   },
@@ -145,7 +154,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: make all\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. run: make all\n"
     }
   },
   {
@@ -181,6 +190,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"build\": effects.run parameter 'argv[1]' does not accept an unsettled value"
     }
   },
@@ -216,6 +228,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"build\": effects.mkdir parameter 'path' does not accept an unsettled value"
     }
   },
@@ -254,6 +269,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"build\": effects.run parameter 'argv[1]' does not accept an unsettled value"
     }
   },
@@ -283,6 +301,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"build\": effects.run argv must not be empty"
     }
   },
@@ -311,10 +332,13 @@
       ]
     },
     "argv": [
-            "build"
+      "build"
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"build\": effects.run failed: sh -c exit 3 exited 3"
     }
   },
@@ -352,6 +376,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\": effects.run failed: sh -c exit 7 exited 7"
     }
   },
@@ -389,6 +416,9 @@
     ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\": effects.run produced output that is not valid UTF-8"
     }
   }

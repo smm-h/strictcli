@@ -806,11 +806,20 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
             )
         raw_result = result
 
-        # Check exit code
+        # Check exit code. `exit_code_by_target` overrides the baseline for a
+        # target whose exit status is intrinsically its own -- an unrecovered Go
+        # panic exits 2 where an uncaught Python exception and an uncaught Node
+        # throw both exit 1 (effects contract §3.5: the framework does not
+        # handle the crash, so the status is the language's). It overrides ONLY
+        # the status, so the case stays one case and its stdout and stderr are
+        # still compared across every target.
         expect = case["expect"]
-        if result.returncode != expect["exit_code"]:
+        want_code = expect.get("exit_code_by_target", {}).get(
+            target, expect["exit_code"]
+        )
+        if result.returncode != want_code:
             errors.append(
-                f"  exit_code: expected {expect['exit_code']}, got {result.returncode}"
+                f"  exit_code: expected {want_code}, got {result.returncode}"
             )
             if result.stderr:
                 errors.append(f"  stderr: {result.stderr.rstrip()!r}")

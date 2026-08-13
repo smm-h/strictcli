@@ -248,13 +248,20 @@ func TestMachineModeEnvelopeOnAnAbortedPreview(t *testing.T) {
 	// The envelope is written at the same seam that renders the log in human
 	// mode, and the abort marker's text rides preview_error instead of stderr
 	// (§19.3). The panic itself still continues untouched.
-	stdout, stderr, _ := runExitPathHelper(t, "--json --dry-run panics")
+	stdout, stderr, code := runExitPathHelper(t, "--json --dry-run panics")
 	var env map[string]interface{}
 	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
 		t.Fatalf("stdout is not one JSON document: %v (stdout=%q)", err, stdout)
 	}
-	if env["dry_run"] != true || env["exit_code"].(float64) != 1 {
-		t.Fatalf("envelope = %v", env)
+	// exit_code is "the process's exit status" (§19.2) and §3.5 leaves that
+	// status to the language on this path: an unrecovered Go panic exits 2.
+	// Asserting the envelope's number against the helper's OBSERVED status is
+	// the point -- a hard-coded 1 is exactly the lie this pins shut.
+	if code != goPanicExitStatus {
+		t.Fatalf("an unrecovered panic exits %d, got %d (stderr=%q)", goPanicExitStatus, code, stderr)
+	}
+	if env["dry_run"] != true || env["exit_code"].(float64) != float64(code) {
+		t.Fatalf("envelope = %v (process exited %d)", env, code)
 	}
 	if n := len(env["preview"].([]interface{})); n != 1 {
 		t.Fatalf("preview holds %d records, want the one recorded before the panic", n)

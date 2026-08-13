@@ -11,17 +11,34 @@
           "help": "push a release",
           "effect": "mutating",
           "grants": [
-            {"name": "push", "reason": "release engine owns remote refs", "kind": "proc_mutate"}
+            {
+              "name": "push",
+              "reason": "release engine owns remote refs",
+              "kind": "proc_mutate"
+            }
           ],
           "handler_effects": [
-            {"method": "run", "argv": ["git", "push"], "grant": "publish"}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "push"
+              ],
+              "grant": "publish"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "release"],
+    "argv": [
+      "--dry-run",
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"release\": grant 'publish' is not declared on this command"
     }
   },
@@ -37,14 +54,27 @@
           "help": "push a release",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "push"], "grant": "push"}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "push"
+              ],
+              "grant": "push"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "release"],
+    "argv": [
+      "--dry-run",
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"release\": grant 'push' is not declared on this command"
     }
   },
@@ -60,17 +90,32 @@
           "help": "push a release",
           "effect": "mutating",
           "grants": [
-            {"name": "push", "reason": "release engine owns remote refs", "kind": "proc_mutate"}
+            {
+              "name": "push",
+              "reason": "release engine owns remote refs",
+              "kind": "proc_mutate"
+            }
           ],
           "handler_effects": [
-            {"method": "write", "path": "VERSION", "content": "1.2.3", "grant": "push"}
+            {
+              "method": "write",
+              "path": "VERSION",
+              "content": "1.2.3",
+              "grant": "push"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "release"],
+    "argv": [
+      "--dry-run",
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"release\": grant 'push' is declared for kind proc_mutate but was used for a file_write effect"
     }
   },
@@ -86,17 +131,34 @@
           "help": "start a worker",
           "effect": "mutating",
           "grants": [
-            {"name": "worker", "reason": "the supervisor owns worker lifecycles", "kind": "proc_spawn"}
+            {
+              "name": "worker",
+              "reason": "the supervisor owns worker lifecycles",
+              "kind": "proc_spawn"
+            }
           ],
           "handler_effects": [
-            {"method": "run", "argv": ["worker", "--once"], "grant": "worker"}
+            {
+              "method": "run",
+              "argv": [
+                "worker",
+                "--once"
+              ],
+              "grant": "worker"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "start"],
+    "argv": [
+      "--dry-run",
+      "start"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"start\": grant 'worker' is declared for kind proc_spawn but was used for a proc_mutate effect"
     }
   },
@@ -112,18 +174,30 @@
           "help": "publish a release",
           "effect": "mutating",
           "grants": [
-            {"name": "gh-api", "reason": "the release bot owns GitHub releases", "kind": "net_mutate"}
+            {
+              "name": "gh-api",
+              "reason": "the release bot owns GitHub releases",
+              "kind": "net_mutate"
+            }
           ],
           "handler_effects": [
-            {"method": "http", "http_method": "POST", "url": "https://api.example.com/releases", "grant": "gh-api"}
+            {
+              "method": "http",
+              "http_method": "POST",
+              "url": "https://api.example.com/releases",
+              "grant": "gh-api"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "publish"],
+    "argv": [
+      "--dry-run",
+      "publish"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. net: POST https://api.example.com/releases (granted: gh-api — the release bot owns GitHub releases)\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. net: POST https://api.example.com/releases (granted: gh-api \u2014 the release bot owns GitHub releases)\n"
     }
   },
   {
@@ -138,18 +212,32 @@
           "help": "start a worker",
           "effect": "mutating",
           "grants": [
-            {"name": "worker", "reason": "the supervisor owns worker lifecycles", "kind": "proc_spawn"}
+            {
+              "name": "worker",
+              "reason": "the supervisor owns worker lifecycles",
+              "kind": "proc_spawn"
+            }
           ],
           "handler_effects": [
-            {"method": "spawn", "argv": ["worker", "--daemon"], "grant": "worker"}
+            {
+              "method": "spawn",
+              "argv": [
+                "worker",
+                "--daemon"
+              ],
+              "grant": "worker"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "start"],
+    "argv": [
+      "--dry-run",
+      "start"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. spawn: worker --daemon (granted: worker — the supervisor owns worker lifecycles)\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. spawn: worker --daemon (granted: worker \u2014 the supervisor owns worker lifecycles)\n"
     }
   },
   {
@@ -164,22 +252,52 @@
           "help": "rearrange the tree",
           "effect": "mutating",
           "grants": [
-            {"name": "tree", "reason": "the generator owns the build tree", "kind": "file_write"}
+            {
+              "name": "tree",
+              "reason": "the generator owns the build tree",
+              "kind": "file_write"
+            }
           ],
           "handler_effects": [
-            {"method": "write", "path": "a.txt", "content": "hi", "grant": "tree"},
-            {"method": "mkdir", "path": "d", "grant": "tree"},
-            {"method": "remove", "path": "old", "grant": "tree"},
-            {"method": "rename", "path": "a.txt", "to": "b.txt", "grant": "tree"},
-            {"method": "chmod", "path": "b.txt", "mode": "644", "grant": "tree"}
+            {
+              "method": "write",
+              "path": "a.txt",
+              "content": "hi",
+              "grant": "tree"
+            },
+            {
+              "method": "mkdir",
+              "path": "d",
+              "grant": "tree"
+            },
+            {
+              "method": "remove",
+              "path": "old",
+              "grant": "tree"
+            },
+            {
+              "method": "rename",
+              "path": "a.txt",
+              "to": "b.txt",
+              "grant": "tree"
+            },
+            {
+              "method": "chmod",
+              "path": "b.txt",
+              "mode": "644",
+              "grant": "tree"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "layout"],
+    "argv": [
+      "--dry-run",
+      "layout"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. write: a.txt (2 bytes) (granted: tree — the generator owns the build tree)\n  2. mkdir: d (granted: tree — the generator owns the build tree)\n  3. remove: old (granted: tree — the generator owns the build tree)\n  4. rename: a.txt -> b.txt (granted: tree — the generator owns the build tree)\n  5. chmod: b.txt 0644 (granted: tree — the generator owns the build tree)\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. write: a.txt (2 bytes) (granted: tree \u2014 the generator owns the build tree)\n  2. mkdir: d (granted: tree \u2014 the generator owns the build tree)\n  3. remove: old (granted: tree \u2014 the generator owns the build tree)\n  4. rename: a.txt -> b.txt (granted: tree \u2014 the generator owns the build tree)\n  5. chmod: b.txt 0644 (granted: tree \u2014 the generator owns the build tree)\n"
     }
   },
   {
@@ -188,24 +306,46 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["git", "status"]],
+      "proc_observe_allowlist": [
+        [
+          "git",
+          "status"
+        ]
+      ],
       "commands": [
         {
           "name": "report",
           "help": "observe the tree",
           "effect": "mutating",
           "grants": [
-            {"name": "inspect", "reason": "the auditor reads the work tree", "kind": "proc_mutate"}
+            {
+              "name": "inspect",
+              "reason": "the auditor reads the work tree",
+              "kind": "proc_mutate"
+            }
           ],
           "handler_effects": [
-            {"method": "run", "argv": ["git", "status"], "grant": "inspect"}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "status"
+              ],
+              "grant": "inspect"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "report"],
+    "argv": [
+      "--dry-run",
+      "report"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"report\": grant 'inspect' cannot be used on an observe (an allowlisted effects.run changes nothing)"
     }
   },
@@ -215,24 +355,45 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["git", "status"]],
+      "proc_observe_allowlist": [
+        [
+          "git",
+          "status"
+        ]
+      ],
       "commands": [
         {
           "name": "report",
           "help": "observe the tree",
           "effect": "read_only",
           "grants": [
-            {"name": "inspect", "reason": "the auditor reads the work tree", "kind": "proc_mutate"}
+            {
+              "name": "inspect",
+              "reason": "the auditor reads the work tree",
+              "kind": "proc_mutate"
+            }
           ],
           "handler_effects": [
-            {"method": "run", "argv": ["git", "status"], "grant": "inspect"}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "status"
+              ],
+              "grant": "inspect"
+            }
           ]
         }
       ]
     },
-    "argv": ["report"],
+    "argv": [
+      "report"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"report\": grant 'inspect' cannot be used on an observe (an allowlisted effects.run changes nothing)"
     }
   },
@@ -242,7 +403,13 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["git", "status"], []],
+      "proc_observe_allowlist": [
+        [
+          "git",
+          "status"
+        ],
+        []
+      ],
       "commands": [
         {
           "name": "show",
@@ -252,7 +419,9 @@
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "proc_observe_allowlist entries must not be empty"
@@ -269,12 +438,20 @@
           "name": "release",
           "help": "push a release",
           "effect": "mutating",
-          "grants": [{"name": "push", "reason": "", "kind": "proc_mutate"}],
+          "grants": [
+            {
+              "name": "push",
+              "reason": "",
+              "kind": "proc_mutate"
+            }
+          ],
           "handler_prints": "released"
         }
       ]
     },
-    "argv": ["release"],
+    "argv": [
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"release\": grant 'push' reason must be a non-empty string"
@@ -292,14 +469,24 @@
           "help": "push a release",
           "effect": "mutating",
           "grants": [
-            {"name": "push", "reason": "release engine owns remote refs", "kind": "proc_mutate"},
-            {"name": "push", "reason": "and again", "kind": "file_write"}
+            {
+              "name": "push",
+              "reason": "release engine owns remote refs",
+              "kind": "proc_mutate"
+            },
+            {
+              "name": "push",
+              "reason": "and again",
+              "kind": "file_write"
+            }
           ],
           "handler_prints": "released"
         }
       ]
     },
-    "argv": ["release"],
+    "argv": [
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"release\": duplicate grant 'push'"
@@ -316,12 +503,20 @@
           "name": "release",
           "help": "push a release",
           "effect": "mutating",
-          "grants": [{"name": "Push", "reason": "release engine owns remote refs", "kind": "proc_mutate"}],
+          "grants": [
+            {
+              "name": "Push",
+              "reason": "release engine owns remote refs",
+              "kind": "proc_mutate"
+            }
+          ],
           "handler_prints": "released"
         }
       ]
     },
-    "argv": ["release"],
+    "argv": [
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"release\": invalid grant name 'Push': must match [a-z][a-z0-9-]*"
@@ -339,12 +534,20 @@
           "name": "release",
           "help": "push a release",
           "effect": "mutating",
-          "grants": [{"name": "push", "reason": "release engine owns remote refs", "kind": "cache_write"}],
+          "grants": [
+            {
+              "name": "push",
+              "reason": "release engine owns remote refs",
+              "kind": "cache_write"
+            }
+          ],
           "handler_prints": "released"
         }
       ]
     },
-    "argv": ["release"],
+    "argv": [
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"release\": grant 'push' has invalid kind 'cache_write': must be one of proc_mutate, proc_spawn, file_write, net_mutate"

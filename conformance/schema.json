@@ -11,7 +11,12 @@
   "$defs": {
     "test_case": {
       "type": "object",
-      "required": ["name", "app", "argv", "expect"],
+      "required": [
+        "name",
+        "app",
+        "argv",
+        "expect"
+      ],
       "additionalProperties": false,
       "properties": {
         "name": {
@@ -25,13 +30,22 @@
         },
         "targets": {
           "type": "array",
-          "items": { "enum": ["python", "go", "typescript"] },
+          "items": {
+            "enum": [
+              "python",
+              "go",
+              "typescript"
+            ]
+          },
           "minItems": 1,
           "description": "Restrict which implementations run this case. Absent means all. Used for cases that are only expressible in some languages (e.g. the bad-return hard error, expressible in Python and TypeScript but unrepresentable in Go's type system)."
         },
         "acknowledged_divergence": {
           "type": "object",
-          "required": ["reason", "streams"],
+          "required": [
+            "reason",
+            "streams"
+          ],
           "additionalProperties": false,
           "properties": {
             "reason": {
@@ -46,12 +60,24 @@
               "properties": {
                 "stdout": {
                   "type": "array",
-                  "items": { "enum": ["python", "go", "typescript"] },
+                  "items": {
+                    "enum": [
+                      "python",
+                      "go",
+                      "typescript"
+                    ]
+                  },
                   "minItems": 1
                 },
                 "stderr": {
                   "type": "array",
-                  "items": { "enum": ["python", "go", "typescript"] },
+                  "items": {
+                    "enum": [
+                      "python",
+                      "go",
+                      "typescript"
+                    ]
+                  },
                   "minItems": 1
                 }
               }
@@ -64,12 +90,16 @@
         },
         "argv": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Command-line arguments (including the subcommand)."
         },
         "env": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Environment variables to set before invoking the app."
         },
         "stdin": {
@@ -79,14 +109,21 @@
         "protocol_script": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/protocol_step" },
+          "items": {
+            "$ref": "#/$defs/protocol_step"
+          },
           "description": "A line-scripted request/response exchange with the running app, for protocols whose next request depends on the previous reply -- the MCP loop and its confirmation round-trip above all. The runner sends each step's line, then reads and asserts one reply line, step by step; the child's full streams are still available to the ordinary expect block and to the N-way comparison. Mutually exclusive with 'stdin', which hands the whole input over up front and can only express an exchange that never reacts."
         },
         "expect": {
           "$ref": "#/$defs/expect"
         }
       },
-      "not": { "required": ["stdin", "protocol_script"] }
+      "not": {
+        "required": [
+          "stdin",
+          "protocol_script"
+        ]
+      }
     },
     "protocol_step": {
       "type": "object",
@@ -99,7 +136,10 @@
           "description": "The line written to the child's stdin. The terminating newline is added by the runner."
         },
         "stream": {
-          "enum": ["stdout", "stderr"],
+          "enum": [
+            "stdout",
+            "stderr"
+          ],
           "default": "stdout",
           "description": "Which of the child's streams the reply line is read from."
         },
@@ -109,17 +149,33 @@
           "minProperties": 1,
           "description": "Assertions on the one reply line this step reads (its trailing newline stripped). A missing line within the step timeout is a failure, never a hang.",
           "properties": {
-            "equals": { "type": "string" },
+            "equals": {
+              "type": "string"
+            },
             "contains": {
               "oneOf": [
-                { "type": "string" },
-                { "type": "array", "items": { "type": "string" } }
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               ]
             },
             "matches": {
               "oneOf": [
-                { "type": "string" },
-                { "type": "array", "items": { "type": "string" } }
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               ]
             },
             "json_equals": {
@@ -131,13 +187,26 @@
     },
     "app": {
       "type": "object",
-      "required": ["name", "version", "help", "commands"],
+      "required": [
+        "name",
+        "version",
+        "help",
+        "commands"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "version": { "type": "string" },
-        "help": { "type": "string" },
-        "env_prefix": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "help": {
+          "type": "string"
+        },
+        "env_prefix": {
+          "type": "string"
+        },
         "config": {
           "type": "boolean",
           "default": false,
@@ -145,35 +214,52 @@
         },
         "config_path": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "null" }
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
           "default": null,
           "description": "Override the default config file path. If null, uses XDG_CONFIG_HOME/<app>/config.<format>."
         },
         "config_format": {
           "type": "string",
-          "enum": ["json", "toml"],
+          "enum": [
+            "json",
+            "toml"
+          ],
           "default": "json",
           "description": "Config file format: 'json' or 'toml'."
         },
         "global_flags": {
           "type": "array",
-          "items": { "$ref": "#/$defs/flag" },
+          "items": {
+            "$ref": "#/$defs/flag"
+          },
           "description": "Flags declared on the App, parsed before the command name and available to every handler."
         },
         "commands": {
           "type": "array",
-          "items": { "$ref": "#/$defs/command" }
+          "items": {
+            "$ref": "#/$defs/command"
+          }
         },
         "groups": {
           "type": "array",
-          "items": { "$ref": "#/$defs/group" }
+          "items": {
+            "$ref": "#/$defs/group"
+          }
         },
         "checks_path": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "null" }
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
           "default": null,
           "description": "Override CWD-based discovery of checks.toml with an explicit path."
@@ -185,23 +271,32 @@
         },
         "config_conflict_mode": {
           "type": "string",
-          "enum": ["cli-wins", "error"],
+          "enum": [
+            "cli-wins",
+            "error"
+          ],
           "default": "cli-wins",
           "description": "Conflict resolution mode for config values. In 'error' mode, config+cli and config+env overlaps are hard errors."
         },
         "infra_root": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Infrastructure location roots: env var name -> default path. Resolved eagerly at construction; immune to --hermetic."
         },
         "handshake_env": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Handshake env vars: env var name -> help string. Read live at access time via the infra accessor."
         },
         "connection_env": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Connection env vars: env var name -> help string. Hermetic-suppressed, read live at access time, no default."
         },
         "confirm_stdin_interactive": {
@@ -223,14 +318,18 @@
         },
         "checks": {
           "type": "array",
-          "items": { "$ref": "#/$defs/check" },
+          "items": {
+            "$ref": "#/$defs/check"
+          },
           "description": "Check stub definitions for code generation."
         },
         "providers": {
           "type": "array",
           "items": {
             "type": "array",
-            "items": { "$ref": "#/$defs/provider_check" }
+            "items": {
+              "$ref": "#/$defs/provider_check"
+            }
           },
           "description": "Check providers registered via register_check_provider / RegisterCheckProvider. Each element is one provider (a list of the specs it returns). Providers have no TOML, so every spec carries its declarative meta inline."
         },
@@ -242,7 +341,9 @@
           "type": "array",
           "items": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "description": "List of argv lists to run via app.test() before the main app.run(). Used by test_coverage cases to generate shard files."
         },
@@ -250,7 +351,9 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["command"],
+            "required": [
+              "command"
+            ],
             "additionalProperties": false,
             "properties": {
               "command": {
@@ -275,7 +378,9 @@
         },
         "coverage_manifest": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Committed coverage manifest to seed at run_cwd/.strictcli/test-coverage.json before the app runs. Used by test_coverage cases to exercise the deterministic manifest-union verdict on the empty-shard path (no pre_test)."
         },
         "tag_contracts": {
@@ -283,34 +388,46 @@
           "additionalProperties": {
             "type": "object",
             "properties": {
-              "requires_flag": { "type": "string" }
+              "requires_flag": {
+                "type": "string"
+              }
             },
-            "required": ["requires_flag"],
+            "required": [
+              "requires_flag"
+            ],
             "additionalProperties": false
           }
         },
         "config_fields_def": {
           "type": "array",
-          "items": { "$ref": "#/$defs/config_field_def" },
+          "items": {
+            "$ref": "#/$defs/config_field_def"
+          },
           "description": "Config field definitions registered on the app via app.config_field() / app.ConfigField()."
         },
         "proc_observe_allowlist": {
           "type": "array",
           "items": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "description": "App-level observe authorization (effects contract §6.2): argv PREFIXES matched element-wise by string equality. A ctx.effects.run whose argv matches one is an observe -- it executes even in dry mode, returns a real value, and is never written to the would-do log."
+          "description": "App-level observe authorization (effects contract \u00a76.2): argv PREFIXES matched element-wise by string equality. A ctx.effects.run whose argv matches one is an observe -- it executes even in dry mode, returns a real value, and is never written to the would-do log."
         }
       }
     },
     "check": {
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "additionalProperties": false,
       "description": "A check-impl stub for code generation. The registration form (error vs warn) is NOT specified here -- generators derive it from the check's severity in the embedded checks_toml. This object only describes what the impl mints via its reporter -- or, with 'aborts', that it mints nothing and unwinds instead.",
       "properties": {
-        "name": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
         "aborts": {
           "const": true,
           "default": false,
@@ -318,7 +435,11 @@
           "$comment": "The check analog of a command's handler_aborts."
         },
         "mint": {
-          "enum": ["passed", "skipped", "found"],
+          "enum": [
+            "passed",
+            "skipped",
+            "found"
+          ],
           "description": "Which terminal outcome the reporter mints. 'found' requires at least one problem; 'passed'/'skipped' forbid problems."
         },
         "message": {
@@ -329,24 +450,42 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["severity", "text"],
+            "required": [
+              "severity",
+              "text"
+            ],
             "additionalProperties": false,
             "properties": {
-              "severity": { "enum": ["error", "warn"] },
-              "text": { "type": "string" }
+              "severity": {
+                "enum": [
+                  "error",
+                  "warn"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
             }
           },
           "description": "Problems the reporter mints before found(). Only valid when mint == 'found'. A warn-severity check may only mint 'warn' problems."
         },
         "notes": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Verdict-inert informational notes the reporter records via note()/Note(). They surface only under --verbose and in JSON, on any outcome including a pass."
         }
       },
       "if": {
-        "properties": { "aborts": { "const": true } },
-        "required": ["aborts"]
+        "properties": {
+          "aborts": {
+            "const": true
+          }
+        },
+        "required": [
+          "aborts"
+        ]
       },
       "then": {
         "properties": {
@@ -357,88 +496,173 @@
         }
       },
       "else": {
-        "required": ["mint", "message"]
+        "required": [
+          "mint",
+          "message"
+        ]
       }
     },
     "provider_check": {
       "type": "object",
-      "required": ["name", "tags", "severity", "fast", "pure", "needs_network", "depends_on", "mint", "message"],
+      "required": [
+        "name",
+        "tags",
+        "severity",
+        "fast",
+        "pure",
+        "needs_network",
+        "depends_on",
+        "mint",
+        "message"
+      ],
       "additionalProperties": false,
       "description": "A provider-sourced check spec. Unlike a TOML-declared check, it carries all eight declarative meta fields inline (providers have no TOML). The impl body (mint/message/problems) mirrors a 'check' def. 'impl_form' selects the constructor (error_check_spec / warn_check_spec); when it differs from 'severity', it pins the materialization-time severity-mismatch hard error.",
       "properties": {
-        "name": { "type": "string" },
-        "tags": { "type": "array", "items": { "type": "string" } },
-        "severity": { "enum": ["error", "warn"] },
-        "fast": { "type": "boolean" },
-        "pure": { "type": "boolean" },
-        "needs_network": { "type": "boolean" },
-        "depends_on": { "type": "array", "items": { "type": "string" } },
-        "scope": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warn"
+          ]
+        },
+        "fast": {
+          "type": "boolean"
+        },
+        "pure": {
+          "type": "boolean"
+        },
+        "needs_network": {
+          "type": "boolean"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scope": {
+          "type": "string"
+        },
         "impl_form": {
-          "enum": ["error", "warn"],
+          "enum": [
+            "error",
+            "warn"
+          ],
           "description": "Which constructor registers the spec. Defaults to 'severity'. A value differing from 'severity' pins the severity-mismatch hard error."
         },
         "mint": {
-          "enum": ["passed", "skipped", "found"],
+          "enum": [
+            "passed",
+            "skipped",
+            "found"
+          ],
           "description": "Which terminal outcome the reporter mints."
         },
-        "message": { "type": "string" },
+        "message": {
+          "type": "string"
+        },
         "problems": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["severity", "text"],
+            "required": [
+              "severity",
+              "text"
+            ],
             "additionalProperties": false,
             "properties": {
-              "severity": { "enum": ["error", "warn"] },
-              "text": { "type": "string" }
+              "severity": {
+                "enum": [
+                  "error",
+                  "warn"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
             }
           }
         },
         "notes": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Verdict-inert informational notes the reporter records via note()/Note()."
         }
       }
     },
     "group": {
       "type": "object",
-      "required": ["name", "help"],
+      "required": [
+        "name",
+        "help"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "help": { "type": "string" },
-        "hidden": { "type": "boolean", "default": false },
+        "name": {
+          "type": "string"
+        },
+        "help": {
+          "type": "string"
+        },
+        "hidden": {
+          "type": "boolean",
+          "default": false
+        },
         "tags": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "commands": {
           "type": "array",
-          "items": { "$ref": "#/$defs/command" }
+          "items": {
+            "$ref": "#/$defs/command"
+          }
         },
         "groups": {
           "type": "array",
-          "items": { "$ref": "#/$defs/group" }
+          "items": {
+            "$ref": "#/$defs/group"
+          }
         }
       }
     },
     "command": {
       "type": "object",
-      "required": ["name", "help"],
+      "required": [
+        "name",
+        "help"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "help": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "help": {
+          "type": "string"
+        },
         "effect": {
-          "enum": ["read_only", "mutating"],
-          "description": "The mandatory command classification (effects contract §1.1). Deliberately NOT in the top-level 'required' list: a top-level required applies conjunctively with the deprecated branch's 'then', which would make classification mandatory on deprecated entries too -- the opposite of §1.1's exemption. The 'else' branch below is what makes it mandatory on every non-deprecated entry."
+          "enum": [
+            "read_only",
+            "mutating"
+          ],
+          "description": "The mandatory command classification (effects contract \u00a71.1). Deliberately NOT in the top-level 'required' list: a top-level required applies conjunctively with the deprecated branch's 'then', which would make classification mandatory on deprecated entries too -- the opposite of \u00a71.1's exemption. The 'else' branch below is what makes it mandatory on every non-deprecated entry."
         },
         "consequential": {
           "type": "boolean",
           "default": false,
-          "description": "Declares that the command's effects are worth interrupting someone for (effects contract §8.1). The framework prompts for exactly these commands and for no others. NOT mandatory -- absence means 'not consequential' -- so it is neither in 'required' nor in the 'else' branch. Declaring it on a read_only command is a registration-time hard error."
+          "description": "Declares that the command's effects are worth interrupting someone for (effects contract \u00a78.1). The framework prompts for exactly these commands and for no others. NOT mandatory -- absence means 'not consequential' -- so it is neither in 'required' nor in the 'else' branch. Declaring it on a read_only command is a registration-time hard error."
         },
         "dry_run_supported": {
           "type": "boolean",
@@ -456,37 +680,58 @@
         },
         "grants": {
           "type": "array",
-          "items": { "$ref": "#/$defs/grant" },
-          "description": "Per-command grant declarations (effects contract §6.1)."
+          "items": {
+            "$ref": "#/$defs/grant"
+          },
+          "description": "Per-command grant declarations (effects contract \u00a76.1)."
         },
         "forwarding": {
           "type": "object",
-          "required": ["reason"],
+          "required": [
+            "reason"
+          ],
           "additionalProperties": false,
           "properties": {
-            "reason": { "type": "string", "minLength": 1 }
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            }
           },
-          "description": "Declared forwarding (effects contract §10.2). The reason is mandatory and non-empty."
+          "description": "Declared forwarding (effects contract \u00a710.2). The reason is mandatory and non-empty."
         },
         "handler_effects": {
           "type": "array",
-          "items": { "$ref": "#/$defs/handler_effect" },
-          "description": "Effect calls the generated handler issues, in order, before its return (effects contract §14.4). Runs BEFORE the handler_prints / handler_returns path and does not replace it."
+          "items": {
+            "$ref": "#/$defs/handler_effect"
+          },
+          "description": "Effect calls the generated handler issues, in order, before its return (effects contract \u00a714.4). Runs BEFORE the handler_prints / handler_returns path and does not replace it."
         },
         "handler_diagnostics": {
           "type": "array",
-          "items": { "$ref": "#/$defs/handler_diagnostic" },
+          "items": {
+            "$ref": "#/$defs/handler_diagnostic"
+          },
           "description": "Context diagnostic calls the generated handler issues, in order, after its handler_effects and before the handler_prints / handler_returns path."
         },
-        "hidden": { "type": "boolean", "default": false },
-        "interactive": { "type": "boolean", "default": false },
+        "hidden": {
+          "type": "boolean",
+          "default": false
+        },
+        "interactive": {
+          "type": "boolean",
+          "default": false
+        },
         "config_fields": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "tags": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "deprecated": {
           "type": "boolean",
@@ -508,18 +753,32 @@
         },
         "handler_returns": {
           "type": "object",
-          "required": ["kind"],
+          "required": [
+            "kind"
+          ],
           "additionalProperties": false,
-          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => ctx.payload(data) then outcome()/Exit(0); 'exit_data' => ctx.payload(data) then outcome(exit_code)/Exit(code); 'none' => return None (Python)/Exit(0) (Go)/return undefined (TypeScript); 'bad' => an invalid return (a hard error on Python and TypeScript; Go's type system makes it unrepresentable, so a 'bad' case must exclude the go target). The data kinds require the command to declare a payload_schema (contract §19.4).",
+          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => ctx.payload(data) then outcome()/Exit(0); 'exit_data' => ctx.payload(data) then outcome(exit_code)/Exit(code); 'none' => return None (Python)/Exit(0) (Go)/return undefined (TypeScript); 'bad' => an invalid return (a hard error on Python and TypeScript; Go's type system makes it unrepresentable, so a 'bad' case must exclude the go target). The data kinds require the command to declare a payload_schema (contract \u00a719.4).",
           "properties": {
-            "kind": { "enum": ["exit", "data", "exit_data", "none", "bad"] },
-            "code": { "type": "integer" },
-            "data": { "description": "Structured data payload for data/exit_data kinds. Author with sorted keys so compact JSON is byte-identical across languages." }
+            "kind": {
+              "enum": [
+                "exit",
+                "data",
+                "exit_data",
+                "none",
+                "bad"
+              ]
+            },
+            "code": {
+              "type": "integer"
+            },
+            "data": {
+              "description": "Structured data payload for data/exit_data kinds. Author with sorted keys so compact JSON is byte-identical across languages."
+            }
           }
         },
         "handler_aborts": {
           "const": true,
-          "description": "The generated handler ABORTS instead of returning: it raises (Python), throws (TypeScript) or panics (Go) with the identical message 'conformance: handler aborted', after running its handler_effects and handler_diagnostics. This is the language-neutral way to reach the framework's unwinding paths (the aborted-preview marker, effects contract §12.3) -- unlike handler_returns kind 'bad', which Go's Outcome type makes unrepresentable. Only true is declarable, and it excludes handler_returns: an aborting handler has no return.",
+          "description": "The generated handler ABORTS instead of returning: it raises (Python), throws (TypeScript) or panics (Go) with the identical message 'conformance: handler aborted', after running its handler_effects and handler_diagnostics. This is the language-neutral way to reach the framework's unwinding paths (the aborted-preview marker, effects contract \u00a712.3) -- unlike handler_returns kind 'bad', which Go's Outcome type makes unrepresentable. Only true is declarable, and it excludes handler_returns: an aborting handler has no return.",
           "default": false
         },
         "passthrough": {
@@ -533,31 +792,52 @@
         },
         "args": {
           "type": "array",
-          "items": { "$ref": "#/$defs/arg" }
+          "items": {
+            "$ref": "#/$defs/arg"
+          }
         },
         "flags": {
           "type": "array",
-          "items": { "$ref": "#/$defs/flag" }
+          "items": {
+            "$ref": "#/$defs/flag"
+          }
         },
         "flag_sets": {
           "type": "array",
-          "items": { "$ref": "#/$defs/flag_set" }
+          "items": {
+            "$ref": "#/$defs/flag_set"
+          }
         },
         "mutex": {
           "type": "array",
-          "items": { "$ref": "#/$defs/mutex_group" }
+          "items": {
+            "$ref": "#/$defs/mutex_group"
+          }
         },
         "dependencies": {
           "type": "array",
-          "items": { "$ref": "#/$defs/dependency" }
+          "items": {
+            "$ref": "#/$defs/dependency"
+          }
         }
       },
       "if": {
-        "properties": { "deprecated": { "const": true } },
-        "required": ["deprecated"]
+        "properties": {
+          "deprecated": {
+            "const": true
+          }
+        },
+        "required": [
+          "deprecated"
+        ]
       },
       "then": {
-        "required": ["name", "help", "deprecated", "deprecated_message"],
+        "required": [
+          "name",
+          "help",
+          "deprecated",
+          "deprecated_message"
+        ],
         "properties": {
           "name": true,
           "help": true,
@@ -590,43 +870,99 @@
         }
       },
       "else": {
-        "required": ["effect"],
-        "not": { "required": ["handler_aborts", "handler_returns"] }
+        "required": [
+          "effect"
+        ],
+        "not": {
+          "required": [
+            "handler_aborts",
+            "handler_returns"
+          ]
+        }
       }
     },
     "grant": {
       "type": "object",
-      "required": ["name", "reason", "kind"],
+      "required": [
+        "name",
+        "reason",
+        "kind"
+      ],
       "additionalProperties": false,
-      "description": "A per-command, per-effect-kind authorization with a mandatory human reason (effects contract §6.1).",
+      "description": "A per-command, per-effect-kind authorization with a mandatory human reason (effects contract \u00a76.1).",
       "properties": {
-        "name": { "type": "string" },
-        "reason": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
         "kind": {
-          "enum": ["proc_mutate", "proc_spawn", "file_write", "net_mutate"]
+          "enum": [
+            "proc_mutate",
+            "proc_spawn",
+            "file_write",
+            "net_mutate"
+          ]
         }
       }
     },
     "handler_effect": {
       "type": "object",
-      "required": ["method"],
+      "required": [
+        "method"
+      ],
       "additionalProperties": false,
-      "description": "One effect call the generated handler issues (effects contract §14.4). Each harness materializes this identically: iterate in order, call the named method with EXACTLY the keys the entry declares (no per-method filtering -- a case declaring a key the method does not accept is asserting the error), and keep the returned carrier in a per-run slice indexed by position so forward_from / extract_from can reference it.",
+      "description": "One effect call the generated handler issues (effects contract \u00a714.4). Each harness materializes this identically: iterate in order, call the named method with EXACTLY the keys the entry declares (no per-method filtering -- a case declaring a key the method does not accept is asserting the error), and keep the returned carrier in a per-run slice indexed by position so forward_from / extract_from can reference it.",
       "properties": {
         "method": {
-          "enum": ["run", "spawn", "write", "mkdir", "remove", "rename", "chmod", "http"]
+          "enum": [
+            "run",
+            "spawn",
+            "write",
+            "mkdir",
+            "remove",
+            "rename",
+            "chmod",
+            "http"
+          ]
         },
-        "argv": { "type": "array", "items": { "type": "string" } },
-        "path": { "type": "string" },
-        "to": { "type": "string" },
-        "mode": { "type": "string" },
-        "content": { "type": "string" },
-        "url": { "type": "string" },
-        "http_method": { "type": "string" },
-        "stream": { "type": "boolean" },
-        "resource": { "type": "string" },
-        "skip_if_current": { "type": "string" },
-        "grant": { "type": "string" },
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "path": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "http_method": {
+          "type": "string"
+        },
+        "stream": {
+          "type": "boolean"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "skip_if_current": {
+          "type": "string"
+        },
+        "grant": {
+          "type": "string"
+        },
         "forward_from": {
           "type": "integer",
           "description": "1-based index of an earlier handler_effects entry whose carrier is forwarded as the final argument of this call."
@@ -639,48 +975,115 @@
     },
     "handler_diagnostic": {
       "type": "object",
-      "required": ["level", "message"],
+      "required": [
+        "level",
+        "message"
+      ],
       "additionalProperties": false,
-      "description": "One Context diagnostic call the generated handler issues. The four levels are gated by --quiet / --verbose per the effects contract §7.4: debug is hidden unless --verbose, info is hidden under --quiet, and warn / error are never suppressed. Each harness materializes this identically: iterate in order, call ctx.debug / ctx.info / ctx.warn / ctx.error with the declared message.",
+      "description": "One Context diagnostic call the generated handler issues. The four levels are gated by --quiet / --verbose per the effects contract \u00a77.4: debug is hidden unless --verbose, info is hidden under --quiet, and warn / error are never suppressed. Each harness materializes this identically: iterate in order, call ctx.debug / ctx.info / ctx.warn / ctx.error with the declared message.",
       "properties": {
-        "level": { "enum": ["debug", "info", "warn", "error"] },
-        "message": { "type": "string" }
+        "level": {
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
       }
     },
     "effect_record": {
       "type": "object",
-      "required": ["seq", "kind", "verb", "detail", "recorded"],
+      "required": [
+        "seq",
+        "kind",
+        "verb",
+        "detail",
+        "recorded"
+      ],
       "additionalProperties": false,
-      "description": "One record of the structured effect log (effects contract §14.2). Populated in BOTH modes; 'recorded' is the key that says which happened.",
+      "description": "One record of the structured effect log (effects contract \u00a714.2). Populated in BOTH modes; 'recorded' is the key that says which happened.",
       "properties": {
-        "seq": { "type": "integer" },
+        "seq": {
+          "type": "integer"
+        },
         "kind": {
-          "enum": ["proc_mutate", "proc_spawn", "file_write", "net_mutate", "cache_write"]
+          "enum": [
+            "proc_mutate",
+            "proc_spawn",
+            "file_write",
+            "net_mutate",
+            "cache_write"
+          ]
         },
         "verb": {
-          "enum": ["run", "spawn", "write", "mkdir", "remove", "rename", "chmod", "net", "cache"]
+          "enum": [
+            "run",
+            "spawn",
+            "write",
+            "mkdir",
+            "remove",
+            "rename",
+            "chmod",
+            "net",
+            "cache"
+          ]
         },
-        "detail": { "type": "string" },
-        "bytes": { "type": ["integer", "null"] },
-        "resource": { "type": "string" },
-        "skip_if_current": { "type": "string" },
-        "grant": { "type": "string" },
-        "recorded": { "type": "boolean" }
+        "detail": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "resource": {
+          "type": "string"
+        },
+        "skip_if_current": {
+          "type": "string"
+        },
+        "grant": {
+          "type": "string"
+        },
+        "recorded": {
+          "type": "boolean"
+        }
       }
     },
     "arg": {
       "type": "object",
-      "required": ["name", "help"],
+      "required": [
+        "name",
+        "help"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "help": { "type": "string" },
-        "required": { "type": "boolean", "default": true },
+        "name": {
+          "type": "string"
+        },
+        "help": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true
+        },
         "default": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "number" },
-            { "type": "null" }
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "variadic": {
@@ -690,78 +1093,156 @@
         },
         "type": {
           "type": "string",
-          "enum": ["str", "int", "float", "bool"],
+          "enum": [
+            "str",
+            "int",
+            "float",
+            "bool"
+          ],
           "default": "str"
         },
         "choices_str": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Choices for str-type args."
         },
         "choices_int": {
           "type": "array",
-          "items": { "type": "integer" },
+          "items": {
+            "type": "integer"
+          },
           "description": "Choices for int-type args."
         },
         "choices_float": {
           "type": "array",
-          "items": { "type": "number" },
+          "items": {
+            "type": "number"
+          },
           "description": "Choices for float-type args."
         }
       }
     },
     "flag": {
       "type": "object",
-      "required": ["name", "help"],
+      "required": [
+        "name",
+        "help"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "help": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
+        "help": {
+          "type": "string"
+        },
         "type": {
           "type": "string",
-          "enum": ["str", "bool", "int", "float", "list[str]", "list[int]", "list[float]", "dict[str,str]", "dict[str,int]", "dict[str,float]"],
+          "enum": [
+            "str",
+            "bool",
+            "int",
+            "float",
+            "list[str]",
+            "list[int]",
+            "list[float]",
+            "dict[str,str]",
+            "dict[str,int]",
+            "dict[str,float]"
+          ],
           "default": "str"
         },
-        "short": { "type": "string" },
+        "short": {
+          "type": "string"
+        },
         "default": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "boolean" },
-            { "type": "number" },
-            { "type": "null" },
-            { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "type": "number" }] } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              }
+            }
           ]
         },
         "default_relative_to_root": {
           "type": "object",
-          "required": ["env_var"],
+          "required": [
+            "env_var"
+          ],
           "additionalProperties": false,
           "properties": {
-            "env_var": { "type": "string" },
-            "parts": { "type": "array", "items": { "type": "string" } }
+            "env_var": {
+              "type": "string"
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           },
           "description": "Flag default that resolves through a declared infra root (RelativeToRoot marker)."
         },
-        "env": { "type": "string" },
-        "connection_url": { "type": "boolean" },
-        "connection_env": { "type": "string" },
-        "prefixed": { "type": "boolean", "default": true },
+        "env": {
+          "type": "string"
+        },
+        "connection_url": {
+          "type": "boolean"
+        },
+        "connection_env": {
+          "type": "string"
+        },
+        "prefixed": {
+          "type": "boolean",
+          "default": true
+        },
         "choices_str": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Choices for str-type flags."
         },
         "choices_int": {
           "type": "array",
-          "items": { "type": "integer" },
+          "items": {
+            "type": "integer"
+          },
           "description": "Choices for int-type flags."
         },
         "choices_float": {
           "type": "array",
-          "items": { "type": "number" },
+          "items": {
+            "type": "number"
+          },
           "description": "Choices for float-type flags."
         },
-        "repeatable": { "type": "boolean", "default": false },
+        "repeatable": {
+          "type": "boolean",
+          "default": false
+        },
         "negatable": {
           "type": "boolean",
           "default": true,
@@ -772,7 +1253,10 @@
         },
         "conflict_mode": {
           "type": "string",
-          "enum": ["cli-wins", "error"],
+          "enum": [
+            "cli-wins",
+            "error"
+          ],
           "description": "Per-flag override of the app config conflict mode. Absent means inherit the app-level config_conflict_mode."
         },
         "env_separator": {
@@ -782,100 +1266,196 @@
     },
     "flag_set": {
       "type": "object",
-      "required": ["name", "flags"],
+      "required": [
+        "name",
+        "flags"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
         "flags": {
           "type": "array",
-          "items": { "$ref": "#/$defs/flag" }
+          "items": {
+            "$ref": "#/$defs/flag"
+          }
         }
       }
     },
     "mutex_group": {
       "type": "object",
-      "required": ["flags"],
+      "required": [
+        "flags"
+      ],
       "additionalProperties": false,
       "properties": {
         "flags": {
           "type": "array",
-          "items": { "$ref": "#/$defs/flag" },
+          "items": {
+            "$ref": "#/$defs/flag"
+          },
           "minItems": 2
         }
       }
     },
     "co_required": {
       "type": "object",
-      "required": ["type", "flags"],
+      "required": [
+        "type",
+        "flags"
+      ],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "co_required" },
+        "type": {
+          "const": "co_required"
+        },
         "flags": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "minItems": 2
         }
       }
     },
     "requires": {
       "type": "object",
-      "required": ["type", "flag", "depends_on"],
+      "required": [
+        "type",
+        "flag",
+        "depends_on"
+      ],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "requires" },
-        "flag": { "type": "string" },
-        "depends_on": { "type": "string" }
+        "type": {
+          "const": "requires"
+        },
+        "flag": {
+          "type": "string"
+        },
+        "depends_on": {
+          "type": "string"
+        }
       }
     },
     "implies": {
       "type": "object",
-      "required": ["type", "flag", "implies", "value"],
+      "required": [
+        "type",
+        "flag",
+        "implies",
+        "value"
+      ],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "implies" },
-        "flag": { "type": "string" },
-        "implies": { "type": "string" },
-        "value": { "type": "boolean" }
+        "type": {
+          "const": "implies"
+        },
+        "flag": {
+          "type": "string"
+        },
+        "implies": {
+          "type": "string"
+        },
+        "value": {
+          "type": "boolean"
+        }
       }
     },
     "dependency": {
       "oneOf": [
-        { "$ref": "#/$defs/co_required" },
-        { "$ref": "#/$defs/requires" },
-        { "$ref": "#/$defs/implies" }
+        {
+          "$ref": "#/$defs/co_required"
+        },
+        {
+          "$ref": "#/$defs/requires"
+        },
+        {
+          "$ref": "#/$defs/implies"
+        }
       ]
     },
     "config_field_def": {
       "type": "object",
-      "required": ["name", "type", "help"],
+      "required": [
+        "name",
+        "type",
+        "help"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
+        "name": {
+          "type": "string"
+        },
         "type": {
           "type": "string",
-          "enum": ["str", "int", "float", "bool"]
+          "enum": [
+            "str",
+            "int",
+            "float",
+            "bool"
+          ]
         },
-        "help": { "type": "string" },
+        "help": {
+          "type": "string"
+        },
         "default": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "boolean" },
-            { "type": "number" },
-            { "type": "null" }
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
     },
     "expect": {
       "type": "object",
-      "required": ["exit_code"],
+      "required": [
+        "exit_code"
+      ],
       "additionalProperties": false,
       "properties": {
-        "exit_code": { "type": "integer" },
+        "exit_code": {
+          "type": "integer"
+        },
+        "exit_code_by_target": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "python": {
+              "type": "integer"
+            },
+            "go": {
+              "type": "integer"
+            },
+            "typescript": {
+              "type": "integer"
+            }
+          },
+          "description": "Per-target override of exit_code, for a status that is intrinsically the language's own rather than the framework's. The only such status today is an unrecovered crash: effects contract \u00a73.5 leaves an unwinding dispatch's exit status to the language ('whatever the language would have produced anyway'), and an unrecovered Go panic exits 2 where an uncaught Python exception and an uncaught Node throw both exit 1. It overrides ONLY the status: the case stays a single case and its stdout and stderr are still compared byte-for-byte across every target."
+        },
         "stdout_contains": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Substring(s) that must appear in stdout."
         },
@@ -885,22 +1465,43 @@
         },
         "stdout_matches": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Regex pattern(s) that must match (re.search) somewhere in stdout. For non-deterministic content like durations."
         },
         "stderr_matches": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Regex pattern(s) that must match (re.search) somewhere in stderr."
         },
         "stderr_contains": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Substring(s) that must appear in stderr."
         },
@@ -910,54 +1511,95 @@
         },
         "stdout_not_contains": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Substring(s) that must NOT appear in stdout."
         },
         "stderr_not_contains": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Substring(s) that must NOT appear in stderr."
         },
         "config_file_contains": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Substring(s) that must appear in the seeded config file after the run (reads the config_content / config_content_late temp file)."
         },
         "config_file_not_contains": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Substring(s) that must NOT appear in the seeded config file after the run."
         },
         "config_file_matches": {
           "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" } }
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           ],
           "description": "Regex pattern(s) that must match (re.search) somewhere in the seeded config file after the run. Useful for asserting key ordering."
         },
         "effects_equals": {
           "type": "array",
-          "items": { "$ref": "#/$defs/effect_record" },
-          "description": "Deep-equality assertion against the structured effect log the run produced (effects contract §14.1). Comparison is STRUCTURAL over the parsed JSON arrays, in order: key order is never compared, key sets are compared as sets (failing fast on the first difference), and values recurse. Absent optional keys and explicit-null keys are equivalent. 'recorded' is required on every record and is therefore never absent. An expected value of the string '$ANY' matches any actual value of any type -- the per-field wildcard for a field whose value is nondeterministic by construction (a continuation signature, a timestamp), where the contract is that the field is present, not what it holds."
+          "items": {
+            "$ref": "#/$defs/effect_record"
+          },
+          "description": "Deep-equality assertion against the structured effect log the run produced (effects contract \u00a714.1). Comparison is STRUCTURAL over the parsed JSON arrays, in order: key order is never compared, key sets are compared as sets (failing fast on the first difference), and values recurse. Absent optional keys and explicit-null keys are equivalent. 'recorded' is required on every record and is therefore never absent. An expected value of the string '$ANY' matches any actual value of any type -- the per-field wildcard for a field whose value is nondeterministic by construction (a continuation signature, a timestamp), where the contract is that the field is present, not what it holds."
         },
         "schema_command_keys": {
           "type": "object",
-          "additionalProperties": { "type": "object" },
+          "additionalProperties": {
+            "type": "object"
+          },
           "description": "Per-command key assertions against the .strictcli/schema.json a --dump-schema run emitted. Maps a dotted command path (groups then command, e.g. 'release.run') to the keys that entry must carry, with their expected values. Values are compared structurally by the same comparator effects_equals uses, so '$ANY' is the per-field wildcard here too: it asserts the key's presence and nothing about its content. Requires --dump-schema in the case argv."
         },
         "schema_command_absent_keys": {
           "type": "object",
           "additionalProperties": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "description": "The mirror of schema_command_keys: maps a dotted command path to keys that must NOT appear on that entry. Pins the emit-when-declared contract (a key omitted by one implementation and emitted with a default value by another is a silent divergence). Requires --dump-schema in the case argv."
         }

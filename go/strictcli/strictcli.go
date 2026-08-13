@@ -2274,7 +2274,15 @@ func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, c
 		}
 		// An unexpected unwind. The recorded effects are still owed to whoever
 		// asked for the preview; the marker says the list may not be all of it.
-		a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, 1, nil, true)
+		//
+		// The envelope's exit_code is "the process's exit status" (§19.2), and
+		// §3.5 pins what that status is on this path: the panic is not
+		// swallowed, so it is "whatever the language would have produced
+		// anyway". In Go an unrecovered panic exits 2, not 1 -- reporting 1
+		// here would make the envelope contradict the process it describes.
+		// The two siblings report 1 on the same path for the same reason:
+		// an uncaught Python exception and an uncaught Node throw both exit 1.
+		a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, goPanicExitStatus, nil, true)
 		panic(r)
 	}()
 	return fn()
@@ -2296,6 +2304,12 @@ func (a *App) emitPreDispatchEnvelope(stdout io.Writer) {
 // interfaceVersion is the envelope contract's own version (§19.2). Changed only
 // by a later amendment to that section.
 const interfaceVersion = 1
+
+// goPanicExitStatus is the exit status the Go runtime gives a process whose
+// panic was never recovered. It is the status §3.5 promises an aborted
+// dispatch keeps ("whatever the language would have produced anyway"), and
+// therefore the exit_code the envelope reports on that path (§19.2).
+const goPanicExitStatus = 2
 
 // envelope is machine mode's sole stdout document (§19.2). The field order is
 // the table's order in that section: optional and for readability only, since

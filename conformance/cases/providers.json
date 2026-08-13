@@ -10,7 +10,9 @@
         [
           {
             "name": "prov-lint",
-            "tags": ["release"],
+            "tags": [
+              "release"
+            ],
             "severity": "error",
             "fast": true,
             "pure": true,
@@ -23,10 +25,16 @@
         ]
       ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": ["PASS", "prov-lint"]
+      "stdout_contains": [
+        "PASS",
+        "prov-lint"
+      ]
     }
   },
   {
@@ -40,7 +48,9 @@
         [
           {
             "name": "prov-lint",
-            "tags": ["release"],
+            "tags": [
+              "release"
+            ],
             "severity": "error",
             "fast": true,
             "pure": true,
@@ -50,16 +60,25 @@
             "mint": "found",
             "message": "lint errors found",
             "problems": [
-              { "severity": "error", "text": "lint errors found" }
+              {
+                "severity": "error",
+                "text": "lint errors found"
+              }
             ]
           }
         ]
       ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 1,
-      "stdout_contains": ["FAIL", "prov-lint"]
+      "stdout_contains": [
+        "FAIL",
+        "prov-lint"
+      ]
     }
   },
   {
@@ -73,7 +92,9 @@
         [
           {
             "name": "prov-fmt",
-            "tags": ["dev"],
+            "tags": [
+              "dev"
+            ],
             "severity": "warn",
             "fast": true,
             "pure": true,
@@ -83,23 +104,37 @@
             "mint": "found",
             "message": "style issues",
             "problems": [
-              { "severity": "warn", "text": "style issues" }
+              {
+                "severity": "warn",
+                "text": "style issues"
+              }
             ]
           }
         ]
       ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 1,
-      "stdout_contains": ["WARN", "prov-fmt"]
+      "stdout_contains": [
+        "WARN",
+        "prov-fmt"
+      ]
     }
   },
   {
     "name": "providers: severity mismatch is a hard error",
     "acknowledged_divergence": {
       "reason": "The remediation half of the message names the language-idiomatic builder: NewErrorCheckSpec/NewWarnCheckSpec (Go), error_check_spec/warn_check_spec (Python), errorCheckSpec/warnCheckSpec (TypeScript). Pinned as an intentional wording divergence in docs/history/_ts-port-spec.md.",
-      "streams": {"stderr": ["go", "typescript"]}
+      "streams": {
+        "stderr": [
+          "go",
+          "typescript"
+        ]
+      }
     },
     "app": {
       "name": "testapp",
@@ -110,7 +145,9 @@
         [
           {
             "name": "prov-x",
-            "tags": ["release"],
+            "tags": [
+              "release"
+            ],
             "severity": "warn",
             "impl_form": "error",
             "fast": true,
@@ -124,9 +161,15 @@
         ]
       ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "declared severity"
     }
   },
@@ -141,7 +184,9 @@
         [
           {
             "name": "dup",
-            "tags": ["release"],
+            "tags": [
+              "release"
+            ],
             "severity": "error",
             "fast": true,
             "pure": true,
@@ -153,7 +198,9 @@
           },
           {
             "name": "dup",
-            "tags": ["release"],
+            "tags": [
+              "release"
+            ],
             "severity": "error",
             "fast": true,
             "pure": true,
@@ -166,9 +213,15 @@
         ]
       ]
     },
-    "argv": ["check", "--all"],
+    "argv": [
+      "check",
+      "--all"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "duplicate check definition"
     }
   },
@@ -183,7 +236,9 @@
         [
           {
             "name": "prov-a",
-            "tags": ["release"],
+            "tags": [
+              "release"
+            ],
             "severity": "error",
             "fast": true,
             "pure": true,
@@ -195,7 +250,9 @@
           },
           {
             "name": "prov-b",
-            "tags": ["release"],
+            "tags": [
+              "release"
+            ],
             "severity": "error",
             "fast": true,
             "pure": true,
@@ -208,7 +265,11 @@
         ]
       ]
     },
-    "argv": ["check", "--name", "prov-a"],
+    "argv": [
+      "check",
+      "--name",
+      "prov-a"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "prov-a",

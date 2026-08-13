@@ -11,22 +11,60 @@
           "help": "issue one effect of every verb",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "tag", "v1.2.3"]},
-            {"method": "spawn", "argv": ["worker", "--daemon"]},
-            {"method": "write", "path": "CHANGELOG.md", "content": "hello"},
-            {"method": "mkdir", "path": "build/out"},
-            {"method": "remove", "path": "build/stale"},
-            {"method": "rename", "path": "old.txt", "to": "new.txt"},
-            {"method": "chmod", "path": "run.sh", "mode": "755"},
-            {"method": "http", "http_method": "POST", "url": "https://api.example.com/releases"}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "tag",
+                "v1.2.3"
+              ]
+            },
+            {
+              "method": "spawn",
+              "argv": [
+                "worker",
+                "--daemon"
+              ]
+            },
+            {
+              "method": "write",
+              "path": "CHANGELOG.md",
+              "content": "hello"
+            },
+            {
+              "method": "mkdir",
+              "path": "build/out"
+            },
+            {
+              "method": "remove",
+              "path": "build/stale"
+            },
+            {
+              "method": "rename",
+              "path": "old.txt",
+              "to": "new.txt"
+            },
+            {
+              "method": "chmod",
+              "path": "run.sh",
+              "mode": "755"
+            },
+            {
+              "method": "http",
+              "http_method": "POST",
+              "url": "https://api.example.com/releases"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "everything"],
+    "argv": [
+      "--dry-run",
+      "everything"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git tag v1.2.3\n  2. spawn: worker --daemon\n  3. write: CHANGELOG.md (5 bytes)\n  4. mkdir: build/out\n  5. remove: build/stale\n  6. rename: old.txt -> new.txt\n  7. chmod: run.sh 0755\n  8. net: POST https://api.example.com/releases\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. run: git tag v1.2.3\n  2. spawn: worker --daemon\n  3. write: CHANGELOG.md (5 bytes)\n  4. mkdir: build/out\n  5. remove: build/stale\n  6. rename: old.txt -> new.txt\n  7. chmod: run.sh 0755\n  8. net: POST https://api.example.com/releases\n"
     }
   },
   {
@@ -41,18 +79,37 @@
           "help": "chmod a few paths",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "chmod", "path": "a.sh", "mode": "755"},
-            {"method": "chmod", "path": "b.txt", "mode": "644"},
-            {"method": "chmod", "path": "c.key", "mode": "600"},
-            {"method": "chmod", "path": "d.tmp", "mode": "7"}
+            {
+              "method": "chmod",
+              "path": "a.sh",
+              "mode": "755"
+            },
+            {
+              "method": "chmod",
+              "path": "b.txt",
+              "mode": "644"
+            },
+            {
+              "method": "chmod",
+              "path": "c.key",
+              "mode": "600"
+            },
+            {
+              "method": "chmod",
+              "path": "d.tmp",
+              "mode": "7"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "modes"],
+    "argv": [
+      "--dry-run",
+      "modes"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. chmod: a.sh 0755\n  2. chmod: b.txt 0644\n  3. chmod: c.key 0600\n  4. chmod: d.tmp 07\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. chmod: a.sh 0755\n  2. chmod: b.txt 0644\n  3. chmod: c.key 0600\n  4. chmod: d.tmp 07\n"
     }
   },
   {
@@ -67,17 +124,32 @@
           "help": "write a few files",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "write", "path": "empty.txt", "content": ""},
-            {"method": "write", "path": "ascii.txt", "content": "abc"},
-            {"method": "write", "path": "utf8.txt", "content": "héllo"}
+            {
+              "method": "write",
+              "path": "empty.txt",
+              "content": ""
+            },
+            {
+              "method": "write",
+              "path": "ascii.txt",
+              "content": "abc"
+            },
+            {
+              "method": "write",
+              "path": "utf8.txt",
+              "content": "h\u00e9llo"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "writes"],
+    "argv": [
+      "--dry-run",
+      "writes"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. write: empty.txt (0 bytes)\n  2. write: ascii.txt (3 bytes)\n  3. write: utf8.txt (6 bytes)\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. write: empty.txt (0 bytes)\n  2. write: ascii.txt (3 bytes)\n  3. write: utf8.txt (6 bytes)\n"
     }
   },
   {
@@ -92,19 +164,42 @@
           "help": "push a release",
           "effect": "mutating",
           "grants": [
-            {"name": "push", "reason": "release engine owns remote refs", "kind": "proc_mutate"}
+            {
+              "name": "push",
+              "reason": "release engine owns remote refs",
+              "kind": "proc_mutate"
+            }
           ],
           "handler_effects": [
-            {"method": "run", "argv": ["git", "tag", "v1.2.3"]},
-            {"method": "run", "argv": ["git", "push", "origin", "v1.2.3"], "grant": "push"}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "tag",
+                "v1.2.3"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "push",
+                "origin",
+                "v1.2.3"
+              ],
+              "grant": "push"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "release"],
+    "argv": [
+      "--dry-run",
+      "release"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git tag v1.2.3\n  2. run: git push origin v1.2.3 (granted: push — release engine owns remote refs)\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. run: git tag v1.2.3\n  2. run: git push origin v1.2.3 (granted: push \u2014 release engine owns remote refs)\n"
     }
   },
   {
@@ -129,10 +224,13 @@
         }
       ]
     },
-    "argv": ["--dry-run", "publish"],
+    "argv": [
+      "--dry-run",
+      "publish"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. net: POST https://api.github.com/repos/o/r/releases [unless resource 'gh-release:v1.2.3' already current]\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. net: POST https://api.github.com/repos/o/r/releases [unless resource 'gh-release:v1.2.3' already current]\n"
     }
   },
   {
@@ -147,12 +245,21 @@
           "help": "sync the remote",
           "effect": "mutating",
           "grants": [
-            {"name": "push", "reason": "release engine owns remote refs", "kind": "proc_mutate"}
+            {
+              "name": "push",
+              "reason": "release engine owns remote refs",
+              "kind": "proc_mutate"
+            }
           ],
           "handler_effects": [
             {
               "method": "run",
-              "argv": ["git", "push", "origin", "main"],
+              "argv": [
+                "git",
+                "push",
+                "origin",
+                "main"
+              ],
               "resource": "remote:origin/main",
               "skip_if_current": "remote:origin/main",
               "grant": "push"
@@ -161,10 +268,13 @@
         }
       ]
     },
-    "argv": ["--dry-run", "sync"],
+    "argv": [
+      "--dry-run",
+      "sync"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git push origin main (granted: push — release engine owns remote refs) [unless resource 'remote:origin/main' already current]\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. run: git push origin main (granted: push \u2014 release engine owns remote refs) [unless resource 'remote:origin/main' already current]\n"
     }
   },
   {
@@ -179,15 +289,26 @@
           "help": "tag a release",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "tag", "v1.2.3"], "resource": "tag:v1.2.3"}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "tag",
+                "v1.2.3"
+              ],
+              "resource": "tag:v1.2.3"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "tag"],
+    "argv": [
+      "--dry-run",
+      "tag"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. run: git tag v1.2.3\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. run: git tag v1.2.3\n"
     }
   },
   {
@@ -205,10 +326,13 @@
         }
       ]
     },
-    "argv": ["--dry-run", "show"],
+    "argv": [
+      "--dry-run",
+      "show"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "shown\nDRY RUN — no changes were made. Would do:\n"
+      "stdout_equals": "shown\nDRY RUN \u2014 no changes were made. Would do:\n"
     }
   },
   {
@@ -223,16 +347,27 @@
           "help": "build something",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "mkdir", "path": "build"},
-            {"method": "write", "path": "build/out.txt", "content": "ok"}
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "write",
+              "path": "build/out.txt",
+              "content": "ok"
+            }
           ]
         }
       ]
     },
-    "argv": ["--quiet", "--dry-run", "build"],
+    "argv": [
+      "--quiet",
+      "--dry-run",
+      "build"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n  2. write: build/out.txt (2 bytes)\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: build\n  2. write: build/out.txt (2 bytes)\n"
     }
   },
   {
@@ -248,15 +383,21 @@
           "effect": "mutating",
           "handler_exit_code": 3,
           "handler_effects": [
-            {"method": "mkdir", "path": "build"}
+            {
+              "method": "mkdir",
+              "path": "build"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "build"],
+    "argv": [
+      "--dry-run",
+      "build"
+    ],
     "expect": {
       "exit_code": 3,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: build\n"
     }
   },
   {
@@ -271,15 +412,21 @@
           "help": "wipe something",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "remove", "path": "state"}
+            {
+              "method": "remove",
+              "path": "state"
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "wipe"],
+    "argv": [
+      "--dry-run",
+      "wipe"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. remove: state\n",
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. remove: state\n",
       "stderr_equals": ""
     }
   },
@@ -295,19 +442,32 @@
           "help": "build something",
           "effect": "mutating",
           "handler_effects": [
-            {"method": "mkdir", "path": "build"},
-            {"method": "write", "path": "VERSION", "content": "1.2.3"}
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "write",
+              "path": "VERSION",
+              "content": "1.2.3"
+            }
           ],
           "handler_aborts": true
         }
       ]
     },
-    "argv": ["--dry-run", "build"],
+    "argv": [
+      "--dry-run",
+      "build"
+    ],
     "expect": {
       "exit_code": 1,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: build\n  2. write: VERSION (5 bytes)\n",
+      "exit_code_by_target": {
+        "go": 2
+      },
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: build\n  2. write: VERSION (5 bytes)\n",
       "stdout_not_contains": "aborted",
-      "stderr_contains": "error: dry-run preview ends at step 3: build aborted — the preview above may be incomplete"
+      "stderr_contains": "error: dry-run preview ends at step 3: build aborted \u2014 the preview above may be incomplete"
     }
   },
   {
@@ -325,11 +485,17 @@
         }
       ]
     },
-    "argv": ["--dry-run", "show"],
+    "argv": [
+      "--dry-run",
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n",
-      "stderr_contains": "show aborted — the preview above may be incomplete"
+      "exit_code_by_target": {
+        "go": 2
+      },
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n",
+      "stderr_contains": "show aborted \u2014 the preview above may be incomplete"
     }
   },
   {
@@ -347,9 +513,14 @@
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stdout_equals": "",
       "stderr_not_contains": "the preview above may be incomplete"
     }

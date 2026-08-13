@@ -11,14 +11,23 @@
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "write", "path": "out.txt", "content": "nope"}
+            {
+              "method": "write",
+              "path": "out.txt",
+              "content": "nope"
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.write is a mutating operation"
     }
   },
@@ -34,14 +43,22 @@
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "mkdir", "path": "build"}
+            {
+              "method": "mkdir",
+              "path": "build"
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.mkdir is a mutating operation"
     }
   },
@@ -57,14 +74,22 @@
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "remove", "path": "state"}
+            {
+              "method": "remove",
+              "path": "state"
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.remove is a mutating operation"
     }
   },
@@ -80,14 +105,23 @@
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "rename", "path": "a.txt", "to": "b.txt"}
+            {
+              "method": "rename",
+              "path": "a.txt",
+              "to": "b.txt"
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.rename is a mutating operation"
     }
   },
@@ -103,14 +137,23 @@
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "chmod", "path": "run.sh", "mode": "755"}
+            {
+              "method": "chmod",
+              "path": "run.sh",
+              "mode": "755"
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.chmod is a mutating operation"
     }
   },
@@ -126,14 +169,24 @@
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "spawn", "argv": ["worker"]}
+            {
+              "method": "spawn",
+              "argv": [
+                "worker"
+              ]
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.spawn is a mutating operation"
     }
   },
@@ -149,14 +202,23 @@
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "http", "http_method": "POST", "url": "https://api.example.com/x"}
+            {
+              "method": "http",
+              "http_method": "POST",
+              "url": "https://api.example.com/x"
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.http is a mutating operation"
     }
   },
@@ -166,21 +228,39 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["git", "status"]],
+      "proc_observe_allowlist": [
+        [
+          "git",
+          "status"
+        ]
+      ],
       "commands": [
         {
           "name": "show",
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "push", "origin", "main"]}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "push",
+                "origin",
+                "main"
+              ]
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.run argv git push origin main is not on the app's proc_observe_allowlist"
     }
   },
@@ -196,14 +276,25 @@
           "help": "show something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "status"]}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "status"
+              ]
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.run argv git status is not on the app's proc_observe_allowlist"
     }
   },
@@ -213,7 +304,11 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["echo"]],
+      "proc_observe_allowlist": [
+        [
+          "echo"
+        ]
+      ],
       "commands": [
         {
           "name": "show",
@@ -221,12 +316,20 @@
           "effect": "read_only",
           "handler_prints": "done",
           "handler_effects": [
-            {"method": "run", "argv": ["echo", "observed"]}
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "observed"
+              ]
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "done\n"
@@ -238,7 +341,11 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["echo"]],
+      "proc_observe_allowlist": [
+        [
+          "echo"
+        ]
+      ],
       "commands": [
         {
           "name": "show",
@@ -246,15 +353,24 @@
           "effect": "read_only",
           "handler_prints": "done",
           "handler_effects": [
-            {"method": "run", "argv": ["echo", "observed"]}
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "observed"
+              ]
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "show"],
+    "argv": [
+      "--dry-run",
+      "show"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "done\nDRY RUN — no changes were made. Would do:\n"
+      "stdout_equals": "done\nDRY RUN \u2014 no changes were made. Would do:\n"
     }
   },
   {
@@ -263,7 +379,12 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["echo", "ok"]],
+      "proc_observe_allowlist": [
+        [
+          "echo",
+          "ok"
+        ]
+      ],
       "commands": [
         {
           "name": "show",
@@ -271,12 +392,22 @@
           "effect": "read_only",
           "handler_prints": "done",
           "handler_effects": [
-            {"method": "run", "argv": ["echo", "ok", "and", "more"]}
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "ok",
+                "and",
+                "more"
+              ]
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "done\n"
@@ -288,21 +419,36 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["echo", "ok"]],
+      "proc_observe_allowlist": [
+        [
+          "echo",
+          "ok"
+        ]
+      ],
       "commands": [
         {
           "name": "show",
           "help": "observe something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "run", "argv": ["echo"]}
+            {
+              "method": "run",
+              "argv": [
+                "echo"
+              ]
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.run argv echo is not on the app's proc_observe_allowlist"
     }
   },
@@ -312,21 +458,37 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["git", "status"]],
+      "proc_observe_allowlist": [
+        [
+          "git",
+          "status"
+        ]
+      ],
       "commands": [
         {
           "name": "show",
           "help": "observe something",
           "effect": "read_only",
           "handler_effects": [
-            {"method": "run", "argv": ["git", "status-x"]}
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "status-x"
+              ]
+            }
           ]
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"show\" is classified read_only; effects.run argv git status-x is not on the app's proc_observe_allowlist"
     }
   },
@@ -345,7 +507,9 @@
         }
       ]
     },
-    "argv": ["show"],
+    "argv": [
+      "show"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "shown\n",

@@ -11,11 +11,19 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "ok",
-          "flags": [{"name": "dry-run", "type": "bool", "help": "should be rejected"}]
+          "flags": [
+            {
+              "name": "dry-run",
+              "type": "bool",
+              "help": "should be rejected"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'dry-run' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
@@ -33,11 +41,19 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "ok",
-          "flags": [{"name": "approve-consequential", "type": "bool", "help": "should be rejected"}]
+          "flags": [
+            {
+              "name": "approve-consequential",
+              "type": "bool",
+              "help": "should be rejected"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'approve-consequential' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
@@ -55,11 +71,19 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "ok",
-          "flags": [{"name": "approve_consequential", "type": "bool", "help": "should be rejected"}]
+          "flags": [
+            {
+              "name": "approve_consequential",
+              "type": "bool",
+              "help": "should be rejected"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
@@ -71,7 +95,13 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "global_flags": [{"name": "approve_consequential", "type": "bool", "help": "should be rejected"}],
+      "global_flags": [
+        {
+          "name": "approve_consequential",
+          "type": "bool",
+          "help": "should be rejected"
+        }
+      ],
       "commands": [
         {
           "name": "cmd",
@@ -81,7 +111,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
@@ -99,11 +131,19 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "arg={approve_consequential}",
-          "args": [{"name": "approve_consequential", "help": "should be rejected"}]
+          "args": [
+            {
+              "name": "approve_consequential",
+              "help": "should be rejected"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd", "value"],
+    "argv": [
+      "cmd",
+      "value"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "arg name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
@@ -121,11 +161,19 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "ok",
-          "flags": [{"name": "yes", "type": "bool", "help": "should be rejected"}]
+          "flags": [
+            {
+              "name": "yes",
+              "type": "bool",
+              "help": "should be rejected"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential"
@@ -137,7 +185,13 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "global_flags": [{"name": "yes", "type": "bool", "help": "should be rejected"}],
+      "global_flags": [
+        {
+          "name": "yes",
+          "type": "bool",
+          "help": "should be rejected"
+        }
+      ],
       "commands": [
         {
           "name": "cmd",
@@ -147,7 +201,9 @@
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'yes' is banned by the framework: the confirmation skip is --approve-consequential"
@@ -165,11 +221,19 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "ok",
-          "flags": [{"name": "quiet", "type": "bool", "help": "should be rejected"}]
+          "flags": [
+            {
+              "name": "quiet",
+              "type": "bool",
+              "help": "should be rejected"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'quiet' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
@@ -187,11 +251,19 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "ok",
-          "flags": [{"name": "verbose", "type": "bool", "help": "should be rejected"}]
+          "flags": [
+            {
+              "name": "verbose",
+              "type": "bool",
+              "help": "should be rejected"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'verbose' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
@@ -203,12 +275,25 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "global_flags": [{"name": "dry-run", "type": "bool", "help": "should be rejected"}],
+      "global_flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "help": "should be rejected"
+        }
+      ],
       "commands": [
-        {"name": "cmd", "help": "a command", "effect": "read_only", "handler_prints": "ok"}
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok"
+        }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'dry-run' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
@@ -229,13 +314,21 @@
           "flag_sets": [
             {
               "name": "output",
-              "flags": [{"name": "quiet", "type": "bool", "help": "should be rejected"}]
+              "flags": [
+                {
+                  "name": "quiet",
+                  "type": "bool",
+                  "help": "should be rejected"
+                }
+              ]
             }
           ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'quiet' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
@@ -256,15 +349,25 @@
           "mutex": [
             {
               "flags": [
-                {"name": "verbose", "type": "bool", "help": "should be rejected"},
-                {"name": "terse", "type": "bool", "help": "the other side"}
+                {
+                  "name": "verbose",
+                  "type": "bool",
+                  "help": "should be rejected"
+                },
+                {
+                  "name": "terse",
+                  "type": "bool",
+                  "help": "the other side"
+                }
               ]
             }
           ]
         }
       ]
     },
-    "argv": ["cmd"],
+    "argv": [
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "flag name 'verbose' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)"
@@ -282,12 +385,23 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "arg={verbose}",
-          "args": [{"name": "verbose", "help": "a positional, not a flag"}]
+          "args": [
+            {
+              "name": "verbose",
+              "help": "a positional, not a flag"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd", "value"],
-    "expect": {"exit_code": 0, "stdout_equals": "arg=value\n"}
+    "argv": [
+      "cmd",
+      "value"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "arg=value\n"
+    }
   },
   {
     "name": "effects_reserved_flags: output is not a reserved flag name",
@@ -301,12 +415,26 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "output={output}",
-          "flags": [{"name": "output", "type": "str", "help": "an ordinary flag", "default": "text"}]
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "an ordinary flag",
+              "default": "text"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd", "--output", "json"],
-    "expect": {"exit_code": 0, "stdout_equals": "output=json\n"}
+    "argv": [
+      "cmd",
+      "--output",
+      "json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "output=json\n"
+    }
   },
   {
     "name": "effects_reserved_flags: a short flag named q is unaffected by the ban",
@@ -320,12 +448,25 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "terse={terse}",
-          "flags": [{"name": "terse", "type": "bool", "help": "an ordinary flag", "short": "q"}]
+          "flags": [
+            {
+              "name": "terse",
+              "type": "bool",
+              "help": "an ordinary flag",
+              "short": "q"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd", "-q"],
-    "expect": {"exit_code": 0, "stdout_equals": "terse=true\n"}
+    "argv": [
+      "cmd",
+      "-q"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "terse=true\n"
+    }
   },
   {
     "name": "effects_reserved_flags: the quartet is recognized after the command name",
@@ -338,14 +479,22 @@
           "name": "build",
           "help": "a command",
           "effect": "mutating",
-          "handler_effects": [{"method": "mkdir", "path": "d"}]
+          "handler_effects": [
+            {
+              "method": "mkdir",
+              "path": "d"
+            }
+          ]
         }
       ]
     },
-    "argv": ["build", "--dry-run"],
+    "argv": [
+      "build",
+      "--dry-run"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: d\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: d\n"
     }
   },
   {
@@ -354,7 +503,11 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["echo"]],
+      "proc_observe_allowlist": [
+        [
+          "echo"
+        ]
+      ],
       "commands": [
         {
           "name": "build",
@@ -362,12 +515,27 @@
           "effect": "mutating",
           "consequential": true,
           "handler_prints": "built",
-          "handler_effects": [{"method": "run", "argv": ["echo", "observed"]}]
+          "handler_effects": [
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "observed"
+              ]
+            }
+          ]
         }
       ]
     },
-    "argv": ["build", "--approve-consequential"],
-    "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+    "argv": [
+      "build",
+      "--approve-consequential"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "built\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_reserved_flags: the quartet is recognized after a nested group's subcommand",
@@ -389,7 +557,12 @@
                   "name": "build",
                   "help": "a nested command",
                   "effect": "mutating",
-                  "handler_effects": [{"method": "mkdir", "path": "n"}]
+                  "handler_effects": [
+                    {
+                      "method": "mkdir",
+                      "path": "n"
+                    }
+                  ]
                 }
               ]
             }
@@ -397,10 +570,15 @@
         }
       ]
     },
-    "argv": ["outer", "inner", "build", "--dry-run"],
+    "argv": [
+      "outer",
+      "inner",
+      "build",
+      "--dry-run"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: n\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: n\n"
     }
   },
   {
@@ -419,16 +597,25 @@
               "name": "build",
               "help": "a nested command",
               "effect": "mutating",
-              "handler_effects": [{"method": "mkdir", "path": "n"}]
+              "handler_effects": [
+                {
+                  "method": "mkdir",
+                  "path": "n"
+                }
+              ]
             }
           ]
         }
       ]
     },
-    "argv": ["grp", "--dry-run", "build"],
+    "argv": [
+      "grp",
+      "--dry-run",
+      "build"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: n\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: n\n"
     }
   },
   {
@@ -443,12 +630,26 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "rest={rest}",
-          "args": [{"name": "rest", "help": "trailing args", "variadic": true}]
+          "args": [
+            {
+              "name": "rest",
+              "help": "trailing args",
+              "variadic": true
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd", "--", "--dry-run", "--verbose"],
-    "expect": {"exit_code": 0, "stdout_equals": "rest=--dry-run,--verbose\n"}
+    "argv": [
+      "cmd",
+      "--",
+      "--dry-run",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rest=--dry-run,--verbose\n"
+    }
   },
   {
     "name": "effects_reserved_flags: a read_only command accepts a post-command dry-run with an empty body",
@@ -465,10 +666,13 @@
         }
       ]
     },
-    "argv": ["look", "--dry-run"],
+    "argv": [
+      "look",
+      "--dry-run"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "looked\nDRY RUN — no changes were made. Would do:\n"
+      "stdout_equals": "looked\nDRY RUN \u2014 no changes were made. Would do:\n"
     }
   },
   {
@@ -482,13 +686,24 @@
           "name": "look",
           "help": "a read-only command",
           "effect": "read_only",
-          "handler_effects": [{"method": "mkdir", "path": "d"}]
+          "handler_effects": [
+            {
+              "method": "mkdir",
+              "path": "d"
+            }
+          ]
         }
       ]
     },
-    "argv": ["look", "--dry-run"],
+    "argv": [
+      "look",
+      "--dry-run"
+    ],
     "expect": {
       "exit_code": 1,
+      "exit_code_by_target": {
+        "go": 2
+      },
       "stderr_contains": "command \"look\" is classified read_only; effects.mkdir is a mutating operation"
     }
   },
@@ -504,12 +719,26 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "name={name}",
-          "args": [{"name": "name", "help": "a positional"}]
+          "args": [
+            {
+              "name": "name",
+              "help": "a positional"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd", "--quiet", "positional", "--verbose", "--approve-consequential"],
-    "expect": {"exit_code": 0, "stdout_equals": "name=positional\n"}
+    "argv": [
+      "cmd",
+      "--quiet",
+      "positional",
+      "--verbose",
+      "--approve-consequential"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name=positional\n"
+    }
   },
   {
     "name": "effects_reserved_flags: quiet after the command name gates handler diagnostics",
@@ -523,13 +752,22 @@
           "help": "a command",
           "effect": "read_only",
           "handler_diagnostics": [
-            {"level": "info", "message": "info-line"},
-            {"level": "warn", "message": "warn-line"}
+            {
+              "level": "info",
+              "message": "info-line"
+            },
+            {
+              "level": "warn",
+              "message": "warn-line"
+            }
           ]
         }
       ]
     },
-    "argv": ["cmd", "--quiet"],
+    "argv": [
+      "cmd",
+      "--quiet"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -547,12 +785,23 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "handler_diagnostics": [{"level": "debug", "message": "debug-line"}]
+          "handler_diagnostics": [
+            {
+              "level": "debug",
+              "message": "debug-line"
+            }
+          ]
         }
       ]
     },
-    "argv": ["cmd", "--verbose"],
-    "expect": {"exit_code": 0, "stdout_equals": "debug-line\n"}
+    "argv": [
+      "cmd",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "debug-line\n"
+    }
   },
   {
     "name": "effects_reserved_flags: hermetic stays pre-command-only",
@@ -569,8 +818,14 @@
         }
       ]
     },
-    "argv": ["cmd", "--hermetic"],
-    "expect": {"exit_code": 1, "stderr_contains": "unknown flag '--hermetic'"}
+    "argv": [
+      "cmd",
+      "--hermetic"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag '--hermetic'"
+    }
   },
   {
     "name": "effects_reserved_flags: a passthrough command's args keep the quartet opaque",
@@ -588,8 +843,15 @@
         }
       ]
     },
-    "argv": ["exec", "--dry-run", "--approve-consequential"],
-    "expect": {"exit_code": 0, "stdout_equals": "exec:--dry-run,--approve-consequential\n"}
+    "argv": [
+      "exec",
+      "--dry-run",
+      "--approve-consequential"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "exec:--dry-run,--approve-consequential\n"
+    }
   },
   {
     "name": "effects_reserved_flags: a passthrough under a group keeps the quartet opaque",
@@ -614,8 +876,16 @@
         }
       ]
     },
-    "argv": ["grp", "exec", "--verbose", "child"],
-    "expect": {"exit_code": 0, "stdout_equals": "exec:--verbose,child\n"}
+    "argv": [
+      "grp",
+      "exec",
+      "--verbose",
+      "child"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "exec:--verbose,child\n"
+    }
   },
   {
     "name": "effects_reserved_flags: the pre-command position is the escape hatch for a passthrough",
@@ -633,8 +903,16 @@
         }
       ]
     },
-    "argv": ["--verbose", "exec", "--verbose", "child"],
-    "expect": {"exit_code": 0, "stdout_equals": "exec:--verbose,child\n"}
+    "argv": [
+      "--verbose",
+      "exec",
+      "--verbose",
+      "child"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "exec:--verbose,child\n"
+    }
   },
   {
     "name": "effects_reserved_flags: a global bool flag value does not end the pre-scan early",
@@ -643,21 +921,36 @@
       "version": "1.0.0",
       "help": "test app",
       "global_flags": [
-        {"name": "profile", "type": "str", "help": "profile name", "default": "none"}
+        {
+          "name": "profile",
+          "type": "str",
+          "help": "profile name",
+          "default": "none"
+        }
       ],
       "commands": [
         {
           "name": "build",
           "help": "a command",
           "effect": "mutating",
-          "handler_effects": [{"method": "mkdir", "path": "d"}]
+          "handler_effects": [
+            {
+              "method": "mkdir",
+              "path": "d"
+            }
+          ]
         }
       ]
     },
-    "argv": ["--profile", "build", "--dry-run", "build"],
+    "argv": [
+      "--profile",
+      "build",
+      "--dry-run",
+      "build"
+    ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: d\n"
+      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: d\n"
     }
   },
   {
@@ -667,11 +960,22 @@
       "version": "1.0.0",
       "help": "test app",
       "commands": [
-        {"name": "cmd", "help": "a command", "effect": "read_only", "handler_prints": "hello"}
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "hello"
+        }
       ]
     },
-    "argv": ["--quiet", "cmd"],
-    "expect": {"exit_code": 0, "stdout_equals": "hello\n"}
+    "argv": [
+      "--quiet",
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "hello\n"
+    }
   },
   {
     "name": "effects_reserved_flags: quiet and verbose together are accepted, quiet wins",
@@ -680,11 +984,24 @@
       "version": "1.0.0",
       "help": "test app",
       "commands": [
-        {"name": "cmd", "help": "a command", "effect": "read_only", "handler_prints": "hello"}
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "hello"
+        }
       ]
     },
-    "argv": ["--quiet", "--verbose", "cmd"],
-    "expect": {"exit_code": 0, "stdout_equals": "hello\n", "stderr_equals": ""}
+    "argv": [
+      "--quiet",
+      "--verbose",
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "hello\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_reserved_flags: the quartet is stripped from argv before command parsing",
@@ -698,12 +1015,26 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "name={name}",
-          "args": [{"name": "name", "help": "a positional"}]
+          "args": [
+            {
+              "name": "name",
+              "help": "a positional"
+            }
+          ]
         }
       ]
     },
-    "argv": ["--quiet", "--verbose", "--approve-consequential", "cmd", "positional"],
-    "expect": {"exit_code": 0, "stdout_equals": "name=positional\n"}
+    "argv": [
+      "--quiet",
+      "--verbose",
+      "--approve-consequential",
+      "cmd",
+      "positional"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "name=positional\n"
+    }
   },
   {
     "name": "effects_reserved_flags: approve-consequential skips the confirm prompt for a consequential command",
@@ -711,7 +1042,11 @@
       "name": "myapp",
       "version": "1.0.0",
       "help": "test app",
-      "proc_observe_allowlist": [["echo"]],
+      "proc_observe_allowlist": [
+        [
+          "echo"
+        ]
+      ],
       "commands": [
         {
           "name": "build",
@@ -719,12 +1054,27 @@
           "effect": "mutating",
           "consequential": true,
           "handler_prints": "built",
-          "handler_effects": [{"method": "run", "argv": ["echo", "observed"]}]
+          "handler_effects": [
+            {
+              "method": "run",
+              "argv": [
+                "echo",
+                "observed"
+              ]
+            }
+          ]
         }
       ]
     },
-    "argv": ["--approve-consequential", "build"],
-    "expect": {"exit_code": 0, "stdout_equals": "built\n", "stderr_equals": ""}
+    "argv": [
+      "--approve-consequential",
+      "build"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "built\n",
+      "stderr_equals": ""
+    }
   },
   {
     "name": "effects_reserved_flags: yes is no longer a framework token",
@@ -741,7 +1091,13 @@
         }
       ]
     },
-    "argv": ["cmd", "--yes"],
-    "expect": {"exit_code": 1, "stderr_contains": "unknown flag '--yes'"}
+    "argv": [
+      "cmd",
+      "--yes"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "unknown flag '--yes'"
+    }
   }
 ]

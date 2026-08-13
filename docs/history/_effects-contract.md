@@ -3865,6 +3865,31 @@ how a terminal was configured.
 
 **Serialization** follows §19.5's escaping regime: plain UTF-8, escaping only what JSON mandates.
 
+> **Amendment (2026-08-13, machine-interface remediation round): `exit_code` on the unwind path is
+> the language's own status, and is the envelope's one intrinsically language-specific field.**
+> This decides nothing new; it writes down what `exit_code` ("the process's exit status") already
+> means when composed with §3.5, because an implementation had read it the other way and shipped a
+> number that contradicted the process it described.
+>
+> §3.5 is explicit that an unexpected unwind is **not** handled: the exception continues to
+> propagate untouched and "the process's exit status and its own error report are whatever the
+> language would have produced anyway". So on that path the framework does not choose the status --
+> the language does. An unrecovered Go panic exits **2**; an uncaught Python exception and an
+> uncaught Node throw both exit **1**. The envelope reports the number its own process will leave
+> with, which means Go's aborted-dispatch envelope reads `"exit_code": 2` where its siblings read
+> `"exit_code": 1`.
+>
+> **The rejected alternative, recorded so it is not re-proposed:** having Go's `Run()` convert the
+> abort into a deliberate `os.Exit(1)` after the envelope is written. It would make the three
+> documents identical, and §3.5 forbids it twice over -- it swallows the panic and it replaces the
+> crash report the same sentence promises. Uniformity bought by suppressing a language's own crash
+> output is not uniformity worth having.
+>
+> **Consequence for conformance.** An aborting case is split by target rather than asserting a
+> status no implementation produces, and a harness must not normalize the status away: the Go
+> harness reproduces `2` and normalizes only the crash *report*, so the aborting cases' stderr stays
+> comparable while their exit status stays honest.
+
 ### 19.3 The `preview` member
 
 `preview` is the structured effect log of §14.2, verbatim -- the same records, the same

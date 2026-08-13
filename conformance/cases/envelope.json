@@ -13,7 +13,10 @@
         }
       ]
     },
-    "argv": ["--json", "cmd"],
+    "argv": [
+      "--json",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -33,12 +36,17 @@
           "effect": "read_only",
           "handler_returns": {
             "kind": "data",
-            "data": { "ok": true }
+            "data": {
+              "ok": true
+            }
           }
         }
       ]
     },
-    "argv": ["--json", "cmd"],
+    "argv": [
+      "--json",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"ok\":true},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -63,7 +71,10 @@
         }
       ]
     },
-    "argv": ["--json", "cmd"],
+    "argv": [
+      "--json",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 3,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":3,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -82,15 +93,30 @@
           "help": "a command",
           "effect": "read_only",
           "handler_diagnostics": [
-            { "level": "info", "message": "starting" },
-            { "level": "warn", "message": "careful" },
-            { "level": "debug", "message": "detail" },
-            { "level": "error", "message": "bad" }
+            {
+              "level": "info",
+              "message": "starting"
+            },
+            {
+              "level": "warn",
+              "message": "careful"
+            },
+            {
+              "level": "debug",
+              "message": "detail"
+            },
+            {
+              "level": "error",
+              "message": "bad"
+            }
           ]
         }
       ]
     },
-    "argv": ["--json", "cmd"],
+    "argv": [
+      "--json",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[{\"level\":\"info\",\"message\":\"starting\"},{\"level\":\"warn\",\"message\":\"careful\"},{\"level\":\"debug\",\"message\":\"detail\"},{\"level\":\"error\",\"message\":\"bad\"}]}\n",
@@ -109,19 +135,37 @@
           "help": "a command",
           "effect": "read_only",
           "handler_diagnostics": [
-            { "level": "info", "message": "starting" },
-            { "level": "warn", "message": "careful" },
-            { "level": "debug", "message": "detail" },
-            { "level": "error", "message": "bad" }
+            {
+              "level": "info",
+              "message": "starting"
+            },
+            {
+              "level": "warn",
+              "message": "careful"
+            },
+            {
+              "level": "debug",
+              "message": "detail"
+            },
+            {
+              "level": "error",
+              "message": "bad"
+            }
           ],
           "handler_returns": {
             "kind": "data",
-            "data": { "ok": true }
+            "data": {
+              "ok": true
+            }
           }
         }
       ]
     },
-    "argv": ["--quiet", "--json", "cmd"],
+    "argv": [
+      "--quiet",
+      "--json",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"ok\":true},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[{\"level\":\"info\",\"message\":\"starting\"},{\"level\":\"warn\",\"message\":\"careful\"},{\"level\":\"debug\",\"message\":\"detail\"},{\"level\":\"error\",\"message\":\"bad\"}]}\n",
@@ -149,7 +193,11 @@
         }
       ]
     },
-    "argv": ["--json", "grp", "cmd"],
+    "argv": [
+      "--json",
+      "grp",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"grp.cmd\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -170,7 +218,10 @@
         }
       ]
     },
-    "argv": ["--json", "nope"],
+    "argv": [
+      "--json",
+      "nope"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":null,\"exit_code\":1,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -191,7 +242,11 @@
         }
       ]
     },
-    "argv": ["cmd", "--json", "--nope"],
+    "argv": [
+      "cmd",
+      "--json",
+      "--nope"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":null,\"exit_code\":1,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -212,7 +267,11 @@
         }
       ]
     },
-    "argv": ["--json", "--dry-run", "cmd"],
+    "argv": [
+      "--json",
+      "--dry-run",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":null,\"dry_run\":true,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -240,7 +299,10 @@
         }
       ]
     },
-    "argv": ["--json", "cmd"],
+    "argv": [
+      "--json",
+      "cmd"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "",
@@ -261,7 +323,11 @@
         }
       ]
     },
-    "argv": ["--json", "cmd", "--help"],
+    "argv": [
+      "--json",
+      "cmd",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": "a command",
@@ -280,13 +346,24 @@
           "help": "build something",
           "effect": "mutating",
           "handler_effects": [
-            { "method": "mkdir", "path": "build" },
-            { "method": "write", "path": "VERSION", "content": "1.2.3" }
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "write",
+              "path": "VERSION",
+              "content": "1.2.3"
+            }
           ]
         }
       ]
     },
-    "argv": ["--json", "--dry-run", "build"],
+    "argv": [
+      "--json",
+      "--dry-run",
+      "build"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"build\",\"exit_code\":0,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"build\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"mkdir\"},{\"bytes\":5,\"detail\":\"VERSION (5 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":2,\"verb\":\"write\"}],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -322,12 +399,18 @@
           "help": "remove a path that is not there",
           "effect": "mutating",
           "handler_effects": [
-            { "method": "remove", "path": "no-such-path-envelope-conformance" }
+            {
+              "method": "remove",
+              "path": "no-such-path-envelope-conformance"
+            }
           ]
         }
       ]
     },
-    "argv": ["--json", "clean"],
+    "argv": [
+      "--json",
+      "clean"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"clean\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"preview\":[{\"detail\":\"no-such-path-envelope-conformance\",\"kind\":\"file_write\",\"recorded\":false,\"seq\":1,\"verb\":\"remove\"}],\"preview_error\":null,\"diagnostics\":[]}\n",
@@ -355,23 +438,52 @@
           "help": "branch on an unsettled result",
           "effect": "mutating",
           "handler_effects": [
-            { "method": "run", "argv": ["git", "tag", "v1.2.3"] },
-            { "method": "run", "argv": ["git", "push", "origin", "v1.2.3"] },
-            { "method": "run", "argv": ["never", "reached"], "extract_from": 2 },
-            { "method": "mkdir", "path": "unreachable" }
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "tag",
+                "v1.2.3"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "git",
+                "push",
+                "origin",
+                "v1.2.3"
+              ]
+            },
+            {
+              "method": "run",
+              "argv": [
+                "never",
+                "reached"
+              ],
+              "extract_from": 2
+            },
+            {
+              "method": "mkdir",
+              "path": "unreachable"
+            }
           ]
         }
       ]
     },
-    "argv": ["--json", "--dry-run", "chain"],
+    "argv": [
+      "--json",
+      "--dry-run",
+      "chain"
+    ],
     "expect": {
       "exit_code": 1,
-      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"chain\",\"exit_code\":1,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"git tag v1.2.3\",\"kind\":\"proc_mutate\",\"recorded\":true,\"seq\":1,\"verb\":\"run\"},{\"detail\":\"git push origin v1.2.3\",\"kind\":\"proc_mutate\",\"recorded\":true,\"seq\":2,\"verb\":\"run\"}],\"preview_error\":{\"kind\":\"truncated\",\"step\":3,\"command\":\"chain\",\"brand\":\"«step 2 output»\",\"message\":\"error: dry-run preview ends at step 3: chain branched on unsettled value «step 2 output» — cannot preview past this point\"},\"diagnostics\":[]}\n",
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"chain\",\"exit_code\":1,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"git tag v1.2.3\",\"kind\":\"proc_mutate\",\"recorded\":true,\"seq\":1,\"verb\":\"run\"},{\"detail\":\"git push origin v1.2.3\",\"kind\":\"proc_mutate\",\"recorded\":true,\"seq\":2,\"verb\":\"run\"}],\"preview_error\":{\"kind\":\"truncated\",\"step\":3,\"command\":\"chain\",\"brand\":\"\u00abstep 2 output\u00bb\",\"message\":\"error: dry-run preview ends at step 3: chain branched on unsettled value \u00abstep 2 output\u00bb \u2014 cannot preview past this point\"},\"diagnostics\":[]}\n",
       "stderr_equals": ""
     }
   },
   {
-    "name": "envelope: an aborted dispatch carries preview_error kind aborted",
+    "name": "envelope: an aborted dispatch carries preview_error kind aborted (python, typescript)",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -382,18 +494,73 @@
           "help": "build something",
           "effect": "mutating",
           "handler_effects": [
-            { "method": "mkdir", "path": "build" },
-            { "method": "write", "path": "VERSION", "content": "1.2.3" }
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "write",
+              "path": "VERSION",
+              "content": "1.2.3"
+            }
           ],
           "handler_aborts": true
         }
       ]
     },
-    "argv": ["--json", "--dry-run", "build"],
+    "argv": [
+      "--json",
+      "--dry-run",
+      "build"
+    ],
     "expect": {
       "exit_code": 1,
-      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"build\",\"exit_code\":1,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"build\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"mkdir\"},{\"bytes\":5,\"detail\":\"VERSION (5 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":2,\"verb\":\"write\"}],\"preview_error\":{\"kind\":\"aborted\",\"step\":3,\"command\":\"build\",\"brand\":null,\"message\":\"error: dry-run preview ends at step 3: build aborted — the preview above may be incomplete\"},\"diagnostics\":[]}\n",
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"build\",\"exit_code\":1,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"build\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"mkdir\"},{\"bytes\":5,\"detail\":\"VERSION (5 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":2,\"verb\":\"write\"}],\"preview_error\":{\"kind\":\"aborted\",\"step\":3,\"command\":\"build\",\"brand\":null,\"message\":\"error: dry-run preview ends at step 3: build aborted \u2014 the preview above may be incomplete\"},\"diagnostics\":[]}\n",
       "stderr_not_contains": "dry-run preview ends at step 3"
-    }
+    },
+    "targets": [
+      "python",
+      "typescript"
+    ]
+  },
+  {
+    "name": "envelope: an aborted dispatch carries preview_error kind aborted (go)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "build",
+          "help": "build something",
+          "effect": "mutating",
+          "handler_effects": [
+            {
+              "method": "mkdir",
+              "path": "build"
+            },
+            {
+              "method": "write",
+              "path": "VERSION",
+              "content": "1.2.3"
+            }
+          ],
+          "handler_aborts": true
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "--dry-run",
+      "build"
+    ],
+    "expect": {
+      "exit_code": 2,
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"build\",\"exit_code\":2,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"build\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"mkdir\"},{\"bytes\":5,\"detail\":\"VERSION (5 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":2,\"verb\":\"write\"}],\"preview_error\":{\"kind\":\"aborted\",\"step\":3,\"command\":\"build\",\"brand\":null,\"message\":\"error: dry-run preview ends at step 3: build aborted \u2014 the preview above may be incomplete\"},\"diagnostics\":[]}\n",
+      "stderr_not_contains": "dry-run preview ends at step 3"
+    },
+    "targets": [
+      "go"
+    ]
   }
 ]

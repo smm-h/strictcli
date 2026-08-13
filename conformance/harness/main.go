@@ -17,10 +17,40 @@ var _ = strings.ReplaceAll
 var _ = fmt.Println
 var _ = sort.Strings
 
+// goPanicExitStatus is the status the Go runtime gives a process whose panic
+// was never recovered.
+const goPanicExitStatus = 2
+
+// dispatching is set immediately before app.Run(). It is what lets the recover
+// below tell the harness's two panic sources apart, which they are not
+// interchangeable:
+//
+//   - BEFORE it, a panic is a REGISTRATION error -- Go's idiomatic spelling of
+//     the ValueError ref_python raises and the throw the TS harness makes. All
+//     three harnesses report it as "error: <message>" and exit 1, and ~118
+//     cases pin that. Nothing in the framework has claimed an exit status at
+//     that point: a registration error precedes machine mode and emits no
+//     envelope.
+//   - AFTER it, a panic is a handler ABORT, and the framework has by then
+//     written an envelope whose exit_code says what status this process will
+//     leave with (effects contract §19.2 read through §3.5: the panic is not
+//     handled, so the status is the language's own). Substituting 1 there
+//     would make the envelope contradict its own process, so the harness
+//     reproduces Go's 2.
+//
+// Either way the recover normalizes only the crash REPORT: the sibling
+// harnesses print the message as "error: <message>", and dumping Go's
+// goroutine trace instead would make every aborting case's stderr incomparable
+// for a reason that has nothing to do with the framework.
+var dispatching bool
+
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", r)
+			if dispatching {
+				os.Exit(goPanicExitStatus)
+			}
 			os.Exit(1)
 		}
 	}()
@@ -337,6 +367,7 @@ func main() {
 		})
 	}
 
+	dispatching = true
 	app.Run()
 }
 
