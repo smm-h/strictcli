@@ -40,6 +40,7 @@ order: 90
 - [typescript/src/mcp](../typescript-src-mcp/)
 - [typescript/src/outcome](../typescript-src-outcome/)
 - [typescript/src/parse](../typescript-src-parse/)
+- [typescript/src/payload_schema](../typescript-src-payload_schema/)
 - [typescript/src/routing](../typescript-src-routing/)
 - [typescript/src/schema](../typescript-src-schema/)
 - [typescript/src/sources](../typescript-src-sources/)

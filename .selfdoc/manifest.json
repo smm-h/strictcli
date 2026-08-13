@@ -1226,6 +1226,31 @@
         },
         {
           "level": 3,
+          "text": "`SchemaType`",
+          "anchor": "schematype"
+        },
+        {
+          "level": 3,
+          "text": "`SchemaArray`",
+          "anchor": "schemaarray"
+        },
+        {
+          "level": 3,
+          "text": "`SchemaObject`",
+          "anchor": "schemaobject"
+        },
+        {
+          "level": 3,
+          "text": "`SchemaEnum`",
+          "anchor": "schemaenum"
+        },
+        {
+          "level": 3,
+          "text": "`SchemaConst`",
+          "anchor": "schemaconst"
+        },
+        {
+          "level": 3,
           "text": "`IsScalarType`",
           "anchor": "isscalartype"
         },
@@ -2384,6 +2409,11 @@
         },
         {
           "level": 4,
+          "text": "`_diagnostic`",
+          "anchor": "_diagnostic"
+        },
+        {
+          "level": 4,
           "text": "`info`",
           "anchor": "info"
         },
@@ -2561,6 +2591,86 @@
           "level": 3,
           "text": "`_msg_payload_already_set`",
           "anchor": "_msg_payload_already_set"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_payload_schema_invalid`",
+          "anchor": "_msg_payload_schema_invalid"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_payload_invalid`",
+          "anchor": "_msg_payload_invalid"
+        },
+        {
+          "level": 3,
+          "text": "`_payload_quote`",
+          "anchor": "_payload_quote"
+        },
+        {
+          "level": 3,
+          "text": "`_pdetail_expected_type`",
+          "anchor": "_pdetail_expected_type"
+        },
+        {
+          "level": 3,
+          "text": "`_payload_kind`",
+          "anchor": "_payload_kind"
+        },
+        {
+          "level": 3,
+          "text": "`_payload_over_magnitude`",
+          "anchor": "_payload_over_magnitude"
+        },
+        {
+          "level": 3,
+          "text": "`_payload_scan_value`",
+          "anchor": "_payload_scan_value"
+        },
+        {
+          "level": 3,
+          "text": "`_payload_deep_equal`",
+          "anchor": "_payload_deep_equal"
+        },
+        {
+          "level": 3,
+          "text": "`_validate_payload_schema`",
+          "anchor": "_validate_payload_schema"
+        },
+        {
+          "level": 3,
+          "text": "`_validate_payload_instance`",
+          "anchor": "_validate_payload_instance"
+        },
+        {
+          "level": 3,
+          "text": "`_validate_payload_value`",
+          "anchor": "_validate_payload_value"
+        },
+        {
+          "level": 3,
+          "text": "`schema_type`",
+          "anchor": "schema_type"
+        },
+        {
+          "level": 3,
+          "text": "`schema_array`",
+          "anchor": "schema_array"
+        },
+        {
+          "level": 3,
+          "text": "`schema_object`",
+          "anchor": "schema_object"
+        },
+        {
+          "level": 3,
+          "text": "`schema_enum`",
+          "anchor": "schema_enum"
+        },
+        {
+          "level": 3,
+          "text": "`schema_const`",
+          "anchor": "schema_const"
         },
         {
           "level": 3,
@@ -3604,8 +3714,13 @@
         },
         {
           "level": 4,
-          "text": "`_emit_payload`",
-          "anchor": "_emit_payload"
+          "text": "`_preview_error`",
+          "anchor": "_preview_error"
+        },
+        {
+          "level": 4,
+          "text": "`_emit_envelope`",
+          "anchor": "_emit_envelope"
         },
         {
           "level": 4,
@@ -3963,6 +4078,11 @@
           "level": 3,
           "text": "Handler return values",
           "anchor": "handler-return-values"
+        },
+        {
+          "level": 3,
+          "text": "Machine payloads",
+          "anchor": "machine-payloads"
         },
         {
           "level": 2,
@@ -4840,6 +4960,16 @@
         },
         {
           "level": 3,
+          "text": "`DiagnosticLevel`",
+          "anchor": "diagnosticlevel"
+        },
+        {
+          "level": 3,
+          "text": "`DiagnosticRecord`",
+          "anchor": "diagnosticrecord"
+        },
+        {
+          "level": 3,
           "text": "`NO_RESERVED_FLAGS`",
           "anchor": "no_reserved_flags"
         },
@@ -4862,6 +4992,11 @@
           "level": 3,
           "text": "`contextPayload`",
           "anchor": "contextpayload"
+        },
+        {
+          "level": 3,
+          "text": "`contextDiagnostics`",
+          "anchor": "contextdiagnostics"
         },
         {
           "level": 3,
@@ -6620,6 +6755,16 @@
         },
         {
           "level": 3,
+          "text": "`errPayloadSchemaInvalid`",
+          "anchor": "errpayloadschemainvalid"
+        },
+        {
+          "level": 3,
+          "text": "`errPayloadInvalid`",
+          "anchor": "errpayloadinvalid"
+        },
+        {
+          "level": 3,
           "text": "`errEffectsUnavailable`",
           "anchor": "erreffectsunavailable"
         },
@@ -6932,6 +7077,11 @@
         },
         {
           "level": 3,
+          "text": "`validatePayloadSchemaDeclaration`",
+          "anchor": "validatepayloadschemadeclaration"
+        },
+        {
+          "level": 3,
           "text": "`validateForwarding`",
           "anchor": "validateforwarding"
         },
@@ -7200,6 +7350,31 @@
           "level": 3,
           "text": "`outcome`",
           "anchor": "outcome"
+        },
+        {
+          "level": 3,
+          "text": "`schemaArray`",
+          "anchor": "schemaarray"
+        },
+        {
+          "level": 3,
+          "text": "`schemaConst`",
+          "anchor": "schemaconst"
+        },
+        {
+          "level": 3,
+          "text": "`schemaEnum`",
+          "anchor": "schemaenum"
+        },
+        {
+          "level": 3,
+          "text": "`schemaObject`",
+          "anchor": "schemaobject"
+        },
+        {
+          "level": 3,
+          "text": "`schemaType`",
+          "anchor": "schematype"
         },
         {
           "level": 3,
@@ -7517,6 +7692,103 @@
           "level": 3,
           "text": "`formatParseErrorOutput`",
           "anchor": "formatparseerroroutput"
+        }
+      ]
+    },
+    {
+      "path": "typescript-src-payload_schema.md",
+      "title": "typescript/src/payload_schema",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/payload_schema",
+          "anchor": "typescriptsrcpayload_schema"
+        },
+        {
+          "level": 2,
+          "text": "`typescript/src/payload_schema`",
+          "anchor": "typescriptsrcpayload_schema"
+        },
+        {
+          "level": 3,
+          "text": "`PAYLOAD_SCHEMA_KEYWORDS`",
+          "anchor": "payload_schema_keywords"
+        },
+        {
+          "level": 3,
+          "text": "`PAYLOAD_JSON_TYPES`",
+          "anchor": "payload_json_types"
+        },
+        {
+          "level": 3,
+          "text": "`PayloadFinding`",
+          "anchor": "payloadfinding"
+        },
+        {
+          "level": 3,
+          "text": "`payloadKind`",
+          "anchor": "payloadkind"
+        },
+        {
+          "level": 3,
+          "text": "`payloadScanValue`",
+          "anchor": "payloadscanvalue"
+        },
+        {
+          "level": 3,
+          "text": "`payloadDeepEqual`",
+          "anchor": "payloaddeepequal"
+        },
+        {
+          "level": 3,
+          "text": "`validatePayloadSchema`",
+          "anchor": "validatepayloadschema"
+        },
+        {
+          "level": 3,
+          "text": "`validatePayloadInstance`",
+          "anchor": "validatepayloadinstance"
+        },
+        {
+          "level": 3,
+          "text": "`validatePayloadSchemaLiteral`",
+          "anchor": "validatepayloadschemaliteral"
+        },
+        {
+          "level": 3,
+          "text": "`validatePayloadValue`",
+          "anchor": "validatepayloadvalue"
+        },
+        {
+          "level": 3,
+          "text": "`schemaType`",
+          "anchor": "schematype"
+        },
+        {
+          "level": 3,
+          "text": "`schemaArray`",
+          "anchor": "schemaarray"
+        },
+        {
+          "level": 3,
+          "text": "`SchemaObjectOpts`",
+          "anchor": "schemaobjectopts"
+        },
+        {
+          "level": 3,
+          "text": "`schemaObject`",
+          "anchor": "schemaobject"
+        },
+        {
+          "level": 3,
+          "text": "`schemaEnum`",
+          "anchor": "schemaenum"
+        },
+        {
+          "level": 3,
+          "text": "`schemaConst`",
+          "anchor": "schemaconst"
         }
       ]
     },
@@ -7888,5 +8160,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-13T01:53:33.366374+00:00"
+  "last_gen": "2026-08-13T04:20:55.094880+00:00"
 }
