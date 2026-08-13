@@ -1,8 +1,7 @@
 ---
 title: typescript/src/trace
-description: "The process trace store."
+description: "The process trace store's writer: strict-profile ULIDs, the append-only partitioned store, and the ancestry variable composed into a child's environment."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 34
 ---

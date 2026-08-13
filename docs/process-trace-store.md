@@ -1,6 +1,6 @@
 ---
 title: Process Trace Store
-description: "How strictcli records process ancestry via STRICTCLI_TRACE_PARENT, an append-only JSONL store, ULIDs, UTC partitions."
+description: "How strictcli records process ancestry: the STRICTCLI_TRACE_PARENT variable, an append-only JSONL store, strict-profile ULIDs and UTC-hour partitions."
 nav_group: "Guides"
 nav_order: 20
 ---
@@ -121,8 +121,9 @@ ssh host STRICTCLI_TRACE_PARENT="$STRICTCLI_TRACE_PARENT" mytool subcommand
   whoever writes next. Deleting the store is a supported thing to do: it means tracing resumes from
   empty, not that tracing dies.
 - **Files are created with mode `0600`** -- partitions and the failure marker alike. The store
-  records who ran what on this machine, and it inherits the directory's own privacy rather than the
-  process umask's. *(authored at the implementation round)*
+  records who ran what on this machine, so a partition inherits the directory's own privacy instead
+  of whatever the writing process's file-creation mask would have granted. *(authored at the
+  implementation round)*
 
 ## Partitions
 
