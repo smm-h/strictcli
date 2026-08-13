@@ -37,11 +37,24 @@ export interface McpIO {
 
 // JSON-RPC and MCP error codes. -32020 (HeaderMismatch) belongs to the HTTP
 // transport, which this server does not speak; -32021
-// (MissingRequiredClientCapability) is fired by the confirmation round-trip.
+// (MissingRequiredClientCapability) is what a consequential call from a client
+// that cannot render the confirmation is answered with.
 const MCP_ERR_PARSE = -32700;
 const MCP_ERR_METHOD_NOT_FOUND = -32601;
 const MCP_ERR_INVALID_PARAMS = -32602;
+const MCP_ERR_MISSING_CLIENT_CAPABILITY = -32021;
 const MCP_ERR_UNSUPPORTED_PROTOCOL_VERSION = -32022;
+
+// The revision forbids a server sending an input request the client never said
+// it could fulfil, and assigns -32021 for saying so. `data.requiredCapabilities`
+// is a client-capabilities object, and this server names FORM mode: a client
+// that declared only URL-mode elicitation cannot render this question either.
+const MCP_MSG_MISSING_ELICITATION =
+	"Server requires the elicitation capability for this request";
+
+function requiredElicitationCapabilities(): JsonObject {
+	return { elicitation: { form: {} } };
+}
 
 // The server speaks two eras (effects contract §22):
 //
@@ -937,7 +950,16 @@ function confirmationExchange(
 			consented: false,
 		};
 	}
-	// A client that cannot render the confirmation gets the refusal, which
-	// names what is required without teaching a way around it.
-	return { consented };
+	// A client that cannot render the confirmation is told what it would have to
+	// declare, in the code the revision assigns -- never how to proceed without
+	// confirming.
+	return {
+		response: jsonrpcError(
+			reqId,
+			MCP_ERR_MISSING_CLIENT_CAPABILITY,
+			MCP_MSG_MISSING_ELICITATION,
+			{ requiredCapabilities: requiredElicitationCapabilities() },
+		),
+		consented: false,
+	};
 }

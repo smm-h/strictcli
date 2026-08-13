@@ -879,12 +879,11 @@ test("mcp: the classification is not in inputSchema", async () => {
 });
 
 test("mcp: tools/call refuses a consequential tool without consent", async () => {
+	// These clients declare no capabilities at all, so the modern answer is the
+	// capability error rather than the seam's refusal, which is only reachable
+	// from the legacy era now.
 	const resp = await sendOne(consentApp(), callRequest({ name: "release" }));
-	assert.equal(resultOf(resp).isError, true);
-	assert.equal(
-		contentOf(resp)[0]?.text,
-		"command 'release' is consequential: the call must carry confirmation",
-	);
+	assert.equal(errorOf(resp).code, -32021);
 });
 
 test("mcp: tools/call proceeds with explicit consent", async () => {
@@ -901,7 +900,7 @@ test("mcp: an explicit false consent is refused", async () => {
 		consentApp(),
 		callRequest({ name: "release", approve_consequential: false }),
 	);
-	assert.equal(resultOf(resp).isError, true);
+	assert.equal(errorOf(resp).code, -32021);
 });
 
 test("mcp: a read_only tool needs no consent", async () => {
@@ -931,7 +930,9 @@ test("mcp: consent inside arguments does not consent", async () => {
 			arguments: { approve_consequential: true },
 		}),
 	);
-	assert.equal(resultOf(resp).isError, true);
+	// The consent never registered, so the command was still unconfirmed and
+	// the call never reached it.
+	assert.equal(errorOf(resp).code, -32021);
 });
 
 // ---------------------------------------------------------------------------
@@ -1322,7 +1323,9 @@ test("mcp: a read-only tool is never asked about", async () => {
 	assert.equal(resultOf(resp).resultType, "complete");
 });
 
-test("mcp: a client without elicitation is refused, not asked", async () => {
+test("mcp: a client without elicitation gets the capability error", async () => {
+	// The revision forbids sending an input request the client never said it
+	// could fulfil, and assigns the code for saying so.
 	const resp = await sendOneRaw(
 		confirmingApp(),
 		toolCall(1, {
@@ -1331,12 +1334,46 @@ test("mcp: a client without elicitation is refused, not asked", async () => {
 			_meta: { ...MODERN_META },
 		}),
 	);
-	const result = resultOf(resp);
-	assert.equal(result.isError, true);
+	const error = errorOf(resp);
+	assert.equal(error.code, -32021);
 	assert.equal(
-		(result.content as { text: string }[])[0]?.text,
-		"command 'release' is consequential: the call must carry confirmation",
+		error.message,
+		"Server requires the elicitation capability for this request",
 	);
+	assert.deepEqual(error.data, {
+		requiredCapabilities: { elicitation: { form: {} } },
+	});
+});
+
+test("mcp: a url-only client gets the capability error", async () => {
+	const resp = await sendOneRaw(
+		confirmingApp(),
+		toolCall(1, {
+			name: "release",
+			arguments: {},
+			_meta: metaWith({
+				"io.modelcontextprotocol/clientCapabilities": {
+					elicitation: { url: {} },
+				},
+			}),
+		}),
+	);
+	assert.equal(errorOf(resp).code, -32021);
+});
+
+test("mcp: a stated consent needs no declared capability", async () => {
+	const resp = await sendOneRaw(
+		confirmingApp(),
+		toolCall(1, {
+			name: "release",
+			arguments: {},
+			approve_consequential: true,
+			_meta: { ...MODERN_META },
+		}),
+	);
+	const result = resultOf(resp);
+	assert.equal(result.resultType, "complete");
+	assert.equal(Object.hasOwn(result, "isError"), false);
 });
 
 test("mcp: a tampered continuation is refused", async () => {
