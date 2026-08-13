@@ -438,5 +438,79 @@
       ],
       "stderr_equals": "error: --rate: expected float, got '1e999'\ntry 'myapp cmd --help'"
     }
+  },
+  {
+    "name": "float: unelected float mutex member delivers None",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "rate",
+                  "type": "float",
+                  "help": "the rate",
+                  "default": null
+                },
+                {
+                  "name": "preset",
+                  "type": "str",
+                  "help": "a named preset",
+                  "default": null
+                }
+              ]
+            }
+          ],
+          "handler_prints": "rate={rate} preset={preset}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--preset",
+      "fast"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rate=None preset=fast"
+    }
+  },
+  {
+    "name": "float: optional float arg omitted delivers None",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "ratio",
+              "type": "float",
+              "help": "the ratio",
+              "required": false
+            }
+          ],
+          "handler_prints": "ratio={ratio}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "ratio=None"
+    }
   }
 ]

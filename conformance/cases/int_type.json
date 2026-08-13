@@ -333,5 +333,79 @@
       "stdout_contains": "<int>",
       "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --port <int>    the port [default: 8000]"
     }
+  },
+  {
+    "name": "int: unelected int mutex member delivers None",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "port",
+                  "type": "int",
+                  "help": "the port",
+                  "default": null
+                },
+                {
+                  "name": "socket",
+                  "type": "str",
+                  "help": "the socket path",
+                  "default": null
+                }
+              ]
+            }
+          ],
+          "handler_prints": "port={port} socket={socket}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--socket",
+      "/tmp/s.sock"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=None socket=/tmp/s.sock"
+    }
+  },
+  {
+    "name": "int: optional int arg omitted delivers None",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "how many",
+              "required": false
+            }
+          ],
+          "handler_prints": "count={count}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "count=None"
+    }
   }
 ]

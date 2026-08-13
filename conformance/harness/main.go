@@ -1316,9 +1316,19 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 					out = strings.ReplaceAll(out, "{"+name+"}", "false")
 				}
 			} else if ftype == "int" {
-				out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%d", args[key].(int)))
+				// An omitted optional int flag arrives as nil, like str/bool.
+				if args[key] == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else {
+					out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%d", args[key].(int)))
+				}
 			} else if ftype == "float" {
-				out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key].(float64)))
+				// Same for an omitted optional float flag.
+				if args[key] == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else {
+					out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key].(float64)))
+				}
 			} else {
 				// str -- might be nil
 				if args[key] != nil {
@@ -1361,9 +1371,19 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 					out = strings.ReplaceAll(out, "{"+name+"}", "false")
 				}
 			} else if atype == "int" {
-				out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%d", args[key].(int)))
+				// An omitted optional int arg arrives as nil, like str/bool.
+				if args[key] == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else {
+					out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%d", args[key].(int)))
+				}
 			} else if atype == "float" {
-				out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key].(float64)))
+				// Same for an omitted optional float arg.
+				if args[key] == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else {
+					out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key].(float64)))
+				}
 			} else {
 				if args[key] != nil {
 					out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key]))
