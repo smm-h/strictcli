@@ -11770,15 +11770,18 @@ def _write_schema(app: App) -> str:
 #   supported versions, the capabilities and the server identity that the
 #   handshake used to carry.
 #
-#   LEGACY (2024-11-05) -- the `initialize` handshake. It is selected by an
-#   `initialize` request and scoped to this process, which is exactly the
-#   dual-era rule the modern revision specifies for a server serving both.
+#   LEGACY (2025-11-25) -- the `initialize` handshake, the newest of the
+#   handshake-based revisions. It is selected by an `initialize` request and
+#   scoped to this process, which is exactly the dual-era rule the modern
+#   revision specifies for a server serving both. That era has no
+#   input-required result, so the same confirmation is delivered as a
+#   server-initiated `elicitation/create` request (contract §22.7).
 #
 # A request that carries neither the modern metadata nor a preceding
 # `initialize` is malformed and is refused. Nothing is inferred.
 
 _MCP_PROTOCOL_VERSION = "2026-07-28"
-_MCP_LEGACY_PROTOCOL_VERSION = "2024-11-05"
+_MCP_LEGACY_PROTOCOL_VERSION = "2025-11-25"
 
 # The reserved `_meta` keys of the modern revision.
 _MCP_META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion"
@@ -11981,13 +11984,18 @@ def _mcp_request_digest(method: str, tool_name: str, arguments: dict) -> str:
 
 
 def _mcp_principal(meta: dict) -> str:
-    """The client this state is minted for, as the client declares itself.
+    """The principal a modern request declares, from its own metadata."""
+    return _mcp_principal_of(meta.get(_MCP_META_CLIENT_INFO))
+
+
+def _mcp_principal_of(info: object) -> str:
+    """The client a state is minted for, as the client declares itself.
 
     On this transport there is no authenticated principal; the declaration is
     self-reported and the binding is a consistency check, not authentication.
-    What actually contains a stolen blob is the per-process key.
+    What actually contains a stolen blob is the per-process key. Both eras
+    carry the same self-report -- per request, or once at the handshake.
     """
-    info = meta.get(_MCP_META_CLIENT_INFO)
     if not isinstance(info, dict):
         return ""
     name = info.get("name")
@@ -12131,19 +12139,102 @@ def _mcp_jsonrpc_error(
     }
 
 
-def _mcp_handle_initialize(app: App, req_id: object) -> dict:
+class _MCPLegacySession:
+    """What the legacy handshake establishes, scoped to this process.
+
+    In that era the session IS the client's declaration, exactly as the
+    per-request `_meta` block is in the modern one: the capabilities and the
+    identity arrive once, at `initialize`, and every later request is read
+    against them.
+    """
+
+    def __init__(self) -> None:
+        self.active = False
+        self.capabilities: dict = {}
+        self.client_info: dict = {}
+
+    def open(self, params: dict) -> None:
+        self.active = True
+        caps = params.get("capabilities")
+        self.capabilities = caps if isinstance(caps, dict) else {}
+        info = params.get("clientInfo")
+        self.client_info = info if isinstance(info, dict) else {}
+
+
+class _MCPChannel:
+    """The line channel to the client, in both directions.
+
+    The legacy confirmation is a request the SERVER sends, so the loop has to
+    be able to write one and read its answer in the middle of serving a call.
+    Anything else that arrives while an answer is awaited is held here and
+    served afterwards -- the loop stays one request at a time, and no client
+    line is dropped.
+    """
+
+    def __init__(self, inp: object, out: object) -> None:
+        self._lines = iter(inp)  # type: ignore[call-overload]
+        self._out = out
+        self._held: deque = deque()
+
+    def next_line(self) -> str | None:
+        """The next line to serve: what was held first, then the stream."""
+        if self._held:
+            return self._held.popleft()
+        return next(self._lines, None)
+
+    def write(self, message: dict) -> None:
+        self._out.write(json.dumps(message) + "\n")  # type: ignore[attr-defined]
+        self._out.flush()  # type: ignore[attr-defined]
+
+    def await_response(self, req_id: str) -> dict | None:
+        """Read until the response to `req_id` arrives, or the stream ends.
+
+        A response carrying another id answers nothing this server sent and is
+        discarded; anything else is held for the main loop.
+        """
+        for raw in self._lines:
+            text = raw.strip()
+            if not text:
+                continue
+            try:
+                msg = json.loads(text)
+            except json.JSONDecodeError:
+                self._held.append(raw)
+                continue
+            if isinstance(msg, dict) and ("result" in msg or "error" in msg):
+                if msg.get("id") == req_id:
+                    return msg
+                continue
+            self._held.append(raw)
+        return None
+
+
+def _mcp_handle_initialize(
+    app: App, req_id: object, params: dict, session: _MCPLegacySession,
+) -> dict:
     """Handle the legacy-era 'initialize' handshake, and select that era.
 
     The modern revision has no handshake; this method is what a legacy client
     opens with, and answering it is what puts this process into legacy
-    semantics for every later request that carries no modern metadata.
+    semantics for every later request that carries no modern metadata. This
+    server speaks one legacy revision, so it always answers with that one --
+    the negotiation rule says to answer with the latest version supported.
+
+    The declared feature is advertised here too, under the key that revision
+    gives a non-standard server capability: one name, two advertisements.
     """
+    session.open(params)
     return {
         "jsonrpc": "2.0",
         "id": req_id,
         "result": {
             "protocolVersion": _MCP_LEGACY_PROTOCOL_VERSION,
-            "capabilities": {"tools": {}},
+            "capabilities": {
+                "tools": {},
+                "experimental": {
+                    _MCP_FEATURE_CONSEQUENTIAL_CONFIRMATION: {},
+                },
+            },
             "serverInfo": {
                 "name": app.name,
                 "version": app.version,
@@ -12221,12 +12312,20 @@ def _mcp_tool_result(
 
 
 def _mcp_client_declares_elicitation(meta: dict) -> bool:
-    """True when the client declared it can render a form elicitation.
+    """True when a modern request's client declared a form elicitation."""
+    return _mcp_declares_form_elicitation(
+        meta.get(_MCP_META_CLIENT_CAPABILITIES),
+    )
+
+
+def _mcp_declares_form_elicitation(caps: object) -> bool:
+    """True when a capabilities block says the client can render a form.
 
     An empty `elicitation` object means form mode, which the protocol states
-    for compatibility with clients written before the modes existed.
+    for compatibility with clients written before the modes existed. The two
+    eras deliver their capabilities differently -- per request, or once at the
+    handshake -- and read them the same way.
     """
-    caps = meta.get(_MCP_META_CLIENT_CAPABILITIES)
     if not isinstance(caps, dict):
         return False
     elicitation = caps.get("elicitation")
@@ -12391,6 +12490,51 @@ def _mcp_confirmation_exchange(
     )
 
 
+def _mcp_legacy_confirmation(
+    tool_name: str,
+    arguments: dict,
+    *,
+    commands: dict[str, tuple[Command, str]],
+    session: _MCPLegacySession,
+    continuation: _MCPContinuation,
+    channel: _MCPChannel,
+) -> bool | None:
+    """Ask a legacy client to confirm, over a request the server sends.
+
+    Returns True when the client accepted, False when the exchange aborted,
+    and None when there was nothing to ask -- either the command is not
+    consequential, or this client never declared it could render the form, in
+    which case the call reaches the consent seam unconsented and gets its
+    refusal.
+
+    The continuation blob rides as the JSON-RPC request id: JSON-RPC obliges
+    the client to echo an id back verbatim, which is the same obligation the
+    modern era puts on `requestState`, so the correlation needs no second
+    mechanism. It is verified on return through the same path, and a matching
+    id that fails any of those checks confirms nothing.
+    """
+    entry = commands.get(tool_name)
+    if entry is None or not entry[0].consequential:
+        return None
+    if not _mcp_declares_form_elicitation(session.capabilities):
+        return None
+    principal = _mcp_principal_of(session.client_info)
+    digest = _mcp_request_digest("tools/call", tool_name, arguments)
+    state = continuation.mint(principal, digest)
+    channel.write({
+        "jsonrpc": "2.0", "id": state, **_mcp_confirmation_request(tool_name),
+    })
+    answer = channel.await_response(state)
+    if answer is None or "result" not in answer:
+        # A JSON-RPC error, or a stream that ended before an answer arrived.
+        # There is no re-ask in this era: the server is holding the request
+        # open, so a non-answer is a decision.
+        return False
+    if continuation.verify(state, principal, digest) is not None:
+        return False
+    return _mcp_confirmation_verdict(answer["result"]) == "accept"
+
+
 def _mcp_handle_tools_call(
     app: App,
     req_id: object,
@@ -12400,6 +12544,8 @@ def _mcp_handle_tools_call(
     commands: dict[str, tuple[Command, str]] | None = None,
     meta: dict | None = None,
     continuation: _MCPContinuation | None = None,
+    session: _MCPLegacySession | None = None,
+    channel: _MCPChannel | None = None,
 ) -> dict:
     """Handle the MCP 'tools/call' request."""
     if "name" not in params:
@@ -12444,6 +12590,26 @@ def _mcp_handle_tools_call(
         if isinstance(outcome_or_consent, dict):
             return outcome_or_consent
         approve_consequential = outcome_or_consent
+    elif (
+        not approve_consequential
+        and session is not None
+        and continuation is not None
+        and channel is not None
+    ):
+        answered = _mcp_legacy_confirmation(
+            tool_name, arguments,
+            commands=commands or {},
+            session=session,
+            continuation=continuation,
+            channel=channel,
+        )
+        if answered is False:
+            return _mcp_tool_result(
+                app, req_id, _msg_confirm_declined(), modern=False,
+                is_error=True,
+            )
+        if answered is True:
+            approve_consequential = True
 
     try:
         result = app._call_with_kwargs(
@@ -12476,15 +12642,20 @@ def _run_mcp_server(
 
     commands = _mcp_collect_commands(app)
     # The one piece of connection state a dual-era server is allowed: an
-    # `initialize` request selects legacy semantics for this process. Modern
-    # requests carry everything they need and never consult it.
-    legacy_era = False
+    # `initialize` request selects legacy semantics for this process and
+    # carries that client's declaration. Modern requests carry everything they
+    # need and never consult it.
+    session = _MCPLegacySession()
     # The continuation minting key and the spent-id set. Both are per process:
     # a blob is unforgeable outside this process and unusable twice inside it.
     continuation = _MCPContinuation()
+    channel = _MCPChannel(inp, out)
 
-    for line in inp:
-        line = line.strip()
+    while True:
+        raw = channel.next_line()
+        if raw is None:
+            break
+        line = raw.strip()
         if not line:
             continue
 
@@ -12492,9 +12663,7 @@ def _run_mcp_server(
             msg = json.loads(line)
         except json.JSONDecodeError:
             # Malformed JSON -- send parse error if we can
-            resp = _mcp_jsonrpc_error(None, -32700, "Parse error")
-            out.write(json.dumps(resp) + "\n")
-            out.flush()
+            channel.write(_mcp_jsonrpc_error(None, -32700, "Parse error"))
             continue
 
         # A non-object JSON value is a parse error, matching Go (which
@@ -12502,27 +12671,23 @@ def _run_mcp_server(
         # it would crash on the msg.get(...) calls below -- but it now redirects
         # to the same -32700 "Parse error" response instead of -32600.
         if not isinstance(msg, dict):
-            resp = _mcp_jsonrpc_error(None, -32700, "Parse error")
-            out.write(json.dumps(resp) + "\n")
-            out.flush()
+            channel.write(_mcp_jsonrpc_error(None, -32700, "Parse error"))
             continue
 
         req_id = msg.get("id")
         method = msg.get("method", "")
         params = msg.get("params", {})
 
-        # Notifications have no 'id' -- don't send a response
-        if "id" not in msg:
+        # Notifications have no 'id' -- don't send a response. Neither does a
+        # response the client sent when this server asked for none.
+        if "id" not in msg or "result" in msg or "error" in msg:
             continue
 
         if not isinstance(params, dict):
             params = {}
 
         if method == "initialize":
-            legacy_era = True
-            resp = _mcp_handle_initialize(app, req_id)
-            out.write(json.dumps(resp) + "\n")
-            out.flush()
+            channel.write(_mcp_handle_initialize(app, req_id, params, session))
             continue
 
         meta = params.get("_meta")
@@ -12535,8 +12700,11 @@ def _run_mcp_server(
             resp = _mcp_dispatch_modern(
                 app, commands, req_id, method, params, meta, continuation,
             )
-        elif legacy_era:
-            resp = _mcp_dispatch_legacy(app, commands, req_id, method, params)
+        elif session.active:
+            resp = _mcp_dispatch_legacy(
+                app, commands, req_id, method, params,
+                session=session, continuation=continuation, channel=channel,
+            )
         else:
             resp = _mcp_jsonrpc_error(
                 req_id, _MCP_ERR_INVALID_PARAMS,
@@ -12544,8 +12712,7 @@ def _run_mcp_server(
                 f"_meta['{_MCP_META_PROTOCOL_VERSION}']",
             )
 
-        out.write(json.dumps(resp) + "\n")
-        out.flush()
+        channel.write(resp)
 
 
 def _mcp_dispatch_modern(
@@ -12588,12 +12755,19 @@ def _mcp_dispatch_legacy(
     req_id: object,
     method: str,
     params: dict,
+    *,
+    session: _MCPLegacySession,
+    continuation: _MCPContinuation,
+    channel: _MCPChannel,
 ) -> dict:
-    """Dispatch one legacy-era request, unchanged from the handshake revision."""
+    """Dispatch one legacy-era request, in that revision's own shapes."""
     if method == "tools/list":
         return _mcp_handle_tools_list(app, commands, req_id, modern=False)
     if method == "tools/call":
-        return _mcp_handle_tools_call(app, req_id, params, modern=False)
+        return _mcp_handle_tools_call(
+            app, req_id, params, modern=False, commands=commands,
+            session=session, continuation=continuation, channel=channel,
+        )
     return _mcp_jsonrpc_error(
         req_id, _MCP_ERR_METHOD_NOT_FOUND, f"Method not found: {method}",
     )

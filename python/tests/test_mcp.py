@@ -86,8 +86,11 @@ class TestMcpInitialize:
         assert resp["jsonrpc"] == "2.0"
         assert resp["id"] == 1
         result = resp["result"]
-        assert result["protocolVersion"] == "2024-11-05"
-        assert result["capabilities"] == {"tools": {}}
+        assert result["protocolVersion"] == "2025-11-25"
+        assert result["capabilities"] == {
+            "tools": {},
+            "experimental": {"dev.smmh.strictcli/consequential-confirmation": {}},
+        }
         assert result["serverInfo"]["name"] == "myapp"
         assert result["serverInfo"]["version"] == "1.0.0"
 
@@ -1048,7 +1051,7 @@ class TestMcpEraSelection:
             {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
             era="legacy",
         )
-        assert responses[0]["result"]["protocolVersion"] == "2024-11-05"
+        assert responses[0]["result"]["protocolVersion"] == "2025-11-25"
         legacy_list = responses[1]["result"]
         assert "resultType" not in legacy_list
         assert "ttlMs" not in legacy_list
@@ -1276,6 +1279,153 @@ class TestMcpConfirmationRoundTrip:
         ))
         assert resp["result"]["resultType"] == "complete"
         assert "isError" not in resp["result"]
+
+
+def _handshake(*, elicitation=True, name="cli", version="1.0.0"):
+    """The legacy opener: in that era the handshake IS the client's declaration."""
+    caps = {"elicitation": {"form": {}}} if elicitation else {}
+    return {
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {
+            "capabilities": caps,
+            "clientInfo": {"name": name, "version": version},
+        },
+    }
+
+
+def _legacy_call(req_id, tool="release", **params):
+    """A legacy tools/call: no per-request metadata, because that era has none."""
+    params.setdefault("arguments", {})
+    params["name"] = tool
+    return {
+        "jsonrpc": "2.0", "id": req_id, "method": "tools/call", "params": params,
+    }
+
+
+def _answer(seen, result):
+    """Answer the elicitation the server just sent, echoing its id."""
+    return {"jsonrpc": "2.0", "id": seen[-1]["id"], "result": result}
+
+
+class TestMcpLegacyConfirmation:
+    """The handshake era asks with a request of its own, and shares the state."""
+
+    def test_a_consequential_call_is_asked_over_a_server_request(self):
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _legacy_call(2),
+            lambda seen: _answer(
+                seen, {"action": "accept", "content": {"proceed": True}},
+            ),
+        )
+        ask = responses[1]
+        assert ask["method"] == "elicitation/create"
+        assert ask["params"]["mode"] == "form"
+        assert ask["params"]["message"] == (
+            "about to run consequential command 'release'. Proceed?"
+        )
+        assert ask["params"]["requestedSchema"]["required"] == ["proceed"]
+        # The correlation id IS the continuation blob: one mint-and-verify path,
+        # two delivery vehicles.
+        assert isinstance(ask["id"], str) and "." in ask["id"]
+        result = responses[2]["result"]
+        assert "resultType" not in result
+        assert "isError" not in result
+        assert json.loads(result["content"][0]["text"]) == {"released": True}
+
+    @pytest.mark.parametrize("answer", [
+        {"action": "decline"},
+        {"action": "cancel"},
+        {"action": "accept", "content": {"proceed": False}},
+        {"action": "accept"},
+        "not an elicitation result",
+    ])
+    def test_anything_but_an_acceptance_aborts(self, answer):
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _legacy_call(2),
+            lambda seen: _answer(seen, answer),
+        )
+        result = responses[2]["result"]
+        assert result["isError"] is True
+        assert result["content"][0]["text"] == "aborted"
+
+    def test_an_error_response_aborts(self):
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _legacy_call(2),
+            lambda seen: {
+                "jsonrpc": "2.0", "id": seen[-1]["id"],
+                "error": {"code": -32601, "message": "Method not found"},
+            },
+        )
+        assert responses[2]["result"]["isError"] is True
+
+    def test_an_answer_under_an_id_the_server_never_minted_confirms_nothing(self):
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _legacy_call(2),
+            lambda seen: {
+                "jsonrpc": "2.0", "id": "not-the-blob",
+                "result": {"action": "accept", "content": {"proceed": True}},
+            },
+        )
+        # The stray response is discarded; the stream then ends without an
+        # answer, which aborts.
+        assert responses[2]["result"]["isError"] is True
+        assert responses[2]["result"]["content"][0]["text"] == "aborted"
+
+    def test_a_client_that_cannot_be_asked_gets_the_seams_refusal(self):
+        responses = _Session(_confirming_app()).run(
+            _handshake(elicitation=False),
+            _legacy_call(2),
+        )
+        result = responses[1]["result"]
+        assert result["isError"] is True
+        assert result["content"][0]["text"] == (
+            "command 'release' is consequential: the call must carry confirmation"
+        )
+
+    def test_a_read_only_call_is_never_asked_about(self):
+        responses = _Session(_confirming_app()).run(
+            _handshake(), _legacy_call(2, tool="look"),
+        )
+        assert len(responses) == 2
+        assert json.loads(
+            responses[1]["result"]["content"][0]["text"]) == {"looked": True}
+
+    def test_a_stated_consent_proceeds_without_asking(self):
+        responses = _Session(_confirming_app()).run(
+            _handshake(), _legacy_call(2, approve_consequential=True),
+        )
+        assert len(responses) == 2
+        assert "isError" not in responses[1]["result"]
+
+    def test_traffic_arriving_mid_exchange_is_held_not_dropped(self):
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _legacy_call(2),
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/list", "params": {}},
+            lambda seen: _answer(
+                seen, {"action": "accept", "content": {"proceed": True}},
+            ),
+        )
+        # handshake, the elicitation, the tool result, and the interrupted
+        # tools/list -- served after the call it interrupted, never dropped.
+        assert [r.get("id") for r in responses][0] == 1
+        assert responses[1]["method"] == "elicitation/create"
+        assert responses[2]["id"] == 2
+        assert responses[3]["id"] == 3
+        assert [t["name"] for t in responses[3]["result"]["tools"]] == [
+            "release", "look",
+        ]
+
+    def test_a_modern_call_is_still_asked_the_modern_way_after_a_handshake(self):
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _call_request(2, name="release", arguments={}),
+        )
+        assert responses[1]["result"]["resultType"] == "input_required"
 
 
 class TestMcpContinuationState:
