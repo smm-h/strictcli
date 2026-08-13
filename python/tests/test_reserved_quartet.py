@@ -113,14 +113,15 @@ class TestReservedNameBan:
 def _quartet_app():
     app = strictcli.App(name="app", version="1.0.0", help="app")
 
-    @app.command("run", effect="read_only", help="run")
+    @app.command("run", effect="read_only", help="run", payload_schema={})
     def _run(ctx):
-        return strictcli.outcome(data={
+        ctx.payload({
             "dry_run": ctx.dry_run,
             "approve_consequential": ctx.approve_consequential,
             "quiet": ctx.quiet,
             "verbose": ctx.verbose,
         })
+        return strictcli.outcome()
 
     return app
 
@@ -199,9 +200,10 @@ class TestDelivery:
         outer = app.group("outer", help="outer")
         inner = outer.group("inner", help="inner")
 
-        @inner.command("run", effect="read_only", help="run")
+        @inner.command("run", effect="read_only", help="run", payload_schema={})
         def _run(ctx):
-            return strictcli.outcome(data={"dry_run": ctx.dry_run})
+            ctx.payload({"dry_run": ctx.dry_run})
+            return strictcli.outcome()
 
         r = app.test(["outer", "inner", "run", "--dry-run"])
         assert r.exit_code == 0
@@ -211,9 +213,10 @@ class TestDelivery:
         app = strictcli.App(name="app", version="1.0.0", help="app")
         grp = app.group("grp", help="grp")
 
-        @grp.command("run", effect="read_only", help="run")
+        @grp.command("run", effect="read_only", help="run", payload_schema={})
         def _run(ctx):
-            return strictcli.outcome(data={"dry_run": ctx.dry_run})
+            ctx.payload({"dry_run": ctx.dry_run})
+            return strictcli.outcome()
 
         r = app.test(["grp", "--dry-run", "run"])
         assert r.exit_code == 0
@@ -224,9 +227,10 @@ class TestDelivery:
         app = strictcli.App(name="app", version="1.0.0", help="app")
 
         @app.command("run", effect="read_only", help="run",
-                     args=[strictcli.Arg(name="name", help="a positional")])
+                     args=[strictcli.Arg(name="name", help="a positional")], payload_schema={})
         def _run(ctx, name):
-            return strictcli.outcome(data={"name": name, "quiet": ctx.quiet})
+            ctx.payload({"name": name, "quiet": ctx.quiet})
+            return strictcli.outcome()
 
         r = app.test(["run", "--quiet", "value"])
         assert r.exit_code == 0
@@ -238,9 +242,10 @@ class TestDelivery:
 
         @app.command("run", effect="read_only", help="run",
                      args=[strictcli.Arg(name="rest", help="trailing args",
-                                         variadic=True)])
+                                         variadic=True)], payload_schema={})
         def _run(ctx, rest):
-            return strictcli.outcome(data={"rest": rest, "dry_run": ctx.dry_run})
+            ctx.payload({"rest": rest, "dry_run": ctx.dry_run})
+            return strictcli.outcome()
 
         r = app.test(["run", "--", "--dry-run"])
         assert r.exit_code == 0
@@ -367,14 +372,17 @@ class TestGating:
         assert r.stdout == ""
         assert r.stderr == "W\nE\n"
 
-    def test_quiet_never_suppresses_structured_data(self):
+    def test_quiet_never_suppresses_the_machine_payload(self):
+        """--quiet cannot reach the payload: it is not written through the
+        writers quiet suppresses (contract §19.2, §7.4's amendment)."""
         app = strictcli.App(name="app", version="1.0.0", help="app")
 
-        @app.command("run", effect="read_only", help="run")
+        @app.command("run", effect="read_only", help="run", payload_schema={})
         def _r(ctx):
-            return strictcli.outcome(data={"k": 1})
+            ctx.payload({"k": 1})
+            return strictcli.outcome()
 
-        r = app.test(["--quiet", "run"])
+        r = app.test(["--quiet", "--json", "run"])
         assert r.data == {"k": 1}
         assert '{"k":1}' in r.stdout
 

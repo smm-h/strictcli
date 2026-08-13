@@ -212,7 +212,7 @@ class TestPassthroughWithMutexRaisesValueError:
     def test_mutex(self):
         pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
         mg = strictcli.MutexGroup(flags=[
-            strictcli.Flag(name="json", type=bool, default=False, help="json output"),
+            strictcli.Flag(name="as-json", type=bool, default=False, help="json output"),
             strictcli.Flag(name="yaml", type=bool, default=False, help="yaml output"),
         ])
         app = _build_app()

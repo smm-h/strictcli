@@ -459,18 +459,19 @@ class TestCheckCommandVerboseNotes:
         # Both checks are pure, so both ran and nothing is left to plan.
         assert "Would run 0 checks:" in result.stdout
 
-    def test_check_no_longer_declares_verbose_or_dry_run_flags(self, tmp_path, monkeypatch):
-        """--verbose and --dry-run are framework-owned reserved names, so the
-        check command's own two flags are dropped and the values are read off
-        the Context (subsumption)."""
+    def test_check_no_longer_declares_verbose_dry_run_or_json_flags(self, tmp_path, monkeypatch):
+        """--verbose, --dry-run and --json are framework-owned reserved names,
+        so the check command's own three flags are dropped and the values are
+        read off the Context (subsumption, contract §7.5)."""
         app = _setup_checks_app(tmp_path, monkeypatch, TWO_CHECKS_TOML)
         check_cmd = app._commands["check"]
         names = {f.name for f in check_cmd.flags}
-        assert names == {"all", "tag", "name", "list", "json", "ignore-warnings"}
+        assert names == {"all", "tag", "name", "list", "ignore-warnings"}
         result = app.test(["check", "--help"])
         assert result.exit_code == 0
         assert "--verbose" not in result.stdout
         assert "--dry-run" not in result.stdout
+        assert "--json" not in result.stdout
 
     def test_json_includes_notes_and_duration(self, tmp_path, monkeypatch):
         app = _setup_checks_app(

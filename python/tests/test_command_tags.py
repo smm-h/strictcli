@@ -242,11 +242,11 @@ class TestTagContracts:
 
     def test_contract_satisfied(self):
         app = _make_app()
-        app.tag_contract("json", requires_flag="json")
+        app.tag_contract("json", requires_flag="as-json")
 
         @app.command("cmd", effect="read_only", help="a command", tags={"json"})
-        @strictcli.flag("json", type=bool, default=False, help="output json")
-        def cmd(ctx, json):
+        @strictcli.flag("as-json", type=bool, default=False, help="output json")
+        def cmd(ctx, as_json):
             pass
 
         result = app.test(["cmd"])
@@ -254,7 +254,7 @@ class TestTagContracts:
 
     def test_contract_violated(self):
         app = _make_app()
-        app.tag_contract("json", requires_flag="json")
+        app.tag_contract("json", requires_flag="as-json")
 
         @app.command("foo", effect="read_only", help="a command", tags={"json"})
         def foo(ctx):
@@ -266,7 +266,7 @@ class TestTagContracts:
 
     def test_contract_error_message_exact(self):
         app = _make_app()
-        app.tag_contract("json", requires_flag="json")
+        app.tag_contract("json", requires_flag="as-json")
 
         @app.command("foo", effect="read_only", help="a command", tags={"json"})
         def foo(ctx):
@@ -274,11 +274,11 @@ class TestTagContracts:
 
         result = app.test(["foo"])
         assert result.exit_code == 1
-        assert 'command "foo": tag "json" requires flag "--json"' in result.stderr
+        assert 'command "foo": tag "json" requires flag "--as-json"' in result.stderr
 
     def test_contract_on_inherited_tag(self):
         app = _make_app()
-        app.tag_contract("json", requires_flag="json")
+        app.tag_contract("json", requires_flag="as-json")
         grp = app.group("grp", help="a group", tags={"json"})
 
         @grp.command("cmd", effect="read_only", help="a command")
@@ -287,11 +287,11 @@ class TestTagContracts:
 
         result = app.test(["grp", "cmd"])
         assert result.exit_code == 1
-        assert 'requires flag "--json"' in result.stderr
+        assert 'requires flag "--as-json"' in result.stderr
 
     def test_contract_untagged_not_checked(self):
         app = _make_app()
-        app.tag_contract("json", requires_flag="json")
+        app.tag_contract("json", requires_flag="as-json")
 
         @app.command("cmd", effect="read_only", help="a command")
         def cmd(ctx):
@@ -302,7 +302,7 @@ class TestTagContracts:
 
     def test_contract_passthrough_exempt(self):
         app = _make_app()
-        app.tag_contract("json", requires_flag="json")
+        app.tag_contract("json", requires_flag="as-json")
         grp = app.group("grp", help="a group", tags={"json"})
 
         @grp.command("run", effect="read_only", help="run something",
@@ -322,20 +322,20 @@ class TestTagContracts:
         def foo(ctx):
             pass
 
-        app.tag_contract("json", requires_flag="json")
+        app.tag_contract("json", requires_flag="as-json")
 
         result = app.test(["foo"])
         assert result.exit_code == 1
-        assert 'requires flag "--json"' in result.stderr
+        assert 'requires flag "--as-json"' in result.stderr
 
     def test_contract_satisfied_by_global_flag(self):
         app = _make_app(
-            flags=[strictcli.Flag(name="json", type=bool, default=False, help="output json")]
+            flags=[strictcli.Flag(name="as-json", type=bool, default=False, help="output json")]
         )
-        app.tag_contract("json", requires_flag="json")
+        app.tag_contract("json", requires_flag="as-json")
 
         @app.command("cmd", effect="read_only", help="a command", tags={"json"})
-        def cmd(ctx, json):
+        def cmd(ctx, as_json):
             pass
 
         result = app.test(["cmd"])
@@ -344,13 +344,13 @@ class TestTagContracts:
     def test_contract_multiple(self):
         # Both contracts satisfied: should pass
         app_good = _make_app()
-        app_good.tag_contract("json", requires_flag="json")
+        app_good.tag_contract("json", requires_flag="as-json")
         app_good.tag_contract("loud", requires_flag="loud")
 
         @app_good.command("good", effect="read_only", help="has both flags", tags={"json", "loud"})
-        @strictcli.flag("json", type=bool, default=False, help="output json")
+        @strictcli.flag("as-json", type=bool, default=False, help="output json")
         @strictcli.flag("loud", type=bool, default=False, help="be loud")
-        def good(ctx, json, loud):
+        def good(ctx, as_json, loud):
             pass
 
         result = app_good.test(["good"])
@@ -358,12 +358,12 @@ class TestTagContracts:
 
         # One contract violated: should fail
         app_bad = _make_app()
-        app_bad.tag_contract("json", requires_flag="json")
+        app_bad.tag_contract("json", requires_flag="as-json")
         app_bad.tag_contract("loud", requires_flag="loud")
 
         @app_bad.command("bad", effect="read_only", help="missing loud flag", tags={"json", "loud"})
-        @strictcli.flag("json", type=bool, default=False, help="output json")
-        def bad(ctx, json):
+        @strictcli.flag("as-json", type=bool, default=False, help="output json")
+        def bad(ctx, as_json):
             pass
 
         result = app_bad.test(["bad"])

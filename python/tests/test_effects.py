@@ -169,12 +169,13 @@ class TestWouldDoLog:
     def test_log_follows_structured_handler_output(self):
         app = _app()
 
-        @app.command("rel", help="rel", effect="mutating")
+        @app.command("rel", help="rel", effect="mutating", payload_schema={})
         def _rel(ctx):
             ctx.effects.mkdir("build")
-            return sc.outcome(data={"planned": True})
+            ctx.payload({"planned": True})
+            return sc.outcome()
 
-        r = app.test(["--dry-run", "rel"])
+        r = app.test(["--dry-run", "--json", "rel"])
         lines = r.stdout.splitlines()
         assert lines[0] == '{"planned":true}'
         assert lines[1] == "DRY RUN — no changes were made. Would do:"
@@ -838,10 +839,11 @@ class TestObserves:
     def test_observe_is_allowed_in_a_read_only_command(self):
         app = _app(proc_observe_allowlist=[[PY, "-c"]])
 
-        @app.command("look", help="look", effect="read_only")
+        @app.command("look", help="look", effect="read_only", payload_schema={})
         def _look(ctx):
             out = ctx.effects.run([PY, "-c", "print('ok')"])
-            return sc.outcome(data={"stdout": out.stdout})
+            ctx.payload({"stdout": out.stdout})
+            return sc.outcome()
 
         r = app.test(["look"])
         assert r.data == {"stdout": "ok"}
@@ -1217,10 +1219,11 @@ class TestLiveExecution:
     def test_run_captures_decoded_output(self):
         app = _app()
 
-        @app.command("rel", help="rel", effect="mutating")
+        @app.command("rel", help="rel", effect="mutating", payload_schema={})
         def _rel(ctx):
             out = ctx.effects.run([PY, "-c", "print('hi')"])
-            return sc.outcome(data={"stdout": out.stdout, "code": out.exit_code})
+            ctx.payload({"stdout": out.stdout, "code": out.exit_code})
+            return sc.outcome()
 
         assert app.test(["rel"]).data == {"stdout": "hi", "code": 0}
 
@@ -1240,10 +1243,11 @@ class TestLiveExecution:
     def test_check_false_returns_the_status(self):
         app = _app()
 
-        @app.command("rel", help="rel", effect="mutating")
+        @app.command("rel", help="rel", effect="mutating", payload_schema={})
         def _rel(ctx):
             out = ctx.effects.run([PY, "-c", "raise SystemExit(3)"], check=False)
-            return sc.outcome(data={"code": out.exit_code})
+            ctx.payload({"code": out.exit_code})
+            return sc.outcome()
 
         assert app.test(["rel"]).data == {"code": 3}
 
@@ -1268,34 +1272,37 @@ class TestLiveExecution:
         monkeypatch.setenv("KEEP_ME", "kept")
         app = _app()
 
-        @app.command("rel", help="rel", effect="mutating")
+        @app.command("rel", help="rel", effect="mutating", payload_schema={})
         def _rel(ctx):
             out = ctx.effects.run([
                 PY, "-c",
                 "import os; print(os.environ['KEEP_ME'], os.environ['EXTRA'])",
             ], env={"EXTRA": "added"})
-            return sc.outcome(data={"stdout": out.stdout})
+            ctx.payload({"stdout": out.stdout})
+            return sc.outcome()
 
         assert app.test(["rel"]).data == {"stdout": "kept added"}
 
     def test_stream_leaves_captured_output_empty(self):
         app = _app()
 
-        @app.command("rel", help="rel", effect="mutating")
+        @app.command("rel", help="rel", effect="mutating", payload_schema={})
         def _rel(ctx):
             out = ctx.effects.run([PY, "-c", "pass"], stream=True)
-            return sc.outcome(data={"stdout": out.stdout, "stderr": out.stderr})
+            ctx.payload({"stdout": out.stdout, "stderr": out.stderr})
+            return sc.outcome()
 
         assert app.test(["rel"]).data == {"stdout": "", "stderr": ""}
 
     def test_spawn_and_wait(self):
         app = _app()
 
-        @app.command("rel", help="rel", effect="mutating")
+        @app.command("rel", help="rel", effect="mutating", payload_schema={})
         def _rel(ctx):
             s = ctx.effects.spawn([PY, "-c", "pass"])
             done = s.wait()
-            return sc.outcome(data={"code": done.exit_code, "has_pid": s.pid > 0})
+            ctx.payload({"code": done.exit_code, "has_pid": s.pid > 0})
+            return sc.outcome()
 
         assert app.test(["rel"]).data == {"code": 0, "has_pid": True}
 
@@ -1315,10 +1322,11 @@ class TestLiveExecution:
     def test_spawn_wait_check_false(self):
         app = _app()
 
-        @app.command("rel", help="rel", effect="mutating")
+        @app.command("rel", help="rel", effect="mutating", payload_schema={})
         def _rel(ctx):
             done = ctx.effects.spawn([PY, "-c", "raise SystemExit(4)"]).wait(check=False)
-            return sc.outcome(data={"code": done.exit_code})
+            ctx.payload({"code": done.exit_code})
+            return sc.outcome()
 
         assert app.test(["rel"]).data == {"code": 4}
 

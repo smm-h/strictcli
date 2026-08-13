@@ -345,39 +345,39 @@ def test_dependency_with_mutex_interaction():
     """A flag can participate in both a mutex group and a dependency."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+            strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
             strictcli.Flag(name="csv", type=bool, default=False, help="CSV output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     # --output requires that one of the format flags is set (tested via
-    # Requires on --json). The mutex ensures only one format flag is used.
+    # Requires on --as-json). The mutex ensures only one format flag is used.
     @app.command(
         "cmd", effect="read_only", help="a command",
         mutex=[mg],
-        dependencies=[strictcli.Requires(flag="output", depends_on="json")],
+        dependencies=[strictcli.Requires(flag="output", depends_on="as-json")],
     )
     @strictcli.flag("output", type=str, help="output path", default="")
-    def cmd(ctx, output, json, csv):
-        print(f"output={output} json={json} csv={csv}")
+    def cmd(ctx, output, as_json, csv):
+        print(f"output={output} json={as_json} csv={csv}")
 
-    # --json alone -> ok
-    r = app.test(["cmd", "--json"])
+    # --as-json alone -> ok
+    r = app.test(["cmd", "--as-json"])
     assert r.exit_code == 0
 
-    # --output with --json -> ok
-    r = app.test(["cmd", "--output", "file.txt", "--json"])
+    # --output with --as-json -> ok
+    r = app.test(["cmd", "--output", "file.txt", "--as-json"])
     assert r.exit_code == 0
     assert "output=file.txt" in r.stdout
     assert "json=True" in r.stdout
 
-    # --output without --json -> error (requires)
+    # --output without --as-json -> error (requires)
     r = app.test(["cmd", "--output", "file.txt", "--csv"])
     assert r.exit_code == 1
     assert "requires" in r.stderr
     assert "--output" in r.stderr
-    assert "--json" in r.stderr
+    assert "--as-json" in r.stderr
 
 
 # ---------------------------------------------------------------------------

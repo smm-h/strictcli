@@ -114,34 +114,52 @@ class TestOutcomeConstruction:
 
     def test_direct_construction_forbidden(self):
         with pytest.raises(TypeError, match="cannot be constructed directly"):
-            strictcli.Outcome(exit_code=0, data=None)
+            strictcli.Outcome(exit_code=0)
 
     def test_factory_builds_outcome(self):
-        oc = strictcli.outcome(exit_code=2, data={"k": 1})
+        oc = strictcli.outcome(exit_code=2)
         assert isinstance(oc, strictcli.Outcome)
         assert oc.exit_code == 2
-        assert oc.data == {"k": 1}
 
     def test_factory_defaults(self):
         oc = strictcli.outcome()
         assert oc.exit_code == 0
-        assert oc.data is None
+
+    def test_factory_rejects_a_data_argument(self):
+        """The bare-JSON-print data channel is gone (contract §19.4)."""
+        with pytest.raises(TypeError):
+            strictcli.outcome(data={"k": 1})
 
 
 class TestOutcomeDataViaTest:
-    """test() captures Outcome data and JSON-prints it to stdout."""
+    """test() captures the machine payload and prints it in machine mode."""
 
     def test_outcome_data_captured_and_printed(self):
         app = _build_app()
 
-        @app.command("data", effect="read_only", help="return data")
+        @app.command("data", effect="read_only", help="return data", payload_schema={})
         def data(ctx):
-            return strictcli.outcome(data={"result": 42})
+            ctx.payload({"result": 42})
+            return strictcli.outcome()
+
+        result = app.test(["data", "--json"])
+        assert result.exit_code == 0
+        assert result.data == {"result": 42}
+        assert json.loads(result.stdout) == {"result": 42}
+
+    def test_payload_is_captured_but_not_printed_outside_machine_mode(self):
+        app = _build_app()
+
+        @app.command("data", effect="read_only", help="return data",
+                     payload_schema={})
+        def data(ctx):
+            ctx.payload({"result": 42})
+            return strictcli.outcome()
 
         result = app.test(["data"])
         assert result.exit_code == 0
         assert result.data == {"result": 42}
-        assert json.loads(result.stdout) == {"result": 42}
+        assert result.stdout == ""
 
     def test_outcome_exit_code_only(self):
         app = _build_app()
@@ -158,11 +176,12 @@ class TestOutcomeDataViaTest:
     def test_outcome_exit_code_and_data(self):
         app = _build_app()
 
-        @app.command("both", effect="read_only", help="both")
+        @app.command("both", effect="read_only", help="both", payload_schema={})
         def both(ctx):
-            return strictcli.outcome(exit_code=1, data=[1, 2, 3])
+            ctx.payload([1, 2, 3])
+            return strictcli.outcome(exit_code=1)
 
-        result = app.test(["both"])
+        result = app.test(["both", "--json"])
         assert result.exit_code == 1
         assert result.data == [1, 2, 3]
         assert json.loads(result.stdout) == [1, 2, 3]
@@ -246,10 +265,11 @@ class TestOutcomeViaCall:
     def test_call_returns_outcome_data(self):
         app = _build_app()
 
-        @app.command("compute", effect="read_only", help="compute")
+        @app.command("compute", effect="read_only", help="compute", payload_schema={})
         @strictcli.flag("x", type=int, help="value")
         def compute(ctx, x):
-            return strictcli.outcome(data={"squared": x * x})
+            ctx.payload({"squared": x * x})
+            return strictcli.outcome()
 
         assert app.call("compute", x=5) == {"squared": 25}
 
@@ -309,11 +329,12 @@ class TestContextWithInvoke:
         app = _build_app()
         captured = {}
 
-        @app.command("cmd", effect="read_only", help="test")
+        @app.command("cmd", effect="read_only", help="test", payload_schema={})
         @strictcli.flag("x", type=int, help="value")
         def cmd(ctx, x):
             captured["x"] = x
-            return strictcli.outcome(data={"doubled": x * 2})
+            ctx.payload({"doubled": x * 2})
+            return strictcli.outcome()
 
         result = app._invoke("cmd", {"x": 3})
         assert result == {"doubled": 6}

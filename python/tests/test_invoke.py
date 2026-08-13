@@ -488,16 +488,16 @@ class TestInvokeMutex:
             "fmt", effect="read_only", help="format",
             mutex=[strictcli.MutexGroup(
                 flags=[
-                    strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+                    strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
                     strictcli.Flag(name="yaml", type=bool, default=False, help="YAML output"),
                 ],
             )],
         )
-        def fmt(ctx, json, yaml):
+        def fmt(ctx, as_json, yaml):
             pass
 
         with pytest.raises(Exception, match="mutually exclusive"):
-            app._invoke("fmt", {"json": True, "yaml": True})
+            app._invoke("fmt", {"as_json": True, "yaml": True})
 
     def test_mutex_one_provided(self):
         captured = {}
@@ -507,15 +507,15 @@ class TestInvokeMutex:
             "fmt", effect="read_only", help="format",
             mutex=[strictcli.MutexGroup(
                 flags=[
-                    strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+                    strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
                     strictcli.Flag(name="yaml", type=bool, default=False, help="YAML output"),
                 ],
             )],
         )
-        def fmt(ctx, json, yaml):
-            captured.update({"json": json, "yaml": yaml})
+        def fmt(ctx, as_json, yaml):
+            captured.update({"json": as_json, "yaml": yaml})
 
-        app._invoke("fmt", {"json": True})
+        app._invoke("fmt", {"as_json": True})
         assert captured["json"] is True
         assert captured["yaml"] is False  # bool mutex non-selected gets default False
 

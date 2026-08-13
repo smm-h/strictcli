@@ -764,26 +764,30 @@ def test_config_show_json_bool_values(tmp_path, monkeypatch):
     assert data["count"]["source"] == "config"
 
 
-# --- config show no-flags error ---
+# --- config show without flags ---
 
-def test_config_show_no_flags_error(tmp_path, monkeypatch):
-    """config show without --plain or --json errors."""
+def test_config_show_no_flags_prints_the_table(tmp_path, monkeypatch):
+    """config show prints the human table when machine mode is off.
+
+    The old "one of --plain, --json is required" mutex is gone with the local
+    --json flag: --json is framework-owned now (contract §7.5's sweep box), so
+    it cannot take part in a command-local mutex group.
+    """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_app(config=True)
     r = app.test(["config", "show"])
-    assert r.exit_code == 1
-    assert "one of --plain, --json is required" in r.stderr
+    assert r.exit_code == 0
+    assert "target = " in r.stdout
 
 
-# --- config show both-flags error ---
-
-def test_config_show_both_flags_error(tmp_path, monkeypatch):
-    """config show with both --plain and --json errors (mutex)."""
+def test_config_show_plain_with_machine_mode_yields_the_payload(tmp_path, monkeypatch):
+    """--plain no longer competes with --json: machine mode wins."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_app(config=True)
     r = app.test(["config", "show", "--plain", "--json"])
-    assert r.exit_code == 1
-    assert "mutually exclusive" in r.stderr
+    assert r.exit_code == 0
+    data = json.loads(r.stdout)
+    assert data["target"]["source"] == "default"
 
 
 # --- config array coercion for repeatable flags ---

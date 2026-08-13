@@ -114,8 +114,8 @@ class TestFrameworkInternalClassification:
         with pytest.raises(ValueError, match='collides with a global flag'):
             strictcli.App(
                 name="app", version="1.0.0", help="app", config=True,
-                flags=[strictcli.Flag(name="json", type=bool, default=False,
-                                      help="json output")],
+                flags=[strictcli.Flag(name="plain", type=bool, default=False,
+                                      help="plain output")],
             )
 
     def test_config_set_still_parses_its_args_and_flags(self, tmp_path):

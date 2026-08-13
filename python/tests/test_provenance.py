@@ -11,19 +11,19 @@ def test_mutex_default_source_not_present_cli():
     """A flag with source=default should NOT be 'present' for mutex evaluation."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+            strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
             strictcli.Flag(name="text", type=bool, default=False, help="text output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("out", effect="read_only", help="output command", mutex=[mg])
-    def out(ctx, json, text):
-        print(f"json={json} text={text}")
+    def out(ctx, as_json, text):
+        print(f"json={as_json} text={text}")
 
-    # Provide only --json. --text has Default(False), so it gets source=default.
-    # Mutex should see only --json as "present" and NOT fire.
-    r = app.test(["out", "--json"])
+    # Provide only --as-json. --text has Default(False), so it gets source=default.
+    # Mutex should see only --as-json as "present" and NOT fire.
+    r = app.test(["out", "--as-json"])
     assert r.exit_code == 0, f"expected success, got: {r.stderr}"
 
 
@@ -31,20 +31,20 @@ def test_mutex_default_source_not_present_invoke():
     """Invoke path: absent kwarg gets source=default, not present for mutex."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+            strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
             strictcli.Flag(name="text", type=bool, default=False, help="text output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("out", effect="read_only", help="output command", mutex=[mg])
-    def out(ctx, json, text):
-        print(f"json={json} text={text}")
+    def out(ctx, as_json, text):
+        print(f"json={as_json} text={text}")
 
     # Provide only "json" via invoke. "text" is absent, gets defaulted.
     # Should succeed -- default does not trigger mutex.
     # call() returns None when handler returns None (print returns None).
-    app.call("out", json=True)
+    app.call("out", as_json=True)
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ def test_mutex_implied_source_not_present():
     """A flag with source=implied should NOT be 'present' for mutex evaluation."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=bool, default=None, help="JSON output"),
+            strictcli.Flag(name="as-json", type=bool, default=None, help="JSON output"),
             strictcli.Flag(name="text", type=bool, default=None, help="text output"),
         ],
     )
@@ -69,12 +69,12 @@ def test_mutex_implied_source_not_present():
         ],
     )
     @strictcli.flag("loud", type=bool, default=False, help="loud mode")
-    def out(ctx, json, text, loud):
-        print(f"json={json} text={text}")
+    def out(ctx, as_json, text, loud):
+        print(f"json={as_json} text={text}")
 
-    # Provide --json and --loud. --loud implies --text=True (source=implied).
-    # Mutex should see only --json as present, NOT fire.
-    r = app.test(["out", "--json", "--loud"])
+    # Provide --as-json and --loud. --loud implies --text=True (source=implied).
+    # Mutex should see only --as-json as present, NOT fire.
+    r = app.test(["out", "--as-json", "--loud"])
     assert r.exit_code == 0, f"expected success, got: {r.stderr}"
 
 
@@ -92,19 +92,19 @@ def test_mutex_cli_and_config_both_present():
     """
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=str, default=None, help="JSON output"),
+            strictcli.Flag(name="as-json", type=str, default=None, help="JSON output"),
             strictcli.Flag(name="text", type=str, default=None, help="text output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("out", effect="read_only", help="output command", mutex=[mg])
-    def out(ctx, json, text):
-        print(f"json={json} text={text}")
+    def out(ctx, as_json, text):
+        print(f"json={as_json} text={text}")
 
     # Provide both via invoke (both SourceCLI). Should error.
     try:
-        app.call("out", json="data", text="data")
+        app.call("out", as_json="data", text="data")
         assert False, "expected InvokeError"
     except strictcli.InvokeError as e:
         assert "mutually exclusive" in str(e)
@@ -174,18 +174,18 @@ def test_invoke_mutex_provided_kwarg_is_cli_source():
     """Invoke: provided kwargs are SourceCLI, count for mutex."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=str, default=None, help="JSON output"),
+            strictcli.Flag(name="as-json", type=str, default=None, help="JSON output"),
             strictcli.Flag(name="text", type=str, default=None, help="text output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("out", effect="read_only", help="output command", mutex=[mg])
-    def out(ctx, json, text):
-        print(f"json={json} text={text}")
+    def out(ctx, as_json, text):
+        print(f"json={as_json} text={text}")
 
     # Provide exactly one mutex flag via invoke -- should succeed.
-    app.call("out", json="data")
+    app.call("out", as_json="data")
 
 
 def test_invoke_defaulted_not_present_for_requires():

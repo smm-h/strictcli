@@ -251,7 +251,10 @@ class Context:
                  *, dry_run: bool = False,
                  approve_consequential: bool = False,
                  quiet: bool = False, verbose: bool = False,
-                 effects: "_Effects | None" = None):
+                 json: bool = False,
+                 effects: "_Effects | None" = None,
+                 command_name: str = "",
+                 payload_schema: object | None = None):
         self._stdout = stdout or sys.stdout
         self._stderr = stderr or sys.stderr
         self._sources = sources or {}  # flag-name -> source label (cli/env/config/default/implied/infra)
@@ -260,7 +263,13 @@ class Context:
         self._approve_consequential = approve_consequential
         self._quiet = quiet
         self._verbose = verbose
+        self._json = json
         self._effects = effects
+        # The payload slot (contract §19.4): at most one value per dispatch,
+        # settable only on a command that declared a payload schema.
+        self._command_name = command_name
+        self._payload_schema = payload_schema
+        self._payload_value: object = _MISSING
 
     @property
     def dry_run(self) -> bool:
@@ -281,6 +290,39 @@ class Context:
     def verbose(self) -> bool:
         """True when the framework-owned ``--verbose`` flag was passed."""
         return self._verbose
+
+    @property
+    def json(self) -> bool:
+        """True when the framework-owned ``--json`` flag was passed.
+
+        ``--json`` selects machine mode (contract §19.1). Handlers do not
+        branch on it to decide whether to build a payload -- ``ctx.payload``
+        is mode-independent and the framework decides what to do with the
+        value -- but the flag is exposed for symmetry with the quartet and for
+        apps that propagate it to a child process.
+        """
+        return self._json
+
+    def payload(self, value: object) -> None:
+        """Supply this dispatch's machine payload (contract §19.4).
+
+        The call is mode-independent: a handler calls it identically in both
+        modes and never branches on ``ctx.json``. In machine mode the value is
+        emitted; outside machine mode it is not printed at all. ``test()`` and
+        ``call()`` capture it either way.
+
+        Two hard errors, both at call time:
+
+        - the command declared no ``payload_schema=``, so there is nothing to
+          validate the value against;
+        - a payload was already supplied in this dispatch (one slot, one
+          answer).
+        """
+        if self._payload_schema is None:
+            raise RuntimeError(_msg_payload_no_schema(self._command_name))
+        if self._payload_value is not _MISSING:
+            raise RuntimeError(_msg_payload_already_set(self._command_name))
+        self._payload_value = value
 
     @property
     def effects(self) -> "_Effects":
@@ -794,6 +836,30 @@ def _msg_effects_unavailable() -> str:
     return (
         "ctx.effects is unavailable: this Context was constructed "
         "outside a command dispatch"
+    )
+
+
+def _msg_payload_no_schema(name: str) -> str:
+    """Message template: ctx.payload on a command declaring no schema (§19.4).
+
+    Registration cannot see that a handler intends to call ctx.payload, so
+    call time is the earliest honest point at which the missing declaration
+    can be named.
+    """
+    return (
+        f'command "{name}": ctx.payload requires a declared payload schema'
+    )
+
+
+def _msg_payload_already_set(name: str) -> str:
+    """Message template: a second ctx.payload call in one dispatch (§19.4).
+
+    Two payloads are two answers to a question with one slot; picking either
+    silently is the kind of guess this regime does not make.
+    """
+    return (
+        f'command "{name}": ctx.payload was already called '
+        f"(a dispatch carries at most one payload)"
     )
 
 
@@ -1847,13 +1913,12 @@ _OUTCOME_TOKEN = object()
 class Outcome:
     """A structured result returned by a command handler.
 
-    Built exclusively via the :func:`outcome` factory. Carries an exit code
-    and optional structured data. When ``data`` is not ``None`` the framework
-    JSON-prints it to stdout; ``test()``/``call()`` capture it as ``data``.
+    Built exclusively via the :func:`outcome` factory. Carries an exit code and
+    nothing else: the bare-JSON-print data channel was deleted (contract
+    §19.4) and machine payloads are supplied through ``ctx.payload``.
     """
 
     exit_code: int
-    data: object = None
     _token: object = None
 
     def __post_init__(self) -> None:
@@ -1864,31 +1929,28 @@ class Outcome:
             )
 
 
-def outcome(exit_code: int = 0, data: object = None) -> Outcome:
+def outcome(exit_code: int = 0) -> Outcome:
     """Build an :class:`Outcome` for a command handler to return.
 
     Args:
         exit_code: process exit code (default 0).
-        data: optional structured data; when not None it is JSON-printed to
-            stdout and captured by ``test()``/``call()``.
     """
-    return Outcome(exit_code=exit_code, data=data, _token=_OUTCOME_TOKEN)
+    return Outcome(exit_code=exit_code, _token=_OUTCOME_TOKEN)
 
 
-def _interpret_handler_return(result: object) -> tuple[int, object]:
-    """Map a command handler's return value to ``(exit_code, data)``.
+def _interpret_handler_return(result: object) -> int:
+    """Map a command handler's return value to an exit code.
 
-    ``data`` is ``_MISSING`` when there is no structured payload to emit.
     The only permitted returns are ``int`` (exit code), ``None`` (exit 0),
     or an :class:`Outcome` built via :func:`outcome`. Anything else is a
     hard error.
     """
     if result is None:
-        return 0, _MISSING
+        return 0
     if isinstance(result, Outcome):
-        return result.exit_code, (_MISSING if result.data is None else result.data)
+        return result.exit_code
     if isinstance(result, int):
-        return result, _MISSING
+        return result
     raise TypeError(
         "command handler must return int (exit code), None (exit 0), or "
         f"strictcli.outcome(...); got {type(result).__name__}"
@@ -3177,6 +3239,13 @@ _RESERVED_FRAMEWORK_FLAG_NAMES = frozenset({
     "dry-run", "approve-consequential", "quiet", "verbose",
 })
 
+# The machine-mode flag name, reserved on the SAME unconditional every-level
+# tier as the quartet (contract §7.1's 2026-08-13 amendment). It is NOT a
+# fifth member of the quartet -- the four are the effects regime's own flags
+# and are named as a set throughout the contract -- so it carries its own
+# reserved-name message and its own token entry.
+_RESERVED_MACHINE_FLAG_NAME = "json"
+
 # `yes` is NOT a framework flag any more -- it was replaced by
 # --approve-consequential (contract §7.1) -- but it stays banned so nobody
 # reintroduces a private --yes meaning the same thing. Its ban message points
@@ -3199,7 +3268,11 @@ _RESERVED_CONSENT_PARAM_NAME = "approve_consequential"
 _RESERVED_GLOBAL_SHORT_NAMES = frozenset({
     "help", "h", "version", "v", "dump-schema", "mcp", "config", "hermetic",
 })
-_RESERVED_GLOBAL_FLAG_NAMES = _RESERVED_GLOBAL_SHORT_NAMES | _RESERVED_FRAMEWORK_FLAG_NAMES
+_RESERVED_GLOBAL_FLAG_NAMES = (
+    _RESERVED_GLOBAL_SHORT_NAMES
+    | _RESERVED_FRAMEWORK_FLAG_NAMES
+    | frozenset({_RESERVED_MACHINE_FLAG_NAME})
+)
 
 
 # argv token -> pre-scan result key for the reserved quartet.
@@ -3210,12 +3283,34 @@ _RESERVED_QUARTET_TOKENS = {
     "--verbose": "verbose",
 }
 
+# What the pre-scan actually recognizes: the quartet plus --json, which reads
+# exactly as the quartet does in BOTH argv regions (contract §7.1's amendment,
+# §7.2). The quartet stays a quartet; the machine flag rides the same delivery
+# rules without joining the set.
+_RESERVED_PRESCAN_TOKENS = {
+    **_RESERVED_QUARTET_TOKENS,
+    "--json": "json",
+}
+
 
 def _raise_flag_name_reserved_by_framework(name: str):
     """Message template: a flag name collides with the reserved quartet."""
     raise ValueError(
         f"flag name '{name}' is reserved by the framework "
         f"(dry-run, approve-consequential, quiet, verbose)"
+    )
+
+
+def _raise_flag_name_json_reserved():
+    """Message template: a flag name collides with the machine-mode flag.
+
+    `--json` is framework-owned (contract §19.1): it selects machine mode and
+    is delivered on the Context, never as a handler kwarg. The ban is the
+    unconditional every-level one, exactly as the quartet's is.
+    """
+    raise ValueError(
+        "flag name 'json' is reserved by the framework: "
+        "--json selects machine mode"
     )
 
 
@@ -3395,6 +3490,8 @@ class Flag:
             )
         if self.name in _RESERVED_FRAMEWORK_FLAG_NAMES:
             _raise_flag_name_reserved_by_framework(self.name)
+        if self.name == _RESERVED_MACHINE_FLAG_NAME:
+            _raise_flag_name_json_reserved()
         if self.name == _RESERVED_CONSENT_PARAM_NAME:
             _raise_flag_name_consent_reserved()
         if self.name in _BANNED_FLAG_NAMES:
@@ -3813,6 +3910,16 @@ _FRAMEWORK_INTERNAL_FORWARDING_REASON = (
     "framework-internal: absorbs app-defined global flag values"
 )
 
+# Payload schemas for strictcli's own auto-registered commands (contract
+# §19.5). Inline literals, byte-identical across the three implementations.
+# The check command's payload is an array in both of its machine shapes -- the
+# listing (--list) and the run results.
+_CHECK_PAYLOAD_SCHEMA = {"type": "array", "items": {"type": "object"}}
+# config show's payload is one object keyed by flag/config-field name, plus the
+# "__infrastructure__" entry; the keys are dynamic, so the declaration names
+# the container only.
+_CONFIG_SHOW_PAYLOAD_SCHEMA = {"type": "object"}
+
 
 def _raise_handler_var_keyword_undeclared(name: str):
     raise ValueError(
@@ -3958,6 +4065,12 @@ class Command:
     # The reason is mandatory and is shown in help and in the refusal.
     dry_run_supported: bool = True
     dry_run_unsupported_reason: str | None = None
+    # The command's machine payload contract (contract §19.5): an inline JSON
+    # Schema literal, registered as written. Absence means the command cannot
+    # produce a payload -- ctx.payload is then a call-time hard error. The
+    # literal is stored opaquely at this round; validating a payload against
+    # it is a later item.
+    payload_schema: dict | None = None
     flags: tuple[Flag, ...] = ()
     args: tuple[Arg, ...] = ()
     flag_sets: tuple[FlagSet, ...] = ()
@@ -4073,6 +4186,7 @@ class Group:
         consequential: bool = False,
         dry_run_supported: bool = True,
         dry_run_unsupported_reason: str | None = None,
+        payload_schema: dict | None = None,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -4097,6 +4211,7 @@ class Group:
                 consequential=consequential,
                 dry_run_supported=dry_run_supported,
                 dry_run_unsupported_reason=dry_run_unsupported_reason,
+                payload_schema=payload_schema,
                 handler=func, args=args, flag_sets=flag_sets, mutex=mutex,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
@@ -4164,6 +4279,18 @@ class Result:
     stderr: str
     exit_code: int
     data: object = None
+
+
+@dataclass(frozen=True)
+class _DispatchResult:
+    """What the one dispatch seam hands back to ``run()`` / ``test()``.
+
+    ``payload`` is ``_MISSING`` when the handler supplied none (a dispatch
+    that never reached a handler always has none).
+    """
+
+    exit_code: int
+    payload: object = _MISSING
 
 
 @dataclass
@@ -4693,6 +4820,9 @@ class App:
         self._last_dry_run: bool = False
         self._last_approve_consequential: bool = False
         self._last_quiet: bool = False
+        # Machine mode (contract §19.1), delivered on the Context like the
+        # quartet: extracted by the pre-scan, never a handler kwarg.
+        self._last_json: bool = False
         self._last_verbose: bool = False
 
         # Observe allowlist: plain argv prefixes, compared by string equality.
@@ -5664,14 +5794,17 @@ class App:
 
         def _check_handler(
             ctx, *, all: bool, tag: str, name: str,
-            list: bool, json: bool, ignore_warnings: bool,
+            list: bool, ignore_warnings: bool,
             **_kw,
         ) -> int:
-            # --verbose and --dry-run are framework-owned reserved names, so the
-            # check command's own two flags are gone and their values are read
-            # off the Context instead.
+            # --verbose, --dry-run and --json are framework-owned reserved
+            # names, so the check command declares none of them and reads their
+            # values off the Context instead. The machine output is this
+            # command's payload (contract §19.4), which is why --json is not a
+            # flag here any more.
             verbose = ctx.verbose
             dry_run = ctx.dry_run
+            json = ctx.json
             # Materialize provider-sourced checks before any registry read
             # (covers the list, dry-run, and execution branches below).
             app_ref._materialize_check_providers()
@@ -5680,7 +5813,10 @@ class App:
             name_glob = name if name else None
 
             if list:
-                _check_list_mode(app_ref._check_defs, json)
+                if json:
+                    ctx.payload(_check_list_items(app_ref._check_defs))
+                else:
+                    _check_list_mode(app_ref._check_defs)
                 return 0
 
             # Determine if any execution filter is active
@@ -5723,7 +5859,7 @@ class App:
                 for n, o, d in raw_results
             ]
             if json:
-                print(format_check_results_json(results_wrapped))
+                ctx.payload(_check_result_items(results_wrapped))
             else:
                 output = format_check_results(results_wrapped, verbose)
                 if output:
@@ -5741,7 +5877,6 @@ class App:
             Flag(name="tag", type=str, default="", help="Tag DSL expression to select checks (e.g. 'changelog & !quality')"),
             Flag(name="name", type=str, default="", help="Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')"),
             Flag(name="list", type=bool, default=False, help="List all registered checks with their tags and exit without running"),
-            Flag(name="json", type=bool, default=False, help="Output check results as machine-readable JSON instead of human text"),
             Flag(name="ignore-warnings", type=bool, default=False, help="Treat warn-severity results as passing so they do not cause nonzero exit"),
         ]
         extra_flags = [f for f in candidate_extra_flags if f.name not in global_flag_names]
@@ -5753,6 +5888,7 @@ class App:
             effect=EFFECT_READ_ONLY,
             handler=_check_handler,
             extra_flags=extra_flags,
+            payload_schema=_CHECK_PAYLOAD_SCHEMA,
         )
 
     def command(
@@ -5764,6 +5900,7 @@ class App:
         consequential: bool = False,
         dry_run_supported: bool = True,
         dry_run_unsupported_reason: str | None = None,
+        payload_schema: dict | None = None,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
         mutex: list[MutexGroup] | None = None,
@@ -5786,6 +5923,7 @@ class App:
                 consequential=consequential,
                 dry_run_supported=dry_run_supported,
                 dry_run_unsupported_reason=dry_run_unsupported_reason,
+                payload_schema=payload_schema,
                 handler=func,
                 args=args,
                 flag_sets=flag_sets,
@@ -5946,7 +6084,7 @@ class App:
         """Start a new dispatch: reset the structured effect log."""
         self._effect_log = _EffectLog()
 
-    def _render_dry_log(self, cmd_path: str, *, aborted: bool) -> None:
+    def _render_dry_log(self, cmd_path: str, out, err, *, aborted: bool) -> None:
         """Write the would-do log for a dry run. No-op outside dry mode.
 
         Called on every exit path out of a dispatch, so a handler that leaves
@@ -5962,11 +6100,11 @@ class App:
         """
         if not self._last_dry_run:
             return
-        print(self._effect_log.render())
+        print(self._effect_log.render(), file=out)
         if aborted:
             print(
                 _msg_dry_run_aborted(self._effect_log.next_seq(), cmd_path),
-                file=sys.stderr,
+                file=err,
             )
 
     def _record_cache_write(self, path: str) -> None:
@@ -6016,6 +6154,7 @@ class App:
         mutex: list[MutexGroup] | None = None,
         extra_flags: list[Flag] | None = None,
         interactive: bool = False,
+        payload_schema: dict | None = None,
     ) -> Command:
         """Build one of strictcli's own auto-registered commands.
 
@@ -6044,6 +6183,7 @@ class App:
             framework_internal=True,
             extra_flags=extra_flags,
             interactive=interactive,
+            payload_schema=payload_schema,
         )
 
     def _register_config_group(self) -> None:
@@ -6082,7 +6222,10 @@ class App:
             if app_ref._config_parse_err:
                 print(f"error: {app_ref._config_parse_err}", file=sys.stderr)
                 return 1
-            use_json = _kw.get("json", False)
+            # --json is framework-owned (contract §19.1): machine mode is
+            # read off the Context and the object below is this command's
+            # payload, not a locally-flagged print.
+            use_json = ctx.json
             config_data = app_ref._config_data
             all_flags = app_ref._collect_all_flags()
             colliding = app_ref._colliding_config_fields()
@@ -6146,7 +6289,10 @@ class App:
                             conn_entry["value"] = os.environ[ev]
                         infra[ev] = conn_entry
                     result["__infrastructure__"] = infra
-                print(json.dumps(result, indent=2, sort_keys=True))
+                # Sorted keys: the three implementations build this object in
+                # three orders (Go marshals a map, which sorts), and the
+                # payload is compared byte-for-byte by conformance.
+                ctx.payload(dict(sorted(result.items())))
                 return 0
             # --plain
             for f in all_flags:
@@ -6203,17 +6349,19 @@ class App:
                         print(f"  {ev} (connection) = <unset>  -- {app_ref._connection_envs[ev]}")
             return 0
 
+        # --plain is the only local flag left: the machine form moved to the
+        # framework-owned --json (contract §19.1), which cannot be declared
+        # here, so the two-flag mutex group went with it.
         config_show_flags = [
             Flag(name="plain", type=bool, default=False, help="Display config values in a human-readable table format"),
-            Flag(name="json", type=bool, default=False, help="Display config values as a JSON object with source metadata"),
         ]
-        config_show_mutex = [MutexGroup(flags=config_show_flags)]
         config_grp.commands["show"] = self._build_framework_command(
             "show",
-            help="Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table or --json for a machine-readable object carrying each entry's type, default and help text.",
+            help="Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table; the framework-owned --json yields the same information as a machine-readable object carrying each entry's type, default and help text.",
             effect=EFFECT_READ_ONLY,
             handler=_config_show_handler,
-            mutex=config_show_mutex,
+            extra_flags=config_show_flags,
+            payload_schema=_CONFIG_SHOW_PAYLOAD_SCHEMA,
         )
 
         # config set
@@ -6538,10 +6686,10 @@ class App:
                 i += 1
                 continue
 
-            # The reserved quartet: booleans, no values, stripped from argv and
-            # delivered on the Context (never as handler kwargs).
-            if tok in _RESERVED_QUARTET_TOKENS:
-                result[_RESERVED_QUARTET_TOKENS[tok]] = True
+            # The reserved quartet plus --json: booleans, no values, stripped
+            # from argv and delivered on the Context (never as handler kwargs).
+            if tok in _RESERVED_PRESCAN_TOKENS:
+                result[_RESERVED_PRESCAN_TOKENS[tok]] = True
                 exclude_indices.add(i)
                 i += 1
                 continue
@@ -6658,8 +6806,8 @@ class App:
                 return
 
             if tok.startswith("-") and tok != "-":
-                if tok in _RESERVED_QUARTET_TOKENS:
-                    result[_RESERVED_QUARTET_TOKENS[tok]] = True
+                if tok in _RESERVED_PRESCAN_TOKENS:
+                    result[_RESERVED_PRESCAN_TOKENS[tok]] = True
                     exclude_indices.add(i)
                 i += 1
                 continue
@@ -6719,6 +6867,7 @@ class App:
             pre_scan.get("approve_consequential")
         )
         self._last_quiet = bool(pre_scan.get("quiet"))
+        self._last_json = bool(pre_scan.get("json"))
         self._last_verbose = bool(pre_scan.get("verbose"))
 
         # --hermetic + --config mutual exclusion
@@ -7316,190 +7465,171 @@ class App:
 
     def run(self) -> None:
         """Run the CLI application, reading from sys.argv."""
-        check_err = self._validate_check_registrations()
-        if check_err:
-            print(f"error: {check_err}", file=sys.stderr)
-            sys.exit(1)
-        tag_err = self._validate_tag_contracts()
-        if tag_err:
-            print(f"error: {tag_err}", file=sys.stderr)
-            sys.exit(1)
-        argv = sys.argv[1:]
-        try:
-            cmd, data, sources = self._parse(argv)
-        except _HelpRequested as e:
-            if isinstance(e.target, App):
-                print(_format_app_help(self))
-            elif isinstance(e.target, Group):
-                print(_format_group_help(self, e.target))
-            elif isinstance(e.target, Command):
-                prefix = self._find_command_prefix(e.target)
-                print(_format_command_help(self, e.target, prefix))
-            sys.exit(0)
-        except _VersionRequested:
-            print(_format_version(self))
-            sys.exit(0)
-        except _DumpSchemaRequested:
-            try:
-                path = _write_schema(self)
-            except RuntimeError as e:
-                print(f"error: {e}", file=sys.stderr)
-                sys.exit(1)
-            print(path)
-            sys.exit(0)
-        except _McpRequested:
-            self.serve_mcp()
-            sys.exit(0)
-        except _ParseError as e:
-            print(f"error: {e}", file=sys.stderr)
-            prefix = e.command_prefix or self.name
-            print(f"try '{prefix} --help'", file=sys.stderr)
-            sys.exit(1)
-        else:
-            self._begin_dispatch()
-            self._last_sources = sources
-            cmd_path = ".".join(self._last_resolved_path + [cmd.name])
-            effects = self._arm_effects(
-                cmd, cmd_path, dry_run=self._last_dry_run,
-            )
-            ctx = Context(
-                stdout=sys.stdout, stderr=sys.stderr, sources=sources,
-                infra=self._infra_access(self._last_hermetic),
-                dry_run=self._last_dry_run,
-                approve_consequential=self._last_approve_consequential,
-                quiet=self._last_quiet, verbose=self._last_verbose,
-                effects=effects,
-            )
-            # The confirm protocol fires only on the real CLI path.
-            self._confirm_consequential(cmd, cmd_path)
-            # The would-do log renders on EVERY exit path out of the dispatch,
-            # not just the normal return: the operator asked for a preview and
-            # the effects were recorded, so a handler that unwinds through
-            # sys.exit or an exception still owes them the list. The clause set
-            # below is exhaustive by construction -- BaseException is the root
-            # of the hierarchy, so no unwind can slip past it.
-            try:
-                if cmd.passthrough is not None:
-                    result = cmd.passthrough.handler(ctx, cmd.name, data, self._last_global_values)
-                else:
-                    result = cmd.handler(ctx, **data)
-                exit_code, out_data = _interpret_handler_return(result)
-                if out_data is not _MISSING:
-                    print(json.dumps(out_data, default=str, separators=(",", ":")))
-            except _DryRunTruncated as trunc:
-                print(trunc.log.render())
-                print(trunc.message, file=sys.stderr)
-                sys.exit(1)
-            except SystemExit:
-                self._render_dry_log(cmd_path, aborted=False)
-                raise
-            except BaseException:
-                self._render_dry_log(cmd_path, aborted=True)
-                raise
-            self._render_dry_log(cmd_path, aborted=False)
-            sys.exit(exit_code)
+        result = self._dispatch(sys.argv[1:], sys.stdout, sys.stderr, "run")
+        sys.exit(result.exit_code)
 
     def test(self, argv: list[str]) -> Result:
         """Run the CLI with given argv, capturing output and exit code."""
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
-        exit_code = 0
-        result_data = None
+        # The redirect wraps the whole dispatch so a handler that bypasses the
+        # context writers and calls print() is captured too.
+        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+            result = self._dispatch(argv, stdout_buf, stderr_buf, "test")
+        return Result(
+            stdout=stdout_buf.getvalue(),
+            stderr=stderr_buf.getvalue(),
+            exit_code=result.exit_code,
+            data=(None if result.payload is _MISSING else result.payload),
+        )
 
+    def _dispatch(self, argv: list[str], out, err, mode: str) -> "_DispatchResult":
+        """The single dispatch seam shared by ``run()`` and ``test()``.
+
+        Parses, renders the pre-dispatch outcomes (help, version, schema dump,
+        MCP, parse errors), executes the handler and finishes through the ONE
+        ordered exit step (:meth:`_finish_dispatch`), which owns the payload,
+        the would-do log and the exit code on every path out of the handler.
+        """
         check_err = self._validate_check_registrations()
         if check_err:
-            stderr_buf.write(f"error: {check_err}\n")
-            return Result(
-                stdout=stdout_buf.getvalue(),
-                stderr=stderr_buf.getvalue(),
-                exit_code=1,
-            )
-
+            print(f"error: {check_err}", file=err)
+            return _DispatchResult(1)
         tag_err = self._validate_tag_contracts()
         if tag_err:
-            stderr_buf.write(f"error: {tag_err}\n")
-            return Result(
-                stdout=stdout_buf.getvalue(),
-                stderr=stderr_buf.getvalue(),
-                exit_code=1,
-            )
+            print(f"error: {tag_err}", file=err)
+            return _DispatchResult(1)
 
         try:
             cmd, data, sources = self._parse(argv)
         except _HelpRequested as e:
             if isinstance(e.target, App):
-                stdout_buf.write(_format_app_help(self) + "\n")
+                print(_format_app_help(self), file=out)
             elif isinstance(e.target, Group):
-                stdout_buf.write(_format_group_help(self, e.target) + "\n")
+                print(_format_group_help(self, e.target), file=out)
             elif isinstance(e.target, Command):
                 prefix = self._find_command_prefix(e.target)
-                stdout_buf.write(_format_command_help(self, e.target, prefix) + "\n")
+                print(_format_command_help(self, e.target, prefix), file=out)
+            return _DispatchResult(0)
         except _VersionRequested:
-            stdout_buf.write(_format_version(self) + "\n")
+            print(_format_version(self), file=out)
+            return _DispatchResult(0)
         except _DumpSchemaRequested:
             try:
                 path = _write_schema(self)
             except RuntimeError as e:
-                stderr_buf.write(f"error: {e}\n")
-                exit_code = 1
-            else:
-                stdout_buf.write(path + "\n")
+                print(f"error: {e}", file=err)
+                return _DispatchResult(1)
+            print(path, file=out)
+            return _DispatchResult(0)
         except _McpRequested:
-            # In test mode, MCP requires real stdin/stdout; just acknowledge
-            stderr_buf.write("error: --mcp requires interactive stdin/stdout\n")
-            exit_code = 1
+            if mode == "test":
+                # In test mode, MCP requires real stdin/stdout; just acknowledge
+                print("error: --mcp requires interactive stdin/stdout", file=err)
+                return _DispatchResult(1)
+            self.serve_mcp()
+            return _DispatchResult(0)
         except _ParseError as e:
-            stderr_buf.write(f"error: {e}\n")
+            print(f"error: {e}", file=err)
             prefix = e.command_prefix or self.name
-            stderr_buf.write(f"try '{prefix} --help'\n")
-            exit_code = 1
-        else:
-            self._begin_dispatch()
-            cmd_path = ".".join(self._last_resolved_path + [cmd.name])
-            # Record test-coverage hit (command-level only).
-            if self.test_coverage:
-                self._record_coverage(cmd_path)
-            # Store sources for function handlers that need provenance info
-            self._last_sources = sources
-            with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
-                try:
-                    ctx = Context(
-                        stdout=stdout_buf, stderr=stderr_buf, sources=sources,
-                        infra=self._infra_access(self._last_hermetic),
-                        dry_run=self._last_dry_run,
-                        approve_consequential=self._last_approve_consequential,
-                        quiet=self._last_quiet, verbose=self._last_verbose,
-                        effects=self._arm_effects(
-                            cmd, cmd_path, dry_run=self._last_dry_run,
-                        ),
-                    )
-                    if cmd.passthrough is not None:
-                        handler_return = cmd.passthrough.handler(
-                            ctx, cmd.name, data, self._last_global_values,
-                        )
-                    else:
-                        handler_return = cmd.handler(ctx, **data)
-                    exit_code, out_data = _interpret_handler_return(handler_return)
-                    if out_data is not _MISSING:
-                        result_data = out_data
-                        print(json.dumps(out_data, default=str, separators=(",", ":")))
-                    self._render_dry_log(cmd_path, aborted=False)
-                except _DryRunTruncated as trunc:
-                    print(trunc.log.render())
-                    print(trunc.message, file=sys.stderr)
-                    exit_code = 1
-                except SystemExit as e:
-                    exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
-                    self._render_dry_log(cmd_path, aborted=False)
-                except BaseException:
-                    self._render_dry_log(cmd_path, aborted=True)
-                    raise
+            print(f"try '{prefix} --help'", file=err)
+            return _DispatchResult(1)
 
-        return Result(
-            stdout=stdout_buf.getvalue(),
-            stderr=stderr_buf.getvalue(),
-            exit_code=exit_code,
-            data=result_data,
+        self._begin_dispatch()
+        cmd_path = ".".join(self._last_resolved_path + [cmd.name])
+        # Record test-coverage hit (command-level only, test mode only).
+        if mode == "test" and self.test_coverage:
+            self._record_coverage(cmd_path)
+        # Store sources for function handlers that need provenance info
+        self._last_sources = sources
+        ctx = Context(
+            stdout=out, stderr=err, sources=sources,
+            infra=self._infra_access(self._last_hermetic),
+            dry_run=self._last_dry_run,
+            approve_consequential=self._last_approve_consequential,
+            quiet=self._last_quiet, verbose=self._last_verbose,
+            json=self._last_json,
+            effects=self._arm_effects(
+                cmd, cmd_path, dry_run=self._last_dry_run,
+            ),
+            command_name=cmd.name,
+            payload_schema=cmd.payload_schema,
+        )
+        if mode == "run":
+            # The confirm protocol fires only on the real CLI path.
+            self._confirm_consequential(cmd, cmd_path)
+        # The ordered exit step runs on EVERY exit path out of the dispatch,
+        # not just the normal return: the operator asked for a preview and the
+        # effects were recorded, so a handler that unwinds through sys.exit or
+        # an exception still owes them the list. The clause set below is
+        # exhaustive by construction -- BaseException is the root of the
+        # hierarchy, so no unwind can slip past it.
+        try:
+            if cmd.passthrough is not None:
+                handler_return = cmd.passthrough.handler(
+                    ctx, cmd.name, data, self._last_global_values,
+                )
+            else:
+                handler_return = cmd.handler(ctx, **data)
+            exit_code = _interpret_handler_return(handler_return)
+        except _DryRunTruncated as trunc:
+            return self._finish_dispatch(
+                ctx, cmd_path, 1, out, err,
+                truncated=trunc, aborted=False,
+            )
+        except SystemExit as e:
+            code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
+            self._finish_dispatch(ctx, cmd_path, code, out, err, aborted=False)
+            if mode == "run":
+                # The real CLI path lets the exit propagate untouched, so a
+                # non-integer sys.exit() argument keeps printing itself.
+                raise
+            return _DispatchResult(code, ctx._payload_value)
+        except BaseException:
+            self._finish_dispatch(ctx, cmd_path, 1, out, err, aborted=True)
+            raise
+        return self._finish_dispatch(ctx, cmd_path, exit_code, out, err)
+
+    def _finish_dispatch(
+        self, ctx: "Context", cmd_path: str, exit_code: int, out, err,
+        *, truncated: "_DryRunTruncated | None" = None,
+        aborted: bool = False,
+    ) -> "_DispatchResult":
+        """The ONE ordered exit step: payload, preview log, exit code.
+
+        Reachable from all four ways out of a dispatch (normal return, an
+        explicit ``sys.exit``, a truncated preview and an unwinding abort), so
+        there is exactly one place that decides what the framework emits at the
+        end of a run and in what order.
+        """
+        self._emit_payload(ctx, out)
+        if truncated is not None:
+            # The truncation path ends the preview for its own pinned reason:
+            # it renders the log it already has and its own error, and never
+            # goes through the generic would-do rendering.
+            print(truncated.log.render(), file=out)
+            print(truncated.message, file=err)
+        else:
+            self._render_dry_log(cmd_path, out, err, aborted=aborted)
+        return _DispatchResult(exit_code, ctx._payload_value)
+
+    def _emit_payload(self, ctx: "Context", out) -> None:
+        """Emit the dispatch's machine payload, if there is one (§19.4).
+
+        Only in machine mode: outside it the payload is captured by the
+        in-process surfaces and printed nowhere. The serialization follows
+        §19.5's escaping regime -- plain UTF-8, escaping only what JSON
+        mandates -- and it is NOT written through the quiet-suppressible
+        writers, so ``--quiet`` has no mechanism by which to reach it.
+        """
+        if ctx._payload_value is _MISSING or not ctx._json:
+            return
+        print(
+            json.dumps(
+                ctx._payload_value, default=str,
+                separators=(",", ":"), ensure_ascii=False,
+            ),
+            file=out,
         )
 
     def _invoke(
@@ -7590,13 +7720,19 @@ class App:
                 infra=self._infra_access(),
                 approve_consequential=approve_consequential,
                 effects=self._arm_effects(cmd, command_path, dry_run=False),
+                command_name=cmd.name,
+                payload_schema=cmd.payload_schema,
             )
             result = cmd.passthrough.handler(
                 ctx, cmd.name, raw_args, global_values,
             )
             _interpret_handler_return(result)  # validate return type
+            # The programmatic surface keeps its capture: it returns the
+            # payload the handler supplied (contract §19.4).
+            if ctx._payload_value is not _MISSING:
+                return ctx._payload_value
             if isinstance(result, Outcome):
-                return result.data
+                return None
             return result
 
         # Build reverse mapping: param_name (underscore) -> flag.name (dashes)
@@ -7671,11 +7807,17 @@ class App:
             infra=self._infra_access(),
             approve_consequential=approve_consequential,
             effects=self._arm_effects(cmd, command_path, dry_run=False),
+            command_name=cmd.name,
+            payload_schema=cmd.payload_schema,
         )
         result = cmd.handler(ctx, **final_kwargs)
         _interpret_handler_return(result)  # validate return type
+        # The programmatic surface keeps its capture: it returns the payload
+        # the handler supplied (contract §19.4).
+        if ctx._payload_value is not _MISSING:
+            return ctx._payload_value
         if isinstance(result, Outcome):
-            return result.data
+            return None
         return result
 
     def call(
@@ -8671,6 +8813,7 @@ def _build_and_validate_command(
     consequential: bool = False,
     dry_run_supported: bool = True,
     dry_run_unsupported_reason: str | None = None,
+    payload_schema: dict | None = None,
     handler: Callable,
     args: list[Arg] | None,
     flag_sets: list[FlagSet] | None,
@@ -8780,6 +8923,7 @@ def _build_and_validate_command(
             consequential=consequential,
             dry_run_supported=dry_run_supported,
             dry_run_unsupported_reason=dry_run_unsupported_reason,
+            payload_schema=payload_schema,
             passthrough=passthrough,
             tags=effective_tags,
             hidden=hidden,
@@ -9048,6 +9192,7 @@ def _build_and_validate_command(
         consequential=consequential,
         dry_run_supported=dry_run_supported,
         dry_run_unsupported_reason=dry_run_unsupported_reason,
+        payload_schema=payload_schema,
         flags=tuple(all_flags),
         args=tuple(all_args),
         flag_sets=tuple(resolved_flag_sets),
@@ -9901,20 +10046,21 @@ def _run_checks(
 _CHECK_STATUS_LABELS = {"pass": "PASS", "fail": "FAIL", "warn": "WARN", "skip": "SKIP"}
 
 
-def _check_list_mode(check_defs: dict[str, _CheckDef], json_mode: bool) -> None:
-    """Print check listing in human or JSON format."""
+def _check_list_items(check_defs: dict[str, _CheckDef]) -> list[dict]:
+    """The check listing as machine data (the check command's payload)."""
+    items = []
+    for cdef in sorted(check_defs.values(), key=lambda c: c.name):
+        entry: dict = {"name": cdef.name, "tags": cdef.tags, "severity": cdef.severity}
+        if cdef.scope:
+            entry["scope"] = cdef.scope
+        items.append(entry)
+    return items
+
+
+def _check_list_mode(check_defs: dict[str, _CheckDef]) -> None:
+    """Print the human-readable check listing."""
     # Sort alphabetically for deterministic output matching Go
     sorted_defs = sorted(check_defs.values(), key=lambda c: c.name)
-
-    if json_mode:
-        items = []
-        for cdef in sorted_defs:
-            entry: dict = {"name": cdef.name, "tags": cdef.tags, "severity": cdef.severity}
-            if cdef.scope:
-                entry["scope"] = cdef.scope
-            items.append(entry)
-        print(json.dumps(items, separators=(",", ":")))
-        return
 
     if not check_defs:
         print("No checks defined.")
@@ -10006,13 +10152,13 @@ def format_check_results(
     return "\n".join(lines)
 
 
-def format_check_results_json(results: list[CheckRunResult]) -> str:
-    """Format check results as a JSON string.
+def _check_result_items(results: list[CheckRunResult]) -> list[dict]:
+    """Check results as machine data (the check command's run payload).
 
     Each entry carries the derived status plus the minted problems (each with
     its severity and text). Problems serialize as [] when empty.
     """
-    items = [
+    return [
         {
             "name": r.name,
             "status": r.status,
@@ -10026,7 +10172,11 @@ def format_check_results_json(results: list[CheckRunResult]) -> str:
         }
         for r in results
     ]
-    return json.dumps(items, separators=(",", ":"))
+
+
+def format_check_results_json(results: list[CheckRunResult]) -> str:
+    """Format check results as a JSON string."""
+    return json.dumps(_check_result_items(results), separators=(",", ":"))
 
 
 # ---------------------------------------------------------------------------
@@ -10153,6 +10303,11 @@ def _serialize_command(cmd: Command) -> dict:
     if not cmd.dry_run_supported:
         d["dry_run_supported"] = False
         d["dry_run_unsupported_reason"] = cmd.dry_run_unsupported_reason
+    # The payload contract, published verbatim (contract §19.5): the inline
+    # literal is the sole canonical artifact, so the dump carries it as
+    # written rather than a re-rendering of it.
+    if cmd.payload_schema is not None:
+        d["payload_schema"] = cmd.payload_schema
     if cmd.passthrough is not None:
         d["passthrough"] = True
     flags = [_serialize_flag(f) for f in cmd.flags]

@@ -218,9 +218,10 @@ class TestMcpToolsCall:
     def test_call_returns_result(self):
         app = _build_app()
 
-        @app.command("info", effect="read_only", help="get info")
+        @app.command("info", effect="read_only", help="get info", payload_schema={})
         def info(ctx):
-            return strictcli.outcome(data={"version": "1.0.0", "status": "ok"})
+            ctx.payload({"version": "1.0.0", "status": "ok"})
+            return strictcli.outcome()
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 10, "method": "tools/call",
@@ -236,12 +237,13 @@ class TestMcpToolsCall:
         captured = {}
         app = _build_app()
 
-        @app.command("deploy", effect="read_only", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy", payload_schema={})
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         def deploy(ctx, target, count):
             captured.update({"target": target, "count": count})
-            return strictcli.outcome(data={"deployed": target, "count": count})
+            ctx.payload({"deployed": target, "count": count})
+            return strictcli.outcome()
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 11, "method": "tools/call",
@@ -285,10 +287,11 @@ class TestMcpToolsCall:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", effect="read_only", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations", payload_schema={})
         @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
         def migrate(ctx, sim_run):
-            return strictcli.outcome(data={"migrated": True, "sim_run": sim_run})
+            ctx.payload({"migrated": True, "sim_run": sim_run})
+            return strictcli.outcome()
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 14, "method": "tools/call",
@@ -385,9 +388,10 @@ class TestMcpToolsCall:
         """When 'arguments' is omitted, defaults to empty dict."""
         app = _build_app()
 
-        @app.command("noop", effect="read_only", help="does nothing")
+        @app.command("noop", effect="read_only", help="does nothing", payload_schema={})
         def noop(ctx):
-            return strictcli.outcome(data="ok")
+            ctx.payload("ok")
+            return strictcli.outcome()
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 18, "method": "tools/call",
@@ -528,11 +532,12 @@ class TestMcpConversation:
         captured = {}
         app = _build_app()
 
-        @app.command("greet", effect="read_only", help="greet someone")
+        @app.command("greet", effect="read_only", help="greet someone", payload_schema={})
         @strictcli.flag("name", type=str, help="person to greet")
         def greet(ctx, name):
             captured["name"] = name
-            return strictcli.outcome(data={"greeting": f"hello {name}"})
+            ctx.payload({"greeting": f"hello {name}"})
+            return strictcli.outcome()
 
         responses = _send_request(
             app,
@@ -607,10 +612,11 @@ class TestMcpEdgeCases:
         grp1 = app.group("cloud", help="cloud commands")
         grp2 = grp1.group("storage", help="storage commands")
 
-        @grp2.command("upload", effect="read_only", help="upload a file")
+        @grp2.command("upload", effect="read_only", help="upload a file", payload_schema={})
         @strictcli.flag("bucket", type=str, help="target bucket")
         def upload(ctx, bucket):
-            return strictcli.outcome(data={"uploaded_to": bucket})
+            ctx.payload({"uploaded_to": bucket})
+            return strictcli.outcome()
 
         # tools/list includes deeply nested commands
         list_resp = _send_one(app, {
@@ -668,9 +674,10 @@ class TestMcpEdgeCases:
         """Successful calls do not have isError in the result."""
         app = _build_app()
 
-        @app.command("ok", effect="read_only", help="always succeeds")
+        @app.command("ok", effect="read_only", help="always succeeds", payload_schema={})
         def ok(ctx):
-            return strictcli.outcome(data="success")
+            ctx.payload("success")
+            return strictcli.outcome()
 
         resp = _send_one(app, {
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -687,14 +694,16 @@ class TestMcpEdgeCases:
 def _consent_app():
     app = _build_app()
 
-    @app.command("look", effect="read_only", help="look at things")
+    @app.command("look", effect="read_only", help="look at things", payload_schema={})
     def look(ctx):
-        return strictcli.outcome(data={"looked": True})
+        ctx.payload({"looked": True})
+        return strictcli.outcome()
 
     @app.command("release", effect="mutating", consequential=True,
-                 help="release things")
+                 help="release things", payload_schema={})
     def release(ctx):
-        return strictcli.outcome(data={"released": True})
+        ctx.payload({"released": True})
+        return strictcli.outcome()
 
     return app
 

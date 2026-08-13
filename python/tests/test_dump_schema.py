@@ -812,12 +812,12 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        json_flag = strictcli.Flag(name="json", type=bool, default=False, help="JSON output")
+        json_flag = strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output")
         text_flag = strictcli.Flag(name="text", type=bool, default=False, help="Text output")
 
         @app.command("show", effect="read_only", help="Show data",
                      mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])])
-        def show(ctx, json, text):
+        def show(ctx, as_json, text):
             pass
 
         app.test(["--dump-schema"])
@@ -827,7 +827,7 @@ class TestSchemaConstraints:
         assert len(cmd["constraints"]) == 1
         c = cmd["constraints"][0]
         assert c["type"] == "mutex"
-        assert c["flags"] == ["json", "text"]
+        assert c["flags"] == ["as-json", "text"]
 
     def test_co_required(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -895,7 +895,7 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        json_flag = strictcli.Flag(name="json", type=bool, default=False, help="JSON output")
+        json_flag = strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output")
         text_flag = strictcli.Flag(name="text", type=bool, default=False, help="Text output")
 
         @app.command("deploy", effect="read_only", help="Deploy",
@@ -906,7 +906,7 @@ class TestSchemaConstraints:
                      ])
         @strictcli.flag("host", type=str, help="Hostname")
         @strictcli.flag("port", type=int, help="Port number")
-        def deploy(ctx, json, text, host, port):
+        def deploy(ctx, as_json, text, host, port):
             pass
 
         app.test(["--dump-schema"])

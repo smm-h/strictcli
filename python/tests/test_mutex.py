@@ -364,18 +364,18 @@ def test_two_separate_mutex_groups():
     )
     mg2 = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
+            strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
             strictcli.Flag(name="csv", type=bool, default=False, help="CSV output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command", mutex=[mg1, mg2])
-    def cmd(ctx, loud, hushed, json, csv):
-        print(f"loud={loud} hushed={hushed} json={json} csv={csv}")
+    def cmd(ctx, loud, hushed, as_json, csv):
+        print(f"loud={loud} hushed={hushed} json={as_json} csv={csv}")
 
     # One from each group -> OK
-    r = app.test(["cmd", "--loud", "--json"])
+    r = app.test(["cmd", "--loud", "--as-json"])
     assert r.exit_code == 0
     assert "loud=True" in r.stdout
     assert "json=True" in r.stdout

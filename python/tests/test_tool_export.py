@@ -763,11 +763,12 @@ class TestRouterTool:
         captured = {}
         app = _build_app()
 
-        @app.command("greet", effect="read_only", help="greet someone")
+        @app.command("greet", effect="read_only", help="greet someone", payload_schema={})
         @strictcli.flag("name", type=str, help="person to greet")
         def greet(ctx, name):
             captured["name"] = name
-            return strictcli.outcome(data={"greeting": f"hello {name}"})
+            ctx.payload({"greeting": f"hello {name}"})
+            return strictcli.outcome()
 
         tools = app.as_tools()
         router = tools[-1]
@@ -809,9 +810,10 @@ class TestToolExecute:
     def test_execute_returns_handler_result(self):
         app = _build_app()
 
-        @app.command("info", effect="read_only", help="get info")
+        @app.command("info", effect="read_only", help="get info", payload_schema={})
         def info(ctx):
-            return strictcli.outcome(data={"version": "1.0.0", "status": "ok"})
+            ctx.payload({"version": "1.0.0", "status": "ok"})
+            return strictcli.outcome()
 
         tools = app.as_tools()
         info_tool = next(t for t in tools if t.name == "info")
@@ -822,12 +824,13 @@ class TestToolExecute:
         captured = {}
         app = _build_app()
 
-        @app.command("deploy", effect="read_only", help="deploy")
+        @app.command("deploy", effect="read_only", help="deploy", payload_schema={})
         @strictcli.flag("target", type=str, help="deploy target")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         def deploy(ctx, target, count):
             captured.update({"target": target, "count": count})
-            return strictcli.outcome(data={"deployed": target, "count": count})
+            ctx.payload({"deployed": target, "count": count})
+            return strictcli.outcome()
 
         tools = app.as_tools()
         deploy_tool = next(t for t in tools if t.name == "deploy")
@@ -910,11 +913,12 @@ class TestToolExecuteGroupedCommand:
         app = _build_app()
         grp = app.group("db", help="database commands")
 
-        @grp.command("migrate", effect="read_only", help="run migrations")
+        @grp.command("migrate", effect="read_only", help="run migrations", payload_schema={})
         @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
         def migrate(ctx, sim_run):
             captured["sim_run"] = sim_run
-            return strictcli.outcome(data={"migrated": True, "sim_run": sim_run})
+            ctx.payload({"migrated": True, "sim_run": sim_run})
+            return strictcli.outcome()
 
         tools = app.as_tools()
         migrate_tool = next(t for t in tools if t.name == "db.migrate")
@@ -931,18 +935,21 @@ class TestToolExecuteGroupedCommand:
 def _consent_app():
     app = _build_app()
 
-    @app.command("look", effect="read_only", help="look at things")
+    @app.command("look", effect="read_only", help="look at things", payload_schema={})
     def look(ctx):
-        return strictcli.outcome(data={"looked": True})
+        ctx.payload({"looked": True})
+        return strictcli.outcome()
 
-    @app.command("build", effect="mutating", help="build things")
+    @app.command("build", effect="mutating", help="build things", payload_schema={})
     def build(ctx):
-        return strictcli.outcome(data={"built": True})
+        ctx.payload({"built": True})
+        return strictcli.outcome()
 
     @app.command("release", effect="mutating", consequential=True,
-                 help="release things")
+                 help="release things", payload_schema={})
     def release(ctx):
-        return strictcli.outcome(data={"released": True})
+        ctx.payload({"released": True})
+        return strictcli.outcome()
 
     return app
 

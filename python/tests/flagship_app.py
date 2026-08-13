@@ -36,18 +36,19 @@ def build_app() -> sc.App:
     )
 
     @app.command("status", help="Show what a release would start from",
-                 effect="read_only")
+                 effect="read_only", payload_schema={})
     def status(ctx):
         # An observe returns a real value here in BOTH modes: read_only
         # commands never record anything, so nothing is ever unsettled.
         head = ctx.effects.run(HEAD_ARGV)
         dirty = ctx.effects.run(DIRTY_ARGV, check=False)
         ctx.info(f"head: {head.stdout}")
-        return sc.outcome(data={
+        ctx.payload({
             "head": head.stdout,
             "clean": dirty.stdout == "",
             "exit_code": head.exit_code,
         })
+        return sc.outcome()
 
     release = app.group("release", help="Release commands")
 
