@@ -72,7 +72,13 @@ TRACE_HOME: str = make_trace_home()
 
 
 def _ensure_harness() -> str:
-    """Build the Go harness binary if not already built. Returns path to binary."""
+    """Build the Go harness binary if not already built. Returns path to binary.
+
+    The binary is left on disk when the run ends. It is gitignored, every
+    process rebuilds it once before using it, and deleting it at the end used
+    to break any other conformance tool (fuzz.py, sweep_trace.py, a second
+    run.py) that was mid-run against the same shared path in this checkout.
+    """
     global HARNESS_BINARY
     if HARNESS_BINARY is not None:
         return HARNESS_BINARY
@@ -99,6 +105,12 @@ def _ensure_ts_harness() -> str:
 
     The harness itself (main.js) has no build step; the prerequisite is a fresh
     typescript/dist, rebuilt once per run so engine changes are always picked up.
+
+    SINGLE-CHECKOUT ASSUMPTION: the rebuild happens in place, in the one shared
+    typescript/dist of this checkout. Two conformance tools running at the same
+    time in the same checkout (run.py, fuzz.py, sweep_trace.py) will rebuild it
+    under each other and read half-written output. Run them one at a time, or
+    give each a checkout of its own.
     """
     global HARNESS_TS_ENTRY
     if HARNESS_TS_ENTRY is not None:
@@ -118,14 +130,6 @@ def _ensure_ts_harness() -> str:
 
     HARNESS_TS_ENTRY = str(HARNESS_TS_DIR / "main.js")
     return HARNESS_TS_ENTRY
-
-
-def _cleanup_harness() -> None:
-    """Remove the compiled harness binary."""
-    global HARNESS_BINARY
-    if HARNESS_BINARY and os.path.exists(HARNESS_BINARY):
-        os.unlink(HARNESS_BINARY)
-    HARNESS_BINARY = None
 
 
 def _load_schema() -> tuple[dict, dict]:
@@ -1175,9 +1179,6 @@ def _run_parity_mode(
                 print(w)
         print()
 
-    # Cleanup
-    _cleanup_harness()
-
     # Summary
     print(
         f"{report.passed}/{report.total} passed, {report.parity_failures} parity failures,"
@@ -1227,9 +1228,6 @@ def _run_single_mode(cases: list[tuple[str, dict]], target: str, verbose: bool) 
             for e in errors:
                 print(e)
         print()
-
-    # Cleanup
-    _cleanup_harness()
 
     # Summary
     total = passed + failed

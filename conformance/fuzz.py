@@ -27,12 +27,11 @@ import subprocess
 import sys
 import time
 
-# Reuse run.py's target descriptors, harness build/cleanup, and N-way
-# divergence reporting rather than duplicating any of it here.
+# Reuse run.py's target descriptors, harness builds, and N-way divergence
+# reporting rather than duplicating any of it here.
 from run import (
     CONFORMANCE_DIR,
     TARGETS,
-    _cleanup_harness,
     _ensure_harness,
     _ensure_ts_harness,
     _normalize,
@@ -523,7 +522,6 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
     else:
         print("No divergences found.")
 
-    _cleanup_harness()
     return divergences
 
 

@@ -229,8 +229,6 @@ def main() -> None:
         ]
         failures.extend(_run_target(target, applicable, args.verbose))
 
-    run._cleanup_harness()
-
     runs = len(targets) * len(cases) * (len(CONDITIONS) + 1)
     if failures:
         print("SWEEP FAILURES:")
