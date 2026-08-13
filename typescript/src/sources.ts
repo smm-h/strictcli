@@ -47,15 +47,23 @@ export class SourcedStore {
 	}
 
 	/**
-	 * "Present" for mutex evaluation: only cli, env, and config sources count.
-	 * Default and implied values do NOT trigger mutex violations.
+	 * The value came from a command-line token. Mutex election is CLI-only
+	 * (effects contract §21.3): env and config sources neither elect a member
+	 * nor supply its value.
 	 */
-	isPresentForMutex(name: string): boolean {
-		const e = this.entries.get(name);
-		if (e === undefined) {
-			return false;
-		}
-		return e.source === "cli" || e.source === "env" || e.source === "config";
+	isCli(name: string): boolean {
+		return this.entries.get(name)?.source === "cli";
+	}
+
+	/** The value came from an env var or the config file. */
+	isEnvOrConfig(name: string): boolean {
+		const source = this.entries.get(name)?.source;
+		return source === "env" || source === "config";
+	}
+
+	/** Drop an entry entirely, so defaults apply to it later. */
+	delete(name: string): void {
+		this.entries.delete(name);
 	}
 
 	/**

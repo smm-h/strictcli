@@ -1150,7 +1150,7 @@ test("mutex: str flags with default null", async () => {
 	);
 });
 
-test("mutex: env-set members count as present (composition.json)", async () => {
+test("mutex: env-set members elect nothing (contract §21.3)", async () => {
 	const mk = (out: string[]): AppImpl => {
 		const app = makeApp({ envPrefix: "MYAPP" });
 		app.command(
@@ -1178,22 +1178,179 @@ test("mutex: env-set members count as present (composition.json)", async () => {
 		);
 		return app;
 	};
+	// One member set via env: nothing is elected, so the group is unsatisfied.
 	await withEnv({ MYAPP_FILE: "data.txt" }, async () => {
-		const out: string[] = [];
+		const r = await run(mk([]), ["cmd"]);
 		assert.equal(
-			(await run(mk(out), ["cmd"], out)).stdout,
-			"file=data.txt url=None",
+			r.stderr,
+			errOut("one of --file, --url is required", "myapp cmd"),
 		);
 	});
+	// Both set via env: still nothing elected, same error -- never "mutually
+	// exclusive", because neither token was typed.
 	await withEnv(
 		{ MYAPP_FILE: "data.txt", MYAPP_URL: "http://example.com" },
 		async () => {
 			const r = await run(mk([]), ["cmd"]);
 			assert.equal(
 				r.stderr,
-				errOut("--file and --url are mutually exclusive", "myapp cmd"),
+				errOut("one of --file, --url is required", "myapp cmd"),
 			);
 		},
+	);
+	// Beside a real election the env value is suppressed, not delivered.
+	await withEnv({ MYAPP_FILE: "data.txt" }, async () => {
+		const out: string[] = [];
+		assert.equal(
+			(await run(mk(out), ["cmd", "--url", "http://example.com"], out)).stdout,
+			"file=None url=http://example.com",
+		);
+	});
+});
+
+// =========================================================================
+// Election semantics (effects contract §21; campaign rulings A1-A5)
+// =========================================================================
+
+function electionApp(out: string[]): AppImpl {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			mutex: [
+				mutexGroup({
+					profile: flag("profile", t.str, {
+						help: "a profile",
+						default: null,
+					}),
+					all_profiles: flag("all-profiles", t.bool, {
+						help: "every profile",
+						default: null,
+					}),
+					current_profile: flag("current-profile", t.bool, {
+						help: "the current profile",
+						default: null,
+					}),
+				}),
+			],
+			handler: (a) => {
+				const g = a as unknown as {
+					profile?: string;
+					all_profiles?: boolean;
+					current_profile?: boolean;
+				};
+				out.push(
+					`profile=${fmt(g.profile)} all=${fmt(g.all_profiles)} ` +
+						`current=${fmt(g.current_profile)}`,
+				);
+			},
+		}),
+	);
+	return app;
+}
+
+test("mutex A1: a negated bool member elects nothing", async () => {
+	const r = await run(electionApp([]), ["run", "--no-all-profiles"]);
+	assert.equal(r.exitCode, 1);
+	assert.equal(
+		r.stderr,
+		errOut(
+			"one of --profile, --all-profiles, --current-profile is required " +
+				"(--no-all-profiles declines an option; it does not choose one)",
+			"myapp run",
+		),
+	);
+});
+
+test("mutex A1: a true bool member still elects", async () => {
+	const out: string[] = [];
+	assert.equal(
+		(await run(electionApp(out), ["run", "--all-profiles"], out)).stdout,
+		"profile=None all=true current=None",
+	);
+});
+
+test("mutex A1: every member declined is an unsatisfied group", async () => {
+	const r = await run(electionApp([]), [
+		"run",
+		"--no-current-profile",
+		"--no-all-profiles",
+	]);
+	assert.equal(
+		r.stderr,
+		errOut(
+			"one of --profile, --all-profiles, --current-profile is required " +
+				"(--no-all-profiles declines an option; it does not choose one)",
+			"myapp run",
+		),
+	);
+});
+
+test("mutex A2: a string member elects on the empty string", async () => {
+	const out: string[] = [];
+	assert.equal(
+		(await run(electionApp(out), ["run", "--profile", ""], out)).stdout,
+		"profile= all=None current=None",
+	);
+});
+
+test("mutex A3: no clause when nothing was declined", async () => {
+	const r = await run(electionApp([]), ["run"]);
+	assert.equal(
+		r.stderr,
+		errOut(
+			"one of --profile, --all-profiles, --current-profile is required",
+			"myapp run",
+		),
+	);
+});
+
+test("mutex A4: a redundant negation beside an election is an error", async () => {
+	const r = await run(electionApp([]), [
+		"run",
+		"--profile",
+		"work",
+		"--no-all-profiles",
+	]);
+	assert.equal(
+		r.stderr,
+		errOut(
+			"--no-all-profiles cannot be combined with --profile " +
+				"(--no-all-profiles declines an option; it does not choose one)",
+			"myapp run",
+		),
+	);
+});
+
+test("mutex A4: every declined member is named, in declaration order", async () => {
+	const r = await run(electionApp([]), [
+		"run",
+		"--profile",
+		"work",
+		"--no-current-profile",
+		"--no-all-profiles",
+	]);
+	assert.equal(
+		r.stderr,
+		errOut(
+			"--no-all-profiles and --no-current-profile cannot be combined " +
+				"with --profile " +
+				"(--no-all-profiles declines an option; it does not choose one)",
+			"myapp run",
+		),
+	);
+});
+
+test("mutex: two elections are still mutually exclusive", async () => {
+	const r = await run(electionApp([]), [
+		"run",
+		"--profile",
+		"work",
+		"--all-profiles",
+	]);
+	assert.equal(
+		r.stderr,
+		errOut("--profile and --all-profiles are mutually exclusive", "myapp run"),
 	);
 });
 

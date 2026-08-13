@@ -32,6 +32,8 @@ import {
 	errHermeticWithConfigCommands,
 	errImpliesConflict,
 	errMissingRequiredArgument,
+	errMutexDeclineClause,
+	errMutexRedundantNegation,
 	errMutuallyExclusive,
 	errOneOfRequired,
 	errUnexpectedArgument,
@@ -611,18 +613,60 @@ export function validateAndBuildKwargs(
 	}
 	const def = cmd.def;
 
-	// Mutex constraints (before defaults). Only cli/env/config sources count.
+	// Mutex constraints (before defaults). Election is CLI-only and
+	// value-aware (effects contract §21):
+	//   - a bool member elects only when the typed token resolved to true;
+	//     `--no-x` DECLINES (it names the member and says it is not the choice)
+	//   - every other type elects on presence with any value, including ""
+	//   - env and config elect nothing AND supply nothing: their entries are
+	//     dropped here, before dependency validation, so an unelected member
+	//     delivers its declared default (or undefined) and never a stale env
+	//     value
 	for (const mg of def.mutex) {
 		const mgFlags = Object.values(mg.flags);
-		const setFlags = mgFlags
-			.filter((f) => store.isPresentForMutex(f.name))
-			.map((f) => `--${f.name}`);
-		if (setFlags.length > 1) {
-			throw new ParseError(errMutuallyExclusive(setFlags.join(" and ")));
+		const elected: AnyFlag[] = [];
+		const declined: AnyFlag[] = [];
+		for (const f of mgFlags) {
+			if (store.isEnvOrConfig(f.name)) {
+				store.delete(f.name);
+				continue;
+			}
+			if (!store.isCli(f.name)) {
+				continue;
+			}
+			if (f.schema === "bool" && store.get(f.name) !== true) {
+				declined.push(f);
+			} else {
+				elected.push(f);
+			}
 		}
-		if (setFlags.length === 0) {
+		const firstDeclined = declined[0];
+		const clause =
+			firstDeclined !== undefined
+				? errMutexDeclineClause(firstDeclined.name)
+				: "";
+		if (elected.length > 1) {
 			throw new ParseError(
-				errOneOfRequired(mgFlags.map((f) => `--${f.name}`).join(", ")),
+				errMutuallyExclusive(elected.map((f) => `--${f.name}`).join(" and ")),
+			);
+		}
+		const soleElected = elected[0];
+		if (
+			elected.length === 1 &&
+			soleElected !== undefined &&
+			declined.length > 0
+		) {
+			throw new ParseError(
+				errMutexRedundantNegation(
+					declined.map((f) => `--no-${f.name}`).join(" and "),
+					soleElected.name,
+					clause,
+				),
+			);
+		}
+		if (elected.length === 0) {
+			throw new ParseError(
+				errOneOfRequired(mgFlags.map((f) => `--${f.name}`).join(", "), clause),
 			);
 		}
 	}

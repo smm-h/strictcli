@@ -989,8 +989,20 @@ export function errMutuallyExclusive(setFlags: string): string {
 	return `${setFlags} are mutually exclusive`;
 }
 
-export function errOneOfRequired(names: string): string {
-	return `one of ${names} is required`;
+export function errOneOfRequired(names: string, clause: string): string {
+	return `one of ${names} is required${clause}`;
+}
+
+export function errMutexRedundantNegation(
+	declined: string,
+	elected: string,
+	clause: string,
+): string {
+	return `${declined} cannot be combined with --${elected}${clause}`;
+}
+
+export function errMutexDeclineClause(name: string): string {
+	return ` (--no-${name} declines an option; it does not choose one)`;
 }
 
 export function errImpliesConflict(

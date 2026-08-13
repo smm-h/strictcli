@@ -27,18 +27,27 @@ test("sources: set/get/has round-trip, including undefined values", () => {
 	assert.deepEqual(s.getEntry("port"), { value: 9090n, source: "env" });
 });
 
-test("sources: mutex presence counts only cli, env, and config", () => {
+test("sources: mutex election counts only cli (contract §21.3)", () => {
 	const s = new SourcedStore();
 	for (const label of ALL_LABELS) {
 		s.set(label, true, label);
 	}
-	assert.equal(s.isPresentForMutex("cli"), true);
-	assert.equal(s.isPresentForMutex("env"), true);
-	assert.equal(s.isPresentForMutex("config"), true);
-	assert.equal(s.isPresentForMutex("default"), false);
-	assert.equal(s.isPresentForMutex("implied"), false);
-	assert.equal(s.isPresentForMutex("infra"), false);
-	assert.equal(s.isPresentForMutex("missing"), false);
+	assert.equal(s.isCli("cli"), true);
+	assert.equal(s.isCli("env"), false);
+	assert.equal(s.isCli("config"), false);
+	assert.equal(s.isCli("default"), false);
+	assert.equal(s.isCli("implied"), false);
+	assert.equal(s.isCli("infra"), false);
+	assert.equal(s.isCli("missing"), false);
+
+	assert.equal(s.isEnvOrConfig("env"), true);
+	assert.equal(s.isEnvOrConfig("config"), true);
+	assert.equal(s.isEnvOrConfig("cli"), false);
+	assert.equal(s.isEnvOrConfig("default"), false);
+	assert.equal(s.isEnvOrConfig("missing"), false);
+
+	s.delete("env");
+	assert.equal(s.has("env"), false);
 });
 
 test("sources: deps presence counts everything except default", () => {

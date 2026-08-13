@@ -60,7 +60,10 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // validator. Its detail strings live in payload_schema.ts rather than here --
 // they are pinned across implementations by the shared vector file, not by the
 // error-parity catalog.
-const EXPECTED_TEMPLATE_COUNT = 319;
+// The mutex-election round (contract §21) adds 2: errMutexRedundantNegation
+// (the redundant-negation parse error) and errMutexDeclineClause (the teaching
+// clause both decline-shaped errors carry).
+const EXPECTED_TEMPLATE_COUNT = 321;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,
@@ -148,8 +151,25 @@ test("parse-time templates are byte-identical to sibling output", () => {
 		"--json, --quiet are mutually exclusive",
 	);
 	assert.equal(
-		errors.errOneOfRequired("--json, --quiet"),
+		errors.errOneOfRequired("--json, --quiet", ""),
 		"one of --json, --quiet is required",
+	);
+	assert.equal(
+		errors.errOneOfRequired(
+			"--json, --quiet",
+			errors.errMutexDeclineClause("quiet"),
+		),
+		"one of --json, --quiet is required " +
+			"(--no-quiet declines an option; it does not choose one)",
+	);
+	assert.equal(
+		errors.errMutexRedundantNegation(
+			"--no-quiet",
+			"json",
+			errors.errMutexDeclineClause("quiet"),
+		),
+		"--no-quiet cannot be combined with --json " +
+			"(--no-quiet declines an option; it does not choose one)",
 	);
 	assert.equal(
 		errors.errFlagRequiresFlag("watch", "serve"),
