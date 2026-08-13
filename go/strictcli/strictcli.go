@@ -239,22 +239,23 @@ type Command struct {
 	// PayloadSchema is the command's machine payload contract (contract
 	// §19.5): an inline JSON Schema literal, registered as written. A nil
 	// schema means the command cannot produce a payload -- ctx.Payload is
-	// then a call-time hard error. The literal is stored opaquely at this
-	// round; validating a payload against it is a later item.
-	PayloadSchema           map[string]interface{}
-	Grants                  []Grant
-	Forwarding              *Forwarding
-	flags                   []Flag
-	args                    []Arg
-	flagSets                []FlagSet
-	mutex                   []MutexGroup
-	dependencies            []Dependency
-	tags                    []string
-	configFields            []string // bound config field names
-	Passthrough             bool
-	PassthroughHandler      PassthroughHandler
-	Hidden                  bool
-	Interactive             bool
+	// then a call-time hard error. The literal is validated at registration
+	// over the closed subset, and the value ctx.Payload supplies is
+	// validated against it at emission.
+	PayloadSchema      map[string]interface{}
+	Grants             []Grant
+	Forwarding         *Forwarding
+	flags              []Flag
+	args               []Arg
+	flagSets           []FlagSet
+	mutex              []MutexGroup
+	dependencies       []Dependency
+	tags               []string
+	configFields       []string // bound config field names
+	Passthrough        bool
+	PassthroughHandler PassthroughHandler
+	Hidden             bool
+	Interactive        bool
 	// effectSet records that WithEffect was applied, so a deliberate
 	// WithEffect("") is told apart from an absent declaration.
 	effectSet bool
@@ -3420,6 +3421,14 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		}
 	} else if cmd.DryRunUnsupportedReason != "" {
 		panic(errCommandDryRunReasonWithoutDeclaration(name))
+	}
+	// The declared payload schema is validated as written, over the closed
+	// subset (§19.5). An unknown keyword anywhere in the literal is a hard
+	// error here, which is what keeps the subset closed by construction.
+	if cmd.PayloadSchema != nil {
+		if f := validatePayloadSchemaLiteral(cmd.PayloadSchema); f != nil {
+			panic(errPayloadSchemaInvalid(name, f.Path, f.Detail))
+		}
 	}
 	cmd.Grants = validateGrants(name, cmd.Grants)
 	if cmd.Forwarding != nil && strings.TrimSpace(cmd.Forwarding.Reason) == "" {

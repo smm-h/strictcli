@@ -121,14 +121,19 @@ func (c *Context) JSON() bool { return c.reserved.json }
 // machine mode it is not printed at all. Test and Call capture it either way.
 //
 // It PANICS when the command declared no payload schema (there is nothing to
-// validate the value against) and when a payload was already supplied in this
-// dispatch (one slot, one answer).
+// validate the value against), when a payload was already supplied in this
+// dispatch (one slot, one answer), and when the value does not satisfy the
+// declared schema (contract §19.5) -- a wrong shape fails here instead of
+// shipping.
 func (c *Context) Payload(value interface{}) {
 	if c.payloadSchema == nil {
 		panic(errPayloadNoSchema(c.commandName))
 	}
 	if c.payloadSet {
 		panic(errPayloadAlreadySet(c.commandName))
+	}
+	if f := validatePayloadValue(value, c.payloadSchema); f != nil {
+		panic(errPayloadInvalid(c.commandName, f.Path, f.Detail))
 	}
 	c.payload = value
 	c.payloadSet = true

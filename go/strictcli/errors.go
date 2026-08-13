@@ -1315,6 +1315,23 @@ func errPayloadAlreadySet(name string) string {
 	return fmt.Sprintf("command %q: ctx.payload was already called (a dispatch carries at most one payload)", name)
 }
 
+// errPayloadSchemaInvalid fires at registration when a declared payload schema
+// leaves the closed subset (§19.5). path names the position inside the
+// declared literal (rooted at payload_schema) and detail names the violated
+// rule; both are byte-identical across the three implementations, pinned by
+// conformance/payload_schema_vectors.json.
+func errPayloadSchemaInvalid(name, path, detail string) string {
+	return fmt.Sprintf("command %q: payload schema is invalid at %s: %s", name, path, detail)
+}
+
+// errPayloadInvalid fires at emission when a payload deviates from its
+// declared schema (§19.5). path names the position inside the value (rooted at
+// payload) and detail names the violated constraint, so a wrong shape fails
+// here instead of shipping.
+func errPayloadInvalid(name, path, detail string) string {
+	return fmt.Sprintf("command %q: payload does not satisfy the declared schema at %s: %s", name, path, detail)
+}
+
 // ---------------------------------------------------------------------------
 // effects.go — dry-run truncation (parse-time)
 //
