@@ -429,6 +429,62 @@ def _check_schema_commands(proj_dir: str | None, expect: dict) -> list[str]:
 
 _SCRIPT_STEP_TIMEOUT = 10.0
 
+# A step may CAPTURE a value out of its reply and a later step may splice it
+# into what it sends. That is the only way to script a protocol whose later
+# requests quote something the server minted -- a continuation state blob, say,
+# which is by construction unguessable and different every run.
+#
+#   {"send": "...", "capture": {"state": "result.requestState"}}
+#   {"send": "... \"requestState\":\"{{state}}\" ..."}
+#   {"send": "... \"requestState\":\"{{state|tamper}}\" ..."}
+#
+# `capture` maps a name to a dotted path into the parsed reply. The
+# substitution vocabulary is closed: a bare `{{name}}` splices the captured
+# text, and `{{name|tamper}}` splices it with its last character changed, which
+# is how a case asserts that an integrity-protected value is actually checked.
+
+_CAPTURE_RE = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_]*)(\|tamper)?\}\}")
+
+
+def _capture_from_reply(line: str, paths: dict, captured: dict) -> list[str]:
+    """Pull declared values out of one reply line into the capture table."""
+    errors: list[str] = []
+    try:
+        parsed = json.loads(line)
+    except json.JSONDecodeError:
+        return [f"  protocol_script: cannot capture from a non-JSON line: {line!r}"]
+    for name, path in paths.items():
+        cursor = parsed
+        for part in str(path).split("."):
+            if not isinstance(cursor, dict) or part not in cursor:
+                errors.append(
+                    f"  protocol_script: capture {name!r} found no {path!r} in {line!r}"
+                )
+                cursor = None
+                break
+            cursor = cursor[part]
+        if cursor is not None:
+            captured[name] = cursor
+    return errors
+
+
+def _splice_captures(text: str, captured: dict) -> tuple[str, list[str]]:
+    """Substitute `{{name}}` / `{{name|tamper}}` in a step's line to send."""
+    errors: list[str] = []
+
+    def replace(match: "re.Match[str]") -> str:
+        name = match.group(1)
+        if name not in captured:
+            errors.append(f"  protocol_script: nothing captured under {name!r}")
+            return match.group(0)
+        value = str(captured[name])
+        if match.group(2) and value:
+            last = value[-1]
+            return value[:-1] + ("A" if last != "A" else "B")
+        return value
+
+    return _CAPTURE_RE.sub(replace, text), errors
+
 
 def _drain(stream, sink: list[str], lines: "queue.Queue[str | None]" = None):
     """Read a child stream line by line into `sink` (and optionally a queue)."""
@@ -504,11 +560,14 @@ def _run_protocol_script(
     for t in threads:
         t.start()
 
+    captured: dict = {}
     try:
         for i, step in enumerate(script, start=1):
             if "send" in step:
+                line_to_send, splice_errors = _splice_captures(step["send"], captured)
+                errors.extend(splice_errors)
                 try:
-                    proc.stdin.write(step["send"] + "\n")
+                    proc.stdin.write(line_to_send + "\n")
                     proc.stdin.flush()
                 except (BrokenPipeError, ValueError):
                     errors.append(
@@ -517,7 +576,8 @@ def _run_protocol_script(
                     )
                     break
             expect_line = step.get("expect_line")
-            if expect_line is None:
+            capture = step.get("capture")
+            if expect_line is None and not capture:
                 continue
             source = err_lines if step.get("stream") == "stderr" else out_lines
             try:
@@ -528,7 +588,16 @@ def _run_protocol_script(
                     f"{_SCRIPT_STEP_TIMEOUT:g}s"
                 )
                 break
-            errors.extend(_check_protocol_line(line, expect_line, i))
+            if expect_line is not None:
+                errors.extend(_check_protocol_line(line, expect_line, i))
+            if capture:
+                if line is None:
+                    errors.append(
+                        f"  protocol_script step {i}: the stream closed before a "
+                        f"line could be captured"
+                    )
+                    break
+                errors.extend(_capture_from_reply(line, capture, captured))
     finally:
         try:
             proc.stdin.close()

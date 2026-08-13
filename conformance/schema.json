@@ -129,11 +129,19 @@
       "type": "object",
       "additionalProperties": false,
       "minProperties": 1,
-      "description": "One step of a line-scripted exchange: send a line, and/or read and assert one reply line. A step with only 'send' does not wait; a step with only 'expect_line' reads without sending.",
+      "description": "One step of a line-scripted exchange: send a line, and/or read and assert one reply line. A step with only 'send' does not wait; a step with only 'expect_line' or 'capture' reads without sending.",
       "properties": {
         "send": {
           "type": "string",
-          "description": "The line written to the child's stdin. The terminating newline is added by the runner."
+          "description": "The line written to the child's stdin. The terminating newline is added by the runner. A '{{name}}' placeholder splices in a value an earlier step captured, and '{{name|tamper}}' splices it with its last character changed -- which is how a case asserts that an integrity-protected value is actually checked."
+        },
+        "capture": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "description": "Values to pull out of this step's reply for later steps to splice into what they send, as {name: dotted path into the parsed reply}. This is the only way to script a protocol whose later requests quote something the server minted -- a continuation state blob, say, which is unguessable by construction and different every run. A step carrying 'capture' reads a reply line even when it asserts nothing about it."
         },
         "stream": {
           "enum": [

@@ -437,3 +437,42 @@ if __name__ == "__main__":
                 failures += 1
                 print(f"FAIL {_name}: {exc}")
     sys.exit(1 if failures else 0)
+
+
+def test_protocol_script_captures_a_value_and_splices_it_into_a_later_line():
+    """The round-trip shape: a later request quotes what the server minted."""
+    _, errors = _script(
+        _ECHO_CHILD,
+        [
+            {"send": '{"state":"abc"}', "capture": {"state": "state"}},
+            {"send": '{"echo":"{{state}}"}', "expect_line": {"json_equals": {"echo": "abc"}}},
+        ],
+    )
+    assert errors == [], errors
+
+
+def test_protocol_script_tamper_changes_the_captured_value():
+    _, errors = _script(
+        _ECHO_CHILD,
+        [
+            {"send": '{"state":"abc"}', "capture": {"state": "state"}},
+            {
+                "send": '{"echo":"{{state|tamper}}"}',
+                "expect_line": {"json_equals": {"echo": "abA"}},
+            },
+        ],
+    )
+    assert errors == [], errors
+
+
+def test_protocol_script_reports_a_capture_path_that_is_not_there():
+    _, errors = _script(
+        _ECHO_CHILD,
+        [{"send": '{"state":"abc"}', "capture": {"state": "result.requestState"}}],
+    )
+    assert any("found no 'result.requestState'" in e for e in errors), errors
+
+
+def test_protocol_script_reports_a_substitution_with_nothing_captured():
+    _, errors = _script(_ECHO_CHILD, [{"send": '{"echo":"{{missing}}"}'}])
+    assert any("nothing captured under 'missing'" in e for e in errors), errors
