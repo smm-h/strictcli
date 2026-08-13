@@ -3788,6 +3788,33 @@ because a reading it presented as forced is authored (§20.1).
      - **The marker's timestamp is unclamped**: no partition was selected when the write failed, so
        there is no range to clamp into.
 
+     **Amended at the lookup-rule audit (2026-08-13), on the spec page and marked there in place.**
+     An independent audit found the page's lookup rule falsified by the page's own rolling rule, and
+     the correction is authored in this same class:
+
+     - **The range invariant is ONE-SIDED.** The clamp bounds an entry's timestamp from below -- an
+       entry is never older than the label of the file it is written to -- and bounds nothing from
+       above. The page's claim that every entry lies *within* its file's half-open range was false:
+       a file rolls only when it is at least 8 MB **and** the hour has advanced, so a small file
+       keeps taking entries for hours, and once it finally crosses the threshold the next partition
+       is labelled for the hour that write happens in. The earlier file is then holding entries at
+       or beyond the newer file's label.
+     - **Lookup is a binary search followed by a backward walk.** Search the sorted labels for the
+       greatest one not after the identifier's embedded timestamp, read that partition, and **on a
+       miss continue with the next older partition until the entry is found or the partitions are
+       exhausted.** The audit constructed the falsifying store -- an hour-09 entry in a `...T04`
+       partition beside a `...T09` partition -- where the single-search rule reports a live entry as
+       missing and a consumer then records a dangling parent that is not dangling.
+     - **No writer behaviour changes.** All three implementations already clamped exactly as the
+       one-sided invariant describes; what was wrong was the page's statement of the invariant and
+       the reader rule derived from it. The test-side chain resolvers in this repository (the only
+       readers it owns, per §20.2) implement the amended rule, and each language's suite pins the
+       stranded-entry store.
+     - **The page's entry example was internally inconsistent** and is regenerated: its identifier
+       decoded to `2025-07-03T19:45:10.869Z` while the `spawned_at` on the same line read
+       `2026-08-13T04:17:52.913Z`, contradicting the page's own rule that `spawned_at` is exactly
+       the millisecond embedded in `id`.
+
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
 

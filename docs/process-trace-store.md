@@ -26,6 +26,13 @@ nav_order: 20
 > line, the partitions, the identifiers and the failure marker. Spellings marked *(authored at the
 > implementation round)* below were pinned when the implementations were written, at points where
 > this page had been silent; they are recorded in the contract's §18.9, item 112.
+>
+> **Amended 2026-08-13 at the lookup-rule audit.** An independent audit found this page's lookup
+> rule falsified by its own rolling rule: the range invariant is one-sided, and a reader must walk
+> backward through older partitions when the binary search misses. The amendment is marked in place
+> under [Partitions](#partitions), and the entry example's identifier -- which decoded to a
+> different instant than the `spawned_at` beside it -- was regenerated. The amendment is recorded in
+> the contract's §18.9, item 112.
 
 When one command-line tool runs another, the second one has no reliable way to say who invoked it.
 Every tool that has wanted the answer has invented its own channel -- an environment marker, a
@@ -128,9 +135,10 @@ ssh host STRICTCLI_TRACE_PARENT="$STRICTCLI_TRACE_PARENT" mytool subcommand
 ## Partitions
 
 Entries live in files labelled with a UTC hour, but a label is a **range start**, not a promise
-about contents: a file covers everything from its own label until the next file's label begins.
-A busy machine produces one file per hour; an idle one produces a single file spanning days. Both
-are correct, and both are searchable the same way, because of the clamp invariant below.
+about contents: a file holds nothing older than its own label, and may hold entries newer than the
+next file's label. A busy machine produces one file per hour; an idle one produces a single file
+spanning days. Both are correct, and both are searched the same way -- binary search to the label,
+then backward through older partitions on a miss (see the lookup rule below).
 
 ```text
 ~/.local/share/strictcli/trace/2026-08-13T04.jsonl
@@ -142,6 +150,9 @@ are correct, and both are searchable the same way, because of the clamp invarian
 - **A file's range is half-open**: it starts at its own label and ends where the next file's label
   begins. The greatest-named file's range is open-ended. A label is therefore *not* a promise that
   the file holds only that hour -- an idle machine may write one file covering three days.
+  *(amended 2026-08-13, lookup-rule audit)* The range is where a reader looks **first**; it is not a
+  bound on contents at the top end, because a file that has not yet rolled keeps taking entries after
+  a newer-labelled partition exists.
 - **Writers append to the greatest-named file.** That file is the active partition.
 - **Rolling.** Before appending, a writer creates the next partition when **both** conditions hold:
   1. the active file's size is at least **8 MB**, and
@@ -151,13 +162,40 @@ are correct, and both are searchable the same way, because of the clamp invarian
   because another writer won the race, the loser simply appends to the winner's file -- no retry
   loop, no coordination. Worst-case file size is therefore the 8 MB threshold plus one hour of
   writes.
-- **The clamp invariant.** A writer whose clock reads earlier than the active partition's range
-  start **clamps** its minted timestamp to that range start. Every entry's embedded timestamp
-  therefore lies within its file's range, without exception -- which is what makes lookup a
-  deterministic **binary search over filenames**: to find entries around an instant, binary-search
-  the sorted filenames for the greatest label not after it, and read that file. A clock that jumps
-  backwards (NTP correction, a VM resuming from a snapshot) costs a small ordering distortion inside
-  one file and never breaks the search.
+- **The clamp invariant, which bounds the bottom only.** A writer whose clock reads earlier than
+  the active partition's range start **clamps** its minted timestamp to that range start. Every
+  entry's embedded timestamp is therefore **at or after its own file's label**, without exception.
+  ~~Every entry's embedded timestamp therefore lies within its file's range, without exception --
+  which is what makes lookup a deterministic **binary search over filenames**: to find entries
+  around an instant, binary-search the sorted filenames for the greatest label not after it, and
+  read that file.~~ *(amended 2026-08-13, lookup-rule audit -- see the box below: the top of the
+  range is NOT bounded, and one binary search is not enough.)* A clock that jumps backwards (NTP
+  correction, a VM resuming from a snapshot) costs a small ordering distortion inside one file and
+  never breaks the lookup.
+- **Lookup: binary search, then walk backward on a miss.** To find the entry an identifier names,
+  binary-search the sorted filenames for the greatest label **not after** that identifier's embedded
+  timestamp and read that file; **if the entry is not there, continue with the next older partition,
+  and so on until it is found or the partitions are exhausted.** The backward walk is required for
+  correctness, not an optimization: the rolling rule above strands entries above their own file's
+  label, so the partition an identifier's timestamp points at is where the entry is *most likely*
+  to be, never where it must be. A search that stops after one file reports entries that exist as
+  missing.
+
+> **Amendment (2026-08-13, lookup-rule audit): the range invariant is one-sided, and lookup walks
+> backward.** This page claimed that every entry's timestamp lay inside its file's half-open range
+> and that one binary search therefore always found it. The rolling rule falsifies the top half of
+> that claim, and the writers were right while the lookup rule was wrong. A file rolls only when it
+> is at least 8 MB **and** the hour has advanced, so a small file keeps taking entries hour after
+> hour; when it finally crosses 8 MB in some later hour, the next write creates a partition labelled
+> for *that* hour. The earlier file is then left holding entries whose timestamps are at or beyond
+> the newer file's label. The audit constructed exactly that store: an hour-09 entry living in the
+> `...T04` partition beside a `...T09` partition, which the single-search rule reports as missing --
+> and a consumer then records a dangling parent that is not dangling.
+>
+> Nothing about writing changes: the clamp still bounds the bottom, and it was always the only bound
+> the writers established. What changes is the reader's rule, which now walks backward through older
+> partitions on a miss, and the invariant's statement, which is one-sided. *(authored at the
+> lookup-rule audit; recorded in the contract's §18.9, item 112.)*
 - **All date arithmetic is UTC epoch arithmetic.** No local time, no timezone database, no DST, no
   calendar code. Formatting a label is integer division of an epoch-millisecond value by 3 600 000
   and rendering the result; comparing labels is string comparison, which the format makes equivalent
@@ -186,8 +224,9 @@ depends on. Writers mint independently, so the profile is the only thing keeping
   secure source. There is **no issuing authority**, no sequence file and no coordination. Collision
   probability for a thousand identifiers minted in the same millisecond is about 4e-19.
 - **The timestamp is the clamped one** (see the clamp invariant above): a writer clamps first, then
-  mints, so the identifier and the entry's `spawned_at` always agree and always fall inside the
-  file's range.
+  mints, so the identifier and the entry's `spawned_at` always agree and are never older than the
+  label of the file the entry is written to. *(amended 2026-08-13, lookup-rule audit: they may be
+  newer than the next file's label -- see the amendment box under Partitions.)*
 - **Shared cross-language test vectors** pin encoding and parsing -- valid canonical forms, lowercase
   rejection, overflow rejection, alphabet violations, and the timestamp round-trip.
 
@@ -205,8 +244,13 @@ reserved-flag state, in which process, at which instant, descending from which p
 describes what the invocation was asked to do beyond the command's own path.
 
 ```json
-{"id":"01JZ8X4M6N7QK2WVBD3F5RTYAC","parent_id":null,"app":"rlsbl","version":"0.61.2","command":"release.run","dry_run":false,"machine_mode":false,"quiet":false,"verbose":true,"approve_consequential":true,"effect":"mutating","pid":48213,"spawned_at":"2026-08-13T04:17:52.913Z"}
+{"id":"01KZWNEG8HJPCTVGNVF2MQ0Y5E","parent_id":null,"app":"rlsbl","version":"0.61.2","command":"release.run","dry_run":false,"machine_mode":false,"quiet":false,"verbose":true,"approve_consequential":true,"effect":"mutating","pid":48213,"spawned_at":"2026-08-13T04:17:52.913Z"}
 ```
+
+The identifier's first 48 bits decode to `2026-08-13T04:17:52.913Z`, which is exactly what
+`spawned_at` renders -- the two always agree, and an example where they do not is a broken example.
+*(The line printed here until 2026-08-13 carried an identifier decoding to 2025-07-03T19:45:10.869Z
+beside that `spawned_at`; corrected at the lookup-rule audit.)*
 
 | Key | Type | Meaning |
 |-----|------|---------|
@@ -269,8 +313,13 @@ after the writing tool has been upgraded, and after a line somewhere turned out 
 **Resolve at capture time.** When the consumer records its own event, it should:
 
 1. read `STRICTCLI_TRACE_PARENT` from its own environment;
-2. resolve that entry from the store, then walk `parent_id` to the root;
+2. resolve that entry from the store by the [lookup rule](#partitions) -- binary search to the
+   greatest label not after the identifier's timestamp, then backward through older partitions on a
+   miss -- and repeat for each `parent_id` up to the root;
 3. **embed the flattened chain in its own record**, alongside the identifiers themselves.
+
+A consumer that stops at the first partition the binary search lands on will report entries that
+exist as dangling, because the rolling rule strands entries above their file's label.
 
 Embedding the resolved chain rather than only the identifiers makes the consumer's record
 self-contained forever. **Age-based pruning of the store -- compressing old partitions, deleting

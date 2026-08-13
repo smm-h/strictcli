@@ -1702,8 +1702,12 @@ def _trace_write_entry(identity: _TraceIdentity) -> str | None:
         os.makedirs(store, mode=_TRACE_DIR_MODE, exist_ok=True)
         now_ms = int(time.time() * 1000)
         label = _trace_active_label(store, now_ms)
-        # The clamp invariant: an entry always lies inside its file's range,
-        # which is what makes lookup a binary search over filenames.
+        # The clamp invariant, one-sided: an entry is never older than its
+        # file's label. It may be NEWER than the next file's label, because a
+        # file that has not reached the roll threshold keeps taking entries
+        # after a newer partition exists -- which is why a reader binary-
+        # searches to the label and then walks backward on a miss (see the
+        # spec page's lookup rule, amended at the 2026-08-13 lookup-rule audit).
         ms = max(now_ms, _trace_label_start_ms(label))
         entry_id = _ulid_mint(ms)
         inherited = os.environ.get(_TRACE_PARENT_ENV)

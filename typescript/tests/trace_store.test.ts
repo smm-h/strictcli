@@ -161,52 +161,112 @@ interface ReadResult {
 }
 
 /**
- * A torn or malformed line is recorded verbatim as an anomaly and skipped --
- * never discarded silently.
+ * One partition's entries and anomalies. A torn or malformed line is recorded
+ * verbatim as an anomaly and skipped -- never discarded silently.
  */
-function readEntries(home: string): ReadResult {
+function entriesIn(path: string): ReadResult {
 	const entries: Record<string, unknown>[] = [];
 	const anomalies: string[] = [];
-	for (const path of partitions(home)) {
-		for (const line of readFileSync(path, "utf8").split("\n")) {
-			if (line === "") {
-				continue;
-			}
-			let obj: unknown;
-			try {
-				obj = JSON.parse(line);
-			} catch {
-				anomalies.push(line);
-				continue;
-			}
-			if (
-				typeof obj !== "object" ||
-				obj === null ||
-				Object.keys(obj).length !== ENTRY_KEYS.length ||
-				!ENTRY_KEYS.every((k) => Object.hasOwn(obj as object, k))
-			) {
-				anomalies.push(line);
-				continue;
-			}
-			entries.push(obj as Record<string, unknown>);
+	for (const line of readFileSync(path, "utf8").split("\n")) {
+		if (line === "") {
+			continue;
 		}
+		let obj: unknown;
+		try {
+			obj = JSON.parse(line);
+		} catch {
+			anomalies.push(line);
+			continue;
+		}
+		if (
+			typeof obj !== "object" ||
+			obj === null ||
+			Object.keys(obj).length !== ENTRY_KEYS.length ||
+			!ENTRY_KEYS.every((k) => Object.hasOwn(obj as object, k))
+		) {
+			anomalies.push(line);
+			continue;
+		}
+		entries.push(obj as Record<string, unknown>);
 	}
 	return { entries, anomalies };
 }
 
-/** Walks parent_id to the root; a dangling reference ends the walk. */
-function flattenAncestry(
-	entries: readonly Record<string, unknown>[],
-	leafId: string,
-): string[] {
-	const byId = new Map(entries.map((e) => [e.id as string, e]));
+function readEntries(home: string): ReadResult {
+	const entries: Record<string, unknown>[] = [];
+	const anomalies: string[] = [];
+	for (const path of partitions(home)) {
+		const found = entriesIn(path);
+		entries.push(...found.entries);
+		anomalies.push(...found.anomalies);
+	}
+	return { entries, anomalies };
+}
+
+/**
+ * The spec's lookup rule (docs/process-trace-store.md, Partitions): binary-
+ * search the sorted labels for the greatest label NOT AFTER the identifier's
+ * embedded timestamp, read that partition, and on a miss walk backward through
+ * older partitions until the entry is found or the partitions are exhausted.
+ * The backward walk is required for correctness: the clamp invariant is
+ * one-sided, so a file that has not rolled keeps taking entries after a
+ * newer-labelled partition exists.
+ *
+ * `walkBack: false` is the pre-amendment rule -- one binary search and nothing
+ * else -- kept so a test can pin what it misses.
+ */
+function resolveEntry(
+	home: string,
+	entryId: string,
+	walkBack = true,
+): Record<string, unknown> | null {
+	const ms = ulidTimestamp(entryId);
+	if (ms === null) {
+		return null;
+	}
+	const parts = partitions(home);
+	const labels = parts.map((p) =>
+		(p.split("/").pop() as string).replace(/\.jsonl$/, ""),
+	);
+	const target = traceLabel(ms);
+	// The greatest label not after the target.
+	let lo = 0;
+	let hi = labels.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1;
+		if ((labels[mid] as string) <= target) {
+			lo = mid + 1;
+		} else {
+			hi = mid;
+		}
+	}
+	for (let index = lo - 1; index >= 0; index--) {
+		for (const entry of entriesIn(parts[index] as string).entries) {
+			if (entry.id === entryId) {
+				return entry;
+			}
+		}
+		if (!walkBack) {
+			return null;
+		}
+	}
+	return null;
+}
+
+/**
+ * Walks parent_id to the root, resolving each link through the store's own
+ * lookup rule; a dangling reference ends the walk.
+ */
+function flattenAncestry(home: string, leafId: string): string[] {
 	const chain: string[] = [];
 	let current: string | null = leafId;
-	while (current !== null && byId.has(current)) {
+	while (current !== null) {
+		const entry = resolveEntry(home, current);
+		if (entry === null) {
+			return chain;
+		}
 		chain.push(current);
-		current = (byId.get(current) as Record<string, unknown>).parent_id as
-			| string
-			| null;
+		current = entry.parent_id as string | null;
 	}
 	return chain;
 }
@@ -468,9 +528,11 @@ test("trace: rolls with O_EXCL when both conditions hold", () => {
 	});
 });
 
-test("trace: the clamp keeps every entry inside its file's range", () => {
+test("trace: the clamp keeps every entry at or after its file's label", () => {
 	// A partition labelled in the future stands for a clock that jumped
-	// backwards. The minted timestamp clamps up to the range start.
+	// backwards. The minted timestamp clamps up to the range start. The clamp
+	// is ONE-SIDED (spec page, amended at the lookup-rule audit): nothing bounds
+	// an entry from above.
 	withHome((home) => {
 		const dir = storeDir(home);
 		mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -499,6 +561,106 @@ test("trace: readers ignore files that are not partitions", () => {
 		const { entries, anomalies } = readEntries(home);
 		assert.equal(entries.length, 1);
 		assert.deepEqual(anomalies, []);
+	});
+});
+
+// --- the lookup rule ------------------------------------------------------
+
+/**
+ * Builds the store the lookup-rule audit constructed, using the real writer.
+ *
+ * 1. A partition labelled for the PREVIOUS hour is the greatest-named file, so
+ *    the writer appends to it and mints a timestamp in the CURRENT hour: that
+ *    entry is stranded above its own file's label.
+ * 2. Padding that file past the roll threshold makes the next write roll, and
+ *    the new partition is labelled for the current hour -- the very label the
+ *    stranded entry's timestamp points at.
+ *
+ * Returns [strandedId, rolledId]. When `link` is true the rolled entry inherits
+ * the stranded one as its parent, so the pair is a chain crossing the strand.
+ */
+function strandedStore(home: string, link = false): [string, string] {
+	const dir = storeDir(home);
+	mkdirSync(dir, { recursive: true, mode: 0o700 });
+	const prevLabel = traceLabel(Date.now() - MS_PER_HOUR);
+	const prev = join(dir, `${prevLabel}.jsonl`);
+	writeFileSync(prev, "");
+	const stranded = mustWrite();
+	// Padding past the roll threshold. It is one anomalous line, which every
+	// reader here skips.
+	appendFileSync(prev, `${"x".repeat(ROLL_BYTES)}\n`);
+	if (link) {
+		process.env[TRACE_PARENT_ENV] = stranded;
+	}
+	const rolled = mustWrite();
+	if (link) {
+		delete process.env[TRACE_PARENT_ENV];
+	}
+	assert.equal(partitions(home).length, 2);
+	return [stranded, rolled];
+}
+
+test("trace: the range is not bounded at the top", () => {
+	// The falsifying store: an entry whose timestamp is at or beyond the NEXT
+	// partition's label, living in the older file.
+	withHome((home) => {
+		const [stranded] = strandedStore(home);
+		const parts = partitions(home);
+		const older = entriesIn(parts[0] as string).entries;
+		assert.equal(older.length, 1);
+		assert.equal(older[0]?.id, stranded);
+		const newerLabel = (parts[1] as string)
+			.split("/")
+			.pop()
+			?.replace(/\.jsonl$/, "") as string;
+		assert.ok(
+			(ulidTimestamp(stranded) as number) >= traceLabelStartMs(newerLabel),
+		);
+	});
+});
+
+test("trace: a stranded entry is found by walking backward", () => {
+	withHome((home) => {
+		const [stranded] = strandedStore(home);
+		assert.equal(resolveEntry(home, stranded)?.id, stranded);
+	});
+});
+
+test("trace: one binary search alone misses the stranded entry", () => {
+	// The rule the spec page carried until the lookup-rule audit: search the
+	// partition the timestamp points at and stop. It reports a live entry as
+	// missing, which a consumer records as a dangling parent.
+	withHome((home) => {
+		const [stranded] = strandedStore(home);
+		assert.equal(resolveEntry(home, stranded, false), null);
+	});
+});
+
+test("trace: the unstranded entry is found by the first search", () => {
+	withHome((home) => {
+		const [, rolled] = strandedStore(home);
+		assert.notEqual(resolveEntry(home, rolled, false), null);
+	});
+});
+
+test("trace: a chain across the strand still flattens", () => {
+	withHome((home) => {
+		const [stranded, rolled] = strandedStore(home, true);
+		assert.deepEqual(flattenAncestry(home, rolled), [rolled, stranded]);
+	});
+});
+
+test("trace: an identifier no store holds resolves to nothing", () => {
+	withHome((home) => {
+		mustWrite();
+		assert.equal(resolveEntry(home, "01JZ8X4M6N7QK2WVBD3F5RTYAC"), null);
+	});
+});
+
+test("trace: an unparseable identifier resolves to nothing", () => {
+	withHome((home) => {
+		mustWrite();
+		assert.equal(resolveEntry(home, "not-a-ulid"), null);
 	});
 });
 
@@ -535,7 +697,7 @@ test("trace: a dangling parent is legal by design", () => {
 	withHome((home) => {
 		process.env[TRACE_PARENT_ENV] = "01JZ8X4M6N7QK2WVBD3F5RTYAC";
 		const id = mustWrite();
-		assert.deepEqual(flattenAncestry(readEntries(home).entries, id), [id]);
+		assert.deepEqual(flattenAncestry(home, id), [id]);
 	});
 });
 
@@ -871,7 +1033,7 @@ test("trace: a three-deep spawn chain yields a flattened ancestry", () => {
 		const parents = new Set(entries.map((e) => e.parent_id));
 		const leaves = entries.filter((e) => !parents.has(e.id));
 		assert.equal(leaves.length, 1);
-		const chain = flattenAncestry(entries, leaves[0]?.id as string);
+		const chain = flattenAncestry(home, leaves[0]?.id as string);
 		assert.equal(chain.length, 3);
 		const byId = new Map(entries.map((e) => [e.id as string, e]));
 		assert.equal(byId.get(chain[2] as string)?.parent_id, null);

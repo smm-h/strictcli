@@ -200,8 +200,12 @@ export function traceWriteEntry(identity: TraceIdentity): string | null {
 		mkdirSync(store, { recursive: true, mode: TRACE_DIR_MODE });
 		const nowMs = Date.now();
 		const label = traceActiveLabel(store, nowMs);
-		// The clamp invariant: an entry always lies inside its file's range,
-		// which is what makes lookup a binary search over filenames.
+		// The clamp invariant, one-sided: an entry is never older than its
+		// file's label. It may be NEWER than the next file's label, because a
+		// file that has not reached the roll threshold keeps taking entries
+		// after a newer partition exists -- which is why a reader binary-
+		// searches to the label and then walks backward on a miss (see the spec
+		// page's lookup rule, amended at the 2026-08-13 lookup-rule audit).
 		const ms = Math.max(nowMs, traceLabelStartMs(label));
 		const id = ulidMint(ms);
 		const inherited = process.env[TRACE_PARENT_ENV];

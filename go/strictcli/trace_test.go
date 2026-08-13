@@ -63,6 +63,39 @@ func tracePartitions(t *testing.T, home string) []string {
 	return out
 }
 
+// entriesIn returns one partition's well-formed entries and its anomalies.
+func entriesIn(t *testing.T, path string) ([]map[string]interface{}, []string) {
+	t.Helper()
+	var entries []map[string]interface{}
+	var anomalies []string
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" {
+			continue
+		}
+		var obj map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			anomalies = append(anomalies, line)
+			continue
+		}
+		complete := len(obj) == len(entryKeys)
+		for _, key := range entryKeys {
+			if _, ok := obj[key]; !ok {
+				complete = false
+			}
+		}
+		if !complete {
+			anomalies = append(anomalies, line)
+			continue
+		}
+		entries = append(entries, obj)
+	}
+	return entries, anomalies
+}
+
 // readEntries returns the well-formed entries and the anomalies. A torn or
 // malformed line is recorded verbatim as an anomaly and skipped -- never
 // discarded silently.
@@ -71,45 +104,64 @@ func readEntries(t *testing.T, home string) ([]map[string]interface{}, []string)
 	var entries []map[string]interface{}
 	var anomalies []string
 	for _, path := range tracePartitions(t, home) {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("reading %s: %v", path, err)
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			if line == "" {
-				continue
-			}
-			var obj map[string]interface{}
-			if err := json.Unmarshal([]byte(line), &obj); err != nil {
-				anomalies = append(anomalies, line)
-				continue
-			}
-			complete := len(obj) == len(entryKeys)
-			for _, key := range entryKeys {
-				if _, ok := obj[key]; !ok {
-					complete = false
-				}
-			}
-			if !complete {
-				anomalies = append(anomalies, line)
-				continue
-			}
-			entries = append(entries, obj)
-		}
+		found, bad := entriesIn(t, path)
+		entries = append(entries, found...)
+		anomalies = append(anomalies, bad...)
 	}
 	return entries, anomalies
 }
 
-func flattenAncestry(entries []map[string]interface{}, leafID string) []string {
-	byID := map[string]map[string]interface{}{}
-	for _, e := range entries {
-		byID[e["id"].(string)] = e
+// resolveEntry implements the spec's lookup rule (docs/process-trace-store.md,
+// Partitions): binary-search the sorted labels for the greatest label NOT AFTER
+// the identifier's embedded timestamp, read that partition, and on a miss walk
+// backward through older partitions until the entry is found or the partitions
+// are exhausted. The backward walk is required for correctness: the clamp
+// invariant is one-sided, so a file that has not rolled keeps taking entries
+// after a newer-labelled partition exists.
+//
+// walkBack=false is the pre-amendment rule -- one binary search and nothing
+// else -- kept so a test can pin what it misses.
+func resolveEntry(t *testing.T, home, entryID string, walkBack bool) map[string]interface{} {
+	t.Helper()
+	ms, ok := ulidTimestamp(entryID)
+	if !ok {
+		return nil
 	}
+	parts := tracePartitions(t, home)
+	labels := make([]string, len(parts))
+	for i, p := range parts {
+		labels[i] = strings.TrimSuffix(filepath.Base(p), ".jsonl")
+	}
+	target := traceLabel(ms)
+	// The greatest label not after the target: sort.SearchStrings finds the
+	// first label >= target, so step back over it unless it equals the target.
+	index := sort.SearchStrings(labels, target)
+	if index == len(labels) || labels[index] != target {
+		index--
+	}
+	for ; index >= 0; index-- {
+		found, _ := entriesIn(t, parts[index])
+		for _, entry := range found {
+			if entry["id"] == entryID {
+				return entry
+			}
+		}
+		if !walkBack {
+			return nil
+		}
+	}
+	return nil
+}
+
+// flattenAncestry walks parent_id to the root, resolving each link through the
+// store's own lookup rule; a dangling reference ends the walk.
+func flattenAncestry(t *testing.T, home, leafID string) []string {
+	t.Helper()
 	var chain []string
 	current := leafID
 	for {
-		entry, ok := byID[current]
-		if !ok {
+		entry := resolveEntry(t, home, current, true)
+		if entry == nil {
 			return chain
 		}
 		chain = append(chain, current)
@@ -395,9 +447,11 @@ func TestTraceRollsWhenBothConditionsHold(t *testing.T) {
 	}
 }
 
-func TestTraceClampKeepsEveryEntryInsideItsFilesRange(t *testing.T) {
+func TestTraceClampKeepsEveryEntryAtOrAfterItsFilesLabel(t *testing.T) {
 	// A partition labelled in the future stands for a clock that jumped
-	// backwards. The minted timestamp clamps up to the range start.
+	// backwards. The minted timestamp clamps up to the range start. The clamp
+	// is ONE-SIDED (spec page, amended at the lookup-rule audit): nothing
+	// bounds an entry from above.
 	home := traceHome(t)
 	dir := traceDirOf(home)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -439,6 +493,120 @@ func TestTraceReadersIgnoreNonPartitionFiles(t *testing.T) {
 	entries, anomalies := readEntries(t, home)
 	if len(entries) != 1 || len(anomalies) != 0 {
 		t.Fatalf("got %d entries and %d anomalies, want 1 and 0", len(entries), len(anomalies))
+	}
+}
+
+// --- the lookup rule ------------------------------------------------------
+
+// strandedStore builds the store the lookup-rule audit constructed, using the
+// real writer.
+//
+//  1. A partition labelled for the PREVIOUS hour is the greatest-named file, so
+//     the writer appends to it and mints a timestamp in the CURRENT hour: that
+//     entry is stranded above its own file's label.
+//  2. Padding that file past the roll threshold makes the next write roll, and
+//     the new partition is labelled for the current hour -- the very label the
+//     stranded entry's timestamp points at.
+//
+// It returns (strandedID, rolledID). When link is true the rolled entry
+// inherits the stranded one as its parent, so the pair is a chain that crosses
+// the strand.
+func strandedStore(t *testing.T, home string, link bool) (string, string) {
+	t.Helper()
+	dir := traceDirOf(home)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	prevLabel := traceLabel(time.Now().UnixMilli() - msPerHour)
+	prev := filepath.Join(dir, prevLabel+".jsonl")
+	if err := os.WriteFile(prev, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stranded := mustWrite(t, testIdentity())
+	// Padding past the roll threshold. It is one anomalous line, which every
+	// reader here skips.
+	appendRaw(t, prev, strings.Repeat("x", traceRollBytes)+"\n")
+	if link {
+		t.Setenv(traceParentEnv, stranded)
+	}
+	rolled := mustWrite(t, testIdentity())
+	if parts := tracePartitions(t, home); len(parts) != 2 {
+		t.Fatalf("partitions %v, want exactly two", parts)
+	}
+	return stranded, rolled
+}
+
+func TestTraceRangeIsNotBoundedAtTheTop(t *testing.T) {
+	// The falsifying store: an entry whose timestamp is at or beyond the NEXT
+	// partition's label, living in the older file.
+	home := traceHome(t)
+	stranded, _ := strandedStore(t, home, false)
+	parts := tracePartitions(t, home)
+	older, _ := entriesIn(t, parts[0])
+	if len(older) != 1 || older[0]["id"] != stranded {
+		t.Fatalf("the stranded entry is not in the older partition: %#v", older)
+	}
+	newerLabel := strings.TrimSuffix(filepath.Base(parts[1]), ".jsonl")
+	start, err := traceLabelStartMs(newerLabel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms, _ := ulidTimestamp(stranded)
+	if ms < start {
+		t.Fatalf("stranded timestamp %d is below the newer label's start %d", ms, start)
+	}
+}
+
+func TestTraceStrandedEntryIsFoundByWalkingBackward(t *testing.T) {
+	home := traceHome(t)
+	stranded, _ := strandedStore(t, home, false)
+	entry := resolveEntry(t, home, stranded, true)
+	if entry == nil || entry["id"] != stranded {
+		t.Fatalf("resolveEntry returned %#v, want the stranded entry", entry)
+	}
+}
+
+func TestTraceOneBinarySearchAloneMissesTheStrandedEntry(t *testing.T) {
+	// The rule the spec page carried until the lookup-rule audit: search the
+	// partition the timestamp points at and stop. It reports a live entry as
+	// missing, which a consumer records as a dangling parent.
+	home := traceHome(t)
+	stranded, _ := strandedStore(t, home, false)
+	if entry := resolveEntry(t, home, stranded, false); entry != nil {
+		t.Fatalf("the single search found %#v; the amendment exists because it does not", entry)
+	}
+}
+
+func TestTraceUnstrandedEntryIsFoundByTheFirstSearch(t *testing.T) {
+	home := traceHome(t)
+	_, rolled := strandedStore(t, home, false)
+	if entry := resolveEntry(t, home, rolled, false); entry == nil {
+		t.Fatal("the entry in the newest partition must be found by the first search")
+	}
+}
+
+func TestTraceChainAcrossTheStrandStillFlattens(t *testing.T) {
+	home := traceHome(t)
+	stranded, rolled := strandedStore(t, home, true)
+	chain := flattenAncestry(t, home, rolled)
+	if len(chain) != 2 || chain[0] != rolled || chain[1] != stranded {
+		t.Fatalf("chain %v, want [%s %s]", chain, rolled, stranded)
+	}
+}
+
+func TestTraceIdentifierNoStoreHoldsResolvesToNothing(t *testing.T) {
+	home := traceHome(t)
+	mustWrite(t, testIdentity())
+	if entry := resolveEntry(t, home, "01JZ8X4M6N7QK2WVBD3F5RTYAC", true); entry != nil {
+		t.Fatalf("resolved %#v for an identifier no store holds", entry)
+	}
+}
+
+func TestTraceUnparseableIdentifierResolvesToNothing(t *testing.T) {
+	home := traceHome(t)
+	mustWrite(t, testIdentity())
+	if entry := resolveEntry(t, home, "not-a-ulid", true); entry != nil {
+		t.Fatalf("resolved %#v for an unparseable identifier", entry)
 	}
 }
 
@@ -922,7 +1090,7 @@ func TestTraceThreeDeepSpawnChainYieldsAFlattenedAncestry(t *testing.T) {
 			leaf = e["id"].(string)
 		}
 	}
-	chain := flattenAncestry(entries, leaf)
+	chain := flattenAncestry(t, home, leaf)
 	if len(chain) != 3 {
 		t.Fatalf("flattened ancestry %v, want three links", chain)
 	}

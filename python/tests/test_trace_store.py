@@ -12,6 +12,7 @@ variable and reads the store itself, exactly as this file does.
 
 from __future__ import annotations
 
+import bisect
 import json
 import os
 import re
@@ -46,35 +47,79 @@ def partitions(home: Path) -> list[Path]:
     )
 
 
+def entries_in(path: Path) -> tuple[list[dict], list[str]]:
+    """One partition's (entries, anomalies)."""
+    entries: list[dict] = []
+    anomalies: list[str] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").split("\n"):
+        if line == "":
+            continue
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            anomalies.append(line)
+            continue
+        if not isinstance(obj, dict) or set(obj) != set(ENTRY_KEYS):
+            anomalies.append(line)
+            continue
+        entries.append(obj)
+    return entries, anomalies
+
+
 def read_entries(home: Path) -> tuple[list[dict], list[str]]:
     """Return (entries, anomalies). A torn or malformed line is recorded
     verbatim as an anomaly and skipped -- never discarded silently."""
     entries: list[dict] = []
     anomalies: list[str] = []
     for path in partitions(home):
-        for line in path.read_text(encoding="utf-8", errors="replace").split("\n"):
-            if line == "":
-                continue
-            try:
-                obj = json.loads(line)
-            except ValueError:
-                anomalies.append(line)
-                continue
-            if not isinstance(obj, dict) or set(obj) != set(ENTRY_KEYS):
-                anomalies.append(line)
-                continue
-            entries.append(obj)
+        found, bad = entries_in(path)
+        entries.extend(found)
+        anomalies.extend(bad)
     return entries, anomalies
 
 
-def flatten_ancestry(entries: list[dict], leaf_id: str) -> list[str]:
-    """Walk parent_id to the root; a dangling reference ends the walk."""
-    by_id = {e["id"]: e for e in entries}
+def resolve_entry(
+    home: Path, entry_id: str, *, walk_back: bool = True
+) -> dict | None:
+    """The spec's lookup rule (docs/process-trace-store.md, Partitions).
+
+    Binary-search the sorted labels for the greatest label NOT AFTER the
+    identifier's embedded timestamp, read that partition, and on a miss walk
+    backward through older partitions until the entry is found or the
+    partitions are exhausted. The backward walk is required for correctness:
+    the clamp invariant is one-sided, so a file that has not rolled keeps
+    taking entries after a newer-labelled partition exists.
+
+    ``walk_back=False`` is the pre-amendment rule -- one binary search and
+    nothing else -- kept so a test can pin what it misses.
+    """
+    if not sc._ulid_valid(entry_id):
+        return None
+    parts = partitions(home)
+    labels = [p.name[: -len(".jsonl")] for p in parts]
+    target = sc._trace_label(sc._ulid_timestamp(entry_id))
+    index = bisect.bisect_right(labels, target) - 1
+    while index >= 0:
+        for entry in entries_in(parts[index])[0]:
+            if entry["id"] == entry_id:
+                return entry
+        if not walk_back:
+            return None
+        index -= 1
+    return None
+
+
+def flatten_ancestry(home: Path, leaf_id: str) -> list[str]:
+    """Walk parent_id to the root, resolving each link through the store's own
+    lookup rule; a dangling reference ends the walk."""
     chain: list[str] = []
     current: str | None = leaf_id
-    while current is not None and current in by_id:
+    while current is not None:
+        entry = resolve_entry(home, current)
+        if entry is None:
+            break
         chain.append(current)
-        current = by_id[current]["parent_id"]
+        current = entry["parent_id"]
     return chain
 
 
@@ -281,7 +326,9 @@ class TestPartitions:
         assert sc._ulid_timestamp(entry_id) == start
         assert entry["spawned_at"] == sc._trace_timestamp(start)
 
-    def test_every_entry_lies_within_its_partitions_range(self, home):
+    def test_every_entry_is_at_or_after_its_partitions_label(self, home):
+        # The clamp invariant is ONE-SIDED (spec page, amended at the
+        # lookup-rule audit): nothing bounds an entry from above.
         for _ in range(5):
             sc._trace_write_entry(_identity())
         for path in partitions(home):
@@ -300,6 +347,85 @@ class TestPartitions:
         entries, anomalies = read_entries(home)
         assert len(entries) == 1
         assert anomalies == []
+
+
+# --- the lookup rule -------------------------------------------------------
+
+
+def _stranded_store(home: Path, monkeypatch=None) -> tuple[str, str]:
+    """Build the store the lookup-rule audit constructed, using the real writer.
+
+    1. A partition labelled for the PREVIOUS hour is the greatest-named file,
+       so the writer appends to it and mints a timestamp in the CURRENT hour:
+       that entry is stranded above its own file's label.
+    2. Padding that file past the 8 MB threshold makes the next write roll, and
+       the new partition is labelled for the current hour -- the very label the
+       stranded entry's timestamp points at.
+
+    Returns (stranded_id, rolled_id). When ``monkeypatch`` is given, the rolled
+    entry inherits the stranded one as its parent, so the pair is a chain that
+    crosses the strand.
+    """
+    d = store_dir(home)
+    d.mkdir(parents=True)
+    prev_label = sc._trace_label(int(time.time() * 1000) - 3_600_000)
+    prev = d / f"{prev_label}.jsonl"
+    prev.write_text("")
+    stranded = sc._trace_write_entry(_identity())
+    assert stranded is not None
+    # Padding past the roll threshold. It is one anomalous line, which every
+    # reader here skips.
+    with open(prev, "a", encoding="utf-8") as fh:
+        fh.write("x" * (8 * 1024 * 1024) + "\n")
+    if monkeypatch is not None:
+        monkeypatch.setenv(TRACE_PARENT, stranded)
+    rolled = sc._trace_write_entry(_identity())
+    assert rolled is not None
+    assert len(partitions(home)) == 2
+    return stranded, rolled
+
+
+class TestLookupRule:
+    """The spec's amended lookup rule: binary search, then walk backward."""
+
+    def test_the_range_is_not_bounded_at_the_top(self, home):
+        # The falsifying store: an entry whose timestamp is at or beyond the
+        # NEXT partition's label, living in the older file. The clamp bounds
+        # the bottom only.
+        stranded, _ = _stranded_store(home)
+        older, newer = partitions(home)
+        assert entries_in(older)[0][0]["id"] == stranded
+        newer_label = newer.name[: -len(".jsonl")]
+        assert sc._ulid_timestamp(stranded) >= sc._trace_label_start_ms(newer_label)
+
+    def test_a_stranded_entry_is_found_by_walking_backward(self, home):
+        stranded, _ = _stranded_store(home)
+        entry = resolve_entry(home, stranded)
+        assert entry is not None
+        assert entry["id"] == stranded
+
+    def test_one_binary_search_alone_misses_the_stranded_entry(self, home):
+        # The rule this page carried until the lookup-rule audit: search the
+        # partition the timestamp points at and stop. It reports a live entry
+        # as missing, which a consumer records as a dangling parent.
+        stranded, _ = _stranded_store(home)
+        assert resolve_entry(home, stranded, walk_back=False) is None
+
+    def test_the_unstranded_entry_is_found_by_the_first_search(self, home):
+        _, rolled = _stranded_store(home)
+        assert resolve_entry(home, rolled, walk_back=False) is not None
+
+    def test_a_chain_across_the_strand_still_flattens(self, home, monkeypatch):
+        stranded, rolled = _stranded_store(home, monkeypatch)
+        assert flatten_ancestry(home, rolled) == [rolled, stranded]
+
+    def test_an_identifier_no_store_holds_resolves_to_nothing(self, home):
+        sc._trace_write_entry(_identity())
+        assert resolve_entry(home, "01JZ8X4M6N7QK2WVBD3F5RTYAC") is None
+
+    def test_an_unparseable_identifier_resolves_to_nothing(self, home):
+        sc._trace_write_entry(_identity())
+        assert resolve_entry(home, "not-a-ulid") is None
 
 
 # --- propagation -----------------------------------------------------------
@@ -337,8 +463,7 @@ class TestPropagation:
         foreign = "01JZ8X4M6N7QK2WVBD3F5RTYAC"
         monkeypatch.setenv(TRACE_PARENT, foreign)
         entry_id = sc._trace_write_entry(_identity())
-        entries, _ = read_entries(home)
-        assert flatten_ancestry(entries, entry_id) == [entry_id]
+        assert flatten_ancestry(home, entry_id) == [entry_id]
 
 
 class TestChildEnvironment:
@@ -760,7 +885,7 @@ class TestChain:
         leaves = [e for e in entries if e["id"] not in
                   {x["parent_id"] for x in entries}]
         assert len(leaves) == 1
-        chain = flatten_ancestry(entries, leaves[0]["id"])
+        chain = flatten_ancestry(home, leaves[0]["id"])
         assert len(chain) == 3
         assert by_id[chain[-1]]["parent_id"] is None
         # The pids are three distinct witnesses, one per spawning process.
