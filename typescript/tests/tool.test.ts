@@ -439,7 +439,7 @@ test("Tool.execute: an unconsented consequential tool is refused", async () => {
 		() => release?.execute() as Promise<unknown>,
 		(e: Error) =>
 			e.message ===
-			"command 'release' is consequential: pass approve_consequential to confirm",
+			"command 'release' is consequential: the call must carry confirmation",
 	);
 });
 

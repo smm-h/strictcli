@@ -12,9 +12,17 @@
  * JSON line is a -32700 parse error exactly like malformed JSON.
  */
 
+import {
+	createHash,
+	createHmac,
+	randomBytes,
+	timingSafeEqual,
+} from "node:crypto";
 import { createInterface } from "node:readline";
 import type { AppImpl } from "./app.js";
 import type { Writer } from "./context.js";
+import { errConfirmDeclined } from "./errors.js";
+import { formatFloatCanonical } from "./float.js";
 import { commandClassification } from "./invoke.js";
 import { jsonCompact } from "./outcome.js";
 import { buildJSONSchema, collectToolCommands } from "./tool.js";
@@ -290,6 +298,8 @@ async function handleToolsCall(
 	reqId: unknown,
 	params: JsonObject,
 	modern: boolean,
+	meta: JsonObject,
+	continuation: McpContinuation | undefined,
 ): Promise<JsonObject> {
 	if (!Object.hasOwn(params, "name")) {
 		return jsonrpcError(
@@ -338,10 +348,28 @@ async function handleToolsCall(
 		);
 	}
 
+	let consented = consentVal;
+	if (modern && continuation !== undefined) {
+		const exchange = confirmationExchange(
+			app,
+			reqId,
+			params,
+			toolName,
+			callArgs,
+			meta,
+			continuation,
+			consented,
+		);
+		if (exchange.response !== undefined) {
+			return exchange.response;
+		}
+		consented = exchange.consented;
+	}
+
 	let result: unknown;
 	try {
 		result = await app.call(toolName, callArgs, {
-			approveConsequential: consentVal,
+			approveConsequential: consented,
 		});
 	} catch (e) {
 		return toolResult(
@@ -365,6 +393,7 @@ async function dispatchModern(
 	method: string,
 	params: JsonObject,
 	meta: JsonObject,
+	continuation: McpContinuation,
 ): Promise<JsonObject> {
 	const invalid = validateMeta(meta);
 	if (invalid !== undefined) {
@@ -386,7 +415,7 @@ async function dispatchModern(
 		return handleToolsList(app, reqId, true);
 	}
 	if (method === "tools/call") {
-		return await handleToolsCall(app, reqId, params, true);
+		return await handleToolsCall(app, reqId, params, true, meta, continuation);
 	}
 	return jsonrpcError(
 		reqId,
@@ -406,7 +435,7 @@ async function dispatchLegacy(
 		return handleToolsList(app, reqId, false);
 	}
 	if (method === "tools/call") {
-		return await handleToolsCall(app, reqId, params, false);
+		return await handleToolsCall(app, reqId, params, false, {}, undefined);
 	}
 	return jsonrpcError(
 		reqId,
@@ -431,6 +460,9 @@ export async function serveMcp(app: AppImpl, io: McpIO = {}): Promise<void> {
 	// `initialize` request selects legacy semantics for this process. Modern
 	// requests carry everything they need and never consult it.
 	let legacyEra = false;
+	// The continuation minting key and the spent-id set. Both are per process:
+	// a blob is unforgeable outside this process and unusable twice inside it.
+	const continuation = new McpContinuation();
 
 	const rl = createInterface({ input, crlfDelay: Infinity });
 	for await (const line of rl) {
@@ -483,6 +515,7 @@ export async function serveMcp(app: AppImpl, io: McpIO = {}): Promise<void> {
 					String(method),
 					params,
 					metaVal,
+					continuation,
 				);
 			} else if (legacyEra) {
 				resp = await dispatchLegacy(app, reqId, String(method), params);
@@ -496,4 +529,414 @@ export async function serveMcp(app: AppImpl, io: McpIO = {}): Promise<void> {
 		}
 		write(resp);
 	}
+}
+
+// --- The continuation primitive (contract §22.4) ----------------------------
+//
+// The protocol is stateless: a server that needs more input answers with an
+// input-required result and whatever it must remember, and the client echoes
+// that back on a retry that is otherwise a fresh, independent request. The
+// state therefore travels THROUGH the client, which makes it attacker-
+// controlled input rather than server memory.
+
+/**
+ * How long a minted continuation stays usable: long enough for a human to
+ * answer the confirmation the client renders, short enough that a captured blob
+ * is worth little.
+ */
+export const MCP_CONTINUATION_TTL_SECONDS = 300;
+
+/** The key the confirmation elicitation is filed under, in both directions. */
+const MCP_CONFIRMATION_KEY = "consequential-confirmation";
+
+/** The continuation refusals, byte-identical in all three implementations. */
+const MCP_ERR_STATE_VERIFICATION = "requestState failed verification";
+const MCP_ERR_STATE_EXPIRED = "requestState has expired";
+const MCP_ERR_STATE_WRONG_CLIENT =
+	"requestState was issued to a different client";
+const MCP_ERR_STATE_WRONG_REQUEST = "requestState does not match this request";
+const MCP_ERR_STATE_REUSED = "requestState has already been used";
+
+/**
+ * Mints and verifies the integrity-protected continuation state blob.
+ *
+ * The blob is `<payload>.<mac>`, both unpadded base64url, where the MAC is
+ * HMAC-SHA256 over the payload bytes under a key minted for this process and
+ * never emitted. A blob is therefore unforgeable without reading this process's
+ * memory, and worthless to any other process.
+ *
+ * The payload binds three things the protocol requires be checked on receipt --
+ * the principal it was issued to, an expiry, and a digest of the originating
+ * request -- plus a unique id, which is what makes single use enforceable:
+ * those three bound the replay window but do not close it.
+ */
+export class McpContinuation {
+	readonly #key = randomBytes(32);
+	readonly #consumed = new Map<string, number>();
+
+	#mac(payload: Buffer): Buffer {
+		return createHmac("sha256", this.#key).update(payload).digest();
+	}
+
+	/** Issues a blob binding this principal, this request and a short window. */
+	mint(principal: string, digest: string, now?: number): string {
+		const moment = now ?? Math.floor(Date.now() / 1000);
+		const payload = Buffer.from(
+			JSON.stringify({
+				v: 1,
+				jti: randomBytes(16).toString("base64url"),
+				prin: principal,
+				exp: Math.floor(moment) + MCP_CONTINUATION_TTL_SECONDS,
+				req: digest,
+			}),
+			"utf8",
+		);
+		return `${payload.toString("base64url")}.${this.#mac(payload).toString("base64url")}`;
+	}
+
+	/**
+	 * Verifies and CONSUMES a blob; returns undefined when it is good and the
+	 * refusal otherwise. A blob that passes every check is consumed here, so a
+	 * second presentation is refused even though it is still perfectly
+	 * well-formed, unexpired and correctly bound.
+	 */
+	verify(
+		blob: string,
+		principal: string,
+		digest: string,
+		now?: number,
+	): string | undefined {
+		const moment = Math.floor(now ?? Date.now() / 1000);
+		const parts = blob.split(".");
+		if (parts.length !== 2) {
+			return MCP_ERR_STATE_VERIFICATION;
+		}
+		const raw = Buffer.from(parts[0] as string, "base64url");
+		const mac = Buffer.from(parts[1] as string, "base64url");
+		const expected = this.#mac(raw);
+		if (
+			mac.length !== expected.length ||
+			!timingSafeEqual(mac, expected) ||
+			raw.length === 0
+		) {
+			return MCP_ERR_STATE_VERIFICATION;
+		}
+		let payload: unknown;
+		try {
+			payload = JSON.parse(raw.toString("utf8"));
+		} catch {
+			return MCP_ERR_STATE_VERIFICATION;
+		}
+		if (!isPlainObject(payload) || payload.v !== 1) {
+			return MCP_ERR_STATE_VERIFICATION;
+		}
+		const jti = payload.jti;
+		const expiry = payload.exp;
+		if (
+			typeof jti !== "string" ||
+			typeof expiry !== "number" ||
+			!Number.isInteger(expiry)
+		) {
+			return MCP_ERR_STATE_VERIFICATION;
+		}
+		this.#prune(moment);
+		if (expiry <= moment) {
+			return MCP_ERR_STATE_EXPIRED;
+		}
+		if (payload.prin !== principal) {
+			return MCP_ERR_STATE_WRONG_CLIENT;
+		}
+		if (payload.req !== digest) {
+			return MCP_ERR_STATE_WRONG_REQUEST;
+		}
+		if (this.#consumed.has(jti)) {
+			return MCP_ERR_STATE_REUSED;
+		}
+		this.#consumed.set(jti, expiry);
+		return undefined;
+	}
+
+	/** Forgets consumed ids that can no longer be replayed anyway. */
+	#prune(moment: number): void {
+		for (const [jti, expiry] of this.#consumed) {
+			if (expiry <= moment) {
+				this.#consumed.delete(jti);
+			}
+		}
+	}
+}
+
+/**
+ * A canonical encoding of a JSON value, for digesting: keys sorted, no
+ * insignificant whitespace, floats in the framework's canonical form -- so the
+ * digest depends on what the caller said, never on how their encoder spelled
+ * it.
+ */
+function canonicalJson(value: unknown): string {
+	if (value === null || value === undefined) {
+		return "null";
+	}
+	if (typeof value === "boolean") {
+		return value ? "true" : "false";
+	}
+	if (typeof value === "bigint") {
+		return value.toString();
+	}
+	if (typeof value === "number") {
+		return Number.isInteger(value) && Math.abs(value) < 1e15
+			? String(value)
+			: formatFloatCanonical(value);
+	}
+	if (typeof value === "string") {
+		return JSON.stringify(value);
+	}
+	if (Array.isArray(value)) {
+		return `[${value.map(canonicalJson).join(",")}]`;
+	}
+	if (isPlainObject(value)) {
+		const keys = Object.keys(value).sort();
+		const parts = keys.map(
+			(key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`,
+		);
+		return `{${parts.join(",")}}`;
+	}
+	return JSON.stringify(String(value));
+}
+
+/** Digests the originating request: the method and its salient parameters. */
+function requestDigest(
+	method: string,
+	toolName: string,
+	args: JsonObject,
+): string {
+	const material = [method, toolName, canonicalJson(args)].join("\n");
+	return createHash("sha256").update(material, "utf8").digest("base64url");
+}
+
+/**
+ * The client this state is minted for, as the client declares itself.
+ *
+ * On this transport there is no authenticated principal; the declaration is
+ * self-reported and the binding is a consistency check, not authentication.
+ * What actually contains a stolen blob is the per-process key.
+ */
+function principalOf(meta: JsonObject): string {
+	const info = meta[MCP_META_CLIENT_INFO];
+	if (!isPlainObject(info)) {
+		return "";
+	}
+	const name = typeof info.name === "string" ? info.name : "";
+	const version = typeof info.version === "string" ? info.version : "";
+	return `${name}/${version}`;
+}
+
+/**
+ * True when the client declared it can render a form elicitation. An empty
+ * `elicitation` object means form mode, which the protocol states for
+ * compatibility with clients written before the modes existed.
+ */
+function clientDeclaresElicitation(meta: JsonObject): boolean {
+	const caps = meta[MCP_META_CLIENT_CAPABILITIES];
+	if (!isPlainObject(caps)) {
+		return false;
+	}
+	const elicitation = caps.elicitation;
+	if (!isPlainObject(elicitation)) {
+		return false;
+	}
+	if (Object.keys(elicitation).length === 0) {
+		return true;
+	}
+	return isPlainObject(elicitation.form);
+}
+
+/**
+ * The elicitation that asks a human, through the client, to confirm. Same words
+ * as the terminal prompt (§12.6) minus its keystroke hint: one vocabulary for
+ * one question, however it is delivered.
+ */
+function confirmationRequest(cmdPath: string): JsonObject {
+	return {
+		method: "elicitation/create",
+		params: {
+			mode: "form",
+			message: `about to run consequential command '${cmdPath}'. Proceed?`,
+			requestedSchema: {
+				type: "object",
+				properties: {
+					proceed: {
+						type: "boolean",
+						title: "Proceed",
+						description: "Whether to run the consequential command.",
+					},
+				},
+				required: ["proceed"],
+			},
+		},
+	};
+}
+
+/** The interim result: what is needed, and the state to echo back with it. */
+function inputRequired(
+	app: AppImpl,
+	reqId: unknown,
+	cmdPath: string,
+	requestState: string,
+): JsonObject {
+	return jsonrpcResult(reqId, {
+		resultType: "input_required",
+		inputRequests: { [MCP_CONFIRMATION_KEY]: confirmationRequest(cmdPath) },
+		requestState,
+		_meta: serverInfoMeta(app),
+	});
+}
+
+/**
+ * Reads one elicitation result: "accept", "reject", "absent" or "malformed".
+ *
+ * An `accept` carrying `proceed: false` is a refusal, not an approval: the
+ * action names what the client did with the dialogue, and the field is the
+ * answer to the question.
+ */
+function confirmationVerdict(answer: unknown): string {
+	if (answer === undefined || answer === null) {
+		return "absent";
+	}
+	if (!isPlainObject(answer)) {
+		return "malformed";
+	}
+	const action = answer.action;
+	if (action === "decline" || action === "cancel") {
+		return "reject";
+	}
+	if (action !== "accept") {
+		return "malformed";
+	}
+	const content = answer.content;
+	if (!isPlainObject(content)) {
+		return "malformed";
+	}
+	return content.proceed === true ? "accept" : "reject";
+}
+
+/**
+ * Runs the confirmation round-trip for one call: either a response to send back
+ * (a refusal, or the interim result asking for confirmation) or the consent the
+ * call may proceed with.
+ */
+function confirmationExchange(
+	app: AppImpl,
+	reqId: unknown,
+	params: JsonObject,
+	toolName: string,
+	args: JsonObject,
+	meta: JsonObject,
+	continuation: McpContinuation,
+	alreadyConsented: boolean,
+): { response?: JsonObject; consented: boolean } {
+	const principal = principalOf(meta);
+	const digest = requestDigest("tools/call", toolName, args);
+	let consented = alreadyConsented;
+
+	if (Object.hasOwn(params, "requestState")) {
+		const state = params.requestState;
+		if (typeof state !== "string") {
+			return {
+				response: jsonrpcError(
+					reqId,
+					MCP_ERR_INVALID_PARAMS,
+					"parameter 'requestState' must be a string",
+				),
+				consented: false,
+			};
+		}
+		let responses: JsonObject = {};
+		if (Object.hasOwn(params, "inputResponses")) {
+			const given = params.inputResponses;
+			if (!isPlainObject(given)) {
+				return {
+					response: jsonrpcError(
+						reqId,
+						MCP_ERR_INVALID_PARAMS,
+						"parameter 'inputResponses' must be an object",
+					),
+					consented: false,
+				};
+			}
+			responses = given;
+		}
+		const refusal = continuation.verify(state, principal, digest);
+		if (refusal !== undefined) {
+			return {
+				response: jsonrpcError(reqId, MCP_ERR_INVALID_PARAMS, refusal),
+				consented: false,
+			};
+		}
+		const verdict = confirmationVerdict(responses[MCP_CONFIRMATION_KEY]);
+		if (verdict === "malformed") {
+			return {
+				response: jsonrpcError(
+					reqId,
+					MCP_ERR_INVALID_PARAMS,
+					`inputResponses['${MCP_CONFIRMATION_KEY}'] is not an elicitation result`,
+				),
+				consented: false,
+			};
+		}
+		if (verdict === "reject") {
+			return {
+				response: toolResult(app, reqId, errConfirmDeclined(), true, true),
+				consented: false,
+			};
+		}
+		if (verdict === "accept") {
+			consented = true;
+		} else {
+			// The state was good but the answer never came. The protocol says to
+			// ask again rather than error -- with a fresh state, since the one
+			// just presented is spent.
+			return {
+				response: inputRequired(
+					app,
+					reqId,
+					toolName,
+					continuation.mint(principal, digest),
+				),
+				consented: false,
+			};
+		}
+	} else if (Object.hasOwn(params, "inputResponses")) {
+		// An answer whose state is missing cannot be verified, and an
+		// unverifiable answer is not an answer.
+		return {
+			response: jsonrpcError(
+				reqId,
+				MCP_ERR_INVALID_PARAMS,
+				"parameter 'inputResponses' requires the requestState it was issued with",
+			),
+			consented: false,
+		};
+	}
+
+	if (consented) {
+		return { consented: true };
+	}
+	const entry = collectToolCommands(app).find(([path]) => path === toolName);
+	if (entry === undefined || !commandClassification(entry[1]).consequential) {
+		return { consented };
+	}
+	if (clientDeclaresElicitation(meta)) {
+		return {
+			response: inputRequired(
+				app,
+				reqId,
+				toolName,
+				continuation.mint(principal, digest),
+			),
+			consented: false,
+		};
+	}
+	// A client that cannot render the confirmation gets the refusal, which
+	// names what is required without teaching a way around it.
+	return { consented };
 }

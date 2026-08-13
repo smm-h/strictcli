@@ -2076,8 +2076,16 @@ export function promptConfirmConsequential(name: string): string {
 	return `about to run consequential command '${name}'. Proceed? [y/N] `;
 }
 
+/**
+ * The non-interactive refusal (contract §8.3).
+ *
+ * It names what is required -- confirmation, at a terminal -- and never the
+ * token that lifts the requirement. A refusal that prints its own override is
+ * not a seam: the reflex it teaches is to append the override and re-run, which
+ * is the opposite of the judgement the declaration asks for.
+ */
 export function errConfirmNonInteractive(): string {
-	return "error: stdin is not interactive; pass --approve-consequential to confirm";
+	return "error: stdin is not interactive; a consequential command must be confirmed at a terminal";
 }
 
 export function errConfirmDeclined(): string {
@@ -2093,7 +2101,7 @@ export function errConfirmDeclined(): string {
  * instead of the framework deciding that silently on its behalf.
  */
 export function errCallConsequentialUnconsented(cmdPath: string): string {
-	return `command '${cmdPath}' is consequential: pass approve_consequential to confirm`;
+	return `command '${cmdPath}' is consequential: the call must carry confirmation`;
 }
 
 // ---------------------------------------------------------------------------

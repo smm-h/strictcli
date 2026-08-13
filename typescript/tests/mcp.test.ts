@@ -6,7 +6,7 @@
  */
 
 import { strict as assert } from "node:assert";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { test } from "node:test";
 import type { App } from "../src/app.js";
 import {
@@ -17,6 +17,7 @@ import {
 	outcome,
 	t,
 } from "../src/index.js";
+import { MCP_CONTINUATION_TTL_SECONDS, McpContinuation } from "../src/mcp.js";
 
 function buildApp(spec: Record<string, unknown> = {}): App {
 	return createApp({
@@ -882,7 +883,7 @@ test("mcp: tools/call refuses a consequential tool without consent", async () =>
 	assert.equal(resultOf(resp).isError, true);
 	assert.equal(
 		contentOf(resp)[0]?.text,
-		"command 'release' is consequential: pass approve_consequential to confirm",
+		"command 'release' is consequential: the call must carry confirmation",
 	);
 });
 
@@ -1150,4 +1151,334 @@ test("mcp: initialize selects the legacy era for later requests", async () => {
 		"complete",
 	);
 	assert.equal(errorOf(responses[3] as Record<string, unknown>).code, -32601);
+});
+
+// ---------------------------------------------------------------------------
+// The confirmation round-trip and its continuation state
+// ---------------------------------------------------------------------------
+
+/**
+ * Drives a live MCP session in which a request may depend on an earlier reply.
+ *
+ * The continuation key and its spent-id set live in the server process, so a
+ * round-trip has to be driven through ONE serveMcp call: a second call is a
+ * second server, and its state is deliberately worthless to the first.
+ */
+async function serveSession(
+	app: App,
+	...steps: ((seen: Record<string, unknown>[]) => unknown)[]
+): Promise<Record<string, unknown>[]> {
+	const stream = new PassThrough();
+	const responses: Record<string, unknown>[] = [];
+	let arrived: (() => void) | undefined;
+	const serving = app.serveMcp({
+		input: stream,
+		output: {
+			write: (chunk) => {
+				for (const line of chunk.split("\n")) {
+					if (line.trim() !== "") {
+						responses.push(JSON.parse(line) as Record<string, unknown>);
+					}
+				}
+				arrived?.();
+			},
+		},
+	});
+	for (const step of steps) {
+		const reply = new Promise<void>((resolve) => {
+			arrived = resolve;
+		});
+		stream.write(`${JSON.stringify(step(responses))}\n`);
+		await reply;
+	}
+	stream.end();
+	await serving;
+	return responses;
+}
+
+/** A client that can render a form elicitation. */
+function elicitingMeta(): Record<string, unknown> {
+	return {
+		"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+		"io.modelcontextprotocol/clientCapabilities": { elicitation: { form: {} } },
+		"io.modelcontextprotocol/clientInfo": { name: "cli", version: "1.0.0" },
+	};
+}
+
+function confirmingApp(): App {
+	const app = buildApp();
+	app.command(
+		defineMutatingCommand("release", {
+			help: "release it",
+			consequential: true,
+			handler: () => outcome(0),
+		}),
+	);
+	app.command(
+		defineReadOnlyCommand("look", { help: "look around", handler: () => 0 }),
+	);
+	return app;
+}
+
+function toolCall(id: unknown, params: Record<string, unknown>): unknown {
+	if (!Object.hasOwn(params, "_meta")) {
+		params._meta = elicitingMeta();
+	}
+	return { jsonrpc: "2.0", id, method: "tools/call", params };
+}
+
+function acceptance(proceed: boolean): Record<string, unknown> {
+	return {
+		"consequential-confirmation": {
+			action: "accept",
+			content: { proceed },
+		},
+	};
+}
+
+function stateOf(resp: Record<string, unknown>): string {
+	return resultOf(resp).requestState as string;
+}
+
+/** Asks, then answers: the two halves of one confirmation. */
+async function driveConfirmation(
+	app: App,
+	answers: Record<string, unknown>,
+): Promise<Record<string, unknown>[]> {
+	return serveSession(
+		app,
+		() => toolCall(1, { name: "release", arguments: {} }),
+		(seen) =>
+			toolCall(2, {
+				name: "release",
+				arguments: {},
+				requestState: stateOf(seen[0] as Record<string, unknown>),
+				inputResponses: answers,
+			}),
+	);
+}
+
+test("mcp: an unconsented consequential call asks for confirmation", async () => {
+	const resp = await sendOneRaw(
+		confirmingApp(),
+		toolCall(1, { name: "release", arguments: {} }),
+	);
+	const result = resultOf(resp);
+	assert.equal(result.resultType, "input_required");
+	const requests = result.inputRequests as Record<string, unknown>;
+	const request = requests["consequential-confirmation"] as Record<
+		string,
+		unknown
+	>;
+	assert.equal(request.method, "elicitation/create");
+	const params = request.params as Record<string, unknown>;
+	assert.equal(params.mode, "form");
+	assert.equal(
+		params.message,
+		"about to run consequential command 'release'. Proceed?",
+	);
+	assert.equal(typeof result.requestState, "string");
+	assert.notEqual(result.requestState, "");
+});
+
+test("mcp: a retry carrying acceptance proceeds", async () => {
+	const responses = await driveConfirmation(confirmingApp(), acceptance(true));
+	const result = resultOf(responses[1] as Record<string, unknown>);
+	assert.equal(result.resultType, "complete");
+	assert.equal(Object.hasOwn(result, "isError"), false);
+});
+
+test("mcp: a declined or cancelled confirmation aborts", async () => {
+	for (const action of ["decline", "cancel"]) {
+		const responses = await driveConfirmation(confirmingApp(), {
+			"consequential-confirmation": { action },
+		});
+		const result = resultOf(responses[1] as Record<string, unknown>);
+		assert.equal(result.isError, true);
+		assert.equal((result.content as { text: string }[])[0]?.text, "aborted");
+	}
+});
+
+test("mcp: an acceptance that says no aborts", async () => {
+	const responses = await driveConfirmation(confirmingApp(), acceptance(false));
+	assert.equal(resultOf(responses[1] as Record<string, unknown>).isError, true);
+});
+
+test("mcp: a missing answer asks again with fresh state", async () => {
+	const responses = await driveConfirmation(confirmingApp(), {});
+	const second = resultOf(responses[1] as Record<string, unknown>);
+	assert.equal(second.resultType, "input_required");
+	assert.notEqual(
+		second.requestState,
+		stateOf(responses[0] as Record<string, unknown>),
+	);
+});
+
+test("mcp: a read-only tool is never asked about", async () => {
+	const resp = await sendOneRaw(
+		confirmingApp(),
+		toolCall(1, { name: "look", arguments: {} }),
+	);
+	assert.equal(resultOf(resp).resultType, "complete");
+});
+
+test("mcp: a client without elicitation is refused, not asked", async () => {
+	const resp = await sendOneRaw(
+		confirmingApp(),
+		toolCall(1, {
+			name: "release",
+			arguments: {},
+			_meta: { ...MODERN_META },
+		}),
+	);
+	const result = resultOf(resp);
+	assert.equal(result.isError, true);
+	assert.equal(
+		(result.content as { text: string }[])[0]?.text,
+		"command 'release' is consequential: the call must carry confirmation",
+	);
+});
+
+test("mcp: a tampered continuation is refused", async () => {
+	const responses = await serveSession(
+		confirmingApp(),
+		() => toolCall(1, { name: "release", arguments: {} }),
+		(seen) => {
+			const state = stateOf(seen[0] as Record<string, unknown>);
+			const broken = `${state.slice(0, -1)}${state.endsWith("A") ? "B" : "A"}`;
+			return toolCall(2, {
+				name: "release",
+				arguments: {},
+				requestState: broken,
+				inputResponses: acceptance(true),
+			});
+		},
+	);
+	const err = errorOf(responses[1] as Record<string, unknown>);
+	assert.equal(err.code, -32602);
+	assert.equal(err.message, "requestState failed verification");
+});
+
+test("mcp: a continuation is single use", async () => {
+	const retry =
+		(id: number) =>
+		(seen: Record<string, unknown>[]): unknown =>
+			toolCall(id, {
+				name: "release",
+				arguments: {},
+				requestState: stateOf(seen[0] as Record<string, unknown>),
+				inputResponses: acceptance(true),
+			});
+	const responses = await serveSession(
+		confirmingApp(),
+		() => toolCall(1, { name: "release", arguments: {} }),
+		retry(2),
+		retry(3),
+	);
+	assert.equal(
+		resultOf(responses[1] as Record<string, unknown>).resultType,
+		"complete",
+	);
+	assert.equal(
+		errorOf(responses[2] as Record<string, unknown>).message,
+		"requestState has already been used",
+	);
+});
+
+test("mcp: a continuation does not travel to another request or client", async () => {
+	const other = await serveSession(
+		confirmingApp(),
+		() => toolCall(1, { name: "release", arguments: {} }),
+		(seen) =>
+			toolCall(2, {
+				name: "release",
+				arguments: { unexpected: 1 },
+				requestState: stateOf(seen[0] as Record<string, unknown>),
+				inputResponses: acceptance(true),
+			}),
+	);
+	assert.equal(
+		errorOf(other[1] as Record<string, unknown>).message,
+		"requestState does not match this request",
+	);
+
+	const elsewhere = await serveSession(
+		confirmingApp(),
+		() => toolCall(1, { name: "release", arguments: {} }),
+		(seen) => {
+			const meta = elicitingMeta();
+			meta["io.modelcontextprotocol/clientInfo"] = {
+				name: "someone-else",
+				version: "1.0.0",
+			};
+			return toolCall(2, {
+				_meta: meta,
+				name: "release",
+				arguments: {},
+				requestState: stateOf(seen[0] as Record<string, unknown>),
+				inputResponses: acceptance(true),
+			});
+		},
+	);
+	assert.equal(
+		errorOf(elsewhere[1] as Record<string, unknown>).message,
+		"requestState was issued to a different client",
+	);
+});
+
+test("mcp: an answer without its continuation is refused", async () => {
+	const resp = await sendOneRaw(
+		confirmingApp(),
+		toolCall(1, {
+			name: "release",
+			arguments: {},
+			inputResponses: acceptance(true),
+		}),
+	);
+	assert.equal(
+		errorOf(resp).message,
+		"parameter 'inputResponses' requires the requestState it was issued with",
+	);
+});
+
+test("mcp: a malformed answer is a protocol error", async () => {
+	const responses = await driveConfirmation(confirmingApp(), {
+		"consequential-confirmation": { action: "shrug" },
+	});
+	assert.equal(
+		errorOf(responses[1] as Record<string, unknown>).message,
+		"inputResponses['consequential-confirmation'] is not an elicitation result",
+	);
+});
+
+test("mcp: a continuation expires, and is worthless to another process", () => {
+	// No clock reaches the wire, so expiry is driven at the mint.
+	const continuation = new McpContinuation();
+	const now = 1000000;
+	const state = continuation.mint("cli/1.0.0", "digest", now);
+	assert.equal(
+		continuation.verify(
+			state,
+			"cli/1.0.0",
+			"digest",
+			now + MCP_CONTINUATION_TTL_SECONDS - 1,
+		),
+		undefined,
+	);
+	const fresh = continuation.mint("cli/1.0.0", "digest", now);
+	assert.equal(
+		continuation.verify(
+			fresh,
+			"cli/1.0.0",
+			"digest",
+			now + MCP_CONTINUATION_TTL_SECONDS + 1,
+		),
+		"requestState has expired",
+	);
+
+	const other = new McpContinuation();
+	assert.equal(
+		other.verify(state, "cli/1.0.0", "digest", now),
+		"requestState failed verification",
+	);
 });

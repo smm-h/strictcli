@@ -160,7 +160,7 @@ test("confirm: a non-interactive stdin errors instead of prompting", async () =>
 		const r = await captureRun(ranApp(ran), ["deploy"]);
 		assert.equal(
 			r.stderr,
-			"error: stdin is not interactive; pass --approve-consequential to confirm\n",
+			"error: stdin is not interactive; a consequential command must be confirmed at a terminal\n",
 		);
 		assert.equal(r.exitCode, 1);
 		assert.deepEqual(ran, []);
@@ -375,7 +375,7 @@ test("confirm: an unconsented consequential call is refused", async () => {
 		() => ranApp(ran).call("deploy"),
 		(e: Error) =>
 			e.message ===
-			"command 'deploy' is consequential: pass approve_consequential to confirm",
+			"command 'deploy' is consequential: the call must carry confirmation",
 	);
 	assert.deepEqual(ran, []);
 });
