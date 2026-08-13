@@ -36,6 +36,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.4",
+		"@hyperjump/json-schema": "^1.17.8",
 		"@types/node": "^22.20.1"
 	},
 	"keywords": [

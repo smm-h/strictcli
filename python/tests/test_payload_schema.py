@@ -467,3 +467,61 @@ class TestBuilders:
         r = app.test(["run", "--json"])
         assert r.exit_code == 0
         assert json.loads(r.stdout)["payload"] == {"a": 1}
+
+
+# ---------------------------------------------------------------------------
+# Dev-only third-party cross-check (contract §19.5)
+#
+# python-jsonschema is a DEV dependency and never a runtime one: it exists to
+# assert that the in-house validator's verdicts agree with an independent
+# implementation on every shared vector. A disagreement is a test failure to
+# investigate, never something the code resolves for itself.
+#
+# Two families are excluded by construction, because they are ours and not
+# JSON Schema's: decision 16's magnitude guard, and JSON representability
+# (which a JSON vector file cannot express in the first place).
+# ---------------------------------------------------------------------------
+
+import jsonschema  # noqa: E402  (dev-only, imported beside its own tests)
+
+_OURS_ONLY_DETAILS = {
+    "the number's magnitude exceeds 2^53 "
+    "(declare a big identifier as a string)",
+    "the value is not representable in JSON",
+}
+
+
+def _cross_checkable(vectors: list[dict]) -> list[dict]:
+    return [
+        v for v in _applicable(vectors)
+        if v["valid"] or v["detail"] not in _OURS_ONLY_DETAILS
+    ]
+
+
+class TestThirdPartyCrossCheck:
+    @pytest.mark.parametrize(
+        "vec", _cross_checkable(INSTANCE_VECTORS), ids=lambda v: v["name"]
+    )
+    def test_verdicts_agree(self, vec):
+        theirs = jsonschema.Draft202012Validator(vec["schema"]).is_valid(
+            vec["value"]
+        )
+        ours = strictcli._validate_payload_value(
+            vec["value"], vec["schema"]
+        ) is None
+        assert ours == theirs, (
+            f"in-house says {ours}, python-jsonschema says {theirs}"
+        )
+
+    @pytest.mark.parametrize(
+        "vec",
+        [v for v in _applicable(SCHEMA_VECTORS) if v["valid"]],
+        ids=lambda v: v["name"],
+    )
+    def test_accepted_schemas_are_valid_json_schema(self, vec):
+        # Anything the subset admits must be a legal JSON Schema document: the
+        # subset is a restriction of JSON Schema, never a dialect of its own.
+        jsonschema.Draft202012Validator.check_schema(vec["schema"])
+
+    def test_the_cross_check_covers_most_of_the_matrix(self):
+        assert len(_cross_checkable(INSTANCE_VECTORS)) >= 130
