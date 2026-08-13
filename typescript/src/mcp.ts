@@ -64,14 +64,17 @@ function requiredElicitationCapabilities(): JsonObject {
 //   supported versions, the capabilities and the server identity that the
 //   handshake used to carry.
 //
-//   LEGACY (2024-11-05) -- the `initialize` handshake. It is selected by an
-//   `initialize` request and scoped to this process, which is exactly the
-//   dual-era rule the modern revision specifies for a server serving both.
+//   LEGACY (2025-11-25) -- the `initialize` handshake, the newest of the
+//   handshake-based revisions. It is selected by an `initialize` request and
+//   scoped to this process, which is exactly the dual-era rule the modern
+//   revision specifies for a server serving both. That era has no
+//   input-required result, so the same confirmation is delivered as a
+//   server-initiated `elicitation/create` request (contract §22.7).
 //
 // A request that carries neither the modern metadata nor a preceding
 // `initialize` is malformed and is refused. Nothing is inferred.
 const MCP_PROTOCOL_VERSION = "2026-07-28";
-const MCP_LEGACY_PROTOCOL_VERSION = "2024-11-05";
+const MCP_LEGACY_PROTOCOL_VERSION = "2025-11-25";
 
 // The reserved `_meta` keys of the modern revision.
 const MCP_META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion";
@@ -241,16 +244,123 @@ function toolResult(
 }
 
 /**
+ * What the legacy handshake establishes, scoped to this process.
+ *
+ * In that era the session IS the client's declaration, exactly as the
+ * per-request `_meta` block is in the modern one: the capabilities and the
+ * identity arrive once, at `initialize`, and every later request is read
+ * against them.
+ */
+class McpLegacySession {
+	active = false;
+	capabilities: JsonObject = {};
+	clientInfo: JsonObject = {};
+
+	open(params: JsonObject): void {
+		this.active = true;
+		this.capabilities = isPlainObject(params.capabilities)
+			? params.capabilities
+			: {};
+		this.clientInfo = isPlainObject(params.clientInfo) ? params.clientInfo : {};
+	}
+}
+
+/**
+ * The line channel to the client, in both directions.
+ *
+ * The legacy confirmation is a request the SERVER sends, so the loop has to be
+ * able to write one and read its answer in the middle of serving a call.
+ * Anything else that arrives while an answer is awaited is held here and served
+ * afterwards -- the loop stays one request at a time, and no client line is
+ * dropped.
+ */
+class McpChannel {
+	readonly #lines: AsyncIterator<string>;
+	readonly #out: Writer;
+	readonly #held: string[] = [];
+
+	constructor(input: NodeJS.ReadableStream, out: Writer) {
+		this.#lines = createInterface({ input, crlfDelay: Infinity })[
+			Symbol.asyncIterator
+		]();
+		this.#out = out;
+	}
+
+	/** The next line to serve: what was held first, then the stream. */
+	async nextLine(): Promise<string | undefined> {
+		const held = this.#held.shift();
+		if (held !== undefined) {
+			return held;
+		}
+		const next = await this.#lines.next();
+		return next.done === true ? undefined : next.value;
+	}
+
+	write(message: JsonObject): void {
+		this.#out.write(`${jsonCompact(message)}\n`);
+	}
+
+	/**
+	 * Read until the response to `reqId` arrives, or the stream ends. A response
+	 * carrying another id answers nothing this server sent and is discarded;
+	 * anything else is held for the main loop.
+	 */
+	async awaitResponse(reqId: string): Promise<JsonObject | undefined> {
+		for (;;) {
+			const next = await this.#lines.next();
+			if (next.done === true) {
+				return undefined;
+			}
+			const line = next.value;
+			if (line.trim() === "") {
+				continue;
+			}
+			let msg: unknown;
+			try {
+				msg = JSON.parse(line);
+			} catch {
+				this.#held.push(line);
+				continue;
+			}
+			if (
+				isPlainObject(msg) &&
+				(Object.hasOwn(msg, "result") || Object.hasOwn(msg, "error"))
+			) {
+				if (msg.id === reqId) {
+					return msg;
+				}
+				continue;
+			}
+			this.#held.push(line);
+		}
+	}
+}
+
+/**
  * The legacy-era `initialize` handshake, which also selects that era.
  *
  * The modern revision has no handshake; this method is what a legacy client
  * opens with, and answering it is what puts this process into legacy semantics
- * for every later request that carries no modern metadata.
+ * for every later request that carries no modern metadata. This server speaks
+ * one legacy revision, so it always answers with that one -- the negotiation
+ * rule says to answer with the latest version supported.
+ *
+ * The declared feature is advertised here too, under the key that revision
+ * gives a non-standard server capability: one name, two advertisements.
  */
-function handleInitialize(app: AppImpl, reqId: unknown): JsonObject {
+function handleInitialize(
+	app: AppImpl,
+	reqId: unknown,
+	params: JsonObject,
+	session: McpLegacySession,
+): JsonObject {
+	session.open(params);
 	return jsonrpcResult(reqId, {
 		protocolVersion: MCP_LEGACY_PROTOCOL_VERSION,
-		capabilities: { tools: {} },
+		capabilities: {
+			tools: {},
+			experimental: { [MCP_FEATURE_CONSEQUENTIAL_CONFIRMATION]: {} },
+		},
 		serverInfo: { name: app.name, version: app.version },
 	});
 }
@@ -314,6 +424,7 @@ async function handleToolsCall(
 	modern: boolean,
 	meta: JsonObject,
 	continuation: McpContinuation | undefined,
+	legacy?: { session: McpLegacySession; channel: McpChannel },
 ): Promise<JsonObject> {
 	if (!Object.hasOwn(params, "name")) {
 		return jsonrpcError(
@@ -378,6 +489,19 @@ async function handleToolsCall(
 			return exchange.response;
 		}
 		consented = exchange.consented;
+	} else if (!modern && !consented && continuation !== undefined && legacy) {
+		const answered = await legacyConfirmation(
+			app,
+			toolName,
+			callArgs,
+			legacy.session,
+			continuation,
+			legacy.channel,
+		);
+		if (answered === false) {
+			return toolResult(app, reqId, errConfirmDeclined(), false, true);
+		}
+		consented = answered === true;
 	}
 
 	let result: unknown;
@@ -438,18 +562,24 @@ async function dispatchModern(
 	);
 }
 
-/** Dispatch one legacy-era request, unchanged from the handshake revision. */
+/** Dispatch one legacy-era request, in that revision's own shapes. */
 async function dispatchLegacy(
 	app: AppImpl,
 	reqId: unknown,
 	method: string,
 	params: JsonObject,
+	session: McpLegacySession,
+	continuation: McpContinuation,
+	channel: McpChannel,
 ): Promise<JsonObject> {
 	if (method === "tools/list") {
 		return handleToolsList(app, reqId, false);
 	}
 	if (method === "tools/call") {
-		return await handleToolsCall(app, reqId, params, false, {}, undefined);
+		return await handleToolsCall(app, reqId, params, false, {}, continuation, {
+			session,
+			channel,
+		});
 	}
 	return jsonrpcError(
 		reqId,
@@ -466,20 +596,25 @@ async function dispatchLegacy(
 export async function serveMcp(app: AppImpl, io: McpIO = {}): Promise<void> {
 	const input = io.input ?? process.stdin;
 	const output = io.output ?? process.stdout;
+	const channel = new McpChannel(input, output);
 	const write = (resp: JsonObject): void => {
-		output.write(`${jsonCompact(resp)}\n`);
+		channel.write(resp);
 	};
 
 	// The one piece of connection state a dual-era server is allowed: an
-	// `initialize` request selects legacy semantics for this process. Modern
-	// requests carry everything they need and never consult it.
-	let legacyEra = false;
+	// `initialize` request selects legacy semantics for this process and carries
+	// that client's declaration. Modern requests carry everything they need and
+	// never consult it.
+	const session = new McpLegacySession();
 	// The continuation minting key and the spent-id set. Both are per process:
 	// a blob is unforgeable outside this process and unusable twice inside it.
 	const continuation = new McpContinuation();
 
-	const rl = createInterface({ input, crlfDelay: Infinity });
-	for await (const line of rl) {
+	for (;;) {
+		const line = await channel.nextLine();
+		if (line === undefined) {
+			break;
+		}
 		if (line.trim() === "") {
 			continue;
 		}
@@ -499,7 +634,13 @@ export async function serveMcp(app: AppImpl, io: McpIO = {}): Promise<void> {
 		}
 
 		// Notifications have no "id" key -- consume silently, no response.
-		if (!Object.hasOwn(msg, "id")) {
+		// Neither does a response the client sent when this server asked for
+		// none.
+		if (
+			!Object.hasOwn(msg, "id") ||
+			Object.hasOwn(msg, "result") ||
+			Object.hasOwn(msg, "error")
+		) {
 			continue;
 		}
 		const reqId = msg.id;
@@ -508,8 +649,7 @@ export async function serveMcp(app: AppImpl, io: McpIO = {}): Promise<void> {
 
 		let resp: JsonObject;
 		if (method === "initialize") {
-			legacyEra = true;
-			resp = handleInitialize(app, reqId);
+			resp = handleInitialize(app, reqId, params, session);
 		} else {
 			const metaVal = params._meta;
 			const present = Object.hasOwn(params, "_meta");
@@ -531,8 +671,16 @@ export async function serveMcp(app: AppImpl, io: McpIO = {}): Promise<void> {
 					metaVal,
 					continuation,
 				);
-			} else if (legacyEra) {
-				resp = await dispatchLegacy(app, reqId, String(method), params);
+			} else if (session.active) {
+				resp = await dispatchLegacy(
+					app,
+					reqId,
+					String(method),
+					params,
+					session,
+					continuation,
+					channel,
+				);
 			} else {
 				resp = jsonrpcError(
 					reqId,
@@ -735,7 +883,14 @@ function requestDigest(
  * What actually contains a stolen blob is the per-process key.
  */
 function principalOf(meta: JsonObject): string {
-	const info = meta[MCP_META_CLIENT_INFO];
+	return principalOfInfo(meta[MCP_META_CLIENT_INFO]);
+}
+
+/**
+ * One self-reported client identity. Both eras carry the same self-report --
+ * per request, or once at the handshake.
+ */
+function principalOfInfo(info: unknown): string {
 	if (!isPlainObject(info)) {
 		return "";
 	}
@@ -744,13 +899,19 @@ function principalOf(meta: JsonObject): string {
 	return `${name}/${version}`;
 }
 
-/**
- * True when the client declared it can render a form elicitation. An empty
- * `elicitation` object means form mode, which the protocol states for
- * compatibility with clients written before the modes existed.
- */
+/** True when a modern request's client declared a form elicitation. */
 function clientDeclaresElicitation(meta: JsonObject): boolean {
-	const caps = meta[MCP_META_CLIENT_CAPABILITIES];
+	return declaresFormElicitation(meta[MCP_META_CLIENT_CAPABILITIES]);
+}
+
+/**
+ * True when a capabilities block says the client can render a form. An empty
+ * `elicitation` object means form mode, which the protocol states for
+ * compatibility with clients written before the modes existed. The two eras
+ * deliver their capabilities differently -- per request, or once at the
+ * handshake -- and read them the same way.
+ */
+function declaresFormElicitation(caps: unknown): boolean {
 	if (!isPlainObject(caps)) {
 		return false;
 	}
@@ -962,4 +1123,55 @@ function confirmationExchange(
 		),
 		consented: false,
 	};
+}
+
+/**
+ * Ask a legacy client to confirm, over a request the server sends.
+ *
+ * Returns true when the client accepted, false when the exchange aborted, and
+ * undefined when there was nothing to ask -- either the command is not
+ * consequential, or this client never declared it could render the form, in
+ * which case the call reaches the consent seam unconsented and gets its
+ * refusal.
+ *
+ * The continuation blob rides as the JSON-RPC request id: JSON-RPC obliges the
+ * client to echo an id back verbatim, which is the same obligation the modern
+ * era puts on `requestState`, so the correlation needs no second mechanism. It
+ * is verified on return through the same path, and a matching id that fails any
+ * of those checks confirms nothing.
+ */
+async function legacyConfirmation(
+	app: AppImpl,
+	toolName: string,
+	args: JsonObject,
+	session: McpLegacySession,
+	continuation: McpContinuation,
+	channel: McpChannel,
+): Promise<boolean | undefined> {
+	const entry = collectToolCommands(app).find(([path]) => path === toolName);
+	if (entry === undefined || !commandClassification(entry[1]).consequential) {
+		return undefined;
+	}
+	if (!declaresFormElicitation(session.capabilities)) {
+		return undefined;
+	}
+	const principal = principalOfInfo(session.clientInfo);
+	const digest = requestDigest("tools/call", toolName, args);
+	const state = continuation.mint(principal, digest);
+	channel.write({
+		jsonrpc: "2.0",
+		id: state,
+		...confirmationRequest(toolName),
+	});
+	const answer = await channel.awaitResponse(state);
+	if (answer === undefined || !Object.hasOwn(answer, "result")) {
+		// A JSON-RPC error, or a stream that ended before an answer arrived.
+		// There is no re-ask in this era: the server is holding the request open,
+		// so a non-answer is a decision.
+		return false;
+	}
+	if (continuation.verify(state, principal, digest) !== undefined) {
+		return false;
+	}
+	return confirmationVerdict(answer.result) === "accept";
 }

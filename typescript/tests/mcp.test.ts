@@ -147,8 +147,11 @@ test("mcp: initialize returns protocol info and server info", async () => {
 	assert.equal(resp.jsonrpc, "2.0");
 	assert.equal(resp.id, 1);
 	const result = resultOf(resp);
-	assert.equal(result.protocolVersion, "2024-11-05");
-	assert.deepEqual(result.capabilities, { tools: {} });
+	assert.equal(result.protocolVersion, "2025-11-25");
+	assert.deepEqual(result.capabilities, {
+		tools: {},
+		experimental: { "dev.smmh.strictcli/consequential-confirmation": {} },
+	});
 	assert.deepEqual(result.serverInfo, { name: "myapp", version: "1.0.0" });
 });
 
@@ -1142,7 +1145,7 @@ test("mcp: initialize selects the legacy era for later requests", async () => {
 	);
 	assert.equal(
 		resultOf(responses[0] as Record<string, unknown>).protocolVersion,
-		"2024-11-05",
+		"2025-11-25",
 	);
 	const legacyList = resultOf(responses[1] as Record<string, unknown>);
 	assert.equal(Object.hasOwn(legacyList, "resultType"), false);
@@ -1374,6 +1377,246 @@ test("mcp: a stated consent needs no declared capability", async () => {
 	const result = resultOf(resp);
 	assert.equal(result.resultType, "complete");
 	assert.equal(Object.hasOwn(result, "isError"), false);
+});
+
+// ---------------------------------------------------------------------------
+// The legacy era's confirmation (contract §22.7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Like serveSession, but each step declares whether a reply is expected before
+ * the next line goes out: the legacy exchange holds a request open while it
+ * waits for an answer, so some lines have to be sent without reading first.
+ */
+async function serveScript(
+	app: App,
+	...steps: {
+		build: (seen: Record<string, unknown>[]) => unknown;
+		reply: boolean;
+	}[]
+): Promise<Record<string, unknown>[]> {
+	const stream = new PassThrough();
+	const responses: Record<string, unknown>[] = [];
+	let arrived: (() => void) | undefined;
+	const serving = app.serveMcp({
+		input: stream,
+		output: {
+			write: (chunk) => {
+				for (const line of chunk.split("\n")) {
+					if (line.trim() !== "") {
+						responses.push(JSON.parse(line) as Record<string, unknown>);
+					}
+				}
+				arrived?.();
+			},
+		},
+	});
+	for (const step of steps) {
+		const reply = new Promise<void>((resolve) => {
+			arrived = resolve;
+		});
+		stream.write(`${JSON.stringify(step.build(responses))}\n`);
+		if (step.reply) {
+			await reply;
+		}
+	}
+	stream.end();
+	await serving;
+	return responses;
+}
+
+/** The legacy opener: in that era the handshake IS the client's declaration. */
+function handshakeRequest(elicitation: boolean): unknown {
+	return {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "initialize",
+		params: {
+			capabilities: elicitation ? { elicitation: { form: {} } } : {},
+			clientInfo: { name: "cli", version: "1.0.0" },
+		},
+	};
+}
+
+/** A legacy tools/call: no per-request metadata, because that era has none. */
+function legacyCall(
+	id: unknown,
+	name: string,
+	params: Record<string, unknown> = {},
+): unknown {
+	return {
+		jsonrpc: "2.0",
+		id,
+		method: "tools/call",
+		params: { name, arguments: {}, ...params },
+	};
+}
+
+/** Answers the elicitation the server just sent, echoing its id. */
+function answerElicitation(
+	seen: Record<string, unknown>[],
+	result: unknown,
+): unknown {
+	const ask = seen[seen.length - 1] as Record<string, unknown>;
+	return { jsonrpc: "2.0", id: ask.id, result };
+}
+
+test("mcp: a legacy consequential call is asked over a server request", async () => {
+	const responses = await serveSession(
+		confirmingApp(),
+		() => handshakeRequest(true),
+		() => legacyCall(2, "release"),
+		(seen) =>
+			answerElicitation(seen, { action: "accept", content: { proceed: true } }),
+	);
+	const ask = responses[1] as Record<string, unknown>;
+	assert.equal(ask.method, "elicitation/create");
+	const params = ask.params as Record<string, unknown>;
+	assert.equal(params.mode, "form");
+	assert.equal(
+		params.message,
+		"about to run consequential command 'release'. Proceed?",
+	);
+	// The correlation id IS the continuation blob: one mint-and-verify path, two
+	// delivery vehicles.
+	assert.equal(typeof ask.id, "string");
+	assert.ok((ask.id as string).includes("."));
+	const result = resultOf(responses[2] as Record<string, unknown>);
+	assert.equal(Object.hasOwn(result, "isError"), false);
+	assert.equal(Object.hasOwn(result, "resultType"), false);
+	// The command ran: its outcome, not an abort.
+	assert.equal((result.content as { text: string }[])[0]?.text, "0");
+});
+
+test("mcp: in the legacy era anything but an acceptance aborts", async () => {
+	const answers: unknown[] = [
+		{ action: "decline" },
+		{ action: "cancel" },
+		{ action: "accept", content: { proceed: false } },
+		{ action: "accept" },
+		"not an elicitation result",
+	];
+	for (const answer of answers) {
+		const responses = await serveSession(
+			confirmingApp(),
+			() => handshakeRequest(true),
+			() => legacyCall(2, "release"),
+			(seen) => answerElicitation(seen, answer),
+		);
+		const result = resultOf(responses[2] as Record<string, unknown>);
+		assert.equal(result.isError, true);
+		assert.equal((result.content as { text: string }[])[0]?.text, "aborted");
+	}
+});
+
+test("mcp: a legacy error response aborts", async () => {
+	const responses = await serveSession(
+		confirmingApp(),
+		() => handshakeRequest(true),
+		() => legacyCall(2, "release"),
+		(seen) => {
+			const ask = seen[seen.length - 1] as Record<string, unknown>;
+			return {
+				jsonrpc: "2.0",
+				id: ask.id,
+				error: { code: -32601, message: "Method not found" },
+			};
+		},
+	);
+	assert.equal(resultOf(responses[2] as Record<string, unknown>).isError, true);
+});
+
+test("mcp: a legacy answer under an id the server never minted confirms nothing", async () => {
+	const responses = await serveScript(
+		confirmingApp(),
+		{ build: () => handshakeRequest(true), reply: true },
+		{ build: () => legacyCall(2, "release"), reply: true },
+		{
+			build: () => ({
+				jsonrpc: "2.0",
+				id: "not-the-blob",
+				result: { action: "accept", content: { proceed: true } },
+			}),
+			reply: false,
+		},
+	);
+	// The stray response is discarded; the stream then ends without an answer,
+	// which aborts.
+	const result = resultOf(responses[2] as Record<string, unknown>);
+	assert.equal(result.isError, true);
+	assert.equal((result.content as { text: string }[])[0]?.text, "aborted");
+});
+
+test("mcp: a legacy client that cannot be asked gets the seam's refusal", async () => {
+	const responses = await serveSession(
+		confirmingApp(),
+		() => handshakeRequest(false),
+		() => legacyCall(2, "release"),
+	);
+	const result = resultOf(responses[1] as Record<string, unknown>);
+	assert.equal(result.isError, true);
+	assert.equal(
+		(result.content as { text: string }[])[0]?.text,
+		"command 'release' is consequential: the call must carry confirmation",
+	);
+});
+
+test("mcp: legacy read-only and consented calls are never asked about", async () => {
+	const responses = await serveSession(
+		confirmingApp(),
+		() => handshakeRequest(true),
+		() => legacyCall(2, "look"),
+		() => legacyCall(3, "release", { approve_consequential: true }),
+	);
+	for (const resp of responses.slice(1)) {
+		assert.equal(
+			Object.hasOwn(resultOf(resp as Record<string, unknown>), "isError"),
+			false,
+		);
+	}
+});
+
+test("mcp: legacy traffic arriving mid-exchange is held, not dropped", async () => {
+	const responses = await serveScript(
+		confirmingApp(),
+		{ build: () => handshakeRequest(true), reply: true },
+		{ build: () => legacyCall(2, "release"), reply: true },
+		{
+			// Sent while the server is waiting for the answer.
+			build: () => ({ jsonrpc: "2.0", id: 3, method: "tools/list" }),
+			reply: false,
+		},
+		{
+			build: (seen) => {
+				const ask = seen[1] as Record<string, unknown>;
+				return {
+					jsonrpc: "2.0",
+					id: ask.id,
+					result: { action: "accept", content: { proceed: true } },
+				};
+			},
+			reply: false,
+		},
+	);
+	assert.equal(
+		(responses[1] as Record<string, unknown>).method,
+		"elicitation/create",
+	);
+	assert.equal((responses[2] as Record<string, unknown>).id, 2);
+	// Served after the call it interrupted, never dropped.
+	assert.equal((responses[3] as Record<string, unknown>).id, 3);
+});
+
+test("mcp: a modern call is still asked the modern way after a handshake", async () => {
+	const responses = await serveSession(
+		confirmingApp(),
+		() => handshakeRequest(true),
+		() => toolCall(2, { name: "release", arguments: {} }),
+	);
+	assert.equal(
+		resultOf(responses[1] as Record<string, unknown>).resultType,
+		"input_required",
+	);
 });
 
 test("mcp: a tampered continuation is refused", async () => {
