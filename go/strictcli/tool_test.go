@@ -955,7 +955,7 @@ func TestToolExecuteRefusesWithoutConsent(t *testing.T) {
 	if err == nil {
 		t.Fatal("an unconsented consequential Execute must be refused")
 	}
-	want := "command 'release' is consequential: pass approve_consequential to confirm"
+	want := "command 'release' is consequential: the call must carry confirmation"
 	if err.Error() != want {
 		t.Fatalf("got %q want %q", err.Error(), want)
 	}

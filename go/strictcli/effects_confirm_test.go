@@ -92,7 +92,7 @@ func TestConfirmNonInteractiveStdinIsAHardError(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("expected exit 1, got %d (stdout=%q stderr=%q)", code, stdout, stderr)
 	}
-	if stderr != "error: stdin is not interactive; pass --approve-consequential to confirm\n" {
+	if stderr != "error: stdin is not interactive; a consequential command must be confirmed at a terminal\n" {
 		t.Fatalf("stderr=%q", stderr)
 	}
 	if strings.Contains(stdout, "deployed") {
@@ -171,7 +171,7 @@ func TestConfirmFiresForAConsequentialPassthrough(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("expected exit 1, got %d (stdout=%q stderr=%q)", code, stdout, stderr)
 	}
-	if stderr != "error: stdin is not interactive; pass --approve-consequential to confirm\n" {
+	if stderr != "error: stdin is not interactive; a consequential command must be confirmed at a terminal\n" {
 		t.Fatalf("a consequential passthrough is not exempt, stderr=%q", stderr)
 	}
 	if strings.Contains(stdout, "wrapped") {

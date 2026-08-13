@@ -1,6 +1,7 @@
 package strictcli
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -984,7 +985,7 @@ func TestMCPToolsCallRefusesWithoutConsent(t *testing.T) {
 		t.Fatalf("expected isError, got %#v", result)
 	}
 	content := result["content"].([]interface{})[0].(map[string]interface{})
-	want := "command 'release' is consequential: pass approve_consequential to confirm"
+	want := "command 'release' is consequential: the call must carry confirmation"
 	if content["text"] != want {
 		t.Fatalf("got %q want %q", content["text"], want)
 	}
@@ -1310,5 +1311,365 @@ func TestMCPEraSelection(t *testing.T) {
 	}
 	if mcpErrorOf(t, responses[3])["code"] != float64(mcpErrMethodNotFound) {
 		t.Errorf("discover from the legacy era: got %v", responses[3])
+	}
+}
+
+// --- The confirmation round-trip and its continuation state ---
+
+// mcpSession is a live MCP session in which a request may depend on an earlier
+// reply.
+//
+// The continuation key and its spent-id set live in the server process, so a
+// round-trip has to be driven through ONE serveMCPIO call: a second call is a
+// second server, and its state is deliberately worthless to the first.
+type mcpSession struct {
+	app       *App
+	responses []map[string]interface{}
+}
+
+// sessionStep builds one request, given the replies seen so far.
+type sessionStep func(seen []map[string]interface{}) map[string]interface{}
+
+// run drives the steps through one server, feeding each request only after the
+// previous reply has been parsed.
+func (s *mcpSession) run(t *testing.T, steps ...sessionStep) []map[string]interface{} {
+	t.Helper()
+	inReader, inWriter := io.Pipe()
+	outReader, outWriter := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		s.app.serveMCPIO(inReader, outWriter)
+		outWriter.Close()
+		close(done)
+	}()
+
+	replies := bufio.NewReader(outReader)
+	for _, step := range steps {
+		request := step(s.responses)
+		line, err := json.Marshal(request)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if _, err := inWriter.Write(append(line, '\n')); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		text, err := replies.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read reply: %v", err)
+		}
+		var resp map[string]interface{}
+		if err := json.Unmarshal([]byte(text), &resp); err != nil {
+			t.Fatalf("unmarshal reply: %v (raw %s)", err, text)
+		}
+		s.responses = append(s.responses, resp)
+	}
+	inWriter.Close()
+	<-done
+	outReader.Close()
+	return s.responses
+}
+
+// confirmingApp exports one consequential tool and one read-only one.
+func confirmingApp() *App {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("release", "release it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectMutating), WithConsequential())
+	app.Command("look", "look around", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+	return app
+}
+
+// elicitingMeta is a client that can render a form elicitation.
+func elicitingMeta() map[string]interface{} {
+	return map[string]interface{}{
+		mcpMetaProtocolVersion:    mcpProtocolVersion,
+		mcpMetaClientCapabilities: map[string]interface{}{"elicitation": map[string]interface{}{"form": map[string]interface{}{}}},
+		mcpMetaClientInfo:         map[string]interface{}{"name": "cli", "version": "1.0.0"},
+	}
+}
+
+func callRequest(id interface{}, params map[string]interface{}) map[string]interface{} {
+	if _, ok := params["_meta"]; !ok {
+		params["_meta"] = elicitingMeta()
+	}
+	return map[string]interface{}{
+		"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": params,
+	}
+}
+
+func acceptance(proceed bool) map[string]interface{} {
+	return map[string]interface{}{
+		mcpConfirmationKey: map[string]interface{}{
+			"action":  "accept",
+			"content": map[string]interface{}{"proceed": proceed},
+		},
+	}
+}
+
+func stateOf(t *testing.T, resp map[string]interface{}) string {
+	t.Helper()
+	state, ok := mcpResultOf(t, resp)["requestState"].(string)
+	if !ok {
+		t.Fatalf("no requestState in %v", resp)
+	}
+	return state
+}
+
+// driveConfirmation asks, then answers: the two halves of one confirmation.
+func driveConfirmation(t *testing.T, app *App, answers map[string]interface{}) []map[string]interface{} {
+	t.Helper()
+	session := &mcpSession{app: app}
+	return session.run(t,
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return callRequest(1, map[string]interface{}{"name": "release", "arguments": map[string]interface{}{}})
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return callRequest(2, map[string]interface{}{
+				"name": "release", "arguments": map[string]interface{}{},
+				"requestState": stateOf(t, seen[0]), "inputResponses": answers,
+			})
+		},
+	)
+}
+
+func TestMCPUnconsentedCallAsksForConfirmation(t *testing.T) {
+	resp, err := sendMCPRequestRaw(confirmingApp(), "tools/call", 1, map[string]interface{}{
+		"_meta": elicitingMeta(), "name": "release", "arguments": map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	result := mcpResultOf(t, resp)
+	if result["resultType"] != "input_required" {
+		t.Fatalf("resultType: got %v", result["resultType"])
+	}
+	requests, _ := result["inputRequests"].(map[string]interface{})
+	request, _ := requests[mcpConfirmationKey].(map[string]interface{})
+	if request["method"] != "elicitation/create" {
+		t.Errorf("method: got %v", request["method"])
+	}
+	params, _ := request["params"].(map[string]interface{})
+	if params["mode"] != "form" {
+		t.Errorf("mode: got %v", params["mode"])
+	}
+	want := "about to run consequential command 'release'. Proceed?"
+	if params["message"] != want {
+		t.Errorf("message: got %q, want %q", params["message"], want)
+	}
+	if state, ok := result["requestState"].(string); !ok || state == "" {
+		t.Errorf("requestState: got %v", result["requestState"])
+	}
+}
+
+func TestMCPRetryCarryingAcceptanceProceeds(t *testing.T) {
+	responses := driveConfirmation(t, confirmingApp(), acceptance(true))
+	result := mcpResultOf(t, responses[1])
+	if result["resultType"] != "complete" {
+		t.Fatalf("resultType: got %v", result["resultType"])
+	}
+	if _, isError := result["isError"]; isError {
+		t.Errorf("expected the call to proceed, got %v", result)
+	}
+}
+
+func TestMCPDeclineAndCancelAbort(t *testing.T) {
+	for _, action := range []string{"decline", "cancel"} {
+		t.Run(action, func(t *testing.T) {
+			responses := driveConfirmation(t, confirmingApp(), map[string]interface{}{
+				mcpConfirmationKey: map[string]interface{}{"action": action},
+			})
+			result := mcpResultOf(t, responses[1])
+			if result["isError"] != true {
+				t.Fatalf("expected an aborted result, got %v", result)
+			}
+			content, _ := result["content"].([]interface{})
+			first, _ := content[0].(map[string]interface{})
+			if first["text"] != errConfirmDeclined {
+				t.Errorf("text: got %v", first["text"])
+			}
+		})
+	}
+}
+
+func TestMCPAcceptanceThatSaysNoAborts(t *testing.T) {
+	responses := driveConfirmation(t, confirmingApp(), acceptance(false))
+	if mcpResultOf(t, responses[1])["isError"] != true {
+		t.Errorf("expected an aborted result, got %v", responses[1])
+	}
+}
+
+func TestMCPMissingAnswerAsksAgainWithFreshState(t *testing.T) {
+	responses := driveConfirmation(t, confirmingApp(), map[string]interface{}{})
+	second := mcpResultOf(t, responses[1])
+	if second["resultType"] != "input_required" {
+		t.Fatalf("resultType: got %v", second["resultType"])
+	}
+	if second["requestState"] == stateOf(t, responses[0]) {
+		t.Errorf("the re-ask reused the spent state")
+	}
+}
+
+func TestMCPReadOnlyToolIsNeverAskedAbout(t *testing.T) {
+	resp, err := sendMCPRequestRaw(confirmingApp(), "tools/call", 1, map[string]interface{}{
+		"_meta": elicitingMeta(), "name": "look", "arguments": map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if mcpResultOf(t, resp)["resultType"] != "complete" {
+		t.Errorf("expected a complete result, got %v", resp)
+	}
+}
+
+func TestMCPClientWithoutElicitationIsRefusedNotAsked(t *testing.T) {
+	resp, err := sendMCPRequestRaw(confirmingApp(), "tools/call", 1, map[string]interface{}{
+		"_meta": modernMeta(), "name": "release", "arguments": map[string]interface{}{},
+	})
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	result := mcpResultOf(t, resp)
+	if result["resultType"] != "complete" || result["isError"] != true {
+		t.Fatalf("expected the refusal, got %v", result)
+	}
+	content, _ := result["content"].([]interface{})
+	first, _ := content[0].(map[string]interface{})
+	want := errCallConsequentialUnconsented("release")
+	if first["text"] != want {
+		t.Errorf("text: got %q, want %q", first["text"], want)
+	}
+}
+
+func TestMCPTamperedStateIsRefused(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	responses := session.run(t,
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return callRequest(1, map[string]interface{}{"name": "release", "arguments": map[string]interface{}{}})
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			state := stateOf(t, seen[0])
+			broken := state[:len(state)-1] + "A"
+			if strings.HasSuffix(state, "A") {
+				broken = state[:len(state)-1] + "B"
+			}
+			return callRequest(2, map[string]interface{}{
+				"name": "release", "arguments": map[string]interface{}{},
+				"requestState": broken, "inputResponses": acceptance(true),
+			})
+		},
+	)
+	errObj := mcpErrorOf(t, responses[1])
+	if errObj["code"] != float64(mcpErrInvalidParams) || errObj["message"] != mcpErrStateVerification {
+		t.Errorf("got %v", errObj)
+	}
+}
+
+func TestMCPStateIsSingleUse(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	retry := func(id interface{}) sessionStep {
+		return func(seen []map[string]interface{}) map[string]interface{} {
+			return callRequest(id, map[string]interface{}{
+				"name": "release", "arguments": map[string]interface{}{},
+				"requestState": stateOf(t, seen[0]), "inputResponses": acceptance(true),
+			})
+		}
+	}
+	responses := session.run(t,
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return callRequest(1, map[string]interface{}{"name": "release", "arguments": map[string]interface{}{}})
+		},
+		retry(2), retry(3),
+	)
+	if mcpResultOf(t, responses[1])["resultType"] != "complete" {
+		t.Fatalf("the first redemption failed: %v", responses[1])
+	}
+	if mcpErrorOf(t, responses[2])["message"] != mcpErrStateReused {
+		t.Errorf("got %v", responses[2])
+	}
+}
+
+func TestMCPStateDoesNotTravel(t *testing.T) {
+	t.Run("to another request", func(t *testing.T) {
+		session := &mcpSession{app: confirmingApp()}
+		responses := session.run(t,
+			func(seen []map[string]interface{}) map[string]interface{} {
+				return callRequest(1, map[string]interface{}{"name": "release", "arguments": map[string]interface{}{}})
+			},
+			func(seen []map[string]interface{}) map[string]interface{} {
+				return callRequest(2, map[string]interface{}{
+					"name": "release", "arguments": map[string]interface{}{"unexpected": 1},
+					"requestState": stateOf(t, seen[0]), "inputResponses": acceptance(true),
+				})
+			},
+		)
+		if mcpErrorOf(t, responses[1])["message"] != mcpErrStateWrongRequest {
+			t.Errorf("got %v", responses[1])
+		}
+	})
+
+	t.Run("to another client", func(t *testing.T) {
+		session := &mcpSession{app: confirmingApp()}
+		responses := session.run(t,
+			func(seen []map[string]interface{}) map[string]interface{} {
+				return callRequest(1, map[string]interface{}{"name": "release", "arguments": map[string]interface{}{}})
+			},
+			func(seen []map[string]interface{}) map[string]interface{} {
+				other := elicitingMeta()
+				other[mcpMetaClientInfo] = map[string]interface{}{"name": "someone-else", "version": "1.0.0"}
+				return callRequest(2, map[string]interface{}{
+					"_meta": other,
+					"name":  "release", "arguments": map[string]interface{}{},
+					"requestState": stateOf(t, seen[0]), "inputResponses": acceptance(true),
+				})
+			},
+		)
+		if mcpErrorOf(t, responses[1])["message"] != mcpErrStateWrongClient {
+			t.Errorf("got %v", responses[1])
+		}
+	})
+}
+
+func TestMCPAnswerWithoutItsStateIsRefused(t *testing.T) {
+	resp, err := sendMCPRequestRaw(confirmingApp(), "tools/call", 1, map[string]interface{}{
+		"_meta": elicitingMeta(), "name": "release",
+		"arguments": map[string]interface{}{}, "inputResponses": acceptance(true),
+	})
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	want := "parameter 'inputResponses' requires the requestState it was issued with"
+	if mcpErrorOf(t, resp)["message"] != want {
+		t.Errorf("got %v", resp)
+	}
+}
+
+func TestMCPMalformedAnswerIsAProtocolError(t *testing.T) {
+	responses := driveConfirmation(t, confirmingApp(), map[string]interface{}{
+		mcpConfirmationKey: map[string]interface{}{"action": "shrug"},
+	})
+	want := fmt.Sprintf("inputResponses['%s'] is not an elicitation result", mcpConfirmationKey)
+	if mcpErrorOf(t, responses[1])["message"] != want {
+		t.Errorf("got %v", responses[1])
+	}
+}
+
+func TestMCPContinuationExpiryAndIsolation(t *testing.T) {
+	// No clock reaches the wire, so expiry is driven at the mint.
+	continuation := newMCPContinuation()
+	var now int64 = 1000000
+	state := continuation.mint("cli/1.0.0", "digest", now)
+	if refusal := continuation.verify(state, "cli/1.0.0", "digest", now+mcpContinuationTTLSeconds-1); refusal != "" {
+		t.Fatalf("a state inside its window was refused: %s", refusal)
+	}
+	fresh := continuation.mint("cli/1.0.0", "digest", now)
+	if refusal := continuation.verify(fresh, "cli/1.0.0", "digest", now+mcpContinuationTTLSeconds+1); refusal != mcpErrStateExpired {
+		t.Errorf("expiry: got %q", refusal)
+	}
+
+	other := newMCPContinuation()
+	if refusal := other.verify(state, "cli/1.0.0", "digest", now); refusal != mcpErrStateVerification {
+		t.Errorf("another process accepted the blob: %q", refusal)
 	}
 }

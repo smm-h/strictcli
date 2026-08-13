@@ -1371,7 +1371,13 @@ func promptConfirmConsequential(name string) string {
 	return fmt.Sprintf("about to run consequential command '%s'. Proceed? [y/N] ", name)
 }
 
-const errConfirmNonInteractive = "error: stdin is not interactive; pass --approve-consequential to confirm"
+// errConfirmNonInteractive is the non-interactive refusal (contract §8.3).
+//
+// It names what is required -- confirmation, at a terminal -- and never the
+// token that lifts the requirement. A refusal that prints its own override is
+// not a seam: the reflex it teaches is to append the override and re-run, which
+// is the opposite of the judgement the declaration asks for.
+const errConfirmNonInteractive = "error: stdin is not interactive; a consequential command must be confirmed at a terminal"
 
 const errConfirmDeclined = "aborted"
 
@@ -1383,7 +1389,7 @@ const errConfirmDeclined = "aborted"
 // makes the caller state, in the call, that it is proceeding without a human,
 // instead of the framework deciding that silently on its behalf.
 func errCallConsequentialUnconsented(cmdPath string) string {
-	return fmt.Sprintf("command '%s' is consequential: pass approve_consequential to confirm", cmdPath)
+	return fmt.Sprintf("command '%s' is consequential: the call must carry confirmation", cmdPath)
 }
 
 // ---------------------------------------------------------------------------

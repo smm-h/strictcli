@@ -2,13 +2,21 @@ package strictcli
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // mcpRequest represents an incoming JSON-RPC 2.0 request or notification.
@@ -224,6 +232,9 @@ func (a *App) serveMCPIO(in io.Reader, out io.Writer) {
 	// `initialize` request selects legacy semantics for this process. Modern
 	// requests carry everything they need and never consult it.
 	legacyEra := false
+	// The continuation minting key and the spent-id set. Both are per process:
+	// a blob is unforgeable outside this process and unusable twice inside it.
+	continuation := newMCPContinuation()
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -252,13 +263,13 @@ func (a *App) serveMCPIO(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		resp := a.handleMCPRequest(req, &legacyEra)
+		resp := a.handleMCPRequest(req, &legacyEra, continuation)
 		writeMCPResponse(out, resp)
 	}
 }
 
 // handleMCPRequest routes one request to its era and dispatches it there.
-func (a *App) handleMCPRequest(req mcpRequest, legacyEra *bool) mcpResponse {
+func (a *App) handleMCPRequest(req mcpRequest, legacyEra *bool, continuation *mcpContinuation) mcpResponse {
 	if req.Method == "initialize" {
 		*legacyEra = true
 		return a.handleMCPInitialize(req)
@@ -271,7 +282,7 @@ func (a *App) handleMCPRequest(req mcpRequest, legacyEra *bool) mcpResponse {
 		return mcpErrorResponse(req.ID, mcpErrInvalidParams,
 			"parameter '_meta' must be an object", nil)
 	case isObject && hasKey(meta, mcpMetaProtocolVersion):
-		return a.dispatchMCPModern(req, meta)
+		return a.dispatchMCPModern(req, meta, continuation)
 	case *legacyEra:
 		return a.dispatchMCPLegacy(req)
 	default:
@@ -289,7 +300,7 @@ func hasKey(obj map[string]interface{}, key string) bool {
 
 // dispatchMCPModern dispatches one modern-era request: metadata, then version,
 // then method.
-func (a *App) dispatchMCPModern(req mcpRequest, meta map[string]interface{}) mcpResponse {
+func (a *App) dispatchMCPModern(req mcpRequest, meta map[string]interface{}, continuation *mcpContinuation) mcpResponse {
 	if invalid := mcpValidateMeta(meta); invalid != "" {
 		return mcpErrorResponse(req.ID, mcpErrInvalidParams, invalid, nil)
 	}
@@ -307,7 +318,7 @@ func (a *App) dispatchMCPModern(req mcpRequest, meta map[string]interface{}) mcp
 	case "tools/list":
 		return a.handleMCPToolsList(req, true)
 	case "tools/call":
-		return a.handleMCPToolsCall(req, true)
+		return a.handleMCPToolsCall(req, true, meta, continuation)
 	default:
 		return mcpErrorResponse(req.ID, mcpErrMethodNotFound,
 			fmt.Sprintf("Method not found: %s", req.Method), nil)
@@ -321,7 +332,7 @@ func (a *App) dispatchMCPLegacy(req mcpRequest) mcpResponse {
 	case "tools/list":
 		return a.handleMCPToolsList(req, false)
 	case "tools/call":
-		return a.handleMCPToolsCall(req, false)
+		return a.handleMCPToolsCall(req, false, nil, nil)
 	default:
 		return mcpErrorResponse(req.ID, mcpErrMethodNotFound,
 			fmt.Sprintf("Method not found: %s", req.Method), nil)
@@ -477,7 +488,7 @@ func (a *App) mcpToolResult(reqID interface{}, text string, modern, isError bool
 }
 
 // handleMCPToolsCall validates params, calls the command, and returns the result.
-func (a *App) handleMCPToolsCall(req mcpRequest, modern bool) mcpResponse {
+func (a *App) handleMCPToolsCall(req mcpRequest, modern bool, meta map[string]interface{}, continuation *mcpContinuation) mcpResponse {
 	params := req.Params
 
 	// Extract tool name
@@ -535,22 +546,28 @@ func (a *App) handleMCPToolsCall(req mcpRequest, modern bool) mcpResponse {
 	// namespace and is published with additionalProperties: false. There is no
 	// server-side default: absent means "not consented", and a consequential
 	// tool is then refused.
-	var callOpts []CallOption
+	consented := false
 	if consentVal, ok := params["approve_consequential"]; ok {
 		consent, ok := consentVal.(bool)
 		if !ok {
-			return mcpResponse{
-				Jsonrpc: "2.0",
-				ID:      req.ID,
-				Error: &mcpError{
-					Code:    mcpErrInvalidParams,
-					Message: "parameter 'approve_consequential' must be a boolean",
-				},
-			}
+			return mcpErrorResponse(req.ID, mcpErrInvalidParams,
+				"parameter 'approve_consequential' must be a boolean", nil)
 		}
-		if consent {
-			callOpts = append(callOpts, WithApproveConsequential())
+		consented = consent
+	}
+
+	if modern {
+		resp, granted := a.mcpConfirmationExchange(
+			req, commandPath, callArgs, meta, continuation, consented)
+		if resp != nil {
+			return *resp
 		}
+		consented = granted
+	}
+
+	var callOpts []CallOption
+	if consented {
+		callOpts = append(callOpts, WithApproveConsequential())
 	}
 
 	// Call the command
@@ -578,4 +595,418 @@ func writeMCPResponse(out io.Writer, resp mcpResponse) {
 		return
 	}
 	fmt.Fprintf(out, "%s\n", data)
+}
+
+// --- The continuation primitive (contract §22.4) ----------------------------
+//
+// The protocol is stateless: a server that needs more input answers with an
+// input-required result and whatever it must remember, and the client echoes
+// that back on a retry that is otherwise a fresh, independent request. The
+// state therefore travels THROUGH the client, which makes it attacker-
+// controlled input rather than server memory.
+
+// mcpContinuationTTLSeconds is how long a minted continuation stays usable:
+// long enough for a human to answer the confirmation the client renders, short
+// enough that a captured blob is worth little.
+const mcpContinuationTTLSeconds = 300
+
+// mcpConfirmationKey is the key the confirmation elicitation is filed under, in
+// both directions.
+const mcpConfirmationKey = "consequential-confirmation"
+
+// mcpContinuationPayload is what the blob carries, and what its MAC covers.
+type mcpContinuationPayload struct {
+	V    int    `json:"v"`
+	JTI  string `json:"jti"`
+	Prin string `json:"prin"`
+	Exp  int64  `json:"exp"`
+	Req  string `json:"req"`
+}
+
+// mcpContinuation mints and verifies the integrity-protected continuation state
+// blob.
+//
+// The blob is `<payload>.<mac>`, both unpadded base64url, where the MAC is
+// HMAC-SHA256 over the payload bytes under a key minted for this process and
+// never emitted. A blob is therefore unforgeable without reading this process's
+// memory, and worthless to any other process.
+//
+// The payload binds three things the protocol requires be checked on receipt --
+// the principal it was issued to, an expiry, and a digest of the originating
+// request -- plus a unique id, which is what makes single use enforceable:
+// those three bound the replay window but do not close it.
+type mcpContinuation struct {
+	key      []byte
+	consumed map[string]int64
+}
+
+func newMCPContinuation() *mcpContinuation {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		panic(fmt.Sprintf("strictcli: cannot mint a continuation key: %s", err))
+	}
+	return &mcpContinuation{key: key, consumed: map[string]int64{}}
+}
+
+func (c *mcpContinuation) mac(payload []byte) []byte {
+	mac := hmac.New(sha256.New, c.key)
+	mac.Write(payload)
+	return mac.Sum(nil)
+}
+
+// mint issues a blob binding this principal, this request and a short window.
+func (c *mcpContinuation) mint(principal, digest string, now int64) string {
+	id := make([]byte, 16)
+	if _, err := rand.Read(id); err != nil {
+		panic(fmt.Sprintf("strictcli: cannot mint a continuation id: %s", err))
+	}
+	payload := mcpContinuationPayload{
+		V:    1,
+		JTI:  base64.RawURLEncoding.EncodeToString(id),
+		Prin: principal,
+		Exp:  now + mcpContinuationTTLSeconds,
+		Req:  digest,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(fmt.Sprintf("strictcli: cannot encode a continuation: %s", err))
+	}
+	return base64.RawURLEncoding.EncodeToString(raw) + "." +
+		base64.RawURLEncoding.EncodeToString(c.mac(raw))
+}
+
+// verify verifies and CONSUMES a blob, returning "" when it is good and the
+// refusal otherwise. A blob that passes every check is consumed here, so a
+// second presentation is refused even though it is still perfectly well-formed,
+// unexpired and correctly bound.
+func (c *mcpContinuation) verify(blob, principal, digest string, now int64) string {
+	parts := strings.Split(blob, ".")
+	if len(parts) != 2 {
+		return mcpErrStateVerification
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return mcpErrStateVerification
+	}
+	mac, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return mcpErrStateVerification
+	}
+	if !hmac.Equal(mac, c.mac(raw)) {
+		return mcpErrStateVerification
+	}
+	var payload mcpContinuationPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return mcpErrStateVerification
+	}
+	if payload.V != 1 || payload.JTI == "" {
+		return mcpErrStateVerification
+	}
+	c.prune(now)
+	if payload.Exp <= now {
+		return mcpErrStateExpired
+	}
+	if payload.Prin != principal {
+		return mcpErrStateWrongClient
+	}
+	if payload.Req != digest {
+		return mcpErrStateWrongRequest
+	}
+	if _, spent := c.consumed[payload.JTI]; spent {
+		return mcpErrStateReused
+	}
+	c.consumed[payload.JTI] = payload.Exp
+	return ""
+}
+
+// prune forgets consumed ids that can no longer be replayed anyway.
+func (c *mcpContinuation) prune(now int64) {
+	for id, exp := range c.consumed {
+		if exp <= now {
+			delete(c.consumed, id)
+		}
+	}
+}
+
+// The continuation refusals, byte-identical in all three implementations.
+const (
+	mcpErrStateVerification = "requestState failed verification"
+	mcpErrStateExpired      = "requestState has expired"
+	mcpErrStateWrongClient  = "requestState was issued to a different client"
+	mcpErrStateWrongRequest = "requestState does not match this request"
+	mcpErrStateReused       = "requestState has already been used"
+)
+
+// mcpCanonicalJSON is a canonical encoding of a JSON value, for digesting: keys
+// sorted, no insignificant whitespace, floats in the framework's canonical form
+// -- so the digest depends on what the caller said, never on how their encoder
+// spelled it.
+func mcpCanonicalJSON(value interface{}) string {
+	switch v := value.(type) {
+	case nil:
+		return "null"
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case float64:
+		if v == math.Trunc(v) && math.Abs(v) < 1e15 {
+			return strconv.FormatInt(int64(v), 10)
+		}
+		return formatFloatCanonical(v)
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case string:
+		return mcpCanonicalString(v)
+	case []interface{}:
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			parts = append(parts, mcpCanonicalJSON(item))
+		}
+		return "[" + strings.Join(parts, ",") + "]"
+	case map[string]interface{}:
+		keys := make([]string, 0, len(v))
+		for key := range v {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			parts = append(parts, mcpCanonicalString(key)+":"+mcpCanonicalJSON(v[key]))
+		}
+		return "{" + strings.Join(parts, ",") + "}"
+	default:
+		return mcpCanonicalString(fmt.Sprintf("%v", v))
+	}
+}
+
+// mcpCanonicalString encodes one string the way the envelope does: plain UTF-8,
+// escaping only what JSON mandates.
+func mcpCanonicalString(s string) string {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(s); err != nil {
+		return `""`
+	}
+	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+// mcpRequestDigest digests the originating request: the method and its salient
+// parameters.
+func mcpRequestDigest(method, toolName string, arguments map[string]interface{}) string {
+	material := method + "\n" + toolName + "\n" + mcpCanonicalJSON(arguments)
+	sum := sha256.Sum256([]byte(material))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// mcpPrincipal is the client this state is minted for, as the client declares
+// itself.
+//
+// On this transport there is no authenticated principal; the declaration is
+// self-reported and the binding is a consistency check, not authentication.
+// What actually contains a stolen blob is the per-process key.
+func mcpPrincipal(meta map[string]interface{}) string {
+	info, ok := meta[mcpMetaClientInfo].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	name, _ := info["name"].(string)
+	version, _ := info["version"].(string)
+	return name + "/" + version
+}
+
+// mcpClientDeclaresElicitation reports whether the client declared it can render
+// a form elicitation. An empty `elicitation` object means form mode, which the
+// protocol states for compatibility with clients written before the modes
+// existed.
+func mcpClientDeclaresElicitation(meta map[string]interface{}) bool {
+	caps, ok := meta[mcpMetaClientCapabilities].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	elicitation, ok := caps["elicitation"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	if len(elicitation) == 0 {
+		return true
+	}
+	_, form := elicitation["form"].(map[string]interface{})
+	return form
+}
+
+// mcpConfirmationRequest is the elicitation that asks a human, through the
+// client, to confirm. Same words as the terminal prompt (§12.6) minus its
+// keystroke hint: one vocabulary for one question, however it is delivered.
+func mcpConfirmationRequest(cmdPath string) map[string]interface{} {
+	return map[string]interface{}{
+		"method": "elicitation/create",
+		"params": map[string]interface{}{
+			"mode":    "form",
+			"message": fmt.Sprintf("about to run consequential command '%s'. Proceed?", cmdPath),
+			"requestedSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"proceed": map[string]interface{}{
+						"type":        "boolean",
+						"title":       "Proceed",
+						"description": "Whether to run the consequential command.",
+					},
+				},
+				"required": []interface{}{"proceed"},
+			},
+		},
+	}
+}
+
+// mcpInputRequired is the interim result: what is needed, and the state to echo
+// back with it.
+func (a *App) mcpInputRequired(reqID interface{}, cmdPath, requestState string) mcpResponse {
+	return mcpResponse{
+		Jsonrpc: "2.0",
+		ID:      reqID,
+		Result: map[string]interface{}{
+			"resultType": "input_required",
+			"inputRequests": map[string]interface{}{
+				mcpConfirmationKey: mcpConfirmationRequest(cmdPath),
+			},
+			"requestState": requestState,
+			"_meta":        a.mcpServerInfo(),
+		},
+	}
+}
+
+// mcpConfirmationVerdict reads one elicitation result: "accept", "reject",
+// "absent" or "malformed".
+//
+// An `accept` carrying `proceed: false` is a refusal, not an approval: the
+// action names what the client did with the dialogue, and the field is the
+// answer to the question.
+func mcpConfirmationVerdict(answer interface{}) string {
+	if answer == nil {
+		return "absent"
+	}
+	result, ok := answer.(map[string]interface{})
+	if !ok {
+		return "malformed"
+	}
+	action, _ := result["action"].(string)
+	if action == "decline" || action == "cancel" {
+		return "reject"
+	}
+	if action != "accept" {
+		return "malformed"
+	}
+	content, ok := result["content"].(map[string]interface{})
+	if !ok {
+		return "malformed"
+	}
+	if proceed, ok := content["proceed"].(bool); ok && proceed {
+		return "accept"
+	}
+	return "reject"
+}
+
+// mcpConfirmationExchange runs the confirmation round-trip for one call. It
+// returns a response to send back (a refusal, or the interim result asking for
+// confirmation) or, when there is none, the consent the call may proceed with.
+func (a *App) mcpConfirmationExchange(
+	req mcpRequest,
+	toolName string,
+	arguments map[string]interface{},
+	meta map[string]interface{},
+	continuation *mcpContinuation,
+	alreadyConsented bool,
+) (*mcpResponse, bool) {
+	principal := mcpPrincipal(meta)
+	digest := mcpRequestDigest("tools/call", toolName, arguments)
+	consented := alreadyConsented
+	now := time.Now().Unix()
+
+	if stateVal, present := req.Params["requestState"]; present {
+		state, ok := stateVal.(string)
+		if !ok {
+			resp := mcpErrorResponse(req.ID, mcpErrInvalidParams,
+				"parameter 'requestState' must be a string", nil)
+			return &resp, false
+		}
+		responses := map[string]interface{}{}
+		if responsesVal, ok := req.Params["inputResponses"]; ok {
+			responses, ok = responsesVal.(map[string]interface{})
+			if !ok {
+				resp := mcpErrorResponse(req.ID, mcpErrInvalidParams,
+					"parameter 'inputResponses' must be an object", nil)
+				return &resp, false
+			}
+		}
+		if continuation == nil {
+			resp := mcpErrorResponse(req.ID, mcpErrInvalidParams, mcpErrStateVerification, nil)
+			return &resp, false
+		}
+		if refusal := continuation.verify(state, principal, digest, now); refusal != "" {
+			resp := mcpErrorResponse(req.ID, mcpErrInvalidParams, refusal, nil)
+			return &resp, false
+		}
+		switch mcpConfirmationVerdict(responses[mcpConfirmationKey]) {
+		case "malformed":
+			resp := mcpErrorResponse(req.ID, mcpErrInvalidParams,
+				fmt.Sprintf("inputResponses['%s'] is not an elicitation result", mcpConfirmationKey), nil)
+			return &resp, false
+		case "reject":
+			resp := a.mcpToolResult(req.ID, errConfirmDeclined, true, true)
+			return &resp, false
+		case "accept":
+			consented = true
+		default:
+			// The state was good but the answer never came. The protocol says
+			// to ask again rather than error -- with a fresh state, since the
+			// one just presented is spent.
+			resp := a.mcpInputRequired(req.ID, toolName, continuation.mint(principal, digest, now))
+			return &resp, false
+		}
+	} else if _, present := req.Params["inputResponses"]; present {
+		// An answer whose state is missing cannot be verified, and an
+		// unverifiable answer is not an answer.
+		resp := mcpErrorResponse(req.ID, mcpErrInvalidParams,
+			"parameter 'inputResponses' requires the requestState it was issued with", nil)
+		return &resp, false
+	}
+
+	if consented {
+		return nil, true
+	}
+	cmd := a.lookupMCPCommand(toolName)
+	if cmd == nil || !cmd.Consequential {
+		return nil, consented
+	}
+	if continuation != nil && mcpClientDeclaresElicitation(meta) {
+		resp := a.mcpInputRequired(req.ID, toolName, continuation.mint(principal, digest, now))
+		return &resp, false
+	}
+	// A client that cannot render the confirmation gets the refusal, which
+	// names what is required without teaching a way around it.
+	return nil, consented
+}
+
+// lookupMCPCommand resolves a dotted tool name to its command, or nil.
+func (a *App) lookupMCPCommand(dotted string) *Command {
+	parts := strings.Split(dotted, ".")
+	if len(parts) == 1 {
+		return a.commands[parts[0]]
+	}
+	group, ok := a.groups[parts[0]]
+	if !ok {
+		return nil
+	}
+	for _, name := range parts[1 : len(parts)-1] {
+		group, ok = group.Groups[name]
+		if !ok {
+			return nil
+		}
+	}
+	return group.Commands[parts[len(parts)-1]]
 }
