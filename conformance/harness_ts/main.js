@@ -374,6 +374,24 @@ function extractCarrier(c) {
  * gated by --quiet / --verbose (effects contract §7.4); the harness does no
  * gating of its own, it just calls the named method.
  */
+/**
+ * The claimed-rendering calls (effects contract §19.7). They run AFTER
+ * handler_effects and BEFORE handler_diagnostics / handler_prints, so a
+ * rendered log lands ahead of the handler's own output -- which is exactly the
+ * ordering the feature exists to make possible.
+ */
+function runHandlerClaim(ctx, cmdDef) {
+	if (cmdDef.handler_claims_log === true) {
+		ctx.effects.recorded();
+	}
+	if (cmdDef.handler_payloads_recorded === true) {
+		ctx.payload(ctx.effects.recorded().map((rec) => rec.verb));
+	}
+	if (cmdDef.handler_renders_log === true) {
+		ctx.effects.renderLog();
+	}
+}
+
 function runHandlerDiagnostics(ctx, entries) {
 	for (const d of entries) {
 		switch (d.level) {
@@ -476,6 +494,7 @@ function makeHandler(cmdDef, globalFlags) {
 	if (cmdDef.handler_aborts === true) {
 		return (_args, ctx) => {
 			runHandlerEffects(ctx, handlerEffects);
+			runHandlerClaim(ctx, cmdDef);
 			runHandlerDiagnostics(ctx, handlerDiagnostics);
 			throw new Error(HANDLER_ABORT_MESSAGE);
 		};
@@ -501,6 +520,7 @@ function makeHandler(cmdDef, globalFlags) {
 		}
 		return (_args, ctx) => {
 			runHandlerEffects(ctx, handlerEffects);
+			runHandlerClaim(ctx, cmdDef);
 			runHandlerDiagnostics(ctx, handlerDiagnostics);
 			switch (hr.kind) {
 				case "data":
@@ -528,6 +548,7 @@ function makeHandler(cmdDef, globalFlags) {
 
 	return (args, ctx) => {
 		runHandlerEffects(ctx, handlerEffects);
+		runHandlerClaim(ctx, cmdDef);
 		runHandlerDiagnostics(ctx, handlerDiagnostics);
 		// A handler_effects-only command declares no template and prints
 		// nothing; the effect calls above are its whole body.
@@ -763,6 +784,10 @@ function splicePayloadSchema(spec, cmdDef) {
 	}
 	const kind = cmdDef.handler_returns?.kind;
 	if (kind === "data" || kind === "exit_data") {
+		spec.payloadSchema = {};
+		return;
+	}
+	if (cmdDef.handler_payloads_recorded === true) {
 		spec.payloadSchema = {};
 	}
 }

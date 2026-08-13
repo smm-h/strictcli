@@ -159,7 +159,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 		}
 		ctx := newContext(io.Discard, io.Discard, nil, a.infraAccess(false),
 			reservedFlags{approveConsequential: co.approveConsequential},
-			a.armEffects(cmd, commandPath, false))
+			a.armEffects(cmd, commandPath, false, nil))
 		code, truncErr := a.invokeSealed(func() int {
 			return cmd.PassthroughHandler(ctx, cmd.Name, args, globalKwargs)
 		})
@@ -297,7 +297,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	// stdout.
 	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess(false),
 		reservedFlags{approveConsequential: co.approveConsequential},
-		a.armEffects(cmd, commandPath, false))
+		a.armEffects(cmd, commandPath, false, nil))
 	ctx.commandName = cmd.Name
 	ctx.payloadSchema = cmd.PayloadSchema
 

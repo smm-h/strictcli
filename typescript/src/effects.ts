@@ -317,6 +317,21 @@ export class EffectLog {
 	truncated: DryRunTruncated | null = null;
 
 	/**
+	 * Claimed rendering (contract §19.7). `claimed` is set by
+	 * `ctx.effects.recorded()`; `handlerRendered` by
+	 * `ctx.effects.renderLog()`. The seam skips its own emission only when the
+	 * handler both claimed AND rendered -- a claim that never rendered is
+	 * re-rendered there, so §3.5's guarantee survives the claim intact.
+	 */
+	claimed = false;
+	handlerRendered = false;
+
+	/** True when the handler already produced the log's bytes (§19.7). */
+	seamSuppressed(): boolean {
+		return this.claimed && this.handlerRendered;
+	}
+
+	/**
 	 * TWO counters, deliberately. Would-do numbering is the numbering of the
 	 * RENDERED lines: it feeds the log's `<N>.` prefix, the `«step N output»`
 	 * brand and the truncation error's "ends at step N". CACHE_WRITEs are never
@@ -545,9 +560,36 @@ export interface ReadOnlyEffects {
 			readonly grant?: string;
 		},
 	): Completed;
+	/**
+	 * Returns the records recorded so far in this dispatch (contract §19.7).
+	 *
+	 * The shape is §14.2's, the same one §14.3's accessor returns for the
+	 * whole run. Calling it CLAIMS the render: the framework's own
+	 * end-of-dispatch emission is suppressed for the rest of the run, so a
+	 * handler can put the preview where it wants it. A claim that never
+	 * renders is re-rendered at the seam -- claiming moves the render, it can
+	 * never remove it (§3.5). In machine mode claiming changes nothing.
+	 */
+	recorded(): Record<string, unknown>[];
+	/**
+	 * Renders the would-do log in §3.2's exact form, here (contract §19.7).
+	 *
+	 * Byte-identical to what the framework would have emitted at the end of
+	 * the dispatch -- one renderer, one record list -- so this moves the
+	 * preview in the stream and never changes its content. Calling it also
+	 * claims the render, which is what keeps the log from appearing twice. A
+	 * no-op in machine mode and outside dry mode, in both cases because those
+	 * are exactly the runs where the framework's own emission produces
+	 * nothing.
+	 */
+	renderLog(): void;
 }
 
-/** The full effects handle: exactly eight methods, and the set is CLOSED. */
+/**
+ * The full effects handle: exactly eight effect methods, and the set is
+ * CLOSED. §19.7's two claimed-rendering calls ride the same handle and mint no
+ * effect at all.
+ */
 export interface MutatingEffects extends ReadOnlyEffects {
 	/** Starts a subprocess without waiting. Spawning is itself an effect. */
 	spawn(
@@ -641,6 +683,12 @@ export class Effects implements MutatingEffects {
 	private readonly allowlist: readonly (readonly string[])[];
 	private readonly trace: TraceIdentity;
 	private mutationRecorded = false;
+	/**
+	 * The human stream renderLog() writes to, and the mode that makes it a
+	 * no-op (contract §19.7).
+	 */
+	private readonly out: { write(text: string): void } | undefined;
+	private readonly json: boolean;
 
 	constructor(
 		cmd: EffectsCommandView,
@@ -648,6 +696,8 @@ export class Effects implements MutatingEffects {
 		log: EffectLog,
 		allowlist: readonly (readonly string[])[],
 		trace: TraceIdentity,
+		out?: { write(text: string): void },
+		json = false,
 	) {
 		this.cmdPath = cmd.cmdPath;
 		this.effect = cmd.effect;
@@ -656,6 +706,25 @@ export class Effects implements MutatingEffects {
 		this.log = log;
 		this.allowlist = allowlist;
 		this.trace = trace;
+		this.out = out;
+		this.json = json;
+	}
+
+	// -- claimed rendering (contract §19.7) ------------------------------
+
+	recorded(): Record<string, unknown>[] {
+		this.log.claimed = true;
+		return this.log.toList();
+	}
+
+	renderLog(): void {
+		this.log.claimed = true;
+		if (this.json || !this.dryRun) {
+			return;
+		}
+		this.log.handlerRendered = true;
+		const sink = this.out ?? process.stdout;
+		sink.write(`${this.log.render()}\n`);
 	}
 
 	// -- helpers ---------------------------------------------------------

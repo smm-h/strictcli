@@ -1217,8 +1217,11 @@ class TestCacheWrites:
             return 0
 
         app.test(["--dry-run", "run"])
+        # The eight effect methods (§2.2's closed set) plus §19.7's two
+        # claimed-rendering calls, which mint no effect at all.
         assert seen["methods"] == {
             "run", "spawn", "write", "mkdir", "remove", "rename", "chmod", "http",
+            "recorded", "render_log",
         }
 
 

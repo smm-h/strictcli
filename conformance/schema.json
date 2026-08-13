@@ -718,6 +718,21 @@
           },
           "description": "Context diagnostic calls the generated handler issues, in order, after its handler_effects and before the handler_prints / handler_returns path."
         },
+        "handler_claims_log": {
+          "const": true,
+          "description": "The generated handler calls ctx.effects.recorded() (effects contract \u00a719.7), which CLAIMS the render: the framework's own end-of-dispatch emission is suppressed for the rest of the run. A claim that never renders is re-rendered at the seam, so this key alone changes no output -- it exists to pin exactly that. Runs after handler_effects and before handler_diagnostics / handler_prints.",
+          "default": false
+        },
+        "handler_renders_log": {
+          "const": true,
+          "description": "The generated handler calls ctx.effects.render_log() / RenderLog() / renderLog() (effects contract \u00a719.7), which renders the would-do log in \u00a73.2's exact form at that point in the handler body and claims the render. Runs after handler_effects and before handler_diagnostics / handler_prints, so the log lands AHEAD of the handler's own output. A no-op in machine mode and outside dry mode.",
+          "default": false
+        },
+        "handler_payloads_recorded": {
+          "const": true,
+          "description": "The generated handler calls ctx.payload with the verbs of ctx.effects.recorded() (effects contract \u00a719.7): the records it reads shape its own payload, identically in both modes. The verbs rather than the records themselves, because a payload is emitted exactly as the handler supplied it (\u00a719.2) and three serializers order an object's keys three ways -- an array of strings is the same bytes everywhere. Implies the permissive payload_schema literal {} when the command declares none.",
+          "default": false
+        },
         "hidden": {
           "type": "boolean",
           "default": false
@@ -854,6 +869,9 @@
           "handler_aborts": false,
           "handler_effects": false,
           "handler_diagnostics": false,
+          "handler_claims_log": false,
+          "handler_renders_log": false,
+          "handler_payloads_recorded": false,
           "effect": false,
           "consequential": false,
           "dry_run_supported": false,

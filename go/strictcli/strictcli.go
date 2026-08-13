@@ -2249,7 +2249,7 @@ func (a *App) Run() {
 // runtime seal and carrying the command's payload declaration.
 func (a *App) newDispatchContext(stdout, stderr io.Writer, pr parseResult, reserved reservedFlags) *Context {
 	ctx := newContext(stdout, stderr, pr.sources, a.infraAccess(pr.hermetic),
-		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
+		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun, stdout))
 	ctx.commandName = pr.cmd.Name
 	ctx.payloadSchema = pr.cmd.PayloadSchema
 	return ctx
@@ -2384,14 +2384,21 @@ func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool
 		// The truncation path ends the preview for its own pinned reason: it
 		// renders the log it already has and its own error, and never goes
 		// through the generic would-do rendering.
-		fmt.Fprintln(stdout, trunc.log.render())
+		if !trunc.log.seamSuppressed() {
+			fmt.Fprintln(stdout, trunc.log.render())
+		}
 		fmt.Fprintln(stderr, trunc.message)
 		return
 	}
 	if !dryRun {
 		return
 	}
-	fmt.Fprintln(stdout, a.renderWouldDoLog())
+	// A handler that claimed the render AND produced the bytes already has the
+	// log in the stream; re-emitting it here would duplicate it. A claim that
+	// never rendered falls through and is rendered (§19.7).
+	if !a.effects.seamSuppressed() {
+		fmt.Fprintln(stdout, a.renderWouldDoLog())
+	}
 	if aborted {
 		fmt.Fprintln(stderr, errDryRunAborted(a.wouldDoSeq(), cmdPath))
 	}

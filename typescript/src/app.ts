@@ -1337,6 +1337,7 @@ export class AppImpl implements App {
 						outcome.cmdPath,
 						outcome.reserved.dryRun,
 						outcome.reserved,
+						out,
 					),
 					outcome.cmd.name,
 					(outcome.cmd.def as PassthroughDef<string>).payloadSchema ?? null,
@@ -1381,6 +1382,7 @@ export class AppImpl implements App {
 						outcome.cmdPath,
 						outcome.reserved.dryRun,
 						outcome.reserved,
+						out,
 					),
 					outcome.cmd.name,
 					(outcome.cmd.def as AnyCommand).payloadSchema ?? null,
@@ -1497,16 +1499,25 @@ export class AppImpl implements App {
 	): DispatchResult {
 		const supplied = contextPayload(ctx);
 		if (ctx.json) {
-			this.emitDispatchEnvelope(ctx, ownsStdout ? err : out, 1, ctx.dryRun, trunc.cmdPath, {
-				kind: "truncated",
-				step: trunc.step,
-				command: trunc.cmdPath,
-				brand: trunc.brand,
-				message: trunc.message,
-			});
+			this.emitDispatchEnvelope(
+				ctx,
+				ownsStdout ? err : out,
+				1,
+				ctx.dryRun,
+				trunc.cmdPath,
+				{
+					kind: "truncated",
+					step: trunc.step,
+					command: trunc.cmdPath,
+					brand: trunc.brand,
+					message: trunc.message,
+				},
+			);
 			return { exitCode: 1, hasPayload: supplied.set, payload: supplied.value };
 		}
-		out.write(`${this.effectLogState.render()}\n`);
+		if (!this.effectLogState.seamSuppressed()) {
+			out.write(`${this.effectLogState.render()}\n`);
+		}
 		err.write(`${trunc.message}\n`);
 		return { exitCode: 1, hasPayload: supplied.set, payload: supplied.value };
 	}
@@ -1593,6 +1604,7 @@ export class AppImpl implements App {
 		cmdPath: string,
 		dryRun: boolean,
 		reserved: ReservedFlags,
+		out?: Writer,
 	): Effects {
 		const def = cmd.def as {
 			readonly effect: Effect;
@@ -1614,6 +1626,8 @@ export class AppImpl implements App {
 				approveConsequential: reserved.approveConsequential,
 				effect: def.effect,
 			},
+			out,
+			reserved.json,
 		);
 	}
 
@@ -1703,8 +1717,13 @@ export class AppImpl implements App {
 		}
 		if (dryRun) {
 			// The would-do log is dry mode's primary output and is NEVER
-			// suppressed by --quiet.
-			out.write(`${this.effectLogState.render()}\n`);
+			// suppressed by --quiet. A handler that claimed the render AND
+			// produced the bytes already has the log in the stream; re-emitting
+			// it here would duplicate it. A claim that never rendered falls
+			// through and is rendered (§19.7).
+			if (!this.effectLogState.seamSuppressed()) {
+				out.write(`${this.effectLogState.render()}\n`);
+			}
 			if (aborted) {
 				err.write(
 					`${errDryRunAborted(this.effectLogState.nextSeq(), cmdPath)}\n`,

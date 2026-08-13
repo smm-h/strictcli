@@ -886,6 +886,8 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 		if k, _ := hr["kind"].(string); k == "data" || k == "exit_data" {
 			opts = append(opts, strictcli.PayloadSchema(map[string]interface{}{}))
 		}
+	} else if v, ok := cmdDef["handler_payloads_recorded"].(bool); ok && v {
+		opts = append(opts, strictcli.PayloadSchema(map[string]interface{}{}))
 	}
 	// Stdout ownership (§19.6): the command's own document keeps stdout and the
 	// envelope moves to stderr in machine mode.
@@ -1125,6 +1127,26 @@ func collectAllFlagDefs(cmdDef map[string]interface{}, globalFlags []map[string]
 // across targets.
 const handlerAbortMessage = "conformance: handler aborted"
 
+// runHandlerClaim performs the claimed-rendering calls (effects contract
+// §19.7). It runs AFTER handler_effects and BEFORE handler_diagnostics /
+// handler_prints, so a rendered log lands ahead of the handler's own output --
+// which is exactly the ordering the feature exists to make possible.
+func runHandlerClaim(ctx *strictcli.Context, cmdDef map[string]interface{}) {
+	if v, ok := cmdDef["handler_claims_log"].(bool); ok && v {
+		ctx.Effects().Recorded()
+	}
+	if v, ok := cmdDef["handler_payloads_recorded"].(bool); ok && v {
+		verbs := []string{}
+		for _, rec := range ctx.Effects().Recorded() {
+			verbs = append(verbs, rec["verb"].(string))
+		}
+		ctx.Payload(verbs)
+	}
+	if v, ok := cmdDef["handler_renders_log"].(bool); ok && v {
+		ctx.Effects().RenderLog()
+	}
+}
+
 // makeHandler builds a normal command handler function from a command definition.
 func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interface{}) func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
 	// handler_aborts: the handler unwinds instead of returning, after its
@@ -1136,6 +1158,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 		diags, _ := cmdDef["handler_diagnostics"].([]interface{})
 		return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
 			runHandlerEffects(ctx, effects)
+			runHandlerClaim(ctx, cmdDef)
 			runHandlerDiagnostics(ctx, diags)
 			panic(handlerAbortMessage)
 		}
@@ -1169,6 +1192,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 		diags, _ := cmdDef["handler_diagnostics"].([]interface{})
 		return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
 			runHandlerEffects(ctx, effects)
+			runHandlerClaim(ctx, cmdDef)
 			runHandlerDiagnostics(ctx, diags)
 			switch kind {
 			case "data":
@@ -1213,6 +1237,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 
 	return func(ctx *strictcli.Context, args map[string]interface{}) strictcli.Outcome {
 		runHandlerEffects(ctx, handlerEffects)
+		runHandlerClaim(ctx, cmdDef)
 		runHandlerDiagnostics(ctx, handlerDiagnostics)
 		if !hasTemplate {
 			return strictcli.Exit(ec)

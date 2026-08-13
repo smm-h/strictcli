@@ -715,12 +715,20 @@ class _EffectLog:
     get their own sequence instead, so every record still carries a ``seq``.
     """
 
-    __slots__ = ("records", "_rendered", "_cached")
+    __slots__ = ("records", "_rendered", "_cached", "claimed", "handler_rendered")
 
     def __init__(self) -> None:
         self.records: list[_EffectRecord] = []
         self._rendered = 0
         self._cached = 0
+        # Claimed rendering (contract §19.7). ``claimed`` is set by
+        # ``ctx.effects.recorded()``; ``handler_rendered`` by
+        # ``ctx.effects.render_log()``. The seam skips its own emission only
+        # when the handler both claimed AND rendered -- a claim that never
+        # rendered is re-rendered there, so §3.5's guarantee survives the
+        # claim intact.
+        self.claimed = False
+        self.handler_rendered = False
 
     def append(self, rec: _EffectRecord) -> None:
         self.records.append(rec)
@@ -748,6 +756,10 @@ class _EffectLog:
 
     def to_list(self) -> list[dict]:
         return [rec.to_dict() for rec in self.records]
+
+    def seam_suppressed(self) -> bool:
+        """True when the handler already produced the log's bytes (§19.7)."""
+        return self.claimed and self.handler_rendered
 
 
 # Message templates that are NOT raised -- printed to stderr, or carried on a
@@ -1753,11 +1765,11 @@ class _Effects:
     """
 
     __slots__ = ("_cmd", "_cmd_path", "_dry_run", "_log", "_allowlist",
-                 "_grants", "_mutation_recorded", "_trace")
+                 "_grants", "_mutation_recorded", "_trace", "_out", "_json")
 
     def __init__(self, *, cmd: "Command", cmd_path: str, dry_run: bool,
                  log: _EffectLog, allowlist: tuple,
-                 trace: "_TraceIdentity") -> None:
+                 trace: "_TraceIdentity", out=None, json: bool = False) -> None:
         self._cmd = cmd
         self._cmd_path = cmd_path
         self._dry_run = dry_run
@@ -1766,6 +1778,46 @@ class _Effects:
         self._grants = {g.name: g for g in cmd.grants}
         self._mutation_recorded = False
         self._trace = trace
+        # The human stream render_log() writes to, and the mode that makes it a
+        # no-op (contract §19.7).
+        self._out = out
+        self._json = json
+
+    # -- claimed rendering (contract §19.7) ------------------------------
+
+    def recorded(self) -> list[dict]:
+        """Return the records recorded so far in this dispatch (§19.7).
+
+        The shape is §14.2's, the same one §14.3's accessor returns for the
+        whole run. Calling this CLAIMS the render: the framework's own
+        end-of-dispatch emission is suppressed for the rest of the run, so a
+        handler can put the preview where it wants it. A claim that never
+        renders is re-rendered at the seam -- claiming moves the render, it can
+        never remove it (§3.5).
+
+        In machine mode claiming changes nothing: there is no human stream to
+        order and the envelope's ``preview`` is unconditional either way.
+        """
+        self._log.claimed = True
+        return self._log.to_list()
+
+    def render_log(self) -> None:
+        """Render the would-do log in §3.2's exact form, here (§19.7).
+
+        Byte-identical to what the framework would have emitted at the end of
+        the dispatch -- one renderer, one record list -- so this moves the
+        preview in the stream and never changes its content. Calling it also
+        claims the render, which is what keeps the log from appearing twice.
+
+        A no-op in machine mode (§19.7) and outside dry mode, in both cases
+        for the same reason: those are exactly the runs where the framework's
+        own end-of-dispatch emission produces nothing.
+        """
+        self._log.claimed = True
+        if self._json or not self._dry_run:
+            return
+        self._log.handler_rendered = True
+        print(self._log.render(), file=self._out or sys.stdout)
 
     # -- helpers ---------------------------------------------------------
 
@@ -6852,7 +6904,7 @@ class App:
             sys.exit(1)
 
     def _arm_effects(self, cmd: "Command", cmd_path: str, *,
-                     dry_run: bool) -> "_Effects":
+                     dry_run: bool, out=None) -> "_Effects":
         """Arm the effects handle for one dispatch (the runtime seal).
 
         Called at EVERY ctx-construction site that dispatches a handler, so
@@ -6878,6 +6930,8 @@ class App:
                 approve_consequential=self._last_approve_consequential,
                 effect=cmd.effect,
             ),
+            out=out,
+            json=self._last_json,
         )
 
     def _begin_dispatch(self) -> None:
@@ -6900,7 +6954,11 @@ class App:
         """
         if not self._last_dry_run:
             return
-        print(self._effect_log.render(), file=out)
+        # A handler that claimed the render AND produced the bytes already has
+        # the log in the stream; re-emitting it here would duplicate it. A
+        # claim that never rendered falls through and is rendered (§19.7).
+        if not self._effect_log.seam_suppressed():
+            print(self._effect_log.render(), file=out)
         if aborted:
             print(
                 _msg_dry_run_aborted(self._effect_log.next_seq(), cmd_path),
@@ -8393,7 +8451,7 @@ class App:
             quiet=self._last_quiet, verbose=self._last_verbose,
             json=self._last_json,
             effects=self._arm_effects(
-                cmd, cmd_path, dry_run=self._last_dry_run,
+                cmd, cmd_path, dry_run=self._last_dry_run, out=out,
             ),
             command_name=cmd.name,
             payload_schema=cmd.payload_schema,
@@ -8482,7 +8540,8 @@ class App:
             # The truncation path ends the preview for its own pinned reason:
             # it renders the log it already has and its own error, and never
             # goes through the generic would-do rendering.
-            print(truncated.log.render(), file=out)
+            if not truncated.log.seam_suppressed():
+                print(truncated.log.render(), file=out)
             print(truncated.message, file=err)
         else:
             self._render_dry_log(cmd_path, out, err, aborted=aborted)

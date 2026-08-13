@@ -172,7 +172,7 @@ func sealedFixture(t *testing.T, dryRun bool) (*App, *Effects) {
 		return Exit(0)
 	}, WithEffect(EffectMutating))
 	app.beginDispatch()
-	return app, app.armEffects(app.commands["go"], "go", dryRun)
+	return app, app.armEffects(app.commands["go"], "go", dryRun, nil)
 }
 
 func TestRunSealedRendersTheLogOnANormalReturn(t *testing.T) {

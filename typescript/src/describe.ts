@@ -123,7 +123,7 @@ export const SURFACE = {
 		{ name: "Spawned", members: ["pid", "wait"] },
 		{ name: "Grant", members: ["name", "reason", "kind"] },
 		{ name: "Forwarding", members: ["reason"] },
-		{ name: "ReadOnlyEffects", members: ["run"] },
+		{ name: "ReadOnlyEffects", members: ["run", "recorded", "renderLog"] },
 		{
 			name: "MutatingEffects",
 			members: [
@@ -135,6 +135,8 @@ export const SURFACE = {
 				"rename",
 				"chmod",
 				"http",
+				"recorded",
+				"renderLog",
 			],
 		},
 		{

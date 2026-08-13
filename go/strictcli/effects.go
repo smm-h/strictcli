@@ -502,7 +502,18 @@ type effectLog struct {
 	records  []effectRecord
 	rendered int
 	cached   int
+	// Claimed rendering (contract §19.7). claimed is set by
+	// Effects.Recorded; handlerRendered by Effects.RenderLog. The seam skips
+	// its own emission only when the handler both claimed AND rendered -- a
+	// claim that never rendered is re-rendered there, so §3.5's guarantee
+	// survives the claim intact.
+	claimed         bool
+	handlerRendered bool
 }
+
+// seamSuppressed reports whether the handler already produced the log's bytes
+// (contract §19.7).
+func (l *effectLog) seamSuppressed() bool { return l.claimed && l.handlerRendered }
 
 func (l *effectLog) append(r effectRecord) {
 	l.records = append(l.records, r)
@@ -554,9 +565,53 @@ type Effects struct {
 	grants           map[string]Grant
 	mutationRecorded bool
 	trace            traceIdentity
+	// The human stream RenderLog writes to, and the mode that makes it a
+	// no-op (contract §19.7).
+	out  io.Writer
+	json bool
 }
 
-func newEffects(cmd *Command, cmdPath string, dryRun bool, log *effectLog, allowlist [][]string, trace traceIdentity) *Effects {
+// Recorded returns the records recorded so far in this dispatch (contract
+// §19.7).
+//
+// The shape is §14.2's, the same one §14.3's accessor returns for the whole
+// run. Calling it CLAIMS the render: the framework's own end-of-dispatch
+// emission is suppressed for the rest of the run, so a handler can put the
+// preview where it wants it. A claim that never renders is re-rendered at the
+// seam -- claiming moves the render, it can never remove it (§3.5).
+//
+// In machine mode claiming changes nothing: there is no human stream to order
+// and the envelope's preview is unconditional either way.
+func (e *Effects) Recorded() []map[string]interface{} {
+	e.log.claimed = true
+	return e.log.toList()
+}
+
+// RenderLog renders the would-do log in §3.2's exact form, here (contract
+// §19.7).
+//
+// Byte-identical to what the framework would have emitted at the end of the
+// dispatch -- one renderer, one record list -- so this moves the preview in
+// the stream and never changes its content. Calling it also claims the render,
+// which is what keeps the log from appearing twice.
+//
+// A no-op in machine mode (§19.7) and outside dry mode, in both cases for the
+// same reason: those are exactly the runs where the framework's own
+// end-of-dispatch emission produces nothing.
+func (e *Effects) RenderLog() {
+	e.log.claimed = true
+	if e.json || !e.dryRun {
+		return
+	}
+	e.log.handlerRendered = true
+	out := e.out
+	if out == nil {
+		out = os.Stdout
+	}
+	fmt.Fprintln(out, e.log.render())
+}
+
+func newEffects(cmd *Command, cmdPath string, dryRun bool, log *effectLog, allowlist [][]string, trace traceIdentity, out io.Writer, json bool) *Effects {
 	grants := make(map[string]Grant, len(cmd.Grants))
 	for _, g := range cmd.Grants {
 		grants[g.Name] = g
@@ -569,6 +624,8 @@ func newEffects(cmd *Command, cmdPath string, dryRun bool, log *effectLog, allow
 		allowlist: allowlist,
 		grants:    grants,
 		trace:     trace,
+		out:       out,
+		json:      json,
 	}
 }
 
@@ -1309,7 +1366,7 @@ func readConfirmLine(r io.Reader) (string, error) {
 // on which ctx.Effects() is missing or a carrier escapes unpoisoned. The log
 // itself is reset by beginDispatch, which runs earlier so pre-handler
 // CACHE_WRITEs (coverage shards) land in the same dispatch's log.
-func (a *App) armEffects(cmd *Command, cmdPath string, dryRun bool) *Effects {
+func (a *App) armEffects(cmd *Command, cmdPath string, dryRun bool, out io.Writer) *Effects {
 	return newEffects(cmd, cmdPath, dryRun, a.effects, a.procObserveAllowlist,
 		traceIdentity{
 			app:                  a.Name,
@@ -1322,7 +1379,7 @@ func (a *App) armEffects(cmd *Command, cmdPath string, dryRun bool) *Effects {
 			verbose:              a.lastVerbose,
 			approveConsequential: a.lastApproveConsequential,
 			effect:               cmd.Effect,
-		})
+		}, out, a.lastJSON)
 }
 
 // beginDispatch starts a new dispatch: it resets the structured effect log.

@@ -353,7 +353,9 @@ def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
         lines.append(
             f"{indent}payload_schema={cmd_def['payload_schema']!r},"
         )
-    elif _hr_kind in ("data", "exit_data"):
+    elif _hr_kind in ("data", "exit_data") or cmd_def.get(
+        "handler_payloads_recorded", False
+    ):
         lines.append(f"{indent}payload_schema={{}},")
     # Stdout ownership (§19.6): the command's own document keeps stdout and the
     # envelope moves to stderr in machine mode.
@@ -768,6 +770,8 @@ def _emit_command_registration(
     # that path.
     effect_lines = _emit_handler_effects(cmd_def, indent + "    ")
     lines.extend(effect_lines)
+    claim_lines = _emit_handler_claim(cmd_def, indent + "    ")
+    lines.extend(claim_lines)
     diag_lines = _emit_handler_diagnostics(cmd_def, indent + "    ")
     lines.extend(diag_lines)
 
@@ -786,13 +790,33 @@ def _emit_command_registration(
         # are its whole body.
         if "handler_prints" in cmd_def:
             lines.append(_emit_handler_body(cmd_def, global_flags))
-        elif not effect_lines and not diag_lines:
+        elif not effect_lines and not diag_lines and not claim_lines:
             lines.append(f"{indent}    pass")
         # Unified return: build an Outcome carrying the exit code.
         lines.append(f"{indent}    return strictcli.outcome(exit_code={exit_code})")
     lines.append("")
 
     return "\n".join(lines)
+
+
+def _emit_handler_claim(cmd_def: dict, indent: str) -> list[str]:
+    """Emit the claimed-rendering calls (effects contract §19.7).
+
+    Runs AFTER handler_effects and BEFORE handler_diagnostics /
+    handler_prints, so a rendered log lands ahead of the handler's own output
+    -- which is exactly the ordering the feature exists to make possible.
+    """
+    lines: list[str] = []
+    if cmd_def.get("handler_claims_log", False):
+        lines.append(f"{indent}ctx.effects.recorded()")
+    if cmd_def.get("handler_payloads_recorded", False):
+        lines.append(
+            f"{indent}ctx.payload("
+            f"[r['verb'] for r in ctx.effects.recorded()])"
+        )
+    if cmd_def.get("handler_renders_log", False):
+        lines.append(f"{indent}ctx.effects.render_log()")
+    return lines
 
 
 def _emit_handler_return(hr: dict, indent: str) -> list[str]:
