@@ -85,7 +85,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
-      "stderr_equals": "call error: command 'release' is consequential: pass approve_consequential to confirm\n"
+      "stderr_equals": "call error: command 'release' is consequential: the call must carry confirmation\n"
     }
   },
   {
@@ -266,7 +266,7 @@
       "exit_code": 0,
       "stdout_matches": [
         "\"isError\":\\s*true",
-        "command 'release' is consequential: pass approve_consequential to confirm"
+        "command 'release' is consequential: the call must carry confirmation"
       ],
       "stderr_equals": ""
     }
@@ -405,7 +405,7 @@
       "exit_code": 0,
       "stdout_matches": [
         "\"isError\":\\s*true",
-        "command 'release' is consequential: pass approve_consequential to confirm"
+        "command 'release' is consequential: the call must carry confirmation"
       ],
       "stdout_not_contains": [
         "released"

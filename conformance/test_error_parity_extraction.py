@@ -155,7 +155,7 @@ def test_type_error_raises_are_not_scanned():
 _EFFECTS_TEMPLATES = {
     # Confirm protocol (effects contract §12.6)
     "about to run consequential command *. Proceed? [y/N] ": "parse",
-    "error: stdin is not interactive; pass --approve-consequential to confirm":
+    "error: stdin is not interactive; a consequential command must be confirmed at a terminal":
         "parse",
     "aborted": "parse",
     # Truncation (§12.5)

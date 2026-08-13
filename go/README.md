@@ -411,7 +411,7 @@ things and that invoking it requires stating consent:
 
 ```go
 _, err := release.Execute(nil)
-// err: command 'release' is consequential: pass approve_consequential to confirm
+// err: command 'release' is consequential: the call must carry confirmation
 _, err = release.Execute(nil, strictcli.WithApproveConsequential()) // proceeds
 ```
 

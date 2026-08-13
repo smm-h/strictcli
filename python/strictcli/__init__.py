@@ -9117,7 +9117,9 @@ class App:
 
         Reads one JSON object per line from input (default: sys.stdin),
         writes one JSON object per line to output (default: sys.stdout).
-        Handles initialize, tools/list, tools/call, and notifications.
+        Handles server/discover, tools/list and tools/call under protocol
+        2026-07-28, the retained initialize handshake of the era before it,
+        and notifications.
 
         The server runs until input is exhausted (EOF).
         """

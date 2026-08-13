@@ -383,7 +383,7 @@ things and that invoking it requires stating consent:
 ```python
 release = next(t for t in tools if t.name == "release")
 release.consequential            # True
-await release.execute()          # InvokeError: ... pass approve_consequential to confirm
+await release.execute()          # InvokeError: ... the call must carry confirmation
 await release.execute(approve_consequential=True)   # proceeds
 ```
 

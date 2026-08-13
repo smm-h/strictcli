@@ -461,7 +461,7 @@ rather than hanging or silently proceeding:
 
 ```
 $ mytool destroy prod < /dev/null
-error: stdin is not interactive; pass --approve-consequential to confirm
+error: stdin is not interactive; a consequential command must be confirmed at a terminal
 ```
 
 The prompt never fires on the programmatic paths, which have no TTY contract.
@@ -470,7 +470,7 @@ and the MCP server take the consent from the call instead and refuse a
 consequential command without it:
 
 ```go
-// Refused: command 'destroy' is consequential: pass approve_consequential to confirm
+// Refused: command 'destroy' is consequential: the call must carry confirmation
 _, err := app.Call("destroy", map[string]interface{}{"env": "prod"})
 
 // Proceeds
@@ -487,7 +487,18 @@ Over MCP the same consent is a top-level `tools/call` param, a sibling of
 ```
 
 This is not human approval and is not meant to be: it makes the caller state,
-in the call, that it is proceeding without a human. Tool descriptors and MCP
+in the call, that it is proceeding without a human.
+Over the current protocol revision the server does not have to take the
+caller's word for it. A `tools/call` on a consequential command from a client
+that declared elicitation support is answered with a confirmation request and
+an opaque `requestState`; the client puts the question to a human, and the
+retry that echoes the state back with an acceptance is what consents. The state
+is integrity-protected, bound to that client and that exact request, expires in
+five minutes and cannot be redeemed twice. The server declares the feature by
+name (`dev.smmh.strictcli/consequential-confirmation`) in its `server/discover`
+result.
+
+Tool descriptors and MCP
 `tools/list` publish `Effect` and `Consequential` beside the argument schema so
 a caller can see the requirement before it calls. There is no bypass flag:
 `--approve-consequential` answers the prompt and does nothing else. A read-only

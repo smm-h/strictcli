@@ -1,6 +1,8 @@
 /**
  * MCP (Model Context Protocol) server: a line-delimited JSON-RPC 2.0 loop
- * over stdin/stdout handling initialize, tools/list, and tools/call.
+ * over stdin/stdout handling server/discover, tools/list and tools/call under
+ * protocol 2026-07-28, plus the retained initialize handshake of the era
+ * before it.
  * Triggered by the reserved --mcp global flag (position-aware pre-scan in
  * parse.ts); test() rejects it with the interactive-stdin message instead.
  *

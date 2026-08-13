@@ -215,8 +215,9 @@ func mcpErrorResponse(reqID interface{}, code int, message string, data interfac
 
 // ServeMCP starts a JSON-RPC 2.0 server on stdin/stdout implementing the
 // Model Context Protocol. It reads one JSON object per line from stdin and
-// writes one JSON object per line to stdout. The server handles initialize,
-// tools/list, and tools/call requests.
+// writes one JSON object per line to stdout. The server handles
+// server/discover, tools/list and tools/call under protocol 2026-07-28, plus
+// the retained initialize handshake of the era before it.
 func (a *App) ServeMCP() {
 	a.serveMCPIO(os.Stdin, os.Stdout)
 }

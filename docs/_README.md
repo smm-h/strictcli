@@ -139,7 +139,7 @@ app.run(process.argv.slice(2));
 - Value provenance -- every resolved flag reports its source (`cli`/`env`/`config`/`default`/`implied`/`infra`) via the handler context
 - Programmatic invocation -- `app.call()` / `app.Call()` runs a command in-process with typed kwargs, bypassing CLI parsing; failures surface as `InvokeError`
 - Check system -- first-class check/validation framework with a TOML manifest, tag DSL, and DAG-ordered execution
-- MCP server mode -- expose commands as tools over the Model Context Protocol
+- MCP server mode -- expose commands as tools over the Model Context Protocol (protocol `2026-07-28`, with the handshake era retained), where a consequential tool asks for confirmation before it runs
 - `--dump-schema` -- auto-injected flag that writes `.strictcli/schema.json` describing the full CLI structure
 - `--help` / `-h` recognized anywhere in argv
 - In-process testing via `app.test()` / `app.Test()`
