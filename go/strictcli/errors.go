@@ -1127,6 +1127,14 @@ func errFlagNameReservedByFramework(name string) string {
 	return fmt.Sprintf("flag name '%s' is reserved by the framework (dry-run, approve-consequential, quiet, verbose)", name)
 }
 
+// errFlagNameJSONReserved is the machine-mode flag's ban (§12.1, §19.1).
+// --json is framework-owned: it selects machine mode and is delivered on the
+// Context, never as a handler kwarg. The ban is the unconditional every-level
+// one, exactly as the quartet's is.
+func errFlagNameJSONReserved() string {
+	return "flag name 'json' is reserved by the framework: --json selects machine mode"
+}
+
 // errFlagNameYesBanned is the outright `yes` ban (§12.1). `yes` owns no
 // framework flag any more -- --approve-consequential replaced --yes -- but a
 // private --yes would restate it in a spelling that IS muscle memory, which is
@@ -1289,6 +1297,25 @@ func errEffectArgvEmpty(name string, method string) string {
 }
 
 const errEffectsUnavailable = "ctx.Effects() is unavailable: this Context was constructed outside a command dispatch"
+
+// ---------------------------------------------------------------------------
+// context.go — the payload API's call-time errors (§19.4)
+// ---------------------------------------------------------------------------
+
+// errPayloadNoSchema fires when a handler calls ctx.payload on a command that
+// declares no payload schema. Registration cannot see that a handler intends
+// to call it, so call time is the earliest honest point at which the missing
+// declaration can be named.
+func errPayloadNoSchema(name string) string {
+	return fmt.Sprintf("command %q: ctx.payload requires a declared payload schema", name)
+}
+
+// errPayloadAlreadySet fires on a second payload call in one dispatch. Two
+// payloads are two answers to a question with one slot; picking either
+// silently is the kind of guess this regime does not make.
+func errPayloadAlreadySet(name string) string {
+	return fmt.Sprintf("command %q: ctx.payload was already called (a dispatch carries at most one payload)", name)
+}
 
 // ---------------------------------------------------------------------------
 // effects.go — dry-run truncation (parse-time)

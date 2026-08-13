@@ -1,26 +1,16 @@
 package strictcli
 
 // Outcome is the opaque, branded result of a command handler. It is constructed
-// only via Exit or ExitData and carries an exit code plus, optionally, structured
-// data. When data is present, the framework JSON-prints it to stdout as one
-// compact line and makes it available to Test and Call.
+// only via Exit and carries an exit code and nothing else: the bare-JSON-print
+// data channel was deleted (contract §19.4) and machine payloads are supplied
+// through Context.Payload.
 type Outcome struct {
 	code int
-	data interface{}
 }
 
-// Exit returns an Outcome that terminates the command with the given exit code
-// and emits no data.
+// Exit returns an Outcome that terminates the command with the given exit code.
 func Exit(code int) Outcome {
 	return Outcome{code: code}
-}
-
-// ExitData returns an Outcome that terminates the command with the given exit
-// code and emits data. The framework JSON-marshals data to stdout and captures
-// it for programmatic callers (Test/Call). Data emission is possible ONLY through
-// this constructor.
-func ExitData(code int, data interface{}) Outcome {
-	return Outcome{code: code, data: data}
 }
 
 // Get returns the value stored under name in kwargs, typed as T.

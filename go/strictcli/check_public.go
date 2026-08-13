@@ -139,19 +139,31 @@ func FormatCheckResults(results []CheckRunResult, verbose bool) string {
 // severity and text). Empty problems serialize as [] rather than null. No
 // trailing newline.
 func FormatCheckResultsJSON(results []CheckRunResult) string {
-	type jsonProblem struct {
-		Severity string `json:"severity"`
-		Text     string `json:"text"`
+	data, err := json.Marshal(checkResultItems(results))
+	if err != nil {
+		return fmt.Sprintf("error: %s", err)
 	}
-	type jsonResult struct {
-		Name       string        `json:"name"`
-		Status     string        `json:"status"`
-		Message    string        `json:"message"`
-		Problems   []jsonProblem `json:"problems"`
-		Notes      []string      `json:"notes"`
-		DurationMs int64         `json:"duration_ms"`
-	}
+	return string(data)
+}
 
+type jsonProblem struct {
+	Severity string `json:"severity"`
+	Text     string `json:"text"`
+}
+
+type jsonResult struct {
+	Name       string        `json:"name"`
+	Status     string        `json:"status"`
+	Message    string        `json:"message"`
+	Problems   []jsonProblem `json:"problems"`
+	Notes      []string      `json:"notes"`
+	DurationMs int64         `json:"duration_ms"`
+}
+
+// checkResultItems is the check command's run payload (contract §19.4): the
+// same records FormatCheckResultsJSON serializes, handed to the framework as
+// data instead of as a string.
+func checkResultItems(results []CheckRunResult) []jsonResult {
 	entries := make([]jsonResult, len(results))
 	for i, r := range results {
 		problems := make([]jsonProblem, 0, len(r.Outcome.problems))
@@ -169,10 +181,5 @@ func FormatCheckResultsJSON(results []CheckRunResult) string {
 			DurationMs: r.DurationMs,
 		}
 	}
-
-	data, err := json.Marshal(entries)
-	if err != nil {
-		return fmt.Sprintf("error: %s", err)
-	}
-	return string(data)
+	return entries
 }

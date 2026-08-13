@@ -819,13 +819,16 @@ func (a *App) registerConfigGroup() {
 	// "cli" is structurally impossible here -- config show is a subcommand,
 	// so the app's own flags were never passed on the command line.
 	// If the config file is malformed, shows the parse error instead of values.
-	registerFrameworkSubcommand(grp, "show", "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table or --json for a machine-readable object carrying each entry's type, default and help text.", EffectReadOnly, func(ctx *Context, args map[string]interface{}) Outcome {
+	registerFrameworkSubcommand(grp, "show", "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table; the framework-owned --json yields the same information as a machine-readable object carrying each entry's type, default and help text.", EffectReadOnly, func(ctx *Context, args map[string]interface{}) Outcome {
 		// If there was a config parse error, show it instead of values
 		if a.configParseErr != "" {
 			fmt.Fprintf(os.Stderr, "error: %s\n", a.configParseErr)
 			return Exit(1)
 		}
-		useJSON := Get[bool](args, "json")
+		// --json is framework-owned (contract §19.1): machine mode is read off
+		// the Context and the object below is this command's payload, not a
+		// locally-flagged print.
+		useJSON := ctx.JSON()
 		configData := a.configData
 		allFlags := a.collectAllFlags()
 		colliding := a.collidingConfigFields()
@@ -911,12 +914,7 @@ func (a *App) registerConfigGroup() {
 				}
 				result["__infrastructure__"] = infra
 			}
-			data, err := json.MarshalIndent(result, "", "  ")
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: %s\n", err)
-				return Exit(1)
-			}
-			fmt.Println(string(data))
+			ctx.Payload(result)
 			return Exit(0)
 		}
 
@@ -993,12 +991,13 @@ func (a *App) registerConfigGroup() {
 			}
 		}
 		return Exit(0)
-	}, WithMutex(
-		MutexGroup{Flags: []Flag{
-			BoolFlag("plain", "Display config values in a human-readable table format", Default(false)),
-			BoolFlag("json", "Display config values as a JSON object with source metadata", Default(false)),
-		}},
-	))
+	},
+		// --plain is the only local flag left: the machine form moved to the
+		// framework-owned --json (contract §7.5's sweep box), which cannot be
+		// declared here, so the two-flag mutex group went with it.
+		WithFlags(BoolFlag("plain", "Display config values in a human-readable table format", Default(false))),
+		PayloadSchema(configShowPayloadSchema),
+	)
 
 	// config set
 	registerFrameworkSubcommand(grp, "set", "Write a persistent value into the config file so it overrides a flag's declared default on every later run. The value is coerced to the flag's own type and rejected if it does not fit: repeatable flags take a comma-separated list (backslash-escape a literal comma) and are checked for duplicates, dict flags take a JSON object. Use --default to drop a key back to its default, and --clear to empty a repeatable flag.", EffectMutating, func(ctx *Context, args map[string]interface{}) Outcome {
@@ -1479,3 +1478,10 @@ func formatConfigValue(v interface{}) string {
 		return fmt.Sprintf("%v", val)
 	}
 }
+
+// configShowPayloadSchema is config show's machine payload contract (contract
+// §19.5): one object keyed by flag/config-field name, plus the
+// "__infrastructure__" entry. The keys are dynamic, so the declaration names
+// the container only. Framework-owned literal, byte-identical across the three
+// implementations.
+var configShowPayloadSchema = map[string]interface{}{"type": "object"}

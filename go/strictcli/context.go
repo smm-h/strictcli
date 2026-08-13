@@ -16,21 +16,30 @@ type Context struct {
 	sources map[string]string // flag param name -> source label (cli/env/config/default/implied/infra)
 	infra   *infraAccess      // resolved infra roots + declared handshake vars (nil if none)
 
-	// The framework-owned reserved quartet, delivered here and never as handler
-	// kwargs.
+	// The framework-owned reserved quartet plus --json, delivered here and
+	// never as handler kwargs.
 	reserved reservedFlags
 	// effects is the per-dispatch effects handle (the runtime seal). nil for a
 	// Context constructed outside a command dispatch.
 	effects *Effects
+
+	// The machine payload slot (contract §19.4): at most one value per
+	// dispatch, settable only on a command that declared a payload schema.
+	commandName   string
+	payloadSchema map[string]interface{}
+	payload       interface{}
+	payloadSet    bool
 }
 
-// reservedFlags carries the values of the framework-owned reserved quartet for
-// one dispatch.
+// reservedFlags carries the values of the framework-owned reserved quartet --
+// plus --json, which is reserved beside them on the same unconditional tier
+// (contract §7.1's 2026-08-13 amendment) without joining the set.
 type reservedFlags struct {
 	dryRun               bool
 	approveConsequential bool
 	quiet                bool
 	verbose              bool
+	json                 bool
 }
 
 // infraAccess carries a Context's view of infrastructure env vars: resolved root
@@ -82,6 +91,35 @@ func (c *Context) Quiet() bool { return c.reserved.quiet }
 
 // Verbose reports whether the framework-owned --verbose flag was passed.
 func (c *Context) Verbose() bool { return c.reserved.verbose }
+
+// JSON reports whether the framework-owned --json flag was passed, which is
+// what selects machine mode (contract §19.1).
+//
+// Handlers do not branch on it to decide whether to build a payload --
+// Context.Payload is mode-independent and the framework decides what to do
+// with the value -- but it is exposed for symmetry with the quartet and for
+// apps that propagate it to a child process.
+func (c *Context) JSON() bool { return c.reserved.json }
+
+// Payload supplies this dispatch's machine payload (contract §19.4).
+//
+// The call is mode-independent: a handler calls it identically in both modes
+// and never branches on JSON(). In machine mode the value is emitted; outside
+// machine mode it is not printed at all. Test and Call capture it either way.
+//
+// It PANICS when the command declared no payload schema (there is nothing to
+// validate the value against) and when a payload was already supplied in this
+// dispatch (one slot, one answer).
+func (c *Context) Payload(value interface{}) {
+	if c.payloadSchema == nil {
+		panic(errPayloadNoSchema(c.commandName))
+	}
+	if c.payloadSet {
+		panic(errPayloadAlreadySet(c.commandName))
+	}
+	c.payload = value
+	c.payloadSet = true
+}
 
 // Effects returns the effects handle for this run. Panics when the Context was
 // constructed outside a command dispatch.
@@ -199,6 +237,13 @@ var reservedFrameworkFlagNames = map[string]bool{
 	"verbose":               true,
 }
 
+// reservedMachineFlagName is the machine-mode flag name, reserved on the SAME
+// unconditional every-level tier as the quartet (contract §7.1's 2026-08-13
+// amendment). It is NOT a fifth member of the quartet -- the four are the
+// effects regime's own flags and are named as a set throughout the contract --
+// so it carries its own reserved-name message and its own token entry.
+const reservedMachineFlagName = "json"
+
 // bannedFlagNames are names the framework refuses outright without owning a
 // flag of that name. `yes` is here because --approve-consequential replaced
 // --yes (contract §7.1) and a private --yes would restate it in a spelling
@@ -234,12 +279,13 @@ var reservedGlobalShortNames = map[string]bool{
 // reservedGlobalFlagNames are names that cannot be used for user-defined global flags
 // because they are reserved by the framework.
 var reservedGlobalFlagNames = func() map[string]bool {
-	m := make(map[string]bool, len(reservedGlobalShortNames)+len(reservedFrameworkFlagNames))
+	m := make(map[string]bool, len(reservedGlobalShortNames)+len(reservedFrameworkFlagNames)+1)
 	for k := range reservedGlobalShortNames {
 		m[k] = true
 	}
 	for k := range reservedFrameworkFlagNames {
 		m[k] = true
 	}
+	m[reservedMachineFlagName] = true
 	return m
 }()

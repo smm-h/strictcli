@@ -7,8 +7,8 @@ import (
 
 func TestTagContractSatisfiedByGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("json", "output json", Default(false)))
-	app.TagContract("json", "json")
+	app.GlobalFlag(BoolFlag("as-json", "output json", Default(false)))
+	app.TagContract("json", "as-json")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("ok")
 		return Exit(0)

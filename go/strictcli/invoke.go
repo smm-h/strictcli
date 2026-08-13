@@ -9,7 +9,7 @@ import (
 // invokeResult holds the outcome of an invoke call.
 type invokeResult struct {
 	exitCode int
-	data     interface{} // structured data from an ExitData outcome (nil otherwise)
+	data     interface{} // the machine payload the handler supplied (nil otherwise)
 	err      string      // non-empty if invocation failed
 }
 
@@ -293,10 +293,13 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	}
 
 	// Context is constructed unconditionally. For invoke, stdout/stderr are
-	// discarded -- structured data flows back through the Outcome, not stdout.
+	// discarded -- the machine payload flows back through the Context, not
+	// stdout.
 	ctx := newContext(io.Discard, io.Discard, sources, a.infraAccess(false),
 		reservedFlags{approveConsequential: co.approveConsequential},
 		a.armEffects(cmd, commandPath, false))
+	ctx.commandName = cmd.Name
+	ctx.payloadSchema = cmd.PayloadSchema
 
 	// Call the handler under the runtime seal.
 	var outcome Outcome
@@ -307,7 +310,9 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	if truncErr != "" {
 		return invokeResult{exitCode: 1, err: truncErr}
 	}
-	return invokeResult{exitCode: outcome.code, data: outcome.data}
+	// The programmatic surface keeps its capture: it returns the payload the
+	// handler supplied (contract §19.4).
+	return invokeResult{exitCode: outcome.code, data: ctx.payload}
 }
 
 // invokeSealed runs a handler on the programmatic path under the runtime seal.
@@ -413,8 +418,8 @@ func coerceInvokeDict(f *Flag, value interface{}) (interface{}, string) {
 // of raw arguments to forward to the handler.
 //
 // Returns:
-//   - For handlers that return ExitData: the data value
-//   - For handlers that return Exit: the exit code (int)
+//   - For handlers that supplied a payload through ctx.Payload: the payload
+//   - For handlers that return Exit without a payload: the exit code (int)
 //   - For passthrough handlers: the exit code (int)
 //
 // Returns an InvokeError if invocation fails (unknown command, missing

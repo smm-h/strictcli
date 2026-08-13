@@ -4594,12 +4594,15 @@ func TestConfigShowNoFlagsError(t *testing.T) {
 		IntFlag("port", "port number", Default(8080)),
 	), WithEffect(EffectReadOnly))
 
+	// The old "one of --plain, --json is required" mutex is gone with the local
+	// --json flag: --json is framework-owned now (contract §7.5's sweep box),
+	// so it cannot take part in a command-local mutex group.
 	r := app.Test([]string{"config", "show"})
-	if r.ExitCode != 1 {
-		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stderr, "one of --plain, --json is required") {
-		t.Fatalf("expected 'one of --plain, --json is required' in stderr, got %q", r.Stderr)
+	if !strings.Contains(r.Stdout, "port = ") {
+		t.Fatalf("expected the human table, got %q", r.Stdout)
 	}
 }
 
@@ -4614,12 +4617,13 @@ func TestConfigShowBothFlagsError(t *testing.T) {
 		IntFlag("port", "port number", Default(8080)),
 	), WithEffect(EffectReadOnly))
 
+	// --plain no longer competes with --json: machine mode wins.
 	r := app.Test([]string{"config", "show", "--plain", "--json"})
-	if r.ExitCode != 1 {
-		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", r.ExitCode, r.Stderr)
 	}
-	if !strings.Contains(r.Stderr, "mutually exclusive") {
-		t.Fatalf("expected 'mutually exclusive' in stderr, got %q", r.Stderr)
+	if !strings.Contains(r.Stdout, `"source"`) {
+		t.Fatalf("expected the machine payload, got %q", r.Stdout)
 	}
 }
 
@@ -6711,12 +6715,12 @@ func TestGroupOwnTagsOnly(t *testing.T) {
 
 func TestTagContractSatisfied(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.TagContract("json", "json")
+	app.TagContract("json", "as-json")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("ok")
 		return Exit(0)
-	}, WithTags("json"), WithFlags(BoolFlag("json", "output json", Default(false))), WithEffect(EffectReadOnly))
-	r := app.Test([]string{"cmd", "--json"})
+	}, WithTags("json"), WithFlags(BoolFlag("as-json", "output json", Default(false))), WithEffect(EffectReadOnly))
+	r := app.Test([]string{"cmd", "--as-json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -6724,28 +6728,28 @@ func TestTagContractSatisfied(t *testing.T) {
 
 func TestTagContractViolated(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.TagContract("json", "json")
+	app.TagContract("json", "as-json")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithTags("json"), WithEffect(EffectReadOnly))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, `command "cmd": tag "json" requires flag "--json"`) {
+	if !strings.Contains(r.Stderr, `command "cmd": tag "json" requires flag "--as-json"`) {
 		t.Fatalf("expected tag contract error, got %q", r.Stderr)
 	}
 }
 
 func TestTagContractExactErrorMessage(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.TagContract("json", "json")
+	app.TagContract("json", "as-json")
 	app.Command("foo", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithTags("json"), WithEffect(EffectReadOnly))
 	r := app.Test([]string{"foo"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	expected := `command "foo": tag "json" requires flag "--json"`
+	expected := `command "foo": tag "json" requires flag "--as-json"`
 	if !strings.Contains(r.Stderr, expected) {
 		t.Fatalf("expected error %q in stderr, got %q", expected, r.Stderr)
 	}
@@ -6753,7 +6757,7 @@ func TestTagContractExactErrorMessage(t *testing.T) {
 
 func TestTagContractOnInheritedTag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.TagContract("json", "json")
+	app.TagContract("json", "as-json")
 	g := app.Group("grp", "a group", "json")
 	// Command inherits "json" tag from group but has no --json flag -> violation
 	g.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
@@ -6761,14 +6765,14 @@ func TestTagContractOnInheritedTag(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1 for inherited tag contract violation, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, `tag "json" requires flag "--json"`) {
+	if !strings.Contains(r.Stderr, `tag "json" requires flag "--as-json"`) {
 		t.Fatalf("expected tag contract error for inherited tag, got %q", r.Stderr)
 	}
 }
 
 func TestTagContractUntaggedCommandNotChecked(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.TagContract("json", "json")
+	app.TagContract("json", "as-json")
 	// Command has no tags -- should not be affected by the contract
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("ok")
@@ -6782,7 +6786,7 @@ func TestTagContractUntaggedCommandNotChecked(t *testing.T) {
 
 func TestTagContractPassthroughExempt(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.TagContract("json", "json")
+	app.TagContract("json", "as-json")
 	app.Passthrough("cmd", "a command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
 	}, WithTags("json"), WithEffect(EffectReadOnly))
@@ -6798,19 +6802,19 @@ func TestTagContractRegisteredAfterCommands(t *testing.T) {
 	// Register command first, then the contract
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithTags("json"), WithEffect(EffectReadOnly))
-	app.TagContract("json", "json")
+	app.TagContract("json", "as-json")
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1 for contract registered after command, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, `tag "json" requires flag "--json"`) {
+	if !strings.Contains(r.Stderr, `tag "json" requires flag "--as-json"`) {
 		t.Fatalf("expected tag contract error, got %q", r.Stderr)
 	}
 }
 
 func TestTagContractMultipleContracts(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.TagContract("json", "json")
+	app.TagContract("json", "as-json")
 	app.TagContract("loud", "loud")
 	// Command has "json" tag but not --json flag, and "loud" tag but not --loud flag
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },

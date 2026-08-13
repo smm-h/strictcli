@@ -1461,22 +1461,24 @@ func TestCheckDryRunEmitsTheFrameworkWouldDoHeader(t *testing.T) {
 
 func TestCheckCommandDropsTheReservedFlagsAndFiltersGlobalCollisions(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test app")
-	app.GlobalFlag(BoolFlag("json", "app-level json output", Default(false)))
+	app.GlobalFlag(BoolFlag("all", "app-level all", Default(false)))
 	app.RegisterCheckProvider(func() []CheckSpec { return nil })
 	cmd := app.commands["check"]
 	names := make(map[string]bool, len(cmd.flags))
 	for _, f := range cmd.flags {
 		names[f.Name] = true
 	}
-	for _, banned := range []string{"verbose", "dry-run"} {
+	// All three reserved names are absent from the candidate list entirely
+	// (§7.5 and its 2026-08-13 sweep box).
+	for _, banned := range []string{"verbose", "dry-run", "json"} {
 		if names[banned] {
 			t.Fatalf("check must not declare a %q flag", banned)
 		}
 	}
-	if names["json"] {
+	if names["all"] {
 		t.Fatal("a candidate colliding with a global flag must be filtered out")
 	}
-	for _, kept := range []string{"all", "tag", "name", "list", "ignore-warnings"} {
+	for _, kept := range []string{"tag", "name", "list", "ignore-warnings"} {
 		if !names[kept] {
 			t.Fatalf("check lost its %q flag", kept)
 		}

@@ -716,8 +716,9 @@ func TestExecuteReturnsError(t *testing.T) {
 func TestExecuteDataHandler(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return ExitData(0, map[string]string{"version": "1.0.0"})
-	}, WithEffect(EffectReadOnly))
+		ctx.Payload(map[string]string{"version": "1.0.0"})
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{}))
 
 	tools := app.AsTools()
 
@@ -881,14 +882,17 @@ func TestJsonSchemaDefaultNilOptional(t *testing.T) {
 func consentToolApp() *App {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("look", "look at things", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return ExitData(0, map[string]interface{}{"looked": true})
-	}, WithEffect(EffectReadOnly))
+		ctx.Payload(map[string]interface{}{"looked": true})
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{}))
 	app.Command("build", "build things", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return ExitData(0, map[string]interface{}{"built": true})
-	}, WithEffect(EffectMutating))
+		ctx.Payload(map[string]interface{}{"built": true})
+		return Exit(0)
+	}, WithEffect(EffectMutating), PayloadSchema(map[string]interface{}{}))
 	app.Command("release", "release things", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return ExitData(0, map[string]interface{}{"released": true})
-	}, WithEffect(EffectMutating), WithConsequential())
+		ctx.Payload(map[string]interface{}{"released": true})
+		return Exit(0)
+	}, WithEffect(EffectMutating), WithConsequential(), PayloadSchema(map[string]interface{}{}))
 	return app
 }
 

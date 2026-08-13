@@ -489,8 +489,9 @@ func TestMCPToolsCallNoArguments(t *testing.T) {
 func TestMCPToolsCallDataHandler(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return ExitData(0, map[string]interface{}{"status": "ok", "count": 42})
-	}, WithEffect(EffectReadOnly))
+		ctx.Payload(map[string]interface{}{"status": "ok", "count": 42})
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{}))
 
 	resp, err := sendMCPRequest(app, "tools/call", 9, map[string]interface{}{
 		"name": "info",

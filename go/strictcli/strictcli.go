@@ -236,6 +236,12 @@ type Command struct {
 	// reason shown in help and in the refusal.
 	DryRunSupported         bool
 	DryRunUnsupportedReason string
+	// PayloadSchema is the command's machine payload contract (contract
+	// §19.5): an inline JSON Schema literal, registered as written. A nil
+	// schema means the command cannot produce a payload -- ctx.Payload is
+	// then a call-time hard error. The literal is stored opaquely at this
+	// round; validating a payload against it is a later item.
+	PayloadSchema           map[string]interface{}
 	Grants                  []Grant
 	Forwarding              *Forwarding
 	flags                   []Flag
@@ -403,6 +409,9 @@ type App struct {
 	lastApproveConsequential bool
 	lastQuiet                bool
 	lastVerbose              bool
+	// Machine mode (contract §19.1), delivered on the Context like the
+	// quartet: extracted by the pre-scan, never a handler kwarg.
+	lastJSON bool
 
 	// exitHook runs immediately before Run's terminal os.Exit. Test-only
 	// surface; see SetExitHook.
@@ -860,6 +869,20 @@ func WithDryRunUnsupported(reason string) CmdOption {
 	}
 }
 
+// PayloadSchema declares the command's machine payload contract (contract
+// §19.5): the inline JSON Schema literal a payload supplied through
+// Context.Payload is registered against. A command that declares none cannot
+// produce a payload, and calling Context.Payload on it is a call-time hard
+// error.
+//
+// The name is the contract's pinned spelling (§18.9 item 111), which is why it
+// carries no With- prefix.
+func PayloadSchema(schema map[string]interface{}) CmdOption {
+	return func(c *Command) {
+		c.PayloadSchema = schema
+	}
+}
+
 // WithGrants declares per-effect-kind authorizations for a command. A grant is
 // not permission to do something otherwise forbidden; it is a labelled reason
 // that surfaces in the preview so a reviewer reading a dry run sees why a
@@ -1246,6 +1269,10 @@ func validateFlagConfig(f *Flag) {
 	// Short names and positional arg names are unaffected.
 	if reservedFrameworkFlagNames[f.Name] {
 		panic(errFlagNameReservedByFramework(f.Name))
+	}
+	// The machine-mode flag, on the same unconditional tier (§7.1's amendment).
+	if f.Name == reservedMachineFlagName {
+		panic(errFlagNameJSONReserved())
 	}
 	// The consent parameter name, reserved on the flag surface too.
 	if f.Name == reservedConsentParamName {
@@ -1968,6 +1995,9 @@ func (a *App) GlobalFlag(f Flag) {
 	if reservedFrameworkFlagNames[f.Name] {
 		panic(errFlagNameReservedByFramework(f.Name))
 	}
+	if f.Name == reservedMachineFlagName {
+		panic(errFlagNameJSONReserved())
+	}
 	if bannedFlagNames[f.Name] {
 		panic(errFlagNameYesBanned)
 	}
@@ -2180,36 +2210,28 @@ func (a *App) Run() {
 	a.beginDispatch()
 	reserved := a.reservedFlagState()
 
-	if pr.cmd.Passthrough {
-		ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic),
-			reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
-		// The confirm protocol fires only on the real CLI path -- and a mutating
-		// PASSTHROUGH is not exempt.
-		a.confirmConsequential(pr.cmd, pr.cmdPath)
-		code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, func() int {
-			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
-		})
-		a.runExitHook()
-		os.Exit(code)
-	}
-
-	ctx := newContext(os.Stdout, os.Stderr, pr.sources, a.infraAccess(pr.hermetic),
-		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
+	ctx := a.newDispatchContext(os.Stdout, os.Stderr, pr, reserved)
+	// The confirm protocol fires only on the real CLI path -- and a mutating
+	// PASSTHROUGH is not exempt.
 	a.confirmConsequential(pr.cmd, pr.cmdPath)
-	code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, func() int {
-		outcome := pr.cmd.Handler(ctx, pr.kwargs)
-		if outcome.data != nil {
-			data, err := json.Marshal(outcome.data)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: failed to marshal result data: %s\n", err)
-				os.Exit(1)
-			}
-			fmt.Println(string(data))
+	code := a.runSealed(os.Stdout, os.Stderr, reserved.dryRun, pr.cmdPath, ctx, func() int {
+		if pr.cmd.Passthrough {
+			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		}
-		return outcome.code
+		return pr.cmd.Handler(ctx, pr.kwargs).code
 	})
 	a.runExitHook()
 	os.Exit(code)
+}
+
+// newDispatchContext builds the one Context a dispatch runs on, arming the
+// runtime seal and carrying the command's payload declaration.
+func (a *App) newDispatchContext(stdout, stderr io.Writer, pr parseResult, reserved reservedFlags) *Context {
+	ctx := newContext(stdout, stderr, pr.sources, a.infraAccess(pr.hermetic),
+		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
+	ctx.commandName = pr.cmd.Name
+	ctx.payloadSchema = pr.cmd.PayloadSchema
+	return ctx
 }
 
 // reservedFlagState snapshots the framework-owned quartet for one dispatch.
@@ -2219,6 +2241,7 @@ func (a *App) reservedFlagState() reservedFlags {
 		approveConsequential: a.lastApproveConsequential,
 		quiet:                a.lastQuiet,
 		verbose:              a.lastVerbose,
+		json:                 a.lastJSON,
 	}
 }
 
@@ -2235,16 +2258,15 @@ func (a *App) reservedFlagState() reservedFlags {
 //
 // A handler that calls os.Exit is outside this guarantee and outside Go: the
 // process is gone before any deferred function runs.
-func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, fn func() int) (code int) {
+func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, ctx *Context, fn func() int) (code int) {
 	defer func() {
 		r := recover()
 		if r == nil {
-			if dryRun {
-				fmt.Fprintln(stdout, a.renderWouldDoLog())
-			}
+			a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, false)
 			return
 		}
 		if t, ok := r.(dryRunTruncation); ok {
+			a.emitPayload(ctx, stdout)
 			fmt.Fprintln(stdout, t.log.render())
 			fmt.Fprintln(stderr, t.message)
 			code = 1
@@ -2252,13 +2274,48 @@ func (a *App) runSealed(stdout, stderr io.Writer, dryRun bool, cmdPath string, f
 		}
 		// An unexpected unwind. The recorded effects are still owed to whoever
 		// asked for the preview; the marker says the list may not be all of it.
-		if dryRun {
-			fmt.Fprintln(stdout, a.renderWouldDoLog())
-			fmt.Fprintln(stderr, errDryRunAborted(a.wouldDoSeq(), cmdPath))
-		}
+		a.finishDispatch(ctx, stdout, stderr, dryRun, cmdPath, true)
 		panic(r)
 	}()
 	return fn()
+}
+
+// finishDispatch is the ONE ordered exit step: payload first, then the would-do
+// log. Reachable from every way out of a dispatch (a normal return, an
+// unwinding abort, and -- through its two halves -- a truncated preview), so
+// there is exactly one place that decides what the framework emits at the end
+// of a run and in what order.
+func (a *App) finishDispatch(ctx *Context, stdout, stderr io.Writer, dryRun bool, cmdPath string, aborted bool) {
+	a.emitPayload(ctx, stdout)
+	if !dryRun {
+		return
+	}
+	fmt.Fprintln(stdout, a.renderWouldDoLog())
+	if aborted {
+		fmt.Fprintln(stderr, errDryRunAborted(a.wouldDoSeq(), cmdPath))
+	}
+}
+
+// emitPayload writes the dispatch's machine payload, if there is one (§19.4).
+//
+// Only in machine mode: outside it the payload is captured by the in-process
+// surfaces and printed nowhere. The encoder disables HTML escaping so the
+// bytes follow §19.5's regime -- plain UTF-8, escaping only what JSON mandates
+// -- and the write does not go through the quiet-suppressible writers, so
+// --quiet has no mechanism by which to reach it.
+func (a *App) emitPayload(ctx *Context, stdout io.Writer) {
+	if ctx == nil || !ctx.payloadSet || !ctx.reserved.json {
+		return
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(ctx.payload); err != nil {
+		fmt.Fprintf(ctx.stderr, "error: failed to marshal result data: %s\n", err)
+		return
+	}
+	// Encode already terminates with a newline.
+	fmt.Fprint(stdout, buf.String())
 }
 
 // Test runs the CLI with the given argv, capturing output and exit code.
@@ -2328,28 +2385,18 @@ func (a *App) Test(argv []string) Result {
 	go func() { defer drainWG.Done(); io.Copy(&stderrBuf, stderrR) }()
 
 	// Context is constructed unconditionally for every dispatch, writing to the
-	// capture pipes. Test() behaves as if --yes were passed: it never prompts.
+	// capture pipes. Test() behaves as if --approve-consequential were passed:
+	// it never prompts.
 	reserved := a.reservedFlagState()
-	ctx := newContext(stdoutW, stderrW, pr.sources, a.infraAccess(pr.hermetic),
-		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun))
+	ctx := a.newDispatchContext(stdoutW, stderrW, pr, reserved)
 
-	var resultData interface{}
-	exitCode := a.runSealed(stdoutW, stderrW, reserved.dryRun, pr.cmdPath, func() int {
+	exitCode := a.runSealed(stdoutW, stderrW, reserved.dryRun, pr.cmdPath, ctx, func() int {
 		if pr.cmd.Passthrough {
 			return pr.cmd.PassthroughHandler(ctx, pr.cmd.Name, pr.passthroughArgs, pr.globalKwargs)
 		}
-		outcome := pr.cmd.Handler(ctx, pr.kwargs)
-		resultData = outcome.data
-		if outcome.data != nil {
-			data, err := json.Marshal(outcome.data)
-			if err != nil {
-				fmt.Fprintf(stderrW, "error: failed to marshal result data: %s\n", err)
-			} else {
-				fmt.Fprintln(stdoutW, string(data))
-			}
-		}
-		return outcome.code
+		return pr.cmd.Handler(ctx, pr.kwargs).code
 	})
+	resultData := ctx.payload
 
 	stdoutW.Close()
 	stderrW.Close()
@@ -2401,14 +2448,17 @@ type preScanResult struct {
 }
 
 // reservedQuartetTokens maps an argv token to the preScanResult field it sets.
-// The quartet is recognized ANYWHERE in argv, exactly like --help/-h:
-// both `app --dry-run cmd` and `app cmd --dry-run` work. Contrast --hermetic,
-// --config, --dump-schema and --mcp, which stay pre-command-only.
+// The quartet -- plus --json, which reads exactly as the quartet does in both
+// argv regions (§7.1's amendment, §7.2) -- is recognized ANYWHERE in argv,
+// exactly like --help/-h: both `app --dry-run cmd` and `app cmd --dry-run`
+// work. Contrast --hermetic, --config, --dump-schema and --mcp, which stay
+// pre-command-only.
 var reservedQuartetTokens = map[string]func(*reservedFlags){
 	"--dry-run":               func(r *reservedFlags) { r.dryRun = true },
 	"--approve-consequential": func(r *reservedFlags) { r.approveConsequential = true },
 	"--quiet":                 func(r *reservedFlags) { r.quiet = true },
 	"--verbose":               func(r *reservedFlags) { r.verbose = true },
+	"--json":                  func(r *reservedFlags) { r.json = true },
 }
 
 // preScanReservedFlags scans argv for the framework-owned reserved flags.
@@ -2671,6 +2721,7 @@ func (a *App) doParse(argv []string) parseResult {
 	a.lastApproveConsequential = preScan.reserved.approveConsequential
 	a.lastQuiet = preScan.reserved.quiet
 	a.lastVerbose = preScan.reserved.verbose
+	a.lastJSON = preScan.reserved.json
 
 	// --hermetic + --config mutual exclusion
 	if preScan.hermetic && preScan.configPath != "" {

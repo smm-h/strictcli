@@ -83,12 +83,13 @@ func buildFlagshipApp() *App {
 				return Exit(1)
 			}
 			ctx.Info("head: " + head.Stdout())
-			return ExitData(0, map[string]interface{}{
+			ctx.Payload(map[string]interface{}{
 				"head":      head.Stdout(),
 				"clean":     dirty.Stdout() == "",
 				"exit_code": head.ExitCode(),
 			})
-		}, WithEffect(EffectReadOnly))
+			return Exit(0)
+		}, WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{}))
 
 	release := app.Group("release", "Release commands")
 

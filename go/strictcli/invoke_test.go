@@ -607,7 +607,7 @@ func TestInvokeMutexGroup(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("out", "output command", captureHandler(&captured),
 			WithMutex(MutexGroup{Flags: []Flag{
-				StringFlag("json", "JSON output", Default(nil)),
+				StringFlag("as-json", "JSON output", Default(nil)),
 				StringFlag("text", "text output", Default(nil)),
 			}}), WithEffect(EffectReadOnly),
 		)
@@ -616,14 +616,14 @@ func TestInvokeMutexGroup(t *testing.T) {
 
 	// Provide exactly one mutex flag
 	app1 := makeApp()
-	ir := app1.invoke("out", map[string]interface{}{"json": "data"})
+	ir := app1.invoke("out", map[string]interface{}{"as_json": "data"})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
 	}
 
 	// Provide both (should error)
 	app2 := makeApp()
-	ir = app2.invoke("out", map[string]interface{}{"json": "data", "text": "data"})
+	ir = app2.invoke("out", map[string]interface{}{"as_json": "data", "text": "data"})
 	if ir.err == "" {
 		t.Fatal("expected error for mutex violation")
 	}

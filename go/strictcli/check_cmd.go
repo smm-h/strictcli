@@ -1,7 +1,6 @@
 package strictcli
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -40,16 +39,17 @@ func (a *App) registerCheckCommand() {
 		tagExpr := Get[string](args, "tag")
 		nameGlob := Get[string](args, "name")
 		list := Get[bool](args, "list")
-		jsonOut := Get[bool](args, "json")
 		ignoreWarnings := Get[bool](args, "ignore_warnings")
-		// --verbose and --dry-run are framework-owned reserved names, so the
-		// check command's own two flags are gone and their values are read off
-		// the Context instead.
+		// --verbose, --dry-run and --json are framework-owned reserved names,
+		// so the check command declares none of them and reads their values off
+		// the Context instead. The machine output is this command's payload
+		// (contract §19.4), which is why --json is not a flag here any more.
 		verbose := ctx.Verbose()
 		dryRun := ctx.DryRun()
+		jsonOut := ctx.JSON()
 
 		if list {
-			return Exit(a.checkList(jsonOut))
+			return Exit(a.checkList(ctx, jsonOut))
 		}
 
 		if !(runAll || tagExpr != "" || nameGlob != "") {
@@ -66,9 +66,9 @@ func (a *App) registerCheckCommand() {
 	}
 	// Filter out candidate flags that already exist as global flags to avoid
 	// collisions -- the handler absorbs global flag values automatically.
-	// --verbose and --dry-run are absent from the candidate list entirely: both
-	// names are now reserved by the framework and their values arrive on the
-	// Context (§7.5).
+	// --verbose, --dry-run and --json are absent from the candidate list
+	// entirely: all three names are now reserved by the framework and their
+	// values arrive on the Context (§7.5 and its 2026-08-13 sweep box).
 	globalFlagNames := make(map[string]bool, len(a.globalFlags))
 	for _, gf := range a.globalFlags {
 		globalFlagNames[gf.Name] = true
@@ -78,7 +78,6 @@ func (a *App) registerCheckCommand() {
 		StringFlag("tag", "Tag DSL expression to select checks (e.g. 'changelog & !quality')", Default("")),
 		StringFlag("name", "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')", Default("")),
 		BoolFlag("list", "List all registered checks with their tags and exit without running", Default(false)),
-		BoolFlag("json", "Output check results as machine-readable JSON instead of human text", Default(false)),
 		BoolFlag("ignore-warnings", "Treat warn-severity results as passing so they do not cause nonzero exit", Default(false)),
 	}
 	extraFlags := make([]Flag, 0, len(candidates))
@@ -91,7 +90,8 @@ func (a *App) registerCheckCommand() {
 	// CACHE_WRITEs (the coverage manifest), which never trip enforcement.
 	a.registerFrameworkCommand("check",
 		"Run project checks registered via the check framework and report results",
-		EffectReadOnly, handler, WithFlags(extraFlags...))
+		EffectReadOnly, handler, WithFlags(extraFlags...),
+		PayloadSchema(checkPayloadSchema))
 }
 
 // registerFrameworkCommand registers one of strictcli's own auto-registered
@@ -134,10 +134,20 @@ func (a *App) wrapCheckContext(base CheckContext, frameworkCtx *Context) CheckCo
 	return checkContextWithConn{CheckContext: base, infra: infra}
 }
 
+// checkPayloadSchema is the check command's machine payload contract (contract
+// §19.5). Both of the command's machine shapes -- the listing (--list) and the
+// run results -- are arrays of objects. Framework-owned literal, byte-identical
+// across the three implementations.
+var checkPayloadSchema = map[string]interface{}{
+	"type":  "array",
+	"items": map[string]interface{}{"type": "object"},
+}
+
 // checkList implements the --list mode.
-func (a *App) checkList(jsonOut bool) int {
+func (a *App) checkList(ctx *Context, jsonOut bool) int {
 	if jsonOut {
-		return a.checkListJSON()
+		ctx.Payload(a.checkListItems())
+		return 0
 	}
 	return a.checkListHuman()
 }
@@ -170,15 +180,15 @@ func (a *App) checkListHuman() int {
 	return 0
 }
 
-// checkListJSON prints checks as a JSON array.
-func (a *App) checkListJSON() int {
-	type checkEntry struct {
-		Name     string   `json:"name"`
-		Tags     []string `json:"tags"`
-		Severity string   `json:"severity"`
-		Scope    string   `json:"scope,omitempty"`
-	}
+type checkEntry struct {
+	Name     string   `json:"name"`
+	Tags     []string `json:"tags"`
+	Severity string   `json:"severity"`
+	Scope    string   `json:"scope,omitempty"`
+}
 
+// checkListItems is the --list mode's machine payload (contract §19.4).
+func (a *App) checkListItems() []checkEntry {
 	entries := make([]checkEntry, len(a.checkOrder))
 	for i, name := range a.checkOrder {
 		def := a.checkDefs[name]
@@ -189,14 +199,7 @@ func (a *App) checkListJSON() int {
 			Scope:    def.scope,
 		}
 	}
-
-	data, err := json.Marshal(entries)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
-		return 1
-	}
-	fmt.Println(string(data))
-	return 0
+	return entries
 }
 
 // checkDryRunPlan prints the would-run plan for the checks a dry run did NOT
@@ -259,7 +262,7 @@ func (a *App) checkRun(frameworkCtx *Context, runAll bool, tagExpr, nameGlob str
 	}
 
 	if jsonOut {
-		fmt.Println(FormatCheckResultsJSON(results))
+		frameworkCtx.Payload(checkResultItems(results))
 	} else if out := FormatCheckResults(results, verbose); out != "" {
 		fmt.Println(out)
 	}

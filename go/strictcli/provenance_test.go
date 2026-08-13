@@ -18,7 +18,7 @@ func TestMutexDefaultSourceNotPresent(t *testing.T) {
 		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
-			BoolFlag("json", "JSON output", Default(false)),
+			BoolFlag("as-json", "JSON output", Default(false)),
 			BoolFlag("text", "text output", Default(false)),
 		}}), WithEffect(EffectReadOnly),
 	)
@@ -26,7 +26,7 @@ func TestMutexDefaultSourceNotPresent(t *testing.T) {
 	// Provide only --json via CLI. --text has Default(false), so it will get
 	// source=default. The mutex check should see only --json as "present"
 	// and NOT fire a mutex violation.
-	r := app.Test([]string{"out", "--json"})
+	r := app.Test([]string{"out", "--as-json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
@@ -38,11 +38,11 @@ func TestMutexDefaultSourceNotPresent(t *testing.T) {
 		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
-			BoolFlag("json", "JSON output", Default(false)),
+			BoolFlag("as-json", "JSON output", Default(false)),
 			BoolFlag("text", "text output", Default(false)),
 		}}), WithEffect(EffectReadOnly),
 	)
-	ir := app2.invoke("out", map[string]interface{}{"json": true})
+	ir := app2.invoke("out", map[string]interface{}{"as_json": true})
 	if ir.err != "" {
 		t.Fatalf("invoke: expected success, got error: %s", ir.err)
 	}
@@ -56,7 +56,7 @@ func TestMutexImpliedSourceNotPresent(t *testing.T) {
 		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
-			BoolFlag("json", "JSON output", Default(nil)),
+			BoolFlag("as-json", "JSON output", Default(nil)),
 			BoolFlag("text", "text output", Default(nil)),
 		}}),
 		WithDependencies(
@@ -71,7 +71,7 @@ func TestMutexImpliedSourceNotPresent(t *testing.T) {
 	// Provide --json and --loud. --loud implies --text=true (source=implied).
 	// The mutex group contains both json and text, but text is implied, so
 	// the mutex should see only json as "present" and NOT fire a violation.
-	r := app.Test([]string{"out", "--json", "--loud"})
+	r := app.Test([]string{"out", "--as-json", "--loud"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
 	}
@@ -95,12 +95,12 @@ func TestMutexCliAndConfigBothPresent(t *testing.T) {
 		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("json", "JSON output", Default(nil)),
+			StringFlag("as-json", "JSON output", Default(nil)),
 			StringFlag("text", "text output", Default(nil)),
 		}}), WithEffect(EffectReadOnly),
 	)
 
-	ir := app.invoke("out", map[string]interface{}{"json": "data", "text": "data"})
+	ir := app.invoke("out", map[string]interface{}{"as_json": "data", "text": "data"})
 	if ir.err == "" {
 		t.Fatal("expected mutex violation error")
 	}
@@ -179,13 +179,13 @@ func TestInvokeMutexProvidedKwargIsCliSource(t *testing.T) {
 		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("json", "JSON output", Default(nil)),
+			StringFlag("as-json", "JSON output", Default(nil)),
 			StringFlag("text", "text output", Default(nil)),
 		}}), WithEffect(EffectReadOnly),
 	)
 
 	// Provide exactly one mutex flag via invoke -- should succeed.
-	ir := app.invoke("out", map[string]interface{}{"json": "data"})
+	ir := app.invoke("out", map[string]interface{}{"as_json": "data"})
 	if ir.err != "" {
 		t.Fatalf("invoke: expected success, got error: %s", ir.err)
 	}

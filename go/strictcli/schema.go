@@ -165,6 +165,12 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 		m["dry_run_supported"] = false
 		m["dry_run_unsupported_reason"] = cmd.DryRunUnsupportedReason
 	}
+	// The payload contract, published verbatim (contract §19.5): the inline
+	// literal is the sole canonical artifact, so the dump carries it as
+	// written rather than a re-rendering of it.
+	if cmd.PayloadSchema != nil {
+		m["payload_schema"] = cmd.PayloadSchema
+	}
 	// passthrough: default false (omit when false)
 	if cmd.Passthrough {
 		m["passthrough"] = true

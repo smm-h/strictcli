@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// --- Exit / ExitData via Test and Call ---
+// --- Exit and the machine payload via Test and Call ---
 
 func TestExitOutcomeSetsExitCodeNoData(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
@@ -24,12 +24,14 @@ func TestExitOutcomeSetsExitCodeNoData(t *testing.T) {
 	}
 }
 
-func TestExitDataPrintsJSONAndCaptures(t *testing.T) {
+func TestPayloadPrintsJSONAndCaptures(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return ExitData(0, map[string]interface{}{"name": "widget", "count": 42})
-	}, WithEffect(EffectReadOnly))
-	r := app.Test([]string{"info"})
+		ctx.Payload(map[string]interface{}{"name": "widget", "count": 42})
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{}))
+	// The payload is printed only in machine mode (contract §19.4).
+	r := app.Test([]string{"info", "--json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("exit = %d: %s", r.ExitCode, r.Stderr)
 	}
@@ -47,28 +49,45 @@ func TestExitDataPrintsJSONAndCaptures(t *testing.T) {
 	}
 }
 
-func TestExitDataNilDataDoesNotPrint(t *testing.T) {
+func TestNoPayloadDoesNotPrint(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return ExitData(0, nil)
+		return Exit(0)
 	}, WithEffect(EffectReadOnly))
-	r := app.Test([]string{"info"})
+	r := app.Test([]string{"info", "--json"})
 	if r.Stdout != "" {
-		t.Fatalf("Stdout = %q, want empty for nil data", r.Stdout)
+		t.Fatalf("Stdout = %q, want empty when no payload was supplied", r.Stdout)
 	}
 	if r.Data != nil {
 		t.Fatalf("Data = %v, want nil", r.Data)
 	}
 }
 
-func TestExitDataReturnedViaCall(t *testing.T) {
+func TestPayloadIsCapturedButNotPrintedOutsideMachineMode(t *testing.T) {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("info", "get info", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		ctx.Payload(map[string]interface{}{"name": "widget"})
+		return Exit(0)
+	}, WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{}))
+	r := app.Test([]string{"info"})
+	if r.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty outside machine mode", r.Stdout)
+	}
+	data, ok := r.Data.(map[string]interface{})
+	if !ok || data["name"] != "widget" {
+		t.Fatalf("Data = %v, want the captured payload", r.Data)
+	}
+}
+
+func TestPayloadReturnedViaCall(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("store", "store data", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return ExitData(0, map[string]interface{}{Get[string](kwargs, "key"): Get[string](kwargs, "value")})
+		ctx.Payload(map[string]interface{}{Get[string](kwargs, "key"): Get[string](kwargs, "value")})
+		return Exit(0)
 	}, WithFlags(
 		StringFlag("key", "data key"),
 		StringFlag("value", "data value"),
-	), WithEffect(EffectReadOnly))
+	), WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{}))
 	result, err := app.Call("store", map[string]interface{}{"key": "status", "value": "active"})
 	if err != nil {
 		t.Fatalf("Call error: %v", err)
