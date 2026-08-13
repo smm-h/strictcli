@@ -331,7 +331,7 @@ func TestAllowlistMatchesElementWisePrefixesOnly(t *testing.T) {
 	app := NewApp("app", "1.0.0", "h",
 		WithProcObserveAllowlist([][]string{{"git", "rev-parse"}}))
 	e := newEffects(&Command{Name: "go", Effect: EffectReadOnly}, "go", true, &effectLog{},
-		app.procObserveAllowlist)
+		app.procObserveAllowlist, traceIdentity{})
 	ops := func(vals ...string) []operand {
 		out := make([]operand, 0, len(vals))
 		for _, v := range vals {

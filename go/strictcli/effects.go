@@ -553,9 +553,10 @@ type Effects struct {
 	allowlist        [][]string
 	grants           map[string]Grant
 	mutationRecorded bool
+	trace            traceIdentity
 }
 
-func newEffects(cmd *Command, cmdPath string, dryRun bool, log *effectLog, allowlist [][]string) *Effects {
+func newEffects(cmd *Command, cmdPath string, dryRun bool, log *effectLog, allowlist [][]string, trace traceIdentity) *Effects {
 	grants := make(map[string]Grant, len(cmd.Grants))
 	for _, g := range cmd.Grants {
 		grants[g.Name] = g
@@ -567,6 +568,7 @@ func newEffects(cmd *Command, cmdPath string, dryRun bool, log *effectLog, allow
 		log:       log,
 		allowlist: allowlist,
 		grants:    grants,
+		trace:     trace,
 	}
 }
 
@@ -804,7 +806,7 @@ func (e *Effects) Spawn(argv []interface{}, opts ...EffectOption) (Spawned, erro
 	}
 	cmd := exec.Command(settled[0], settled[1:]...)
 	cmd.Dir = o.cwd
-	cmd.Env = mergedEnv(o.env)
+	cmd.Env = traceChildEnv(mergedEnv(o.env), e.trace)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -1061,7 +1063,7 @@ func (e *Effects) execRun(ops []operand, joined string, o effectOpts, method str
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = o.cwd
-	cmd.Env = mergedEnv(o.env)
+	cmd.Env = traceChildEnv(mergedEnv(o.env), e.trace)
 
 	var outBuf, errBuf bytes.Buffer
 	if o.stream {
@@ -1308,7 +1310,19 @@ func readConfirmLine(r io.Reader) (string, error) {
 // itself is reset by beginDispatch, which runs earlier so pre-handler
 // CACHE_WRITEs (coverage shards) land in the same dispatch's log.
 func (a *App) armEffects(cmd *Command, cmdPath string, dryRun bool) *Effects {
-	return newEffects(cmd, cmdPath, dryRun, a.effects, a.procObserveAllowlist)
+	return newEffects(cmd, cmdPath, dryRun, a.effects, a.procObserveAllowlist,
+		traceIdentity{
+			app:                  a.Name,
+			version:              a.Version,
+			command:              cmdPath,
+			hasCommand:           true,
+			dryRun:               dryRun,
+			machineMode:          a.lastJSON,
+			quiet:                a.lastQuiet,
+			verbose:              a.lastVerbose,
+			approveConsequential: a.lastApproveConsequential,
+			effect:               cmd.Effect,
+		})
 }
 
 // beginDispatch starts a new dispatch: it resets the structured effect log.
