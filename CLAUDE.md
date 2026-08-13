@@ -149,7 +149,7 @@ When adding a feature to one implementation, add it to all implementations and a
 
 ### Handler result contract
 
-Every handler receives a context (Go and Python are ctx-first; TypeScript is args-first); there is no legacy no-ctx signature and no `ctx.emit` -- structured data flows back only through the return value.
+Every handler receives a context (Go and Python are ctx-first; TypeScript is args-first); there is no legacy no-ctx signature and no `ctx.emit`. The return value carries the exit code and nothing else.
 
 - **Go**: `func(ctx *Context, kwargs map[string]interface{}) Outcome`. Return `Exit(code)`.
 - **Python**: `def handler(ctx, **kwargs)` returning `int` (exit code), `None` (exit 0), or `strictcli.outcome(exit_code)`. Any other return type is a hard error. `Outcome` is branded -- it cannot be constructed directly, only via the `outcome()` factory.
