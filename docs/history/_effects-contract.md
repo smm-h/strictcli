@@ -73,6 +73,15 @@ value. Nothing outside mutex groups changes. The round is a **breaking** change 
 behaviour, and it deletes the motivation for the hand-written "nothing was chosen" guards the
 consumers grew against the old semantics.
 
+Amended an eleventh time 2026-08-14 at the **protocol round** (§18.11), which adds §22. The MCP
+server stops pinning the protocol's first revision and speaks `2026-07-28`: per-request metadata
+instead of a handshake, a mandatory `server/discover`, a `resultType` on every result, the
+per-request client-capability declaration, and the revision's own error codes. On top of that it
+mints and verifies an integrity-protected continuation state and runs the confirmation
+round-trip, so the one channel that can reach a human now asks one instead of taking a caller's
+word for it. §8.3, §8.4, §8.5, §12.6 and §18.8's item 93 are amended in place rather than
+contradicted, and the two refusal messages stop printing the token that lifts them.
+
 The ordinal above counts amendment **rounds**, not the paragraphs of this header: the fifth round
 (the adoption round, §18.6) and the eighth (the non-CLI consent round, §18.8) recorded their
 rulings in §18 without adding a paragraph here, which is why the header reads first, second,
@@ -1502,10 +1511,11 @@ replaced by the exactly-one rule.
 If stdin is not a TTY, the framework does not prompt. It writes to stderr:
 
 ```
-error: stdin is not interactive; pass --approve-consequential to confirm
+error: stdin is not interactive; a consequential command must be confirmed at a terminal
 ```
 
-and exits `1`. TTY detection is net-new in all three implementations (no `isatty` /
+and exits `1`. (Amended 2026-08-14, §18.11 item 121: the message no longer prints the token that
+lifts it. See §12.6's amendment box for why.) TTY detection is net-new in all three implementations (no `isatty` /
 `IsTerminal` / `isTTY` call exists anywhere in the current sources): Python `sys.stdin.isatty()`,
 Go a `golang.org/x/term`-free `os.Stdin.Stat()` mode check (Go stays zero-dependency), TypeScript
 `process.stdin.isTTY === true`.
@@ -1530,6 +1540,14 @@ splits in two (amended 2026-08-11, item 93):
   caller that wants the flag's semantics writes the flag.
 - **`call()` / `Call()` / `invoke` / `invokeApp`, and the MCP server** take the consent from the
   call instead (§8.5). A consequential command reached without it is refused.
+
+> **Amendment (2026-08-14, protocol round -- §18.11, item 120).** The seam is unchanged; what
+> changed is that one transport now has a way to *obtain* consent rather than only to carry it.
+> Over the modern protocol revision the server answers an unconsented consequential call with a
+> confirmation request and a continuation state, and the retry's acceptance is the consent
+> `Call` is given (§22.5). Everything §8.5 says about the shared seam still holds verbatim: the
+> declaration is a property of the command (§8.1), the seam refuses without consent, and each
+> transport is responsible for obtaining it. This is the first transport that asks a human.
 
 ### 8.5 Consent on the non-CLI channels
 
@@ -1578,11 +1596,22 @@ default: absent means "not consented". A non-boolean value is a `-32602` protoco
 (`parameter 'approve_consequential' must be a boolean`); a refusal is ordinary `isError` tool-result
 content, like any other invocation failure.
 
+Since the protocol round (§22.5) the param is no longer the only way consent reaches the server on
+that transport: a client that declares it can render an elicitation is *asked*, and its answer is
+the consent. The param remains what it always was -- a caller stating, in the call, that it is
+proceeding without a human.
+
 **The refusal**, byte-identical in all three implementations:
 
 ```
-command '<path>' is consequential: pass approve_consequential to confirm
+command '<path>' is consequential: the call must carry confirmation
 ```
+
+> **Amendment (2026-08-14, protocol round -- §18.11, item 121).** The text was
+> `command '<path>' is consequential: pass approve_consequential to confirm`, and it is amended
+> for the same reason as §8.3's: a refusal that spells its own override teaches the override. The
+> consent argument itself is unchanged and is documented in the table above, in the quickstarts
+> and in the READMEs -- the refusal simply stops being one of those places.
 
 **Consent reaches the handler.** When it is given, `ctx.approve_consequential` /
 `ctx.ApproveConsequential()` / `ctx.approveConsequential` reports `true` on the programmatic path,
@@ -2234,13 +2263,21 @@ so parity is checked. Renamed from `promptConfirmMutating` at the consequence ro
 prompt names what the command declared, not what it was classified.
 
 ```
-error: stdin is not interactive; pass --approve-consequential to confirm
+error: stdin is not interactive; a consequential command must be confirmed at a terminal
 ```
 
 `errConfirmNonInteractive()`. **This one is now conformance-covered**: the runner pins each case's
 stdin to the null device (§14.5), so §8.3's branch is a deterministic outcome in all three targets
 rather than a template whose trigger the runner could not reach. The prompt itself and
 `errConfirmDeclined` stay `coverage_deferred` -- they need an answer typed at a terminal.
+
+> **Amendment (2026-08-14, protocol round -- §18.11, item 121).** The text was
+> `error: stdin is not interactive; pass --approve-consequential to confirm`. It printed the exact
+> token that lifts it, and the reflex it taught was to append that token and re-run -- which is
+> the opposite of the judgement `consequential` asks for, and was observed in practice within one
+> retry. The amended text names what is required and never how to force the command through
+> without it. `--approve-consequential` remains documented surface (§7.3); a refusal is simply not
+> where it is advertised.
 
 ```
 aborted
@@ -3558,6 +3595,15 @@ central inference. This round is governed by the same precedence rule item 84 es
       a very different downstream shape; it changes the registration surface in all three
       implementations and was not needed to close this hole.
 
+    > **Amendment (2026-08-14, protocol round -- §18.11, item 120).** This item's honest limit --
+    > "a caller can always supply consent" -- was true of the transport as it stood, and is why
+    > the item said the point is that it must say so somewhere recordable. The protocol round
+    > removes the limit for the one transport that can now reach a human: over the modern
+    > revision the server *asks*, through the client, and the answer is the consent (§22.5). The
+    > declaration stays a property of the command, which is what the campaign's decision 6 ruled
+    > and what this item already assumed; the channel-pair alternative above stays rejected, and
+    > for the same reason -- what varies is the delivery, never the fact.
+
 94. **`test()` keeps its as-if-approved behaviour (§8.4, authored at this round).** It parses argv
     exactly as the CLI does, so a caller who wants the flag's semantics can write the flag; and
     every unit suite in the fleet drives consequential commands through it. Item 93 applies to the
@@ -3912,6 +3958,59 @@ uses were found.
      by `test_conflict_mode_fires_before_mutex` (Python) and
      `TestConfigConflictModeFiresBeforeMutex` (Go), and no implementation changed for this item
      -- §21.3 gained the carve-out paragraph, and nothing else.
+
+### 18.11 Amendments made at the protocol round (2026-08-14)
+
+This round implements campaign decisions 5, 6 and 26 and the audit additions attached to them. It
+adds §22 and amends §8.3, §8.4, §8.5, §12.6 and item 93 in place. Items 120-122 are **ruled
+upstream**; items 123-126 are authored spellings in the §18.3 class -- the mechanical remainder
+the rulings left open, decided here so implementors had nothing left to decide.
+
+120. **The shared seam requires consent, and each transport obtains it (campaign decision 5).**
+     Ruled upstream against this repository's two open records: the MCP auto-approve finding and
+     the challenge-token design's three lettered options. `Call` gaining a consent parameter had
+     already been implemented at the non-CLI consent round (item 93); what this round adds is the
+     other half of the ruling -- a transport that *obtains* the consent rather than only carrying
+     it. The stated cost of the seam change was verified to be zero: `Call` has exactly three
+     callers, all inside this repository.
+
+121. **A refusal must not print the token that lifts it (audit addition to decision 5).** Both
+     refusals are amended (§8.3, §8.5, §12.6). The observed failure was an agent clearing the
+     non-interactive refusal by appending the flag it named, within one retry. The amended texts
+     name what is required -- confirmation -- and never how to force the command through without
+     it, following the same rule the campaign's decision 25 applies to a missing tool: name the
+     remedy, never an override.
+
+122. **The confirmation semantics are published as a declared feature (campaign decision 26).**
+     A NAME (`dev.smmh.strictcli/consequential-confirmation`), never a version number, matching
+     decision 9's features-not-numbers ruling. The tool descriptors' `effect` / `consequential`
+     properties (item 93) are the other machine-readable half; the published page and the
+     client-declaration error are the next round's.
+
+123. **The server is dual-era, and the legacy branch is untouched (§22.1).** The alternative was
+     to delete the handshake outright. Retaining it costs one boolean of connection state, is
+     exactly what the modern revision specifies for a server serving both, and leaves §11.6's
+     legacy branch somewhere to live. A request carrying neither era's marker is refused rather
+     than guessed at, which is the same rule as everywhere else in this document.
+
+124. **An unrecognized key under a reserved prefix is refused, not ignored (§22.2).** The
+     protocol defines the prefix as its own namespace but does not say what a server must do with
+     an unknown key in it. Ignoring it would mean silently accepting a vocabulary this server does
+     not speak, which is the failure mode this framework exists to prevent.
+
+125. **The continuation's shape: HMAC-SHA256, a per-process key, 300 seconds, single use
+     (§22.4).** The protocol requires integrity protection and *recommends* the three bindings;
+     it explicitly leaves single use to the server, and this server enforces it. 300 seconds is
+     the one number with no external anchor: long enough for a human to answer a dialogue the
+     client renders, short enough that a captured blob is worth little. The principal is
+     self-reported on this transport and §22.4a says so rather than implying otherwise.
+
+126. **Conformance grows a capture-and-splice step vocabulary (§22.5's cases).** A round-trip
+     cannot be scripted from static lines, because the retry has to quote a blob that is
+     unguessable by construction. Steps gain `capture` (a name and a dotted path into the reply)
+     and `send` gains `{{name}}` and `{{name|tamper}}`. The vocabulary is closed, and `tamper` is
+     the whole reason it exists: an integrity-protected value that no case ever corrupts is an
+     unchecked value.
 
 ---
 
@@ -4462,3 +4561,203 @@ Evaluated per group, in this order:
    declined, naming the first declined member.
 
 All three are parse errors: stderr, exit code 1, byte-identical in all three implementations.
+
+---
+
+## 22. The protocol server
+
+Added 2026-08-14 at the **protocol round** (§18.11). Sections in this document are never
+renumbered, so §22 sits physically after §21. It is normative exactly as §§1-17 are.
+
+The framework exposes every tool-eligible command over the Model Context Protocol under the
+reserved `--mcp` flag. Until this round the server pinned the protocol's **first** revision
+(`2024-11-05`) -- two revisions before the one that introduced a confirmation mechanism at all --
+so the one channel that could have asked a human had no way to ask.
+
+### 22.1 The two eras
+
+| Era | Revision | Selected by | Shape |
+|-----|----------|-------------|-------|
+| **Modern** | `2026-07-28` | a request carrying `_meta['io.modelcontextprotocol/protocolVersion']` | stateless: every request declares its version and the client's capabilities; every result carries a `resultType`; `server/discover` replaces the handshake |
+| **Legacy** | `2024-11-05` | an `initialize` request, scoped to the process | the handshake revision, byte-unchanged from what this server has always spoken |
+
+A request that carries neither the modern metadata nor a preceding `initialize` is **malformed**
+and is refused with `-32602`; nothing is inferred from its shape. The legacy latch is the only
+piece of connection state the server keeps, and the modern era never consults it -- which is what
+the modern revision's own dual-era rule requires of a server serving both.
+
+The legacy era is untouched by this round on purpose. It is where §11.6's server-initiated
+delivery will live; moving it now would have meant designing that branch here.
+
+### 22.2 Per-request metadata
+
+A modern request's `_meta` block is validated before anything else looks at it:
+
+| Key | Required | Rule |
+|-----|----------|------|
+| `io.modelcontextprotocol/protocolVersion` | yes | a string; selects the era, and a value other than `2026-07-28` is refused with `-32022` |
+| `io.modelcontextprotocol/clientCapabilities` | yes | an object; what the server may rely on the client to do |
+| `io.modelcontextprotocol/clientInfo` | no | an object when present; the client's self-report |
+| `io.modelcontextprotocol/logLevel`, `io.modelcontextprotocol/subscriptionId` | no | recognized and ignored |
+| `progressToken`, `traceparent`, `tracestate`, `baggage` | no | recognized and ignored |
+
+Every key is additionally checked against the protocol's key-name grammar: an optional
+dot-separated prefix, a slash, and a name that (unless empty) begins and ends alphanumeric.
+**A key under a prefix the protocol reserves for itself** -- any prefix whose second label is
+`modelcontextprotocol` or `mcp` -- **that this revision does not define is refused, not ignored.**
+A vendor-prefixed key (`com.example.mcp/thing`) is carried without complaint. The refusals:
+
+```
+missing required request metadata: _meta['io.modelcontextprotocol/protocolVersion']
+missing required request metadata: _meta['io.modelcontextprotocol/clientCapabilities']
+parameter '_meta' must be an object
+_meta['io.modelcontextprotocol/protocolVersion'] must be a string
+_meta['io.modelcontextprotocol/clientCapabilities'] must be an object
+_meta['io.modelcontextprotocol/clientInfo'] must be an object
+invalid _meta key name: '<key>'
+unrecognized reserved _meta key: '<key>'
+```
+
+All are `-32602`, byte-identical in all three implementations. Go sorts the key set before
+validating, so a request carrying more than one offending key is refused deterministically rather
+than by map-iteration order.
+
+### 22.3 Discovery, result types, error codes and the declared feature
+
+**`server/discover`** is mandatory in the modern revision and is what replaces the handshake:
+
+```json
+{"resultType":"complete",
+ "supportedVersions":["2026-07-28"],
+ "capabilities":{"tools":{},"extensions":{"dev.smmh.strictcli/consequential-confirmation":{}}},
+ "instructions":"<the app's declared help>",
+ "ttlMs":3600000,"cacheScope":"public",
+ "_meta":{"io.modelcontextprotocol/serverInfo":{"name":"<app>","version":"<version>"}}}
+```
+
+- **`resultType`** is on every modern result: `"complete"` for a finished one, `"input_required"`
+  for the interim one of §22.5. Legacy results carry none, exactly as they never did.
+- **The server identity** rides every modern result's own `_meta`, which is where the handshake's
+  `serverInfo` went.
+- **Cacheability.** `tools/list` and `server/discover` carry `ttlMs: 3600000` and
+  `cacheScope: "public"`. The tool list is derived from the app's static command registration, so
+  it cannot vary per client and cannot change while the process runs.
+- **The declared feature** is `dev.smmh.strictcli/consequential-confirmation`, an extension
+  identifier under the framework's own vendor prefix. It is a **NAME, not a version number**
+  (campaign decision 26, following decision 9's features-not-numbers reasoning): a new name
+  appears only if the confirmation dance changes incompatibly. A client learns that this server
+  asks before running a consequential tool without inferring it from a revision date.
+- **Error codes.** `-32022` (unsupported protocol version) is emitted with
+  `data: {"supported": ["2026-07-28"], "requested": "<what was asked for>"}`. `-32020`
+  (header mismatch) is HTTP-transport-only and unreachable here. `-32021` (missing required
+  client capability) is not emitted at this round -- see §22.6.
+
+### 22.4 The continuation primitive
+
+The modern revision is stateless: a server that needs more input answers with what it needs and
+whatever it must remember, and the client echoes that back on a retry which is otherwise a fresh,
+independent request. **The state therefore travels through the client, which makes it
+attacker-controlled input rather than server memory**, and the protocol requires it be treated
+as such.
+
+The blob is `<payload>.<mac>`, both unpadded base64url:
+
+| Field | Meaning |
+|-------|---------|
+| `v` | the payload format, `1` |
+| `jti` | 128 random bits; what makes single use enforceable |
+| `prin` | the principal it was issued to (§22.4a) |
+| `exp` | mint time + **300 seconds** |
+| `req` | a digest of the originating request |
+
+The MAC is **HMAC-SHA256** over the payload bytes under a **key minted for this process and never
+emitted**. A blob is therefore unforgeable without reading the process's memory, and worthless to
+any other process. There is no fixed key and no injectable clock anywhere in this design: the
+campaign's decision 7 rejected determinism injection precisely because a leaked fixed key makes
+the blob forgeable by anyone reading the published source.
+
+`req` is `SHA-256("tools/call\n<tool name>\n<canonical arguments>")`, where the canonical form
+sorts object keys, emits no insignificant whitespace, and renders floats in the framework's
+canonical form (§SCF) -- so the digest depends on what the caller said, never on how their encoder
+spelled it.
+
+**Verification is also consumption.** In order: shape, then MAC, then payload version, then
+expiry, then principal, then request digest, then the spent-id set; a blob that passes every check
+is recorded as spent, so a second presentation is refused even though it is still perfectly
+well-formed, unexpired and correctly bound. The refusals, all `-32602` and byte-identical:
+
+```
+requestState failed verification
+requestState has expired
+requestState was issued to a different client
+requestState does not match this request
+requestState has already been used
+```
+
+Spent ids are pruned once they are past their own expiry, so the set cannot grow without bound.
+
+#### 22.4a The principal, stated honestly
+
+On this transport there is no authenticated principal. The binding uses the client's self-reported
+`io.modelcontextprotocol/clientInfo` (`"<name>/<version>"`, or `"/"` when the fields are absent
+and `""` when the whole block is), and it is therefore a **consistency check, not authentication**:
+it stops a blob minted for one declared client being redeemed by another, and nothing more. What
+actually contains a stolen blob is the per-process key plus the five-minute expiry plus single
+use. This is stated here rather than implied because the protocol's own text says self-reported
+identity must not be relied on for security decisions, and this document should not be read as
+doing so.
+
+### 22.5 The confirmation round-trip
+
+A modern `tools/call` naming a `consequential` command, carrying no consent, from a client that
+declared it can render a form elicitation, is answered with:
+
+```json
+{"resultType":"input_required",
+ "inputRequests":{"consequential-confirmation":{
+   "method":"elicitation/create",
+   "params":{"mode":"form",
+             "message":"about to run consequential command '<path>'. Proceed?",
+             "requestedSchema":{"type":"object",
+               "properties":{"proceed":{"type":"boolean","title":"Proceed",
+                 "description":"Whether to run the consequential command."}},
+               "required":["proceed"]}}}},
+ "requestState":"<§22.4's blob>",
+ "_meta":{"io.modelcontextprotocol/serverInfo":{...}}}
+```
+
+The message is the terminal prompt's words (§12.6) minus its keystroke hint: **one vocabulary for
+one question, however it is delivered.**
+
+The retry echoes the state and carries the answer under the same key:
+
+| Answer | Outcome |
+|--------|---------|
+| `{"action":"accept","content":{"proceed":true}}` | the call proceeds with consent; `ctx.approve_consequential` reports true, exactly as §8.5 promises |
+| `{"action":"accept","content":{"proceed":false}}` | aborted -- the action names what the client did with the dialogue, the field is the answer to the question |
+| `{"action":"decline"}` / `{"action":"cancel"}` | aborted |
+| absent | the state is spent; the server asks again with a **fresh** state, which is what the protocol says to do rather than erroring |
+| anything else | `-32602 inputResponses['consequential-confirmation'] is not an elicitation result` |
+
+An abort is ordinary tool-result content: `isError: true` with the text `aborted`, which is
+§12.6's word for the same decision at a terminal.
+
+**`inputResponses` without `requestState` is `-32602`**
+(`parameter 'inputResponses' requires the requestState it was issued with`): an answer that cannot
+be verified is not an answer. A non-string `requestState` and a non-object `inputResponses` are
+`-32602` on the same grounds.
+
+Two things do **not** change. A `read_only` or plain `mutating` command is never asked about. A
+call that states consent (`approve_consequential: true`) proceeds without the round-trip -- it is
+a caller declaring it is proceeding without a human, which is what §8.5 made it.
+
+### 22.6 What this round deliberately leaves to the next
+
+- **A client that did not declare elicitation** gets §8.5's refusal, unchanged. The modern
+  revision's answer is `-32021` with `data.requiredCapabilities`, and that is the next round's,
+  together with the published protocol page that shows the dialogue.
+- **The legacy era** keeps the static consent param and no confirmation mechanism at all.
+- **Expiry has no conformance case.** Tampering, forgery, the two bindings and reuse are all
+  expressible over the wire; expiry is not, because reaching it would need either a five-minute
+  test or an injectable clock, and the clock was rejected (decision 7). It is covered by unit
+  tests in all three implementations, which drive the mint directly.
