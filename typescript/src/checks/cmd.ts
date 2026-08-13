@@ -182,7 +182,6 @@ async function checkHandler(
 	// Framework-delivered, not command flags (all three names are reserved).
 	const verbose = ctx.verbose;
 	const dryRun = ctx.dryRun;
-	const jsonOut = ctx.json;
 	// Treat empty strings as "not provided".
 	const tagRaw = typeof kwargs.tag === "string" ? kwargs.tag : "";
 	const nameRaw = typeof kwargs.name === "string" ? kwargs.name : "";
@@ -190,7 +189,7 @@ async function checkHandler(
 	const nameGlob = nameRaw !== "" ? nameRaw : undefined;
 
 	if (listMode) {
-		checkListMode(app.checks, jsonOut, ctx);
+		checkListMode(app.checks, ctx);
 		return 0;
 	}
 
@@ -231,15 +230,15 @@ async function checkHandler(
 		dryRun,
 	);
 
-	if (jsonOut) {
-		// The payload is NOT routed through ctx.info: machine output is
-		// structurally exempt from --quiet (contract §19.2).
-		ctx.payload(checkResultItems(results));
-	} else {
-		const output = formatCheckResults(results, verbose);
-		if (output !== "") {
-			ctx.info(output);
-		}
+	// The payload is supplied unconditionally and is NOT routed through
+	// ctx.info: the call is mode-independent (contract §19.4) and machine
+	// output is structurally exempt from --quiet (§19.2). The human rendering
+	// is unconditional too, and rides the envelope's diagnostics in machine
+	// mode (§19.1).
+	ctx.payload(checkResultItems(results));
+	const output = formatCheckResults(results, verbose);
+	if (output !== "") {
+		ctx.info(output);
 	}
 	if (dryRun) {
 		checkDryRunPlan(app.checks.defs, impureListed, order, ctx);
@@ -247,26 +246,23 @@ async function checkHandler(
 	return exitCode;
 }
 
-/** The --list mode: check listing in human or JSON format. */
-function checkListMode(
-	state: ChecksState,
-	jsonMode: boolean,
-	ctx: Context,
-): void {
+/**
+ * The --list mode. The payload is supplied unconditionally (contract §19.4)
+ * and the human table goes through the context writer, so machine mode
+ * carries it as one diagnostic instead of a second stdout document (§19.1).
+ */
+function checkListMode(state: ChecksState, ctx: Context): void {
 	const names = sortedCheckNames(state);
 	const sortedDefs = names.map((n) => state.defs.get(n) as CheckDef);
 
-	if (jsonMode) {
-		const items = sortedDefs.map((def) => ({
-			name: def.name,
-			tags: def.tags,
-			severity: def.severity,
-			// Scope is emitted only when non-empty (omitempty parity).
-			...(def.scope !== "" ? { scope: def.scope } : {}),
-		}));
-		ctx.payload(items);
-		return;
-	}
+	const items = sortedDefs.map((def) => ({
+		name: def.name,
+		tags: def.tags,
+		severity: def.severity,
+		// Scope is emitted only when non-empty (omitempty parity).
+		...(def.scope !== "" ? { scope: def.scope } : {}),
+	}));
+	ctx.payload(items);
 
 	if (sortedDefs.length === 0) {
 		ctx.info("No checks defined.");
