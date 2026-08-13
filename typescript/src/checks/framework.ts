@@ -157,9 +157,13 @@ function thrownMessage(err: unknown): string {
  */
 export function mintCheckAbort(name: string, err: unknown): CheckOutcome {
 	const text = checkAbortText(name, thrownTypeName(err), thrownMessage(err));
-	return new CheckOutcome(MINT_TOKEN, "found", text, [
-		{ severity: "error", text },
-	], []);
+	return new CheckOutcome(
+		MINT_TOKEN,
+		"found",
+		text,
+		[{ severity: "error", text }],
+		[],
+	);
 }
 
 /**
