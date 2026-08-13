@@ -44,5 +44,108 @@
       "exit_code": 0,
       "stdout_contains": "/"
     }
+  },
+  {
+    "name": "dump-schema: a declared payload schema is published verbatim",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "report",
+          "help": "produce a report",
+          "effect": "read_only",
+          "payload_schema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "counts": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "status": {
+                "enum": [
+                  "pass",
+                  "fail"
+                ]
+              },
+              "kind": {
+                "const": "report"
+              }
+            },
+            "required": [
+              "name",
+              "status"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "handler_prints": "reported"
+        },
+        {
+          "name": "plain",
+          "help": "declare nothing",
+          "effect": "read_only",
+          "handler_prints": "plain"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_keys": {
+        "report": {
+          "payload_schema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "counts": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "status": {
+                "enum": [
+                  "pass",
+                  "fail"
+                ]
+              },
+              "kind": {
+                "const": "report"
+              }
+            },
+            "required": [
+              "name",
+              "status"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "schema_command_absent_keys": {
+        "plain": [
+          "payload_schema"
+        ]
+      }
+    }
   }
 ]

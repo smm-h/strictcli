@@ -345,8 +345,15 @@ def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
     # command that declares no schema -- so the harness declares the permissive
     # literal for exactly those commands. The literal is identical in all three
     # harnesses, which is what keeps the schema dump in parity.
+    # A case may declare its own literal with "payload_schema", which is how
+    # the closed subset's enforcement becomes observable through the CLI: the
+    # schema dump publishes it verbatim and a payload is validated against it.
     _hr_kind = (cmd_def.get("handler_returns") or {}).get("kind")
-    if _hr_kind in ("data", "exit_data"):
+    if "payload_schema" in cmd_def:
+        lines.append(
+            f"{indent}payload_schema={cmd_def['payload_schema']!r},"
+        )
+    elif _hr_kind in ("data", "exit_data"):
         lines.append(f"{indent}payload_schema={{}},")
     if cmd_def.get("grants"):
         exprs = [

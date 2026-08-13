@@ -154,6 +154,7 @@ _MAIN_STUBS = {
     "check_check_runner_functions": lambda *_a: [],
     "check_check_runner_shared_types": lambda *_a: [],
     "check_outcome_api": lambda *_a: [],
+    "check_payload_schema_builders": lambda *_a: [],
 }
 
 

@@ -477,5 +477,46 @@
         "\"source\":\"default\""
       ]
     }
+  },
+  {
+    "name": "machine_mode: a payload matching its declared schema rides the envelope",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "payload_schema": {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "ok"
+            ],
+            "additionalProperties": false
+          },
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          }
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"ok\":true},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
   }
 ]

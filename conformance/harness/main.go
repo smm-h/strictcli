@@ -846,7 +846,12 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 	// a command that declares no schema -- so the harness declares the
 	// permissive literal for exactly those commands. The literal is identical
 	// in all three harnesses, which is what keeps the schema dump in parity.
-	if hr, ok := cmdDef["handler_returns"].(map[string]interface{}); ok {
+	// A case may declare its own literal with "payload_schema", which is how
+	// the closed subset's enforcement becomes observable through the CLI: the
+	// schema dump publishes it verbatim and a payload is validated against it.
+	if declared, ok := cmdDef["payload_schema"].(map[string]interface{}); ok {
+		opts = append(opts, strictcli.PayloadSchema(declared))
+	} else if hr, ok := cmdDef["handler_returns"].(map[string]interface{}); ok {
 		if k, _ := hr["kind"].(string); k == "data" || k == "exit_data" {
 			opts = append(opts, strictcli.PayloadSchema(map[string]interface{}{}))
 		}

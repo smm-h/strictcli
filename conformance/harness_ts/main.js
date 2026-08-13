@@ -753,6 +753,13 @@ function spliceDryRun(spec, cmdDef) {
  * parity.
  */
 function splicePayloadSchema(spec, cmdDef) {
+	// A case may declare its own literal with "payload_schema", which is how
+	// the closed subset's enforcement becomes observable through the CLI: the
+	// schema dump publishes it verbatim and a payload is validated against it.
+	if (cmdDef.payload_schema !== undefined) {
+		spec.payloadSchema = cmdDef.payload_schema;
+		return;
+	}
 	const kind = cmdDef.handler_returns?.kind;
 	if (kind === "data" || kind === "exit_data") {
 		spec.payloadSchema = {};
