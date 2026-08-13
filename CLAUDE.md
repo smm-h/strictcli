@@ -99,7 +99,7 @@ Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface
 
 ### Conformance (`conformance/`)
 
-JSON test cases in `cases/` (57 files) define app structure + argv + expected output. `run.py` drives targets differently:
+JSON test cases in `cases/` (77 files) define app structure + argv + expected output. `run.py` drives targets differently:
 
 - **Python**: generates a reference script via `ref_python.py` and executes it with the case argv.
 - **Go**: builds a single persistent harness binary (`conformance/harness/`, built once per run, cleaned up afterward) that interprets the app definition at runtime. `run.py` writes the app definition JSON to a temp file and passes its path via the `CONFORMANCE_APP_DEF` env var. There is NO per-app-hash Go binary cache.
