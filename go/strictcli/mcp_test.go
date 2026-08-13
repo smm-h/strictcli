@@ -147,8 +147,20 @@ func TestMCPInitialize(t *testing.T) {
 		t.Fatalf("expected result object, got %T", resp["result"])
 	}
 
-	if result["protocolVersion"] != "2024-11-05" {
-		t.Errorf("expected protocolVersion '2024-11-05', got %v", result["protocolVersion"])
+	if result["protocolVersion"] != "2025-11-25" {
+		t.Errorf("expected protocolVersion '2025-11-25', got %v", result["protocolVersion"])
+	}
+
+	capabilities, ok := result["capabilities"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected capabilities object, got %T", result["capabilities"])
+	}
+	experimental, ok := capabilities["experimental"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected experimental capabilities, got %v", capabilities)
+	}
+	if _, ok := experimental[mcpFeatureConsequentialConfirmation].(map[string]interface{}); !ok {
+		t.Errorf("the handshake must declare the feature by name, got %v", experimental)
 	}
 
 	serverInfo, ok := result["serverInfo"].(map[string]interface{})
@@ -162,10 +174,6 @@ func TestMCPInitialize(t *testing.T) {
 		t.Errorf("expected version '1.0.0', got %v", serverInfo["version"])
 	}
 
-	capabilities, ok := result["capabilities"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected capabilities object, got %T", result["capabilities"])
-	}
 	if _, ok := capabilities["tools"]; !ok {
 		t.Error("expected 'tools' in capabilities")
 	}
@@ -1328,9 +1336,31 @@ type mcpSession struct {
 // sessionStep builds one request, given the replies seen so far.
 type sessionStep func(seen []map[string]interface{}) map[string]interface{}
 
+// scriptStep is one line to send, and whether a reply is expected before the
+// next one goes out. The legacy exchange holds a request open while it waits
+// for an answer, so some lines have to be sent without reading first.
+type scriptStep struct {
+	build sessionStep
+	reply bool
+}
+
+// sends builds a step whose reply comes later, if at all.
+func sends(build sessionStep) scriptStep { return scriptStep{build: build, reply: false} }
+
 // run drives the steps through one server, feeding each request only after the
 // previous reply has been parsed.
 func (s *mcpSession) run(t *testing.T, steps ...sessionStep) []map[string]interface{} {
+	t.Helper()
+	script := make([]scriptStep, 0, len(steps))
+	for _, step := range steps {
+		script = append(script, scriptStep{build: step, reply: true})
+	}
+	return s.runScript(t, script...)
+}
+
+// runScript is run with per-step control over whether a reply is awaited; every
+// line still unread when the script ends is drained before the server exits.
+func (s *mcpSession) runScript(t *testing.T, steps ...scriptStep) []map[string]interface{} {
 	t.Helper()
 	inReader, inWriter := io.Pipe()
 	outReader, outWriter := io.Pipe()
@@ -1342,8 +1372,15 @@ func (s *mcpSession) run(t *testing.T, steps ...sessionStep) []map[string]interf
 	}()
 
 	replies := bufio.NewReader(outReader)
+	record := func(text string) {
+		var resp map[string]interface{}
+		if err := json.Unmarshal([]byte(text), &resp); err != nil {
+			t.Fatalf("unmarshal reply: %v (raw %s)", err, text)
+		}
+		s.responses = append(s.responses, resp)
+	}
 	for _, step := range steps {
-		request := step(s.responses)
+		request := step.build(s.responses)
 		line, err := json.Marshal(request)
 		if err != nil {
 			t.Fatalf("marshal: %v", err)
@@ -1351,17 +1388,28 @@ func (s *mcpSession) run(t *testing.T, steps ...sessionStep) []map[string]interf
 		if _, err := inWriter.Write(append(line, '\n')); err != nil {
 			t.Fatalf("write: %v", err)
 		}
+		if !step.reply {
+			continue
+		}
 		text, err := replies.ReadString('\n')
 		if err != nil {
 			t.Fatalf("read reply: %v", err)
 		}
-		var resp map[string]interface{}
-		if err := json.Unmarshal([]byte(text), &resp); err != nil {
-			t.Fatalf("unmarshal reply: %v (raw %s)", err, text)
-		}
-		s.responses = append(s.responses, resp)
+		record(text)
 	}
 	inWriter.Close()
+	// Drain whatever the server still has to say. io.Pipe writes block until
+	// they are read, so this has to happen before waiting for the server to
+	// exit -- and it is where a reply held during an exchange shows up.
+	for {
+		text, err := replies.ReadString('\n')
+		if strings.TrimSpace(text) != "" {
+			record(text)
+		}
+		if err != nil {
+			break
+		}
+	}
 	<-done
 	outReader.Close()
 	return s.responses
@@ -1582,6 +1630,270 @@ func TestMCPStatedConsentNeedsNoDeclaredCapability(t *testing.T) {
 	}
 	if _, isError := result["isError"]; isError {
 		t.Errorf("expected the call to proceed, got %v", result)
+	}
+}
+
+// --- The legacy era's confirmation (contract §22.7) ---
+
+// handshakeRequest is the legacy opener: in that era the handshake IS the
+// client's declaration.
+func handshakeRequest(elicitation bool) map[string]interface{} {
+	caps := map[string]interface{}{}
+	if elicitation {
+		caps["elicitation"] = map[string]interface{}{"form": map[string]interface{}{}}
+	}
+	return map[string]interface{}{
+		"jsonrpc": "2.0", "id": 1, "method": "initialize",
+		"params": map[string]interface{}{
+			"capabilities": caps,
+			"clientInfo":   map[string]interface{}{"name": "cli", "version": "1.0.0"},
+		},
+	}
+}
+
+// legacyCall is a legacy tools/call: no per-request metadata, because that era
+// has none.
+func legacyCall(id interface{}, toolName string, params map[string]interface{}) map[string]interface{} {
+	if params == nil {
+		params = map[string]interface{}{}
+	}
+	params["name"] = toolName
+	if _, ok := params["arguments"]; !ok {
+		params["arguments"] = map[string]interface{}{}
+	}
+	return map[string]interface{}{
+		"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": params,
+	}
+}
+
+// answerElicitation echoes the id of the elicitation the server just sent.
+func answerElicitation(t *testing.T, seen []map[string]interface{}, result interface{}) map[string]interface{} {
+	t.Helper()
+	ask := seen[len(seen)-1]
+	return map[string]interface{}{
+		"jsonrpc": "2.0", "id": ask["id"], "result": result,
+	}
+}
+
+func TestMCPLegacyConsequentialCallIsAskedOverAServerRequest(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	responses := session.run(t,
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return handshakeRequest(true)
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return legacyCall(2, "release", nil)
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return answerElicitation(t, seen, map[string]interface{}{
+				"action": "accept", "content": map[string]interface{}{"proceed": true},
+			})
+		},
+	)
+	ask := responses[1]
+	if ask["method"] != "elicitation/create" {
+		t.Fatalf("expected a server-initiated elicitation, got %v", ask)
+	}
+	params, _ := ask["params"].(map[string]interface{})
+	if params["mode"] != "form" {
+		t.Errorf("mode: got %v", params["mode"])
+	}
+	want := "about to run consequential command 'release'. Proceed?"
+	if params["message"] != want {
+		t.Errorf("message: got %q, want %q", params["message"], want)
+	}
+	// The correlation id IS the continuation blob: one mint-and-verify path,
+	// two delivery vehicles.
+	id, ok := ask["id"].(string)
+	if !ok || !strings.Contains(id, ".") {
+		t.Errorf("the elicitation id must be the continuation blob, got %v", ask["id"])
+	}
+	result := mcpResultOf(t, responses[2])
+	if _, isError := result["isError"]; isError {
+		t.Errorf("expected the call to proceed, got %v", result)
+	}
+	if _, ok := result["resultType"]; ok {
+		t.Errorf("a legacy result carries no resultType: %v", result)
+	}
+}
+
+func TestMCPLegacyAnythingButAnAcceptanceAborts(t *testing.T) {
+	answers := map[string]interface{}{
+		"decline":    map[string]interface{}{"action": "decline"},
+		"cancel":     map[string]interface{}{"action": "cancel"},
+		"proceedNo":  map[string]interface{}{"action": "accept", "content": map[string]interface{}{"proceed": false}},
+		"noContent":  map[string]interface{}{"action": "accept"},
+		"notAResult": "not an elicitation result",
+	}
+	for name, answer := range answers {
+		t.Run(name, func(t *testing.T) {
+			session := &mcpSession{app: confirmingApp()}
+			responses := session.run(t,
+				func(seen []map[string]interface{}) map[string]interface{} {
+					return handshakeRequest(true)
+				},
+				func(seen []map[string]interface{}) map[string]interface{} {
+					return legacyCall(2, "release", nil)
+				},
+				func(seen []map[string]interface{}) map[string]interface{} {
+					return answerElicitation(t, seen, answer)
+				},
+			)
+			result := mcpResultOf(t, responses[2])
+			if result["isError"] != true {
+				t.Fatalf("expected an aborted result, got %v", result)
+			}
+			content, _ := result["content"].([]interface{})
+			first, _ := content[0].(map[string]interface{})
+			if first["text"] != errConfirmDeclined {
+				t.Errorf("text: got %v", first["text"])
+			}
+		})
+	}
+}
+
+func TestMCPLegacyErrorResponseAborts(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	responses := session.run(t,
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return handshakeRequest(true)
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return legacyCall(2, "release", nil)
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			ask := seen[len(seen)-1]
+			return map[string]interface{}{
+				"jsonrpc": "2.0", "id": ask["id"],
+				"error": map[string]interface{}{"code": -32601, "message": "Method not found"},
+			}
+		},
+	)
+	if mcpResultOf(t, responses[2])["isError"] != true {
+		t.Errorf("expected an aborted result, got %v", responses[2])
+	}
+}
+
+func TestMCPLegacyAnswerUnderAnUnmintedIDConfirmsNothing(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	responses := session.runScript(t,
+		scriptStep{reply: true, build: func(seen []map[string]interface{}) map[string]interface{} {
+			return handshakeRequest(true)
+		}},
+		scriptStep{reply: true, build: func(seen []map[string]interface{}) map[string]interface{} {
+			return legacyCall(2, "release", nil)
+		}},
+		sends(func(seen []map[string]interface{}) map[string]interface{} {
+			return map[string]interface{}{
+				"jsonrpc": "2.0", "id": "not-the-blob",
+				"result": map[string]interface{}{
+					"action": "accept", "content": map[string]interface{}{"proceed": true},
+				},
+			}
+		}),
+	)
+	// The stray response is discarded; the stream then ends without an answer,
+	// which aborts.
+	result := mcpResultOf(t, responses[2])
+	if result["isError"] != true {
+		t.Fatalf("expected an aborted result, got %v", result)
+	}
+}
+
+func TestMCPLegacyClientThatCannotBeAskedGetsTheSeamsRefusal(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	responses := session.run(t,
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return handshakeRequest(false)
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return legacyCall(2, "release", nil)
+		},
+	)
+	result := mcpResultOf(t, responses[1])
+	if result["isError"] != true {
+		t.Fatalf("expected the refusal, got %v", result)
+	}
+	content, _ := result["content"].([]interface{})
+	first, _ := content[0].(map[string]interface{})
+	want := errCallConsequentialUnconsented("release")
+	if first["text"] != want {
+		t.Errorf("text: got %q, want %q", first["text"], want)
+	}
+}
+
+func TestMCPLegacyReadOnlyAndConsentedCallsAreNeverAsked(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	responses := session.run(t,
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return handshakeRequest(true)
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return legacyCall(2, "look", nil)
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return legacyCall(3, "release", map[string]interface{}{
+				"approve_consequential": true,
+			})
+		},
+	)
+	for _, resp := range responses[1:] {
+		result := mcpResultOf(t, resp)
+		if _, isError := result["isError"]; isError {
+			t.Errorf("expected the call to proceed, got %v", result)
+		}
+	}
+}
+
+func TestMCPLegacyTrafficArrivingMidExchangeIsHeldNotDropped(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	responses := session.runScript(t,
+		scriptStep{reply: true, build: func(seen []map[string]interface{}) map[string]interface{} {
+			return handshakeRequest(true)
+		}},
+		scriptStep{reply: true, build: func(seen []map[string]interface{}) map[string]interface{} {
+			return legacyCall(2, "release", nil)
+		}},
+		sends(func(seen []map[string]interface{}) map[string]interface{} {
+			// Sent while the server is waiting for the answer.
+			return map[string]interface{}{"jsonrpc": "2.0", "id": 3, "method": "tools/list"}
+		}),
+		sends(func(seen []map[string]interface{}) map[string]interface{} {
+			ask := seen[1]
+			return map[string]interface{}{
+				"jsonrpc": "2.0", "id": ask["id"],
+				"result": map[string]interface{}{
+					"action": "accept", "content": map[string]interface{}{"proceed": true},
+				},
+			}
+		}),
+	)
+	if responses[1]["method"] != "elicitation/create" {
+		t.Fatalf("expected the elicitation second, got %v", responses[1])
+	}
+	if responses[2]["id"] != float64(2) {
+		t.Errorf("expected the tool result third, got %v", responses[2])
+	}
+	// Served after the call it interrupted, never dropped.
+	if responses[3]["id"] != float64(3) {
+		t.Errorf("expected the held tools/list fourth, got %v", responses[3])
+	}
+}
+
+func TestMCPModernCallIsStillAskedTheModernWayAfterAHandshake(t *testing.T) {
+	session := &mcpSession{app: confirmingApp()}
+	responses := session.run(t,
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return handshakeRequest(true)
+		},
+		func(seen []map[string]interface{}) map[string]interface{} {
+			return callRequest(2, map[string]interface{}{
+				"name": "release", "arguments": map[string]interface{}{},
+			})
+		},
+	)
+	if mcpResultOf(t, responses[1])["resultType"] != "input_required" {
+		t.Errorf("expected the modern round-trip, got %v", responses[1])
 	}
 }
 

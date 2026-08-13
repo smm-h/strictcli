@@ -76,15 +76,18 @@ func mcpRequiredElicitationCapabilities() map[string]interface{} {
 //	supported versions, the capabilities and the server identity that the
 //	handshake used to carry.
 //
-//	LEGACY (2024-11-05) -- the `initialize` handshake. It is selected by an
-//	`initialize` request and scoped to this process, which is exactly the
-//	dual-era rule the modern revision specifies for a server serving both.
+//	LEGACY (2025-11-25) -- the `initialize` handshake, the newest of the
+//	handshake-based revisions. It is selected by an `initialize` request and
+//	scoped to this process, which is exactly the dual-era rule the modern
+//	revision specifies for a server serving both. That era has no
+//	input-required result, so the same confirmation is delivered as a
+//	server-initiated `elicitation/create` request (contract §22.7).
 //
 // A request that carries neither the modern metadata nor a preceding
 // `initialize` is malformed and is refused. Nothing is inferred.
 const (
 	mcpProtocolVersion       = "2026-07-28"
-	mcpLegacyProtocolVersion = "2024-11-05"
+	mcpLegacyProtocolVersion = "2025-11-25"
 )
 
 // The reserved `_meta` keys of the modern revision.
@@ -238,58 +241,161 @@ func (a *App) ServeMCP() {
 	a.serveMCPIO(os.Stdin, os.Stdout)
 }
 
-// serveMCPIO is the internal implementation of ServeMCP that accepts custom
-// reader/writer for testability.
-func (a *App) serveMCPIO(in io.Reader, out io.Writer) {
+// mcpLegacySession is what the legacy handshake establishes, scoped to this
+// process. In that era the session IS the client's declaration, exactly as the
+// per-request `_meta` block is in the modern one: the capabilities and the
+// identity arrive once, at `initialize`, and every later request is read
+// against them.
+type mcpLegacySession struct {
+	active       bool
+	capabilities map[string]interface{}
+	clientInfo   map[string]interface{}
+}
+
+func (s *mcpLegacySession) open(params map[string]interface{}) {
+	s.active = true
+	s.capabilities, _ = params["capabilities"].(map[string]interface{})
+	s.clientInfo, _ = params["clientInfo"].(map[string]interface{})
+}
+
+// mcpChannel is the line channel to the client, in both directions.
+//
+// The legacy confirmation is a request the SERVER sends, so the loop has to be
+// able to write one and read its answer in the middle of serving a call.
+// Anything else that arrives while an answer is awaited is held here and served
+// afterwards -- the loop stays one request at a time, and no client line is
+// dropped.
+type mcpChannel struct {
+	scanner *bufio.Scanner
+	out     io.Writer
+	held    []string
+}
+
+func newMCPChannel(in io.Reader, out io.Writer) *mcpChannel {
 	scanner := bufio.NewScanner(in)
 	// Increase buffer size for large JSON objects
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	return &mcpChannel{scanner: scanner, out: out}
+}
+
+// nextLine returns the next line to serve: what was held first, then the stream.
+func (c *mcpChannel) nextLine() (string, bool) {
+	if len(c.held) > 0 {
+		line := c.held[0]
+		c.held = c.held[1:]
+		return line, true
+	}
+	if c.scanner.Scan() {
+		return c.scanner.Text(), true
+	}
+	return "", false
+}
+
+// write emits one server-to-client message as a single line.
+func (c *mcpChannel) write(message interface{}) {
+	data, err := json.Marshal(message)
+	if err != nil {
+		fmt.Fprintf(c.out, `{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"marshal error"}}`+"\n")
+		return
+	}
+	fmt.Fprintf(c.out, "%s\n", data)
+}
+
+// awaitResponse reads until the response to reqID arrives, or the stream ends.
+// A response carrying another id answers nothing this server sent and is
+// discarded; anything else is held for the main loop.
+func (c *mcpChannel) awaitResponse(reqID string) map[string]interface{} {
+	for c.scanner.Scan() {
+		line := c.scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var msg map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &msg); err != nil || msg == nil {
+			c.held = append(c.held, line)
+			continue
+		}
+		_, hasResult := msg["result"]
+		_, hasError := msg["error"]
+		if hasResult || hasError {
+			if id, ok := msg["id"].(string); ok && id == reqID {
+				return msg
+			}
+			continue
+		}
+		c.held = append(c.held, line)
+	}
+	return nil
+}
+
+// serveMCPIO is the internal implementation of ServeMCP that accepts custom
+// reader/writer for testability.
+func (a *App) serveMCPIO(in io.Reader, out io.Writer) {
+	channel := newMCPChannel(in, out)
 
 	// The one piece of connection state a dual-era server is allowed: an
-	// `initialize` request selects legacy semantics for this process. Modern
-	// requests carry everything they need and never consult it.
-	legacyEra := false
+	// `initialize` request selects legacy semantics for this process and
+	// carries that client's declaration. Modern requests carry everything they
+	// need and never consult it.
+	session := &mcpLegacySession{}
 	// The continuation minting key and the spent-id set. Both are per process:
 	// a blob is unforgeable outside this process and unusable twice inside it.
 	continuation := newMCPContinuation()
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for {
+		line, ok := channel.nextLine()
+		if !ok {
+			return
+		}
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
+		var raw map[string]interface{}
 		var req mcpRequest
-		if err := json.Unmarshal([]byte(line), &req); err != nil {
+		if err := json.Unmarshal([]byte(line), &raw); err != nil || raw == nil {
 			// Invalid JSON -- send parse error if we can extract an ID
-			resp := mcpResponse{
+			channel.write(mcpResponse{
 				Jsonrpc: "2.0",
 				ID:      nil,
 				Error: &mcpError{
 					Code:    -32700,
 					Message: "Parse error",
 				},
-			}
-			writeMCPResponse(out, resp)
+			})
+			continue
+		}
+		if err := json.Unmarshal([]byte(line), &req); err != nil {
+			channel.write(mcpResponse{
+				Jsonrpc: "2.0",
+				ID:      nil,
+				Error:   &mcpError{Code: -32700, Message: "Parse error"},
+			})
 			continue
 		}
 
-		// Notifications have no ID and expect no response
-		if req.ID == nil {
+		// Notifications have no ID and expect no response. Neither does a
+		// response the client sent when this server asked for none.
+		_, hasResult := raw["result"]
+		_, hasError := raw["error"]
+		if req.ID == nil || hasResult || hasError {
 			// notifications/initialized and any other notification: silently ignore
 			continue
 		}
 
-		resp := a.handleMCPRequest(req, &legacyEra, continuation)
-		writeMCPResponse(out, resp)
+		channel.write(a.handleMCPRequest(req, session, continuation, channel))
 	}
 }
 
 // handleMCPRequest routes one request to its era and dispatches it there.
-func (a *App) handleMCPRequest(req mcpRequest, legacyEra *bool, continuation *mcpContinuation) mcpResponse {
+func (a *App) handleMCPRequest(
+	req mcpRequest,
+	session *mcpLegacySession,
+	continuation *mcpContinuation,
+	channel *mcpChannel,
+) mcpResponse {
 	if req.Method == "initialize" {
-		*legacyEra = true
-		return a.handleMCPInitialize(req)
+		return a.handleMCPInitialize(req, session)
 	}
 
 	metaVal, present := req.Params["_meta"]
@@ -300,8 +406,8 @@ func (a *App) handleMCPRequest(req mcpRequest, legacyEra *bool, continuation *mc
 			"parameter '_meta' must be an object", nil)
 	case isObject && hasKey(meta, mcpMetaProtocolVersion):
 		return a.dispatchMCPModern(req, meta, continuation)
-	case *legacyEra:
-		return a.dispatchMCPLegacy(req)
+	case session.active:
+		return a.dispatchMCPLegacy(req, session, continuation, channel)
 	default:
 		return mcpErrorResponse(req.ID, mcpErrInvalidParams,
 			fmt.Sprintf("missing required request metadata: _meta['%s']", mcpMetaProtocolVersion), nil)
@@ -335,21 +441,26 @@ func (a *App) dispatchMCPModern(req mcpRequest, meta map[string]interface{}, con
 	case "tools/list":
 		return a.handleMCPToolsList(req, true)
 	case "tools/call":
-		return a.handleMCPToolsCall(req, true, meta, continuation)
+		return a.handleMCPToolsCall(req, true, meta, continuation, nil, nil)
 	default:
 		return mcpErrorResponse(req.ID, mcpErrMethodNotFound,
 			fmt.Sprintf("Method not found: %s", req.Method), nil)
 	}
 }
 
-// dispatchMCPLegacy dispatches one legacy-era request, unchanged from the
-// handshake revision.
-func (a *App) dispatchMCPLegacy(req mcpRequest) mcpResponse {
+// dispatchMCPLegacy dispatches one legacy-era request, in that revision's own
+// shapes.
+func (a *App) dispatchMCPLegacy(
+	req mcpRequest,
+	session *mcpLegacySession,
+	continuation *mcpContinuation,
+	channel *mcpChannel,
+) mcpResponse {
 	switch req.Method {
 	case "tools/list":
 		return a.handleMCPToolsList(req, false)
 	case "tools/call":
-		return a.handleMCPToolsCall(req, false, nil, nil)
+		return a.handleMCPToolsCallLegacy(req, session, continuation, channel)
 	default:
 		return mcpErrorResponse(req.ID, mcpErrMethodNotFound,
 			fmt.Sprintf("Method not found: %s", req.Method), nil)
@@ -360,8 +471,14 @@ func (a *App) dispatchMCPLegacy(req mcpRequest) mcpResponse {
 //
 // The modern revision has no handshake; this method is what a legacy client
 // opens with, and answering it is what puts this process into legacy semantics
-// for every later request that carries no modern metadata.
-func (a *App) handleMCPInitialize(req mcpRequest) mcpResponse {
+// for every later request that carries no modern metadata. This server speaks
+// one legacy revision, so it always answers with that one -- the negotiation
+// rule says to answer with the latest version supported.
+//
+// The declared feature is advertised here too, under the key that revision
+// gives a non-standard server capability: one name, two advertisements.
+func (a *App) handleMCPInitialize(req mcpRequest, session *mcpLegacySession) mcpResponse {
+	session.open(req.Params)
 	return mcpResponse{
 		Jsonrpc: "2.0",
 		ID:      req.ID,
@@ -369,6 +486,9 @@ func (a *App) handleMCPInitialize(req mcpRequest) mcpResponse {
 			"protocolVersion": mcpLegacyProtocolVersion,
 			"capabilities": map[string]interface{}{
 				"tools": map[string]interface{}{},
+				"experimental": map[string]interface{}{
+					mcpFeatureConsequentialConfirmation: map[string]interface{}{},
+				},
 			},
 			"serverInfo": map[string]interface{}{
 				"name":    a.Name,
@@ -504,8 +624,26 @@ func (a *App) mcpToolResult(reqID interface{}, text string, modern, isError bool
 	return a.mcpCompleteResult(reqID, body)
 }
 
+// handleMCPToolsCallLegacy serves a legacy-era call, which may have to ask the
+// client to confirm before it runs (§22.7).
+func (a *App) handleMCPToolsCallLegacy(
+	req mcpRequest,
+	session *mcpLegacySession,
+	continuation *mcpContinuation,
+	channel *mcpChannel,
+) mcpResponse {
+	return a.handleMCPToolsCall(req, false, nil, continuation, session, channel)
+}
+
 // handleMCPToolsCall validates params, calls the command, and returns the result.
-func (a *App) handleMCPToolsCall(req mcpRequest, modern bool, meta map[string]interface{}, continuation *mcpContinuation) mcpResponse {
+func (a *App) handleMCPToolsCall(
+	req mcpRequest,
+	modern bool,
+	meta map[string]interface{},
+	continuation *mcpContinuation,
+	session *mcpLegacySession,
+	channel *mcpChannel,
+) mcpResponse {
 	params := req.Params
 
 	// Extract tool name
@@ -580,6 +718,13 @@ func (a *App) handleMCPToolsCall(req mcpRequest, modern bool, meta map[string]in
 			return *resp
 		}
 		consented = granted
+	} else if !consented && session != nil && continuation != nil && channel != nil {
+		decided, granted := a.mcpLegacyConfirmation(
+			commandPath, callArgs, session, continuation, channel)
+		if decided && !granted {
+			return a.mcpToolResult(req.ID, errConfirmDeclined, false, true)
+		}
+		consented = granted
 	}
 
 	var callOpts []CallOption
@@ -601,17 +746,6 @@ func (a *App) handleMCPToolsCall(req mcpRequest, modern bool, meta map[string]in
 	}
 
 	return a.mcpToolResult(req.ID, string(resultJSON), modern, false)
-}
-
-// writeMCPResponse marshals and writes a JSON-RPC response as a single line.
-func writeMCPResponse(out io.Writer, resp mcpResponse) {
-	data, err := json.Marshal(resp)
-	if err != nil {
-		// Last resort: write a minimal error
-		fmt.Fprintf(out, `{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"marshal error"}}`+"\n")
-		return
-	}
-	fmt.Fprintf(out, "%s\n", data)
 }
 
 // --- The continuation primitive (contract §22.4) ----------------------------
@@ -827,7 +961,13 @@ func mcpRequestDigest(method, toolName string, arguments map[string]interface{})
 // self-reported and the binding is a consistency check, not authentication.
 // What actually contains a stolen blob is the per-process key.
 func mcpPrincipal(meta map[string]interface{}) string {
-	info, ok := meta[mcpMetaClientInfo].(map[string]interface{})
+	return mcpPrincipalOf(meta[mcpMetaClientInfo])
+}
+
+// mcpPrincipalOf reads one self-reported client identity. Both eras carry the
+// same self-report -- per request, or once at the handshake.
+func mcpPrincipalOf(value interface{}) string {
+	info, ok := value.(map[string]interface{})
 	if !ok {
 		return ""
 	}
@@ -836,12 +976,19 @@ func mcpPrincipal(meta map[string]interface{}) string {
 	return name + "/" + version
 }
 
-// mcpClientDeclaresElicitation reports whether the client declared it can render
-// a form elicitation. An empty `elicitation` object means form mode, which the
-// protocol states for compatibility with clients written before the modes
-// existed.
+// mcpClientDeclaresElicitation reports whether a modern request's client
+// declared a form elicitation.
 func mcpClientDeclaresElicitation(meta map[string]interface{}) bool {
-	caps, ok := meta[mcpMetaClientCapabilities].(map[string]interface{})
+	return mcpDeclaresFormElicitation(meta[mcpMetaClientCapabilities])
+}
+
+// mcpDeclaresFormElicitation reports whether a capabilities block says the
+// client can render a form. An empty `elicitation` object means form mode, which
+// the protocol states for compatibility with clients written before the modes
+// existed. The two eras deliver their capabilities differently -- per request,
+// or once at the handshake -- and read them the same way.
+func mcpDeclaresFormElicitation(value interface{}) bool {
+	caps, ok := value.(map[string]interface{})
 	if !ok {
 		return false
 	}
@@ -1010,6 +1157,61 @@ func (a *App) mcpConfirmationExchange(
 	resp := mcpErrorResponse(req.ID, mcpErrMissingClientCapability, mcpMsgMissingElicitation,
 		map[string]interface{}{"requiredCapabilities": mcpRequiredElicitationCapabilities()})
 	return &resp, false
+}
+
+// mcpLegacyConfirmation asks a legacy client to confirm, over a request the
+// server sends. It reports whether there was anything to ask (decided) and, if
+// so, whether the client accepted.
+//
+// decided is false when the command is not consequential, or when this client
+// never declared it could render the form -- in which case the call reaches the
+// consent seam unconsented and gets its refusal.
+//
+// The continuation blob rides as the JSON-RPC request id: JSON-RPC obliges the
+// client to echo an id back verbatim, which is the same obligation the modern
+// era puts on `requestState`, so the correlation needs no second mechanism. It
+// is verified on return through the same path, and a matching id that fails any
+// of those checks confirms nothing.
+func (a *App) mcpLegacyConfirmation(
+	toolName string,
+	arguments map[string]interface{},
+	session *mcpLegacySession,
+	continuation *mcpContinuation,
+	channel *mcpChannel,
+) (decided, consented bool) {
+	cmd := a.lookupMCPCommand(toolName)
+	if cmd == nil || !cmd.Consequential {
+		return false, false
+	}
+	if !mcpDeclaresFormElicitation(session.capabilities) {
+		return false, false
+	}
+	principal := mcpPrincipalOf(session.clientInfo)
+	digest := mcpRequestDigest("tools/call", toolName, arguments)
+	now := time.Now().Unix()
+	state := continuation.mint(principal, digest, now)
+
+	ask := mcpConfirmationRequest(toolName)
+	ask["jsonrpc"] = "2.0"
+	ask["id"] = state
+	channel.write(ask)
+
+	answer := channel.awaitResponse(state)
+	if answer == nil {
+		// A stream that ended before an answer arrived. There is no re-ask in
+		// this era: the server is holding the request open, so a non-answer is
+		// a decision.
+		return true, false
+	}
+	result, ok := answer["result"]
+	if !ok {
+		// A JSON-RPC error response answers the question with a failure.
+		return true, false
+	}
+	if refusal := continuation.verify(state, principal, digest, time.Now().Unix()); refusal != "" {
+		return true, false
+	}
+	return true, mcpConfirmationVerdict(result) == "accept"
 }
 
 // lookupMCPCommand resolves a dotted tool name to its command, or nil.
