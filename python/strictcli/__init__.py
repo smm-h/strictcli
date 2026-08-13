@@ -6582,10 +6582,12 @@ class App:
             # names, so the check command declares none of them and reads their
             # values off the Context instead. The machine output is this
             # command's payload (contract §19.4), which is why --json is not a
-            # flag here any more.
+            # flag here any more. The handler never branches on ctx.json: the
+            # payload call is mode-independent and every human line goes
+            # through a context writer, so machine mode carries the text as
+            # diagnostics and stdout keeps exactly one document (§19.1, §19.4).
             verbose = ctx.verbose
             dry_run = ctx.dry_run
-            json = ctx.json
             # Materialize provider-sourced checks before any registry read
             # (covers the list, dry-run, and execution branches below).
             app_ref._materialize_check_providers()
@@ -6594,10 +6596,8 @@ class App:
             name_glob = name if name else None
 
             if list:
-                if json:
-                    ctx.payload(_check_list_items(app_ref._check_defs))
-                else:
-                    _check_list_mode(app_ref._check_defs)
+                ctx.payload(_check_list_items(app_ref._check_defs))
+                _check_list_mode(app_ref._check_defs, ctx)
                 return 0
 
             # Determine if any execution filter is active
@@ -6607,13 +6607,13 @@ class App:
                 # No flags: show help for the check command
                 check_cmd = app_ref._commands["check"]
                 prefix = app_ref._find_command_prefix(check_cmd)
-                print(_format_command_help(app_ref, check_cmd, prefix))
+                ctx.info(_format_command_help(app_ref, check_cmd, prefix))
                 return 0
 
             # Resolve filters and order
             selected = _filter_checks(app_ref._check_defs, tag_expr, name_glob, all)
             if not selected:
-                print("No checks matched the given filters.")
+                ctx.info("No checks matched the given filters.")
                 return 0
             order = _resolve_check_order(app_ref._check_defs, selected)
 
@@ -6623,10 +6623,9 @@ class App:
             # really run (that is what makes a rehearsal mean something) and the
             # impure remainder is rendered as the would-run plan.
             if app_ref._check_context_factory is None:
-                print(
+                ctx.error(
                     "error: no check context configured. "
-                    "Call app.set_check_context(factory) before running.",
-                    file=sys.stderr,
+                    "Call app.set_check_context(factory) before running."
                 )
                 return 1
             context = app_ref._wrap_check_context(app_ref._check_context_factory())
@@ -6639,14 +6638,14 @@ class App:
                 CheckRunResult(name=n, outcome=o, duration_ms=d)
                 for n, o, d in raw_results
             ]
-            if json:
-                ctx.payload(_check_result_items(results_wrapped))
-            else:
-                output = format_check_results(results_wrapped, verbose)
-                if output:
-                    print(output)
+            ctx.payload(_check_result_items(results_wrapped))
+            output = format_check_results(results_wrapped, verbose)
+            if output:
+                ctx.info(output)
             if dry_run:
-                _check_dry_run_mode(app_ref._check_defs, impure_listed, order)
+                _check_dry_run_mode(
+                    app_ref._check_defs, impure_listed, order, ctx,
+                )
 
             return exit_code
 
@@ -6995,7 +6994,7 @@ class App:
 
         # config path
         def _config_path_handler(ctx, **_kw) -> None:
-            print(_config_path(
+            ctx.info(_config_path(
                 app_ref.name,
                 override=app_ref.config_path,
                 config_format=app_ref.config_format,
@@ -7016,11 +7015,22 @@ class App:
         def _config_show_handler(ctx, **_kw) -> int:
             # If there was a config parse error, show it instead of values
             if app_ref._config_parse_err:
-                print(f"error: {app_ref._config_parse_err}", file=sys.stderr)
+                ctx.error(f"error: {app_ref._config_parse_err}")
                 return 1
-            # --json is framework-owned (contract §19.1): machine mode is
-            # read off the Context and the object below is this command's
-            # payload, not a locally-flagged print.
+            # --json is framework-owned (contract §19.1): machine mode is read
+            # off the Context and the object below is this command's payload,
+            # not a locally-flagged print.
+            #
+            # This branch is NOT the double-document compensation the check
+            # command's was -- machine mode here already emits one document --
+            # and it cannot be removed without a ruling. §19.5's emission-time
+            # magnitude guard refuses any number above 2^53, and a config file
+            # may legitimately hold one (a float flag set to 1e16). Building
+            # the payload unconditionally therefore turns a latent `config show
+            # --json` failure into an unconditional `config show` failure. The
+            # collision between §19.4's mode-independent payload call and
+            # §19.5's guard is real and is recorded here rather than resolved
+            # by an implementation.
             use_json = ctx.json
             config_data = app_ref._config_data
             all_flags = app_ref._collect_all_flags()
@@ -7091,7 +7101,9 @@ class App:
                 # conformance.
                 ctx.payload(_deep_sorted(result))
                 return 0
-            # --plain
+
+            # --plain, through the context writers: one info call per line, so
+            # nothing here can put a second document on stdout.
             for f in all_flags:
                 param = _flag_param_name(f.name)
                 value, source = _resolve_flag_show_source(f, config_data)
@@ -7100,7 +7112,7 @@ class App:
                 cf_collide = colliding.get(param)
                 if cf_collide is not None:
                     line += f"  -- {cf_collide.help}"
-                print(line)
+                ctx.info(line)
             # Include config fields in plain output (skip colliding ones: they
             # are rendered as an annotation on the flag line above).
             non_colliding_fields = {
@@ -7108,8 +7120,8 @@ class App:
                 if n not in colliding
             }
             if non_colliding_fields:
-                print()
-                print("Config fields:")
+                ctx.info("")
+                ctx.info("Config fields:")
                 for cf_name, cf in non_colliding_fields.items():
                     found, value = _nested_get(config_data, cf_name)
                     if found:
@@ -7121,7 +7133,7 @@ class App:
                         value = None
                         source = "not set"
                     req_str = "required" if cf.required else "optional"
-                    print(
+                    ctx.info(
                         f"  {cf_name} ({cf.type.__name__}, {req_str})"
                         f" = {_format_config_value(value)}"
                         f"  (source: {source})"
@@ -7129,21 +7141,21 @@ class App:
                     )
             # Infrastructure section (roots + handshakes + connections)
             if app_ref._infra_root_order or app_ref._handshake_order or app_ref._connection_order:
-                print()
-                print("Infrastructure:")
+                ctx.info("")
+                ctx.info("Infrastructure:")
                 for ev in app_ref._infra_root_order:
                     src = "env-set" if app_ref._infra_root_from_env[ev] else "default"
-                    print(f"  {ev} (root) = {app_ref._infra_roots[ev]}  (source: {src})")
+                    ctx.info(f"  {ev} (root) = {app_ref._infra_roots[ev]}  (source: {src})")
                 for ev in app_ref._handshake_order:
                     if ev in os.environ:
-                        print(f"  {ev} (handshake) = {os.environ[ev]}  (set)  -- {app_ref._handshake_envs[ev]}")
+                        ctx.info(f"  {ev} (handshake) = {os.environ[ev]}  (set)  -- {app_ref._handshake_envs[ev]}")
                     else:
-                        print(f"  {ev} (handshake) = <unset>  -- {app_ref._handshake_envs[ev]}")
+                        ctx.info(f"  {ev} (handshake) = <unset>  -- {app_ref._handshake_envs[ev]}")
                 for ev in app_ref._connection_order:
                     if ev in os.environ:
-                        print(f"  {ev} (connection) = {os.environ[ev]}  (set)  -- {app_ref._connection_envs[ev]}")
+                        ctx.info(f"  {ev} (connection) = {os.environ[ev]}  (set)  -- {app_ref._connection_envs[ev]}")
                     else:
-                        print(f"  {ev} (connection) = <unset>  -- {app_ref._connection_envs[ev]}")
+                        ctx.info(f"  {ev} (connection) = <unset>  -- {app_ref._connection_envs[ev]}")
             return 0
 
         # --plain is the only local flag left: the machine form moved to the
@@ -7408,7 +7420,7 @@ class App:
                     app_ref._config_fields,
                 )
             effects.write(cfg_path, content)
-            print(cfg_path)
+            ctx.info(cfg_path)
             return 0
 
         config_grp.commands["init"] = self._build_framework_command(
@@ -10950,13 +10962,17 @@ def _check_list_items(check_defs: dict[str, _CheckDef]) -> list[dict]:
     return items
 
 
-def _check_list_mode(check_defs: dict[str, _CheckDef]) -> None:
-    """Print the human-readable check listing."""
+def _check_list_mode(check_defs: dict[str, _CheckDef], ctx: "Context") -> None:
+    """Write the human-readable check listing through the context writer.
+
+    The whole table is ONE ``ctx.info`` call, so machine mode carries it as a
+    single diagnostic (contract §19.1) rather than one per row.
+    """
     # Sort alphabetically for deterministic output matching Go
     sorted_defs = sorted(check_defs.values(), key=lambda c: c.name)
 
     if not check_defs:
-        print("No checks defined.")
+        ctx.info("No checks defined.")
         return
 
     # Compute column widths
@@ -10965,17 +10981,20 @@ def _check_list_mode(check_defs: dict[str, _CheckDef]) -> None:
     tags_width = max(len(", ".join(cdef.tags)) for cdef in sorted_defs)
     tags_width = max(tags_width, len("TAGS"))
 
-    header = f"{'NAME':<{name_width}}   {'TAGS':<{tags_width}}   SEVERITY"
-    print(header)
+    lines = [f"{'NAME':<{name_width}}   {'TAGS':<{tags_width}}   SEVERITY"]
     for cdef in sorted_defs:
         tags_str = ", ".join(cdef.tags)
-        print(f"{cdef.name:<{name_width}}   {tags_str:<{tags_width}}   {cdef.severity}")
+        lines.append(
+            f"{cdef.name:<{name_width}}   {tags_str:<{tags_width}}   {cdef.severity}"
+        )
+    ctx.info("\n".join(lines))
 
 
 def _check_dry_run_mode(
     check_defs: dict[str, _CheckDef], listed: list[str], order: list[str],
+    ctx: "Context",
 ) -> None:
-    """Print the would-run plan for the checks a dry run did NOT execute.
+    """Write the would-run plan for the checks a dry run did NOT execute.
 
     ``listed`` is the purity partition's remainder (the impure checks and any
     check whose dependency was listed); ``order`` is the full selected order,
@@ -10983,16 +11002,20 @@ def _check_dry_run_mode(
     printed even when nothing was left over -- an empty plan is a statement
     ("everything selected ran"), the same way the framework's own would-do log
     prints its header with an empty body.
+
+    The whole plan is ONE ``ctx.info`` call, so machine mode carries it as a
+    single diagnostic (contract §19.1).
     """
-    print(f"Would run {len(listed)} check{'s' if len(listed) != 1 else ''}:")
+    lines = [f"Would run {len(listed)} check{'s' if len(listed) != 1 else ''}:"]
     for i, name in enumerate(listed, 1):
         cdef = check_defs[name]
         purity = "pure" if _check_is_pure(cdef) else "impure"
         deps = [d for d in cdef.depends_on if d in set(order)]
         if deps:
-            print(f"  {i}. {name} (depends on: {', '.join(deps)}) [{purity}]")
+            lines.append(f"  {i}. {name} (depends on: {', '.join(deps)}) [{purity}]")
         else:
-            print(f"  {i}. {name} [{purity}]")
+            lines.append(f"  {i}. {name} [{purity}]")
+    ctx.info("\n".join(lines))
 
 
 
