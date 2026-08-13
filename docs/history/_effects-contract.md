@@ -63,6 +63,16 @@ stderr lines, and §14.2's structured effect log stops being a test-only diagnos
 preview's source. Sections are never renumbered in this document, so §19 and §20 sit physically
 after §18.
 
+Amended a tenth time 2026-08-13 at the **mutex-election round** (§18.10), which adds §21. Five
+upstream rulings fix what a typed token does to a mutex group: a bool member elects only when it
+resolves to true, so `--no-x` declines instead of choosing; every other type elects on presence
+with any value; the unsatisfied-group error teaches when a declined member is what left it
+unsatisfied; a redundant negation beside a real election is a parse error rather than an accepted
+no-op; and election is command-line-only, so env and config neither elect a member nor supply its
+value. Nothing outside mutex groups changes. The round is a **breaking** change to parse-time
+behaviour, and it deletes the motivation for the hand-written "nothing was chosen" guards the
+consumers grew against the old semantics.
+
 The ordinal above counts amendment **rounds**, not the paragraphs of this header: the fifth round
 (the adoption round, §18.6) and the eighth (the non-CLI consent round, §18.8) recorded their
 rulings in §18 without adding a paragraph here, which is why the header reads first, second,
@@ -3818,6 +3828,76 @@ because a reading it presented as forced is authored (§20.1).
 Nothing else in this document was decided at authoring time. Every remaining statement is either
 verbatim from the ratified pin list or a direct reading of the code as it stands, cited in place.
 
+### 18.10 Amendments made at the mutex-election round (2026-08-13)
+
+This round records five rulings made upstream about **which typed token elects a mutex group's
+member** (campaign decisions A1-A5). Items 113-117 are ruled upstream, not authored here; item 118
+is an authored spelling in the §18.3 class, fixing the message texts and the value-delivery
+consequence the rulings left open. The round writes §21 and amends nothing else: mutex election is
+a parse-time constraint, not an effects-regime one, and it touches this document only because
+this document is where cross-language spellings are pinned.
+
+The evidence behind the round, measured across six consumer projects: 18 production mutex groups,
+15 of them containing a bool, 14 carrying the present-false hole, 8 carrying hand-written
+"nothing was chosen" guards written to compensate for it, and 2 actively dangerous -- one where
+declining a mode silently selected the *other* mode's destructive behaviour, one where declining
+a narrowing option silently widened the operation to everything. Zero legitimate present-false
+uses were found.
+
+113. **A bool member elects its group only when its resolved value is true (§21.2).** A
+     present-but-false member -- `--no-x` on the command line -- elects nothing. Before this
+     ruling, presence alone elected, so typing the negation of one option *chose* it, which is
+     the inversion the two dangerous sites shipped.
+
+114. **A string member elects on presence with any value, including the empty string (§21.2).**
+     Typing `--profile ""` is an explicit act; whether `""` is a legal value for that flag is
+     flag-level value validation and never the mutex layer's business. The handler-side
+     consequence is stated in the docs: a handler on a mutex member tests `is None`, never
+     truthiness.
+
+115. **The unsatisfied-group error teaches, when a declined member is what made it unsatisfied
+     (§21.4).** `one of --profile, --all-profiles is required (--no-all-profiles declines an
+     option; it does not choose one)`. The clause is appended only when at least one bool member
+     was present-and-false on the command line; the bare message is otherwise unchanged.
+
+116. **A redundant negation beside a real election is a parse error (§21.4).** `--profile work
+     --no-all-profiles` is refused rather than accepted-and-ignored: every typed token does
+     something or errors. It is NOT the "mutually exclusive" case and does not borrow that
+     message, which would be a lie -- nothing about the two tokens conflicts; the second one
+     simply cannot mean what typing it suggests.
+
+117. **Mutex election is CLI-only (§21.3).** Env and config sources no longer elect a member. A
+     mutex group exists to force the operator to choose *in the invocation*; a value inherited
+     from an environment two shells up, or from a config file written last year, is not that
+     choice. Measured usage of env- or config-elected mutex members across the fleet: zero.
+
+118. **Authored spellings and the value-delivery consequence (§21).** Ruled upstream: the
+     teaching clause's wording (item 115) and that A4 is an error (item 116). Authored here:
+
+     - **The A4 message text**, pinned byte-identically in three languages:
+       `<declined> cannot be combined with <elected> (<first-declined> declines an option; it
+       does not choose one)`, where `<declined>` renders each declined member as `--no-<name>`
+       in group-declaration order joined by ` and `, `<elected>` renders the electing member as
+       `--<name>`, and the parenthetical repeats item 115's clause verbatim so the two errors
+       teach with one sentence, not two.
+     - **The clause names the FIRST declined member in group-declaration order** when more than
+       one member was declined. Item 115's ruling shows the one-member case only, and a clause
+       that grew a list would stop reading as a sentence.
+     - **The error precedence inside one group**: more than one election is the mutually-exclusive
+       error (unchanged text, listing the electing members only); exactly one election plus at
+       least one declined member is the A4 error; no election is the required error, with the
+       clause when anything was declined.
+     - **An unelected member never carries an env or config value (§21.3).** Item 117 says those
+       sources do not *elect*; it does not say what happens to the value. Leaving the value in
+       place preserves exactly the hazard the round exists to remove: `--url` typed on the command
+       line beside a stale `FILE` in the environment would deliver *both* members non-empty, and
+       every handler in the fleet reads such a group by testing its members in declaration order.
+       So a mutex member's value comes from the command line or from that flag's own declared
+       default, and env and config are not consulted for it at all. The suppression happens before
+       dependency validation, so `Requires`/`CoRequired`/`Implies` see the same state the mutex
+       layer does. A *declared default* still applies to an unelected member -- a default is a
+       property of the flag, not an election, and item 117 says nothing about it.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -4287,3 +4367,70 @@ bullet stands unamended. It carries an identifier, never a mode; the framework w
 child's environment and never reads it back into a decision; and §20.2 makes that a contract item
 enforced by sweeps rather than an assurance. A variable no behaviour may depend on cannot inherit
 a mode.
+
+---
+
+## 21. Mutex election
+
+Added 2026-08-13 at the mutex-election round (§18.10). Sections in this document are never
+renumbered, so §21 sits physically after §20. It is normative exactly as §§1-17 are.
+
+A `MutexGroup` declares that **exactly one** of its members is chosen in each invocation. This
+section defines what "chosen" means. Nothing here is conditional on the effects regime; it is
+pinned in this document because this document is where cross-language message spellings live.
+
+### 21.1 Vocabulary
+
+| Term | Meaning |
+|------|---------|
+| **elects** | A typed token selects this member as the group's choice. |
+| **declines** | A typed token names this member and states it is NOT the choice: `--no-<name>` on a bool member. |
+| **unelected** | Neither elected nor declined -- the member was not named in the invocation. |
+
+### 21.2 What elects, by type
+
+- A **bool** member is elected by `--<name>` on the command line, and only when the value it
+  resolves to is **true**. `--no-<name>` **declines**: it elects nothing.
+- Every **other** type is elected by presence on the command line, whatever the value. `--profile ""`
+  elects. Whether the empty string is a legal value for that flag is the flag's own value
+  validation (`choices`, `validate`) and is checked after the group is satisfied, never instead
+  of it.
+
+The consequence for handlers is one line, and it is stated in the flag-system documentation: a
+handler on a mutex member tests for **absence** (`is None` / `== nil` / `=== undefined`), never
+for truthiness. A member elected with an empty string is present; a bool member left unelected
+is not.
+
+### 21.3 CLI-only
+
+**Only command-line tokens elect.** A value that reaches a mutex member from an environment
+variable or a config file elects nothing, and it does not satisfy the group.
+
+Env and config are, further, **not consulted at all** for a mutex member's value: an unelected
+member delivers its declared default, or nothing (`None` / `nil` / `undefined`) when it declares
+none, regardless of what the environment or the config file holds for it. The suppression is
+applied before dependency validation, so `Requires`, `CoRequired` and `Implies` observe the same
+state the group does, and the resulting source label is `default`, never `env` or `config`.
+
+This is a **deliberate special case**, and the only one in the framework: for every flag that is
+not a mutex member, the ordinary precedence (CLI > env > config > default) is untouched. The
+justification is that a mutex group exists to make the operator choose *in the invocation*, and
+an inherited environment is not that choice. The cost is stated rather than hidden: an operator
+who wants a default choice for such a group cannot express it through env or config, and must
+either type the flag or the application must stop using a mutex group for that decision.
+
+### 21.4 The three errors
+
+Evaluated per group, in this order:
+
+1. **More than one member elected** -- `--a and --b are mutually exclusive`, listing the electing
+   members only, in group-declaration order. Declined members never appear here.
+2. **Exactly one member elected, and at least one member declined** --
+   `--no-b cannot be combined with --a (--no-b declines an option; it does not choose one)`.
+   Declined members render as `--no-<name>` in group-declaration order joined by ` and `; the
+   parenthetical names the **first** declined member.
+3. **No member elected** -- `one of --a, --b is required`, with
+   ` (--no-b declines an option; it does not choose one)` appended when at least one member was
+   declined, naming the first declined member.
+
+All three are parse errors: stderr, exit code 1, byte-identical in all three implementations.
