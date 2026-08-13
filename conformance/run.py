@@ -43,6 +43,33 @@ HARNESS_BINARY: str | None = None
 HARNESS_TS_DIR = CONFORMANCE_DIR / "harness_ts"
 HARNESS_TS_ENTRY: str | None = None
 
+# Every case runs with HOME pointing at a throwaway directory rather than at the
+# operator's home. The process trace store (docs/process-trace-store.md) derives
+# its location literally from HOME, and a case that starts a real child writes an
+# entry -- which must land in a throwaway store, never in the operator's. The
+# trace sweeps (sweep_trace.py) reassign TRACE_HOME per condition, which is also
+# how the broken-store sweep points a run at an unwritable store. Toolchain
+# builds (go build, npm run build) happen before any case runs and use the real
+# environment, so no build cache is redirected here.
+#
+# `~/.local/lib` is symlinked back to the operator's, because the Python target
+# runs under the ambient interpreter and resolves its dependencies through the
+# per-user site directory that lives there. Only `~/.local/share` -- where the
+# store sits -- is genuinely fresh.
+
+
+def make_trace_home(prefix: str = "strictcli_conf_home_") -> str:
+    """Create a throwaway HOME whose ~/.local/share is empty."""
+    home = tempfile.mkdtemp(prefix=prefix)
+    os.makedirs(os.path.join(home, ".local"), exist_ok=True)
+    real_lib = os.path.join(os.path.expanduser("~"), ".local", "lib")
+    if os.path.isdir(real_lib):
+        os.symlink(real_lib, os.path.join(home, ".local", "lib"))
+    return home
+
+
+TRACE_HOME: str = make_trace_home()
+
 
 def _ensure_harness() -> str:
     """Build the Go harness binary if not already built. Returns path to binary."""
@@ -744,8 +771,10 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         run_cwd = str(CONFORMANCE_DIR)
 
     try:
-        # Build environment: inherit current env, overlay test env and target extras
+        # Build environment: inherit current env, overlay the throwaway HOME,
+        # then the test env and the target extras.
         env = os.environ.copy()
+        env["HOME"] = TRACE_HOME
         test_env = case.get("env", {})
         env.update(test_env)
         env.update(extra_env)

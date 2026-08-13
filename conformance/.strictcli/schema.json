@@ -224,6 +224,18 @@
       "pure": true,
       "needs_network": false,
       "depends_on": []
+    },
+    "trace-sweeps": {
+      "tags": [
+        "pre-release",
+        "conformance",
+        "parity"
+      ],
+      "severity": "error",
+      "fast": false,
+      "pure": false,
+      "needs_network": false,
+      "depends_on": []
     }
   }
 }

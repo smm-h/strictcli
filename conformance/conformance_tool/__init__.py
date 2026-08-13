@@ -131,6 +131,18 @@ def check_float_fuzz(ctx, reporter):
     return _run_script(reporter, "check_float_fuzz.py")
 
 
+@app.error_check("trace-sweeps")
+def check_trace_sweeps(ctx, reporter):
+    """The trace store's observational-only sweeps (effects contract §20.2).
+
+    A forged ancestry identifier and an unwritable store must both leave
+    stdout, stderr and the exit code byte-identical to the same runs without
+    them. This is the entire spoofing defense, and it is what makes the store
+    observational rather than an input to behaviour.
+    """
+    return _run_script(reporter, "sweep_trace.py")
+
+
 @app.error_check("schema-freshness")
 def check_schema_freshness(ctx, reporter):
     """Fail when the committed schema no longer matches the tool's own schema.
