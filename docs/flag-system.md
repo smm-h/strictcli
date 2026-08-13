@@ -545,11 +545,43 @@ def status(ctx, token, region):
 
 ## Mutex groups
 
-Mutually exclusive flags are declared via `MutexGroup`, which enforces that at
-most one flag in the group has a value from an explicit source (CLI, env, or
-config). Default and implied values do not trigger mutex violations. A mutex
-group must contain at least 2 flags, and a flag cannot appear in multiple mutex
-groups.
+Mutually exclusive flags are declared via `MutexGroup`, which enforces that
+**exactly one** member is chosen in each invocation. A mutex group must contain
+at least 2 flags, and a flag cannot appear in multiple mutex groups.
+
+### What elects a member
+
+Only a **command-line token** elects. A bool member is elected by `--<name>`,
+and only when it resolves to **true**: `--no-<name>` *declines* the option --
+it says "not this one", and elects nothing. Every other type elects on presence
+with any value, including the empty string (`--profile ""` is an explicit act;
+whether `""` is legal for that flag is the flag's own value validation).
+
+Three errors, checked in this order per group:
+
+| Situation | Error |
+|-----------|-------|
+| More than one member elected | `--a and --b are mutually exclusive` |
+| One elected, another declined | `--no-b cannot be combined with --a (--no-b declines an option; it does not choose one)` |
+| Nothing elected | `one of --a, --b is required`, plus ` (--no-b declines an option; it does not choose one)` when a member was declined |
+
+### Env and config do not elect
+
+Election is command-line-only, and this is the framework's one deliberate
+exception to the ordinary CLI > env > config > default precedence. A value that
+would reach a mutex member from an environment variable or a config file
+neither elects it nor is delivered to the handler: an unelected member gets its
+declared default, or nothing (`None` / `nil` / `undefined`) when it declares
+none, and its source label is `default`. A mutex group exists to make the
+operator choose in the invocation, so an inherited environment cannot make that
+choice -- nor silently sit beside a typed one.
+
+### Handlers test absence, never truthiness
+
+A handler on a mutex member must test `is None` (Python) / `== nil` (Go) /
+`=== undefined` (TypeScript). A truthiness test misreads an elected `--profile ""`
+as "not chosen", and reads an unelected bool member the same way an elected
+`false` would read if one could exist.
 
 ```python
 @app.command(
@@ -557,15 +589,17 @@ groups.
     help="produce output",
     effect="read_only",
     mutex=[strictcli.MutexGroup(flags=[
-        strictcli.Flag(name="json", type=bool, default=False, help="JSON output"),
-        strictcli.Flag(name="csv", type=bool, default=False, help="CSV output"),
+        strictcli.Flag(name="as-table", type=bool, help="table output"),
+        strictcli.Flag(name="as-csv", type=bool, help="CSV output"),
     ])],
 )
-def output(ctx, json, csv):
+def output(ctx, as_table, as_csv):
     ...
 ```
 
-A mutex group must contain at least two flags. Flags in a mutex group with no default get `None` instead of being required -- the group itself enforces that at least one is chosen.
+A member with no declared default gets `None` instead of being required -- the
+group itself enforces that exactly one is chosen. (`json` is not usable as a
+flag name anywhere: it is reserved for machine mode.)
 
 ## Dependencies
 

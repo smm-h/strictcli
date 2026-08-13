@@ -202,10 +202,14 @@ skipped under `--hermetic`):
 
 After all values are resolved, constraint validation runs:
 
-- **Mutex groups**: at most one flag in each mutex group may have a value from a
-  CLI, env, or config source. Defaults and implied values do not trigger mutex
-  violations. If no flag has a value and no defaults exist, "one of ... is
-  required" errors.
+- **Mutex groups**: exactly one member must be *elected*, and only a
+  command-line token elects. A bool member elects only when it resolves to
+  true, so `--no-x` declines instead of choosing; every other type elects on
+  presence with any value. Env- and config-sourced values on a mutex member
+  elect nothing and are dropped, so an unelected member delivers its declared
+  default (or nothing). Two elections are "mutually exclusive", an election
+  beside a declined member is "cannot be combined with", and no election is
+  "one of ... is required". See the flag-system page for the full rules.
 - **CoRequired**: all named flags must be present together, or none.
 - **Requires**: if flag A is present, flag B must also be present.
 - **Implies**: if flag A is present, flag B is automatically set to the implied
@@ -249,8 +253,8 @@ only under the framework-owned `--json`; `Test()` / `test()` and `Call()` /
 
 Every resolved flag value carries a source label tracking where its value came
 from. Source provenance enables intelligent constraint evaluation: mutex checks
-only consider explicit sources (cli, env, config), while dependency checks
-consider everything except defaults. Handlers can inspect provenance at runtime
+consider only the cli source, while dependency checks consider everything
+except defaults. Handlers can inspect provenance at runtime
 to alter behavior based on whether a value was explicitly provided or fell
 through to its default. The six source labels are:
 
@@ -267,8 +271,9 @@ Provenance is tracked internally by a `SourcedStore` (Go/TypeScript) or
 `_SourcedStore` (Python) that pairs each value with its source label.
 Provenance matters for constraint evaluation:
 
-- **Mutex checks** consider only `cli`, `env`, and `config` sources. A flag
-  with a `default` or `implied` source does not trigger a mutex violation.
+- **Mutex election** considers only the `cli` source. A member whose value came
+  from `env` or `config` neither elects nor keeps that value: the entry is
+  dropped before dependency validation, so the member ends up labeled `default`.
 - **Dependency checks** (`CoRequired`, `Requires`) consider everything except
   `default`. A flag that got its value from `implied` is considered "present"
   for dependency purposes; a flag with only a `default` is not.
