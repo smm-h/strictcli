@@ -600,7 +600,7 @@
       "stdout_contains": [
         "size = 100000000000000000.0  (source: config)"
       ],
-      "stderr": ""
+      "stderr_equals": ""
     }
   },
   {
