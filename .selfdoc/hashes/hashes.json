@@ -5,8 +5,8 @@
     "description": "41d9d797eec63a9fa35f6ecba944148da61725bb479e989eea1d373176e12644"
   },
   "en/conformance.md": {
-    "content": "da5529a7926bdc975e7975e909245ab3f35634a95a18328064fa382a53940030",
-    "description": "5f62213d163489cc78af1595dbb9de858c171190608dbd1b290b5a3a5ed05af2"
+    "content": "21b893b8685bf5412dcf6ebec6fb5301ae99a75366f52035ac4aefeb7a0b8093",
+    "description": "65874f0f2a991d2e373885f39b395b835f56a872caa4e79a294bc61051b3f5ed"
   },
   "en/flag-system.md": {
     "content": "8d0682f4320258fab41fe4e0326ef1d204fc3080a890f394c7f915bab126e5ab",
@@ -64,8 +64,8 @@
   },
   "en/typescript-src-checks-cmd.md": {
     "content": "bf62ecac667b2db64c4b97b7a6fd6a31959b261b6123c2b8dde47c3ea702e059",
-    "description": "a61a8605858bfa1ee80b3d2c207c611c50bff8bb30d5d0f54b059a701f7b98ef",
-    "source_docstring": "1cf2ee2d50e9481a841c582f5520da405d8b25a4c5660c7e0038f74557f6a75b"
+    "description": "e656642326f07658c820798800be2e396e020c14943a7d270b075e380e135a1e",
+    "source_docstring": "f80719caa550957205ce068aecf8cdceeac50b9a3a1eaf5aaf4eb85ca608474f"
   },
   "en/typescript-src-checks-coverage.md": {
     "content": "b49d8bf91167b6e6ca8f6c9d3598002943866562e31a79c8dbc0659273b792da",
