@@ -310,6 +310,12 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     # any implementation's Command carries.
     "handler_effects",
     "handler_diagnostics",
+    # Claimed rendering (effects contract §19.7), same class: the claim and
+    # render calls a *generated* handler issues, not a field any
+    # implementation's Command carries.
+    "handler_claims_log",
+    "handler_renders_log",
+    "handler_payloads_recorded",
     "default_relative_to_root",
     "pre_test",
     "coverage_manifest",
