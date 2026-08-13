@@ -951,6 +951,10 @@ _PY_PARSE_TIME_MSG_FUNCS = frozenset({
     # function to be visible at all -- and §12.8 is a parse-time section in
     # Go's and TypeScript's catalogs, so it is one here too.
     "_msg_effect_option_not_accepted",
+    # The mutex decline clause (effects contract §21.4). Python spells it as a
+    # `_msg_*` function because two raise sites share it; Go and TypeScript
+    # carry it in their parse-time catalog sections, so it is parse-time here.
+    "_msg_mutex_decline_clause",
 })
 _PY_TOP_LEVEL_DEF_PAT = re.compile(r"^(?:def |class |@)", re.MULTILINE)
 _PY_RETURN_PAT = re.compile(r"^    return\s", re.MULTILINE)

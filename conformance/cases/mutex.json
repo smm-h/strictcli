@@ -408,5 +408,389 @@
       "stdout_contains": "Flags (mutually exclusive):",
       "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [required]\n  --muted, --no-muted        muted output [required]"
     }
+  },
+  {
+    "name": "mutex A1: a negated bool member elects nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "profile",
+                  "type": "str",
+                  "help": "a profile",
+                  "default": null
+                },
+                {
+                  "name": "all-profiles",
+                  "type": "bool",
+                  "help": "every profile"
+                },
+                {
+                  "name": "current-profile",
+                  "type": "bool",
+                  "help": "the current profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--no-all-profiles"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "is required",
+        "declines an option"
+      ],
+      "stderr_equals": "error: one of --profile, --all-profiles, --current-profile is required (--no-all-profiles declines an option; it does not choose one)\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "mutex A1: a true bool member still elects",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "profile",
+                  "type": "str",
+                  "help": "a profile",
+                  "default": null
+                },
+                {
+                  "name": "all-profiles",
+                  "type": "bool",
+                  "help": "every profile"
+                },
+                {
+                  "name": "current-profile",
+                  "type": "bool",
+                  "help": "the current profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--all-profiles"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "profile=None all=true current=None"
+    }
+  },
+  {
+    "name": "mutex A1: every member declined is an unsatisfied group",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "profile",
+                  "type": "str",
+                  "help": "a profile",
+                  "default": null
+                },
+                {
+                  "name": "all-profiles",
+                  "type": "bool",
+                  "help": "every profile"
+                },
+                {
+                  "name": "current-profile",
+                  "type": "bool",
+                  "help": "the current profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--no-current-profile",
+      "--no-all-profiles"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: one of --profile, --all-profiles, --current-profile is required (--no-all-profiles declines an option; it does not choose one)\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "mutex A2: a string member elects on the empty string",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "profile",
+                  "type": "str",
+                  "help": "a profile",
+                  "default": null
+                },
+                {
+                  "name": "all-profiles",
+                  "type": "bool",
+                  "help": "every profile"
+                },
+                {
+                  "name": "current-profile",
+                  "type": "bool",
+                  "help": "the current profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--profile",
+      ""
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "profile= all=None current=None"
+    }
+  },
+  {
+    "name": "mutex A3: no teaching clause when nothing was declined",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "profile",
+                  "type": "str",
+                  "help": "a profile",
+                  "default": null
+                },
+                {
+                  "name": "all-profiles",
+                  "type": "bool",
+                  "help": "every profile"
+                },
+                {
+                  "name": "current-profile",
+                  "type": "bool",
+                  "help": "the current profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: one of --profile, --all-profiles, --current-profile is required\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "mutex A4: a redundant negation beside an election is a parse error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "profile",
+                  "type": "str",
+                  "help": "a profile",
+                  "default": null
+                },
+                {
+                  "name": "all-profiles",
+                  "type": "bool",
+                  "help": "every profile"
+                },
+                {
+                  "name": "current-profile",
+                  "type": "bool",
+                  "help": "the current profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--profile",
+      "work",
+      "--no-all-profiles"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": [
+        "cannot be combined with",
+        "declines an option"
+      ],
+      "stderr_equals": "error: --no-all-profiles cannot be combined with --profile (--no-all-profiles declines an option; it does not choose one)\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "mutex A4: every declined member is named, in declaration order",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "profile",
+                  "type": "str",
+                  "help": "a profile",
+                  "default": null
+                },
+                {
+                  "name": "all-profiles",
+                  "type": "bool",
+                  "help": "every profile"
+                },
+                {
+                  "name": "current-profile",
+                  "type": "bool",
+                  "help": "the current profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--profile",
+      "work",
+      "--no-current-profile",
+      "--no-all-profiles"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --no-all-profiles and --no-current-profile cannot be combined with --profile (--no-all-profiles declines an option; it does not choose one)\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "mutex: two elections are still mutually exclusive",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "profile",
+                  "type": "str",
+                  "help": "a profile",
+                  "default": null
+                },
+                {
+                  "name": "all-profiles",
+                  "type": "bool",
+                  "help": "every profile"
+                },
+                {
+                  "name": "current-profile",
+                  "type": "bool",
+                  "help": "the current profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--profile",
+      "work",
+      "--all-profiles"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --profile and --all-profiles are mutually exclusive\ntry 'myapp run --help'"
+    }
   }
 ]

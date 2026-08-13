@@ -198,6 +198,14 @@ def generate_test_case(row_idx: int, row: list) -> dict:
 
     if is_repeatable:
         flag_def["repeatable"] = True
+        # Both are stated explicitly rather than left to a default: Go requires
+        # an explicit `unique` for compound flags, and a repeatable flag fed
+        # from an env var needs its separator declared. (Hand-edited into the
+        # generated file by an earlier round; carried here so regeneration is
+        # idempotent.)
+        flag_def["unique"] = False
+        if has_env:
+            flag_def["env_separator"] = ","
 
     if has_choices:
         if flag_type == "str":
@@ -207,16 +215,54 @@ def generate_test_case(row_idx: int, row: list) -> dict:
 
     if flag_type == "bool":
         flag_def["negatable"] = is_negatable_true
+        # A non-negatable bool outside a mutex group is REQUIRED without a
+        # declared default (there is no `--no-x` token that could supply it),
+        # so state one. Mutex members need none: the group supplies the
+        # unelected members' absence. (Hand-edited into the generated file by
+        # the required-booleans round; carried here so regeneration is
+        # idempotent.)
+        if not is_negatable_true and not is_mutex:
+            flag_def["default"] = False
 
     # Decide how the value is provided and what output to expect.
     # Priority: negatable test > env > default > CLI
-    test_negation = flag_type == "bool" and is_negatable_true
+    #
+    # Mutex members are the exception, and it is a hard one: under the election
+    # rules (effects contract §21) only a command-line token elects a member,
+    # and a bool member elects only when it resolves to TRUE. So a mutex row
+    # can neither test `--no-<name>` (that DECLINES, leaving the group
+    # unsatisfied -- a parse error, not the exit-0 this generator asserts) nor
+    # provide the value through env or a default (neither elects). Every mutex
+    # row therefore provides an electing CLI token; the negation and env axes
+    # are still exercised in registration (the flag declares them) and by the
+    # hand-written cases in mutex.json, which pin the decline semantics
+    # directly.
+    test_negation = flag_type == "bool" and is_negatable_true and not is_mutex
     provided_via = "cli"
     argv = ["cmd"]
     env_dict: dict[str, str] = {}
     app_needs_env_prefix = has_env
 
-    if test_negation:
+    if is_mutex:
+        # Elect via the command line, whatever the other axes say.
+        provided_via = "cli"
+        if flag_type == "bool":
+            argv.append(f"--{flag_name}")
+        elif flag_type == "str":
+            if is_repeatable:
+                argv.extend([f"--{flag_name}", "test_val", f"--{flag_name}", "test_val"])
+            elif has_short:
+                argv.extend([f"-{_short_letter(flag_type)}", "test_val"])
+            else:
+                argv.extend([f"--{flag_name}", "test_val"])
+        elif flag_type == "int":
+            if is_repeatable:
+                argv.extend([f"--{flag_name}", "99", f"--{flag_name}", "99"])
+            elif has_short:
+                argv.extend([f"-{_short_letter(flag_type)}", "99"])
+            else:
+                argv.extend([f"--{flag_name}", "99"])
+    elif test_negation:
         # Test --no-flagname
         provided_via = "cli"
         argv.append(f"--no-{flag_name}")
@@ -264,6 +310,7 @@ def generate_test_case(row_idx: int, row: list) -> dict:
     command: dict = {
         "name": "cmd",
         "help": "a command",
+        "effect": "read_only",
         "handler_prints": handler_prints,
     }
 
@@ -291,10 +338,11 @@ def generate_test_case(row_idx: int, row: list) -> dict:
         handler_prints = f"{flag_name}={{{flag_name}}} {companion_name}={{{companion_name}}}"
         command["handler_prints"] = handler_prints
 
-        # Compute companion's expected output: companion is never provided,
-        # so it uses its default or zero value.
+        # Compute companion's expected output: the companion is never
+        # provided, so it uses its declared default -- and a mutex member with
+        # no declared default is None, never a type zero value.
         if flag_type == "bool":
-            companion_expected = f"{companion_name}=false"
+            companion_expected = f"{companion_name}=None"
         elif has_default:
             companion_expected = f"{companion_name}={_default_value(flag_type)}"
         else:

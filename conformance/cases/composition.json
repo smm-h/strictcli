@@ -1,6 +1,6 @@
 [
   {
-    "name": "composition: mutex + env, one set via env is ok",
+    "name": "composition: mutex + env, a value set via env elects nothing",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -42,12 +42,17 @@
       "MYAPP_FILE": "data.txt"
     },
     "expect": {
-      "exit_code": 0,
-      "stdout_equals": "file=data.txt url=None"
+      "exit_code": 1,
+      "stderr_contains": [
+        "--file",
+        "--url",
+        "is required"
+      ],
+      "stderr_equals": "error: one of --file, --url is required\ntry 'myapp cmd --help'"
     }
   },
   {
-    "name": "composition: mutex + env, both set via env is error",
+    "name": "composition: mutex + env, both set via env is still an unsatisfied group",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -94,9 +99,58 @@
       "stderr_contains": [
         "--file",
         "--url",
-        "mutually exclusive"
+        "is required"
       ],
-      "stderr_equals": "error: --file and --url are mutually exclusive\ntry 'myapp cmd --help'"
+      "stderr_equals": "error: one of --file, --url is required\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "composition: mutex + env, an env value beside a CLI election is suppressed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "file",
+                  "type": "str",
+                  "help": "read from file",
+                  "default": null,
+                  "env": "MYAPP_FILE"
+                },
+                {
+                  "name": "url",
+                  "type": "str",
+                  "help": "read from URL",
+                  "default": null,
+                  "env": "MYAPP_URL"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "file={file} url={url}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--url",
+      "http://example.com"
+    ],
+    "env": {
+      "MYAPP_FILE": "data.txt"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "file=None url=http://example.com"
     }
   },
   {
@@ -325,7 +379,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "--local"
     ],
@@ -373,7 +427,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "--local",
       "--system"

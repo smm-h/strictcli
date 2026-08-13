@@ -21,13 +21,13 @@
                   "short": "s",
                   "env": "MYAPP_FLAG0",
                   "repeatable": true,
+                  "unique": false,
+                  "env_separator": ",",
                   "choices_str": [
                     "test_val",
                     "other_val",
                     "third_val"
-                  ],
-                  "unique": false,
-                  "env_separator": ","
+                  ]
                 },
                 {
                   "name": "alt0",
@@ -43,14 +43,15 @@
       "env_prefix": "MYAPP"
     },
     "argv": [
-      "cmd"
+      "cmd",
+      "--flag0",
+      "test_val",
+      "--flag0",
+      "test_val"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag0=test_val alt0=None"
-    },
-    "env": {
-      "MYAPP_FLAG0": "test_val"
+      "stdout_equals": "flag0=test_val,test_val alt0=None"
     }
   },
   {
@@ -88,11 +89,11 @@
     },
     "argv": [
       "cmd",
-      "--no-flag1"
+      "--flag1"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag1=false alt1=None"
+      "stdout_equals": "flag1=true alt1=None"
     }
   },
   {
@@ -228,12 +229,12 @@
               "type": "str",
               "help": "test flag 5",
               "repeatable": true,
+              "unique": false,
               "choices_str": [
                 "test_val",
                 "other_val",
                 "third_val"
-              ],
-              "unique": false
+              ]
             }
           ]
         }
