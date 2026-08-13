@@ -34,6 +34,7 @@ import {
 	createApp,
 	defineReadOnlyCommand,
 	flag,
+	mutexGroup,
 	t,
 } from "../src/index.js";
 import { envelopePayloadText } from "./envelope_helpers.js";
@@ -507,6 +508,49 @@ test("parse-time loading: late-written config is honored", async () => {
 	writeFileSync(join(dir, "config.json"), '{"port": 5555}');
 	const r = await app.test(["run"]);
 	assert.equal(r.stdout, "port=5555\n");
+});
+
+test("mutex: a config value elects nothing and is never delivered (A5)", async () => {
+	// Contract §21.3: election is command-line-only, and env/config are not
+	// consulted for an unelected member's value either.
+	const { dir } = freshXdg();
+	writeFileSync(join(dir, "config.json"), '{"file": "from-config.txt"}');
+	const mk = (): App => {
+		const app = createApp({
+			name: "myapp",
+			version: "1.0.0",
+			help: "test app",
+			config: true,
+		});
+		app.command(
+			defineReadOnlyCommand("fetch", {
+				help: "fetch data",
+				mutex: [
+					mutexGroup({
+						file: flag("file", t.str, {
+							help: "read from file",
+							default: null,
+						}),
+						url: flag("url", t.str, { help: "read from URL", default: null }),
+					}),
+				],
+				handler: (args, ctx) => {
+					const g = args as unknown as { file?: string; url?: string };
+					ctx.info(`file=${g.file ?? "None"} url=${g.url ?? "None"}`);
+					return 0;
+				},
+			}),
+		);
+		return app;
+	};
+	// Nothing typed: the config value elects nothing, so the group is unsatisfied.
+	let r = await mk().test(["fetch"]);
+	assert.equal(r.exitCode, 1);
+	assert.match(r.stderr, /one of --file, --url is required/);
+	// Beside a real election the config value is suppressed, not delivered.
+	r = await mk().test(["fetch", "--url", "u"]);
+	assert.equal(r.exitCode, 0);
+	assert.equal(r.stdout, "file=None url=u\n");
 });
 
 // =========================================================================

@@ -1354,6 +1354,31 @@ test("mutex: two elections are still mutually exclusive", async () => {
 	);
 });
 
+test("mutex: a declared default still applies to an unelected member", async () => {
+	// §18.10 item 118: a default is a property of the flag, not an election.
+	const out: string[] = [];
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			mutex: [
+				mutexGroup({
+					loud: flag("loud", t.bool, { help: "loud", default: false }),
+					hushed: flag("hushed", t.bool, { help: "hushed", default: false }),
+				}),
+			],
+			handler: (a) => {
+				const g = a as unknown as { loud?: boolean; hushed?: boolean };
+				out.push(`loud=${fmt(g.loud)} hushed=${fmt(g.hushed)}`);
+			},
+		}),
+	);
+	assert.equal(
+		(await run(app, ["cmd", "--loud"], out)).stdout,
+		"loud=true hushed=false",
+	);
+});
+
 // =========================================================================
 // dependencies.json
 // =========================================================================

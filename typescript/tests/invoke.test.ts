@@ -328,6 +328,36 @@ test("call: mutex violations raise InvokeError", async () => {
 	});
 });
 
+test("call: an explicit false bool declines instead of electing (A1)", async () => {
+	// Election ruling A1 holds on the programmatic path too: all_profiles=false
+	// elects nothing, so the group is unsatisfied and the error teaches.
+	const app = buildApp();
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			mutex: [
+				mutexGroup({
+					profile: flag("profile", t.str, {
+						help: "a profile",
+						default: null,
+					}),
+					all_profiles: flag("all-profiles", t.bool, {
+						help: "every profile",
+						default: null,
+					}),
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	await assert.rejects(app.call("run", { all_profiles: false }), {
+		name: "InvokeError",
+		message:
+			"one of --profile, --all-profiles is required " +
+			"(--no-all-profiles declines an option; it does not choose one)",
+	});
+});
+
 test("call: dependency violations raise InvokeError", async () => {
 	const app = buildApp();
 	app.command(
