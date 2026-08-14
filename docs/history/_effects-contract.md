@@ -4114,6 +4114,16 @@ the correction that made the promise true.
      each segment before the decode. A canonically-spelled blob is unaffected -- no encoder emits
      anything else -- so this only narrows what a client can hand back.
 
+136. **All three sort the `_meta` key set, not just Go (§22.2).** §22.2 recorded the sort as a Go
+     implementation note -- Go's map iteration is randomized, so it had to sort to be
+     deterministic at all -- and Python and TypeScript validated in document order. A request
+     carrying two offending keys therefore got a *different named key* from each, which is a
+     refusal text that is not byte-identical, against §22.2's own promise. Sorted was already the
+     documented order, so the correction is to sort in the other two rather than to unpick Go's.
+     TypeScript sorts over the encoded UTF-8 bytes: its default comparison is over UTF-16 code
+     units, which orders an astral character before a BMP one and would have reintroduced the
+     same divergence in a narrower corner.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -4726,9 +4736,13 @@ invalid _meta key name: '<key>'
 unrecognized reserved _meta key: '<key>'
 ```
 
-All are `-32602`, byte-identical in all three implementations. Go sorts the key set before
-validating, so a request carrying more than one offending key is refused deterministically rather
-than by map-iteration order.
+All are `-32602`, byte-identical in all three implementations. **Every implementation sorts the
+key set before validating**, so a request carrying more than one offending key is refused by
+naming the same key everywhere -- the lexically first offender, whichever of the two key rules it
+breaks. Go sorts because its map iteration is randomized; Python and TypeScript sort because a
+document's own order is a different answer (corrected 2026-08-14, §18.13 item 136). The order is
+over UTF-8 bytes, which is Go's `sort.Strings` and Python's code-point sort; TypeScript compares
+the encoded bytes rather than its default UTF-16 code units.
 
 ### 22.3 Discovery, result types, error codes and the declared feature
 
