@@ -1,6 +1,7 @@
 package strictcli
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -938,5 +939,134 @@ func TestMCPProjectionOfAMemberSpelledSelector(t *testing.T) {
 	// A member's payload flattens under the MEMBER's own flag name.
 	if _, ok := props["profile"]; !ok {
 		t.Fatalf("member payload missing from the flat schema: %v", props)
+	}
+}
+
+// --- Unaffected by the construct, re-verified per surface (§24.3) ---
+
+func TestScopedBoolNegationStillWorks(t *testing.T) {
+	app := simpleApp("cmd", "a command", "mode={mode}",
+		WithFlags(ChoiceFlag("mode", "the mode", Required(),
+			Choice("a", "choice a", BoolFlag("cache", "use the cache", Default(true))),
+			Choice("b", "choice b"),
+		)))
+	r := app.Test([]string{"cmd", "--mode", "a", "--no-cache"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "mode=a[cache:false]") {
+		t.Fatalf("stdout = %q", r.Stdout)
+	}
+}
+
+func TestScopedRepeatableAndDictSubFlags(t *testing.T) {
+	app := simpleApp("cmd", "a command", "mode={mode}",
+		WithFlags(ChoiceFlag("mode", "the mode", Required(),
+			Choice("a", "choice a",
+				ListFlag(TypeStr, "tag", "a tag", Optional(), Unique(false)),
+				DictFlag(TypeStr, "label", "a label", Optional(), Unique(false)),
+			),
+			Choice("b", "choice b"),
+		)))
+	r := app.Test([]string{"cmd", "--mode", "a", "--tag", "x", "--tag", "y", "--label", "k=v"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "label:k=v") || !strings.Contains(r.Stdout, "tag:[x y]") {
+		t.Fatalf("stdout = %q", r.Stdout)
+	}
+}
+
+func TestScopedFlagAtPrefixResolves(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/body.txt"
+	if err := writeFileForTest(path, "from-file"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	app := simpleApp("cmd", "a command", "mode={mode}",
+		WithFlags(ChoiceFlag("mode", "the mode", Required(),
+			Choice("a", "choice a", StringFlag("body", "the body", Optional())),
+			Choice("b", "choice b"),
+		)))
+	r := app.Test([]string{"cmd", "--mode", "a", "--body", "@" + path})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "body:from-file") {
+		t.Fatalf("stdout = %q", r.Stdout)
+	}
+}
+
+// A scoped flag's coercion failure is a VALUE error, and it is reported after
+// election and scope but before presence (§24.3's precedence).
+func TestScopedValueErrorAfterScopeBeforePresence(t *testing.T) {
+	app := simpleApp("cmd", "a command", "mode={mode}",
+		WithFlags(ChoiceFlag("mode", "the mode", Required(),
+			Choice("a", "choice a",
+				IntFlag("count", "how many", Optional()),
+				StringFlag("target", "the target", Required()),
+			),
+			Choice("b", "choice b"),
+		)))
+	r := app.Test([]string{"cmd", "--mode", "a", "--count", "nope"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--count: expected integer") {
+		t.Fatalf("stderr = %q, want the value error before the presence error", r.Stderr)
+	}
+}
+
+// The skipped-binding diagnostics ride machine mode's diagnostics array at
+// level "debug", whatever the human stream did (§24.6, §19.2).
+func TestSkippedBindingRidesMachineDiagnostics(t *testing.T) {
+	t.Setenv("NOTIFY_SUBJECT", "from-env")
+	r := conditionalBindingApp().Test([]string{"send", "--json", "--via", "sms", "--phone-number", "+1"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, `"level":"debug"`) ||
+		!strings.Contains(r.Stdout, "not consulted: env var 'NOTIFY_SUBJECT'") {
+		t.Fatalf("envelope = %q", r.Stdout)
+	}
+}
+
+// writeFileForTest writes a fixture file for the @-prefix test.
+func writeFileForTest(path, body string) error {
+	return os.WriteFile(path, []byte(body), 0o600)
+}
+
+// --- Schema dump: minimum non-crashing touches only (§24.11, §24.15) ---
+//
+// The dumped schema's SELECTOR ENCODING is deliberately not authored by this
+// round: a selector's value shape is a variant, which the closed JSON Schema
+// subset cannot express, and the encoding belongs to the schema-v2 amendment.
+// What this test pins is only that the dump still runs and still carries the
+// selector's own presence -- a dump that flattens a selector away is not a legal
+// END state, and closing that is the next wave's work.
+func TestSchemaDumpCarriesTheSelectorEntry(t *testing.T) {
+	chdirTemp(t)
+	app := notifyApp()
+	schema, err := dumpSchema(app)
+	if err != nil {
+		t.Fatalf("dumpSchema error: %v", err)
+	}
+	cmd := schema["commands"].(map[string]interface{})["send"].(map[string]interface{})
+	flags := cmd["flags"].([]interface{})
+	var via map[string]interface{}
+	for _, f := range flags {
+		m := f.(map[string]interface{})
+		if m["name"] == "via" {
+			via = m
+		}
+	}
+	if via == nil {
+		t.Fatalf("no 'via' flag entry: %v", flags)
+	}
+	if via["type"] != "choice" {
+		t.Fatalf("type = %v, want \"choice\"", via["type"])
+	}
+	if via["presence"] != "required" {
+		t.Fatalf("presence = %v", via["presence"])
 	}
 }
