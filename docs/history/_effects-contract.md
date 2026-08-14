@@ -118,6 +118,18 @@ languages. It is the second phase of the declaration-regime campaign, and it del
 short of two things it enables: the surviving constraint families (§24.14) and the dumped schema's
 selector encoding (§24.11), each of which is a round with its own amendment.
 
+Amended a fifteenth time 2026-08-14 at the **schema-v2 round** (§18.16), which adds §25. The dumped
+schema becomes `schema_version: 2` in a single migration: a flag's and an arg's value shape becomes a
+**real JSON Schema fragment** from a closed four-keyword subset under `value_schema`, arity becomes a
+property of that value (so the `repeatable` key dies and the parity checker's last normalization rule
+goes with it), compound args are unified rather than banned, an int choice beyond ±2^53 is refused at
+registration, and a **selector** carries the framework-native `choices`/`elect_by` encoding §24.11
+deliberately left to this round. The document also gains a byte canon, a declared key order per
+entity, a rewritten `defaults` block, and the behavioral keys the dump was blind to. §13's
+flag-entry, arg-entry and defaults-block text is superseded by two boxes there, §12 gains the round's
+one registration guard as §12.14, and §25 ships in the **same release as §24** for the reason §24.11
+pins. It is the third phase of the declaration-regime campaign.
+
 The ordinal above counts amendment **rounds**, not the paragraphs of this header: the fifth round
 (the adoption round, §18.6) and the eighth (the non-CLI consent round, §18.8) recorded their
 rulings in §18 without adding a paragraph here, which is why the header reads first, second,
@@ -2085,8 +2097,9 @@ effects regime's split is pinned here, and the three catalogs' section markers m
 | §12.1, §12.2, §12.3, §12.4, §12.7, §12.9, §12.10 | registration-time |
 
 (§12.11 was added at the 2026-08-04 adoption round and takes the same category as §12.5, whose
-message family it belongs to. §12.12 and §12.13 were added after this table and **declare their own
-category in place**: §12.12 is registration-time throughout, and §12.13 splits -- its election,
+message family it belongs to. §12.12, §12.13 and §12.14 were added after this table and **declare
+their own category in place**: §12.12 and §12.14 are registration-time throughout, and §12.13
+splits -- its election,
 scope and delivery templates are parse-time and its declaration guards are registration-time. The
 table is not the authority for a section that states its own category; it is the authority for the
 sections it lists.) §12.4's templates fire at effect-call time rather than at
@@ -2759,8 +2772,9 @@ and the split is pinned here rather than derived: the **election, scope and deli
 Templates that name a *spelling* carry a per-language noun phrase and are asserted per target, which
 is §12.12's mechanism unchanged: **the sentence is byte-identical and the spellings inside it are
 each language's own**. §12.12's `<required-spelling>` / `<optional-spelling>` / `<default-spelling>`
-table is reused verbatim; this section adds `<record-spelling>` (§24.2's value-flag entry) and
-`<selector-spelling>` (§24.12's selector constructor):
+table is reused verbatim; this section adds three rows -- `<record-spelling>` (§24.2's value-flag
+entry), `<selector-spelling>` (§24.12's selector constructor) and its member-spelled twin
+`<member-selector-spelling>`:
 
 | | Python | Go | TypeScript |
 |---|---|---|---|
@@ -2900,7 +2914,7 @@ templates from the scoped declaration sites too. A ban that is checked only on a
 the single most likely correctness defect in this construct, and it is named here so that it is a
 requirement rather than a discovery.
 
-**Name collisions** (§24.7). Four, and each names both sites:
+**Name collisions** (§24.7). Five, and each names both sites:
 
 | Template | Text |
 |---|---|
@@ -3159,6 +3173,16 @@ exclusion rationale.
 > always have a default", which §23 makes false by construction. Required bools now appear in all
 > three, which is what Python already did.
 
+> **Amendment (2026-08-14, scoped-selector round, §18.15 item 173; recorded at the read-back audit,
+> §18.17 item 199): the MCP requiredness `iff` above is a ROOT-SCOPE rule.** A flag declared inside a
+> choice's scope is projected as a top-level property and **never** appears in `required`, whatever
+> its own presence declares: its requiredness is conditional on an election, and the tool schema has
+> no vocabulary for a conditional requirement. The scope rule is carried in the tool description
+> instead and enforced at call time with the CLI parser's own sentence (§24.11). A **selector's** own
+> property follows the rule above unchanged -- it is in `required` exactly when the selector declares
+> `required`. Nothing about the CLI-side or the dumped `presence` key moves; this narrows the MCP
+> projection alone, at the one place §24 gave a flag a conditional existence.
+
 > **Amendment (2026-08-14, schema-v2 round): the dumped schema becomes `schema_version: 2`, and the
 > flag and arg entries' value keys are superseded by §25.** The full v2 format -- the fragment
 > subset, the arity rule, the choices and selector encodings, the byte canon, the key order, the
@@ -3188,11 +3212,27 @@ exclusion rationale.
 >   value's *shape* is published, not which command-entry facts are published.
 >
 > **The conformance case schema** (`conformance/schema.json`) follows on the input side, where these
-> are what a case *declares*: `$defs/flag` and `$defs/arg` lose `type`'s v1 spelling in favour of the
-> declaration surfaces §25 names, `$defs/flag` loses `repeatable`, `$defs/mutex_group` is deleted
-> with the construct, and `$defs/config_field_def`'s `type` enum is replaced per §25.7.
+> are what a case *declares*: ~~`$defs/flag` and `$defs/arg` lose `type`'s v1 spelling in favour of the
+> declaration surfaces §25 names, `$defs/flag` loses `repeatable`,~~ `$defs/mutex_group` is deleted
+> with the construct, ~~and `$defs/config_field_def`'s `type` enum is replaced per §25.7.~~
 > `check_schema_parity.py` gains the byte-equality mode §25.8 requires and keeps the `presence`
 > assertion the box above added.
+
+> **Correction (2026-08-14, read-back audit, §18.17 item 200): the struck clauses above confused a
+> dumped key with a declaration key, and the case schema keeps all three.** `$defs/flag`'s and
+> `$defs/arg`'s `type`, and `$defs/flag`'s `repeatable`, are how a **case declares a carrier and its
+> arity** -- the input side -- not how a dump publishes a value's shape. §25.3 keeps *both*
+> declaration spellings and unifies only what they publish, §25.13's arity fixes need cases that
+> declare exactly those two shapes, and §25.15 adds no declaration surface at all. Deleting those
+> keys would make the declarations unspellable and the round's own coverage unwritable.
+> `$defs/config_field_def`'s `type` is a declaration for the same reason and likewise stays; what
+> §25.7 moves is the config-field **entry** a dump writes. What the case schema really loses is
+> `$defs/mutex_group`, deleted with the construct (§24.4, §25.7).
+>
+> What it still **needs** is named here rather than left for an implementor to discover, and is
+> **not** authored: neither the scoped-selector round nor the schema-v2 round pinned a case-level
+> spelling for a selector, for a choice's scope, or for §24.2's record-shaped `choices` entries --
+> and §12.13's parse-time templates each require a covering case that cannot be written without one.
 
 > **Amendment (2026-08-14, schema-v2 round): the app and command entries gain the behavioral keys
 > the dump was blind to, and the `defaults` block is rewritten.** Also §25's, and recorded here for
@@ -3652,7 +3692,8 @@ Recorded so implementors do not re-litigate them:
 ## 18. Decision provenance
 
 This section is **exhaustive**: every decision in §§1-17 -- and, since the machine-interface round,
-§§19-20, which are numbered after this section because sections here are never renumbered -- that
+every section numbered after this one (§§19-25), which sit there because sections here are never
+renumbered -- that
 is not verbatim plan text is listed below, in one of three classes. If a statement in this document is not derivable from the ratified
 pin list in the campaign ledger, it appears here.
 
@@ -5014,9 +5055,12 @@ Three are convergence picks -- one implementation was right and the other two ch
 ### 18.15 Amendments made at the scoped-selector round (2026-08-14)
 
 This round is the second phase of the declaration-regime campaign. It adds §24 and §12.13, adds four
-§0 terminology rows, supersedes §21 item by item, and amends §23.5, §23.9 and §12.12's mutex entry in
-place. Numbering continues §18.14's rather than restarting, for the reason that section gives: these
-are the same campaign's ledger.
+§0 terminology rows, supersedes §21 item by item, and amends §7.1, §19.1, §23.1, §23.5, §23.9 and
+§12.12's mutex entry in place -- the §7.1 and §19.1 amendments being item 169's every-level name-ban
+substitution, and §23.1's the same substitution on the presence rule's own level list. §23.2, §23.4
+and §23.5's second whole-table note were amended later, at the read-back audit (§18.17 item 201),
+which found them falsified by this round and unamended. Numbering continues §18.14's rather than
+restarting, for the reason that section gives: these are the same campaign's ledger.
 
 **Origin tags**, per §18.14's preamble. `(D)` marks the user's own proposal or an explicit
 directive; `[%%]` marks a ruling adopted from a **recommendation**, which is trust rather than
@@ -5444,6 +5488,95 @@ deleted**, so it labels every positional arg required today.
      compatibility surfaces. No new declaration surface beyond the one widening the unification
      ruling requires (TypeScript's list-carrier variadic arg). Nothing about `presence` or `default`,
      which the presence round settled and this round republishes unchanged.
+
+### 18.17 Corrections made at the read-back audit of the two-amendment round (2026-08-14)
+
+An independent read-back audit of the scoped-selector round (§18.15) and the schema-v2 round
+(§18.16) checked the two sections against each other, against the campaign's rulings S1-S17, and
+against the sites the two rounds' own changes falsified. **Nothing below is a new ruling or a
+changed guarantee**, which is why this section follows §18.13's shape rather than opening a round of
+its own: each item either propagates a decision already taken into a site that still contradicted
+it, or corrects a count, a list or a claim. Numbering continues §18.16's, for the reason §18.14
+gave. The campaign rulings were verified transcribed without drift, the ledger runs 160-196
+unbroken, and the reused code-level strings were checked against the three implementations
+(`pdetailMagnitude` / `_PDETAIL_MAGNITUDE` byte-for-byte, §21.4's four mutex functions including the
+` and ` join, `errFlagInvalidChoice` and the prefixed required-flag text).
+
+197. **The header gains the schema-v2 round's paragraph.** Every round that adds a normative section
+     had written one; the fifteenth did not, and the header therefore described a document whose
+     last section it never mentioned. The paragraph added is a summary of §18.16 and §25 and decides
+     nothing. The round-versus-paragraph note below it is unaffected: it enumerates the *early*
+     rounds that wrote no paragraph, and both remain paragraph-less.
+
+198. **Three counts and lists in §12 are corrected.** §12's category table named §12.12 and §12.13
+     as the sections declaring their own category and omitted §12.14, which does the same
+     (registration-time); §12.13's preamble said it adds two spelling rows while its table adds
+     three; and §12.13's name-collision table is introduced as "Four" while listing five templates.
+     All three are plain corrections with no text of any template touched.
+
+199. **§13's MCP requiredness rule is narrowed to root scope (§24.11).** The presence round pinned
+     "a parameter appears in a tool schema's `required` array **iff** its declared presence is
+     `required`". §24.11 then made a scoped flag's requiredness conditional and excluded it from
+     `required` entirely -- and said so in §24, while §13, which is where the MCP requiredness rule
+     is pinned, still read as an unqualified `iff`. The exception is now carried in §13's presence
+     box. A selector's own property follows the original rule unchanged.
+
+200. **§13's case-schema clause confused a dumped key with a declaration key.** The schema-v2 box
+     told `conformance/schema.json` to drop `type` from `$defs/flag` and `$defs/arg` and
+     `repeatable` from `$defs/flag` -- but those are the input side, how a *case declares* a carrier
+     and its arity, not how a dump publishes a value's shape. §25.3 keeps both declaration spellings
+     and unifies only what they publish, §25.13's arity fixes need cases that declare exactly those
+     two shapes, and §25.15 adds no declaration surface. The clauses are struck and the reason
+     recorded in place; `$defs/mutex_group`'s deletion, the one case-schema change v2 really forces,
+     stands. Named with it, and **not** authored here: neither round pinned a case-level spelling
+     for a selector, a choice's scope, or §24.2's record-shaped `choices` entries, and §12.13's
+     parse-time templates each require a covering case that cannot be written without one.
+
+201. **The presence round's remaining mutex text is superseded (§23.2, §23.4, §23.5).** §18.15's
+     supersession reached §23.1, §23.5's mutex row and §23.9's bullet, and left three sites
+     standing: §23.2's closing sentence ("after this round the member declares
+     `presence: "optional"`"), §23.4's last row and the paragraph under it (whose "the group
+     enforces cardinality on top of presence" names a construct that no longer exists, and whose
+     replacement is now the opposite declaration), and §23.5's second whole-table note (whose "one
+     exception is the mutex row" names a row that same round superseded). All three are amended in
+     place with the round's own rulings; none reverses anything.
+
+202. **§24.3's sibling-reuse clause names arity, matching §24.7 and item 169.** The rule is
+     "identical type **and arity**" in §24.7 and in the ledger, and §24.3 stated it as "identical
+     type". The prose is aligned. Recorded as **open rather than authored**: §12.13's
+     `errSiblingScopeTypeMismatch` likewise names only types (`... declared by choices "<a>" and
+     "<b>" with different types`), so an arity-only violation -- one scope declaring `--x`
+     repeatable and its sibling declaring it scalar -- has a rule and no message. Widening that
+     template's sentence or minting a sibling for it is a spelling decision this audit does not
+     take.
+
+203. **§25.9's array-order rule carves out the member payload's pinned position.** §25.6 places a
+     member-spelled choice's `value` entry **first** in that choice's `flags` array; §25.9 said
+     array order is always declaration order, and the payload is declared through a different
+     constructor with no position of its own. The specific rule wins and §25.9 now says so.
+
+204. **§25.10's always-emitted list stops claiming a fragment on every entry, and two missing
+     baselines are named.** The list included `value_schema` unqualified, which §25.2's own table
+     and §25.6 contradict: a selector carries none, and the absence is the declaration. Recorded as
+     **open rather than authored**: a selector choice object's `flags` (omitted when the scope is
+     empty) and a value-flag choice record's `help` (omitted when absent) are omit-at-baseline keys
+     on entities the `defaults` block has no entry for, so the block is not yet the complete
+     omission map it is defined to be. Naming those entities is a spelling decision, and this audit
+     leaves it to the round that takes it.
+
+205. **Two ledger-level lists are completed.** §18's own preamble still scoped its exhaustiveness
+     claim to "§§19-20", four sections after that stopped being true; it now reads §§19-25. And
+     §18.15's preamble listed the sites that round amended in place without naming §7.1, §19.1 or
+     §23.1, all three of which carry its item-169 and item-178 markers.
+
+206. **Three spellings the audit found unpinned and deliberately did not author.** Recorded so they
+     are a known remainder rather than a discovery at implementation time: §24.4 says declaring a
+     payload on a **token**-spelled choice is a registration error and §12.13 carries no template
+     for it; §12.13 pins `<member-selector-spelling>` and no template in the section uses it; and
+     the origin clauses appended to a scope-suffix message are shown only through the example
+     `flag '--phone-number' is required under '--via sms' (elected from env var 'NOTIFY_VIA')`,
+     whose `(elected` … `)` wrapper composes exactly from the pinned clause but has no template name
+     of its own.
 
 ---
 
@@ -6427,8 +6560,14 @@ compiler never saw.
 `FlagKeyIsOptional` reads `presence` instead of `opts extends { default: null }`, which fixes the
 known unsoundness it had: a mutex member declared without a default was typed as an
 always-present, non-nullable key, while the parser handed it `undefined` through the exemption
-§23.4 deletes. After this round the member declares `presence: "optional"` like anything else, and
-the handler-args type follows the declaration by construction.
+§23.4 deletes. ~~After this round the member declares `presence: "optional"` like anything else, and
+the handler-args type follows the declaration by construction.~~ *(amended 2026-08-14,
+scoped-selector round, §18.15 item 178)* After this round every flag declares its presence and the
+handler-args type follows the declaration by construction. The **mutex member** itself no longer
+exists: a member flag declares `required`, read as *required once this member is elected* (§24.4),
+and a choice's scoped flags are reachable only through the tag that proves the scope was elected --
+which is the structural fix §24.12 records for the same unsoundness this paragraph closed by
+declaration.
 
 ### 23.3 Positional args
 
@@ -6509,6 +6648,24 @@ mutex member could not say "I may be absent", and its removal is a prerequisite 
 system's by-name model. It also makes §21 read as it always should have -- a group decides *which*
 member is chosen, and a member decides what its own absence means.
 
+> **Amendment (2026-08-14, scoped-selector round, §18.15 item 178): the last row's *replacement*,
+> and the paragraph above it, are superseded.** What this round deleted is unchanged -- the
+> parse-time exemption is gone, and the table records it correctly. What no longer holds is what the
+> row says replaces it, and the sentence built on that:
+>
+> - **"the member's own `optional` declaration"** is wrong twice over. `MutexGroup` is deleted
+>   (§21's box, §24.4), so there is no group left to "enforce cardinality on top of presence"; and a
+>   **member flag must declare requiredness**, read as *required once this member is elected*
+>   (§12.13's `errMemberFlagPresence`, §23.5's own superseded-row box). The exemption's real
+>   replacement is the **scope**: an unelected choice's flags are not resolved at all, and an
+>   elected choice's flags declare and resolve presence exactly as any flag does (§24.1).
+> - **The prerequisite clause is re-homed rather than withdrawn.** Exactly-one left the constraint
+>   system entirely (§24.14, item 176), so the deletion is a prerequisite for the *selector
+>   construct*; the by-name reference model survives for the co-occurrence families that remain.
+> - **The closing sentence about §21** stands only as history: a group no longer decides anything,
+>   because there is no group. Its live form is §24.1's -- the selector decides which choice is
+>   elected, and each flag inside the elected scope decides what its own absence means.
+
 ### 23.5 Composition
 
 Presence composes with every other declaration in the framework. Each cell below is pinned, and
@@ -6540,9 +6697,15 @@ the third is added below)*:
   the check's existing text is unchanged: it never had anything to say about a flag that declares
   no value.
 - **Requiredness is satisfied by any source that provides a value** -- CLI, env, config or an
-  implication. It is not a "must be typed on the command line" rule. The one exception is the
+  implication. It is not a "must be typed on the command line" rule. ~~The one exception is the
   mutex row, and it is §21.3's exception rather than this round's: env and config are not consulted
-  for a mutex member at all.
+  for a mutex member at all.~~ *(amended 2026-08-14, scoped-selector round, §18.15 item 178: the
+  mutex row is superseded, so the exception is restated over what replaced it)* The one exception is
+  **member spelling**, and it is §21.3's exception carried over rather than this round's: env and
+  config are not consulted for a member flag at all (§24.6). A **token**-spelled selector takes
+  every source like any value flag, and a **scoped** flag's env or config binding is consulted
+  exactly when its scope is elected and otherwise never consulted at all -- §24.6's conditional
+  binding, which is a declaration property rather than a second exception.
 - **The `validate` row's `default` cell SUPERSEDES shipped Python behaviour** *(added 2026-08-14,
   presence round -- implementation sweep)*. The cell reads *runs on a supplied value, never on the
   default*, and this section's preamble says a row stating today's behaviour is stated only
@@ -6870,7 +7033,7 @@ therefore part of the election phase's contract, not an implementation detail.
 
 **Tokenization cannot wait for an election.** Whether `--target` consumes the next argv element is
 decided before any choice is elected, which is why sibling scopes may reuse a name only with an
-identical type (§24.7). The alternative -- deferring value binding until after election -- would
+identical type and arity (§24.7). The alternative -- deferring value binding until after election -- would
 make the `--flag value` / `--flag` distinction depend on parse order, and is refused.
 
 **Blame the outermost unsatisfied election.** A flag two levels down whose *outer* election is the
@@ -7770,7 +7933,10 @@ order and UTF-16 order coincide and the three languages' native comparisons agre
 having to specify a collation.
 
 **Array order** is always declaration order: flags, args, choices, grants, constraints, config-field
-`bound_commands`, `proc_observe_allowlist` prefixes. `tags` remain sorted, as they are today.
+`bound_commands`, `proc_observe_allowlist` prefixes. `tags` remain sorted, as they are today. The one
+element whose position is pinned rather than declared is a **member-spelled choice's payload**, which
+§25.6 places **first** in that choice's `flags` array; the scope's own declared flags follow it, in
+their declaration order.
 
 ### 25.10 The `defaults` block, rewritten
 
@@ -7819,9 +7985,24 @@ v2 makes it true.
 
 Keys with **no** baseline are absent from the block on purpose, and the list is exactly the set of
 always-emitted facts: `name`, `help`, `version`, `schema_version`, `project_id`, `effect`,
-`presence`, `value_schema`, a choice's `name` and `help`, a config field's `help` and `required`, and
-a check's six mandatory fields. `default` on a flag or arg is absent for the reason above:
-its emission is governed by another key, not by a baseline.
+`presence`, `value_schema` **on every entry that has one**, a choice's `name` and `help`, a config
+field's `help` and `required`, and a check's six mandatory fields. `default` on a flag or arg is
+absent for the reason above: its emission is governed by another key, not by a baseline.
+
+**`value_schema` is the one entry in that list with a stated exception, and the exception is not an
+omission at a baseline.** A **selector** flag carries no fragment at all, and its absence *is* the
+declaration (§25.2's last table row, §25.6): a variant is inexpressible in the closed subset, the
+presence of `elect_by` is what tells a reader which shape it is holding, and §25.12's check asserts
+the absence rather than tolerating it. So the block gains no `value_schema` baseline -- a baseline
+would have to say what an absent fragment means, and every answer it could give is false for the one
+entry that omits the key, which is exactly the kind of statement this section's rewrite removes.
+
+**Two omission rules this block does not yet carry**, named here rather than left to inference: a
+selector choice object's `flags`, omitted when the scope is empty (§25.6), and a value-flag choice
+record's `help`, omitted when the entry declares none (§25.5). Both are omit-at-baseline keys on
+entities the block has no entry for, so the block is not yet the complete omission map its own
+contract claims. The entity keys it would need are deliberately **not** invented here: naming them
+is a spelling decision, and it is recorded as an open one (§18.17 item 204).
 
 ### 25.11 Behavioral completeness
 
