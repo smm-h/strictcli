@@ -233,6 +233,32 @@ func RelativeToRoot(envVar string, parts ...string) InfraRootPath {
 	return InfraRootPath{envVar: envVar, parts: append([]string{}, parts...)}
 }
 
+// String renders the marker as the declaration that produced it, which is the
+// form Python (repr) and TypeScript (toString) both print -- including the
+// separator after the env var when there are no parts at all. Without it, fmt
+// rendered the struct ("{MYAPP_ROOT [store]}") and Go's help output leaked its
+// internal shape where the siblings printed the declaration (contract §23.8).
+func (p InfraRootPath) String() string {
+	quoted := make([]string, len(p.parts))
+	for i, part := range p.parts {
+		quoted[i] = pyStrRepr(part)
+	}
+	return "RelativeToRoot(" + pyStrRepr(p.envVar) + ", " + strings.Join(quoted, ", ") + ")"
+}
+
+// pyStrRepr renders a string the way Python's repr() does for the printable
+// values a declaration carries: single quotes, switching to double quotes only
+// when the value contains a single quote and no double quote, with backslashes
+// (and single quotes inside single quotes) escaped.
+func pyStrRepr(s string) string {
+	if strings.Contains(s, "'") && !strings.Contains(s, `"`) {
+		return `"` + strings.ReplaceAll(s, `\`, `\\`) + `"`
+	}
+	escaped := strings.ReplaceAll(s, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, "'", `\'`)
+	return "'" + escaped + "'"
+}
+
 // infraRootDecl is a raw WithInfraRoot declaration, collected during the options
 // loop and resolved eagerly after the loop completes in NewApp.
 type infraRootDecl struct {

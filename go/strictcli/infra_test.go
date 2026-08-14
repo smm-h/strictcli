@@ -407,3 +407,53 @@ func TestInfraConfigShowSurface(t *testing.T) {
 		t.Fatalf("json root = %v", root)
 	}
 }
+
+// --- Marker display form ---
+
+// A RelativeToRoot marker renders as the Python repr of the declaration, which
+// is what Python and TypeScript both print. Go used to fall through to fmt's
+// struct rendering ("{MYAPP_ROOT [store]}"), leaking its own internal shape
+// into help output.
+func TestMarkerStringForm(t *testing.T) {
+	cases := []struct {
+		marker InfraRootPath
+		want   string
+	}{
+		{RelativeToRoot("MYAPP_ROOT", "store"), "RelativeToRoot('MYAPP_ROOT', 'store')"},
+		{RelativeToRoot("MYAPP_ROOT", "sub", "db.sqlite"), "RelativeToRoot('MYAPP_ROOT', 'sub', 'db.sqlite')"},
+		// Python's repr keeps the separator after the env var even with no
+		// parts at all: repr(RelativeToRoot('E')) == "RelativeToRoot('E', )".
+		{RelativeToRoot("E"), "RelativeToRoot('E', )"},
+		{RelativeToRoot("E", ""), "RelativeToRoot('E', '')"},
+		// Quote selection follows Python's repr: double quotes only when the
+		// value contains a single quote and no double quote.
+		{RelativeToRoot("it's", "x"), `RelativeToRoot("it's", 'x')`},
+		{RelativeToRoot("E", `q"z`), `RelativeToRoot('E', 'q"z')`},
+		{RelativeToRoot("E", `a\b`), `RelativeToRoot('E', 'a\\b')`},
+	}
+	for _, tc := range cases {
+		if got := tc.marker.String(); got != tc.want {
+			t.Fatalf("String() = %q, want %q", got, tc.want)
+		}
+		if got := fmt.Sprintf("%v", tc.marker); got != tc.want {
+			t.Fatalf("%%v = %q, want %q", got, tc.want)
+		}
+	}
+}
+
+func TestMarkerDefaultInHelp(t *testing.T) {
+	os.Unsetenv("MYAPP_ROOT")
+	app := NewApp("myapp", "1.0.0", "test app", WithInfraRoot("MYAPP_ROOT", "/opt/myapp"))
+	app.Command("cmd", "a command", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithFlags(StringFlag("store", "the store", Default(RelativeToRoot("MYAPP_ROOT", "store")))),
+		WithEffect(EffectReadOnly))
+	r := app.Test([]string{"cmd", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	want := "  --store <str>    the store [default: RelativeToRoot('MYAPP_ROOT', 'store')]"
+	if !strings.Contains(r.Stdout, want) {
+		t.Fatalf("help line missing:\nwant %q\ngot  %q", want, r.Stdout)
+	}
+}
