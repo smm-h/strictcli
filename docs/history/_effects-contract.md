@@ -161,6 +161,18 @@ the sweep's appended-to-the-quartet rendering. The superseded box stays in place
 superseded marker, the reversal is recorded in item 111's ledger, and nothing else the sweep
 touched changes.
 
+The scoped-selector round was **swept after its implementation** (2026-08-15), once all three
+languages had shipped §24. §18.19 carries the sweep as items 213-224, continuing that round's
+numbering, and every amendment is marked in place with its item. **The sweep reverses no ruling and
+adds no section.** It corrects four texts the implementations proved wrong -- the help sample's
+flag spelling, the skipped-binding diagnostic's stream, the MCP scope refusal's error channel, and
+the help-block rule's subject, which reaches positional args too -- and pins eight spellings the
+pre-implementation text left open, among them the defaulted selector's presence part, the origin
+suffix's subject, the arg twin of the bare-entry template, the duplicate-name precedence, and two
+short-reuse guards promoted from one language's authoring to the cross-language catalog. One of its
+items changes bytes on commands that declare no selector at all (§24.3's precedence), and it is
+named as a behaviour change rather than left inside a table cell.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -2881,6 +2893,19 @@ before it, `<origin>` is one of the three clauses above, and a command-line elec
 **empty** suffix rather than a bare `(elected)` -- the wrapper exists exactly when the clause it
 wraps does, which is the rule the scope suffix already follows at root scope.
 
+**Which election the suffix names is pinned** *(added 2026-08-15, implementation round, §18.19 item
+216)*: on a presence or requirement message inside a scope, the suffix names the **outermost
+non-command-line election on the path**, and nothing else. A path may mix sources -- `--via` typed
+on the command line, a nested `--transport` elected from a config key, and the required flag two
+levels down missing -- and the reader can see every command-line segment of the path in their own
+argv already. What they cannot see is the ambient cause, so that is what the suffix names; when
+every election on the path came from the command line there is no ambient cause and the suffix is
+empty, which is the same rule as the wrapper's. When two or more ambient elections sit on one path,
+the outermost is named for §24.3's reason: it is the one the reader would have to change, and
+naming the inner one would send them to a scope that only exists because of the outer election.
+Python and Go arrived at this rule independently while implementing the round, which is why it is
+pinned here rather than left to each parser's walk order.
+
 **A selector elected more than once** -- last-wins is right for a plain flag and wrong for an
 election, because discarding a value would discard a whole scope with it:
 
@@ -2905,12 +2930,19 @@ a choice name is unique only within its selector, so the prefix names both.
 | `errChoiceHelpEmpty(sel, c)` | `Choice "<c>" of "<sel>": help text is required` |
 | `errSelectorDefaultUnknownChoice(sel, v, names)` | `Flag "<sel>": <default-spelling> names no declared choice: must be one of: <names>` |
 | `errSelectorDefaultIncomplete(sel, c, sub)` | `Flag "<sel>": <default-spelling> elects choice "<c>", whose scope declares the required flag '--<sub>': a defaulted selection must be complete with nothing typed`. **Python-excluded** -- Python's default *is* a choice instance, so the incomplete state is unconstructable rather than refused (§24.5) |
-| `errMemberFlagPresence(sel, m)` | `Choice "<m>" of "<sel>": a member flag must declare <required-spelling>, read as required once this member is elected` |
+| `errMemberFlagPresence(sel, m)` | `Choice "<m>" of "<sel>": a member flag must declare <required-spelling>, read as required once this member is elected`. **Python-excluded** *(amended 2026-08-15, implementation round, §18.19 item 213)* -- `member_value(help=...)` takes no presence keyword and a frozen dataclass's field is required by construction, so the refused state is **unconstructable** rather than refused, the same class `errSelectorDefaultIncomplete` is in. TypeScript reaches it only through a widened or JSON-shaped caller (the choice record is read back as `{ presence?: unknown }`), and that widened call **is** the covering input the conformance case asserts |
 | `errMemberSelectorShort(sel)` | `Flag "<sel>": a member-spelled choice flag is never typed, so it cannot carry a short: declare the short on a member` |
 | `errMemberDefaultCarriesValue(sel, c)` | `Flag "<sel>": <default-spelling> elects choice "<c>", whose flag carries a value nothing supplies: only a payload-less member can be a default` |
 | `errTokenChoiceCarriesPayload(sel, c)` | `Choice "<c>" of "<sel>": a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with <member-selector-spelling>` |
 | `errChoicesEntryNotRecord(name, i)` | `Flag "<name>": choices entry <i> is a bare value: declare it as <record-spelling>` |
+| `errArgChoicesEntryNotRecord(name, i)` | `Arg "<name>": choices entry <i> is a bare value: declare it as <record-spelling>`. *(added 2026-08-15, implementation round, §18.19 item 219)* The **arg twin**: positionals keep `choices` in the record spelling (§24.7), and this catalog twins every flag/arg message that reaches both surfaces (`errFlagChoicesEmpty` / `errArgChoicesEmpty`, the whole default-type-mismatch family), so an arg reports itself as an arg rather than borrowing the flag prefix |
 | `errChoicesEntryIsChoiceClass(name, i, cls)` | `Flag "<name>": choices entry <i> is the choice class '<cls>', which declares a scope: a choice with a scope belongs to a choice flag, declared with <selector-spelling>`. **Python-only** -- Go's `Ch` and TypeScript's record literal are distinct types from a choice, so the sibling mis-declaration is a compile error (§24.12) |
+
+**Entry indices are 0-based** *(added 2026-08-15, implementation round, §18.19 item 219)*, in
+`errChoicesEntryNotRecord`, `errArgChoicesEntryNotRecord` and `errChoicesEntryIsChoiceClass` alike:
+`<i>` is the entry's index in the declared list as the language itself counts it, so the first entry
+is `choices entry 0`. It is pinned because the three implementations each render `<i>` from their
+own loop counter, and a one-based message would be a byte divergence no rule forbade.
 
 **`errTokenChoiceCarriesPayload` is what makes `<member-selector-spelling>` a used row** (§18.18
 items 210-211). §24.4 pinned the rule -- a payload is delivered under the reserved name `value` and
@@ -2938,7 +2970,8 @@ templates from the scoped declaration sites too. A ban that is checked only on a
 the single most likely correctness defect in this construct, and it is named here so that it is a
 requirement rather than a discovery.
 
-**Name collisions** (§24.7). Five, and each names both sites:
+**Name collisions** (§24.7). ~~Five~~ *(amended 2026-08-15, implementation round, §18.19 item 221)*
+**Seven**, and each names both sites:
 
 | Template | Text |
 |---|---|
@@ -2947,6 +2980,36 @@ requirement rather than a discovery.
 | `errSiblingScopeShapeMismatch(sel, x, a, b)` | `Flag "<sel>": flag '--<x>' is declared by choices "<a>" and "<b>" with different value shapes: sibling scopes may reuse a name only with an identical type and arity, because tokenizing '--<x>' cannot wait for an election` |
 | `errCoElectableNameReuse(name, x, p1, p2)` | `command "<name>": flag '--<x>' is declared under '<p1>' and under '<p2>', which can be elected at the same time: simultaneously electable scopes may not reuse a flag name` |
 | `errShortCollidesAcrossScopes(name, s, a, b)` | `command "<name>": short '-<s>' is claimed by '--<a>' and '--<b>', which can be elected at the same time` |
+| `errShortShapeMismatch(name, s, a, b)` | `command "<name>": short '-<s>' is claimed by '--<a>' and '--<b>' with different value shapes: sibling scopes may reuse a short only with an identical type and arity, because tokenizing '-<s>' cannot wait for an election`. *(added 2026-08-15, implementation round, §18.19 item 221)* |
+| `errShortOnAmbiguousElection(name, s, x)` | `command "<name>": short '-<s>' is reused by sibling scopes and also claimed by '--<x>', which elects: an election token is read before any election has happened, so its short cannot be shared`. *(added 2026-08-15, implementation round, §18.19 item 221)* |
+
+**The two short-reuse guards are the short-side twin of the sibling-name rule** (§18.19 item 221).
+§24.7 permits sibling scopes to reuse a short and says nothing more, which left two states with a
+rule and no message. Both are pinned above, **all three implementations**, in the same
+`command "<name>": ` family `errShortCollidesAcrossScopes` already uses -- the site is the command,
+because the two claimants live in different scopes and neither one owns the collision.
+
+- **`errShortShapeMismatch`** is `errSiblingScopeShapeMismatch`'s exact argument one token over:
+  which *name* a reused short binds to is decided after the election, so the short may only be
+  reused when the token consumes argv identically whatever the election decides. Same noun (**value
+  shape**, §25.3's word for type-and-arity together), same reason clause, same one-condition-one-
+  message discipline -- widened, never twinned into an arity-only sibling.
+- **`errShortOnAmbiguousElection`** closes the ordering hazard the first cannot see: a short that is
+  reused across sibling scopes **and** also claimed by a candidate that is itself an election
+  token (a token-spelled selector, or a member flag, which elects by being typed) is refused
+  outright, because the binding is resolved *after* the elections and an election token has to be
+  readable *before* any election has happened. There is no shape that makes it legal, so the guard
+  refuses rather than comparing.
+
+**"Sibling scopes" here is spelling-agnostic, and that is what closes the member-scope hazard.** The
+two guards are stated over *scopes*, never over *choices of a token-spelled selector*, so two
+sibling **member** scopes -- the scopes of two member choices of one member-spelled selector, which
+also can never be live together -- are covered by the same words: reusing a short between them is
+legal exactly when the two declarations tokenize identically, and refused by
+`errShortShapeMismatch` when they do not. When one of the two claimants is the member flag itself,
+the short is claimed by a token that elects and `errShortOnAmbiguousElection` refuses it. Every
+implementation must therefore walk member scopes when it builds the short-claim table; a check run
+only over token-spelled selectors' choices leaves exactly this hazard open.
 
 **The sibling-scope template covers type and arity in one sentence** (§18.18 item 208). §24.7's rule
 is "identical type **and** arity", and the template it belongs to named only types -- so a sibling
@@ -2959,6 +3022,25 @@ shape**, which is §25.3's own word for type-and-arity together and is exactly w
 declarations' `value_schema` fragments would publish, so the reader diffs one thing rather than two;
 and the symbol is renamed to `errSiblingScopeShapeMismatch`, because a function named for types that
 fires on arity is the same two-facts-one-name defect one level down.
+
+**Duplicate-name precedence: a member choice name that collides with a root flag is the plain
+duplicate-flag error** *(added 2026-08-15, implementation round, §18.19 item 223)*. Under member
+spelling a choice name **is** a flag name (§24.7), and the member flag lives at root scope beside
+the command's own flags -- so `--profile` declared both as a member of a selector and as an ordinary
+flag of the same command is the framework's existing `command "<name>": duplicate flag name "<x>"`,
+not `errCoElectableNameReuse`. The rule reads by site, not by construct:
+
+| The two declarations | Template |
+|---|---|
+| both at root scope (a member flag and a command flag, or two command flags) | the existing duplicate-flag error |
+| one at root, one inside a scope | `errScopedNameCollidesRoot` -- the scoped one could never be reached |
+| both inside scopes that can be elected together | `errCoElectableNameReuse` |
+| both inside sibling scopes | legal, subject to `errSiblingScopeShapeMismatch` |
+
+`errCoElectableNameReuse`'s sentence names two **scope paths** (`declared under '<p1>' and under
+'<p2>'`), and a root-scope declaration has no path to render -- which is the structural reason the
+scope-versus-scope template cannot be the one that fires here, quite apart from which message reads
+better.
 
 **Scoped positionals** (S15, §24.7):
 
@@ -3002,6 +3084,74 @@ command "<name>": handler parameter '<param>' annotation <written> cannot be res
 classes in declaration order joined by ` | ` (plus nothing else -- a selector is never optional,
 §24.5), and `<written>` is the annotation as written, rendered by the same value formatter the rest
 of the family uses.
+
+**The language-specific families, ratified** *(added 2026-08-15, implementation round, §18.19 item
+220)*. Building the construct three times produced three sets of messages that name a
+mis-declaration only one language's spelling can express. They are **`excluded:` entries in
+`check_error_parity.py` with the rationale below**, which is §12.12's precedent applied for
+§12.12's reason -- a language-specific template is expected wherever a mis-declaration is
+expressible in exactly one surface, and it is a parity *defect* only when the sibling has an input
+that could produce the state and does not.
+
+**Go-only, two.** Both come from Go's twin-constructor spelling and its identity values, which is
+where Go's declaration surface differs from the other two on purpose (§24.12):
+
+```
+Choice "<c>" of "<sel>": a member-spelled choice flag declares its choices with MemberChoice(...), which names the flag that elects the choice
+Choice "<c>" of "<sel>": a choice value belongs to exactly one choice flag; it is already declared by "<first-sel>"
+```
+
+`errMemberChoiceRequired(sel, c)` and `errChoiceAliased(c, firstSel, secondSel)`. The first is
+`errTokenChoiceCarriesPayload`'s mirror: because `ChoiceFlag` and `MemberChoiceFlag` are twins over
+one `FlagOption` interface, a plain `Choice(...)` can reach the member-spelled constructor exactly
+as a `MemberChoice(...)` can reach the token-spelled one; Python spells member election with a
+keyword on the selector and TypeScript's factory takes its own choice shape, so neither has the
+input. The second exists because a Go choice is a **value with identity** (§24.12): the same
+`*ChoiceDecl` can be written into two selectors, and its identity at `Match` time would then be
+ambiguous. Python's choice classes and TypeScript's keyed map have no aliasing site at all.
+
+**Python-authored, twelve -- of which ten stay Python-only.** Two of the twelve are promoted to
+cross-language templates by item 221 above (`errShortShapeMismatch`, `errShortOnAmbiguousElection`):
+they name a state every language's declaration surface can reach, so they belong in the pinned
+catalog rather than in an exclusion list. The remaining ten are Python-only because they name
+either a keyword-string mis-spelling, a dataclass-field mis-declaration or an annotation state, none
+of which Go's functional options or TypeScript's typed literals can express:
+
+```
+Flag "<name>": elect_by is undeclared: declare elect_by="selector-token" or elect_by="member-flags"
+Flag "<name>": elect_by must be "selector-token" or "member-flags", got <value>
+Flag "<name>": choices entry <i> is <got>, not a choice class: declare it with @choice(...)
+Flag "<sel>": choice name "<c>" must match [a-z][a-z0-9-]*
+Choice "<c>" of "<sel>": field '<field>' declares no flag: declare it with sub_flag(...), sub_choice_flag(...) or member_value(...)
+Choice "<c>" of "<sel>": member_value(...) declares the payload on field '<field>': a member-spelled choice's payload is delivered under the reserved name 'value'
+Choice "<c>" of "<sel>": the annotation of field '<field>' cannot be resolved at registration: a choice class must be importable at run time, not only under TYPE_CHECKING
+Choice "<c>" of "<sel>": field '<field>' is bound to choice flag '--<nested>' and must be annotated <union>, got <written>
+Flag "<sel>": default= must be an instance of a declared choice class, got <got>
+parameter '<param>' for command '<cmd>' must be an instance of a declared choice of '--<sel>' (<union>), got <got>
+```
+
+`_raise_selector_elect_by_undeclared`, `_raise_selector_elect_by_invalid`,
+`_raise_choices_entry_not_choice_class`, `_raise_choice_name_charset`,
+`_raise_scope_field_undeclared`, `_raise_member_value_field_name`,
+`_raise_scope_annotation_unresolved`, `_raise_scope_selector_annotation`,
+`_raise_selector_default_not_instance`, `_raise_invoke_selector_not_record`. The last one is the
+only **parse-time** member of the family -- it is `call()`'s refusal of a value that is not an
+elected record (§24.11), where the other nine are registration-time -- and `<value>` / `<got>` /
+`<written>` are rendered by the same value formatter the rest of the Python catalog uses. Two of
+them mirror templates the pinned catalog already has one level down: the field-annotation message is
+`_raise_handler_selector_annotation` for a **nested** selector declared inside a scope, and the
+unresolved-annotation message is `_raise_handler_annotation_unresolved`'s scope-side twin.
+
+**TypeScript, no new family -- two defensive-reachability notes.** TypeScript authored no
+language-specific templates, because its literal-typed surfaces make the mis-declarations above
+compile errors. What it does have is pinned templates it can reach only through a **widened or
+JSON-driven caller**: `errChoiceDuplicateName` is structurally unreachable through the keyed choice
+map (object keys are unique by construction), and `errMemberFlagPresence` is unreachable through the
+declared choice type (there is no per-member presence slot). Both are enforced defensively anyway,
+exactly as the presence checks are, and **the widened call is the covering input** -- a conformance
+case asserts them by handing the factory a value the public type would have rejected. That is a
+reachability note, not an exclusion: the template is present and asserted in all three
+implementations.
 
 ### 12.14 The schema-v2 declaration guard
 
@@ -5231,7 +5381,9 @@ selector, it is no longer a constraint family, and no separate decision was take
 
 **Written before any implementation**, which is the §19 discipline this campaign adopted explicitly
 and the presence round's items 137-150 followed. Anything the implementations surface later
-continues this numbering as a sweep, exactly as items 151-159 did.
+continues this numbering as a sweep, exactly as items 151-159 did. *(pointer added 2026-08-15)*
+**That sweep is §18.19, items 213-224**, taken once all three implementations of this construct
+existed; several texts below are corrected in place there, each marked at its site.
 
 **The evidence behind the round**: three complete prototypes (`py/`, `go/`, `ts/`), one per
 language, each with a running parser, registration validation, help rendering, schema and MCP
@@ -5454,6 +5606,8 @@ decided here so implementors have nothing left to decide.
 
 **Written before any implementation**, the discipline this campaign adopted explicitly. Anything the
 implementations surface later continues this numbering as a sweep, exactly as items 151-159 did.
+*(pointer added 2026-08-15)* The scoped-selector construct's sweep is **§18.19, items 213-224**;
+nothing in it touches this round's schema work.
 
 **The evidence behind the round** is the working tree, read at authoring time rather than taken from
 the todos' line anchors (which had drifted). Six findings shaped items below and none of them came
@@ -5824,6 +5978,186 @@ the template it had a rule for), §25.10 (the `defaults` block and its always-em
      wrapper exists exactly when the clause it wraps does, which is the rule the scope suffix already
      follows at root scope. The example sentence §18.17 item 206 quoted is now a composition of two
      named templates rather than the only place the form appears.
+
+### 18.19 Corrections and spellings forced by the scoped-selector implementations (2026-08-15)
+
+The scoped-selector round (§18.15) and its two follow-ups were **written before any
+implementation**, which the campaign adopted on purpose and which §18.15's own preamble said would
+be swept once the implementations existed. All three now do -- Python, Go and TypeScript, each with
+the construct's parser, registration guards, help rendering, schema and MCP projections -- and
+building it three times falsified several pinned texts and left several others unwritten. This
+section is that sweep. Numbering continues §18.18's, for the reason §18.14 gave: the same
+campaign's ledger.
+
+**Nothing below changes a guarantee.** Each item is one of two things: a **correction**, where a
+pinned sentence said something the implementations proved wrong and the document follows the
+implementations; or a **convergence pick**, where two or three implementations independently
+arrived at the same spelling for something no rule had decided, and it is pinned so the third does
+not diverge. §18.13's and §18.17's shape, not a round of its own.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation. They are implementation-forced corrections and
+convergence picks in the §18.3 class -- the mechanical remainder, decided here so no implementor is
+left choosing.
+
+**Sites amended in place**: §12.13 (one row marked Python-excluded, one row added, two rows promoted
+into the collision table, four new explanatory blocks), §24.3 (the precedence's scope), §24.6 (the
+debug channel's stream), §24.10 (the layout sample, the block rule's subject, two new layout
+bullets) and §24.11 (the refusal channel, and the description map's choice names).
+
+213. **`errMemberFlagPresence` is Python-excluded (§12.13).** Python's member payload is declared
+     `value: str = member_value(help=...)`, which takes **no presence keyword at all**, and a frozen
+     dataclass's field is required by construction -- so "a member flag declared something other
+     than required" is **unconstructable** in Python, not merely unraised. That is
+     `errSelectorDefaultIncomplete`'s exact class (item 167), and it gets the same treatment: an
+     `excluded:` entry with the rationale, never a parity defect. Recorded with it, because the
+     audit question is otherwise reopened every time someone reads the TypeScript source:
+     TypeScript's declared choice type has no presence slot either, so its check reads the record
+     back as `{ presence?: unknown }` and fires only for a **widened or JSON-driven caller** -- and
+     that widened call is the covering input the conformance case supplies. Present and asserted in
+     Go and TypeScript, excluded in Python.
+
+214. **§24.10's layout sample is corrected to long-first (§24.10).** The sample spelled the
+     selector's line `-v, --via <choice>`; the framework spells every flag line **long first, short
+     after** (`--via, -v <choice>`), at every level and in all three implementations. The sample was
+     illustrative and simply wrong -- it contradicted the layout it existed to demonstrate. No rule
+     moves, and the corrected line is the same width, so the alignment column the sample teaches is
+     unchanged.
+
+215. **The defaulted selector's help rendering is pinned (§24.10).** §24.5 says a default is a
+     **complete elected value** and §23.8 says a flag line ends with exactly one presence part;
+     neither said what that part *renders* for a selector, and a choice name alone would hide the
+     fields the default supplies. Pinned:
+     `[default: <choice> (<field>=<value>, ...)]`, the elected choice's own scalar fields in
+     declaration order, joined by `, `, each rendered by §23.8's existing value formatter; and
+     `[default: <choice>]`, with no parentheses at all, when the scope is empty. A nested selector
+     inside the defaulted scope is not expanded inline -- it has its own line and states its own
+     default there. One rendering serves both mechanisms of item 167: Python reads the fields off
+     the default *instance*, Go and TypeScript read the named choice's declared scope defaults, and
+     completeness is what makes those the same values.
+
+216. **The origin suffix names the outermost non-command-line election (§12.13, §24.6).** §12.13
+     pinned the three origin clauses and the wrapper (item 212) but not *which* election on a
+     multi-source path they describe. Pinned: the **outermost non-CLI** election, and nothing else.
+     The rule follows §24.6's own reason for having the clauses at all -- the reader can see every
+     command-line segment in their own argv, so the suffix exists to name the cause they cannot see
+     -- and it follows §24.3's blame rule for the choice among several ambient ones: the outermost
+     is the one they would have to change. An all-CLI path produces the empty suffix, which is the
+     wrapper's existing rule. Python and Go converged on this independently while implementing;
+     pinning it keeps TypeScript from picking the innermost, which is the equally defensible answer
+     nobody should have to choose.
+
+217. **§24.6's "stderr's debug channel" is corrected to stdout (§24.6).** The skipped-binding
+     diagnostics ride `ctx.debug`, and `ctx.debug` writes to **stdout** in all three implementations
+     -- Python's `Context.debug`, Go's `(*Context).Debug`, TypeScript's `Context#debug` -- hidden
+     unless `--verbose`, suppressed by `--quiet`, which dominates. Only `warn` and `error` take
+     stderr. The contract sentence follows the implementations: the diagnostic's content, level and
+     suppression rules were never in question, and relocating three working implementations onto
+     another stream to rescue a stray noun would have been a change made for the document's
+     convenience. Machine mode was already stated correctly one paragraph up -- the same lines ride
+     `diagnostics` at level `debug` (§19.2) whatever the human stream did.
+
+218. **The content-keyed help block extends to positional args (§24.10).** §24.10's rule said "a
+     choice-carrying **flag**", and §24.2 deleted the bare-value entry on **both** surfaces -- a
+     positional's `choices` is the same record list, with the same optional help. So an arg whose
+     entries carry help had help text with nowhere to render. The rule's subject is corrected to a
+     choice-carrying **declaration**: an arg with help on any entry drops the one-line
+     `[choices: ...]` meta and renders its entries indented two columns beneath its own line in the
+     `Arguments:` section, value first, help second, with that section's own alignment column. An
+     arg cannot own a scope (§24.7), so help is the only thing that can promote it, and an arg with
+     no help on any entry is byte-identical to what it was. Recorded because the implementations
+     read the ambiguous text three different ways: Go and Python kept the one-line form
+     unconditionally for args, and TypeScript suppressed the one-line form without rendering a
+     block, which drops the entries from help entirely. All three are wrong against the corrected
+     rule, and the third is a defect in its own right.
+
+219. **The `Arg` twin of `errChoicesEntryNotRecord` is pinned, and entry indices are 0-based
+     (§12.13).** Python and TypeScript both authored the arg-side message independently and
+     identically in shape -- the `Arg "<name>": ` prefix, the flag sentence otherwise unchanged --
+     which is what the catalogue does for every other message reaching both surfaces
+     (`errFlagChoicesEmpty` / `errArgChoicesEmpty`, the default-type-mismatch family). It is pinned
+     as `errArgChoicesEntryNotRecord(name, i)`, all three. Go currently reports `Flag "<name>"` from
+     `ArgChoices(...)`, because both surfaces call one validator that takes the flag prefix as a
+     constant: that is a defect against this pin, not a Go-shaped idiom, and it makes an arg's
+     mis-declaration name a flag that does not exist. Pinned with it: `<i>` is **0-based** in all
+     three entry templates, because each implementation renders it from its own loop counter and a
+     one-based message would be a byte divergence no rule forbade.
+
+220. **The language-specific template families are ratified, with their `excluded:` rationales
+     (§12.13).** Three sets, each expected rather than tolerated, per §12.12's precedent. **Go-only,
+     two**: `errMemberChoiceRequired` (a plain `Choice(...)` passed to `MemberChoiceFlag(...)` --
+     only Go's twin-constructor spelling over one `FlagOption` interface has that input, which is
+     item 163's deliberate choice producing exactly one message of its own) and `errChoiceAliased`
+     (a choice value written into two selectors -- only Go's identity values have an aliasing site
+     at all, and identity is what removes stringly-typed switches from Go handler code).
+     **Python-authored, twelve**, of which item 221 promotes two to cross-language, leaving **ten**
+     Python-only: `elect_by` undeclared and invalid, a non-choice-class `choices` entry, the
+     choice-name charset, an undeclared scope field, a misplaced `member_value`, an unresolved scope
+     annotation, a nested-selector annotation mismatch, a non-instance `default=`, and -- the only
+     parse-time member of the family -- a non-record value handed to `call()`. Each names a keyword
+     string, a dataclass field or an annotation, none of which Go's functional options or
+     TypeScript's typed literals can express. **TypeScript authors none**, and instead has two
+     defensive-reachability notes: `errChoiceDuplicateName` (object keys are unique by construction)
+     and `errMemberFlagPresence` (no per-member presence slot in the declared type) are reachable
+     only through a widened or JSON-driven caller, which is the covering input rather than an
+     exclusion -- the templates are present and asserted everywhere.
+
+221. **The two short-reuse guards are promoted to cross-language pinned templates (§12.13).**
+     `errShortShapeMismatch` and `errShortOnAmbiguousElection` were authored Python-only, and they
+     name states every declaration surface can reach, so they belong in the pinned catalog:
+     §24.7 permits sibling scopes to reuse a short and says nothing more, which left two conditions
+     with a rule and no message. The first is `errSiblingScopeShapeMismatch`'s argument one token
+     over -- which *name* a reused short binds to is decided after the election, so the token must
+     consume argv identically whatever the election decides -- and it is widened, never twinned, for
+     item 208's reason. The second closes what shape comparison cannot see: a short reused across
+     sibling scopes **and** claimed by a candidate that is itself an election token is refused
+     outright, because the binding resolves after the elections and an election token must be
+     readable before any election has happened. Both are `command "<name>": ` messages, because the
+     claimants live in different scopes and neither owns the collision. **They close the
+     member-scope short hazard Go reported**: both are stated over *scopes* rather than over choices
+     of a token-spelled selector, so two sibling **member** scopes are covered by the same words --
+     legal when the two declarations tokenize identically, `errShortShapeMismatch` when they do not,
+     and `errShortOnAmbiguousElection` when one claimant is the member flag itself, which elects by
+     being typed. Recorded as a requirement with them: every implementation must walk member scopes
+     when it builds the short-claim table, since a table built only from token-spelled selectors'
+     choices leaves exactly that hazard open.
+
+222. **§24.11's refusal channel is corrected, and the description map's choice names are pinned
+     (§24.11).** A scope violation at the machine boundary is **not** `-32602`: it rides the
+     framework's existing tool-result error channel -- a successful response whose `result` carries
+     the sentence with `isError: true` -- which is §8.5's pinned precedent for a consent refusal
+     ("like any other invocation failure"), §22.5's for an abort, and the implementations' for an
+     unknown tool name, all for one reason. The `-32602` conditions are the protocol-level ones
+     (`name` not a string, `arguments` not an object, `approve_consequential` not a boolean); a
+     well-formed request that violates the command's own declaration rule is an execution-time
+     refusal, read by an agent that reads tool results. One channel for every `tools/call` refusal
+     also keeps the agent's recovery loop from branching on where a refusal was carried. Pinned
+     with the correction: the description block renders choice names **as declared** --
+     `via=user-facing`, never `via=user_facing`. The underscore mapping belongs to property and
+     flag names; a choice is a *value* the schema publishes in an `enum`, and mapping it would make
+     the description name something the `enum` does not contain.
+
+223. **Duplicate-name precedence is pinned (§12.13, §24.7).** Under member spelling a choice name
+     **is** a flag name, and the member flag lives at **root scope** -- so a member choice colliding
+     with a command-level flag of the same name is the framework's existing
+     `command "<name>": duplicate flag name "<x>"`, not `errCoElectableNameReuse`. The
+     co-electable template is for **scope versus scope** only, which its own sentence proves: it
+     names two scope paths, and a root-scope declaration has no path to render. §12.13 now carries
+     the full precedence by site -- both at root, one at root and one scoped
+     (`errScopedNameCollidesRoot`), both in co-electable scopes (`errCoElectableNameReuse`), both in
+     sibling scopes (legal, subject to `errSiblingScopeShapeMismatch`).
+
+224. **§24.3's parse-problem precedence is normative for every command, selector-free ones included
+     (§24.3).** The phase order is a property of the parser, not of the declaration: a structural
+     problem (unknown flag, unknown choice, double election, scope violation) is reported before a
+     value problem (coercion, `validate`, at-prefix) whether or not the command declares a selector.
+     The alternative -- selector-free commands keep reporting in argv order -- would make the same
+     two mistakes on the same command line report differently depending on a declaration the user
+     cannot see, which is the outcome the phase order exists to prevent. Within a phase, ordering is
+     unchanged: command-line order. This **changes bytes on existing selector-free commands**, where
+     an inline coercion failure previously beat a later unknown flag, and it is a deliberate
+     consequence rather than a side effect: it is user-visible, so each implementation names it in
+     its own changelog. No sentence changes -- only which of two true refusals is printed.
 
 ---
 
@@ -7278,6 +7612,22 @@ Both statements are true; the precedence rule picks the one that names a token t
 Recording a missing required election and deferring its refusal until after scope validation is
 therefore part of the election phase's contract, not an implementation detail.
 
+**The precedence is normative for every command, selector-free ones included** *(added 2026-08-15,
+implementation round, §18.19 item 224)*. The phase order is a property of the parser, not of the
+declaration: a **structural** problem -- an unknown flag, an unknown choice, a double election, a
+scope violation -- is reported before a **value** problem -- a coercion failure, a `validate`
+refusal, an at-prefix failure -- on a command that declares no selector exactly as on one that does.
+The alternative reading, that a command with no selector keeps reporting problems in argv order,
+would make the same two mistakes on the same command line report differently depending on a
+declaration the user cannot see, which is the outcome the phase order exists to prevent. Within one
+phase, ordering is unchanged: command-line order, first recorded reported first.
+
+This **changes bytes on existing selector-free commands**, and it is a deliberate consequence rather
+than a side effect: `myapp run --count abc --nosuch` reported the coercion failure on `--count`
+before this round wherever the parser coerced inline, and reports `unknown flag '--nosuch'` after
+it. It is user-visible, so each implementation names it in its own changelog; nothing about which
+*sentence* is produced changes, only which of two true refusals is the one printed.
+
 **Tokenization cannot wait for an election.** Whether `--target` consumes the next argv element is
 decided before any choice is elected, which is why sibling scopes may reuse a name only with an
 identical type and arity (§24.7). The alternative -- deferring value binding until after election -- would
@@ -7392,8 +7742,22 @@ not consulted: config key '<key>' binds flag '--<x>' under '<scope path>', which
 ```
 
 `errAmbientBindingSkippedEnv(var, x, path)` / `errAmbientBindingSkippedConfig(key, x, path)`. All
-three. They are **diagnostics, not errors**: no `error: ` prefix, stderr's debug channel, and the
-run continues.
+three. They are **diagnostics, not errors**: no `error: ` prefix, ~~stderr's debug channel~~
+*(amended 2026-08-15, implementation round, §18.19 item 217)* **the framework's debug channel**, and
+the run continues.
+
+> **Correction (2026-08-15, implementation round, §18.19 item 217): the debug channel is stdout.**
+> The struck words named the wrong stream. `ctx.debug` writes to **stdout** in all three
+> implementations -- Python's `Context.debug` (`python/strictcli/__init__.py`, the `info`/`warn`/
+> `debug`/`error` block), Go's `(*Context).Debug` (`go/strictcli/context.go`) and TypeScript's
+> `Context#debug` (`typescript/src/context.ts`) each write the line to their stdout stream, hidden
+> unless `--verbose` and suppressed by `--quiet`, which dominates. Only `warn` and `error` take
+> stderr. This sentence follows the implementations rather than the other way round: nothing about
+> the diagnostic's content, level or suppression rules was in question, and moving three working
+> implementations onto stderr to satisfy a stray noun would have been a change for the document's
+> convenience. Machine mode is unchanged and was already stated correctly one paragraph up: the
+> same lines ride the envelope's `diagnostics` at level `debug` (§19.2) whatever the human stream
+> did.
 
 **An election from a non-CLI source names itself in every message it causes.** A required sub-flag
 missing under a scope elected by an environment variable, or a typed flag refused because an
@@ -7485,15 +7849,17 @@ because a *defaulted* field is present in both cases and only the accessor separ
 
 ### 24.10 Help rendering
 
-**The rule**: a choice-carrying flag renders as an **indented block** iff any of its choices carries
-help **or** a scope; otherwise it keeps today's one-line `[choices: a, b, c]` form.
+**The rule**: a choice-carrying ~~flag~~ *(amended 2026-08-15, implementation round, §18.19 item
+218)* **declaration -- a flag or a positional arg --** renders as an **indented block** iff any of
+its choices carries help **or** a scope; otherwise it keeps today's one-line `[choices: a, b, c]`
+form.
 
 A selector therefore always renders as a block -- its choices carry mandatory help -- and a value
 flag renders as a block exactly when its entries were given help. The layout:
 
 ```
 Flags:
-  -v, --via <choice>          delivery channel [required]
+  --via, -v <choice>          delivery channel [required]
     email                     deliver the notification as an email message
       --subject <str>         subject line of the message [required]
       --recipient <str>       destination email address [required]
@@ -7501,6 +7867,14 @@ Flags:
       --phone-number <str>    destination number in E.164 form [required]
   --dry-run                   print what would be sent [default: false]
 ```
+
+> **Correction (2026-08-15, implementation round, §18.19 item 214): the selector's line reads
+> `--via, -v <choice>`.** The sample above was authored before the implementations and spelled the
+> flag `-v, --via <choice>`, short first. The framework's spelling is **long first, short after**,
+> on every flag line at every level and in every implementation (`--flag, -x`, and
+> `--flag, --no-flag, -x` for a negatable bool), so the sample contradicted the layout it was
+> illustrating. Only the sample was wrong; no rule changes, and the line's width is unchanged, so
+> the alignment column the sample demonstrates is the same one.
 
 - a choice line indents **two columns** past its selector's line; a choice's scoped flags indent
   **two columns** past their choice; recursion adds two per level;
@@ -7512,7 +7886,26 @@ Flags:
   clause `(exactly one of the following)` and its presence part, with the member flags rendered as
   ordinary flag lines two columns beneath it;
 - a **value flag's** entries in block form render the value where a choice name renders, followed
-  by its help; an entry with no help renders the value alone.
+  by its help; an entry with no help renders the value alone;
+- *(added 2026-08-15, implementation round, §18.19 item 218)* a **positional arg's** entries follow
+  the same content-keyed rule inside the `Arguments:` section: an arg whose entries carry help drops
+  the one-line `[choices: ...]` meta and renders the entries as a block indented **two columns**
+  past the arg's own line, value first and help second, exactly as a value flag's do. An arg cannot
+  declare a scope (§24.7), so help on an entry is the only thing that can promote it, and an arg
+  whose entries carry no help keeps the one-line form unchanged. The arg block computes its
+  alignment inside the `Arguments:` section, which has its own column and never shares the flag
+  block's;
+- *(added 2026-08-15, implementation round, §18.19 item 215)* a **defaulted selector's** presence
+  part renders the **complete elected value**, because that is what a default is (§24.5):
+  `[default: <choice> (<field>=<value>, ...)]`, the elected choice's own **scalar** fields in
+  declaration order, each rendered by §23.8's value formatter, joined by `, `. A choice whose scope
+  is empty -- or whose fields are all nested selectors -- renders `[default: <choice>]` with no
+  parenthesized part at all, never an empty `()`. A **nested** selector inside the defaulted scope
+  is not expanded into the parenthesized list: it opens its own line in the block, where its own
+  presence part states its own default by this same rule. This is one rendering for two mechanisms
+  (§24.5): Python reads the fields off the default choice *instance*, Go and TypeScript read the
+  defaults declared by the named choice's scope, and a complete defaulted selection makes those the
+  same values.
 
 ### 24.11 Schema, MCP and the machine boundary
 
@@ -7535,7 +7928,34 @@ partial encoding would restore -- so the two amendments ship into one release.
   command-line fact and there are no tokens at this boundary; a member's payload flattens under the
   member's own flag name, which the framework already guarantees unique command-wide;
 - wrong combinations are refused **at call time**, with the **same sentence the CLI parser gives**
-  (§12.13), carried as the protocol's invalid-params error.
+  (§12.13), carried as ~~the protocol's invalid-params error~~ *(amended 2026-08-15, implementation
+  round, §18.19 item 222)* **the framework's existing tool-result error channel** -- a successful
+  JSON-RPC response whose `result` carries the sentence as content with `isError: true`.
+
+> **Correction (2026-08-15, implementation round, §18.19 item 222): a scope refusal is not
+> `-32602`.** The struck clause put an execution-time refusal on the protocol's parameter-validation
+> code, and the precedent already pinned in this document says otherwise: §8.5 pins a consent
+> refusal as "ordinary `isError` tool-result content, like any other invocation failure", and
+> §22.5's abort takes the same channel. The implementations extend the same reading to an **unknown
+> tool name** -- it is handed to `call()` and its invocation error comes back as `isError` content,
+> never `-32602`. A scope violation is that same class of fact. The request was
+> well-formed at the protocol level (`name` is a string, `arguments` is an object,
+> `approve_consequential` is a boolean, and those three **are** the `-32602` conditions); what
+> failed is the command's own declaration rule, and the caller that must read the sentence is the
+> agent, which reads tool results rather than JSON-RPC error objects. Carrying it as `isError`
+> content also keeps one path for every refusal a `tools/call` can produce -- consent refusals,
+> invocation errors and scope violations alike -- so the agent's recovery loop does not branch on
+> where a refusal was carried.
+
+**Choice names ride the description map exactly as declared** *(added 2026-08-15, implementation
+round, §18.19 item 222)*. The block's key is `<selector>=<choice>` where the **selector** is the
+schema's property name (underscored, `flag_param_name`-style, because that is what the schema
+publishes) and the **choice** is the enum value the schema publishes, which is the choice name as
+written in the declaration -- `via=user-facing`, never `via=user_facing`. The underscore mapping
+belongs to property and flag names only, and a choice name is neither: it is a *value*, so mapping
+it would make the description name something the `enum` does not contain. Parameter names in the
+list after the colon are property names and **are** underscored, including a member-spelled choice's
+payload, which appears under the member's own flag name.
 
 The scope structure survives in the **tool description**, appended as a deterministic block so that
 an agent can read the constraint it cannot see in the schema:
