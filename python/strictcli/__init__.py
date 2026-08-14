@@ -11933,13 +11933,48 @@ _MCP_CONTINUATION_TTL_SECONDS = 300
 _MCP_CONFIRMATION_KEY = "consequential-confirmation"
 
 
+#: The base64url alphabet, in value order -- the one spelling §22.4 defines.
+_B64URL_ALPHABET = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+)
+_B64URL_VALUES = {char: value for value, char in enumerate(_B64URL_ALPHABET)}
+
+
 def _b64url(raw: bytes) -> str:
     """Unpadded base64url -- the blob is a URL-safe opaque token."""
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
+def _b64url_canonical(text: str) -> bool:
+    """True when `text` is the ONE unpadded base64url spelling of some bytes.
+
+    The three languages' decoders do not agree on their own -- Python's ignores
+    stray characters and accepts padding, Node's ignores anything outside the
+    alphabet, and Go's skips newlines -- and all three ignore the trailing bits
+    of a final character that does not fill a byte, so a blob's last character
+    can be altered without changing what it decodes to. The blob is
+    attacker-controlled input, so the spelling is checked here, before any
+    decoder sees it, identically in all three implementations.
+    """
+    remainder = len(text) % 4
+    if remainder == 1:
+        # No byte string encodes to a length one past a multiple of four.
+        return False
+    for char in text:
+        if char not in _B64URL_VALUES:
+            return False
+    if remainder == 0:
+        return True
+    # Two characters carry one byte and three carry two, so the final character
+    # has 4 or 2 bits left over, and a canonical encoder leaves them zero.
+    leftover = 0b1111 if remainder == 2 else 0b11
+    return not _B64URL_VALUES[text[-1]] & leftover
+
+
 def _b64url_decode(text: str) -> bytes | None:
-    """Decode unpadded base64url, or None when the text is not one."""
+    """Decode canonical unpadded base64url, or None when the text is not one."""
+    if not _b64url_canonical(text):
+        return None
     padding = "=" * (-len(text) % 4)
     try:
         return base64.urlsafe_b64decode(text + padding)

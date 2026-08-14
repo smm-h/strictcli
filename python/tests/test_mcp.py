@@ -1606,6 +1606,37 @@ class TestMcpContinuationState:
             fresh, "cli/1.0.0", "digest", now=now + ttl + 1,
         ) == "requestState has expired"
 
+    def test_only_canonical_unpadded_base64url_verifies(self):
+        """§22.4's blob is unpadded base64url, and no other spelling of it.
+
+        Left to themselves the three languages' decoders disagree: Python's
+        accepts padding and Node's ignores anything outside the alphabet, while
+        Go's refuses both -- and all three ignore a newline or the trailing bits
+        of a final character that does not fill a byte. The blob is
+        attacker-controlled input, so the spelling is checked before any decoder
+        sees it, identically everywhere.
+        """
+        alphabet = (
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        )
+        continuation = strictcli._MCPContinuation()
+        good = continuation.mint("cli/1.0.0", "digest")
+        head, mac = good.split(".")
+        # The same data bits with a flipped ignored trailing bit: a lax decoder
+        # yields the identical MAC bytes and accepts the blob.
+        noisy = mac[:-1] + alphabet[alphabet.index(mac[-1]) ^ 1]
+        for spelling in (
+            good + "=",                        # padding
+            good + "*",                        # outside the alphabet
+            f"{head[:5]}\n{head[5:]}.{mac}",   # a newline a decoder may skip
+            f"{head}.{noisy}",                 # non-canonical trailing bits
+        ):
+            assert continuation.verify(spelling, "cli/1.0.0", "digest") == (
+                "requestState failed verification"
+            ), f"accepted a non-canonical spelling: {spelling!r}"
+        # The canonical spelling still verifies, and is consumed doing so.
+        assert continuation.verify(good, "cli/1.0.0", "digest") is None
+
     def test_a_state_is_worthless_to_another_process(self):
         one = strictcli._MCPContinuation()
         other = strictcli._MCPContinuation()
