@@ -1089,10 +1089,7 @@ test("mcp: the request metadata is validated key by key", async () => {
  */
 test("mcp: more than one offending _meta key names the first in sorted order", async () => {
 	const cases: [Record<string, unknown>, string][] = [
-		[
-			{ "z!bad": 1, "a!bad": 1 },
-			"invalid _meta key name: 'a!bad'",
-		],
+		[{ "z!bad": 1, "a!bad": 1 }, "invalid _meta key name: 'a!bad'"],
 		// The lexically first offender is named whichever rule it breaks.
 		[
 			{ "z!bad": 1, "io.mcp/whatever": 1 },
@@ -1865,7 +1862,10 @@ test("mcp: a continuation accepts only canonical unpadded base64url", () => {
 		);
 	}
 	// The canonical spelling still verifies, and is consumed doing so.
-	assert.equal(continuation.verify(good, "cli/1.0.0", "digest", now), undefined);
+	assert.equal(
+		continuation.verify(good, "cli/1.0.0", "digest", now),
+		undefined,
+	);
 });
 
 test("mcp: a continuation expires, and is worthless to another process", () => {
