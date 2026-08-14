@@ -814,13 +814,15 @@ func Ch(value interface{}, help string) ChoiceValue {
 
 // choiceValuesToRecords validates a choices list and splits it into the plain
 // value list the parser and schema use and the record list help rendering uses.
-// name is the flag or arg name for the error text.
-func choiceValuesToRecords(name string, vals []ChoiceValue) ([]interface{}, []ChoiceValue) {
+// name is the flag or arg name for the error text, and notRecord is the
+// surface's own bare-value template: the two surfaces have twin messages, so an
+// arg reports itself as an arg (§12.13, §18.19 item 219).
+func choiceValuesToRecords(name string, vals []ChoiceValue, notRecord func(string, int) string) ([]interface{}, []ChoiceValue) {
 	values := make([]interface{}, len(vals))
 	records := make([]ChoiceValue, len(vals))
 	for i, cv := range vals {
 		if !cv.viaCh {
-			panic(errChoicesEntryNotRecord(name, i))
+			panic(notRecord(name, i))
 		}
 		values[i] = cv.Value
 		records[i] = cv
@@ -836,7 +838,7 @@ func choiceValuesToRecords(name string, vals []ChoiceValue) ([]interface{}, []Ch
 // Ch(value, help); the bare-value entry is deleted (contract §24.2).
 func Choices(vals ...ChoiceValue) FlagOption {
 	return flagOptFunc(func(f *Flag) {
-		f.Choices, f.choiceRecords = choiceValuesToRecords(f.Name, vals)
+		f.Choices, f.choiceRecords = choiceValuesToRecords(f.Name, vals, errChoicesEntryNotRecord)
 	})
 }
 
@@ -958,7 +960,7 @@ func ArgType(t FlagType) ArgOption {
 // positionals stay command-level, with choices in the record spelling).
 func ArgChoices(vals ...ChoiceValue) ArgOption {
 	return func(a *Arg) {
-		a.Choices, a.choiceRecords = choiceValuesToRecords(a.Name, vals)
+		a.Choices, a.choiceRecords = choiceValuesToRecords(a.Name, vals, errArgChoicesEntryNotRecord)
 	}
 }
 

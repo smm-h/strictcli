@@ -473,11 +473,21 @@ func validateSelectorDecl(sel *Flag) {
 	}
 }
 
+// valueShape is a declaration's type and arity together, which is §25.3's own
+// word for the pair and exactly what its `value_schema` fragment would publish.
+type valueShape struct {
+	t          FlagType
+	repeatable bool
+}
+
+func shapeOf(f *Flag) valueShape {
+	return valueShape{t: f.Type, repeatable: f.Repeatable}
+}
+
 // sameValueShape reports whether two declarations tokenize and deliver
-// identically: same type and same arity. §25.3's word for the pair is "value
-// shape", which is what the two declarations' fragments would publish.
+// identically: same type and same arity.
 func sameValueShape(a, b *Flag) bool {
-	return a.Type == b.Type && a.Repeatable == b.Repeatable
+	return shapeOf(a) == shapeOf(b)
 }
 
 // ---------------------------------------------------------------------------
@@ -498,6 +508,18 @@ func (s *flagSite) choice() *ChoiceDecl {
 		return nil
 	}
 	return s.path[len(s.path)-1].ch
+}
+
+// elects reports whether this site's declaration is itself an election token: a
+// token-spelled selector, or a member flag, which elects by being typed. A
+// member-spelled selector is not one -- it has no token at all, which is why it
+// cannot carry a short in the first place.
+func (s *flagSite) elects() bool {
+	if s.flag.Type == TypeChoice && !s.flag.memberSpelled {
+		return true
+	}
+	ch := s.choice()
+	return ch != nil && ch.member && memberFlag(ch) == s.flag
 }
 
 // selector returns the selector owning this site's scope, or nil at root.
@@ -631,6 +653,43 @@ func validateCommandScopes(cmdName string, idx *flagIndex) {
 					panic(errShortCollidesAcrossScopes(cmdName, short, a.flag.Name, b.flag.Name))
 				}
 			}
+		}
+	}
+
+	// What survives the pass above is SIBLING reuse: one short claimed by two
+	// or more names that can never be live together. §24.7 permits it, and the
+	// two guards below are what it permits it subject to (§12.13, §18.19 item
+	// 221). Both are stated over SCOPES rather than over choices of a
+	// token-spelled selector, which is what covers two sibling MEMBER scopes
+	// with the same words -- the index walks member scopes, so a member flag's
+	// own short is a claimant here like any other.
+	for _, short := range idx.shortOrder {
+		sites := idx.shorts[short]
+		var names []string
+		seen := map[string]bool{}
+		for _, s := range sites {
+			if !seen[s.flag.Name] {
+				seen[s.flag.Name] = true
+				names = append(names, s.flag.Name)
+			}
+		}
+		if len(names) < 2 {
+			continue
+		}
+		shapes := map[valueShape]bool{}
+		for _, name := range names {
+			for _, s := range sites {
+				if s.flag.Name != name {
+					continue
+				}
+				if s.elects() {
+					panic(errShortOnAmbiguousElection(cmdName, short, name))
+				}
+				shapes[shapeOf(s.flag)] = true
+			}
+		}
+		if len(shapes) > 1 {
+			panic(errShortShapeMismatch(cmdName, short, names[0], names[1]))
 		}
 	}
 }

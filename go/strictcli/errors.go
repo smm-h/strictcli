@@ -1556,6 +1556,15 @@ func errChoicesEntryNotRecord(name string, i int) string {
 	return fmt.Sprintf("Flag %q: choices entry %d is a bare value: declare it as Ch(<value>, \"<help>\")", name, i)
 }
 
+// errArgChoicesEntryNotRecord is the ARG twin of errChoicesEntryNotRecord
+// (§12.13, §18.19 item 219). Positionals keep `choices` in the record spelling,
+// and this catalogue twins every flag/arg message that reaches both surfaces,
+// so an arg reports itself as an arg rather than borrowing the flag prefix.
+// `<i>` is 0-based in both, as it is in every entry template.
+func errArgChoicesEntryNotRecord(name string, i int) string {
+	return fmt.Sprintf("Arg %q: choices entry %d is a bare value: declare it as Ch(<value>, \"<help>\")", name, i)
+}
+
 // errMemberChoiceRequired is GO-ONLY, and it is the mirror of
 // errTokenChoiceCarriesPayload: Go's two selector constructors are twins, so a
 // plain Choice(...) can reach MemberChoiceFlag(...) the way a MemberChoice(...)
@@ -1604,6 +1613,24 @@ func errCoElectableNameReuse(name, x, p1, p2 string) string {
 
 func errShortCollidesAcrossScopes(name, s, a, b string) string {
 	return fmt.Sprintf("command %q: short '-%s' is claimed by '--%s' and '--%s', which can be elected at the same time", name, s, a, b)
+}
+
+// errShortShapeMismatch is errSiblingScopeShapeMismatch's exact argument one
+// token over (§12.13, §18.19 item 221): which NAME a reused short binds to is
+// decided after the election, so the short may only be reused when the token
+// consumes argv identically whatever the election decides. Stated over SCOPES,
+// so two sibling member scopes are covered by the same words.
+func errShortShapeMismatch(name, s, a, b string) string {
+	return fmt.Sprintf("command %q: short '-%s' is claimed by '--%s' and '--%s' with different value shapes: sibling scopes may reuse a short only with an identical type and arity, because tokenizing '-%s' cannot wait for an election", name, s, a, b, s)
+}
+
+// errShortOnAmbiguousElection closes what shape comparison cannot see: a short
+// reused across sibling scopes AND claimed by a candidate that is itself an
+// election token is refused outright, because the binding resolves after the
+// elections and an election token must be readable before any election has
+// happened (§12.13, §18.19 item 221). There is no shape that makes it legal.
+func errShortOnAmbiguousElection(name, s, x string) string {
+	return fmt.Sprintf("command %q: short '-%s' is reused by sibling scopes and also claimed by '--%s', which elects: an election token is read before any election has happened, so its short cannot be shared", name, s, x)
 }
 
 // --- A constraint naming a scoped flag (§12.13, §24.8) ---
