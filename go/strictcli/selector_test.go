@@ -1039,14 +1039,13 @@ func writeFileForTest(path, body string) error {
 	return os.WriteFile(path, []byte(body), 0o600)
 }
 
-// --- Schema dump: minimum non-crashing touches only (§24.11, §24.15) ---
+// --- Schema dump: the selector rides §25.6's encoding ---
 //
-// The dumped schema's SELECTOR ENCODING is deliberately not authored by this
-// round: a selector's value shape is a variant, which the closed JSON Schema
-// subset cannot express, and the encoding belongs to the schema-v2 amendment.
-// What this test pins is only that the dump still runs and still carries the
-// selector's own presence -- a dump that flattens a selector away is not a legal
-// END state, and closing that is the next wave's work.
+// A selector's value shape is a variant, which the closed JSON Schema subset
+// cannot express, so the entry carries no fragment at all and its `choices` are
+// choice objects. `elect_by` is the discriminator. The full encoding is pinned
+// in schema_v2_test.go; this is the selector round's own end-state check that a
+// dump no longer flattens the construct away.
 func TestSchemaDumpCarriesTheSelectorEntry(t *testing.T) {
 	chdirTemp(t)
 	app := notifyApp()
@@ -1066,8 +1065,11 @@ func TestSchemaDumpCarriesTheSelectorEntry(t *testing.T) {
 	if via == nil {
 		t.Fatalf("no 'via' flag entry: %v", flags)
 	}
-	if via["type"] != "choice" {
-		t.Fatalf("type = %v, want \"choice\"", via["type"])
+	if _, present := via["value_schema"]; present {
+		t.Fatalf("a selector entry must carry no fragment: %v", via)
+	}
+	if via["elect_by"] != "selector-token" {
+		t.Fatalf("elect_by = %v", via["elect_by"])
 	}
 	if via["presence"] != "required" {
 		t.Fatalf("presence = %v", via["presence"])

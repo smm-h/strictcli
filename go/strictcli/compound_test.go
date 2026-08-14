@@ -916,8 +916,15 @@ func TestListFlagSchema(t *testing.T) {
 	run := commands["run"].(map[string]interface{})
 	flags := run["flags"].([]interface{})
 	flag := flags[0].(map[string]interface{})
-	if flag["type"] != "list[int]" {
-		t.Fatalf("expected type 'list[int]', got %v", flag["type"])
+	// v2 publishes a real JSON Schema fragment, and the v1 carrier string is
+	// gone with it (contract §25.2).
+	frag := flag["value_schema"].(map[string]interface{})
+	if frag["type"] != "array" {
+		t.Fatalf("expected an array fragment, got %v", frag)
+	}
+	items := frag["items"].(map[string]interface{})
+	if items["type"] != "integer" {
+		t.Fatalf("expected integer items, got %v", items)
 	}
 }
 
@@ -938,8 +945,15 @@ func TestDictFlagSchema(t *testing.T) {
 	run := commands["run"].(map[string]interface{})
 	flags := run["flags"].([]interface{})
 	flag := flags[0].(map[string]interface{})
-	if flag["type"] != "dict[str]" {
-		t.Fatalf("expected type 'dict[str]', got %v", flag["type"])
+	// A dict's keys are `string` structurally, so `additionalProperties`
+	// carrying the value type is a complete description (contract §25.2).
+	frag := flag["value_schema"].(map[string]interface{})
+	if frag["type"] != "object" {
+		t.Fatalf("expected an object fragment, got %v", frag)
+	}
+	addl := frag["additionalProperties"].(map[string]interface{})
+	if addl["type"] != "string" {
+		t.Fatalf("expected string values, got %v", addl)
 	}
 }
 

@@ -3132,8 +3132,8 @@ func TestDumpSchemaContents(t *testing.T) {
 	if targetFlag["name"] != "target" {
 		t.Fatalf("expected flag name 'target', got %v", targetFlag["name"])
 	}
-	if targetFlag["type"] != "str" {
-		t.Fatalf("expected flag type 'str', got %v", targetFlag["type"])
+	if got := targetFlag["value_schema"].(map[string]interface{})["type"]; got != "string" {
+		t.Fatalf("expected fragment type 'string', got %v", got)
 	}
 	if targetFlag["short"] != "t" {
 		t.Fatalf("expected short 't', got %v", targetFlag["short"])
@@ -3142,8 +3142,15 @@ func TestDumpSchemaContents(t *testing.T) {
 	if !ok || len(choices) != 2 {
 		t.Fatalf("expected 2 choices, got %v", targetFlag["choices"])
 	}
-	if choices[0] != "prod" || choices[1] != "staging" {
-		t.Fatalf("expected choices [prod, staging], got %v", choices)
+	// The sibling key carries the value-plus-help RECORDS; the values
+	// themselves live in the fragment's `enum` (contract §25.5).
+	if choices[0].(map[string]interface{})["value"] != "prod" ||
+		choices[1].(map[string]interface{})["value"] != "staging" {
+		t.Fatalf("expected the records for [prod, staging], got %v", choices)
+	}
+	enum := targetFlag["value_schema"].(map[string]interface{})["enum"].([]interface{})
+	if enum[0] != "prod" || enum[1] != "staging" {
+		t.Fatalf("expected the enum [prod, staging], got %v", enum)
 	}
 	// hidden should be omitted when false (default)
 	if _, ok := targetFlag["hidden"]; ok {
@@ -3154,8 +3161,8 @@ func TestDumpSchemaContents(t *testing.T) {
 	if forceFlag["name"] != "force-deploy" {
 		t.Fatalf("expected flag name 'force-deploy', got %v", forceFlag["name"])
 	}
-	if forceFlag["type"] != "bool" {
-		t.Fatalf("expected flag type 'bool', got %v", forceFlag["type"])
+	if got := forceFlag["value_schema"].(map[string]interface{})["type"]; got != "boolean" {
+		t.Fatalf("expected fragment type 'boolean', got %v", got)
 	}
 	if forceFlag["negatable"] != true {
 		t.Fatalf("expected negatable true, got %v", forceFlag["negatable"])
@@ -3304,8 +3311,8 @@ func TestDumpSchemaGlobalFlags(t *testing.T) {
 	if loud["name"] != "loud" {
 		t.Fatalf("expected name 'loud', got %v", loud["name"])
 	}
-	if loud["type"] != "bool" {
-		t.Fatalf("expected type 'bool', got %v", loud["type"])
+	if got := loud["value_schema"].(map[string]interface{})["type"]; got != "boolean" {
+		t.Fatalf("expected fragment type 'boolean', got %v", got)
 	}
 	if loud["short"] != "V" {
 		t.Fatalf("expected short 'V', got %v", loud["short"])
@@ -3318,8 +3325,8 @@ func TestDumpSchemaGlobalFlags(t *testing.T) {
 	if output["name"] != "output" {
 		t.Fatalf("expected name 'output', got %v", output["name"])
 	}
-	if output["type"] != "str" {
-		t.Fatalf("expected type 'str', got %v", output["type"])
+	if got := output["value_schema"].(map[string]interface{})["type"]; got != "string" {
+		t.Fatalf("expected fragment type 'string', got %v", got)
 	}
 	if output["default"] != "text" {
 		t.Fatalf("expected default 'text', got %v", output["default"])
@@ -6880,7 +6887,7 @@ func TestSchemaNoTagsOmitted(t *testing.T) {
 }
 
 func TestSchemaTagsInDefaults(t *testing.T) {
-	defaults := buildSchemaDefaults()
+	defaults := toPlain(buildSchemaDefaults()).(map[string]interface{})
 	cmdDefaults := defaults["command"].(map[string]interface{})
 	if _, ok := cmdDefaults["tags"]; !ok {
 		t.Fatal("expected 'tags' in command defaults")
@@ -6905,19 +6912,19 @@ func TestSchemaVersion(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'schema_version' in schema")
 	}
-	if sv != 1 {
-		t.Fatalf("expected schema_version 1, got %v", sv)
+	if sv != 2 {
+		t.Fatalf("expected schema_version 2, got %v", sv)
 	}
 }
 
 func TestSchemaVersionInDefaults(t *testing.T) {
-	defaults := buildSchemaDefaults()
+	defaults := toPlain(buildSchemaDefaults()).(map[string]interface{})
 	sv, ok := defaults["schema_version"]
 	if !ok {
 		t.Fatal("expected 'schema_version' in defaults")
 	}
-	if sv != 1 {
-		t.Fatalf("expected schema_version default 1, got %v", sv)
+	if sv != 2 {
+		t.Fatalf("expected schema_version default 2, got %v", sv)
 	}
 }
 
@@ -7082,7 +7089,7 @@ func TestSchemaConstraintsOmittedWhenEmpty(t *testing.T) {
 }
 
 func TestSchemaConstraintsInDefaults(t *testing.T) {
-	defaults := buildSchemaDefaults()
+	defaults := toPlain(buildSchemaDefaults()).(map[string]interface{})
 	cmdDefaults := defaults["command"].(map[string]interface{})
 	if _, ok := cmdDefaults["constraints"]; !ok {
 		t.Fatal("expected 'constraints' in command defaults")
@@ -7124,7 +7131,7 @@ func TestSchemaTagContractsOmittedWhenEmpty(t *testing.T) {
 }
 
 func TestSchemaTagContractsInDefaults(t *testing.T) {
-	defaults := buildSchemaDefaults()
+	defaults := toPlain(buildSchemaDefaults()).(map[string]interface{})
 	appDefaults := defaults["app"].(map[string]interface{})
 	if _, ok := appDefaults["tag_contracts"]; !ok {
 		t.Fatal("expected 'tag_contracts' in app defaults")
@@ -7182,15 +7189,15 @@ func TestSchemaArgDefaultOmittedWhenNotSet(t *testing.T) {
 	}
 }
 
-func TestSchemaArgDefaultInDefaults(t *testing.T) {
-	defaults := buildSchemaDefaults()
-	argDefaults := defaults["arg"].(map[string]interface{})
-	v, ok := argDefaults["default"]
-	if !ok {
-		t.Fatal("expected 'default' in arg defaults")
-	}
-	if v != nil {
-		t.Fatalf("expected arg default to be nil, got %v", v)
+// `default` has NO baseline on either entry since presence became the
+// authority: it is emitted exactly when `presence` is "default", so a `null`
+// baseline for it would state something false (contract §25.10).
+func TestSchemaDefaultHasNoBaselineOnEitherEntry(t *testing.T) {
+	defaults := toPlain(buildSchemaDefaults()).(map[string]interface{})
+	for _, entity := range []string{"arg", "flag"} {
+		if _, ok := defaults[entity].(map[string]interface{})["default"]; ok {
+			t.Fatalf("%s defaults must carry no 'default' baseline", entity)
+		}
 	}
 }
 
@@ -7583,16 +7590,18 @@ func TestSchemaArgType(t *testing.T) {
 	cmd := commands["cmd"].(map[string]interface{})
 	args := cmd["args"].([]interface{})
 
-	// int arg should have "type": "int"
+	// Every arg entry carries a fragment now -- there is nothing to
+	// reconstruct, which is why `arg.type` left the defaults block (§25.10).
 	intArg := args[0].(map[string]interface{})
-	if intArg["type"] != "int" {
-		t.Fatalf("expected type 'int', got %v", intArg["type"])
+	if got := intArg["value_schema"].(map[string]interface{})["type"]; got != "integer" {
+		t.Fatalf("expected fragment type 'integer', got %v", got)
 	}
-
-	// str arg should NOT have "type" (default, omitted)
 	strArg := args[1].(map[string]interface{})
+	if got := strArg["value_schema"].(map[string]interface{})["type"]; got != "string" {
+		t.Fatalf("expected fragment type 'string', got %v", got)
+	}
 	if _, ok := strArg["type"]; ok {
-		t.Fatalf("str arg should not have 'type' in schema (default is omitted)")
+		t.Fatalf("the v1 'type' key is deleted, got %v", strArg["type"])
 	}
 }
 
@@ -7621,8 +7630,15 @@ func TestSchemaArgChoices(t *testing.T) {
 	if len(choicesList) != 2 {
 		t.Fatalf("expected 2 choices, got %d", len(choicesList))
 	}
-	if choicesList[0] != "dev" || choicesList[1] != "prod" {
-		t.Fatalf("expected choices [dev, prod], got %v", choicesList)
+	// The sibling key carries RECORDS; the values live in the fragment's enum
+	// (contract §25.5). `help` is omitted when the entry declares none.
+	first := choicesList[0].(map[string]interface{})
+	if first["value"] != "dev" || len(first) != 1 {
+		t.Fatalf("expected {value: dev}, got %v", first)
+	}
+	enum := arg["value_schema"].(map[string]interface{})["enum"].([]interface{})
+	if len(enum) != 2 || enum[0] != "dev" || enum[1] != "prod" {
+		t.Fatalf("expected the enum [dev, prod], got %v", enum)
 	}
 }
 
@@ -7637,8 +7653,10 @@ func TestSchemaArgTypeInDefaults(t *testing.T) {
 	}
 	defaults := schema["defaults"].(map[string]interface{})
 	argDefaults := defaults["arg"].(map[string]interface{})
-	if argDefaults["type"] != "str" {
-		t.Fatalf("expected arg default type 'str', got %v", argDefaults["type"])
+	// `arg.type` is DELETED from the block: `value_schema` is always emitted,
+	// so there is nothing to reconstruct (§25.10).
+	if _, ok := argDefaults["type"]; ok {
+		t.Fatalf("expected no arg 'type' baseline, got %v", argDefaults["type"])
 	}
 	if argDefaults["choices"] != nil {
 		t.Fatalf("expected arg default choices nil, got %v", argDefaults["choices"])
@@ -8009,7 +8027,7 @@ func TestSchemaHiddenGroup(t *testing.T) {
 }
 
 func TestSchemaHiddenInteractiveInDefaults(t *testing.T) {
-	defaults := buildSchemaDefaults()
+	defaults := toPlain(buildSchemaDefaults()).(map[string]interface{})
 	cmdDefaults := defaults["command"].(map[string]interface{})
 	if cmdDefaults["hidden"] != false {
 		t.Fatalf("expected command.hidden default to be false, got %v", cmdDefaults["hidden"])
@@ -8510,8 +8528,8 @@ func TestDumpSchemaDictNoCWD(t *testing.T) {
 	app.Command("greet", "Say hello", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	d := app.DumpSchemaDict()
-	if d["schema_version"] != 1 {
-		t.Fatalf("expected schema_version 1, got %v", d["schema_version"])
+	if d["schema_version"] != 2 {
+		t.Fatalf("expected schema_version 2, got %v", d["schema_version"])
 	}
 	if d["version"] != "1.0.0" {
 		t.Fatalf("expected version 1.0.0, got %v", d["version"])

@@ -834,6 +834,30 @@ func choiceValuesToRecords(name string, vals []ChoiceValue, notRecord func(strin
 	return values, records
 }
 
+// checkChoiceMagnitudes runs §12.14's guard over one declaration's resolved
+// choice values. surface is "Flag" or "Arg", which is each surface's own
+// existing message prefix.
+func checkChoiceMagnitudes(surface, name string, values []interface{}) {
+	for _, v := range values {
+		n, ok := v.(int)
+		if !ok {
+			continue
+		}
+		if n > choiceMaxMagnitude || n < -choiceMaxMagnitude {
+			if surface == "Arg" {
+				panic(errArgChoiceMagnitude(name, n))
+			}
+			panic(errFlagChoiceMagnitude(name, n))
+		}
+	}
+}
+
+// choiceMaxMagnitude is the largest integer a JSON reader parsing numbers as
+// IEEE-754 doubles recovers exactly. It is the payload regime's own guard at a
+// second boundary: there a value being written into the envelope, here one
+// being written into the schema file.
+const choiceMaxMagnitude = 1 << 53
+
 // Choices sets the allowed values for a flag. Every entry is a record built by
 // Ch(value, help); the bare-value entry is deleted (contract §24.2).
 func Choices(vals ...ChoiceValue) FlagOption {
@@ -1333,19 +1357,21 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 			panic(errArgTypeBad(a.Type))
 		}
 	}
-	// Validate choices
+	// Validate choices. The list-typed refusal is DELETED (contract §25.4): a
+	// variadic arg declared with a scalar element type and one declared with the
+	// list carrier are one declaration with one published shape, so a ban that
+	// fired on one spelling and not the other was two rules for one fact. The
+	// entries are checked against the ELEMENT type in both spellings.
 	if a.Choices != nil {
-		if IsListType(a.Type) {
-			panic(errArgChoicesIncompatibleListType(a.Name))
-		}
-		if a.Type == TypeBool {
+		item := ItemType(a.Type)
+		if item == TypeBool {
 			panic(errArgChoicesIncompatibleBool(a.Name))
 		}
 		if len(a.Choices) == 0 {
 			panic(errArgChoicesEmpty(a.Name))
 		}
 		for _, c := range a.Choices {
-			switch a.Type {
+			switch item {
 			case TypeStr:
 				if _, ok := c.(string); !ok {
 					panic(errArgChoiceTypeMismatch(a.Name, c, "str"))
@@ -1360,6 +1386,9 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 				}
 			}
 		}
+		// §12.14's guard: an int choice beyond ±2^53 cannot survive the
+		// fragment that publishes it.
+		checkChoiceMagnitudes("Arg", a.Name, a.Choices)
 	}
 	// Validate default type matches declared type. There is no list branch:
 	// a list-typed arg must be variadic (refused just above otherwise), and a
@@ -1643,6 +1672,9 @@ func validateFlagConfig(f *Flag) {
 				}
 			}
 		}
+		// §12.14's guard: an int choice beyond ±2^53 cannot survive the
+		// fragment that publishes it.
+		checkChoiceMagnitudes("Flag", f.Name, f.Choices)
 	}
 	// Validate int default type
 	if f.Type == TypeInt && f.hasDefault && f.Default != nil {

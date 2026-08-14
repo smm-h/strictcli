@@ -9,7 +9,23 @@ import (
 	"strings"
 )
 
-// flagTypeName maps FlagType to its string representation for schema output.
+// The dumped schema, version 2 (effects contract §25).
+//
+// Every flag and arg entry carries a `value_schema`: a real JSON Schema
+// fragment from the closed four-keyword subset (`type`, `items`,
+// `additionalProperties`, `enum`) with JSON Schema's own type names. The v1
+// `type` key is gone, and so is `repeatable` -- arity is a property of the
+// VALUE, so a repeatable scalar flag publishes the identical array fragment a
+// `list[T]` flag does. A SELECTOR carries no fragment at all, and its absence
+// is the declaration: a variant is inexpressible in the closed subset, and the
+// presence of `elect_by` is what tells a reader which shape it is holding.
+//
+// Keys are emitted in the order §25.9 pins, at every depth, and the document is
+// written by the canonical writer in schema_json.go.
+
+// flagTypeName maps FlagType to its string representation. The dumped schema no
+// longer uses it -- v2 publishes fragments -- but help rendering and several
+// error templates name a carrier in strictcli's own vocabulary.
 var flagTypeName = map[FlagType]string{
 	TypeStr:       "str",
 	TypeBool:      "bool",
@@ -22,6 +38,61 @@ var flagTypeName = map[FlagType]string{
 	TypeDictStr:   "dict[str]",
 	TypeDictInt:   "dict[int]",
 	TypeDictFloat: "dict[float]",
+}
+
+// jsonSchemaTypeName maps a SCALAR carrier to JSON Schema's own type name.
+// `<T>` is always JSON Schema's name, never strictcli's (§25.2).
+var jsonSchemaTypeName = map[FlagType]string{
+	TypeStr:   "string",
+	TypeBool:  "boolean",
+	TypeInt:   "integer",
+	TypeFloat: "number",
+}
+
+// scalarFragment is one scalar row of §25.2's fragment table, with its `enum`
+// if the declaration carries choices. Keys are emitted in the subset's own
+// order: type, items, additionalProperties, enum.
+func scalarFragment(t FlagType, choices []interface{}) *schemaObject {
+	frag := newSchemaObject().set("type", jsonSchemaTypeName[t])
+	if choices != nil {
+		frag.set("enum", append([]interface{}{}, choices...))
+	}
+	return frag
+}
+
+// flagValueSchema is the fragment describing the value a FLAG delivers.
+//
+// A `list[T]` flag and a repeatable scalar `T` flag converge on the same array
+// fragment, which is what §25.3 means by arity being a property of the value
+// rather than of the spelling. A dict's keys are `string` structurally, so
+// `additionalProperties` carrying the value type is a complete description.
+//
+// An optional flag emits the plain type: there is no `null` in any fragment and
+// no type list, because presence is the sole authority on absence.
+func flagValueSchema(f *Flag) *schemaObject {
+	if IsDictType(f.Type) {
+		return newSchemaObject().
+			set("type", "object").
+			set("additionalProperties", scalarFragment(ItemType(f.Type), nil))
+	}
+	if IsListType(f.Type) || f.Repeatable {
+		return newSchemaObject().
+			set("type", "array").
+			set("items", scalarFragment(ItemType(f.Type), f.Choices))
+	}
+	return scalarFragment(f.Type, f.Choices)
+}
+
+// argValueSchema is the fragment for a positional arg, in either spelling of a
+// variadic: the element-carrier one and the list-carrier one publish the same
+// array row (§25.4).
+func argValueSchema(a *Arg) *schemaObject {
+	if a.IsVariadic {
+		return newSchemaObject().
+			set("type", "array").
+			set("items", scalarFragment(ItemType(a.Type), a.Choices))
+	}
+	return scalarFragment(a.Type, a.Choices)
 }
 
 // serializeDefault converts a default value to a JSON-serializable form. A
@@ -40,12 +111,10 @@ func serializeDefault(v interface{}) interface{} {
 	for i, p := range m.parts {
 		parts[i] = p
 	}
-	return map[string]interface{}{
-		"relative_to_root": map[string]interface{}{
-			"env_var": m.envVar,
-			"parts":   parts,
-		},
-	}
+	return newSchemaObject().set(
+		"relative_to_root",
+		newSchemaObject().set("env_var", m.envVar).set("parts", parts),
+	)
 }
 
 // presenceName renders a resolved presence declaration for the dumped schema.
@@ -63,157 +132,270 @@ func presenceName(p presenceKind) string {
 	return ""
 }
 
-// serializeFlag converts a Flag to a JSON-serializable map matching the Python format.
-// Fields matching their defaults are omitted; see buildSchemaDefaults().
-func serializeFlag(f Flag) map[string]interface{} {
-	m := map[string]interface{}{
-		"name": f.Name,
-		"type": flagTypeName[f.Type],
-		"help": f.Help,
+// serializeChoiceRecords is a value flag's (or arg's) `choices=` entries, as
+// the records item 164 made them (§25.5).
+//
+// The machine-readable half of a choices declaration lives in the fragment's
+// `enum`; this is the human-readable half, which JSON Schema has no vocabulary
+// for. `help` is OMITTED when the entry declares none, so Go's empty-string
+// spelling of "no help" and an absent one cannot produce different bytes for
+// the same declaration.
+func serializeChoiceRecords(records []ChoiceValue) []interface{} {
+	out := make([]interface{}, 0, len(records))
+	for _, r := range records {
+		entry := newSchemaObject().set("value", r.Value)
+		if r.Help != "" {
+			entry.set("help", r.Help)
+		}
+		out = append(out, entry)
 	}
+	return out
+}
 
-	// short: default nil (omit when empty string -> nil)
+// serializeFlagMember serializes one member of a command's flag list: a
+// selector when it declares choices, an ordinary flag entry otherwise. Flags
+// and selectors share ONE array, interleaved in declaration order -- a selector
+// IS a flag (§24.2), and `elect_by` is what tells a reader which it is holding.
+func serializeFlagMember(f *Flag) *schemaObject {
+	if f.Type == TypeChoice {
+		return serializeSelector(f)
+	}
+	return serializeFlag(f)
+}
+
+// serializeFlag converts a Flag to an ordered entry, in §25.9's key order:
+// name, help, value_schema, short, presence, default, env, env_separator,
+// prefixed, choices, elect_by, unique, conflict_mode, negatable.
+func serializeFlag(f *Flag) *schemaObject {
+	d := newSchemaObject().
+		set("name", f.Name).
+		set("help", f.Help).
+		set("value_schema", flagValueSchema(f))
 	if f.Short != "" {
-		m["short"] = f.Short
+		d.set("short", f.Short)
 	}
-
-	// presence: ALWAYS emitted -- presence is mandatory, so there is no default
-	// to omit against (contract §13's presence-round amendment).
-	m["presence"] = presenceName(f.presence)
-
-	// default: emitted exactly when presence is "default", and then ALWAYS,
+	// Presence is ALWAYS emitted: it is a mandatory declaration, so there is no
+	// baseline to omit against (contract §13's presence-round amendment).
+	d.set("presence", presenceName(f.presence))
+	// `default` is emitted exactly when presence is "default", and then always,
 	// whatever the value: [], {}, "", false and 0 are declarations rather than
-	// the absence of one, so the omit-when-empty rules are gone.
+	// the absence of one.
 	if f.presence == presenceDefault {
-		m["default"] = serializeDefault(f.Default)
+		d.set("default", serializeDefault(f.Default))
 	}
-
-	// env: default nil (omit when empty string -> nil)
 	if f.Env != "" {
-		m["env"] = f.Env
+		d.set("env", f.Env)
 	}
-
-	// choices: default nil (omit when nil)
-	if f.Choices != nil {
-		m["choices"] = f.Choices
-	}
-
-	// repeatable: default false (omit when false)
-	if f.Repeatable {
-		m["repeatable"] = true
-	}
-
-	// unique: default false (omit when false)
-	if f.Unique {
-		m["unique"] = true
-	}
-
-	// conflict_mode: serialized only when explicitly set (omitted when
-	// inheriting the app default). Additive; schema_version stays 1, so
-	// consumers must treat absence as "inherit the app config_conflict_mode".
-	if f.hasConflictMode {
-		m["conflict_mode"] = f.ConflictMode
-	}
-
-	// env_separator: default "" (omit when empty)
 	if f.EnvSeparator != "" {
-		m["env_separator"] = f.EnvSeparator
+		d.set("env_separator", f.EnvSeparator)
 	}
-
-	// negatable: default nil (omit when nil, i.e. non-bool flags)
-	// For bool flags, always emit negatable
-	if f.Type == TypeBool {
-		m["negatable"] = f.Negatable
+	// Omitted when true, which is the framework's own behavior: the key appears
+	// exactly on the flags that depart from it (§25.11).
+	if !f.Prefixed {
+		d.set("prefixed", false)
 	}
-
-	// hidden: default false (always false in current impl, so always omitted)
-	// If hidden were ever true, we'd emit it here.
-
-	return m
+	if f.choiceRecords != nil {
+		d.set("choices", serializeChoiceRecords(f.choiceRecords))
+	}
+	if f.Unique {
+		d.set("unique", true)
+	}
+	// Per-flag conflict mode: serialized only when explicitly set. Absence means
+	// "inherit the app default", which v2 publishes as `config_conflict_mode`,
+	// so the effective mode is finally computable from the dump alone (§25.11).
+	if f.hasConflictMode {
+		d.set("conflict_mode", f.ConflictMode)
+	}
+	if f.Type == TypeBool && !f.Repeatable {
+		d.set("negatable", f.Negatable)
+	}
+	return d
 }
 
-// serializeArg converts an Arg to a JSON-serializable map.
-// Fields matching their defaults are omitted; see buildSchemaDefaults().
-func serializeArg(a Arg) map[string]interface{} {
-	m := map[string]interface{}{
-		"name": a.Name,
-		"help": a.Help,
+// serializeChoiceObject is one choice of one selector: `name`, `help`, and its
+// scope (§25.6). `flags` is omitted when the scope is empty.
+//
+// A member-spelled choice's PAYLOAD is the first entry of that array, under the
+// reserved name `value` with `presence: "required"` -- the payload is supplied
+// by electing the member, and required-once-elected is exactly what a member
+// flag's presence means. A payload-less member has no `value` entry.
+func serializeChoiceObject(ch *ChoiceDecl) *schemaObject {
+	entry := newSchemaObject().set("name", ch.Name).set("help", ch.Help)
+	var scope []interface{}
+	start := 0
+	if ch.member {
+		start = 1
+		if choiceCarriesPayload(ch) {
+			payload := serializeFlag(memberFlag(ch))
+			payload.set("name", scopeReservedValueName)
+			payload.set("presence", presenceName(presenceRequired))
+			scope = append(scope, payload)
+		}
 	}
-	// type: default "str" (omit when str)
-	if a.Type != TypeStr {
-		m["type"] = flagTypeName[a.Type]
+	for j := start; j < len(ch.Flags); j++ {
+		scope = append(scope, serializeFlagMember(&ch.Flags[j]))
 	}
-	// presence: ALWAYS emitted, exactly as on a flag entry. The arg-side
-	// `required` key is deleted: it was the same fact under a second key.
-	m["presence"] = presenceName(a.presence)
-	// variadic: default false (omit when false)
-	if a.IsVariadic {
-		m["variadic"] = true
+	if len(scope) > 0 {
+		entry.set("flags", scope)
 	}
-	// default: emitted exactly when presence is "default", and then always.
+	return entry
+}
+
+// serializeSelectorDefault renders a selector's declared default as the flat
+// map §25.6 pins: `{"choice": "<name>", "<field>": <value>, ...}` -- the
+// choice's name under the reserved key `choice`, then each field that HAS a
+// value in the default selection, in declaration order.
+//
+// A field with no value is omitted, which is unambiguous because `null` is not a
+// declarable default anywhere in the framework, and a nested selector is
+// excluded: it publishes its own default on its own entry. Go's default names a
+// choice whose scope registration already proved complete, which is what makes
+// this the same map Python's default INSTANCE produces.
+func serializeSelectorDefault(sel *Flag) *schemaObject {
+	name, _ := sel.Default.(string)
+	ch := findChoice(sel, name)
+	flat := newSchemaObject().set("choice", name)
+	if ch == nil {
+		return flat
+	}
+	start := 0
+	if ch.member {
+		// Only a payload-less member can be a default, so the electing flag
+		// contributes no field.
+		start = 1
+	}
+	for j := start; j < len(ch.Flags); j++ {
+		f := &ch.Flags[j]
+		if f.Type == TypeChoice || f.presence != presenceDefault {
+			continue
+		}
+		flat.set(f.Name, serializeDefault(f.Default))
+	}
+	return flat
+}
+
+// serializeSelector serializes one selector in the encoding §25.6 pins.
+//
+// A selector has NO `value_schema`. Its value is a variant -- one tagged record
+// chosen from several, each with a different set of fields -- and the closed
+// four-keyword subset cannot express one; publishing a wrong fragment would be
+// worse than publishing none, because a reader would validate against it. Each
+// scoped entry is a FULL flag entry, which is what makes recursion free: a
+// nested selector is an entry inside a `flags` array carrying its own `choices`
+// and `elect_by`, to any depth.
+func serializeSelector(sel *Flag) *schemaObject {
+	d := newSchemaObject().set("name", sel.Name).set("help", sel.Help)
+	if sel.Short != "" {
+		d.set("short", sel.Short)
+	}
+	d.set("presence", presenceName(sel.presence))
+	if sel.presence == presenceDefault {
+		d.set("default", serializeSelectorDefault(sel))
+	}
+	if sel.Env != "" {
+		d.set("env", sel.Env)
+	}
+	choices := make([]interface{}, 0, len(sel.choiceDecls))
+	for _, ch := range sel.choiceDecls {
+		choices = append(choices, serializeChoiceObject(ch))
+	}
+	d.set("choices", choices)
+	// The discriminator, in §24.12's own two-value vocabulary.
+	if sel.memberSpelled {
+		d.set("elect_by", "member-flags")
+	} else {
+		d.set("elect_by", "selector-token")
+	}
+	return d
+}
+
+// serializeArg converts an Arg to an ordered entry, in §25.9's key order:
+// name, help, value_schema, presence, default, variadic, choices.
+//
+// `variadic` SURVIVES the arity rule that deleted `repeatable`, and the
+// asymmetry is deliberate: it names a token-consumption rule -- this arg takes
+// every remaining positional token, and only the last arg may -- which a
+// consumer needs in order to render `<files>...` in a usage line.
+func serializeArg(a *Arg) *schemaObject {
+	d := newSchemaObject().
+		set("name", a.Name).
+		set("help", a.Help).
+		set("value_schema", argValueSchema(a)).
+		set("presence", presenceName(a.presence))
 	if a.presence == presenceDefault {
-		m["default"] = a.Default
+		d.set("default", serializeDefault(a.Default))
 	}
-	// choices: default nil (omit when nil)
-	if a.Choices != nil {
-		m["choices"] = a.Choices
+	if a.IsVariadic {
+		d.set("variadic", true)
 	}
-	return m
+	if a.choiceRecords != nil {
+		d.set("choices", serializeChoiceRecords(a.choiceRecords))
+	}
+	return d
 }
 
-// serializeCommand converts a Command to a JSON-serializable map.
+// serializeCommand converts a Command to an ordered entry.
 // Fields matching their defaults are omitted; see buildSchemaDefaults().
-func serializeCommand(cmd *Command) map[string]interface{} {
-	m := map[string]interface{}{
-		"name": cmd.Name,
-		"help": cmd.Help,
+func serializeCommand(cmd *Command) *schemaObject {
+	m := newSchemaObject().
+		set("name", cmd.Name).
+		set("help", cmd.Help).
 		// Always emitted: classification is mandatory, so there is no default
 		// to omit against.
-		"effect": cmd.Effect,
-	}
+		set("effect", cmd.Effect)
 	// consequential: NOT mandatory; absence means "not consequential"
 	// (contract §8.1, §13), so it is omitted when false.
 	if cmd.Consequential {
-		m["consequential"] = true
+		m.set("consequential", true)
 	}
 	// Emitted only when declared: dry run is supported unless a command says
 	// otherwise, so the pair appears exactly on the commands that refuse it.
 	if !cmd.DryRunSupported {
-		m["dry_run_supported"] = false
-		m["dry_run_unsupported_reason"] = cmd.DryRunUnsupportedReason
+		m.set("dry_run_supported", false)
+		m.set("dry_run_unsupported_reason", cmd.DryRunUnsupportedReason)
 	}
 	// The payload contract, published verbatim (contract §19.5): the inline
 	// literal is the sole canonical artifact, so the dump carries it as
 	// written rather than a re-rendering of it.
 	if cmd.PayloadSchema != nil {
-		m["payload_schema"] = cmd.PayloadSchema
+		m.set("payload_schema", cmd.PayloadSchema)
 	}
 	// Emitted only when declared true; absence means the framework owns stdout,
 	// which is the baseline (contract §13's 2026-08-13 amendment, §19.6).
 	if cmd.OwnsStdout {
-		m["owns_stdout"] = true
+		m.set("owns_stdout", true)
 	}
-	// passthrough: default false (omit when false)
 	if cmd.Passthrough {
-		m["passthrough"] = true
+		m.set("passthrough", true)
 	}
-	// flags: default [] (omit when empty)
 	if len(cmd.flags) > 0 {
 		flags := make([]interface{}, 0, len(cmd.flags))
-		for _, f := range cmd.flags {
-			flags = append(flags, serializeFlag(f))
+		for i := range cmd.flags {
+			flags = append(flags, serializeFlagMember(&cmd.flags[i]))
 		}
-		m["flags"] = flags
+		m.set("flags", flags)
 	}
-	// args: default [] (omit when empty)
+	// The grouping v1 discarded when it merged a set's flags into the command's
+	// flag list. Members keep their ordinary entries above, so this adds a
+	// grouping without duplicating a declaration (§25.11).
+	if len(cmd.flagSets) > 0 {
+		sets := make([]interface{}, 0, len(cmd.flagSets))
+		for _, fs := range cmd.flagSets {
+			names := make([]interface{}, len(fs.Flags))
+			for i, f := range fs.Flags {
+				names[i] = f.Name
+			}
+			sets = append(sets, newSchemaObject().set("name", fs.Name).set("flags", names))
+		}
+		m.set("flag_sets", sets)
+	}
 	if len(cmd.args) > 0 {
 		args := make([]interface{}, 0, len(cmd.args))
-		for _, a := range cmd.args {
-			args = append(args, serializeArg(a))
+		for i := range cmd.args {
+			args = append(args, serializeArg(&cmd.args[i]))
 		}
-		m["args"] = args
+		m.set("args", args)
 	}
-	// tags: default [] (omit when empty)
 	if len(cmd.tags) > 0 {
 		sorted := make([]string, len(cmd.tags))
 		copy(sorted, cmd.tags)
@@ -222,58 +404,52 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 		for i, t := range sorted {
 			tags[i] = t
 		}
-		m["tags"] = tags
+		m.set("tags", tags)
 	}
-	// constraints: default [] (omit when empty)
 	constraints := serializeConstraints(cmd)
 	if len(constraints) > 0 {
-		m["constraints"] = constraints
+		m.set("constraints", constraints)
 	}
-	// hidden: default false (omit when false)
 	if cmd.Hidden {
-		m["hidden"] = true
+		m.set("hidden", true)
 	}
-	// interactive: default false (omit when false)
 	if cmd.Interactive {
-		m["interactive"] = true
+		m.set("interactive", true)
 	}
-	// config_fields: default [] (omit when empty)
 	if len(cmd.configFields) > 0 {
 		cfList := make([]interface{}, len(cmd.configFields))
 		for i, f := range cmd.configFields {
 			cfList[i] = f
 		}
-		m["config_fields"] = cfList
+		m.set("config_fields", cfList)
 	}
 	// grants: omitted when empty; entries in declaration order.
 	if len(cmd.Grants) > 0 {
 		grants := make([]interface{}, 0, len(cmd.Grants))
 		for _, g := range cmd.Grants {
-			grants = append(grants, map[string]interface{}{
-				"name":   g.Name,
-				"reason": g.Reason,
-				"kind":   g.Kind,
-			})
+			grants = append(grants, newSchemaObject().
+				set("name", g.Name).
+				set("reason", g.Reason).
+				set("kind", g.Kind))
 		}
-		m["grants"] = grants
+		m.set("grants", grants)
 	}
 	// forwarding: omitted when absent. The private framework-internal marker is
 	// NOT emitted.
 	if cmd.Forwarding != nil {
-		m["forwarding"] = map[string]interface{}{"reason": cmd.Forwarding.Reason}
+		m.set("forwarding", newSchemaObject().set("reason", cmd.Forwarding.Reason))
 	}
 	return m
 }
 
-// serializeConstraints builds the constraints array from a command's mutex groups and dependencies.
+// serializeConstraints builds the constraints array from a command's
+// dependencies, in §25.7's closed catalogue and its key order.
 func serializeConstraints(cmd *Command) []interface{} {
 	var constraints []interface{}
 	// The "mutex" constraint entry is DELETED with MutexGroup (contract §21's
 	// supersession box): exactly-one left the constraint system entirely and is
 	// a member-spelled selector now, which is a FLAG entry rather than a
-	// constraint. The selector's own encoding is the schema-v2 amendment's
-	// (§24.11, §24.15).
-	// Dependencies
+	// constraint.
 	for _, dep := range cmd.dependencies {
 		switch d := dep.(type) {
 		case CoRequired:
@@ -281,60 +457,55 @@ func serializeConstraints(cmd *Command) []interface{} {
 			for i, name := range d.Flags {
 				flags[i] = name
 			}
-			constraints = append(constraints, map[string]interface{}{
-				"type":  "co_required",
-				"flags": flags,
-			})
+			constraints = append(constraints, newSchemaObject().
+				set("type", "co_required").
+				set("flags", flags))
 		case Requires:
-			constraints = append(constraints, map[string]interface{}{
-				"type":       "requires",
-				"flag":       d.Flag,
-				"depends_on": d.DependsOn,
-			})
+			constraints = append(constraints, newSchemaObject().
+				set("type", "requires").
+				set("flag", d.Flag).
+				set("depends_on", d.DependsOn))
 		case Implies:
-			constraints = append(constraints, map[string]interface{}{
-				"type":    "implies",
-				"flag":    d.Flag,
-				"implies": d.Implies,
-				"value":   d.Value,
-			})
+			constraints = append(constraints, newSchemaObject().
+				set("type", "implies").
+				set("flag", d.Flag).
+				set("implies", d.Implies).
+				set("value", d.Value))
 		}
 	}
 	return constraints
 }
 
-// serializeGroup converts a Group to a JSON-serializable map (recursive).
-// Fields matching their defaults are omitted; see buildSchemaDefaults().
-func serializeGroup(grp *Group) map[string]interface{} {
-	m := map[string]interface{}{
-		"name": grp.Name,
-		"help": grp.Help,
-	}
-	// commands: default {} (omit when empty)
+// serializeGroup converts a Group to an ordered entry (recursive), in §25.9's
+// key order: name, help, commands, groups, deprecated, tags, hidden.
+func serializeGroup(grp *Group) *schemaObject {
+	m := newSchemaObject().set("name", grp.Name).set("help", grp.Help)
+	// commands and groups keep DECLARATION order, which every implementation
+	// retains (§25.9).
 	if len(grp.Commands) > 0 {
-		commands := make(map[string]interface{})
-		for name, cmd := range grp.Commands {
-			commands[name] = serializeCommand(cmd)
+		commands := newSchemaObject()
+		for _, name := range grp.order {
+			commands.set(name, serializeCommand(grp.Commands[name]))
 		}
-		m["commands"] = commands
+		m.set("commands", commands)
 	}
-	// groups: default {} (omit when empty)
 	if len(grp.Groups) > 0 {
-		groups := make(map[string]interface{})
-		for name, sub := range grp.Groups {
-			groups[name] = serializeGroup(sub)
+		groups := newSchemaObject()
+		for _, name := range grp.groupOrder {
+			groups.set(name, serializeGroup(grp.Groups[name]))
 		}
-		m["groups"] = groups
+		m.set("groups", groups)
 	}
-	// deprecated: default {} (omit when empty)
+	// `deprecated` is emitted SORTED ascending by key: no implementation retains
+	// a declaration order for it (§25.9).
 	if len(grp.deprecatedMap) > 0 {
-		deprecated := make(map[string]interface{})
-		for name, msg := range grp.deprecatedMap {
-			deprecated[name] = msg
+		deprecated := newSchemaObject()
+		for _, name := range sortedStringMapKeys(grp.deprecatedMap) {
+			deprecated.set(name, grp.deprecatedMap[name])
 		}
-		m["deprecated"] = deprecated
+		m.set("deprecated", deprecated)
 	}
-	// tags: default [] (omit when empty) — own tags only, not accumulated
+	// tags: own tags only, not accumulated
 	if len(grp.tags) > 0 {
 		sorted := make([]string, len(grp.tags))
 		copy(sorted, grp.tags)
@@ -343,67 +514,111 @@ func serializeGroup(grp *Group) map[string]interface{} {
 		for i, t := range sorted {
 			tags[i] = t
 		}
-		m["tags"] = tags
+		m.set("tags", tags)
 	}
-	// hidden: default false (omit when false)
 	if grp.Hidden {
-		m["hidden"] = true
+		m.set("hidden", true)
 	}
 	return m
 }
 
-// buildSchemaDefaults returns the canonical defaults object for the schema.
-// Consumers use this to reconstruct omitted fields.
-func buildSchemaDefaults() map[string]interface{} {
-	return map[string]interface{}{
-		"schema_version": 1,
-		"app": map[string]interface{}{
-			"env_prefix":    nil,
-			"config":        false,
-			"global_flags":  []interface{}{},
-			"commands":      map[string]interface{}{},
-			"groups":        map[string]interface{}{},
-			"deprecated":    map[string]interface{}{},
-			"tag_contracts": map[string]interface{}{},
-		},
-		"flag": map[string]interface{}{
-			"short":         nil,
-			"default":       nil,
-			"env":           nil,
-			"choices":       nil,
-			"repeatable":    false,
-			"unique":        false,
-			"env_separator": nil,
-			"negatable":     nil,
-			"hidden":        false,
-		},
-		// `presence` is deliberately absent from both the flag and the arg
-		// entry: it is ALWAYS emitted, so there is no default to omit
-		// against (contract §13's presence-round amendment). The arg-side
-		// `required` key is deleted with the derivation behind it.
-		"arg": map[string]interface{}{
-			"type":     "str",
-			"default":  nil,
-			"variadic": false,
-			"choices":  nil,
-		},
-		"command": map[string]interface{}{
-			"passthrough": false,
-			"flags":       []interface{}{},
-			"args":        []interface{}{},
-			"tags":        []interface{}{},
-			"constraints": []interface{}{},
-			"hidden":      false,
-			"interactive": false,
-		},
-		"group": map[string]interface{}{
-			"commands":   map[string]interface{}{},
-			"groups":     map[string]interface{}{},
-			"deprecated": map[string]interface{}{},
-			"tags":       []interface{}{},
-			"hidden":     false,
-		},
+// sortedStringMapKeys returns a string-keyed map's keys, ascending. Every key
+// that reaches it is ASCII by registration rule, so byte order, code-point
+// order and UTF-16 order coincide (§25.9).
+func sortedStringMapKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
 	}
+	sort.Strings(out)
+	return out
+}
+
+// buildSchemaDefaults is the machine-readable map of what an OMITTED key means
+// (contract §25.10).
+//
+// Keys with no baseline are absent from this block on purpose, and that list is
+// exactly the set of always-emitted facts: `name`, `help`, `version`,
+// `schema_version`, `project_id`, `effect`, `presence`, `value_schema` on every
+// entry that has one, a choice object's `name` and `help`, a choice record's
+// `value`, a config field's `help` and `required`, and a check's six mandatory
+// fields.
+//
+// `default` on a flag or arg has no baseline either: since presence became the
+// authority it is emitted exactly when `presence` is `"default"`, and a `null`
+// baseline for it would state something false. `value_schema`'s one exception
+// is not an omission at a baseline: a SELECTOR carries no fragment at all and
+// its absence IS the declaration, so a baseline would have to say what an
+// absent fragment means and every answer it could give is false for the one
+// entry that omits the key.
+func buildSchemaDefaults() *schemaObject {
+	return newSchemaObject().
+		set("schema_version", 2).
+		set("app", newSchemaObject().
+			set("env_prefix", nil).
+			set("config", false).
+			set("config_format", "json").
+			set("config_path", nil).
+			set("config_conflict_mode", "cli-wins").
+			set("proc_observe_allowlist", []interface{}{}).
+			set("global_flags", []interface{}{}).
+			set("commands", newSchemaObject()).
+			set("groups", newSchemaObject()).
+			set("deprecated", newSchemaObject()).
+			set("tag_contracts", newSchemaObject()).
+			set("checks", newSchemaObject()).
+			set("config_fields", newSchemaObject()).
+			set("infra", newSchemaObject())).
+		set("flag", newSchemaObject().
+			set("short", nil).
+			set("env", nil).
+			set("env_separator", nil).
+			set("prefixed", true).
+			set("choices", nil).
+			set("elect_by", nil).
+			set("unique", false).
+			set("conflict_mode", nil).
+			set("negatable", nil)).
+		set("arg", newSchemaObject().
+			set("variadic", false).
+			set("choices", nil)).
+		// The two choice entities, which is what makes this block the complete
+		// omission map it is defined to be: a selector choice object's `flags`
+		// is omitted when the scope is empty, and a value-flag choice record's
+		// `help` is omitted when the entry declares none.
+		set("choice", newSchemaObject().set("flags", []interface{}{})).
+		set("choice_record", newSchemaObject().set("help", nil)).
+		set("command", newSchemaObject().
+			set("consequential", false).
+			set("dry_run_supported", true).
+			set("dry_run_unsupported_reason", nil).
+			set("payload_schema", nil).
+			set("owns_stdout", false).
+			set("passthrough", false).
+			set("flags", []interface{}{}).
+			set("flag_sets", []interface{}{}).
+			set("args", []interface{}{}).
+			set("tags", []interface{}{}).
+			set("constraints", []interface{}{}).
+			set("hidden", false).
+			set("interactive", false).
+			set("config_fields", []interface{}{}).
+			set("grants", []interface{}{}).
+			set("forwarding", nil)).
+		set("group", newSchemaObject().
+			set("commands", newSchemaObject()).
+			set("groups", newSchemaObject()).
+			set("deprecated", newSchemaObject()).
+			set("tags", []interface{}{}).
+			set("hidden", false)).
+		set("config_field", newSchemaObject().
+			set("default", nil).
+			set("bound_commands", []interface{}{})).
+		set("check", newSchemaObject().set("scope", nil)).
+		set("infra", newSchemaObject().
+			set("roots", []interface{}{}).
+			set("handshakes", []interface{}{}).
+			set("connections", []interface{}{}))
 }
 
 // readProjectID reads the module path from go.mod in the current working directory.
@@ -427,30 +642,47 @@ func readProjectID() (string, error) {
 	return "", errCannotDetermineProjectIDNoModule()
 }
 
-// dumpSchemaCore builds the full schema map, excluding project_id.
+// dumpSchemaObject builds the full ordered schema document, excluding
+// project_id.
 //
 // This is the CWD-free, filesystem-free core of schema production. It reads
 // only the in-memory App (name, version, help, flags, commands, groups, etc.).
 // project_id is the only field that requires reading go.mod from the CWD, so it
-// is added later by the file-writer path (dumpSchema). This function cannot
-// fail. Fields matching their defaults are omitted; see buildSchemaDefaults().
-func dumpSchemaCore(app *App) map[string]interface{} {
-	schema := map[string]interface{}{
-		"schema_version": 1,
-		"name":           app.Name,
-		"version":        app.Version,
-		"help":           app.Help,
-		"defaults":       buildSchemaDefaults(),
-	}
+// is added later by the file-writer path (dumpSchemaOrdered). This function
+// cannot fail. Fields matching their defaults are omitted; see
+// buildSchemaDefaults().
+func dumpSchemaObject(app *App) *schemaObject {
+	schema := newSchemaObject().
+		set("schema_version", 2).
+		set("defaults", buildSchemaDefaults()).
+		set("name", app.Name).
+		set("version", app.Version).
+		set("help", app.Help)
 
-	// env_prefix: default nil (omit when empty -> nil)
 	if app.EnvPrefix != "" {
-		schema["env_prefix"] = app.EnvPrefix
+		schema.set("env_prefix", app.EnvPrefix)
 	}
-
-	// config: default false (omit when false)
 	if app.configEnabled {
-		schema["config"] = true
+		schema.set("config", true)
+	}
+	// The three app-level config keys v1 was blind to. Until v2 an app could
+	// relocate every user's config file, or switch it from JSON to TOML, while
+	// its dumped schema stayed byte-identical (§25.11).
+	if app.configFormat != "" && app.configFormat != "json" {
+		schema.set("config_format", app.configFormat)
+	}
+	// The DECLARATION, never the resolution: a declared literal path as
+	// declared, and a RelativeToRoot in its machine-stable marker shape. The
+	// resolved absolute path is a property of the dumping machine, and a
+	// RelativeToRoot declaration is resolved eagerly INTO configPathOverride at
+	// construction, which is why the reference is consulted first.
+	if app.configPathRef != nil {
+		schema.set("config_path", serializeDefault(*app.configPathRef))
+	} else if app.configPathOverride != "" {
+		schema.set("config_path", app.configPathOverride)
+	}
+	if app.configConflictMode != "" && app.configConflictMode != "cli-wins" {
+		schema.set("config_conflict_mode", app.configConflictMode)
 	}
 
 	// proc_observe_allowlist: omitted when empty; prefixes in declaration order.
@@ -463,132 +695,117 @@ func dumpSchemaCore(app *App) map[string]interface{} {
 			}
 			allowlist = append(allowlist, entry)
 		}
-		schema["proc_observe_allowlist"] = allowlist
+		schema.set("proc_observe_allowlist", allowlist)
 	}
 
-	// global_flags: default [] (omit when empty)
 	if len(app.globalFlags) > 0 {
 		globalFlags := make([]interface{}, 0, len(app.globalFlags))
-		for _, f := range app.globalFlags {
-			globalFlags = append(globalFlags, serializeFlag(f))
+		for i := range app.globalFlags {
+			globalFlags = append(globalFlags, serializeFlagMember(&app.globalFlags[i]))
 		}
-		schema["global_flags"] = globalFlags
+		schema.set("global_flags", globalFlags)
 	}
 
-	// commands: default {} (omit when empty)
+	// commands and groups keep DECLARATION order (§25.9).
 	if len(app.commands) > 0 {
-		commands := make(map[string]interface{})
-		for name, cmd := range app.commands {
-			commands[name] = serializeCommand(cmd)
+		commands := newSchemaObject()
+		for _, name := range app.cmdOrder {
+			commands.set(name, serializeCommand(app.commands[name]))
 		}
-		schema["commands"] = commands
+		schema.set("commands", commands)
 	}
-
-	// groups: default {} (omit when empty)
 	if len(app.groups) > 0 {
-		groups := make(map[string]interface{})
-		for name, grp := range app.groups {
-			groups[name] = serializeGroup(grp)
+		groups := newSchemaObject()
+		for _, name := range app.groupOrder {
+			groups.set(name, serializeGroup(app.groups[name]))
 		}
-		schema["groups"] = groups
+		schema.set("groups", groups)
 	}
 
-	// deprecated: default {} (omit when empty)
+	// `deprecated`, `tag_contracts` and `checks` are emitted SORTED ascending by
+	// key: no implementation retains a declaration order for all three, and a
+	// canon that cannot be produced from what an implementation holds is not a
+	// canon (§25.9).
 	if len(app.deprecatedMap) > 0 {
-		deprecated := make(map[string]interface{})
-		for name, msg := range app.deprecatedMap {
-			deprecated[name] = msg
+		deprecated := newSchemaObject()
+		for _, name := range sortedStringMapKeys(app.deprecatedMap) {
+			deprecated.set(name, app.deprecatedMap[name])
 		}
-		schema["deprecated"] = deprecated
+		schema.set("deprecated", deprecated)
 	}
-
-	// tag_contracts: default {} (omit when empty)
 	if len(app.tagContracts) > 0 {
-		tagContracts := make(map[string]interface{})
-		for tag, flag := range app.tagContracts {
-			tagContracts[tag] = flag
+		tagContracts := newSchemaObject()
+		for _, tag := range sortedStringMapKeys(app.tagContracts) {
+			tagContracts.set(tag, app.tagContracts[tag])
 		}
-		schema["tag_contracts"] = tagContracts
+		schema.set("tag_contracts", tagContracts)
 	}
 
-	// config_fields: only present when config fields are declared
+	if app.checksEnabled {
+		checks := newSchemaObject()
+		names := make([]string, 0, len(app.checkDefs))
+		for name := range app.checkDefs {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			// The dumped `checks` block must be a function of the DECLARATION
+			// alone. A provider materializes into the same registry lazily and
+			// per-cwd, so iterating the whole registry made a dump taken after a
+			// check run differ from one taken before it (§25.7). The exclusion
+			// is structural here rather than a comment.
+			if app.providerSourcedNames[name] {
+				continue
+			}
+			def := app.checkDefs[name]
+			entry := newSchemaObject().
+				set("tags", def.tags).
+				set("severity", def.severity).
+				set("fast", def.fast).
+				set("pure", def.pure).
+				set("needs_network", def.needsNetwork).
+				set("depends_on", def.dependsOn)
+			if def.scope != "" {
+				entry.set("scope", def.scope)
+			}
+			checks.set(name, entry)
+		}
+		// Omitted when empty, which is the baseline the `defaults` block states:
+		// an app whose only checks are provider-sourced publishes no block at
+		// all rather than an empty one.
+		if len(checks.keys) > 0 {
+			schema.set("checks", checks)
+		}
+	}
+
+	// config_fields: only present when config fields are declared, in
+	// declaration order.
 	if len(app.configFields) > 0 {
-		cfSchema := make(map[string]interface{})
+		cfSchema := newSchemaObject()
 		for _, name := range app.configFieldOrder {
 			cf := app.configFields[name]
-			entry := map[string]interface{}{
-				"type":     flagTypeName[cf.Type],
-				"help":     cf.Help,
-				"required": cf.Required,
-			}
+			// Config fields are scalar-only in every implementation, so the
+			// fragment is always a scalar row. `required` STAYS beside it: it is
+			// not §23's presence declaration under another name -- a config
+			// field has no CLI surface and no three-way declaration, and
+			// `required` there means "the config file must contain it".
+			entry := newSchemaObject().
+				set("value_schema", scalarFragment(cf.Type, nil)).
+				set("help", cf.Help).
+				set("required", cf.Required)
 			if cf.HasDefault {
-				entry["default"] = cf.Default
+				entry.set("default", cf.Default)
 			}
-			// Find which commands bind this field
-			var boundCommands []string
-			for _, cmdName := range app.cmdOrder {
-				cmd := app.commands[cmdName]
-				for _, f := range cmd.configFields {
-					if f == name {
-						boundCommands = append(boundCommands, cmdName)
-						break
-					}
-				}
-			}
-			// Search groups recursively
-			var searchGroup func(g *Group, prefix string)
-			searchGroup = func(g *Group, prefix string) {
-				for _, cmdName := range g.order {
-					cmd := g.Commands[cmdName]
-					for _, f := range cmd.configFields {
-						if f == name {
-							boundCommands = append(boundCommands, prefix+cmdName)
-							break
-						}
-					}
-				}
-				for _, grpName := range g.groupOrder {
-					searchGroup(g.Groups[grpName], prefix+grpName+" ")
-				}
-			}
-			for _, grpName := range app.groupOrder {
-				searchGroup(app.groups[grpName], grpName+" ")
-			}
-			if len(boundCommands) > 0 {
-				cmds := make([]interface{}, len(boundCommands))
-				for i, c := range boundCommands {
+			if bound := boundCommandsFor(app, name); len(bound) > 0 {
+				cmds := make([]interface{}, len(bound))
+				for i, c := range bound {
 					cmds[i] = c
 				}
-				entry["bound_commands"] = cmds
+				entry.set("bound_commands", cmds)
 			}
-			cfSchema[name] = entry
+			cfSchema.set(name, entry)
 		}
-		schema["config_fields"] = cfSchema
-	}
-
-	// checks: only present when checks are enabled (not a default-omission case).
-	// Only TOML-declared checks appear here. Provider-sourced checks
-	// (RegisterCheckProvider) are deliberately EXCLUDED: providers materialize
-	// lazily per-cwd at check-run time, so they are not part of the static,
-	// committed schema. The schema describes the declared surface, not the
-	// dynamically-materialized one.
-	if app.checksEnabled {
-		checksMap := make(map[string]interface{})
-		for name, def := range app.checkDefs {
-			entry := map[string]interface{}{
-				"tags":          def.tags,
-				"severity":      def.severity,
-				"fast":          def.fast,
-				"pure":          def.pure,
-				"needs_network": def.needsNetwork,
-				"depends_on":    def.dependsOn,
-			}
-			if def.scope != "" {
-				entry["scope"] = def.scope
-			}
-			checksMap[name] = entry
-		}
-		schema["checks"] = checksMap
+		schema.set("config_fields", cfSchema)
 	}
 
 	// infra: only present when infrastructure roots or handshake vars are
@@ -596,7 +813,7 @@ func dumpSchemaCore(app *App) map[string]interface{} {
 	// must be machine-stable (not machine-specific). Only the declared env var
 	// and default path (both stable declarations) are emitted for roots.
 	if len(app.infraRootOrder) > 0 || len(app.handshakeOrder) > 0 || len(app.connectionOrder) > 0 {
-		infra := make(map[string]interface{})
+		infra := newSchemaObject()
 		if len(app.infraRootOrder) > 0 {
 			roots := make([]interface{}, 0, len(app.infraRootOrder))
 			for _, ev := range app.infraRootOrder {
@@ -607,48 +824,94 @@ func dumpSchemaCore(app *App) map[string]interface{} {
 						break
 					}
 				}
-				roots = append(roots, map[string]interface{}{
-					"env_var": ev,
-					"default": def,
-				})
+				roots = append(roots, newSchemaObject().set("env_var", ev).set("default", def))
 			}
-			infra["roots"] = roots
+			infra.set("roots", roots)
 		}
 		if len(app.handshakeOrder) > 0 {
 			handshakes := make([]interface{}, 0, len(app.handshakeOrder))
 			for _, ev := range app.handshakeOrder {
-				handshakes = append(handshakes, map[string]interface{}{
-					"env_var": ev,
-					"help":    app.handshakeEnvs[ev],
-				})
+				handshakes = append(handshakes, newSchemaObject().
+					set("env_var", ev).
+					set("help", app.handshakeEnvs[ev]))
 			}
-			infra["handshakes"] = handshakes
+			infra.set("handshakes", handshakes)
 		}
 		if len(app.connectionOrder) > 0 {
 			connections := make([]interface{}, 0, len(app.connectionOrder))
 			for _, ev := range app.connectionOrder {
-				connections = append(connections, map[string]interface{}{
-					"env_var": ev,
-					"help":    app.connectionEnvs[ev],
-				})
+				connections = append(connections, newSchemaObject().
+					set("env_var", ev).
+					set("help", app.connectionEnvs[ev]))
 			}
-			infra["connections"] = connections
+			infra.set("connections", connections)
 		}
-		schema["infra"] = infra
+		schema.set("infra", infra)
 	}
 	return schema
 }
 
-// dumpSchema produces the full schema map including project_id (reads the CWD).
-// It delegates to dumpSchemaCore and adds project_id (read from go.mod).
-func dumpSchema(app *App) (map[string]interface{}, error) {
+// boundCommandsFor lists the command paths binding one config field, in
+// declaration order.
+func boundCommandsFor(app *App, name string) []string {
+	var bound []string
+	for _, cmdName := range app.cmdOrder {
+		cmd := app.commands[cmdName]
+		for _, f := range cmd.configFields {
+			if f == name {
+				bound = append(bound, cmdName)
+				break
+			}
+		}
+	}
+	var searchGroup func(g *Group, prefix string)
+	searchGroup = func(g *Group, prefix string) {
+		for _, cmdName := range g.order {
+			cmd := g.Commands[cmdName]
+			for _, f := range cmd.configFields {
+				if f == name {
+					bound = append(bound, prefix+cmdName)
+					break
+				}
+			}
+		}
+		for _, grpName := range g.groupOrder {
+			searchGroup(g.Groups[grpName], prefix+grpName+" ")
+		}
+	}
+	for _, grpName := range app.groupOrder {
+		searchGroup(app.groups[grpName], grpName+" ")
+	}
+	return bound
+}
+
+// dumpSchemaCore returns the schema core as plain Go maps, excluding
+// project_id. The written document's key order lives in the ordered form; a
+// caller of this reads fields by name.
+func dumpSchemaCore(app *App) map[string]interface{} {
+	return toPlain(dumpSchemaObject(app)).(map[string]interface{})
+}
+
+// dumpSchemaOrdered produces the full ordered document including project_id
+// (reads the CWD). project_id sits immediately after `defaults`, so removing it
+// leaves the CWD-free core byte-identical.
+func dumpSchemaOrdered(app *App) (*schemaObject, error) {
 	projectID, err := readProjectID()
 	if err != nil {
 		return nil, err
 	}
-	schema := dumpSchemaCore(app)
-	schema["project_id"] = projectID
+	schema := dumpSchemaObject(app)
+	schema.insertAfter("defaults", "project_id", projectID)
 	return schema, nil
+}
+
+// dumpSchema produces the full schema as plain maps, including project_id.
+func dumpSchema(app *App) (map[string]interface{}, error) {
+	schema, err := dumpSchemaOrdered(app)
+	if err != nil {
+		return nil, err
+	}
+	return toPlain(schema).(map[string]interface{}), nil
 }
 
 // DumpSchemaDict returns the app's full schema as a map, excluding project_id.
@@ -694,12 +957,16 @@ func checkSchemaProjectID(filePath string, newProjectID string) error {
 // WithSchemaPathRelativeToRoot, or the framework's ".strictcli/schema.json"
 // anchored at the construction-time cwd) -- never at the caller's working
 // directory at dump time.
+//
+// The bytes are the canon's (§25.8), not encoding/json's: a repository whose
+// schema file is written sometimes by this implementation and sometimes by
+// another must see a diff exactly when something changed.
 func writeSchema(app *App) (string, error) {
-	schema, err := dumpSchema(app)
+	schema, err := dumpSchemaOrdered(app)
 	if err != nil {
 		return "", err
 	}
-	data, err := json.MarshalIndent(schema, "", "  ")
+	text, err := canonicalJSON(schema)
 	if err != nil {
 		return "", err
 	}
@@ -709,11 +976,12 @@ func writeSchema(app *App) (string, error) {
 			return "", err
 		}
 	}
-	newProjectID, _ := schema["project_id"].(string)
+	newProjectID, _ := schema.get("project_id").(string)
 	if err := checkSchemaProjectID(filePath, newProjectID); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filePath, append(data, '\n'), 0o644); err != nil {
+	// Exactly one trailing newline at end of file.
+	if err := os.WriteFile(filePath, []byte(text+"\n"), 0o644); err != nil {
 		return "", err
 	}
 	// Framework-blessed CACHE_WRITE: recorded in the structured effect log,

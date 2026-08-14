@@ -973,8 +973,11 @@ func TestSchemaIncludesConfigFields(t *testing.T) {
 		t.Fatal("expected region key in config_fields")
 	}
 	region := regionRaw.(map[string]interface{})
-	if region["type"] != "str" {
-		t.Fatalf("expected region type 'str', got %v", region["type"])
+	// A config-field entry publishes a fragment too, from the scalar rows only
+	// (contract §25.7). `required` stays beside it: a config field has no CLI
+	// surface and no presence declaration.
+	if got := region["value_schema"].(map[string]interface{})["type"]; got != "string" {
+		t.Fatalf("expected region fragment type 'string', got %v", got)
 	}
 	if region["help"] != "AWS region" {
 		t.Fatalf("expected region help 'AWS region', got %v", region["help"])
@@ -1001,8 +1004,8 @@ func TestSchemaIncludesConfigFields(t *testing.T) {
 		t.Fatal("expected port key in config_fields")
 	}
 	port := portRaw.(map[string]interface{})
-	if port["type"] != "int" {
-		t.Fatalf("expected port type 'int', got %v", port["type"])
+	if got := port["value_schema"].(map[string]interface{})["type"]; got != "integer" {
+		t.Fatalf("expected port fragment type 'integer', got %v", got)
 	}
 	if port["required"] != true {
 		t.Fatalf("expected port required true, got %v", port["required"])

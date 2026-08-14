@@ -21,14 +21,6 @@ type Tool struct {
 	Execute       func(map[string]interface{}, ...CallOption) (interface{}, error)
 }
 
-// jsonSchemaType maps scalar FlagType values to JSON Schema type strings.
-var jsonSchemaType = map[FlagType]string{
-	TypeStr:   "string",
-	TypeBool:  "boolean",
-	TypeInt:   "integer",
-	TypeFloat: "number",
-}
-
 // buildJSONSchema builds a JSON Schema parameters object for a command's
 // flags and positional args.
 func buildJSONSchema(cmd *Command) map[string]interface{} {
@@ -51,39 +43,24 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
 		paramName := flagParamName(f.Name)
-		prop := map[string]interface{}{}
 
 		if f.Type == TypeChoice {
-			prop["type"] = "string"
-			prop["enum"] = choiceEnum(f)
-			prop["description"] = f.Help
-			properties[paramName] = prop
+			properties[paramName] = map[string]interface{}{
+				"type":        "string",
+				"enum":        choiceEnum(f),
+				"description": f.Help,
+			}
 			if f.presence == presenceRequired {
 				required = append(required, paramName)
 			}
 			continue
 		}
 
-		if IsDictType(f.Type) {
-			prop["type"] = "object"
-			prop["additionalProperties"] = map[string]interface{}{
-				"type": jsonSchemaType[ItemType(f.Type)],
-			}
-		} else if IsListType(f.Type) || f.Repeatable {
-			prop["type"] = "array"
-			prop["items"] = map[string]interface{}{
-				"type": jsonSchemaType[ItemType(f.Type)],
-			}
-		} else {
-			prop["type"] = jsonSchemaType[f.Type]
-		}
-
-		if f.Choices != nil {
-			choices := make([]interface{}, len(f.Choices))
-			copy(choices, f.Choices)
-			prop["enum"] = choices
-		}
-
+		// The parameter's shape is the SAME fragment the dumped `value_schema`
+		// publishes (contract §25.13), so a tool schema and a dumped schema
+		// cannot disagree about a value: the array rows carry their `enum`
+		// inside `items`, describing an element rather than the array.
+		prop := toPlain(flagValueSchema(f)).(map[string]interface{})
 		prop["description"] = f.Help
 
 		properties[paramName] = prop
@@ -99,23 +76,7 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 
 	for i := range cmd.args {
 		a := &cmd.args[i]
-		prop := map[string]interface{}{}
-
-		if a.IsVariadic {
-			prop["type"] = "array"
-			prop["items"] = map[string]interface{}{
-				"type": jsonSchemaType[a.Type],
-			}
-		} else {
-			prop["type"] = jsonSchemaType[a.Type]
-		}
-
-		if a.Choices != nil {
-			choices := make([]interface{}, len(a.Choices))
-			copy(choices, a.Choices)
-			prop["enum"] = choices
-		}
-
+		prop := toPlain(argValueSchema(a)).(map[string]interface{})
 		prop["description"] = a.Help
 
 		properties[a.Name] = prop
@@ -335,27 +296,17 @@ func addScopedProperties(properties map[string]interface{}, flags []Flag) {
 	walk(flags, false)
 }
 
-// scopedPropertySchema is one scoped flag's JSON Schema property.
+// scopedPropertySchema is one scoped flag's JSON Schema property, derived from
+// the same fragment the dump publishes (contract §25.13).
 func scopedPropertySchema(f *Flag) map[string]interface{} {
-	prop := map[string]interface{}{}
-	switch {
-	case f.Type == TypeChoice:
-		prop["type"] = "string"
-		prop["enum"] = choiceEnum(f)
-	case IsDictType(f.Type):
-		prop["type"] = "object"
-		prop["additionalProperties"] = map[string]interface{}{"type": jsonSchemaType[ItemType(f.Type)]}
-	case IsListType(f.Type) || f.Repeatable:
-		prop["type"] = "array"
-		prop["items"] = map[string]interface{}{"type": jsonSchemaType[ItemType(f.Type)]}
-	default:
-		prop["type"] = jsonSchemaType[f.Type]
+	if f.Type == TypeChoice {
+		return map[string]interface{}{
+			"type":        "string",
+			"enum":        choiceEnum(f),
+			"description": f.Help,
+		}
 	}
-	if f.Choices != nil {
-		choices := make([]interface{}, len(f.Choices))
-		copy(choices, f.Choices)
-		prop["enum"] = choices
-	}
+	prop := toPlain(flagValueSchema(f)).(map[string]interface{})
 	prop["description"] = f.Help
 	return prop
 }

@@ -564,7 +564,7 @@ func (st *electionState) resolveElected(ls *liveSel, cliByFlag map[*Flag]interfa
 			if !choiceCarriesPayload(ch) {
 				continue
 			}
-			key = "value"
+			key = scopeReservedValueName
 		}
 
 		if f.Type == TypeChoice {

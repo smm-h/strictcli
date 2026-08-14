@@ -499,10 +499,10 @@ func TestConsequentialIsEmittedInTheSchema(t *testing.T) {
 	app.Command("grave", "h", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithEffect(EffectMutating), WithConsequential())
-	if _, present := serializeCommand(app.commands["plain"])["consequential"]; present {
+	if _, present := toPlain(serializeCommand(app.commands["plain"])).(map[string]interface{})["consequential"]; present {
 		t.Fatal("consequential must be omitted when false")
 	}
-	if got := serializeCommand(app.commands["grave"])["consequential"]; got != true {
+	if got := toPlain(serializeCommand(app.commands["grave"])).(map[string]interface{})["consequential"]; got != true {
 		t.Fatalf("consequential = %v, want true", got)
 	}
 }

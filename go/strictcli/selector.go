@@ -22,6 +22,11 @@ import (
 //     only as the handler key and as the noun help and errors use. This is what
 //     subsumed and replaced MutexGroup (§21's supersession box).
 
+// scopeReservedValueName is the reserved field name a member-spelled choice's
+// own payload is delivered under, in the handler record and in the dumped
+// schema alike (§24.4, §24.7, §25.6).
+const scopeReservedValueName = "value"
+
 // ChoiceDecl is one choice of a selector: a name, its mandatory help, and the
 // scope of flags that exist only while it is elected.
 //
@@ -414,7 +419,7 @@ func validateSelectorDecl(sel *Flag) {
 			if sub.Name == "choice" {
 				panic(errScopedNameChoiceReserved(ch.Name, sel.Name))
 			}
-			if j >= start && sub.Name == "value" {
+			if j >= start && sub.Name == scopeReservedValueName {
 				panic(errScopedNameValueReserved(ch.Name, sel.Name))
 			}
 			if sub.Name == sel.Name {

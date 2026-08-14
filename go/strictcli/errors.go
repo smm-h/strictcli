@@ -108,12 +108,28 @@ func errArgTypeBad(t FlagType) string {
 	return fmt.Sprintf("Arg.type must be str, bool, int, or float, got %d", t)
 }
 
-func errArgChoicesIncompatibleListType(name string) string {
-	return fmt.Sprintf("Arg %q: choices is incompatible with list type", name)
-}
-
 func errArgChoicesIncompatibleBool(name string) string {
 	return fmt.Sprintf("Arg %q: choices is incompatible with type=bool", name)
+}
+
+// errFlagChoiceMagnitude / errArgChoiceMagnitude are §12.14's guard, one
+// condition on two surfaces. The published `value_schema` fragment carries a
+// declaration's choices as a JSON Schema `enum`, and a reader that parses JSON
+// numbers as IEEE-754 doubles -- which every reader of a dumped schema is
+// entitled to be -- reads a DIFFERENT integer back, so the framework refuses
+// the declaration rather than publishing a fragment it knows will be misread.
+//
+// The clause after the colon is reused byte-for-byte from the payload regime's
+// own magnitude guard: the same condition at a second boundary, and a second
+// wording for one fact is what the reuse rule prevents. Float choices are
+// deliberately exempt -- the canonical float form is by construction the
+// shortest string that round-trips to the identical double.
+func errFlagChoiceMagnitude(name string, v int) string {
+	return fmt.Sprintf("Flag %q: choice %d: %s", name, v, pdetailMagnitude)
+}
+
+func errArgChoiceMagnitude(name string, v int) string {
+	return fmt.Sprintf("Arg %q: choice %d: %s", name, v, pdetailMagnitude)
 }
 
 func errArgChoicesEmpty(name string) string {
@@ -1057,6 +1073,13 @@ func errCannotDetermineProjectIDReadError(err error) error {
 
 func errCannotDetermineProjectIDNoModule() error {
 	return fmt.Errorf("Cannot determine project_id: no module directive in go.mod")
+}
+
+// errSchemaValueUnserializable names a value the canonical writer cannot
+// encode. It is a framework bug rather than a user mistake -- every value the
+// schema holds comes from a declaration surface whose types are closed.
+func errSchemaValueUnserializable(v interface{}) error {
+	return fmt.Errorf("schema value of unserializable type: %T", v)
 }
 
 func errSchemaMismatch(existingID string, newID string) error {
