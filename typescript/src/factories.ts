@@ -422,7 +422,17 @@ const ARG_PRESENCE_ERRORS: PresenceErrors = {
  * assertion -- reaches the factory with shapes the compiler never saw.
  *
  * Zero declared and two declared are both hard errors, and a null-valued
- * default is refused before either: it is not a spelling of optionality.
+ * default is refused as well: it is not a spelling of optionality.
+ *
+ * The count check runs FIRST (§12.12's implementation-sweep box, ledger item
+ * 154): `presence: "required"` or `presence: "optional"` written beside
+ * `default: null` is a combination error naming both spellings, and the
+ * null-default redirect is reserved for the null default written as the sole
+ * declaration -- which here means either `default: null` alone or the
+ * two-part `presence: "default"` carrying it. Only an untyped or JSON-driven
+ * caller can reach the paired form at all (`default?: never` on the
+ * required/optional members refuses it at compile time), but the runtime check
+ * follows the ruling regardless.
  */
 function resolvePresence(
 	name: string,
@@ -430,10 +440,27 @@ function resolvePresence(
 	errs: PresenceErrors,
 ): Presence {
 	const dflt = o.default;
+	const declared = o.presence;
+	if (
+		(declared === "required" || declared === "optional") &&
+		dflt !== undefined
+	) {
+		// Canonical order (required, optional, default) regardless of the order
+		// they were written in, so the line is deterministic. A null default
+		// reaches here too, and names the spelling that was actually written.
+		throw new RegistrationError(
+			errs.declaredTwice(
+				name,
+				declared === "required"
+					? PRESENCE_SPELLING_REQUIRED
+					: PRESENCE_SPELLING_OPTIONAL,
+				presenceSpellingDefault(formatValueForError(dflt)),
+			),
+		);
+	}
 	if (dflt === null) {
 		throw new RegistrationError(errs.nullNotOptional(name));
 	}
-	const declared = o.presence;
 	if (
 		declared !== "required" &&
 		declared !== "optional" &&
@@ -446,19 +473,6 @@ function resolvePresence(
 			throw new RegistrationError(errs.defaultValueMissing(name));
 		}
 		return "default";
-	}
-	if (dflt !== undefined) {
-		// Canonical order (required, optional, default) regardless of the order
-		// they were written in, so the line is deterministic.
-		throw new RegistrationError(
-			errs.declaredTwice(
-				name,
-				declared === "required"
-					? PRESENCE_SPELLING_REQUIRED
-					: PRESENCE_SPELLING_OPTIONAL,
-				presenceSpellingDefault(formatValueForError(dflt)),
-			),
-		);
 	}
 	return declared;
 }

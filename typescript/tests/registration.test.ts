@@ -1370,11 +1370,44 @@ test("presence: declaring two does not register, in canonical order", () => {
 });
 
 test("presence: a null-valued default redirects to the optional spelling", () => {
+	// The redirect fires when the null default is the SOLE declaration -- the
+	// old idiom it exists to teach (ledger item 154).
 	rejects(
 		() => flag("target", t.str, loose({ help: "h", default: null })),
 		'Flag "target": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)',
 	);
-	// Even beside the spelling it redirects to: one spelling per fact.
+	rejects(
+		() => arg("src", t.str, loose({ help: "h", default: null })),
+		'Arg "src": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)',
+	);
+	// The two-part default spelling carrying null is still ONE declaration, so
+	// it redirects too rather than reading as a combination.
+	rejects(
+		() =>
+			flag(
+				"target",
+				t.str,
+				loose({ help: "h", presence: "default", default: null }),
+			),
+		'Flag "target": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)',
+	);
+	rejects(
+		() =>
+			arg(
+				"src",
+				t.str,
+				loose({ help: "h", presence: "default", default: null }),
+			),
+		'Arg "src": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)',
+	);
+});
+
+test("presence: the two-declared error wins over the null-default redirect", () => {
+	// The count check runs first (§12.12's implementation-sweep box, ledger
+	// item 154): a null default written BESIDE a presence declaration is a
+	// combination error naming both spellings, not a redirect. `default?: never`
+	// refuses the pairing at compile time, so only an untyped or JSON-driven
+	// caller reaches it -- which the conformance harness is.
 	rejects(
 		() =>
 			flag(
@@ -1382,11 +1415,34 @@ test("presence: a null-valued default redirects to the optional spelling", () =>
 				t.str,
 				loose({ help: "h", presence: "optional", default: null }),
 			),
-		'Flag "target": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)',
+		'Flag "target": presence is declared twice: presence: "optional" and presence: "default" with default: null cannot be combined; declare exactly one',
 	);
 	rejects(
-		() => arg("src", t.str, loose({ help: "h", default: null })),
-		'Arg "src": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)',
+		() =>
+			flag(
+				"target",
+				t.str,
+				loose({ help: "h", presence: "required", default: null }),
+			),
+		'Flag "target": presence is declared twice: presence: "required" and presence: "default" with default: null cannot be combined; declare exactly one',
+	);
+	rejects(
+		() =>
+			arg(
+				"src",
+				t.str,
+				loose({ help: "h", presence: "optional", default: null }),
+			),
+		'Arg "src": presence is declared twice: presence: "optional" and presence: "default" with default: null cannot be combined; declare exactly one',
+	);
+	rejects(
+		() =>
+			arg(
+				"src",
+				t.str,
+				loose({ help: "h", presence: "required", default: null }),
+			),
+		'Arg "src": presence is declared twice: presence: "required" and presence: "default" with default: null cannot be combined; declare exactly one',
 	);
 });
 
