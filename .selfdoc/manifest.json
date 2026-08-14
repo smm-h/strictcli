@@ -2120,8 +2120,8 @@
         },
         {
           "level": 3,
-          "text": "Go: an unexported field closes a trap the exported one left open",
-          "anchor": "go-an-unexported-field-closes-a-trap-the-exported-one-left-open"
+          "text": "Go: a package-private field closes a trap the exported one left open",
+          "anchor": "go-a-package-private-field-closes-a-trap-the-exported-one-left-open"
         },
         {
           "level": 3,
@@ -8906,5 +8906,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-14T17:32:56.265596+00:00"
+  "last_gen": "2026-08-14T17:35:37.576202+00:00"
 }
