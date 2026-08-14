@@ -35,7 +35,7 @@ func TestArgNamedJSONIsUnaffected(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cat", "cat a file", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
-	}, WithArgs(NewArg("json", "a file named json")), WithEffect(EffectReadOnly))
+	}, WithArgs(NewArg("json", "a file named json", ArgRequired())), WithEffect(EffectReadOnly))
 	if r := app.Test([]string{"cat", "x"}); r.ExitCode != 0 {
 		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
 	}

@@ -23,7 +23,7 @@ func buildInvokeTestApp(captured *map[string]interface{}) *App {
 		*captured = kwargs
 		return Exit(0)
 	}, WithFlags(
-		StringFlag("name", "who to greet"),
+		StringFlag("name", "who to greet", Required()),
 	), WithEffect(EffectReadOnly))
 
 	return app
@@ -55,7 +55,7 @@ func TestInvokeMatchesTest(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("deploy", "deploy something", captureHandler(captured),
 			WithFlags(
-				StringFlag("target", "deploy target"),
+				StringFlag("target", "deploy target", Required()),
 				BoolFlag("sim-run", "dry run mode", Default(false)),
 				IntFlag("count", "instance count", Default(1)),
 			), WithEffect(EffectReadOnly),
@@ -178,7 +178,7 @@ func TestInvokeNestedGroupCommand(t *testing.T) {
 	zone := dns.Group("zone", "zone commands")
 	zone.Command("create", "create a zone", captureHandler(&captured),
 		WithFlags(
-			StringFlag("name", "zone name"),
+			StringFlag("name", "zone name", Required()),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -202,7 +202,7 @@ func TestInvokeNestedGroupMatchesTest(t *testing.T) {
 		zone := dns.Group("zone", "zone commands")
 		zone.Command("create", "create a zone", captureHandler(captured),
 			WithFlags(
-				StringFlag("name", "zone name"),
+				StringFlag("name", "zone name", Required()),
 				IntFlag("ttl", "time to live", Default(3600)),
 			), WithEffect(EffectReadOnly),
 		)
@@ -279,9 +279,9 @@ func TestInvokeGlobalFlagsMatchTest(t *testing.T) {
 
 	app1 := makeApp(&invokeKwargs)
 	ir := app1.invoke("run", map[string]interface{}{
-		"loud": true,
-		"format":  "json",
-		"target":  "remote",
+		"loud":   true,
+		"format": "json",
+		"target": "remote",
 	})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
@@ -303,8 +303,8 @@ func TestInvokeWithPositionalArgs(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cp", "copy files", captureHandler(&captured),
 		WithArgs(
-			NewArg("source", "source file"),
-			NewArg("dest", "destination file"),
+			NewArg("source", "source file", ArgRequired()),
+			NewArg("dest", "destination file", ArgRequired()),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -330,8 +330,8 @@ func TestInvokePositionalArgsMatchTest(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("cp", "copy files", captureHandler(captured),
 			WithArgs(
-				NewArg("source", "source file"),
-				NewArg("dest", "destination file"),
+				NewArg("source", "source file", ArgRequired()),
+				NewArg("dest", "destination file", ArgRequired()),
 			),
 			WithFlags(
 				BoolFlag("recursive", "copy recursively", Default(false)),
@@ -366,7 +366,7 @@ func TestInvokeVariadicArgs(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("rm", "remove files", captureHandler(&captured),
 		WithArgs(
-			NewArg("files", "files to remove", Variadic()),
+			NewArg("files", "files to remove", Variadic(), ArgRequired()),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -395,7 +395,7 @@ func TestInvokeVariadicArgsMatchTest(t *testing.T) {
 				BoolFlag("force-removal", "force removal", Default(false)),
 			),
 			WithArgs(
-				NewArg("files", "files to remove", Variadic()),
+				NewArg("files", "files to remove", Variadic(), ArgRequired()),
 			), WithEffect(EffectReadOnly),
 		)
 		return app
@@ -436,8 +436,8 @@ func TestInvokePassthroughCommand(t *testing.T) {
 	}, WithEffect(EffectReadOnly))
 
 	ir := app.invoke("exec", map[string]interface{}{
-		"_args":   []string{"ls", "-la", "/tmp"},
-		"loud": true,
+		"_args": []string{"ls", "-la", "/tmp"},
+		"loud":  true,
 	})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
@@ -462,7 +462,7 @@ func TestInvokePassthroughUnknownKwargs(t *testing.T) {
 
 	ir := app.invoke("exec", map[string]interface{}{
 		"_args":      []string{"ls"},
-		"loud":    true,
+		"loud":       true,
 		"bogus_flag": "should fail",
 	})
 	if ir.err == "" {
@@ -478,7 +478,7 @@ func TestInvokePassthroughUnknownKwargs(t *testing.T) {
 
 func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	app.GlobalFlag(StringFlag("token", "auth token"))
+	app.GlobalFlag(StringFlag("token", "auth token", Required()))
 	app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
 	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
@@ -486,8 +486,8 @@ func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 
 	// Don't provide "token" -- it's a required string global flag (no default)
 	ir := app.invoke("exec", map[string]interface{}{
-		"_args":   []string{"ls"},
-		"loud": true,
+		"_args": []string{"ls"},
+		"loud":  true,
 	})
 	if ir.err == "" {
 		t.Fatal("expected error for missing required global flag in passthrough command")
@@ -503,7 +503,7 @@ func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 func TestInvokePassthroughMissingRequiredBoolGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	// A required bool global flag: no Default, so it must be provided explicitly.
-	app.GlobalFlag(BoolFlag("force-run", "force operation"))
+	app.GlobalFlag(BoolFlag("force-run", "force operation", Required()))
 	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
 	}, WithEffect(EffectReadOnly))
@@ -541,7 +541,7 @@ func TestInvokeUnknownParameter(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("greet", "say hello", captureHandler(&captured),
 		WithFlags(
-			StringFlag("name", "who to greet"),
+			StringFlag("name", "who to greet", Required()),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -562,7 +562,7 @@ func TestInvokeMissingRequiredFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("deploy", "deploy it", captureHandler(&captured),
 		WithFlags(
-			StringFlag("target", "deploy target"),
+			StringFlag("target", "deploy target", Required()),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -580,7 +580,7 @@ func TestInvokeChoicesValidation(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("run", "run it", captureHandler(&captured),
 		WithFlags(
-			StringFlag("mode", "operation mode", Choices("fast", "slow")),
+			StringFlag("mode", "operation mode", Choices("fast", "slow"), Required()),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -607,8 +607,8 @@ func TestInvokeMutexGroup(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("out", "output command", captureHandler(&captured),
 			WithMutex(MutexGroup{Flags: []Flag{
-				StringFlag("as-json", "JSON output", Default(nil)),
-				StringFlag("text", "text output", Default(nil)),
+				StringFlag("as-json", "JSON output", Optional()),
+				StringFlag("text", "text output", Optional()),
 			}}), WithEffect(EffectReadOnly),
 		)
 		return app
@@ -654,7 +654,7 @@ func TestInvokeFloatFlag(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("scale", "scale it", captureHandler(captured),
 			WithFlags(
-				FloatFlag("factor", "scale factor"),
+				FloatFlag("factor", "scale factor", Required()),
 			), WithEffect(EffectReadOnly),
 		)
 		return app
@@ -731,8 +731,8 @@ func TestInvokeOptionalArgMatchesTest(t *testing.T) {
 		app := NewApp("myapp", "1.0.0", "test app")
 		app.Command("show", "show something", captureHandler(captured),
 			WithArgs(
-				NewArg("item", "item to show"),
-				NewArg("detail", "detail level", ArgRequired(false), ArgDefault("summary")),
+				NewArg("item", "item to show", ArgRequired()),
+				NewArg("detail", "detail level", ArgDefault("summary")),
 			), WithEffect(EffectReadOnly),
 		)
 		return app
@@ -832,7 +832,7 @@ func TestCallHandlerSourceProvenance(t *testing.T) {
 		capturedSources["loud"] = ctx.Source("loud")
 		return Exit(0)
 	}, WithFlags(
-		StringFlag("name", "who to greet"),
+		StringFlag("name", "who to greet", Required()),
 		BoolFlag("loud", "loud output", Default(false)),
 	), WithEffect(EffectReadOnly))
 

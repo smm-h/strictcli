@@ -90,13 +90,37 @@ func DictOf(valueType FlagType) FlagType {
 	}
 }
 
+// presenceKind is the resolved presence declaration of a flag or a positional
+// arg (contract §23). Every flag and every arg declares EXACTLY ONE of the
+// three, at registration, through the sibling options Required()/Optional()/
+// Default(v) (ArgRequired()/ArgOptional()/ArgDefault(v) for args). Nothing is
+// inferred from the shape of another declaration.
+type presenceKind uint8
+
+const (
+	presenceUndeclared presenceKind = iota
+	presenceRequired
+	presenceOptional
+	presenceDefault
+)
+
+// Presence declaration bits. They are accumulated by the three sibling options
+// so that declaring two can be named in the error, and so that a struct literal
+// -- which passes through no option at all -- declares nothing and does not
+// register.
+const (
+	presenceBitRequired uint8 = 1 << iota
+	presenceBitOptional
+	presenceBitDefault
+)
+
 // Flag represents a --flag declaration.
 type Flag struct {
 	Name         string
 	Type         FlagType
 	Help         string
 	Short        string
-	Default      interface{} // nil means no default (required for str/int)
+	Default      interface{} // the declared default; meaningful only with Default(v)
 	Env          string
 	Prefixed     bool
 	Negatable    bool
@@ -124,8 +148,15 @@ type Flag struct {
 	// flag-colliding ConfigField inherits the flag's handling.
 	ConflictMode string
 
-	// hasDefault distinguishes between "default explicitly set to nil" and "no default"
-	hasDefault      bool
+	// hasDefault records that Default(v) was applied. It is internal
+	// bookkeeping for the declared value only: requiredness comes from
+	// `presence`, never from this field (contract §23.4).
+	hasDefault bool
+	// presence is the resolved declaration; presenceBits records which of the
+	// three sibling options were applied, so zero and two-or-more are both
+	// nameable registration errors (§12.12).
+	presence        presenceKind
+	presenceBits    uint8
 	hasUnique       bool
 	hasConflictMode bool
 }
@@ -134,13 +165,14 @@ type Flag struct {
 type Arg struct {
 	Name       string
 	Help       string
-	Required   bool
 	Default    interface{}
 	IsVariadic bool
 	Type       FlagType
 	Choices    []interface{}
 
-	hasDefault bool
+	hasDefault   bool
+	presence     presenceKind
+	presenceBits uint8
 }
 
 // FlagSet is a reusable bundle of flags.
@@ -645,11 +677,35 @@ func Short(s string) FlagOption {
 	}
 }
 
-// Default sets the default value for a flag.
+// Default declares the flag's presence as "a default value the framework
+// supplies when nothing else does" (contract §23.1). It is one of the three
+// sibling presence options -- Required(), Optional(), Default(v) -- of which
+// EXACTLY ONE must be applied to every flag.
+//
+// Default(nil) is a registration error: a null-valued default is not a spelling
+// of optionality. Use Optional(), which delivers nil when the flag is absent.
 func Default(v interface{}) FlagOption {
 	return func(f *Flag) {
 		f.Default = v
 		f.hasDefault = true
+		f.presenceBits |= presenceBitDefault
+	}
+}
+
+// Required declares that a value must be supplied for this flag, from any
+// source (CLI, env, config, or an implication). One of the three sibling
+// presence options; see Default.
+func Required() FlagOption {
+	return func(f *Flag) {
+		f.presenceBits |= presenceBitRequired
+	}
+}
+
+// Optional declares that absence is legal and is delivered AS absence: the
+// handler receives nil. One of the three sibling presence options; see Default.
+func Optional() FlagOption {
+	return func(f *Flag) {
+		f.presenceBits |= presenceBitOptional
 	}
 }
 
@@ -745,18 +801,35 @@ func NegatableOpt(b bool) FlagOption {
 // ArgOption configures an Arg.
 type ArgOption func(*Arg)
 
-// ArgRequired sets whether an arg is required.
-func ArgRequired(b bool) ArgOption {
+// ArgRequired declares that a value must be supplied for this positional arg.
+// One of the three sibling presence options -- ArgRequired(), ArgOptional(),
+// ArgDefault(v) -- of which EXACTLY ONE must be applied to every arg.
+func ArgRequired() ArgOption {
 	return func(a *Arg) {
-		a.Required = b
+		a.presenceBits |= presenceBitRequired
 	}
 }
 
-// ArgDefault sets the default value for an arg.
+// ArgOptional declares that absence is legal and is delivered AS absence: the
+// arg's kwargs entry is present and holds nil. One of the three sibling
+// presence options; see ArgRequired.
+func ArgOptional() ArgOption {
+	return func(a *Arg) {
+		a.presenceBits |= presenceBitOptional
+	}
+}
+
+// ArgDefault declares a default value the framework supplies when the arg is
+// absent. One of the three sibling presence options; see ArgRequired.
+//
+// ArgDefault(nil) is a registration error (use ArgOptional()), and so is
+// ArgDefault on a variadic arg: a variadic always delivers a list, so its empty
+// case is ArgOptional().
 func ArgDefault(v interface{}) ArgOption {
 	return func(a *Arg) {
 		a.Default = v
 		a.hasDefault = true
+		a.presenceBits |= presenceBitDefault
 	}
 }
 
@@ -1129,17 +1202,15 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 		panic(errArgNameConsentReserved)
 	}
 	a := Arg{
-		Name:     name,
-		Help:     help,
-		Required: true,
-		Type:     TypeStr,
+		Name: name,
+		Help: help,
+		Type: TypeStr,
 	}
 	for _, opt := range opts {
 		opt(&a)
 	}
-	if a.Required && a.hasDefault {
-		panic(errRequiredArgCannotHaveDefault)
-	}
+	// Presence is mandatory and is never inferred (contract §23.1, §23.3).
+	resolveArgPresence(&a)
 	// Validate type: scalar types always allowed; list types only on variadic args
 	if IsListType(a.Type) {
 		if !a.IsVariadic {
@@ -1300,6 +1371,119 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 	return a
 }
 
+// --- The presence declaration (contract §23) ---
+
+// presenceBitOrder is the canonical rendering order of the three declarations:
+// required, optional, default. A "declared twice" message names the two that
+// were supplied in this order regardless of the order they were written in, so
+// the line is deterministic.
+var presenceBitOrder = []uint8{presenceBitRequired, presenceBitOptional, presenceBitDefault}
+
+// flagPresenceSpelling renders Go's spelling of one presence declaration for a
+// flag. A default spelling carries its value, formatted by the same formatter
+// the other declaration guards use.
+func flagPresenceSpelling(bit uint8, dflt interface{}) string {
+	switch bit {
+	case presenceBitRequired:
+		return "Required()"
+	case presenceBitOptional:
+		return "Optional()"
+	default:
+		if dflt == nil {
+			return "Default(nil)"
+		}
+		return fmt.Sprintf("Default(%s)", formatValueForError(dflt))
+	}
+}
+
+// argPresenceSpelling is flagPresenceSpelling's positional-arg twin.
+func argPresenceSpelling(bit uint8, dflt interface{}) string {
+	switch bit {
+	case presenceBitRequired:
+		return "ArgRequired()"
+	case presenceBitOptional:
+		return "ArgOptional()"
+	default:
+		if dflt == nil {
+			return "ArgDefault(nil)"
+		}
+		return fmt.Sprintf("ArgDefault(%s)", formatValueForError(dflt))
+	}
+}
+
+// declaredPresenceBits returns the declared bits in canonical order.
+func declaredPresenceBits(bits uint8) []uint8 {
+	var out []uint8
+	for _, bit := range presenceBitOrder {
+		if bits&bit != 0 {
+			out = append(out, bit)
+		}
+	}
+	return out
+}
+
+// resolveFlagPresence enforces §23.1 on a flag and stores the resolved
+// declaration. It is idempotent, so it can run both in the constructors (where
+// most flags are built) and again at command registration (which is the only
+// place a struct literal is seen).
+func resolveFlagPresence(f *Flag) {
+	declared := declaredPresenceBits(f.presenceBits)
+	switch len(declared) {
+	case 0:
+		panic(errFlagPresenceUndeclared(f.Name))
+	case 1:
+		// resolved below
+	default:
+		panic(errFlagPresenceDeclaredTwice(f.Name,
+			flagPresenceSpelling(declared[0], f.Default),
+			flagPresenceSpelling(declared[1], f.Default)))
+	}
+	switch declared[0] {
+	case presenceBitRequired:
+		f.presence = presenceRequired
+	case presenceBitOptional:
+		f.presence = presenceOptional
+	default:
+		// A null-valued default is not a spelling of optionality: one spelling
+		// per fact, so the value-shaped one is refused and redirected.
+		if f.Default == nil {
+			panic(errFlagDefaultNullNotOptional(f.Name))
+		}
+		f.presence = presenceDefault
+	}
+}
+
+// resolveArgPresence is resolveFlagPresence's positional-arg twin.
+func resolveArgPresence(a *Arg) {
+	declared := declaredPresenceBits(a.presenceBits)
+	switch len(declared) {
+	case 0:
+		panic(errArgPresenceUndeclared(a.Name))
+	case 1:
+		// resolved below
+	default:
+		panic(errArgPresenceDeclaredTwice(a.Name,
+			argPresenceSpelling(declared[0], a.Default),
+			argPresenceSpelling(declared[1], a.Default)))
+	}
+	switch declared[0] {
+	case presenceBitRequired:
+		a.presence = presenceRequired
+	case presenceBitOptional:
+		a.presence = presenceOptional
+	default:
+		if a.Default == nil {
+			panic(errArgDefaultNullNotOptional(a.Name))
+		}
+		// A variadic arg always delivers a list, so its empty case is
+		// ArgOptional() and a default has nothing to mean.
+		if a.IsVariadic {
+			panic(errArgVariadicDefault(a.Name))
+		}
+		a.presence = presenceDefault
+	}
+}
+
 // validateFlagConfig panics on invalid flag configuration (programmer error).
 func validateFlagConfig(f *Flag) {
 	if strings.TrimSpace(f.Help) == "" {
@@ -1328,6 +1512,9 @@ func validateFlagConfig(f *Flag) {
 	if strings.HasPrefix(f.Name, "no-") {
 		panic(errFlagNoPrefixReserved(f.Name))
 	}
+	// Presence is mandatory and is never inferred from another declaration
+	// (contract §23.1).
+	resolveFlagPresence(f)
 	if f.Repeatable && f.Type == TypeBool {
 		panic(errFlagRepeatableIncompatibleBool(f.Name))
 	}
@@ -1427,9 +1614,6 @@ func validateFlagConfig(f *Flag) {
 		if !ok {
 			panic(errFlagDictDefaultMustBeMap(f.Name))
 		}
-		if len(m) == 0 {
-			panic(errFlagExplicitEmptyDefaultRedundantDict(f.Name))
-		}
 		valType := ItemType(f.Type)
 		for k, v := range m {
 			if errStr := validateScalarType(v, valType); errStr != "" {
@@ -1441,9 +1625,6 @@ func validateFlagConfig(f *Flag) {
 		slice, ok := f.Default.([]interface{})
 		if !ok {
 			panic(errFlagListDefaultMustBeSlice(f.Name))
-		}
-		if len(slice) == 0 {
-			panic(errFlagExplicitEmptyDefaultRedundantList(f.Name))
 		}
 		elemType := ItemType(f.Type)
 		for i, elem := range slice {
@@ -1462,9 +1643,6 @@ func validateFlagConfig(f *Flag) {
 		slice, ok := f.Default.([]interface{})
 		if !ok {
 			panic(errFlagRepeatableDefaultMustBeList(f.Name))
-		}
-		if len(slice) == 0 {
-			panic(errFlagExplicitEmptyDefaultRedundantRepeatable(f.Name))
 		}
 		for i, elem := range slice {
 			switch f.Type {
@@ -1489,14 +1667,9 @@ func validateFlagConfig(f *Flag) {
 	if f.Type != TypeBool {
 		f.Negatable = false
 	}
-	// Resolve defaults
-	if !f.hasDefault {
-		if f.Repeatable {
-			// Repeatable/list/dict defaults to empty (slice or map)
-		}
-		// No default: required (nil Default) — same for all types including bool
-	}
-	// Validate default is in choices (after default resolution)
+	// Validate default is in choices. The check applies to declared VALUES
+	// only: an optional flag has no value, and absence is never matched
+	// against choices (contract §23.5).
 	if f.Choices != nil && f.hasDefault && f.Default != nil && !f.Repeatable {
 		found := false
 		for _, c := range f.Choices {
@@ -2079,6 +2252,9 @@ func (a *App) GlobalFlag(f Flag) {
 			panic(errDuplicateGlobalFlag(f.Name))
 		}
 	}
+	// Presence is mandatory at every level, global flags included (§23.1).
+	// The constructors already resolved it; this catches a struct literal.
+	resolveFlagPresence(&f)
 	a.validateFlagInfraMarker(&f)
 	a.validateFlagConnection(&f)
 	a.globalFlags = append(a.globalFlags, f)
@@ -3455,7 +3631,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 		if _, ok := globalValues[f.Name]; ok {
 			continue
 		}
-		val, src, errMsg := applyFlagDefault(f, nil, "global ", a.infraRoots)
+		val, src, errMsg := applyFlagDefault(f, "global ", a.infraRoots)
 		if errMsg != "" {
 			return nil, nil, nil, errMsg
 		}
@@ -3579,6 +3755,28 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		return cmd
 	}
 
+	// Presence is mandatory on every flag and every arg (contract §23.1). The
+	// constructors resolve it, so this pass is what catches a Flag/Arg STRUCT
+	// LITERAL: it passes through no option, declares no presence, and does not
+	// register -- which is also what closes the trap where an exported Default
+	// field set on a literal left hasDefault false and was silently ignored.
+	for i := range cmd.flags {
+		resolveFlagPresence(&cmd.flags[i])
+	}
+	for i := range cmd.flagSets {
+		for j := range cmd.flagSets[i].Flags {
+			resolveFlagPresence(&cmd.flagSets[i].Flags[j])
+		}
+	}
+	for i := range cmd.mutex {
+		for j := range cmd.mutex[i].Flags {
+			resolveFlagPresence(&cmd.mutex[i].Flags[j])
+		}
+	}
+	for i := range cmd.args {
+		resolveArgPresence(&cmd.args[i])
+	}
+
 	// Merge flag set flags and mutex flags into a unified all-flags list for validation
 	allFlags := make([]Flag, 0, len(cmd.flags))
 	allFlags = append(allFlags, cmd.flags...)
@@ -3595,6 +3793,12 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		for _, f := range mg.Flags {
 			if mutexFlagNames[f.Name] {
 				panic(errCommandFlagInMultipleMutex(name, f.Name))
+			}
+			// The group's own requirement is what makes the choice
+			// mandatory, so a member that must always be supplied
+			// contradicts a group that permits exactly one (§23.5).
+			if f.presence == presenceRequired {
+				panic(errFlagMutexMemberRequired(f.Name))
 			}
 			mutexFlagNames[f.Name] = true
 		}

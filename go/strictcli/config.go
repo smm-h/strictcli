@@ -797,7 +797,7 @@ func resolveFlagShowSource(f *Flag, configData map[string]interface{}) (interfac
 		return v, "config"
 	}
 	// Default
-	if f.hasDefault && f.Default != nil {
+	if f.presence == presenceDefault {
 		return f.Default, "default"
 	}
 	return nil, "default"
@@ -1182,9 +1182,9 @@ func (a *App) registerConfigGroup() {
 		existing[key] = typedValue
 		return Exit(writeConfigFile(e, existing, path, a.configFormat, configChange{key: key, value: typedValue}))
 	}, WithArgs(
-		NewArg("key", "The config key to set, matching a registered flag name"),
+		NewArg("key", "The config key to set, matching a registered flag name", ArgRequired()),
 		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
-			ArgRequired(false)),
+			ArgOptional()),
 	), WithFlags(
 		BoolFlag("clear", "Clear a repeatable flag by setting its value to an empty list", Default(false)),
 		BoolFlag("default", "Reset a key to its default value by removing it from the config file", Default(false)),
@@ -1326,7 +1326,7 @@ func (a *App) generateTomlTemplate(allFlags []Flag) string {
 			comment += fmt.Sprintf(" -- %s", cf.Help)
 		}
 		sb.WriteString(comment + "\n")
-		if f.hasDefault && f.Default != nil {
+		if f.presence == presenceDefault {
 			sb.WriteString(fmt.Sprintf("%s = %s\n", param, formatTomlValue(f.Default)))
 		} else {
 			sb.WriteString(fmt.Sprintf("# %s = \n", param))
@@ -1406,7 +1406,7 @@ func (a *App) generateJSONTemplate(allFlags []Flag) string {
 	// Add flags
 	for _, f := range allFlags {
 		param := flagParamName(f.Name)
-		if f.hasDefault && f.Default != nil {
+		if f.presence == presenceDefault {
 			result[param] = f.Default
 		} else {
 			result[param] = nil

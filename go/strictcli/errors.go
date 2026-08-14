@@ -89,8 +89,6 @@ func errInvalidTagName(t string) string {
 
 const errArgHelpEmpty = "Arg.help must be a non-empty string"
 
-const errRequiredArgCannotHaveDefault = "required arg cannot have a default"
-
 func errArgListTypeRequiresVariadic(name string) string {
 	return fmt.Sprintf("Arg %q: list type requires variadic=true", name)
 }
@@ -227,20 +225,12 @@ func errFlagDictDefaultMustBeMap(name string) string {
 	return fmt.Sprintf("Flag %q: dict flag default must be a map[string]interface{}", name)
 }
 
-func errFlagExplicitEmptyDefaultRedundantDict(name string) string {
-	return fmt.Sprintf("Flag %q: explicit empty default is redundant for dict flags, omit the default", name)
-}
-
 func errFlagDefaultValueForKey(name string, k string, errStr string) string {
 	return fmt.Sprintf("Flag %q: default value for key %q: %s", name, k, errStr)
 }
 
 func errFlagListDefaultMustBeSlice(name string) string {
 	return fmt.Sprintf("Flag %q: list flag default must be a []interface{}", name)
-}
-
-func errFlagExplicitEmptyDefaultRedundantList(name string) string {
-	return fmt.Sprintf("Flag %q: explicit empty default is redundant for list flags, omit the default", name)
 }
 
 func errFlagDefaultElementError(name string, i int, errStr string) string {
@@ -251,16 +241,53 @@ func errFlagRepeatableDefaultMustBeList(name string) string {
 	return fmt.Sprintf("Flag %q: repeatable flag default must be a list", name)
 }
 
-func errFlagExplicitEmptyDefaultRedundantRepeatable(name string) string {
-	return fmt.Sprintf("Flag %q: explicit empty default is redundant for repeatable flags, omit the default", name)
-}
-
 func errFlagDefaultElementTypeMismatch(name string, i int, typeName string) string {
 	return fmt.Sprintf("Flag %q: default element %d is not of type %s", name, i, typeName)
 }
 
 func errFlagDefaultNotInChoices(name string, dflt interface{}, choicesStr string) string {
 	return fmt.Sprintf("Flag %q: default '%v' is not in choices [%s]", name, dflt, choicesStr)
+}
+
+// ---------------------------------------------------------------------------
+// strictcli.go — the presence declaration (contract §12.12, §23)
+//
+// Every template here is registration-time. The sentence is byte-identical
+// across the three implementations and the SPELLINGS inside it are Go's own:
+// Required() / Optional() / Default(<value>) for flags, ArgRequired() /
+// ArgOptional() / ArgDefault(<value>) for args.
+// ---------------------------------------------------------------------------
+
+func errFlagPresenceUndeclared(name string) string {
+	return fmt.Sprintf("Flag %q: presence is undeclared: declare exactly one of Required(), Optional(), or Default(<value>)", name)
+}
+
+func errArgPresenceUndeclared(name string) string {
+	return fmt.Sprintf("Arg %q: presence is undeclared: declare exactly one of ArgRequired(), ArgOptional(), or ArgDefault(<value>)", name)
+}
+
+func errFlagPresenceDeclaredTwice(name, first, second string) string {
+	return fmt.Sprintf("Flag %q: presence is declared twice: %s and %s cannot be combined; declare exactly one", name, first, second)
+}
+
+func errArgPresenceDeclaredTwice(name, first, second string) string {
+	return fmt.Sprintf("Arg %q: presence is declared twice: %s and %s cannot be combined; declare exactly one", name, first, second)
+}
+
+func errFlagDefaultNullNotOptional(name string) string {
+	return fmt.Sprintf("Flag %q: Default(nil) does not declare optionality: use Optional() (it delivers nil when the flag is absent)", name)
+}
+
+func errArgDefaultNullNotOptional(name string) string {
+	return fmt.Sprintf("Arg %q: ArgDefault(nil) does not declare optionality: use ArgOptional() (it delivers nil when the arg is absent)", name)
+}
+
+func errFlagMutexMemberRequired(name string) string {
+	return fmt.Sprintf("Flag %q: a mutex member cannot declare Required(): the group's own requirement is what makes the choice mandatory", name)
+}
+
+func errArgVariadicDefault(name string) string {
+	return fmt.Sprintf("Arg %q: a variadic arg cannot declare ArgDefault(): it always delivers a list, so declare ArgRequired() for at least one value or ArgOptional() for possibly none", name)
 }
 
 // ---------------------------------------------------------------------------

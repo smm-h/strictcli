@@ -17,7 +17,7 @@ func mcpTestApp() *App {
 		fmt.Printf("Hello, %s!", kwargs["name"])
 		return Exit(0)
 	}, WithFlags(
-		StringFlag("name", "who to greet"),
+		StringFlag("name", "who to greet", Required()),
 	), WithEffect(EffectReadOnly))
 	app.Command("status", "check status", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
@@ -29,7 +29,7 @@ func mcpTestApp() *App {
 	dns.Command("list", "list DNS records", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithFlags(
-		StringFlag("zone", "DNS zone"),
+		StringFlag("zone", "DNS zone", Required()),
 	), WithEffect(EffectReadOnly))
 
 	return app
@@ -308,7 +308,7 @@ func TestMCPToolsCallSuccess(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("greet", "greet someone", captureHandler(&captured), WithFlags(
-		StringFlag("name", "who to greet"),
+		StringFlag("name", "who to greet", Required()),
 		BoolFlag("loud", "shout greeting", Default(false)),
 	), WithEffect(EffectReadOnly))
 
@@ -355,7 +355,7 @@ func TestMCPToolsCallGroupedCommand(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
 	dns := app.Group("dns", "manage DNS")
 	dns.Command("list", "list records", captureHandler(&captured), WithFlags(
-		StringFlag("zone", "DNS zone"),
+		StringFlag("zone", "DNS zone", Required()),
 	), WithEffect(EffectReadOnly))
 
 	resp, err := sendMCPRequest(app, "tools/call", 5, map[string]interface{}{
@@ -383,7 +383,7 @@ func TestMCPToolsCallGroupedCommand(t *testing.T) {
 func TestMCPToolsCallMissingRequired(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("greet", "greet someone", nopHandler, WithFlags(
-		StringFlag("name", "who to greet"),
+		StringFlag("name", "who to greet", Required()),
 	), WithEffect(EffectReadOnly))
 
 	resp, err := sendMCPRequest(app, "tools/call", 6, map[string]interface{}{
@@ -597,7 +597,7 @@ func TestMCPMultiMessageSession(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("testapp", "1.0.0", "test application")
 	app.Command("greet", "greet someone", captureHandler(&captured), WithFlags(
-		StringFlag("name", "who to greet"),
+		StringFlag("name", "who to greet", Required()),
 	), WithEffect(EffectReadOnly))
 
 	// Build a multi-line session: initialize, notification, tools/list, tools/call
@@ -805,7 +805,7 @@ func TestMCPNameResolutionNestedGroup(t *testing.T) {
 	dns := app.Group("dns", "manage DNS")
 	zone := dns.Group("zone", "manage zones")
 	zone.Command("create", "create a zone", captureHandler(&captured), WithFlags(
-		StringFlag("name", "zone name"),
+		StringFlag("name", "zone name", Required()),
 	), WithEffect(EffectReadOnly))
 
 	// The dotted command path is the tool name, at any nesting depth.
@@ -838,7 +838,7 @@ func TestMCPViaPipe(t *testing.T) {
 	app.Command("echo", "echo back", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithFlags(
-		StringFlag("msg", "message to echo"),
+		StringFlag("msg", "message to echo", Required()),
 	), WithEffect(EffectReadOnly))
 
 	// Use os.Pipe to simulate stdin/stdout

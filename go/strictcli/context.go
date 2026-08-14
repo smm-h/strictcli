@@ -270,6 +270,23 @@ func (c *Context) Source(name string) string {
 	panic(errNoSourceInfo(name))
 }
 
+// Provided reports whether the INVOCATION caused this flag's value, as opposed
+// to the declaration (contract §23.6). Sources "cli", "env", "config" and
+// "implied" are provided; "default" and "infra" are not -- an implied value
+// exists only because the invocation contained the trigger, while a
+// RelativeToRoot default is still a declared default with a distinct label.
+//
+// It accepts dashed or underscored names, underscore form first, exactly as
+// Source does, and panics on an unknown name with the same message: it reads
+// the same per-parse store, so a name with no source has no provision either.
+func (c *Context) Provided(name string) bool {
+	switch c.Source(name) {
+	case "cli", "env", "config", "implied":
+		return true
+	}
+	return false
+}
+
 // reservedFrameworkFlagNames is the effects-regime quartet. The ban on these
 // four LONG flag names is unconditional and applies at every level -- command
 // flags, flag-set flags, mutex-group flags and app global flags. The four have

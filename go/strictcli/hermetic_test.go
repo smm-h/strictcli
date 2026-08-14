@@ -185,7 +185,7 @@ func TestHermeticRequiredFlagMissing(t *testing.T) {
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithFlags(
-		StringFlag("name", "name to use", Env("MYAPP_NAME")),
+		StringFlag("name", "name to use", Env("MYAPP_NAME"), Required()),
 	), WithEffect(EffectReadOnly))
 
 	// Without hermetic, this would succeed (env provides the value).
@@ -230,7 +230,7 @@ func TestHermeticRequiredBoolMissing(t *testing.T) {
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithFlags(
-		BoolFlag("loud", "enable loud"),
+		BoolFlag("loud", "enable loud", Required()),
 	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--hermetic", "run"})

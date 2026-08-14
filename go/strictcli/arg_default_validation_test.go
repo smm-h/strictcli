@@ -27,59 +27,49 @@ func expectPanicContaining(t *testing.T, substr string, fn func()) {
 
 func TestArgStrDefaultTypeMismatchPanics(t *testing.T) {
 	expectPanicContaining(t, "type=str requires a str default, got 'int'", func() {
-		NewArg("name", "the name", ArgRequired(false), ArgDefault(42))
+		NewArg("name", "the name", ArgDefault(42))
 	})
 }
 
 func TestArgStrDefaultTypeMismatchBoolPanics(t *testing.T) {
 	expectPanicContaining(t, "type=str requires a str default, got 'bool'", func() {
-		NewArg("name", "the name", ArgRequired(false), ArgDefault(true))
+		NewArg("name", "the name", ArgDefault(true))
 	})
 }
 
-func TestArgListDefaultNotSlicePanics(t *testing.T) {
-	expectPanicContaining(t, "list arg default must be a list", func() {
+// A variadic arg always delivers a list, so a default on one has nothing to
+// mean: the declaration is refused at registration (contract §23.3, §12.12).
+// A list-typed arg must be variadic, so this refusal covers every list default
+// an arg could once carry.
+
+func TestArgVariadicDefaultPanics(t *testing.T) {
+	expectPanicContaining(t, `Arg "items": a variadic arg cannot declare ArgDefault(): it always delivers a list, so declare ArgRequired() for at least one value or ArgOptional() for possibly none`, func() {
 		NewArg("items", "the items", ArgType(ListOf(TypeStr)), Variadic(),
-			ArgRequired(false), ArgDefault("nope"))
+			ArgDefault([]interface{}{"a", "b"}))
 	})
 }
 
-func TestArgListDefaultEmptyPanics(t *testing.T) {
-	expectPanicContaining(t, "explicit empty default is redundant for list args, omit the default", func() {
+func TestArgVariadicEmptyDefaultPanics(t *testing.T) {
+	expectPanicContaining(t, "a variadic arg cannot declare ArgDefault()", func() {
 		NewArg("items", "the items", ArgType(ListOf(TypeStr)), Variadic(),
-			ArgRequired(false), ArgDefault([]interface{}{}))
+			ArgDefault([]interface{}{}))
 	})
 }
 
-func TestArgListDefaultElementTypeMismatchPanics(t *testing.T) {
-	expectPanicContaining(t, "default element 1 is not of type str", func() {
-		NewArg("items", "the items", ArgType(ListOf(TypeStr)), Variadic(),
-			ArgRequired(false), ArgDefault([]interface{}{"a", 2}))
+func TestArgVariadicScalarDefaultPanics(t *testing.T) {
+	// The refusal is about the SPELLING being inapplicable, so it does not
+	// depend on the default's shape.
+	expectPanicContaining(t, "a variadic arg cannot declare ArgDefault()", func() {
+		NewArg("items", "the items", Variadic(), ArgDefault("nope"))
 	})
 }
 
-func TestArgListDefaultIntElementTypeMismatchPanics(t *testing.T) {
-	expectPanicContaining(t, "default element 0 is not of type int", func() {
-		NewArg("nums", "the numbers", ArgType(ListOf(TypeInt)), Variadic(),
-			ArgRequired(false), ArgDefault([]interface{}{"1"}))
-	})
-}
-
-func TestArgListDefaultValidStr(t *testing.T) {
-	a := NewArg("items", "the items", ArgType(ListOf(TypeStr)), Variadic(),
-		ArgRequired(false), ArgDefault([]interface{}{"a", "b"}))
-	if len(a.Default.([]interface{})) != 2 {
-		t.Fatalf("expected default of 2 elements, got %v", a.Default)
+func TestArgVariadicPresenceDeclarations(t *testing.T) {
+	// The two legal declarations for a variadic arg.
+	if a := (NewArg("items", "the items", ArgType(ListOf(TypeStr)), Variadic(), ArgRequired())); a.presence != presenceRequired {
+		t.Fatalf("expected required presence, got %v", a.presence)
 	}
-}
-
-func TestArgListDefaultFloatCoercesInt(t *testing.T) {
-	// Int elements in a float list default are coerced to float64,
-	// mirroring list flag default handling.
-	a := NewArg("ratios", "the ratios", ArgType(ListOf(TypeFloat)), Variadic(),
-		ArgRequired(false), ArgDefault([]interface{}{1, 2.5}))
-	slice := a.Default.([]interface{})
-	if v, ok := slice[0].(float64); !ok || v != 1.0 {
-		t.Fatalf("expected element 0 coerced to float64(1.0), got %T(%v)", slice[0], slice[0])
+	if a := (NewArg("items", "the items", ArgType(ListOf(TypeStr)), Variadic(), ArgOptional())); a.presence != presenceOptional {
+		t.Fatalf("expected optional presence, got %v", a.presence)
 	}
 }

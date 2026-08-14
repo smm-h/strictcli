@@ -150,7 +150,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 			if v, ok := kwargs[paramName]; ok {
 				globalKwargs[paramName] = v
 			} else {
-				val, _, errMsg := applyFlagDefault(&gf, nil, "global ", a.infraRoots)
+				val, _, errMsg := applyFlagDefault(&gf, "global ", a.infraRoots)
 				if errMsg != "" {
 					return invokeResult{exitCode: 1, err: errMsg}
 				}
@@ -282,7 +282,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 			continue
 		}
 		// Apply defaults
-		val, src, errMsg := applyFlagDefault(gf, nil, "global ", a.infraRoots)
+		val, src, errMsg := applyFlagDefault(gf, "global ", a.infraRoots)
 		if errMsg != "" {
 			return invokeResult{exitCode: 1, err: errMsg}
 		}

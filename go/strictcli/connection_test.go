@@ -71,7 +71,7 @@ func newConnApp(t *testing.T) (*App, *map[string]interface{}, *map[string]string
 		src = map[string]string{"dsn": ctx.Source("dsn")}
 		return Exit(0)
 	}, WithFlags(
-		StringFlag("dsn", "connection string", Default(nil), ConnectionURLFlag("DATABASE_URL")),
+		StringFlag("dsn", "connection string", Optional(), ConnectionURLFlag("DATABASE_URL")),
 	), WithEffect(EffectReadOnly))
 	return app, &kw, &src
 }
@@ -325,7 +325,7 @@ func TestConnectionURLFlag_UndeclaredBindingPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConnectionEnv("DATABASE_URL", "conn"))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("dsn", "dsn", Default(nil), ConnectionURLFlag("OTHER_URL"))), WithEffect(EffectReadOnly))
+		WithFlags(StringFlag("dsn", "dsn", Optional(), ConnectionURLFlag("OTHER_URL"))), WithEffect(EffectReadOnly))
 }
 
 func TestConnectionEnv_BindingWithoutURLMarkerPanics(t *testing.T) {
@@ -349,7 +349,7 @@ func TestConnectionEnv_BindingPlusPerFlagEnvPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithConnectionEnv("DATABASE_URL", "conn"))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("dsn", "dsn", Default(nil), Env("SOMETHING_ELSE"), ConnectionURLFlag("DATABASE_URL"))), WithEffect(EffectReadOnly))
+		WithFlags(StringFlag("dsn", "dsn", Optional(), Env("SOMETHING_ELSE"), ConnectionURLFlag("DATABASE_URL"))), WithEffect(EffectReadOnly))
 }
 
 func TestConnectionEnv_EmptyHelpPanics(t *testing.T) {

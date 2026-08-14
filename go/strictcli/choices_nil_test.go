@@ -6,15 +6,16 @@ import (
 	"testing"
 )
 
-// A flag registered with Default(nil) + Choices(...) means "optional; if
+// A flag registered with Optional() + Choices(...) means "optional; if
 // passed, must be one of the choices". When the flag is NOT passed, its
 // resolved value is nil and choices validation must be skipped -- nil only
-// arises from Default(nil)/ArgDefault(nil)/unset mutex flags; a CLI-supplied
-// value is never nil.
+// arises from Optional()/ArgOptional()/unset mutex members; a CLI-supplied
+// value is never nil. The default-in-choices check applies to declared VALUES
+// only, never to absence (contract §23.5).
 
-func TestFlagNilDefaultChoicesNotPassed(t *testing.T) {
+func TestFlagOptionalChoicesNotPassed(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format}",
-		WithFlags(StringFlag("format", "output format", Default(nil), Choices("text", "json"))))
+		WithFlags(StringFlag("format", "output format", Optional(), Choices("text", "json"))))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -24,9 +25,9 @@ func TestFlagNilDefaultChoicesNotPassed(t *testing.T) {
 	}
 }
 
-func TestFlagNilDefaultChoicesPassedValid(t *testing.T) {
+func TestFlagOptionalChoicesPassedValid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format}",
-		WithFlags(StringFlag("format", "output format", Default(nil), Choices("text", "json"))))
+		WithFlags(StringFlag("format", "output format", Optional(), Choices("text", "json"))))
 	r := app.Test([]string{"cmd", "--format", "json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -36,9 +37,9 @@ func TestFlagNilDefaultChoicesPassedValid(t *testing.T) {
 	}
 }
 
-func TestFlagNilDefaultChoicesPassedInvalid(t *testing.T) {
+func TestFlagOptionalChoicesPassedInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format}",
-		WithFlags(StringFlag("format", "output format", Default(nil), Choices("text", "json"))))
+		WithFlags(StringFlag("format", "output format", Optional(), Choices("text", "json"))))
 	r := app.Test([]string{"cmd", "--format", "xml"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -48,9 +49,9 @@ func TestFlagNilDefaultChoicesPassedInvalid(t *testing.T) {
 	}
 }
 
-func TestArgNilDefaultChoicesNotPassed(t *testing.T) {
+func TestArgOptionalChoicesNotPassed(t *testing.T) {
 	app := simpleApp("cmd", "a command", "env={env}",
-		WithArgs(NewArg("env", "target env", ArgRequired(false), ArgDefault(nil),
+		WithArgs(NewArg("env", "target env", ArgOptional(),
 			ArgChoices("dev", "staging", "prod"))))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
@@ -61,23 +62,9 @@ func TestArgNilDefaultChoicesNotPassed(t *testing.T) {
 	}
 }
 
-func TestArgOptionalNoDefaultChoicesNotPassed(t *testing.T) {
-	// Optional arg with no default resolves to nil -- choices must not fire.
+func TestArgOptionalChoicesPassedValid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "env={env}",
-		WithArgs(NewArg("env", "target env", ArgRequired(false),
-			ArgChoices("dev", "staging", "prod"))))
-	r := app.Test([]string{"cmd"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
-	}
-	if r.Stdout != "env=None" {
-		t.Fatalf("expected 'env=None', got %q", r.Stdout)
-	}
-}
-
-func TestArgNilDefaultChoicesPassedValid(t *testing.T) {
-	app := simpleApp("cmd", "a command", "env={env}",
-		WithArgs(NewArg("env", "target env", ArgRequired(false), ArgDefault(nil),
+		WithArgs(NewArg("env", "target env", ArgOptional(),
 			ArgChoices("dev", "staging", "prod"))))
 	r := app.Test([]string{"cmd", "prod"})
 	if r.ExitCode != 0 {
@@ -88,9 +75,9 @@ func TestArgNilDefaultChoicesPassedValid(t *testing.T) {
 	}
 }
 
-func TestArgNilDefaultChoicesPassedInvalid(t *testing.T) {
+func TestArgOptionalChoicesPassedInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "env={env}",
-		WithArgs(NewArg("env", "target env", ArgRequired(false), ArgDefault(nil),
+		WithArgs(NewArg("env", "target env", ArgOptional(),
 			ArgChoices("dev", "staging", "prod"))))
 	r := app.Test([]string{"cmd", "local"})
 	if r.ExitCode != 1 {
@@ -101,18 +88,18 @@ func TestArgNilDefaultChoicesPassedInvalid(t *testing.T) {
 	}
 }
 
-func TestGlobalFlagNilDefaultChoicesNotPassed(t *testing.T) {
+func TestGlobalFlagOptionalChoicesNotPassed(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok")
-	app.GlobalFlag(StringFlag("format", "output format", Default(nil), Choices("text", "json")))
+	app.GlobalFlag(StringFlag("format", "output format", Optional(), Choices("text", "json")))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
 }
 
-func TestGlobalFlagNilDefaultChoicesPassedInvalid(t *testing.T) {
+func TestGlobalFlagOptionalChoicesPassedInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok")
-	app.GlobalFlag(StringFlag("format", "output format", Default(nil), Choices("text", "json")))
+	app.GlobalFlag(StringFlag("format", "output format", Optional(), Choices("text", "json")))
 	r := app.Test([]string{"--format", "xml", "cmd"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -128,8 +115,8 @@ func TestMutexFlagChoicesUnsetNotValidated(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format} output={output}",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				StringFlag("format", "output format", Default(nil), Choices("text", "json")),
-				StringFlag("output", "output path", Default(nil)),
+				StringFlag("format", "output format", Optional(), Choices("text", "json")),
+				StringFlag("output", "output path", Optional()),
 			},
 		}))
 	r := app.Test([]string{"cmd", "--output", "out.txt"})
@@ -141,11 +128,11 @@ func TestMutexFlagChoicesUnsetNotValidated(t *testing.T) {
 	}
 }
 
-func TestFlagNilDefaultValidateNotCalled(t *testing.T) {
+func TestFlagOptionalValidateNotCalled(t *testing.T) {
 	// A custom validator must not run for a flag that was not passed
 	// (resolved value nil) -- there is no value to validate.
 	app := simpleApp("cmd", "a command", "name={name}",
-		WithFlags(StringFlag("name", "a name", Default(nil),
+		WithFlags(StringFlag("name", "a name", Optional(),
 			ValidateFn(func(v interface{}) error {
 				s, ok := v.(string)
 				if !ok {

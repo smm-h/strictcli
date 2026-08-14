@@ -599,9 +599,14 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 // on the command line. Returns (value, errorMsg). If errorMsg is non-empty, the
 // flag is required and was not provided. The prefix is prepended to error
 // messages (e.g. "global " for global flags, "" for command flags).
-func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string, roots map[string]string) (interface{}, Source, string) {
-	if IsDictType(f.Type) {
-		if f.hasDefault && f.Default != nil {
+func applyFlagDefault(f *Flag, prefix string, roots map[string]string) (interface{}, Source, string) {
+	// Delivery follows the DECLARED presence and nothing else (contract §23):
+	// there is no empty-collection default a compound flag never asked for, and
+	// no mutex-member exemption -- a member declares Optional() like anything
+	// else, and the group enforces cardinality on top of that.
+	switch f.presence {
+	case presenceDefault:
+		if IsDictType(f.Type) {
 			src := f.Default.(map[string]interface{})
 			m := make(map[string]interface{}, len(src))
 			for k, v := range src {
@@ -609,16 +614,10 @@ func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string, ro
 			}
 			return m, SourceDefault, ""
 		}
-		return map[string]interface{}{}, SourceDefault, ""
-	}
-	if f.Repeatable {
-		if f.hasDefault && f.Default != nil {
+		if f.Repeatable {
 			src := f.Default.([]interface{})
 			return append([]interface{}{}, src...), SourceDefault, ""
 		}
-		return []interface{}{}, SourceDefault, ""
-	}
-	if f.hasDefault && f.Default != nil {
 		// A RelativeToRoot marker resolves through the declared infra roots and
 		// reports source "infra" (distinguishable from a plain default).
 		if ref, ok := f.Default.(InfraRootPath); ok {
@@ -630,11 +629,9 @@ func applyFlagDefault(f *Flag, mutexFlagNames map[string]bool, prefix string, ro
 			return resolved, SourceInfra, ""
 		}
 		return f.Default, SourceDefault, ""
-	}
-	if f.hasDefault && f.Default == nil {
-		return nil, SourceDefault, ""
-	}
-	if mutexFlagNames != nil && mutexFlagNames[f.Name] {
+	case presenceOptional:
+		// Absence delivered AS absence. The source label stays "default" --
+		// the declaration decided, which is what that label means (§23.6).
 		return nil, SourceDefault, ""
 	}
 	if f.Type == TypeBool && f.Negatable {
@@ -776,7 +773,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 		if store.has(f.Name) {
 			continue
 		}
-		val, src, errMsg := applyFlagDefault(f, mutexFlagNames, "", infraRoots)
+		val, src, errMsg := applyFlagDefault(f, "", infraRoots)
 		if errMsg != "" {
 			return nil, nil, nil, errMsg
 		}
@@ -833,10 +830,11 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 			// Collect all remaining positionals
 			remaining := positionals[posIdx:]
 			if len(remaining) == 0 {
-				if a.Required {
+				if a.presence == presenceRequired {
 					return nil, nil, nil, errMissingRequiredArgument(a.Name)
 				}
-				// Optional variadic with no values: empty list
+				// A variadic arg always delivers a list, so its optional case
+				// is the empty one (contract §23.3).
 				argValues[a.Name] = []interface{}{}
 			} else {
 				vals := make([]interface{}, len(remaining))
@@ -857,12 +855,13 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 			}
 			argValues[a.Name] = coerced
 			posIdx++
-		} else if a.Required {
+		} else if a.presence == presenceRequired {
 			return nil, nil, nil, errMissingRequiredArgument(a.Name)
-		} else if a.hasDefault {
+		} else if a.presence == presenceDefault {
 			argValues[a.Name] = a.Default
 		} else {
-			// Optional arg with no default: nil (printed as "None" for conformance)
+			// An optional arg delivers absence as a PRESENT key holding nil
+			// -- never key-absence (contract §23.3).
 			argValues[a.Name] = nil
 		}
 	}

@@ -59,11 +59,11 @@ func TestReservedQuartetBannedOnCommandFlags(t *testing.T) {
 
 func TestReservedQuartetBannedOnEveryFlagConstructor(t *testing.T) {
 	cases := []func(){
-		func() { StringFlag("verbose", "h") },
-		func() { IntFlag("quiet", "h") },
-		func() { FloatFlag("approve-consequential", "h") },
-		func() { ListFlag(TypeStr, "dry-run", "h", Unique(true), Repeatable()) },
-		func() { DictFlag(TypeStr, "verbose", "h") },
+		func() { StringFlag("verbose", "h", Required()) },
+		func() { IntFlag("quiet", "h", Required()) },
+		func() { FloatFlag("approve-consequential", "h", Required()) },
+		func() { ListFlag(TypeStr, "dry-run", "h", Unique(true), Repeatable(), Default([]interface{}{})) },
+		func() { DictFlag(TypeStr, "verbose", "h", Default(map[string]interface{}{})) },
 	}
 	for i, fn := range cases {
 		got := mustPanic(t, fn)
@@ -98,11 +98,11 @@ func TestYesIsBannedOutright(t *testing.T) {
 
 func TestReservedQuartetLeavesShortNamesAndArgsAlone(t *testing.T) {
 	// Short names are unaffected; positional arg names have no -- spelling.
-	f := StringFlag("target", "h", Short("y"))
+	f := StringFlag("target", "h", Short("y"), Required())
 	if f.Short != "y" {
 		t.Fatalf("short flag 'y' must stay available")
 	}
-	a := NewArg("verbose", "h")
+	a := NewArg("verbose", "h", ArgRequired())
 	if a.Name != "verbose" {
 		t.Fatalf("arg names are unaffected by the ban")
 	}
@@ -116,8 +116,8 @@ func TestConsentParamNameBannedOnFlags(t *testing.T) {
 	want := "flag name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
 	cases := []func(){
 		func() { BoolFlag("approve_consequential", "h", Default(false)) },
-		func() { StringFlag("approve_consequential", "h") },
-		func() { IntFlag("approve_consequential", "h") },
+		func() { StringFlag("approve_consequential", "h", Required()) },
+		func() { IntFlag("approve_consequential", "h", Required()) },
 	}
 	for i, fn := range cases {
 		if got := mustPanic(t, fn); got != want {
@@ -128,21 +128,21 @@ func TestConsentParamNameBannedOnFlags(t *testing.T) {
 
 func TestConsentParamNameBannedOnArgs(t *testing.T) {
 	want := "arg name 'approve_consequential' is reserved by the framework: it names the programmatic consent parameter"
-	if got := mustPanic(t, func() { NewArg("approve_consequential", "h") }); got != want {
+	if got := mustPanic(t, func() { NewArg("approve_consequential", "h", ArgRequired()) }); got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
 
 func TestConsentParamBanLeavesOtherArgNamesAlone(t *testing.T) {
 	for _, name := range []string{"verbose", "approve", "approve-consequential"} {
-		if a := NewArg(name, "h"); a.Name != name {
+		if a := NewArg(name, "h", ArgRequired()); a.Name != name {
 			t.Fatalf("arg %q must stay available", name)
 		}
 	}
 }
 
 func TestOutputIsNotReserved(t *testing.T) {
-	f := StringFlag("output", "h")
+	f := StringFlag("output", "h", Required())
 	if f.Name != "output" {
 		t.Fatal("--output must stay available to apps")
 	}
@@ -891,7 +891,7 @@ func TestQuartetIsStrippedFromArgvAfterTheCommandName(t *testing.T) {
 		seen = kwargs["name"]
 		quiet = ctx.Quiet()
 		return Exit(0)
-	}, WithEffect(EffectReadOnly), WithArgs(NewArg("name", "a positional")))
+	}, WithEffect(EffectReadOnly), WithArgs(NewArg("name", "a positional", ArgRequired())))
 	r := app.Test([]string{"go", "--quiet", "value"})
 	if r.ExitCode != 0 || seen != "value" || !quiet {
 		t.Fatalf("exit=%d name=%v quiet=%v stderr=%q", r.ExitCode, seen, quiet, r.Stderr)
@@ -906,7 +906,7 @@ func TestATokenAfterDoubleDashIsDataNotAReservedFlag(t *testing.T) {
 		seen = kwargs["rest"]
 		dry = ctx.DryRun()
 		return Exit(0)
-	}, WithEffect(EffectReadOnly), WithArgs(NewArg("rest", "trailing args", Variadic())))
+	}, WithEffect(EffectReadOnly), WithArgs(NewArg("rest", "trailing args", Variadic(), ArgRequired())))
 	r := app.Test([]string{"go", "--", "--dry-run"})
 	if r.ExitCode != 0 || dry {
 		t.Fatalf("a token after -- must stay data: exit=%d dry=%v stderr=%q",

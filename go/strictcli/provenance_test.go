@@ -56,8 +56,8 @@ func TestMutexImpliedSourceNotPresent(t *testing.T) {
 		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
-			BoolFlag("as-json", "JSON output", Default(nil)),
-			BoolFlag("text", "text output", Default(nil)),
+			BoolFlag("as-json", "JSON output", Optional()),
+			BoolFlag("text", "text output", Optional()),
 		}}),
 		WithDependencies(
 			// Providing --loud implies --text=true
@@ -95,8 +95,8 @@ func TestMutexCliAndConfigBothPresent(t *testing.T) {
 		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("as-json", "JSON output", Default(nil)),
-			StringFlag("text", "text output", Default(nil)),
+			StringFlag("as-json", "JSON output", Optional()),
+			StringFlag("text", "text output", Optional()),
 		}}), WithEffect(EffectReadOnly),
 	)
 
@@ -119,7 +119,7 @@ func TestRequiresImpliedSourceCountsAsPresent(t *testing.T) {
 		WithFlags(
 			BoolFlag("all", "deploy all", Default(false)),
 			BoolFlag("loud", "loud mode", Default(false)),
-			StringFlag("target", "deploy target"),
+			StringFlag("target", "deploy target", Required()),
 		),
 		WithDependencies(
 			// --all implies --loud=true
@@ -146,7 +146,7 @@ func TestRequiresDefaultSourceNotPresent(t *testing.T) {
 		return Exit(0)
 	},
 		WithFlags(
-			StringFlag("target", "deploy target"),
+			StringFlag("target", "deploy target", Required()),
 			BoolFlag("loud", "loud mode", Default(false)),
 		),
 		WithDependencies(
@@ -179,8 +179,8 @@ func TestInvokeMutexProvidedKwargIsCliSource(t *testing.T) {
 		return Exit(0)
 	},
 		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("as-json", "JSON output", Default(nil)),
-			StringFlag("text", "text output", Default(nil)),
+			StringFlag("as-json", "JSON output", Optional()),
+			StringFlag("text", "text output", Optional()),
 		}}), WithEffect(EffectReadOnly),
 	)
 
@@ -199,7 +199,7 @@ func TestInvokeDefaultedNotPresentForRequires(t *testing.T) {
 		return Exit(0)
 	},
 		WithFlags(
-			StringFlag("target", "deploy target"),
+			StringFlag("target", "deploy target", Required()),
 			BoolFlag("loud", "loud mode", Default(false)),
 		),
 		WithDependencies(

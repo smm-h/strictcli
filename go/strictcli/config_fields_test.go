@@ -1525,7 +1525,7 @@ func TestFieldFlagShowPlainRendersOnceWithAnnotation(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target")), WithEffect(EffectReadOnly))
+		WithFlags(StringFlag("target", "deploy target", Required())), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"))
 
 	r := app.Test([]string{"config", "show", "--plain"})
@@ -1552,7 +1552,7 @@ func TestFieldFlagShowJSONRendersOnce(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target")), WithEffect(EffectReadOnly))
+		WithFlags(StringFlag("target", "deploy target", Required())), WithEffect(EffectReadOnly))
 	app.ConfigField("target", ConfigFieldHelp("the deploy target"))
 
 	r := app.Test([]string{"config", "show", "--json"})
@@ -1663,7 +1663,7 @@ func TestFieldFlagOneAbsentDefaultOK(t *testing.T) {
 	// Field has default, flag has none.
 	app2 := NewApp("test", "1.0.0", "test app", WithConfig())
 	app2.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("target", "deploy target")), WithEffect(EffectReadOnly))
+		WithFlags(StringFlag("target", "deploy target", Required())), WithEffect(EffectReadOnly))
 	app2.ConfigField("target", ConfigFieldHelp("the deploy target"), ConfigFieldDefault("prod"))
 }
 

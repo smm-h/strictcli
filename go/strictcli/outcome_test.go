@@ -97,8 +97,8 @@ func TestPayloadReturnedViaCall(t *testing.T) {
 		ctx.Payload(map[string]interface{}{Get[string](kwargs, "key"): Get[string](kwargs, "value")})
 		return Exit(0)
 	}, WithFlags(
-		StringFlag("key", "data key"),
-		StringFlag("value", "data value"),
+		StringFlag("key", "data key", Required()),
+		StringFlag("value", "data value", Required()),
 	), WithEffect(EffectReadOnly), PayloadSchema(map[string]interface{}{}))
 	result, err := app.Call("store", map[string]interface{}{"key": "status", "value": "active"})
 	if err != nil {

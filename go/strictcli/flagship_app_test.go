@@ -157,7 +157,7 @@ func buildFlagshipApp() *App {
 		},
 		WithEffect(EffectMutating),
 		WithGrants(Grant{Name: "push", Reason: "release engine owns remote refs", Kind: ProcMutate}),
-		WithArgs(NewArg("version", "The version to release")),
+		WithArgs(NewArg("version", "The version to release", ArgRequired())),
 	)
 
 	release.Command("verify", "Verify the last release",

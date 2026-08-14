@@ -17,9 +17,9 @@ func nopHandler(ctx *Context, kwargs map[string]interface{}) Outcome {
 func TestJsonSchemaAllScalarTypes(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run something", nopHandler, WithFlags(
-		StringFlag("name", "a string flag"),
-		IntFlag("count", "an integer flag"),
-		FloatFlag("ratio", "a float flag"),
+		StringFlag("name", "a string flag", Required()),
+		IntFlag("count", "an integer flag", Required()),
+		FloatFlag("ratio", "a float flag", Required()),
 		BoolFlag("loud", "a bool flag", Default(false)),
 	), WithEffect(EffectReadOnly))
 
@@ -54,8 +54,8 @@ func TestJsonSchemaAllScalarTypes(t *testing.T) {
 func TestJsonSchemaRequiredFlags(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("deploy", "deploy something", nopHandler, WithFlags(
-		StringFlag("target", "deploy target"),                // required (no default)
-		IntFlag("replicas", "replica count"),                 // required (no default)
+		StringFlag("target", "deploy target", Required()),    // required (no default)
+		IntFlag("replicas", "replica count", Required()),     // required (no default)
 		StringFlag("region", "region", Default("us-east-1")), // optional (has default)
 		BoolFlag("sim-run", "dry run mode", Default(false)),  // optional (has default)
 		FloatFlag("threshold", "threshold", Default(0.5)),    // optional (has default)
@@ -102,7 +102,7 @@ func TestJsonSchemaOptionalFlagNotInRequired(t *testing.T) {
 func TestJsonSchemaChoicesAsEnum(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("deploy", "deploy", nopHandler, WithFlags(
-		StringFlag("env", "environment", Choices("dev", "staging", "prod")),
+		StringFlag("env", "environment", Choices("dev", "staging", "prod"), Required()),
 	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("deploy")
@@ -123,9 +123,9 @@ func TestJsonSchemaChoicesAsEnum(t *testing.T) {
 func TestJsonSchemaListType(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
-		ListFlag(TypeStr, "tags", "tag list", Unique(false)),
-		ListFlag(TypeInt, "ports", "port list", Unique(false)),
-		ListFlag(TypeFloat, "weights", "weight list", Unique(false)),
+		ListFlag(TypeStr, "tags", "tag list", Unique(false), Default([]interface{}{})),
+		ListFlag(TypeInt, "ports", "port list", Unique(false), Default([]interface{}{})),
+		ListFlag(TypeFloat, "weights", "weight list", Unique(false), Default([]interface{}{})),
 	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
@@ -155,8 +155,8 @@ func TestJsonSchemaListType(t *testing.T) {
 func TestJsonSchemaDictType(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
-		DictFlag(TypeStr, "labels", "label map", Unique(false)),
-		DictFlag(TypeInt, "counts", "count map", Unique(false)),
+		DictFlag(TypeStr, "labels", "label map", Unique(false), Default(map[string]interface{}{})),
+		DictFlag(TypeInt, "counts", "count map", Unique(false), Default(map[string]interface{}{})),
 	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
@@ -185,7 +185,7 @@ func TestJsonSchemaDictType(t *testing.T) {
 func TestJsonSchemaHelpAsDescription(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
-		StringFlag("name", "the user name"),
+		StringFlag("name", "the user name", Required()),
 	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
@@ -200,7 +200,7 @@ func TestJsonSchemaHelpAsDescription(t *testing.T) {
 func TestJsonSchemaPositionalArg(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("greet", "greet someone", nopHandler,
-		WithArgs(NewArg("person", "who to greet")), WithEffect(EffectReadOnly),
+		WithArgs(NewArg("person", "who to greet", ArgRequired())), WithEffect(EffectReadOnly),
 	)
 
 	schema := app.JsonSchema("greet")
@@ -231,7 +231,7 @@ func TestJsonSchemaPositionalArg(t *testing.T) {
 func TestJsonSchemaArgChoices(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("set-level", "set level", nopHandler,
-		WithArgs(NewArg("level", "log level", ArgChoices("debug", "info", "warn", "error"))), WithEffect(EffectReadOnly),
+		WithArgs(NewArg("level", "log level", ArgChoices("debug", "info", "warn", "error"), ArgRequired())), WithEffect(EffectReadOnly),
 	)
 
 	schema := app.JsonSchema("set-level")
@@ -251,7 +251,7 @@ func TestJsonSchemaArgChoices(t *testing.T) {
 func TestJsonSchemaVariadicArg(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler,
-		WithArgs(NewArg("files", "files to process", ArgRequired(false), Variadic())), WithEffect(EffectReadOnly),
+		WithArgs(NewArg("files", "files to process", ArgOptional(), Variadic())), WithEffect(EffectReadOnly),
 	)
 
 	schema := app.JsonSchema("run")
@@ -301,7 +301,7 @@ func TestJsonSchemaGroupedCommand(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	g := app.Group("dns", "manage DNS")
 	g.Command("list", "list DNS records", nopHandler, WithFlags(
-		StringFlag("zone", "DNS zone"),
+		StringFlag("zone", "DNS zone", Required()),
 	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("dns.list")
@@ -468,7 +468,7 @@ func TestAsToolsToolDescription(t *testing.T) {
 func TestAsToolsToolParameters(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("deploy", "deploy", nopHandler, WithFlags(
-		StringFlag("target", "deploy target"),
+		StringFlag("target", "deploy target", Required()),
 		BoolFlag("sim-run", "dry run", Default(false)),
 	), WithEffect(EffectReadOnly))
 
@@ -583,7 +583,7 @@ func TestExecuteViaTool(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("greet", "greet someone", captureHandler(&captured), WithFlags(
-		StringFlag("name", "who to greet"),
+		StringFlag("name", "who to greet", Required()),
 	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
@@ -620,7 +620,7 @@ func TestExecuteViaRouterTool(t *testing.T) {
 	var captured map[string]interface{}
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("deploy", "deploy", captureHandler(&captured), WithFlags(
-		StringFlag("target", "deploy target"),
+		StringFlag("target", "deploy target", Required()),
 	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
@@ -648,7 +648,7 @@ func TestExecuteGroupedCommandViaTool(t *testing.T) {
 
 	dns := app.Group("dns", "manage DNS")
 	dns.Command("list", "list records", captureHandler(&captured), WithFlags(
-		StringFlag("zone", "DNS zone"),
+		StringFlag("zone", "DNS zone", Required()),
 	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
@@ -682,7 +682,7 @@ func TestExecuteGroupedCommandViaTool(t *testing.T) {
 func TestExecuteReturnsError(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("deploy", "deploy", nopHandler, WithFlags(
-		StringFlag("target", "deploy target"),
+		StringFlag("target", "deploy target", Required()),
 	), WithEffect(EffectReadOnly))
 
 	tools := app.AsTools()
@@ -766,7 +766,7 @@ func TestRouterToolInvalidCommandType(t *testing.T) {
 func TestAsToolsRepeatableFlagNotRequired(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "my application")
 	app.Command("run", "run", nopHandler, WithFlags(
-		StringFlag("tag", "a tag", Repeatable(), Unique(false)),
+		StringFlag("tag", "a tag", Repeatable(), Unique(false), Default([]interface{}{})),
 	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
@@ -854,18 +854,18 @@ func TestAsToolsParametersRequiredIsEmptyList(t *testing.T) {
 func TestJsonSchemaDefaultNilOptional(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
-		StringFlag("config", "config path", Default(nil)),
+		StringFlag("config", "config path", Optional()),
 	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("run")
 
-	// Default(nil) means optional -- should not be in required
+	// Optional() means optional -- should not be in required
 	required := schema["required"]
 	if required != nil {
 		if reqSlice, ok := required.([]interface{}); ok {
 			for _, r := range reqSlice {
 				if r == "config" {
-					t.Error("flag with Default(nil) should not be required")
+					t.Error("flag with Optional() should not be required")
 				}
 			}
 		}

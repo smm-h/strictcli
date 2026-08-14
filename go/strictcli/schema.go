@@ -47,6 +47,21 @@ func serializeDefault(v interface{}) interface{} {
 	}
 }
 
+// presenceName renders a resolved presence declaration for the dumped schema.
+// The three names are the canonical ones the contract pins (§13, §23.7).
+func presenceName(p presenceKind) string {
+	switch p {
+	case presenceRequired:
+		return "required"
+	case presenceOptional:
+		return "optional"
+	case presenceDefault:
+		return "default"
+	}
+	// Unreachable: an undeclared flag or arg does not register.
+	return ""
+}
+
 // serializeFlag converts a Flag to a JSON-serializable map matching the Python format.
 // Fields matching their defaults are omitted; see buildSchemaDefaults().
 func serializeFlag(f Flag) map[string]interface{} {
@@ -61,13 +76,15 @@ func serializeFlag(f Flag) map[string]interface{} {
 		m["short"] = f.Short
 	}
 
-	// default: default nil (omit when nil, unless repeatable with no explicit default)
-	dflt := f.Default
-	if f.Repeatable && f.Default == nil && !f.hasDefault {
-		dflt = []interface{}{}
-	}
-	if dflt != nil {
-		m["default"] = serializeDefault(dflt)
+	// presence: ALWAYS emitted -- presence is mandatory, so there is no default
+	// to omit against (contract §13's presence-round amendment).
+	m["presence"] = presenceName(f.presence)
+
+	// default: emitted exactly when presence is "default", and then ALWAYS,
+	// whatever the value: [], {}, "", false and 0 are declarations rather than
+	// the absence of one, so the omit-when-empty rules are gone.
+	if f.presence == presenceDefault {
+		m["default"] = serializeDefault(f.Default)
 	}
 
 	// env: default nil (omit when empty string -> nil)
@@ -125,16 +142,15 @@ func serializeArg(a Arg) map[string]interface{} {
 	if a.Type != TypeStr {
 		m["type"] = flagTypeName[a.Type]
 	}
-	// required: default true (omit when true)
-	if !a.Required {
-		m["required"] = false
-	}
+	// presence: ALWAYS emitted, exactly as on a flag entry. The arg-side
+	// `required` key is deleted: it was the same fact under a second key.
+	m["presence"] = presenceName(a.presence)
 	// variadic: default false (omit when false)
 	if a.IsVariadic {
 		m["variadic"] = true
 	}
-	// default: default nil (omit when nil / no default set)
-	if a.hasDefault {
+	// default: emitted exactly when presence is "default", and then always.
+	if a.presence == presenceDefault {
 		m["default"] = a.Default
 	}
 	// choices: default nil (omit when nil)
@@ -366,9 +382,12 @@ func buildSchemaDefaults() map[string]interface{} {
 			"negatable":     nil,
 			"hidden":        false,
 		},
+		// `presence` is deliberately absent from both the flag and the arg
+		// entry: it is ALWAYS emitted, so there is no default to omit
+		// against (contract §13's presence-round amendment). The arg-side
+		// `required` key is deleted with the derivation behind it.
 		"arg": map[string]interface{}{
 			"type":     "str",
-			"required": true,
 			"default":  nil,
 			"variadic": false,
 			"choices":  nil,

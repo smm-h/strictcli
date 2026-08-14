@@ -18,9 +18,9 @@ func electionApp() *App {
 		"profile={profile} all={all_profiles} current={current_profile}",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				StringFlag("profile", "a profile", Default(nil)),
-				BoolFlag("all-profiles", "every profile", Default(nil)),
-				BoolFlag("current-profile", "the current profile", Default(nil)),
+				StringFlag("profile", "a profile", Optional()),
+				BoolFlag("all-profiles", "every profile", Optional()),
+				BoolFlag("current-profile", "the current profile", Optional()),
 			},
 		}))
 }
@@ -130,9 +130,9 @@ func TestMutexA5EnvDoesNotElect(t *testing.T) {
 	app := simpleApp("fetch", "fetch data", "file={file} url={url}",
 		WithMutex(MutexGroup{
 			Flags: []Flag{
-				StringFlag("file", "read from file", Default(nil),
+				StringFlag("file", "read from file", Optional(),
 					Env("TEST_FILE_A5"), Prefixed(false)),
-				StringFlag("url", "read from URL", Default(nil)),
+				StringFlag("url", "read from URL", Optional()),
 			},
 		}))
 	r := app.Test([]string{"fetch"})
@@ -154,9 +154,9 @@ func TestMutexA5EnvValueSuppressedBesideAnElection(t *testing.T) {
 		return Exit(0)
 	}, WithEffect(EffectReadOnly), WithMutex(MutexGroup{
 		Flags: []Flag{
-			StringFlag("file", "read from file", Default(nil),
+			StringFlag("file", "read from file", Optional(),
 				Env("TEST_FILE_A5B"), Prefixed(false)),
-			StringFlag("url", "read from URL", Default(nil)),
+			StringFlag("url", "read from URL", Optional()),
 		},
 	}))
 	r := app.Test([]string{"fetch", "--url", "http://example.com"})
@@ -182,8 +182,8 @@ func TestMutexA5ConfigDoesNotElect(t *testing.T) {
 			return Exit(0)
 		}, WithMutex(MutexGroup{
 			Flags: []Flag{
-				StringFlag("file", "read from file", Default(nil)),
-				StringFlag("url", "read from URL", Default(nil)),
+				StringFlag("file", "read from file", Optional()),
+				StringFlag("url", "read from URL", Optional()),
 			},
 		}), WithEffect(EffectReadOnly))
 		return app

@@ -25,7 +25,7 @@ func TestGlobalFlagReservedNames(t *testing.T) {
 				}
 			}()
 			app := NewApp("testapp", "1.0.0", "test")
-			app.GlobalFlag(StringFlag(name, "test flag"))
+			app.GlobalFlag(StringFlag(name, "test flag", Required()))
 		})
 	}
 }
@@ -56,7 +56,7 @@ func TestGlobalFlagReservedShortNames(t *testing.T) {
 				}
 			}()
 			app := NewApp("testapp", "1.0.0", "test")
-			app.GlobalFlag(StringFlag(tc.name, "test flag", Short(tc.short)))
+			app.GlobalFlag(StringFlag(tc.name, "test flag", Short(tc.short), Required()))
 		})
 	}
 }
@@ -66,6 +66,6 @@ func TestGlobalFlagReservedShortNames(t *testing.T) {
 func TestGlobalFlagNonReservedAllowed(t *testing.T) {
 	app := NewApp("testapp", "1.0.0", "test")
 	app.GlobalFlag(BoolFlag("loud", "enable loud output", Default(false)))
-	app.GlobalFlag(StringFlag("output", "output file"))
+	app.GlobalFlag(StringFlag("output", "output file", Required()))
 	// No panic means success.
 }

@@ -23,7 +23,7 @@ func TestEnvSourceLabel(t *testing.T) {
 		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
-		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL")),
+		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Required()),
 	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run"})
@@ -100,7 +100,7 @@ func TestCliOverridesEnv(t *testing.T) {
 		capturedCtx = ctx
 		return Exit(0)
 	}, WithFlags(
-		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL")),
+		IntFlag("level", "verbosity level", Env("MYAPP_LEVEL"), Required()),
 	), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"run", "--level", "99"})

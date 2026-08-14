@@ -275,12 +275,17 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 			if a.Choices != nil {
 				metaParts = append(metaParts, fmt.Sprintf("choices: %s", formatChoices(a.Choices)))
 			}
-			if !a.Required {
-				if a.hasDefault {
-					metaParts = append(metaParts, fmt.Sprintf("default: %s", formatDefaultValue(a.Default)))
-				} else {
-					metaParts = append(metaParts, "optional")
-				}
+			// Exactly one presence part, last on the line (contract §23.8).
+			// A required positional renders [required] like a required flag:
+			// there is no usage line, so it was the one declaration whose
+			// presence a reader could not see.
+			switch a.presence {
+			case presenceRequired:
+				metaParts = append(metaParts, "required")
+			case presenceOptional:
+				metaParts = append(metaParts, "optional")
+			default:
+				metaParts = append(metaParts, fmt.Sprintf("default: %s", formatDefaultValue(a.Default)))
 			}
 			meta := ""
 			if len(metaParts) > 0 {
@@ -429,29 +434,14 @@ func buildFlagMeta(f Flag) string {
 			metaParts = append(metaParts, "env: "+f.Env)
 		}
 	}
-	if f.Type == TypeBool && f.hasDefault && f.Default != nil {
-		if def, ok := f.Default.(bool); ok && def {
-			metaParts = append(metaParts, "default: true")
-		} else {
-			metaParts = append(metaParts, "default: false")
-		}
-	} else if f.Repeatable {
-		// Repeatable flags are never required; show default only if non-empty
-		if f.hasDefault && f.Default != nil {
-			if items, ok := f.Default.([]interface{}); ok && len(items) > 0 {
-				parts := make([]string, len(items))
-				for i, elem := range items {
-					parts[i] = formatValueForError(elem)
-				}
-				metaParts = append(metaParts, fmt.Sprintf("default: %s", strings.Join(parts, ", ")))
-			}
-		}
-	} else if f.hasDefault && f.Default != nil {
-		metaParts = append(metaParts, fmt.Sprintf("default: %s", formatDefaultValue(f.Default)))
-	} else if f.hasDefault {
-		metaParts = append(metaParts, "optional")
-	} else {
+	// Exactly one presence part, last on the line (contract §23.8).
+	switch f.presence {
+	case presenceRequired:
 		metaParts = append(metaParts, "required")
+	case presenceOptional:
+		metaParts = append(metaParts, "optional")
+	default:
+		metaParts = append(metaParts, "default: "+formatFlagDefaultForHelp(f))
 	}
 
 	var sb strings.Builder
@@ -464,4 +454,43 @@ func buildFlagMeta(f Flag) string {
 		sb.WriteString("]")
 	}
 	return " " + sb.String()
+}
+
+// formatFlagDefaultForHelp renders a DECLARED default value for the help line's
+// presence part. A declared empty collection renders as the literal `[]` / `{}`
+// rather than as nothing: under the presence declaration it is a declaration,
+// and a declaration that rendered blank would leave the flag as the one line
+// with no presence part (contract §23.8).
+func formatFlagDefaultForHelp(f Flag) string {
+	if f.Type == TypeBool && !f.Repeatable {
+		if def, ok := f.Default.(bool); ok && def {
+			return "true"
+		}
+		return "false"
+	}
+	if IsDictType(f.Type) {
+		m, ok := f.Default.(map[string]interface{})
+		if !ok {
+			return formatDefaultValue(f.Default)
+		}
+		if len(m) == 0 {
+			return "{}"
+		}
+		return formatDictForDisplay(m)
+	}
+	if f.Repeatable {
+		items, ok := f.Default.([]interface{})
+		if !ok {
+			return formatDefaultValue(f.Default)
+		}
+		if len(items) == 0 {
+			return "[]"
+		}
+		parts := make([]string, len(items))
+		for i, elem := range items {
+			parts[i] = formatValueForError(elem)
+		}
+		return strings.Join(parts, ", ")
+	}
+	return formatDefaultValue(f.Default)
 }

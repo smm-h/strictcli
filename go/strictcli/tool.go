@@ -68,14 +68,11 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 
 		properties[paramName] = prop
 
-		// A flag is required if it's scalar, non-bool, and has no default.
-		// Bool flags always have a default (false). List/dict/repeatable flags
-		// always have a default (empty collection).
-		isRequired := !IsCompoundType(f.Type) &&
-			!f.Repeatable &&
-			f.Type != TypeBool &&
-			!f.hasDefault
-		if isRequired {
+		// A parameter is required iff its DECLARED presence is required
+		// (contract §13's presence-round amendment, §23.7). The old
+		// four-clause derivation is gone, and with it the exclusion of bools:
+		// "bool flags always have a default" is false by construction now.
+		if f.presence == presenceRequired {
 			required = append(required, paramName)
 		}
 	}
@@ -103,7 +100,7 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 
 		properties[a.Name] = prop
 
-		if a.Required {
+		if a.presence == presenceRequired {
 			required = append(required, a.Name)
 		}
 	}
