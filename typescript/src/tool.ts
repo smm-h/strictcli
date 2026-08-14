@@ -167,9 +167,11 @@ export function buildJSONSchema(
 		} else {
 			prop.type = JSON_SCHEMA_TYPES[a.schema];
 		}
-		const opts = a.opts as { readonly choices?: readonly unknown[] };
+		const opts = a.opts as {
+			readonly choices?: readonly { readonly value: unknown }[];
+		};
 		if (opts.choices !== undefined) {
-			prop.enum = [...opts.choices];
+			prop.enum = [...choiceValues(opts.choices)];
 		}
 		prop.description = a.opts.help;
 		properties[a.name] = prop;
