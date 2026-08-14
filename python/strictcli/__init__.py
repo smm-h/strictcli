@@ -10543,6 +10543,51 @@ _JSON_SCHEMA_TYPES = {
 }
 
 
+def _scalar_fragment(t: type, choices: list | None) -> dict:
+    """One scalar row of §25.2's fragment table, with its `enum` if any."""
+    frag: dict = {"type": _JSON_SCHEMA_TYPES[t]}
+    if choices is not None:
+        frag["enum"] = list(choices)
+    return frag
+
+
+def _value_schema_fragment(decl: "Flag | Arg") -> dict:
+    """The JSON Schema fragment describing the value a declaration delivers.
+
+    A real fragment from the closed four-keyword subset (`type`, `items`,
+    `additionalProperties`, `enum`), with JSON Schema's own type names, emitted
+    in that key order (contract §25.2).
+
+    ARITY IS VALUE SHAPE (§25.3): a repeatable scalar flag and a `list[T]` flag
+    publish the identical array fragment, and a variadic arg does the same in
+    either spelling -- which is what makes the deleted `repeatable` key a
+    second spelling of a fact the shape already carries.
+
+    An optional declaration emits the plain type: there is no `null` in any
+    fragment and no type list, because presence is the sole authority on
+    absence and a nullable fragment would be a second statement about it.
+
+    The same function feeds the MCP projection, so a tool schema's parameter
+    shape and the dumped one cannot disagree (§25.13).
+    """
+    compound = getattr(decl, "compound", "scalar")
+    if compound == "dict":
+        return {
+            "type": "object",
+            "additionalProperties": {
+                "type": _JSON_SCHEMA_TYPES[decl.value_type],
+            },
+        }
+    array = (
+        compound == "list"
+        or bool(getattr(decl, "repeatable", False))
+        or bool(getattr(decl, "variadic", False))
+    )
+    if array:
+        return {"type": "array", "items": _scalar_fragment(decl.type, decl.choices)}
+    return _scalar_fragment(decl.type, decl.choices)
+
+
 def _build_json_schema(cmd: Command) -> dict:
     """Build a JSON Schema parameters object for a command's flags and args."""
     properties: dict = {}
@@ -10550,22 +10595,7 @@ def _build_json_schema(cmd: Command) -> dict:
 
     for f in cmd.flags:
         param_name = _flag_param_name(f.name)
-        prop: dict = {}
-
-        if f.compound == "list":
-            prop["type"] = "array"
-            prop["items"] = {"type": _JSON_SCHEMA_TYPES[f.item_type]}
-        elif f.compound == "dict":
-            prop["type"] = "object"
-            prop["additionalProperties"] = {
-                "type": _JSON_SCHEMA_TYPES[f.value_type],
-            }
-        else:
-            prop["type"] = _JSON_SCHEMA_TYPES[f.type]
-
-        if f.choices is not None:
-            prop["enum"] = f.choices[:]
-
+        prop: dict = _value_schema_fragment(f)
         prop["description"] = f.help
 
         properties[param_name] = prop
@@ -10577,17 +10607,7 @@ def _build_json_schema(cmd: Command) -> dict:
             required.append(param_name)
 
     for a in cmd.args:
-        prop = {}
-
-        if a.compound == "list":
-            prop["type"] = "array"
-            prop["items"] = {"type": _JSON_SCHEMA_TYPES[a.item_type]}
-        else:
-            prop["type"] = _JSON_SCHEMA_TYPES[a.type]
-
-        if a.choices is not None:
-            prop["enum"] = a.choices[:]
-
+        prop = _value_schema_fragment(a)
         prop["description"] = a.help
 
         properties[a.name] = prop
@@ -10627,25 +10647,12 @@ def _build_json_schema(cmd: Command) -> dict:
             payload = site.choice.payload
             if payload is None:
                 continue
-            properties[_flag_param_name(site.name)] = {
-                "type": _JSON_SCHEMA_TYPES[payload.type],
-                "description": payload.help,
-            }
+            prop = _value_schema_fragment(payload)
+            prop["description"] = payload.help
+            properties[_flag_param_name(site.name)] = prop
             continue
         f = site.decl
-        prop = {}
-        if f.compound == "list":
-            prop["type"] = "array"
-            prop["items"] = {"type": _JSON_SCHEMA_TYPES[f.item_type]}
-        elif f.compound == "dict":
-            prop["type"] = "object"
-            prop["additionalProperties"] = {
-                "type": _JSON_SCHEMA_TYPES[f.value_type],
-            }
-        else:
-            prop["type"] = _JSON_SCHEMA_TYPES[f.type]
-        if f.choices is not None:
-            prop["enum"] = f.choices[:]
+        prop = _value_schema_fragment(f)
         prop["description"] = f.help
         properties[_flag_param_name(f.name)] = prop
 

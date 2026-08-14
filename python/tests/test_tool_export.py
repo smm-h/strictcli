@@ -1015,3 +1015,151 @@ class TestToolExecuteConsent:
             router.execute(command="release", approve_consequential=True)
         )
         assert result == {"released": True}
+
+
+# ---------------------------------------------------------------------------
+# §25.13 -- the MCP projection derives its parameter shape from the same
+# arity rule the dumped `value_schema` fragment states
+# ---------------------------------------------------------------------------
+
+
+class TestProjectionArityAndEnumPlacement:
+    def test_an_array_shaped_flags_enum_lives_inside_items(self):
+        """`enum` at the property root would say the ARRAY must equal one of
+        the choices."""
+        app = _build_app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.flag(
+            "tag", type=list[str], help="the tags", presence="required",
+            unique=False,
+            choices=[strictcli.Choice("a"), strictcli.Choice("b")],
+        )
+        def cmd(ctx, tag):
+            pass
+
+        prop = app.json_schema("cmd")["properties"]["tag"]
+        assert prop == {
+            "type": "array",
+            "items": {"type": "string", "enum": ["a", "b"]},
+            "description": "the tags",
+        }
+        assert "enum" not in prop
+
+    def test_a_scalar_flags_enum_stays_at_the_fragment_root(self):
+        app = _build_app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.flag(
+            "mode", type=str, help="the mode", presence="required",
+            choices=[strictcli.Choice("fast"), strictcli.Choice("slow")],
+        )
+        def cmd(ctx, mode):
+            pass
+
+        assert app.json_schema("cmd")["properties"]["mode"] == {
+            "type": "string",
+            "enum": ["fast", "slow"],
+            "description": "the mode",
+        }
+
+    def test_a_repeatable_scalar_flag_projects_as_an_array(self):
+        """A repeatable scalar flag delivers a list, so it projects one."""
+        app = _build_app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.flag(
+            "include", type=str, help="what to include", presence="required",
+            repeatable=True, unique=False,
+        )
+        def cmd(ctx, include):
+            pass
+
+        assert app.json_schema("cmd")["properties"]["include"] == {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "what to include",
+        }
+
+    def test_a_repeatable_scalar_flag_with_choices_puts_enum_in_items(self):
+        app = _build_app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.flag(
+            "include", type=int, help="what to include", presence="required",
+            repeatable=True, unique=False,
+            choices=[strictcli.Choice(1), strictcli.Choice(2)],
+        )
+        def cmd(ctx, include):
+            pass
+
+        assert app.json_schema("cmd")["properties"]["include"] == {
+            "type": "array",
+            "items": {"type": "integer", "enum": [1, 2]},
+            "description": "what to include",
+        }
+
+    def test_a_variadic_scalar_arg_projects_as_an_array(self):
+        app = _build_app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.arg("files", help="the files", presence="required", variadic=True)
+        def cmd(ctx, files):
+            pass
+
+        assert app.json_schema("cmd")["properties"]["files"] == {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "the files",
+        }
+
+    def test_a_list_typed_variadic_arg_projects_identically(self):
+        """Both spellings of a compound arg publish one shape (§25.4)."""
+        app = _build_app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.arg(
+            "ports", type=list[int], help="the ports", presence="required",
+            variadic=True,
+        )
+        def cmd(ctx, ports):
+            pass
+
+        assert app.json_schema("cmd")["properties"]["ports"] == {
+            "type": "array",
+            "items": {"type": "integer"},
+            "description": "the ports",
+        }
+
+    def test_a_variadic_args_enum_lives_inside_items(self):
+        app = _build_app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.arg(
+            "scopes", help="the scopes", presence="required", variadic=True,
+            choices=[strictcli.Choice("head"), strictcli.Choice("tags")],
+        )
+        def cmd(ctx, scopes):
+            pass
+
+        assert app.json_schema("cmd")["properties"]["scopes"] == {
+            "type": "array",
+            "items": {"type": "string", "enum": ["head", "tags"]},
+            "description": "the scopes",
+        }
+
+    def test_a_dict_flag_keeps_its_additional_properties_shape(self):
+        app = _build_app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.flag(
+            "label", type=dict[str, int], help="the labels", presence="required",
+        )
+        def cmd(ctx, label):
+            pass
+
+        assert app.json_schema("cmd")["properties"]["label"] == {
+            "type": "object",
+            "additionalProperties": {"type": "integer"},
+            "description": "the labels",
+        }
