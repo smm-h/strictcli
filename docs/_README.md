@@ -13,6 +13,33 @@ strictcli has multiple first-class implementations kept in behavioral lockstep b
 | **Go** | `go get github.com/smm-h/strictcli/go/strictcli` | [go/](go/) |
 | **TypeScript** | `npm install strictcli` | [typescript/README.md](typescript/README.md) |
 
+## Build in your language, not in a shared subset
+
+Pick whichever of the three you want to work in and write it the way that
+language is written. Python gets decorators, keyword arguments and dataclasses.
+Go gets functional options and compile-time option shapes. TypeScript gets
+discriminated unions and full type inference from the flag declaration through to
+the handler's argument types. The three surfaces are deliberately different, and
+none of them is a transliteration of another:
+
+```python
+@strictcli.flag("target", type=str, presence="required", help="Where to deploy")
+```
+```go
+strictcli.StringFlag("target", "Where to deploy", strictcli.Required())
+```
+```ts
+flag("target", t.str, { help: "Where to deploy", presence: "required" })
+```
+
+What the three hold identical is **behavior** -- the same semantics for every
+declaration, the same help bytes, the same schema, and the same error sentence
+with your language's own spellings inside it. You are not handed a
+lowest-common-denominator API so that three implementations can stay in step.
+You are handed your language's best form, enforced strictly: what strictcli
+makes mandatory, it makes mandatory in the idiom you already write. See
+[docs/language-idioms.md](docs/language-idioms.md).
+
 ## Philosophy
 
 Most CLI frameworks infer behavior from type hints, function signatures, or naming conventions. strictcli does the opposite: every flag, argument, command, and help string is declared explicitly. If something is missing, you get an error at registration time, not a confusing runtime surprise.
