@@ -529,8 +529,9 @@ class TestSchemaDefaults:
         assert defaults["flag"]["negatable"] is None
         assert defaults["flag"]["hidden"] is False
 
-        # Arg defaults
-        assert defaults["arg"]["required"] is True
+        # Arg defaults -- the `required` key is deleted with the derivation
+        # behind it (contract §13's presence-round amendment).
+        assert "required" not in defaults["arg"]
         assert defaults["arg"]["default"] is None
         assert defaults["arg"]["variadic"] is False
 

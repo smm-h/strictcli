@@ -11784,9 +11784,12 @@ def _build_schema_defaults() -> dict:
             "negatable": None,
             "hidden": False,
         },
+        # `presence` is deliberately absent from both the flag and the arg
+        # entry: it is ALWAYS emitted, so there is no default to omit against
+        # (contract §13's presence-round amendment). The arg-side `required`
+        # key is deleted with the derivation behind it.
         "arg": {
             "type": "str",
-            "required": True,
             "default": None,
             "variadic": False,
             "choices": None,
