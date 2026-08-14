@@ -930,13 +930,21 @@ class TestSchemaWithConfigFields:
 
         assert "config_fields" in schema
         assert "db.url" in schema["config_fields"]
-        assert schema["config_fields"]["db.url"]["type"] == "str"
+        # A config field is scalar-only in every implementation, so its
+        # fragment is always a scalar row (§25.7). `required` stays beside it:
+        # it means "the config file must contain it", not §23's presence.
+        assert schema["config_fields"]["db.url"]["value_schema"] == {
+            "type": "string",
+        }
+        assert "type" not in schema["config_fields"]["db.url"]
         assert schema["config_fields"]["db.url"]["help"] == "Database URL"
         assert schema["config_fields"]["db.url"]["required"] is True
         assert "default" not in schema["config_fields"]["db.url"]
 
         assert "cache.ttl" in schema["config_fields"]
-        assert schema["config_fields"]["cache.ttl"]["type"] == "int"
+        assert schema["config_fields"]["cache.ttl"]["value_schema"] == {
+            "type": "integer",
+        }
         assert schema["config_fields"]["cache.ttl"]["required"] is False
         assert schema["config_fields"]["cache.ttl"]["default"] == 3600
 

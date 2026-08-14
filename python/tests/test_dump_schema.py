@@ -135,14 +135,18 @@ class TestSchemaCommands:
         # Check flag serialization
         target_flag = cmd["flags"][0]
         assert target_flag["name"] == "target"
-        assert target_flag["type"] == "str"
+        assert target_flag["value_schema"] == {
+            "type": "string", "enum": ["prod", "staging"],
+        }
         assert target_flag["short"] == "t"
-        assert target_flag["choices"] == ["prod", "staging"]
+        assert target_flag["choices"] == [
+            {"value": "prod"}, {"value": "staging"},
+        ]
         assert "hidden" not in target_flag  # hidden=False is the default, omitted
 
         force_flag = cmd["flags"][1]
         assert force_flag["name"] == "force-deploy"
-        assert force_flag["type"] == "bool"
+        assert force_flag["value_schema"] == {"type": "boolean"}
         assert force_flag["negatable"] is True
         assert force_flag["default"] is False
 
@@ -280,15 +284,17 @@ class TestSchemaGlobalFlags:
         assert len(data["global_flags"]) == 2
         loud = data["global_flags"][0]
         assert loud["name"] == "loud"
-        assert loud["type"] == "bool"
+        assert loud["value_schema"] == {"type": "boolean"}
         assert loud["short"] == "V"
         assert loud["negatable"] is True
 
         output = data["global_flags"][1]
         assert output["name"] == "output"
-        assert output["type"] == "str"
+        assert output["value_schema"] == {
+            "type": "string", "enum": ["text", "json"],
+        }
         assert output["default"] == "text"
-        assert output["choices"] == ["text", "json"]
+        assert output["choices"] == [{"value": "text"}, {"value": "json"}]
         assert "negatable" not in output  # non-bool flag, null is the default, omitted
 
 
@@ -376,7 +382,7 @@ class TestSchemaFlagTypes:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         flag = data["commands"]["cmd"]["flags"][0]
-        assert flag["type"] == "int"
+        assert flag["value_schema"] == {"type": "integer"}
         assert flag["default"] == 5
 
     def test_float_flag(self, tmp_path, monkeypatch):
@@ -391,7 +397,7 @@ class TestSchemaFlagTypes:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         flag = data["commands"]["cmd"]["flags"][0]
-        assert flag["type"] == "float"
+        assert flag["value_schema"] == {"type": "number"}
         assert flag["default"] == 0.5
 
     def test_repeatable_flag(self, tmp_path, monkeypatch):
@@ -406,7 +412,11 @@ class TestSchemaFlagTypes:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         flag = data["commands"]["cmd"]["flags"][0]
-        assert flag["repeatable"] is True
+        # `repeatable` is deleted: the fragment carries the arity (§25.3).
+        assert "repeatable" not in flag
+        assert flag["value_schema"] == {
+            "type": "array", "items": {"type": "string"},
+        }
         assert flag["default"] == []
 
     def test_env_on_flag(self, tmp_path, monkeypatch):
@@ -497,6 +507,63 @@ class TestSchemaDefaults:
         assert isinstance(data["defaults"], dict)
 
     def test_defaults_structure(self, tmp_path, monkeypatch):
+        """The whole block, verbatim (contract §25.10).
+
+        It is the machine-readable map of what an OMITTED key means, so it is
+        pinned as one document rather than key by key: a phantom entry, or a
+        baseline for a key whose emission is governed by another key, is the
+        exact defect the v2 rewrite removed.
+        """
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+
+        assert data["defaults"] == {
+            "schema_version": 2,
+            "app": {
+                "env_prefix": None, "config": False, "config_format": "json",
+                "config_path": None, "config_conflict_mode": "cli-wins",
+                "proc_observe_allowlist": [], "global_flags": [],
+                "commands": {}, "groups": {}, "deprecated": {},
+                "tag_contracts": {}, "checks": {}, "config_fields": {},
+                "infra": {},
+            },
+            "flag": {
+                "short": None, "env": None, "env_separator": None,
+                "prefixed": True, "choices": None, "elect_by": None,
+                "unique": False, "conflict_mode": None, "negatable": None,
+            },
+            "arg": {"variadic": False, "choices": None},
+            "choice": {"flags": []},
+            "choice_record": {"help": None},
+            "command": {
+                "consequential": False, "dry_run_supported": True,
+                "dry_run_unsupported_reason": None, "payload_schema": None,
+                "owns_stdout": False, "passthrough": False, "flags": [],
+                "flag_sets": [], "args": [], "tags": [], "constraints": [],
+                "hidden": False, "interactive": False, "config_fields": [],
+                "grants": [], "forwarding": None,
+            },
+            "group": {
+                "commands": {}, "groups": {}, "deprecated": {}, "tags": [],
+                "hidden": False,
+            },
+            "config_field": {"default": None, "bound_commands": []},
+            "check": {"scope": None},
+            "infra": {"roots": [], "handshakes": [], "connections": []},
+        }
+
+    def test_the_deleted_baselines_are_gone(self, tmp_path, monkeypatch):
+        """`flag.hidden` was a phantom (no implementation has a flag-level
+        `hidden`); `flag.default` and `arg.default` state something false now
+        that presence governs `default`'s emission; `flag.repeatable` and
+        `arg.type` name keys that no longer exist."""
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
@@ -507,51 +574,26 @@ class TestSchemaDefaults:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         defaults = data["defaults"]
-
-        # Schema version default
-        assert defaults["schema_version"] == 1
-
-        # App defaults
-        assert defaults["app"]["env_prefix"] is None
-        assert defaults["app"]["config"] is False
-        assert defaults["app"]["global_flags"] == []
-        assert defaults["app"]["commands"] == {}
-        assert defaults["app"]["groups"] == {}
-        assert defaults["app"]["deprecated"] == {}
-        assert defaults["app"]["tag_contracts"] == {}
-
-        # Flag defaults
-        assert defaults["flag"]["short"] is None
-        assert defaults["flag"]["default"] is None
-        assert defaults["flag"]["env"] is None
-        assert defaults["flag"]["choices"] is None
-        assert defaults["flag"]["repeatable"] is False
-        assert defaults["flag"]["negatable"] is None
-        assert defaults["flag"]["hidden"] is False
-
-        # Arg defaults -- the `required` key is deleted with the derivation
-        # behind it (contract §13's presence-round amendment).
+        assert "hidden" not in defaults["flag"]
+        assert "default" not in defaults["flag"]
+        assert "repeatable" not in defaults["flag"]
+        assert "default" not in defaults["arg"]
+        assert "type" not in defaults["arg"]
         assert "required" not in defaults["arg"]
-        assert defaults["arg"]["default"] is None
-        assert defaults["arg"]["variadic"] is False
-
-        # Command defaults
-        assert defaults["command"]["passthrough"] is False
-        assert defaults["command"]["flags"] == []
-        assert defaults["command"]["args"] == []
-        assert defaults["command"]["constraints"] == []
-
-        # Group defaults
-        assert defaults["group"]["commands"] == {}
-        assert defaults["group"]["groups"] == {}
-        assert defaults["group"]["deprecated"] == {}
+        # `presence` and `value_schema` are always emitted, so neither has a
+        # baseline to omit against.
+        assert "presence" not in defaults["flag"]
+        assert "presence" not in defaults["arg"]
+        assert "value_schema" not in defaults["flag"]
+        assert "value_schema" not in defaults["arg"]
 
 
 class TestSchemaOmitsDefaults:
     """Fields matching their defaults are omitted from the schema output."""
 
     def test_flag_null_fields_omitted(self, tmp_path, monkeypatch):
-        """A flag with all-default optional fields should only have name/type/help."""
+        """A flag with all-default optional fields carries only its identity
+        keys: name, help, value_schema and presence."""
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
@@ -563,17 +605,12 @@ class TestSchemaOmitsDefaults:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         flag = data["commands"]["cmd"]["flags"][0]
-        assert flag["name"] == "name"
-        assert flag["type"] == "str"
-        assert flag["help"] == "A name"
-        # All optional fields should be absent (they match defaults)
-        assert "short" not in flag
-        assert "default" not in flag
-        assert "env" not in flag
-        assert "choices" not in flag
-        assert "repeatable" not in flag
-        assert "negatable" not in flag
-        assert "hidden" not in flag
+        assert flag == {
+            "name": "name",
+            "help": "A name",
+            "value_schema": {"type": "string"},
+            "presence": "required",
+        }
 
     def test_command_empty_flags_and_args_omitted(self, tmp_path, monkeypatch):
         """A command with no flags/args should omit those lists."""
@@ -694,7 +731,8 @@ class TestSchemaNonDefaultValues:
         assert flag["short"] == "l"
         assert flag["default"] == 3
         assert flag["env"] == "MY_LEVEL"
-        assert flag["choices"] == [1, 2, 3]
+        assert flag["value_schema"] == {"type": "integer", "enum": [1, 2, 3]}
+        assert flag["choices"] == [{"value": 1}, {"value": 2}, {"value": 3}]
 
     def test_config_true_present(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -779,7 +817,7 @@ class TestSchemaVersion:
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
-        assert data["schema_version"] == 1
+        assert data["schema_version"] == 2
 
     def test_schema_version_is_first_key(self, tmp_path, monkeypatch):
         """schema_version should appear before other keys in the JSON."""
@@ -837,17 +875,25 @@ class TestSchemaConstraints:
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["show"]
         assert "constraints" not in cmd
-        # The selector is published NESTED, never flattened away (§24.11).
-        assert cmd["selectors"] == [{
+        # The selector is published NESTED, never flattened away, and it lives
+        # in the command's ONE flags array: a selector IS a flag, and the
+        # presence of `elect_by` is what tells a reader which shape it is
+        # holding (§25.6).
+        assert "selectors" not in cmd
+        assert cmd["flags"] == [{
             "name": "format",
             "help": "the output format",
             "presence": "required",
-            "elect_by": "member-flags",
             "choices": [
                 {"name": "as-json", "help": "JSON output"},
                 {"name": "text", "help": "Text output"},
             ],
+            "elect_by": "member-flags",
         }]
+        # A selector carries NO value_schema: its value is a variant, which
+        # the closed four-keyword subset cannot express, and publishing a
+        # wrong fragment would be worse than publishing none (§25.6).
+        assert "value_schema" not in cmd["flags"][0]
 
     def test_co_required(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -1137,7 +1183,7 @@ class TestDumpSchemaDict:
             pass
 
         d = app.dump_schema_dict()
-        assert d["schema_version"] == 1
+        assert d["schema_version"] == 2
         assert d["version"] == "1.0.0"
         assert d["name"] == "testapp"
         assert "project_id" not in d
@@ -1312,3 +1358,462 @@ class TestDeclaredSchemaLocation:
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValueError, match="MYAPP_HOME"):
             _make_app(schema_path=strictcli.RelativeToRoot("MYAPP_HOME", "schema.json"))
+
+
+class TestByteCanon:
+    """The dumped document is dumper-independent (contract §25.8).
+
+    A repository whose schema file is written sometimes by one implementation
+    and sometimes by another must see a diff exactly when something changed,
+    so the encoding itself is pinned: escaping, layout, numbers and the
+    trailing newline.
+    """
+
+    def _dump(self, tmp_path, app):
+        app.test(["--dump-schema"])
+        return (tmp_path / ".strictcli" / "schema.json").read_text(encoding="utf-8")
+
+    def test_the_whole_document_byte_for_byte(self, tmp_path, monkeypatch):
+        """One small app, pinned as bytes: layout, key order and escaping in
+        one assertion, because they are one encoding."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command(
+            "greet", effect="read_only",
+            help="Greet — with ünicode & <html> and a/slash",
+        )
+        @strictcli.flag("ratio", type=float, help="The ratio", default=1e-7)
+        def greet(ctx, ratio):
+            pass
+
+        text = self._dump(tmp_path, app)
+        tail = text[text.index('  "project_id"'):]
+        assert tail == (
+            '  "project_id": "testproject",\n'
+            '  "name": "testapp",\n'
+            '  "version": "1.0.0",\n'
+            '  "help": "A test app",\n'
+            '  "commands": {\n'
+            '    "greet": {\n'
+            '      "name": "greet",\n'
+            '      "help": "Greet — with ünicode & <html> and a/slash",\n'
+            '      "effect": "read_only",\n'
+            '      "flags": [\n'
+            '        {\n'
+            '          "name": "ratio",\n'
+            '          "help": "The ratio",\n'
+            '          "value_schema": {\n'
+            '            "type": "number"\n'
+            '          },\n'
+            '          "presence": "default",\n'
+            '          "default": 1e-7\n'
+            '        }\n'
+            '      ]\n'
+            '    }\n'
+            '  }\n'
+            '}\n'
+        )
+
+    def test_non_ascii_is_raw_and_html_significant_characters_are_literal(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="café <b> & </b> a/b")
+        def noop(ctx):
+            pass
+
+        text = self._dump(tmp_path, app)
+        assert "café <b> & </b> a/b" in text
+        assert "\\u" not in text
+        assert "\\/" not in text
+
+    def test_a_control_character_uses_json_s_own_escape(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="two\nlines\tapart")
+        def noop(ctx):
+            pass
+
+        text = self._dump(tmp_path, app)
+        assert '"help": "two\\nlines\\tapart"' in text
+
+    def test_every_float_goes_through_the_canonical_float_form(
+        self, tmp_path, monkeypatch,
+    ):
+        """Python's `repr` -- which `json.dumps` would use -- writes `1e-07`
+        where SCF writes `1e-7`."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        @strictcli.flag("small", type=float, help="A small one", default=1e-7)
+        @strictcli.flag("big", type=float, help="A big one", default=1e21)
+        @strictcli.flag("whole", type=float, help="A whole one", default=2.0)
+        def noop(ctx, small, big, whole):
+            pass
+
+        text = self._dump(tmp_path, app)
+        assert '"default": 1e-7' in text
+        assert '"default": 1e+21' in text
+        assert '"default": 2.0' in text
+        assert "1e-07" not in text
+
+    def test_integers_are_bare_tokens(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        @strictcli.flag("count", type=int, help="How many", default=5)
+        def noop(ctx, count):
+            pass
+
+        text = self._dump(tmp_path, app)
+        assert '"default": 5\n' in text
+        assert '"default": 5.0' not in text
+
+    def test_the_layout_is_two_space_indent_one_member_per_line(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        text = self._dump(tmp_path, app)
+        assert text.startswith('{\n  "schema_version": 2,\n  "defaults": {\n')
+        # Empty containers are inline, never split across lines.
+        assert '"proc_observe_allowlist": [],' in text
+        assert '"commands": {},' in text
+
+    def test_exactly_one_trailing_newline(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        text = self._dump(tmp_path, app)
+        assert text.endswith("}\n")
+        assert not text.endswith("}\n\n")
+
+
+class TestCanonicalKeyOrder:
+    """Keys are emitted in a DECLARED order, never sorted at serialization
+    time; keyed objects follow the two rules §25.9 pins."""
+
+    def _dump(self, tmp_path, app):
+        app.test(["--dump-schema"])
+        return json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+
+    def test_the_top_level_order(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app(env_prefix="MYAPP", config=True, config_format="toml")
+        app.config_field("db.url", type=str, help="Database URL")
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        app.deprecate("old", message="gone")
+        data = self._dump(tmp_path, app)
+        assert list(data) == [
+            "schema_version", "defaults", "project_id", "name", "version",
+            "help", "env_prefix", "config", "config_format", "commands",
+            "groups", "deprecated", "config_fields",
+        ]
+
+    def test_the_flag_entry_order(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        @strictcli.flag(
+            "level", type=int, help="Level", short="l", default=3,
+            env="MY_LEVEL", prefixed=False, conflict_mode="error",
+            choices=[strictcli.Choice(1), strictcli.Choice(3)],
+        )
+        def noop(ctx, level):
+            pass
+
+        data = self._dump(tmp_path, app)
+        assert list(data["commands"]["noop"]["flags"][0]) == [
+            "name", "help", "value_schema", "short", "presence", "default",
+            "env", "prefixed", "choices", "conflict_mode",
+        ]
+
+    def test_the_arg_entry_order(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        @strictcli.arg(
+            "scope", help="the scope", default="head",
+            choices=[strictcli.Choice("head"), strictcli.Choice("tags")],
+        )
+        def noop(ctx, scope):
+            pass
+
+        data = self._dump(tmp_path, app)
+        assert list(data["commands"]["noop"]["args"][0]) == [
+            "name", "help", "value_schema", "presence", "default", "choices",
+        ]
+
+    def test_commands_keep_declaration_order(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        for name in ("zebra", "alpha", "middle"):
+            @app.command(name, effect="read_only", help="Does nothing")
+            def noop(ctx):
+                pass
+
+        data = self._dump(tmp_path, app)
+        assert list(data["commands"]) == ["zebra", "alpha", "middle"]
+
+    def test_deprecated_and_tag_contracts_are_sorted_by_key(
+        self, tmp_path, monkeypatch,
+    ):
+        """Go retains no declaration order for either, and a canon no
+        implementation can produce is not a canon."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command(
+            "noop", effect="read_only", help="Does nothing", tags=["z", "a"],
+        )
+        @strictcli.flag("dry", type=bool, help="dry", default=False)
+        def noop(ctx, dry):
+            pass
+
+        app.deprecate("zulu", message="gone")
+        app.deprecate("alpha", message="gone")
+        app.tag_contract("z", requires_flag="dry")
+        app.tag_contract("a", requires_flag="dry")
+        data = self._dump(tmp_path, app)
+        assert list(data["deprecated"]) == ["alpha", "zulu"]
+        assert list(data["tag_contracts"]) == ["a", "z"]
+
+
+class TestBehavioralCompleteness:
+    """The keys v1 was blind to (contract §25.11).
+
+    Each is omitted at its baseline, so a departure from the framework's own
+    behavior is exactly what makes a key appear.
+    """
+
+    def _dump(self, tmp_path, app):
+        app.test(["--dump-schema"])
+        return json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+
+    def test_the_config_keys_are_absent_at_their_baselines(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app(config=True)
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        data = self._dump(tmp_path, app)
+        assert "config_format" not in data
+        assert "config_path" not in data
+        assert "config_conflict_mode" not in data
+
+    def test_a_non_default_config_format_and_conflict_mode_appear(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app(
+            config=True, config_format="toml", config_conflict_mode="error",
+        )
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        data = self._dump(tmp_path, app)
+        assert data["config_format"] == "toml"
+        assert data["config_conflict_mode"] == "error"
+
+    def test_a_literal_config_path_is_published_as_declared(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app(config=True, config_path="conf/app.json")
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        assert self._dump(tmp_path, app)["config_path"] == "conf/app.json"
+
+    def test_a_relative_to_root_config_path_publishes_the_declaration(
+        self, tmp_path, monkeypatch,
+    ):
+        """Never the resolution: a resolved absolute path is a property of the
+        dumping machine, and a committed schema file must not carry one."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("MYAPP_HOME", str(tmp_path / "home"))
+        app = _make_app(
+            config=True,
+            infra_root={"MYAPP_HOME": "~/.myapp"},
+            config_path=strictcli.RelativeToRoot("MYAPP_HOME", "conf", "app.json"),
+        )
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        published = self._dump(tmp_path, app)["config_path"]
+        assert published == {
+            "relative_to_root": {
+                "env_var": "MYAPP_HOME",
+                "parts": ["conf", "app.json"],
+            },
+        }
+        # The eagerly resolved path is still available to the runtime, and is
+        # exactly what must NOT be published.
+        assert app.config_path == str(tmp_path / "home" / "conf" / "app.json")
+
+    def test_prefixed_is_omitted_when_true_and_emitted_when_false(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app(env_prefix="MYAPP")
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        @strictcli.flag("plain", type=str, help="Plain", presence="optional")
+        @strictcli.flag(
+            "bare", type=str, help="Bare", presence="optional", prefixed=False,
+        )
+        def noop(ctx, plain, bare):
+            pass
+
+        flags = self._dump(tmp_path, app)["commands"]["noop"]["flags"]
+        assert "prefixed" not in flags[0]
+        assert flags[1]["prefixed"] is False
+
+    def test_flag_sets_record_the_grouping_v1_discarded(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+        common = strictcli.FlagSet(
+            name="common",
+            flags=[
+                strictcli.Flag(
+                    name="host", type=str, help="Hostname", presence="optional",
+                ),
+                strictcli.Flag(
+                    name="port", type=int, help="Port", presence="optional",
+                ),
+            ],
+        )
+
+        @app.command(
+            "serve", effect="read_only", help="Serve", flag_sets=[common],
+        )
+        def serve(ctx, host, port):
+            pass
+
+        cmd = self._dump(tmp_path, app)["commands"]["serve"]
+        assert cmd["flag_sets"] == [{"name": "common", "flags": ["host", "port"]}]
+        # The members keep their ordinary entries, so the key adds a grouping
+        # without duplicating a declaration.
+        assert [f["name"] for f in cmd["flags"]] == ["host", "port"]
+
+    def test_flag_sets_is_absent_when_the_command_declares_none(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        assert "flag_sets" not in self._dump(tmp_path, app)["commands"]["noop"]
+
+
+class TestChoicesSiblingKey:
+    """§25.5: the enum lives in the fragment, the records live beside it."""
+
+    def _dump(self, tmp_path, app):
+        app.test(["--dump-schema"])
+        return json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+
+    def test_help_is_omitted_when_the_entry_declares_none(
+        self, tmp_path, monkeypatch,
+    ):
+        """An absent help and Go's empty-string spelling of the same fact must
+        not produce different bytes."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        @strictcli.flag(
+            "scope", type=str, help="The scope", presence="required",
+            choices=[
+                strictcli.Choice("head", help="the current commit only"),
+                strictcli.Choice("branches"),
+            ],
+        )
+        def noop(ctx, scope):
+            pass
+
+        flag = self._dump(tmp_path, app)["commands"]["noop"]["flags"][0]
+        assert flag["choices"] == [
+            {"value": "head", "help": "the current commit only"},
+            {"value": "branches"},
+        ]
+        assert flag["value_schema"] == {
+            "type": "string", "enum": ["head", "branches"],
+        }
+
+    def test_a_value_keeps_its_own_type_and_is_never_stringified(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        @strictcli.flag(
+            "port", type=int, help="The port", presence="required",
+            choices=[strictcli.Choice(80), strictcli.Choice(443)],
+        )
+        def noop(ctx, port):
+            pass
+
+        flag = self._dump(tmp_path, app)["commands"]["noop"]["flags"][0]
+        assert flag["choices"] == [{"value": 80}, {"value": 443}]
+        assert flag["value_schema"] == {"type": "integer", "enum": [80, 443]}
+
+    def test_an_array_shaped_carriers_enum_lives_inside_items(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        @strictcli.flag(
+            "tag", type=list[str], help="The tags", default=[], unique=False,
+            choices=[strictcli.Choice("a"), strictcli.Choice("b")],
+        )
+        def noop(ctx, tag):
+            pass
+
+        flag = self._dump(tmp_path, app)["commands"]["noop"]["flags"][0]
+        assert flag["value_schema"] == {
+            "type": "array",
+            "items": {"type": "string", "enum": ["a", "b"]},
+        }

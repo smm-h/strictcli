@@ -862,66 +862,117 @@ class TestDictFlagCall:
 
 
 class TestCompoundTypeSchema:
-    """Schema serialization for compound types."""
+    """Schema serialization for compound types.
+
+    Every entry publishes a real JSON Schema fragment under `value_schema`,
+    with JSON Schema's own type names (§25.2). The v1 `type` key -- which
+    carried strictcli's type names inside a JSON-Schema-shaped object -- is
+    gone.
+    """
 
     def test_list_int_schema(self):
-        """list[int] flag serializes as array type."""
+        """list[int] flag publishes the array fragment."""
         f = strictcli.Flag(name="ids", type=list[int], help="ids", default=[])
         from strictcli import _serialize_flag
         schema = _serialize_flag(f)
-        assert schema["type"] == {
+        assert schema["value_schema"] == {
             "type": "array",
-            "items": {"type": "int"},
+            "items": {"type": "integer"},
         }
+        assert "type" not in schema
 
     def test_list_str_schema(self):
-        """list[str] flag serializes with items.type=str."""
+        """list[str] flag publishes items.type=string."""
         f = strictcli.Flag(name="tags", type=list[str], help="tags", default=[])
         from strictcli import _serialize_flag
         schema = _serialize_flag(f)
-        assert schema["type"] == {
+        assert schema["value_schema"] == {
             "type": "array",
-            "items": {"type": "str"},
+            "items": {"type": "string"},
         }
 
+    def test_a_repeatable_scalar_flag_publishes_the_same_array_fragment(self):
+        """Arity is a property of the VALUE, so the two declaration spellings
+        converge on one published shape and `repeatable` is gone (§25.3)."""
+        listed = strictcli.Flag(
+            name="tags", type=list[str], help="tags", default=[],
+        )
+        repeated = strictcli.Flag(
+            name="tags", type=str, help="tags", default=[],
+            repeatable=True, unique=False,
+        )
+        from strictcli import _serialize_flag
+        assert (
+            _serialize_flag(listed)["value_schema"]
+            == _serialize_flag(repeated)["value_schema"]
+            == {"type": "array", "items": {"type": "string"}}
+        )
+        assert "repeatable" not in _serialize_flag(repeated)
+
     def test_dict_str_str_schema(self):
-        """dict[str, str] serializes as object type."""
+        """dict[str, str] publishes the object fragment."""
         f = strictcli.Flag(name="headers", type=dict[str, str], help="headers", default={})
         from strictcli import _serialize_flag
         schema = _serialize_flag(f)
-        assert schema["type"] == {
+        assert schema["value_schema"] == {
             "type": "object",
-            "additionalProperties": {"type": "str"},
+            "additionalProperties": {"type": "string"},
         }
 
     def test_dict_str_int_schema(self):
-        """dict[str, int] serializes with additionalProperties.type=int."""
+        """dict[str, int] publishes additionalProperties.type=integer."""
         f = strictcli.Flag(name="counts", type=dict[str, int], help="counts", default={})
         from strictcli import _serialize_flag
         schema = _serialize_flag(f)
-        assert schema["type"] == {
+        assert schema["value_schema"] == {
             "type": "object",
-            "additionalProperties": {"type": "int"},
+            "additionalProperties": {"type": "integer"},
         }
 
     def test_list_arg_schema(self):
-        """list[T] arg serializes as array type."""
+        """list[T] arg publishes the array fragment."""
         a = strictcli.Arg(
             name="nums", type=list[int], help="numbers", variadic=True, presence="required",
         )
         from strictcli import _serialize_arg
         schema = _serialize_arg(a)
-        assert schema["type"] == {
+        assert schema["value_schema"] == {
             "type": "array",
-            "items": {"type": "int"},
+            "items": {"type": "integer"},
         }
 
-    def test_scalar_flag_schema_unchanged(self):
-        """Scalar flags still serialize as before."""
+    def test_a_variadic_scalar_arg_publishes_the_same_array_fragment(self):
+        """Both spellings of a compound arg publish one shape (§25.4)."""
+        listed = strictcli.Arg(
+            name="nums", type=list[int], help="numbers", variadic=True,
+            presence="required",
+        )
+        scalar = strictcli.Arg(
+            name="nums", type=int, help="numbers", variadic=True,
+            presence="required",
+        )
+        from strictcli import _serialize_arg
+        assert (
+            _serialize_arg(listed)["value_schema"]
+            == _serialize_arg(scalar)["value_schema"]
+            == {"type": "array", "items": {"type": "integer"}}
+        )
+
+    def test_scalar_flag_schema(self):
+        """A scalar flag publishes the scalar row, with JSON Schema's name."""
         f = strictcli.Flag(name="name", type=str, help="name", presence="required")
         from strictcli import _serialize_flag
         schema = _serialize_flag(f)
-        assert schema["type"] == "str"
+        assert schema["value_schema"] == {"type": "string"}
+
+    def test_an_optional_flag_emits_the_plain_type_with_no_null(self):
+        """Presence is the sole authority on absence, so no fragment carries
+        `null` and none is a type list (§25.2)."""
+        f = strictcli.Flag(
+            name="name", type=str, help="name", presence="optional",
+        )
+        from strictcli import _serialize_flag
+        assert _serialize_flag(f)["value_schema"] == {"type": "string"}
 
 
 # ---------------------------------------------------------------------------

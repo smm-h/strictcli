@@ -47,18 +47,20 @@ class TestRegistration:
         assert entry["severity"] == "error"
         assert sorted(entry["tags"]) == ["effects", "quality"]
 
-    def test_schema_metadata(self, tmp_path):
+    def test_the_dumped_checks_block_never_carries_a_provider_sourced_check(
+        self, tmp_path,
+    ):
+        """The block is a function of the DECLARATION alone (§25.7).
+
+        A provider materializes into the same registry lazily and per-cwd, so
+        a dump taken after a check run used to differ from one taken before it.
+        """
         app, _ = _app(tmp_path)
+        before = app.dump_schema_dict().get("checks", {})
         app.test(["check", "--list"])  # materialize providers
-        entry = app.dump_schema_dict()["checks"]["effects-bypass"]
-        assert entry == {
-            "tags": ["effects", "quality"],
-            "severity": "error",
-            "fast": True,
-            "pure": True,
-            "needs_network": False,
-            "depends_on": [],
-        }
+        after = app.dump_schema_dict().get("checks", {})
+        assert "effects-bypass" not in after
+        assert after == before
 
     def test_not_registered_without_checks(self):
         app = strictcli.App(name="testapp", version="1.0.0", help="test app")

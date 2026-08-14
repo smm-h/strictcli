@@ -181,3 +181,37 @@ class TestSchemaWithScope:
 
         unscoped = data["checks"]["unscoped-check"]
         assert "scope" not in unscoped
+
+
+class TestCheckBlockCanon:
+    """The block is sorted by key and is a function of the declaration alone
+    (contract §25.7, §25.9)."""
+
+    def test_checks_are_sorted_ascending_by_name(self, tmp_path, monkeypatch):
+        """Go retains no declaration order for the block, and a canon no
+        implementation can produce is not a canon."""
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text(CHECKS_TOML)
+        monkeypatch.chdir(tmp_path)
+
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+
+        @app.error_check("lint-code")
+        def lint_impl(ctx, reporter):
+            return pass_outcome("ok")
+
+        @app.warn_check("check-deps")
+        def deps_impl(ctx, reporter):
+            return pass_outcome("ok")
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        # Declared in the TOML as lint-code then check-deps.
+        assert list(data["checks"]) == ["check-deps", "lint-code"]

@@ -7140,7 +7140,12 @@ class App:
         # A shared frozenset of declared root names, threaded to commands/groups
         # so flag-default markers can be validated at registration time.
         self._infra_root_names: frozenset[str] = frozenset(self._infra_roots)
-        # Resolve the config-path marker (if any) now that roots exist.
+        # Resolve the config-path marker (if any) now that roots exist. The
+        # DECLARATION is retained beside the resolution, because that is what
+        # the dumped schema publishes: a resolved absolute path is a property
+        # of the dumping machine, and a committed schema file must not carry
+        # one (contract §25.11).
+        self._config_path_declared: object = self.config_path
         if isinstance(self.config_path, RelativeToRoot):
             self.config_path = _resolve_infra_root_path(self.config_path, self._infra_roots)
         # Resolve the schema-dump location once, at construction: a declared
@@ -13957,30 +13962,49 @@ def format_check_results_json(results: list[CheckRunResult]) -> str:
 _TYPE_NAMES = {str: "str", bool: "bool", int: "int", float: "float"}
 
 
-def _serialize_flag(f: Flag) -> dict:
-    """Serialize a Flag to a JSON-serializable dict.
+def _serialize_choice_records(records: tuple) -> list[dict]:
+    """A value flag's `choices=` entries, as the records item 164 made them.
 
-    Identity fields (name, type, help) are always included.
-    Other fields are omitted when they match the schema defaults.
+    The machine-readable half of a choices declaration lives in the fragment's
+    `enum`; this is the human-readable half, which JSON Schema has no
+    vocabulary for (§25.5). `help` is OMITTED when the entry declares none, so
+    the two spellings of "no help" -- an absent one and Go's empty string --
+    cannot produce different bytes for the same declaration.
     """
-    # Compound type serialization
-    if f.compound == "list":
-        type_obj = {
-            "type": "array",
-            "items": {"type": _TYPE_NAMES[f.item_type]},
-        }
-    elif f.compound == "dict":
-        type_obj = {
-            "type": "object",
-            "additionalProperties": {"type": _TYPE_NAMES[f.value_type]},
-        }
-    else:
-        type_obj = _TYPE_NAMES[f.type]
+    out: list[dict] = []
+    for r in records:
+        entry: dict = {"value": r.value}
+        if r.help:
+            entry["help"] = r.help
+        out.append(entry)
+    return out
 
+
+def _serialize_default_value(value: object) -> object:
+    """A declared default, as the schema publishes it.
+
+    A RelativeToRoot marker is emitted in its machine-stable shape: only the
+    declared env var and path parts, never the resolved machine-specific path.
+    """
+    if isinstance(value, RelativeToRoot):
+        return _serialize_marker(value)
+    return value
+
+
+def _serialize_flag(f: Flag) -> dict:
+    """Serialize a Flag to a JSON-serializable dict (contract §25).
+
+    Keys are emitted in the canonical order §25.9 pins for a flag entry;
+    nothing is sorted at serialization time.
+    """
     d: dict = {
         "name": f.name,
-        "type": type_obj,
         "help": f.help,
+        # The value's shape is a real JSON Schema fragment now, and the v1
+        # `type` key -- which had three spellings across three
+        # implementations -- is gone with `repeatable`, whose fact the shape
+        # already carries (§25.2, §25.3).
+        "value_schema": _value_schema_fragment(f),
     }
     if f.short is not None:
         d["short"] = f.short
@@ -13993,111 +14017,133 @@ def _serialize_flag(f: Flag) -> dict:
     # whatever the value: [], {}, "", false and 0 are declarations rather than
     # the absence of one, so the omit-when-empty rules are gone.
     if f.presence == _PRESENCE_DEFAULT:
-        # A RelativeToRoot marker default is serialized machine-stably: only the
-        # declared env var and path parts (no resolved, machine-specific path).
-        # This shape is identical across the Python and Go implementations.
-        if isinstance(f.default, RelativeToRoot):
-            d["default"] = _serialize_marker(f.default)
-        else:
-            d["default"] = f.default
+        d["default"] = _serialize_default_value(f.default)
     if f.env is not None:
         d["env"] = f.env
-    if f.choices is not None:
-        d["choices"] = f.choices
-    if f.repeatable and f.compound != "list":
-        # Only emit repeatable for plain repeatable flags, not list[T] flags
-        d["repeatable"] = f.repeatable
-    if f.unique is True:
-        d["unique"] = True
-    # Per-flag conflict mode: serialized only when explicitly set (omitted when
-    # inheriting the app default). This is additive; schema_version stays 1, so
-    # consumers get no version signal for this field -- they must treat its
-    # absence as "inherit the app-level config_conflict_mode".
-    if not isinstance(f.conflict_mode, _MissingSentinel):
-        d["conflict_mode"] = f.conflict_mode
     if f.env_separator is not None:
         d["env_separator"] = f.env_separator
+    # Omitted when true, which is the framework's behavior: the key appears
+    # exactly on the flags that depart from it (§25.11).
+    if not f.prefixed:
+        d["prefixed"] = False
+    if f.choice_records is not None:
+        d["choices"] = _serialize_choice_records(f.choice_records)
+    if f.unique is True:
+        d["unique"] = True
+    # Per-flag conflict mode: serialized only when explicitly set. Absence
+    # means "inherit the app default", which v2 publishes as
+    # `config_conflict_mode`, so the effective mode is finally computable from
+    # the dump alone (§25.11).
+    if not isinstance(f.conflict_mode, _MissingSentinel):
+        d["conflict_mode"] = f.conflict_mode
     negatable = f.negatable if f.type is bool and f.compound == "scalar" else None
     if negatable is not None:
         d["negatable"] = negatable
-    # hidden is currently always False, so always omitted
     return d
 
 
-def _serialize_selector(sel: _Selector) -> dict:
-    """Serialize one selector: the nested choices and scopes, each choice's
-    help, each scoped entry's presence and default, and the spelling (§24.11).
+def _serialize_choice_object(c: "_ChoiceSpec") -> dict:
+    """One choice of one selector: `name`, `help`, and its scope (§25.6).
 
-    NOT the pinned v2 encoding -- that is the schema-v2 amendment's, which the
-    two rounds ship into one release. This is the minimum that keeps
-    `--dump-schema` from flattening a selector away.
+    `flags` is omitted when the scope is empty. A member-spelled choice's
+    payload is the FIRST entry of that array, under the reserved name `value`
+    with `presence: "required"` -- the payload is supplied by electing the
+    member, and required-once-elected is exactly what a member flag's presence
+    means. The scope's own declared flags follow it, in declaration order.
     """
-    d: dict = {
-        "name": sel.name,
-        "help": sel.help,
-        "presence": sel.presence,
-        "elect_by": sel.elect_by,
-    }
-    if sel.short is not None:
-        d["short"] = sel.short
-    if sel.env is not None:
-        d["env"] = sel.env
-    choices: list[dict] = []
-    for c in sel.choices:
-        entry: dict = {"name": c.name, "help": c.help}
-        if c.payload is not None:
-            entry["value"] = {
-                "type": _TYPE_NAMES[c.payload.type],
-                "help": c.payload.help,
-            }
-        scope = [
+    entry: dict = {"name": c.name, "help": c.help}
+    scope: list[dict] = []
+    if c.payload is not None:
+        payload = _serialize_flag(c.payload)
+        payload["name"] = _SCOPE_RESERVED_VALUE
+        payload["presence"] = _PRESENCE_REQUIRED
+        scope.append(payload)
+    for m in c.members:
+        scope.append(
             _serialize_selector(m) if isinstance(m, _Selector)
             else _serialize_flag(m)
-            for m in c.members
-        ]
-        if scope:
-            entry["flags"] = scope
-        choices.append(entry)
-    d["choices"] = choices
+        )
+    if scope:
+        entry["flags"] = scope
+    return entry
+
+
+def _serialize_selector_default(sel: _Selector) -> dict:
+    """A selector's declared default, as the flat map §25.6 pins.
+
+    `{"choice": "<name>", "<field>": <value>, ...}`: the choice's name under
+    the reserved key `choice`, followed by each field that has a value in the
+    default selection, in declaration order. A field with no value is omitted,
+    which is unambiguous because `null` is not a declarable default anywhere in
+    the framework.
+    """
+    spec = sel.choice_by_class(type(sel.default))
+    flat: dict = {"choice": spec.name}
+    if spec.payload is not None:
+        value = getattr(sel.default, _SCOPE_RESERVED_VALUE, None)
+        if value is not None:
+            flat[_SCOPE_RESERVED_VALUE] = _serialize_default_value(value)
+    for m in spec.members:
+        if not isinstance(m, Flag):
+            continue
+        value = getattr(sel.default, _flag_param_name(m.name), None)
+        if value is None:
+            continue
+        flat[m.name] = _serialize_default_value(value)
+    return flat
+
+
+def _serialize_selector(sel: _Selector) -> dict:
+    """Serialize one selector, in the encoding §25.6 pins.
+
+    A selector flag has NO `value_schema`, and its absence is the declaration:
+    a selector's value is a variant -- one tagged record chosen from several,
+    each with a different set of fields -- and the closed four-keyword subset
+    cannot express one. Publishing a wrong fragment would be worse than
+    publishing none, because a reader would validate against it.
+
+    `elect_by` is the discriminator: an entry carrying it is a selector, and
+    its `choices` are choice objects; an entry without it is an ordinary flag,
+    and its `choices` (if any) are value records. Each scoped entry is a FULL
+    flag entry, which is what makes recursion free -- a nested selector is an
+    entry inside a `flags` array carrying its own `choices` and `elect_by`, to
+    any depth.
+    """
+    d: dict = {"name": sel.name, "help": sel.help}
+    if sel.short is not None:
+        d["short"] = sel.short
+    d["presence"] = sel.presence
     if sel.presence == _PRESENCE_DEFAULT:
-        spec = sel.choice_by_class(type(sel.default))
-        flat: dict = {"choice": spec.name}
-        for f in spec.members:
-            if isinstance(f, Flag):
-                flat[f.name] = getattr(
-                    sel.default, _flag_param_name(f.name),
-                )
-        d["default"] = flat
+        d["default"] = _serialize_selector_default(sel)
+    if sel.env is not None:
+        d["env"] = sel.env
+    d["choices"] = [_serialize_choice_object(c) for c in sel.choices]
+    d["elect_by"] = sel.elect_by
     return d
 
 
 def _serialize_arg(a: Arg) -> dict:
-    """Serialize an Arg to a JSON-serializable dict.
+    """Serialize an Arg to a JSON-serializable dict (contract §25).
 
-    Identity fields (name, help) are always included.
-    Other fields are omitted when they match the schema defaults.
+    `variadic` SURVIVES the arity rule that deleted `repeatable`, and the
+    asymmetry is deliberate: it names a token-consumption rule -- this arg
+    takes every remaining positional token, and only the last arg may -- which
+    a consumer needs in order to render `<files>...` in a usage line.
     """
     d: dict = {
         "name": a.name,
         "help": a.help,
+        "value_schema": _value_schema_fragment(a),
     }
-    # Compound type serialization for args
-    if a.compound == "list":
-        d["type"] = {
-            "type": "array",
-            "items": {"type": _TYPE_NAMES[a.item_type]},
-        }
-    elif a.type is not str:
-        d["type"] = a.type.__name__
     # Same always-emitted presence key as a flag entry; the old `required` key
     # is deleted rather than kept beside it (contract §13's amendment).
     d["presence"] = a.presence
     if a.presence == _PRESENCE_DEFAULT:
-        d["default"] = a.default
+        d["default"] = _serialize_default_value(a.default)
     if a.variadic:
         d["variadic"] = a.variadic
-    if a.choices is not None:
-        d["choices"] = a.choices
+    if a.choice_records is not None:
+        d["choices"] = _serialize_choice_records(a.choice_records)
     return d
 
 
@@ -14148,22 +14194,31 @@ def _serialize_command(cmd: Command) -> dict:
         d["owns_stdout"] = True
     if cmd.passthrough is not None:
         d["passthrough"] = True
-    flags = [_serialize_flag(f) for f in cmd.flags]
+    # Flags and selectors share ONE array, interleaved in declaration order: a
+    # selector IS a flag (§24.2), and the provisional `selectors` key that kept
+    # them apart is replaced by §25.6's encoding, where the presence of
+    # `elect_by` is what tells a reader which shape it is holding.
+    flags = [
+        _serialize_selector(m) if isinstance(m, _Selector)
+        else _serialize_flag(m)
+        for m in cmd.members
+    ]
     if flags:
         d["flags"] = flags
+    # The grouping v1 discarded when it merged a set's flags into the command's
+    # flag list. Members keep their ordinary entries above, so this adds a
+    # grouping without duplicating a declaration (§25.11).
+    if cmd.flag_sets:
+        d["flag_sets"] = [
+            {"name": fs.name, "flags": [f.name for f in fs.flags]}
+            for fs in cmd.flag_sets
+        ]
     args = [_serialize_arg(a) for a in cmd.args]
     if args:
         d["args"] = args
     tags = sorted(cmd.tags)
     if tags:
         d["tags"] = tags
-    # Selectors are published nested, never flattened away: a dump that
-    # flattened one would restore exactly the erasure §13's presence box ended
-    # (§24.11). The full v1-successor encoding is the schema-v2 amendment's;
-    # this is the minimum that keeps the dump honest until it arrives.
-    selectors = [_serialize_selector(s) for s in cmd.selectors]
-    if selectors:
-        d["selectors"] = selectors
     constraints: list[dict] = []
     for dep in cmd.dependencies:
         if isinstance(dep, CoRequired):
@@ -14230,47 +14285,80 @@ def _serialize_group(group: Group) -> dict:
 
 
 def _build_schema_defaults() -> dict:
-    """Return the defaults object documenting what 'missing' means in the schema."""
+    """The machine-readable map of what an OMITTED key means (contract §25.10).
+
+    Keys with no baseline are absent from this block on purpose, and that list
+    is exactly the set of always-emitted facts: `name`, `help`, `version`,
+    `schema_version`, `project_id`, `effect`, `presence`, `value_schema` on
+    every entry that has one, a choice object's `name` and `help`, a choice
+    record's `value`, a config field's `help` and `required`, and a check's six
+    mandatory fields.
+
+    `default` on a flag or arg has no baseline either: since presence became
+    the authority, it is emitted exactly when `presence` is `"default"`, and a
+    `null` baseline for it would state something false.
+
+    `value_schema`'s one exception is not an omission at a baseline: a SELECTOR
+    carries no fragment at all and its absence IS the declaration, so a
+    baseline would have to say what an absent fragment means and every answer
+    it could give is false for the one entry that omits the key.
+    """
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "app": {
             "env_prefix": None,
             "config": False,
+            "config_format": "json",
+            "config_path": None,
+            "config_conflict_mode": "cli-wins",
+            "proc_observe_allowlist": [],
             "global_flags": [],
             "commands": {},
             "groups": {},
             "deprecated": {},
             "tag_contracts": {},
+            "checks": {},
+            "config_fields": {},
+            "infra": {},
         },
         "flag": {
             "short": None,
-            "default": None,
             "env": None,
-            "choices": None,
-            "repeatable": False,
-            "unique": False,
             "env_separator": None,
+            "prefixed": True,
+            "choices": None,
+            "elect_by": None,
+            "unique": False,
+            "conflict_mode": None,
             "negatable": None,
-            "hidden": False,
         },
-        # `presence` is deliberately absent from both the flag and the arg
-        # entry: it is ALWAYS emitted, so there is no default to omit against
-        # (contract §13's presence-round amendment). The arg-side `required`
-        # key is deleted with the derivation behind it.
         "arg": {
-            "type": "str",
-            "default": None,
             "variadic": False,
             "choices": None,
         },
+        # The two choice entities, which is what makes this block the complete
+        # omission map it is defined to be: a selector choice object's `flags`
+        # is omitted when the scope is empty, and a value-flag choice record's
+        # `help` is omitted when the entry declares none.
+        "choice": {"flags": []},
+        "choice_record": {"help": None},
         "command": {
+            "consequential": False,
+            "dry_run_supported": True,
+            "dry_run_unsupported_reason": None,
+            "payload_schema": None,
+            "owns_stdout": False,
             "passthrough": False,
             "flags": [],
+            "flag_sets": [],
             "args": [],
             "tags": [],
             "constraints": [],
             "hidden": False,
             "interactive": False,
+            "config_fields": [],
+            "grants": [],
+            "forwarding": None,
         },
         "group": {
             "commands": {},
@@ -14279,6 +14367,9 @@ def _build_schema_defaults() -> dict:
             "tags": [],
             "hidden": False,
         },
+        "config_field": {"default": None, "bound_commands": []},
+        "check": {"scope": None},
+        "infra": {"roots": [], "handshakes": [], "connections": []},
     }
 
 
@@ -14338,7 +14429,7 @@ def _dump_schema_core(app: App) -> dict:
     ``defaults`` key documents what each missing field means.
     """
     schema: dict = {
-        "schema_version": 1,
+        "schema_version": 2,
         "defaults": _build_schema_defaults(),
         "name": app.name,
         "version": app.version,
@@ -14348,6 +14439,19 @@ def _dump_schema_core(app: App) -> dict:
         schema["env_prefix"] = app.env_prefix
     if app.config:
         schema["config"] = app.config
+    # The three app-level config keys v1 was blind to. Until v2 an app could
+    # relocate every user's config file, or switch it from JSON to TOML, while
+    # its dumped schema stayed byte-identical (§25.11).
+    if app.config_format != "json":
+        schema["config_format"] = app.config_format
+    # The DECLARATION, never the resolution: a declared literal path as
+    # declared, and a RelativeToRoot in its machine-stable marker shape. The
+    # resolved absolute path is a property of the dumping machine.
+    declared_config_path = app._config_path_declared
+    if declared_config_path is not None:
+        schema["config_path"] = _serialize_default_value(declared_config_path)
+    if app.config_conflict_mode != "cli-wins":
+        schema["config_conflict_mode"] = app.config_conflict_mode
     if app._proc_observe_allowlist:
         schema["proc_observe_allowlist"] = [
             list(prefix) for prefix in app._proc_observe_allowlist
@@ -14361,14 +14465,31 @@ def _dump_schema_core(app: App) -> dict:
     groups = {name: _serialize_group(grp) for name, grp in app._groups.items()}
     if groups:
         schema["groups"] = groups
-    deprecated = {name: dep.message for name, dep in app._deprecated.items()}
+    # `deprecated`, `tag_contracts` and `checks` are emitted SORTED ascending
+    # by key: no implementation retains a declaration order for all three, and
+    # a canon that cannot be produced from what an implementation holds is not
+    # a canon (§25.9). Every key here is ASCII by registration rule, so byte,
+    # code-point and UTF-16 order coincide.
+    deprecated = {
+        name: app._deprecated[name].message for name in sorted(app._deprecated)
+    }
     if deprecated:
         schema["deprecated"] = deprecated
     if app._tag_contracts:
-        schema["tag_contracts"] = dict(app._tag_contracts)
+        schema["tag_contracts"] = {
+            k: app._tag_contracts[k] for k in sorted(app._tag_contracts)
+        }
     if app._checks_enabled:
         checks_schema: dict = {}
-        for name, cdef in app._check_defs.items():
+        for name in sorted(app._check_defs):
+            # The dumped `checks` block must be a function of the DECLARATION
+            # alone. A provider materializes into the same registry lazily and
+            # per-cwd, so iterating the whole registry made a dump taken after
+            # a check run differ from one taken before it (§25.7). The
+            # exclusion is structural here rather than a comment.
+            if name in app._provider_sourced_names:
+                continue
+            cdef = app._check_defs[name]
             entry = {
                 "tags": cdef.tags,
                 "severity": cdef.severity,
@@ -14393,8 +14514,13 @@ def _dump_schema_core(app: App) -> dict:
             _collect_config_field_bindings_from_group(grp, bindings, [])
 
         for name, cf in app._config_fields.items():
+            # Config fields are scalar-only in every implementation, so the
+            # fragment is always a scalar row. `required` STAYS beside it: it
+            # is not §23's presence declaration under another name -- a config
+            # field has no CLI surface and no three-way declaration, and
+            # `required` there means "the config file must contain it".
             entry: dict = {
-                "type": cf.type.__name__,
+                "value_schema": _scalar_fragment(cf.type, None),
                 "help": cf.help,
                 "required": cf.required,
             }
@@ -14468,6 +14594,83 @@ def _check_schema_project_id(file_path: str, new_project_id: str) -> None:
         )
 
 
+def _canonical_json_string(value: str) -> str:
+    """One JSON string literal, escaped exactly as the canon mandates.
+
+    `"` and `\\` are escaped, control characters below U+0020 use JSON's short
+    escapes where one exists and `\\u00XX` otherwise -- and nothing else is
+    escaped. Non-ASCII is raw UTF-8 (``ensure_ascii=False``), the
+    HTML-significant characters `<`, `>` and `&` are literal, and `/` is never
+    escaped (§25.8).
+    """
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _write_canonical_json(value: object, depth: int, out: list[str]) -> None:
+    """Append one value's canonical encoding to ``out``."""
+    if isinstance(value, dict):
+        if not value:
+            out.append("{}")
+            return
+        out.append("{\n")
+        inner = "  " * (depth + 1)
+        items = list(value.items())
+        for i, (key, member) in enumerate(items):
+            out.append(inner)
+            out.append(_canonical_json_string(str(key)))
+            out.append(": ")
+            _write_canonical_json(member, depth + 1, out)
+            out.append(",\n" if i < len(items) - 1 else "\n")
+        out.append("  " * depth + "}")
+        return
+    if isinstance(value, (list, tuple)):
+        if not value:
+            out.append("[]")
+            return
+        out.append("[\n")
+        inner = "  " * (depth + 1)
+        for i, element in enumerate(value):
+            out.append(inner)
+            _write_canonical_json(element, depth + 1, out)
+            out.append(",\n" if i < len(value) - 1 else "\n")
+        out.append("  " * depth + "]")
+        return
+    if value is None:
+        out.append("null")
+        return
+    if isinstance(value, bool):
+        out.append("true" if value else "false")
+        return
+    if isinstance(value, int):
+        # Bare integer token: no decimal point, no exponent, no separators.
+        out.append(str(value))
+        return
+    if isinstance(value, float):
+        # Every float goes through the canonical float form the repo already
+        # owns, the same one the three implementations share byte-for-byte.
+        # `json.dumps` would render it through `repr`, which differs from SCF
+        # on a zero-padded exponent (`1e-07` against `1e-7`).
+        out.append(_format_float_canonical(value))
+        return
+    if isinstance(value, str):
+        out.append(_canonical_json_string(value))
+        return
+    raise TypeError(f"schema value of unserializable type: {type(value).__name__}")
+
+
+def _canonical_json(value: object) -> str:
+    """The dumper-independent encoding of a whole schema document (§25.8).
+
+    Two-space indent, one member or element per line, `": "` between a key and
+    its value, empty containers inline. A repository whose schema file is
+    written sometimes by one implementation and sometimes by another must see a
+    diff exactly when something changed.
+    """
+    out: list[str] = []
+    _write_canonical_json(value, 0, out)
+    return "".join(out)
+
+
 def _write_schema(app: App) -> str:
     """Write the schema to the app's declared location and return the path.
 
@@ -14481,8 +14684,9 @@ def _write_schema(app: App) -> str:
     if dir_path:
         os.makedirs(dir_path, exist_ok=True)
     _check_schema_project_id(file_path, schema["project_id"])
-    with open(file_path, "w") as f:
-        f.write(json.dumps(schema, indent=2) + "\n")
+    # Exactly one trailing newline at end of file.
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(_canonical_json(schema) + "\n")
     app._record_cache_write(file_path)
     return file_path
 

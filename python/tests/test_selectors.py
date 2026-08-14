@@ -1229,22 +1229,156 @@ def test_a_wrong_flat_combination_is_refused_with_the_clis_own_sentence():
 
 
 def test_the_dumped_schema_publishes_the_selector_nested(tmp_path, monkeypatch):
+    """The whole selector entry, verbatim (§25.6).
+
+    Each scoped entry is a FULL flag entry with its own fragment and presence,
+    which is what makes the encoding satisfy §24.11 rather than gesture at it,
+    and what makes recursion free.
+    """
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproject"\n')
     monkeypatch.chdir(tmp_path)
     _notify().test(["--dump-schema"])
     data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
-    sel = data["commands"]["send"]["selectors"][0]
-    assert sel["name"] == "via"
-    assert sel["presence"] == "required"
-    assert sel["elect_by"] == "selector-token"
-    assert sel["short"] == "v"
-    assert [c["name"] for c in sel["choices"]] == ["email", "sms", "webhook"]
-    assert sel["choices"][2]["flags"][1] == {
-        "name": "retries",
-        "type": "int",
-        "help": "how many times to retry",
-        "presence": "default",
-        "default": 3,
+    flags = data["commands"]["send"]["flags"]
+    assert "selectors" not in data["commands"]["send"]
+    sel = flags[0]
+    assert sel == {
+        "name": "via",
+        "help": "delivery channel",
+        "short": "v",
+        "presence": "required",
+        "choices": [
+            {
+                "name": "email",
+                "help": "deliver the notification as an email message",
+                "flags": [
+                    {"name": "subject",
+                     "help": "subject line of the message",
+                     "value_schema": {"type": "string"},
+                     "presence": "required"},
+                    {"name": "recipient",
+                     "help": "destination email address",
+                     "value_schema": {"type": "string"},
+                     "presence": "required"},
+                ],
+            },
+            {
+                "name": "sms",
+                "help": "deliver the notification as a text message",
+                "flags": [
+                    {"name": "phone-number",
+                     "help": "destination number in E.164 form",
+                     "value_schema": {"type": "string"},
+                     "presence": "required"},
+                ],
+            },
+            {
+                "name": "webhook",
+                "help": "post the notification to a URL",
+                "flags": [
+                    {"name": "url", "help": "the endpoint",
+                     "value_schema": {"type": "string"},
+                     "presence": "required"},
+                    {"name": "retries", "help": "how many times to retry",
+                     "value_schema": {"type": "integer"},
+                     "presence": "default", "default": 3},
+                ],
+            },
+        ],
+        "elect_by": "selector-token",
+    }
+    # `elect_by` is the discriminator: an entry carrying it has no fragment.
+    assert "value_schema" not in sel
+    # The ordinary root flag keeps its ordinary entry, in declaration order.
+    assert flags[1]["name"] == "dry"
+    assert flags[1]["value_schema"] == {"type": "boolean"}
+
+
+def test_a_nested_selector_is_an_entry_inside_a_scope(tmp_path, monkeypatch):
+    """Recursion costs the encoding nothing: a nested selector is an ordinary
+    entry inside a `flags` array, carrying its own choices and elect_by."""
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproject"\n')
+    monkeypatch.chdir(tmp_path)
+    _changelog_app().test(["--dump-schema"])
+    data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+    outer = data["commands"]["add"]["flags"][0]
+    assert outer["name"] == "visibility"
+    inner = outer["choices"][0]["flags"][0]
+    assert inner["name"] == "type"
+    assert inner["elect_by"] == "selector-token"
+    assert "value_schema" not in inner
+    assert inner["choices"][0]["flags"] == [{
+        "name": "headline",
+        "help": "the headline",
+        "value_schema": {"type": "string"},
+        "presence": "required",
+    }]
+
+
+def test_a_member_payload_is_the_first_scope_entry_named_value(
+    tmp_path, monkeypatch,
+):
+    """§25.6: the payload is supplied by electing the member, and
+    required-once-elected is exactly what a member flag's presence means."""
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproject"\n')
+    monkeypatch.chdir(tmp_path)
+
+    @choice("profile", help="operate on one named profile")
+    class Profile:
+        value: str = member_value(help="profile name")
+        create_missing: bool = sub_flag(
+            help="create the profile when absent", default=False,
+        )
+
+    @choice("all-profiles", help="operate on every profile")
+    class AllProfiles:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "target", help="which profiles to operate on", presence="required",
+        elect_by="member-flags", choices=[Profile, AllProfiles],
+    )
+    def run(ctx, target: Profile | AllProfiles):
+        pass
+
+    app.test(["--dump-schema"])
+    data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+    sel = data["commands"]["run"]["flags"][0]
+    assert sel["choices"][0]["flags"] == [
+        {"name": "value", "help": "profile name",
+         "value_schema": {"type": "string"}, "presence": "required"},
+        {"name": "create-missing",
+         "help": "create the profile when absent",
+         "value_schema": {"type": "boolean"}, "presence": "default",
+         "default": False, "negatable": True},
+    ]
+    # A payload-less member has no `value` entry, and an empty scope has no
+    # `flags` key at all.
+    assert sel["choices"][1] == {
+        "name": "all-profiles", "help": "operate on every profile",
+    }
+
+
+def test_a_defaulted_selector_publishes_the_flat_map(tmp_path, monkeypatch):
+    """§25.6: `{"choice": "<name>", "<field>": <value>, ...}`, in declaration
+    order, which is the one encoding that spans both languages' mechanisms."""
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproject"\n')
+    monkeypatch.chdir(tmp_path)
+    app = _notify(
+        presence=strictcli._MISSING,
+        default=Webhook(url="https://example.test/hook", retries=5),
+    )
+    app.test(["--dump-schema"])
+    data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+    sel = data["commands"]["send"]["flags"][0]
+    assert sel["presence"] == "default"
+    assert sel["default"] == {
+        "choice": "webhook",
+        "url": "https://example.test/hook",
+        "retries": 5,
     }
 
 
