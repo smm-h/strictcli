@@ -64,6 +64,7 @@ RICH_APP = {
             "name": "trace",
             "type": "bool",
             "help": "Enable trace output",
+            "presence": "default",
             "short": "V",
             "default": False,
         },
@@ -71,6 +72,7 @@ RICH_APP = {
             "name": "log-level",
             "type": "str",
             "help": "Logging level",
+            "presence": "default",
             "default": "info",
             "env": "RICH_LOG_LEVEL",
             "choices_str": ["debug", "info", "warn", "error"],
@@ -81,6 +83,7 @@ RICH_APP = {
             "name": "state-file",
             "type": "str",
             "help": "State file relative to the infra root",
+            "presence": "default",
             "default_relative_to_root": {
                 "env_var": "RICH_HOME",
                 "parts": ["state", "app.db"],
@@ -99,18 +102,21 @@ RICH_APP = {
                     "name": "name",
                     "type": "str",
                     "help": "A string flag",
+                    "presence": "default",
                     "default": "world",
                 },
                 {
                     "name": "count",
                     "type": "int",
                     "help": "An integer flag",
+                    "presence": "default",
                     "default": 42,
                 },
                 {
                     "name": "ratio",
                     "type": "float",
                     "help": "A float flag",
+                    "presence": "default",
                     "default": 3.14,
                 },
                 # Named `simulate`, not `dry-run`: the reserved quartet (§7.1)
@@ -119,12 +125,14 @@ RICH_APP = {
                     "name": "simulate",
                     "type": "bool",
                     "help": "Simulate without applying",
+                    "presence": "required",
                 },
                 # Command flag with a RelativeToRoot marker default.
                 {
                     "name": "cache-file",
                     "type": "str",
                     "help": "Cache file relative to the infra root",
+                    "presence": "default",
                     "default_relative_to_root": {
                         "env_var": "RICH_HOME",
                         "parts": ["cache.bin"],
@@ -135,6 +143,7 @@ RICH_APP = {
                 {
                     "name": "target",
                     "help": "Target to process",
+                    "presence": "required",
                 },
             ],
         },
@@ -149,6 +158,7 @@ RICH_APP = {
                     "name": "tag",
                     "type": "str",
                     "help": "Tags to apply",
+                    "presence": "required",
                     "repeatable": True,
                     "unique": True,
                     "env": "RICH_TAGS",
@@ -158,6 +168,7 @@ RICH_APP = {
                     "name": "port",
                     "type": "int",
                     "help": "Ports to open",
+                    "presence": "default",
                     "repeatable": True,
                     "unique": False,
                     "default": [80, 443],
@@ -177,16 +188,19 @@ RICH_APP = {
                             "name": "as-json",
                             "type": "bool",
                             "help": "JSON output",
+                            "presence": "optional",
                         },
                         {
                             "name": "yaml",
                             "type": "bool",
                             "help": "YAML output",
+                            "presence": "optional",
                         },
                         {
                             "name": "text",
                             "type": "bool",
                             "help": "Text output",
+                            "presence": "optional",
                         },
                     ],
                 },
@@ -222,24 +236,25 @@ RICH_APP = {
                     "name": "host",
                     "type": "str",
                     "help": "Deploy host",
-                    "default": None,
+                    "presence": "optional",
                 },
                 {
                     "name": "port-num",
                     "type": "int",
                     "help": "Deploy port",
-                    "default": None,
+                    "presence": "optional",
                 },
                 {
                     "name": "ssl",
                     "type": "bool",
                     "help": "Use SSL",
+                    "presence": "required",
                 },
                 {
                     "name": "cert",
                     "type": "str",
                     "help": "SSL certificate path",
-                    "default": None,
+                    "presence": "optional",
                 },
             ],
             "dependencies": [
@@ -274,11 +289,13 @@ RICH_APP = {
                     "name": "email",
                     "type": "bool",
                     "help": "Send email notification",
+                    "presence": "required",
                 },
                 {
                     "name": "alert",
                     "type": "bool",
                     "help": "Enable alerts",
+                    "presence": "required",
                 },
             ],
             "dependencies": [
@@ -304,12 +321,14 @@ RICH_APP = {
                             "name": "page",
                             "type": "int",
                             "help": "Page number",
+                            "presence": "default",
                             "default": 1,
                         },
                         {
                             "name": "per-page",
                             "type": "int",
                             "help": "Items per page",
+                            "presence": "default",
                             "default": 20,
                         },
                     ],
@@ -326,11 +345,12 @@ RICH_APP = {
                 {
                     "name": "src",
                     "help": "Source directory",
+                    "presence": "required",
                 },
                 {
                     "name": "extra",
                     "help": "Extra files",
-                    "required": False,
+                    "presence": "optional",
                     "variadic": True,
                 },
             ],
@@ -375,6 +395,7 @@ RICH_APP = {
                     "name": "priority",
                     "type": "int",
                     "help": "Priority level",
+                    "presence": "default",
                     "choices_int": [1, 2, 3, 4, 5],
                     "default": 3,
                 },
@@ -382,6 +403,7 @@ RICH_APP = {
                     "name": "threshold",
                     "type": "float",
                     "help": "Threshold value",
+                    "presence": "default",
                     "choices_float": [0.1, 0.5, 0.9],
                     "default": 0.5,
                 },
@@ -398,6 +420,7 @@ RICH_APP = {
                     "name": "format",
                     "type": "str",
                     "help": "Output format",
+                    "presence": "default",
                     "short": "f",
                     "default": "table",
                     "prefixed": True,
@@ -406,6 +429,7 @@ RICH_APP = {
                     "name": "color-off",
                     "type": "bool",
                     "help": "Disable colors",
+                    "presence": "required",
                     "negatable": False,
                 },
             ],
@@ -427,7 +451,7 @@ RICH_APP = {
                             "name": "steps",
                             "type": "int",
                             "help": "Migration steps",
-                            "default": None,
+                            "presence": "optional",
                         },
                     ],
                 },
@@ -467,6 +491,7 @@ RICH_APP = {
                                     "name": "detailed",
                                     "type": "bool",
                                     "help": "Show detailed stats",
+                                    "presence": "required",
                                 },
                             ],
                         },
@@ -872,6 +897,73 @@ def _compare_schemas_nway(schemas: dict[str, dict]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _presence_violations(node: object, path: str = "$") -> list[str]:
+    """Every flag or arg entry in a dumped schema that fails §23's promises.
+
+    The erasure this asserts against is the point of the assertion rather than
+    an afterthought (contract §13's presence-round amendment): before the round
+    the dumped schema described a flag's presence NOWHERE, so a required flag
+    and an explicitly-optional one serialized identically and three
+    implementations certified agreement about a fact none of them emitted. A
+    parity check that cannot fail on a missing field would let that happen
+    again, so a missing key is a failure here, never a silently-equal pair of
+    absences.
+
+    Three facts are checked on every entry: `presence` is present and is one of
+    the three declarable values; `default` is present exactly when `presence`
+    is "default"; and an arg entry carries no `required` key, which the round
+    deleted rather than keeping beside presence.
+    """
+    problems: list[str] = []
+    if isinstance(node, dict):
+        for kind, key in (("flag", "global_flags"), ("flag", "flags"), ("arg", "args")):
+            entries = node.get(key)
+            if not isinstance(entries, list):
+                continue
+            for i, entry in enumerate(entries):
+                if not isinstance(entry, dict):
+                    continue
+                where = f"{path}.{key}[{i}]"
+                name = entry.get("name", "?")
+                presence = entry.get("presence")
+                if presence is None:
+                    problems.append(
+                        f"{where} ({name!r}): no 'presence' key -- presence is "
+                        "always emitted (§13)"
+                    )
+                elif presence not in ("required", "optional", "default"):
+                    problems.append(
+                        f"{where} ({name!r}): presence is {presence!r}, expected "
+                        "one of required, optional, default"
+                    )
+                has_default = "default" in entry
+                if presence == "default" and not has_default:
+                    problems.append(
+                        f"{where} ({name!r}): presence is 'default' with no "
+                        "'default' key -- the value is emitted always, "
+                        "including [], {}, '', false and 0 (§13)"
+                    )
+                if presence in ("required", "optional") and has_default:
+                    problems.append(
+                        f"{where} ({name!r}): presence is {presence!r} but a "
+                        "'default' key is emitted -- default is emitted exactly "
+                        "when presence is 'default' (§13)"
+                    )
+                if kind == "arg" and "required" in entry:
+                    problems.append(
+                        f"{where} ({name!r}): the arg entry's 'required' key is "
+                        "deleted by §23.3, not kept beside presence"
+                    )
+        for key, value in node.items():
+            if key in ("defaults", "global_flags", "flags", "args"):
+                continue
+            problems.extend(_presence_violations(value, f"{path}.{key}"))
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            problems.extend(_presence_violations(value, f"{path}[{i}]"))
+    return problems
+
+
 def main() -> int:
     print("Building Go harness...", flush=True)
     try:
@@ -914,7 +1006,12 @@ def main() -> int:
         if failed:
             continue
 
-        diffs = _compare_schemas_nway(schemas)
+        diffs: list[str] = []
+        for target, schema in schemas.items():
+            diffs.extend(
+                f"{target}: {problem}" for problem in _presence_violations(schema)
+            )
+        diffs.extend(_compare_schemas_nway(schemas))
         if diffs:
             all_diffs.append((label, diffs))
             print(f"  {len(diffs)} difference(s) found")

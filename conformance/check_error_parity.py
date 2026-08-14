@@ -799,6 +799,132 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     'proc_observe_allowlist entries must be lists of strings, got *': {
         "go": "excluded:Go's WithProcObserveAllowlist takes [][]string; a non-string element is a compile error",
     },
+
+    # =======================================================================
+    # The presence declaration (contract §12.12, §23)
+    #
+    # Every template in this family carries a per-language noun phrase, because
+    # the thing it names is a SPELLING and the three languages spell it
+    # differently: the sentence is byte-identical and the spellings inside it
+    # are each language's own. So each implementation's variant is a signature
+    # its siblings genuinely do not carry, and the parity assertion lives in
+    # conformance/cases/presence_registration.json, which asserts the whole
+    # line per target rather than a shared one.
+    #
+    # The declared-twice template is deliberately absent from this block: its
+    # spellings are interpolated arguments rather than literal text, so the
+    # three implementations share one signature and match without an exclusion.
+    # =======================================================================
+
+    # -- Nothing declared: the zero case, three spellings --
+    'Flag *: presence is undeclared: declare exactly one of presence="required", presence="optional", or default=<value>': {
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Flag *: presence is undeclared: declare exactly one of Required(), Optional(), or Default(<value>)': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Flag *: presence is undeclared: declare exactly one of *, *, or *': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Arg *: presence is undeclared: declare exactly one of presence="required", presence="optional", or default=<value>': {
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Arg *: presence is undeclared: declare exactly one of ArgRequired(), ArgOptional(), or ArgDefault(<value>)': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Arg *: presence is undeclared: declare exactly one of *, *, or *': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+
+    # -- The null-valued default's redirect, three spellings, two surfaces --
+    'Flag *: default=None does not declare optionality: use presence="optional" (it delivers None when the flag is absent)': {
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Flag *: Default(nil) does not declare optionality: use Optional() (it delivers nil when the flag is absent)': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Flag *: default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Arg *: default=None does not declare optionality: use presence="optional" (it delivers None when the arg is absent)': {
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Arg *: ArgDefault(nil) does not declare optionality: use ArgOptional() (it delivers nil when the arg is absent)': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Arg *: default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+
+    # -- A mutex member declaring requiredness, three spellings --
+    'Flag *: a mutex member cannot declare presence="required": the group\'s own requirement is what makes the choice mandatory': {
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Flag *: a mutex member cannot declare Required(): the group\'s own requirement is what makes the choice mandatory': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Flag *: a mutex member cannot declare *: the group\'s own requirement is what makes the choice mandatory': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+
+    # -- A variadic arg declaring a default, three spellings --
+    'Arg *: a variadic arg cannot declare default=: it always delivers a list, so declare presence="required" for at least one value or presence="optional" for possibly none': {
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Arg *: a variadic arg cannot declare ArgDefault(): it always delivers a list, so declare ArgRequired() for at least one value or ArgOptional() for possibly none': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+    'Arg *: a variadic arg cannot declare *: it always delivers a list, so declare * for at least one value or * for possibly none': {
+        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
+    },
+
+    # -- Python-only: a presence= value that is neither fact --
+    '* *: presence must be "required" or "optional", got *; a default value is declared with default=<value>': {
+        "go": "excluded:Python-only by construction (§12.12's amendment, item 153): Python spells the declaration as a keyword taking a string, and Go's three FlagOptions and TypeScript's discriminated union have no input that could carry a bad presence value",
+        "typescript": "excluded:Python-only by construction (§12.12's amendment, item 153): Python spells the declaration as a keyword taking a string, and Go's three FlagOptions and TypeScript's discriminated union have no input that could carry a bad presence value",
+    },
+
+    # -- TypeScript-only: presence: "default" carrying no value --
+    'Flag *: * requires a default value: declare default: <value>, or * for no value': {
+        "python": "excluded:TypeScript-only by construction (§12.12's amendment, item 153): TS is the only language whose default spelling has two parts, so the half-written declaration is inexpressible in Python's default=<value> and Go's Default(v), which ARE the value",
+        "go": "excluded:TypeScript-only by construction (§12.12's amendment, item 153): TS is the only language whose default spelling has two parts, so the half-written declaration is inexpressible in Python's default=<value> and Go's Default(v), which ARE the value",
+    },
+    'Arg *: * requires a default value: declare default: <value>, or * for no value': {
+        "python": "excluded:TypeScript-only by construction (§12.12's amendment, item 153): TS is the only language whose default spelling has two parts, so the half-written declaration is inexpressible in Python's default=<value> and Go's Default(v), which ARE the value",
+        "go": "excluded:TypeScript-only by construction (§12.12's amendment, item 153): TS is the only language whose default spelling has two parts, so the half-written declaration is inexpressible in Python's default=<value> and Go's Default(v), which ARE the value",
+    },
+    'presence: "default" with default: *': {
+        "python": "excluded:TypeScript-only by construction (§12.12's amendment, item 153): TS is the only language whose default spelling has two parts, so the half-written declaration is inexpressible in Python's default=<value> and Go's Default(v), which ARE the value",
+        "go": "excluded:TypeScript-only by construction (§12.12's amendment, item 153): TS is the only language whose default spelling has two parts, so the half-written declaration is inexpressible in Python's default=<value> and Go's Default(v), which ARE the value",
+    },
+
+    # -- Python-only: the handler-parameter check --
+    "command *: handler parameter * is bound to optional flag '--*' and must default to None": {
+        "go": 'excluded:Python-only (§12.12, item 147): Go and TypeScript handlers receive one kwargs map / one args object, so there is no per-parameter default to re-sentinelize with. An absent site, not a skipped check',
+        "typescript": 'excluded:Python-only (§12.12, item 147): Go and TypeScript handlers receive one kwargs map / one args object, so there is no per-parameter default to re-sentinelize with. An absent site, not a skipped check',
+    },
+    'command *: handler parameter * is bound to optional arg * and must default to None': {
+        "go": 'excluded:Python-only (§12.12, item 147): Go and TypeScript handlers receive one kwargs map / one args object, so there is no per-parameter default to re-sentinelize with. An absent site, not a skipped check',
+        "typescript": 'excluded:Python-only (§12.12, item 147): Go and TypeScript handlers receive one kwargs map / one args object, so there is no per-parameter default to re-sentinelize with. An absent site, not a skipped check',
+    },
 }
 
 

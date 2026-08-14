@@ -325,6 +325,11 @@ _GLOBAL_SCHEMA_TEST_ONLY: set[str] = {
     # app, not a field any implementation's App carries.
     "pre_call",
     "dump_tools",
+    # The generated Python handler's per-parameter defaults: the only way a
+    # case can spell the re-sentinelization the handler-parameter check refuses
+    # (contract §12.12, §23.3). It describes the harness's synthetic handler
+    # signature, not a field any implementation's Command carries.
+    "handler_param_defaults",
     # Installs the framework's test-only confirm seam (SetConfirmIO /
     # _set_confirm_io / setConfirmIO) so the confirm protocol treats the case's
     # piped stdin as interactive. It describes what the harness does to an app,
@@ -375,6 +380,13 @@ _SHARED_SCHEMA_TO_GO: dict[str, str] = {
     # connection_env -> ConnectionEnv by default PascalCase; connection_url needs
     # the initialism-preserving ConnectionURL.
     "connection_url": "ConnectionURL",
+    # The presence declaration (contract §23.2) is stored on an UNEXPORTED Go
+    # field on purpose: presence is declared through the three sibling
+    # FlagOptions (Required/Optional/Default), and a Flag struct literal that
+    # never passes through them declares no presence and does not register.
+    # describe_go dumps unexported fields too, so the mapping is the lowercase
+    # name rather than an exclusion.
+    "presence": "presence",
 }
 
 # TS struct -> owning factories whose option_keys extend the entity's TS name
@@ -846,6 +858,10 @@ KNOWN_OPTION_FUNCS: set[str] = {
     "Short", "Default", "Env", "Prefixed", "Choices", "Repeatable",
     "ValidateFn", "NegatableOpt",
     "ArgRequired", "ArgDefault", "Variadic", "ArgType", "ArgChoices",
+    # The presence declaration (contract §23.2, §23.3): three sibling
+    # FlagOptions and their ArgOption twins, where Default(v) / ArgDefault(v)
+    # are the third spelling and were already catalogued above.
+    "Required", "Optional", "ArgOptional",
     "WithArgs", "WithFlags", "WithFlagSets", "WithMutex", "WithDependencies",
     "WithPassthrough", "WithEnvPrefix", "WithConfig",
     "WithConfigPath", "WithConfigFormat",
