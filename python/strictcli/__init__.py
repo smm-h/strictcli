@@ -5147,6 +5147,31 @@ def _raise_short_collides_across_scopes(name: str, s: str, a: str, b: str):
     )
 
 
+def _raise_short_on_ambiguous_election(cmd_name: str, short: str, token: str):
+    """Authored: a short reused across sibling scopes cannot name an election.
+
+    Which name a short binds to is decided AFTER the election (§24.7 lets
+    sibling scopes reuse a short), and an election token has to be read before
+    one has happened.
+    """
+    raise ValueError(
+        f'command "{cmd_name}": short \'-{short}\' is reused by sibling '
+        f"scopes and also claimed by '--{token}', which elects: an election "
+        f"token is read before any election has happened, so its short cannot "
+        f"be shared"
+    )
+
+
+def _raise_short_shape_mismatch(cmd_name: str, short: str, a: str, b: str):
+    """Authored: sibling scopes reusing a short must tokenize identically."""
+    raise ValueError(
+        f'command "{cmd_name}": short \'-{short}\' is claimed by \'--{a}\' and '
+        f"'--{b}' with different value shapes: sibling scopes may reuse a "
+        f"short only with an identical type and arity, because tokenizing "
+        f"'-{short}' cannot wait for an election"
+    )
+
+
 def _raise_scoped_positional(c: str, sel: str):
     raise ValueError(
         f'Choice "{c}" of "{sel}": positional args cannot be declared inside a '
@@ -5293,6 +5318,15 @@ def choice(name: str, *, help: str):  # noqa: A002 - mirrors the framework keywo
 
     def decorator(cls: type) -> type:
         localns = dict(sys._getframe(1).f_locals)
+        # A positional declared inside a scope is refused by name, with the
+        # message that names both the choice and its selector (§12.13). The
+        # marker keeps the dataclass constructible so that message is what the
+        # reader sees, rather than `dataclasses`' mutable-default complaint.
+        for attr, value in list(vars(cls).items()):
+            if isinstance(value, Arg):
+                setattr(cls, attr, field(
+                    metadata={_SCOPE_FIELD_KEY: {"kind": "positional"}},
+                ))
         dc = dataclasses.dataclass(frozen=True, kw_only=True)(cls)
         setattr(dc, _CHOICE_SPEC_ATTR, _ChoiceDecl(
             name=name, help=help, cls=dc, localns=localns,
@@ -5310,6 +5344,7 @@ def sub_flag(
     short: str | None = None,
     choices: list | None = None,
     env: str | None = None,
+    prefixed: bool = True,
     repeatable: bool = False,
     unique: object = _MISSING,
     negatable: object = _MISSING,
@@ -5333,15 +5368,13 @@ def sub_flag(
         "short": short,
         "choices": choices,
         "env": env,
+        "prefixed": prefixed,
         "repeatable": repeatable,
         "unique": unique,
         "negatable": negatable,
         "validate": validate,
     }
-    meta = {_SCOPE_FIELD_KEY: payload}
-    if not isinstance(default, _MissingSentinel):
-        return field(default=default, metadata=meta)
-    return field(metadata=meta)
+    return _scope_field(payload, default)
 
 
 def sub_choice_flag(
@@ -5370,10 +5403,25 @@ def sub_choice_flag(
         "short": short,
         "env": env,
     }
+    return _scope_field(payload, default)
+
+
+def _scope_field(payload: dict, default: object):
+    """The dataclass field a scope declaration produces.
+
+    A declared collection default is passed through `default_factory`, because
+    `dataclasses` refuses an unhashable class attribute -- and a shared mutable
+    default is the hazard `@choice`'s frozen dataclass exists to remove.
+    """
     meta = {_SCOPE_FIELD_KEY: payload}
-    if not isinstance(default, _MissingSentinel):
-        return field(default=default, metadata=meta)
-    return field(metadata=meta)
+    if isinstance(default, _MissingSentinel):
+        return field(metadata=meta)
+    if isinstance(default, (list, dict, set)):
+        snapshot = type(default)(default)
+        return field(
+            default_factory=lambda: type(snapshot)(snapshot), metadata=meta,
+        )
+    return field(default=default, metadata=meta)
 
 
 def member_value(*, help: str):  # noqa: A002
@@ -5660,6 +5708,8 @@ def _build_choice_spec(
                 _raise_scoped_positional(decl.name, sel_name)
             _raise_scope_field_undeclared(decl.name, sel_name, f.name)
         flag_name = _scope_field_name(f.name)
+        if meta["kind"] == "positional":
+            _raise_scoped_positional(decl.name, sel_name)
         if meta["kind"] == "payload":
             if f.name != _SCOPE_RESERVED_VALUE:
                 _raise_member_value_field_name(decl.name, sel_name, f.name)
@@ -5693,6 +5743,7 @@ def _build_choice_spec(
                 short=meta["short"],
                 choices=meta["choices"],
                 env=meta["env"],
+                prefixed=meta["prefixed"],
                 repeatable=meta["repeatable"],
                 unique=meta["unique"],
                 negatable=meta["negatable"],
@@ -10532,6 +10583,8 @@ def _build_json_schema(cmd: Command) -> dict:
     for group in cmd.sites.values():
         site = group[0]
         if site.kind == "selector":
+            if not site.path:
+                continue
             sel = site.decl
             properties[_flag_param_name(sel.name)] = {
                 "type": "string",
@@ -10892,6 +10945,9 @@ class _Occ:
     name: str
     raw: object  # str for value tokens, True/False for bool-style tokens
     token: str
+    # Candidate names, when a short is reused by sibling scopes: which one it
+    # binds to is decided once the elections are known (§24.7).
+    alts: tuple[str, ...] = ()
 
 
 @dataclass
@@ -11150,6 +11206,21 @@ def _elect_member_spelled(
             _MSG_ELECTION_ORIGIN_DEFAULT,
         )
     return None, ""
+
+
+def _resolve_short_occurrences(
+    cmd: Command, occs: list[_Occ], state: _ElectionState,
+) -> None:
+    """Bind a sibling-reused short to the name whose scope is live (§24.7)."""
+    for occ in occs:
+        if len(occ.alts) < 2:
+            continue
+        for candidate in occ.alts:
+            if any(
+                _path_is_live(s.path, state) for s in cmd.sites.get(candidate, ())
+            ):
+                occ.name = candidate
+                break
 
 
 def _validate_scopes(
@@ -11542,6 +11613,7 @@ def _resolve_selectors(
         cmd.selectors, (), occs, state,
         config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
     )
+    _resolve_short_occurrences(cmd, occs, state)
     _validate_scopes(cmd, occs, state)
     result = _build_scope_values(
         cmd.selectors, (), occs, state,
@@ -11579,10 +11651,39 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
     boundary, so a member's payload flattens under the member's own name.
     """
     occs: list[_Occ] = []
-    for sel in cmd.selectors:
+    seen_selectors: set[int] = set()
+
+    def add_selector(sel: _Selector) -> None:
+        if id(sel) in seen_selectors:
+            return
+        seen_selectors.add(id(sel))
         param = _flag_param_name(sel.name)
-        if param in arguments:
-            _flat_selector_occ(sel, arguments[param], occs)
+        if param not in arguments:
+            return
+        value = arguments[param]
+        if not sel.is_member_spelled:
+            occs.append(_Occ(sel.name, value, f"--{sel.name}"))
+            return
+        spec = sel.choice_by_name(str(value))
+        if spec is None:
+            names = ", ".join(c.name for c in sel.choices)
+            raise _ParseError(
+                f"--{sel.name}: invalid value '{value}', must be one of: {names}"
+            )
+        payload = (
+            arguments.get(_flag_param_name(spec.name))
+            if spec.payload is not None else True
+        )
+        occs.append(_Occ(spec.name, payload, f"--{spec.name}"))
+
+    for sel in cmd.selectors:
+        add_selector(sel)
+    for group in cmd.sites.values():
+        for site in group:
+            if site.kind == "selector":
+                add_selector(site.decl)
+            elif site.kind == "member":
+                add_selector(site.decl)
     for group in cmd.sites.values():
         site = group[0]
         if site.kind != "flag":
@@ -11590,30 +11691,7 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
         param = _flag_param_name(site.name)
         if param in arguments:
             occs.append(_Occ(site.name, arguments[param], f"--{site.name}"))
-    for group in cmd.sites.values():
-        for site in group:
-            if site.kind != "selector":
-                continue
-            param = _flag_param_name(site.name)
-            if param in arguments:
-                _flat_selector_occ(site.decl, arguments[param], occs)
     return occs
-
-
-def _flat_selector_occ(sel: _Selector, value: object, occs: list[_Occ]) -> None:
-    """One selector's election, spelled the way the flat form spells it."""
-    if not sel.is_member_spelled:
-        occs.append(_Occ(sel.name, value, f"--{sel.name}"))
-        return
-    spec = sel.choice_by_name(str(value))
-    if spec is None:
-        names = ", ".join(c.name for c in sel.choices)
-        raise _ParseError(
-            f"--{sel.name}: invalid value '{value}', must be one of: {names}"
-        )
-    occs.append(_Occ(
-        spec.name, True if spec.payload is None else None, f"--{spec.name}",
-    ))
 
 
 def _selector_result_from_records(
@@ -11717,13 +11795,16 @@ def _parse_command(
         """Record one scoped occurrence, or return None if `tok` is not one."""
         name = tok[2:] if tok.startswith("--") else ""
         inline: str | None = None
+        alts: tuple[str, ...] = ()
         if tok.startswith("--") and "=" in tok:
             head, inline = tok.split("=", 1)
             name = head[2:]
         elif tok.startswith("-") and len(tok) == 2:
-            name = cmd.shorts.get(tok[1], "")
-            if not name:
+            candidates = cmd.shorts.get(tok[1], ())
+            if not candidates:
                 return None
+            name = candidates[0]
+            alts = candidates
         elif not tok.startswith("--"):
             return None
         if name.startswith("no-"):
@@ -11745,14 +11826,14 @@ def _parse_command(
                 raise _ParseError(
                     f"flag '--{name}' is a boolean flag and does not take a value"
                 )
-            scoped_occs.append(_Occ(name, True, tok))
+            scoped_occs.append(_Occ(name, True, tok, alts))
             return idx + 1
         if inline is not None:
-            scoped_occs.append(_Occ(name, inline, tok))
+            scoped_occs.append(_Occ(name, inline, tok, alts))
             return idx + 1
         if idx + 1 >= len(tokens):
             raise _ParseError(f"flag '--{name}' requires a value")
-        scoped_occs.append(_Occ(name, tokens[idx + 1], tok))
+        scoped_occs.append(_Occ(name, tokens[idx + 1], tok, alts))
         return idx + 2
 
     def _store_value(f: Flag, value: object) -> None:
@@ -12355,16 +12436,35 @@ def _build_and_validate_command(
     for site in site_list:
         sites.setdefault(site.name, []).append(site)  # type: ignore[union-attr]
     sites = {k: tuple(v) for k, v in sites.items()}
-    scoped_shorts: dict[str, str] = {}
+    scoped_shorts: dict[str, tuple[str, ...]] = {}
     for site in site_list:
-        short = (
-            site.choice.payload.short if site.kind == "member"
-            and site.choice.payload is not None
-            else getattr(site.decl, "short", None)
-            if site.kind != "member" else None
-        )
-        if short:
-            scoped_shorts[short] = site.name
+        if site.kind == "member":
+            short = (
+                site.choice.payload.short
+                if site.choice.payload is not None else None
+            )
+        else:
+            short = getattr(site.decl, "short", None)
+        if not short:
+            continue
+        names = scoped_shorts.get(short, ())
+        if site.name not in names:
+            scoped_shorts[short] = names + (site.name,)
+    # A short reused by sibling scopes for TWO DIFFERENT names is resolved
+    # after the election, which only works when the token tokenizes the same
+    # way whatever the outcome -- the same reason §24.7 constrains sibling name
+    # reuse -- and only when no election token depends on it.
+    for short, names in scoped_shorts.items():
+        if len(names) < 2:
+            continue
+        shapes = set()
+        for token in names:
+            for site in sites[token]:
+                if site.kind != "flag":
+                    _raise_short_on_ambiguous_election(name, short, token)
+                shapes.add(_value_shape(site.decl))
+        if len(shapes) > 1:
+            _raise_short_shape_mismatch(name, short, names[0], names[1])
 
     # Validate: a command flag colliding with a config field (validation-only
     # coexistence) must have an agreeing default. Config fields registered after
