@@ -169,8 +169,8 @@
         },
         {
           "level": 3,
-          "text": "Required bool flags",
-          "anchor": "required-bool-flags"
+          "text": "Bool flags and the presence declaration",
+          "anchor": "bool-flags-and-the-presence-declaration"
         },
         {
           "level": 2,
@@ -398,13 +398,38 @@
         },
         {
           "level": 2,
-          "text": "Required vs optional flags",
-          "anchor": "required-vs-optional-flags"
+          "text": "The presence declaration",
+          "anchor": "the-presence-declaration"
         },
         {
           "level": 3,
-          "text": "How defaults work internally",
-          "anchor": "how-defaults-work-internally"
+          "text": "A null default is not optionality",
+          "anchor": "a-null-default-is-not-optionality"
+        },
+        {
+          "level": 3,
+          "text": "What \"required\" requires",
+          "anchor": "what-required-requires"
+        },
+        {
+          "level": 3,
+          "text": "What \"optional\" delivers",
+          "anchor": "what-optional-delivers"
+        },
+        {
+          "level": 3,
+          "text": "Was this supplied? `ctx.provided`",
+          "anchor": "was-this-supplied-ctxprovided"
+        },
+        {
+          "level": 3,
+          "text": "Presence in help output",
+          "anchor": "presence-in-help-output"
+        },
+        {
+          "level": 3,
+          "text": "Presence composed with other declarations",
+          "anchor": "presence-composed-with-other-declarations"
         },
         {
           "level": 2,
@@ -420,6 +445,11 @@
           "level": 3,
           "text": "Required booleans",
           "anchor": "required-booleans"
+        },
+        {
+          "level": 3,
+          "text": "Tri-state booleans",
+          "anchor": "tri-state-booleans"
         },
         {
           "level": 3,
@@ -468,8 +498,8 @@
         },
         {
           "level": 3,
-          "text": "All booleans must have explicit defaults or be required",
-          "anchor": "all-booleans-must-have-explicit-defaults-or-be-required"
+          "text": "Every boolean states its presence, like every other flag",
+          "anchor": "every-boolean-states-its-presence-like-every-other-flag"
         },
         {
           "level": 3,
@@ -498,8 +528,8 @@
         },
         {
           "level": 3,
-          "text": "Required vs optional args",
-          "anchor": "required-vs-optional-args"
+          "text": "Arg presence",
+          "anchor": "arg-presence"
         },
         {
           "level": 3,
@@ -570,6 +600,11 @@
           "level": 3,
           "text": "Handlers test absence, never truthiness",
           "anchor": "handlers-test-absence-never-truthiness"
+        },
+        {
+          "level": 3,
+          "text": "A member declares its own absence",
+          "anchor": "a-member-declares-its-own-absence"
         },
         {
           "level": 2,
@@ -657,8 +692,28 @@
         },
         {
           "level": 3,
-          "text": "Default(nil) for Optional Flags",
-          "anchor": "defaultnil-for-optional-flags"
+          "text": "Presence: required, optional, or a default",
+          "anchor": "presence-required-optional-or-a-default"
+        },
+        {
+          "level": 3,
+          "text": "`Default(nil)` is a registration error",
+          "anchor": "defaultnil-is-a-registration-error"
+        },
+        {
+          "level": 3,
+          "text": "Presence in help output",
+          "anchor": "presence-in-help-output"
+        },
+        {
+          "level": 3,
+          "text": "Repeatable flags declare presence too",
+          "anchor": "repeatable-flags-declare-presence-too"
+        },
+        {
+          "level": 3,
+          "text": "`ctx.Provided` -- was this supplied?",
+          "anchor": "ctxprovided-was-this-supplied"
         },
         {
           "level": 2,
@@ -1396,6 +1451,16 @@
         },
         {
           "level": 3,
+          "text": "`Required`",
+          "anchor": "required"
+        },
+        {
+          "level": 3,
+          "text": "`Optional`",
+          "anchor": "optional"
+        },
+        {
+          "level": 3,
           "text": "`Env`",
           "anchor": "env"
         },
@@ -1448,6 +1513,11 @@
           "level": 3,
           "text": "`ArgRequired`",
           "anchor": "argrequired"
+        },
+        {
+          "level": 3,
+          "text": "`ArgOptional`",
+          "anchor": "argoptional"
         },
         {
           "level": 3,
@@ -1741,6 +1811,11 @@
         },
         {
           "level": 3,
+          "text": "`Context.Provided`",
+          "anchor": "contextprovided"
+        },
+        {
+          "level": 3,
           "text": "`Unsettled.String`",
           "anchor": "unsettledstring"
         },
@@ -1878,6 +1953,11 @@
           "level": 3,
           "text": "`App.DumpSchemaDict`",
           "anchor": "appdumpschemadict"
+        },
+        {
+          "level": 3,
+          "text": "`InfraRootPath.String`",
+          "anchor": "infrarootpathstring"
         },
         {
           "level": 3,
@@ -2209,8 +2289,8 @@
         },
         {
           "level": 3,
-          "text": "Required vs Optional",
-          "anchor": "required-vs-optional"
+          "text": "Presence: required, optional, or a default",
+          "anchor": "presence-required-optional-or-a-default"
         },
         {
           "level": 3,
@@ -2538,6 +2618,11 @@
           "level": 4,
           "text": "`source`",
           "anchor": "source"
+        },
+        {
+          "level": 4,
+          "text": "`provided`",
+          "anchor": "provided"
         },
         {
           "level": 4,
@@ -3331,6 +3416,61 @@
         },
         {
           "level": 3,
+          "text": "`_default_spelling`",
+          "anchor": "_default_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_flag_presence_undeclared`",
+          "anchor": "_raise_flag_presence_undeclared"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_arg_presence_undeclared`",
+          "anchor": "_raise_arg_presence_undeclared"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_flag_presence_declared_twice`",
+          "anchor": "_raise_flag_presence_declared_twice"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_arg_presence_declared_twice`",
+          "anchor": "_raise_arg_presence_declared_twice"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_flag_default_null_not_optional`",
+          "anchor": "_raise_flag_default_null_not_optional"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_arg_default_null_not_optional`",
+          "anchor": "_raise_arg_default_null_not_optional"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_flag_mutex_member_required`",
+          "anchor": "_raise_flag_mutex_member_required"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_arg_variadic_default`",
+          "anchor": "_raise_arg_variadic_default"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_presence_value_invalid`",
+          "anchor": "_raise_presence_value_invalid"
+        },
+        {
+          "level": 3,
+          "text": "`_resolve_presence`",
+          "anchor": "_resolve_presence"
+        },
+        {
+          "level": 3,
           "text": "`_parse_compound_type`",
           "anchor": "_parse_compound_type"
         },
@@ -3383,6 +3523,16 @@
           "level": 3,
           "text": "`Forwarding`",
           "anchor": "forwarding"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_handler_param_optional_flag_default`",
+          "anchor": "_raise_handler_param_optional_flag_default"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_handler_param_optional_arg_default`",
+          "anchor": "_raise_handler_param_optional_arg_default"
         },
         {
           "level": 3,
@@ -4041,6 +4191,16 @@
         },
         {
           "level": 3,
+          "text": "`_format_presence_for_help`",
+          "anchor": "_format_presence_for_help"
+        },
+        {
+          "level": 3,
+          "text": "`_format_declared_default_for_help`",
+          "anchor": "_format_declared_default_for_help"
+        },
+        {
+          "level": 3,
           "text": "`_format_dry_run_section`",
           "anchor": "_format_dry_run_section"
         },
@@ -4447,14 +4607,19 @@
           "anchor": "flag-types"
         },
         {
-          "level": 3,
-          "text": "Boolean Flags",
-          "anchor": "boolean-flags"
+          "level": 2,
+          "text": "Presence: required, optional, or a default",
+          "anchor": "presence-required-optional-or-a-default"
         },
         {
           "level": 3,
-          "text": "String Flags",
-          "anchor": "string-flags"
+          "text": "`ctx.provided` -- was this supplied?",
+          "anchor": "ctxprovided-was-this-supplied"
+        },
+        {
+          "level": 3,
+          "text": "Boolean Flags",
+          "anchor": "boolean-flags"
         },
         {
           "level": 3,
@@ -5687,11 +5852,6 @@
         },
         {
           "level": 3,
-          "text": "`errRequiredArgCannotHaveDefault`",
-          "anchor": "errrequiredargcannothavedefault"
-        },
-        {
-          "level": 3,
           "text": "`errArgListTypeRequiresVariadic`",
           "anchor": "errarglisttyperequiresvariadic"
         },
@@ -5729,21 +5889,6 @@
           "level": 3,
           "text": "`errArgChoiceTypeMismatch`",
           "anchor": "errargchoicetypemismatch"
-        },
-        {
-          "level": 3,
-          "text": "`errArgListDefaultMustBeList`",
-          "anchor": "errarglistdefaultmustbelist"
-        },
-        {
-          "level": 3,
-          "text": "`errArgExplicitEmptyDefaultRedundantList`",
-          "anchor": "errargexplicitemptydefaultredundantlist"
-        },
-        {
-          "level": 3,
-          "text": "`errArgDefaultElementTypeMismatch`",
-          "anchor": "errargdefaultelementtypemismatch"
         },
         {
           "level": 3,
@@ -5862,11 +6007,6 @@
         },
         {
           "level": 3,
-          "text": "`errFlagExplicitEmptyDefaultRedundantDict`",
-          "anchor": "errflagexplicitemptydefaultredundantdict"
-        },
-        {
-          "level": 3,
           "text": "`errFlagDefaultValueForKey`",
           "anchor": "errflagdefaultvalueforkey"
         },
@@ -5877,11 +6017,6 @@
         },
         {
           "level": 3,
-          "text": "`errFlagExplicitEmptyDefaultRedundantList`",
-          "anchor": "errflagexplicitemptydefaultredundantlist"
-        },
-        {
-          "level": 3,
           "text": "`errFlagDefaultElementError`",
           "anchor": "errflagdefaultelementerror"
         },
@@ -5889,11 +6024,6 @@
           "level": 3,
           "text": "`errFlagRepeatableDefaultMustBeList`",
           "anchor": "errflagrepeatabledefaultmustbelist"
-        },
-        {
-          "level": 3,
-          "text": "`errFlagExplicitEmptyDefaultRedundantRepeatable`",
-          "anchor": "errflagexplicitemptydefaultredundantrepeatable"
         },
         {
           "level": 3,
@@ -7219,6 +7349,81 @@
           "level": 3,
           "text": "`errAppConfigConflictModeBad`",
           "anchor": "errappconfigconflictmodebad"
+        },
+        {
+          "level": 3,
+          "text": "`PRESENCE_SPELLING_REQUIRED`",
+          "anchor": "presence_spelling_required"
+        },
+        {
+          "level": 3,
+          "text": "`PRESENCE_SPELLING_OPTIONAL`",
+          "anchor": "presence_spelling_optional"
+        },
+        {
+          "level": 3,
+          "text": "`presenceSpellingDefault`",
+          "anchor": "presencespellingdefault"
+        },
+        {
+          "level": 3,
+          "text": "`PRESENCE_SPELLING_DEFAULT_BARE`",
+          "anchor": "presence_spelling_default_bare"
+        },
+        {
+          "level": 3,
+          "text": "`PRESENCE_SPELLING_DEFAULT_PLACEHOLDER`",
+          "anchor": "presence_spelling_default_placeholder"
+        },
+        {
+          "level": 3,
+          "text": "`errFlagPresenceUndeclared`",
+          "anchor": "errflagpresenceundeclared"
+        },
+        {
+          "level": 3,
+          "text": "`errArgPresenceUndeclared`",
+          "anchor": "errargpresenceundeclared"
+        },
+        {
+          "level": 3,
+          "text": "`errFlagPresenceDeclaredTwice`",
+          "anchor": "errflagpresencedeclaredtwice"
+        },
+        {
+          "level": 3,
+          "text": "`errArgPresenceDeclaredTwice`",
+          "anchor": "errargpresencedeclaredtwice"
+        },
+        {
+          "level": 3,
+          "text": "`errFlagDefaultNullNotOptional`",
+          "anchor": "errflagdefaultnullnotoptional"
+        },
+        {
+          "level": 3,
+          "text": "`errArgDefaultNullNotOptional`",
+          "anchor": "errargdefaultnullnotoptional"
+        },
+        {
+          "level": 3,
+          "text": "`errFlagMutexMemberRequired`",
+          "anchor": "errflagmutexmemberrequired"
+        },
+        {
+          "level": 3,
+          "text": "`errArgVariadicDefault`",
+          "anchor": "errargvariadicdefault"
+        },
+        {
+          "level": 3,
+          "text": "`errFlagDefaultValueMissing`",
+          "anchor": "errflagdefaultvaluemissing"
+        },
+        {
+          "level": 3,
+          "text": "`errArgDefaultValueMissing`",
+          "anchor": "errargdefaultvaluemissing"
         }
       ]
     },
@@ -7256,6 +7461,11 @@
           "level": 3,
           "text": "`ConflictMode`",
           "anchor": "conflictmode"
+        },
+        {
+          "level": 3,
+          "text": "`Presence`",
+          "anchor": "presence"
         },
         {
           "level": 3,
@@ -8255,6 +8465,11 @@
         },
         {
           "level": 3,
+          "text": "`PROVIDED_SOURCES`",
+          "anchor": "provided_sources"
+        },
+        {
+          "level": 3,
           "text": "`SourcedEntry`",
           "anchor": "sourcedentry"
         },
@@ -8624,6 +8839,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-14T02:15:19.833286+00:00",
-  "theme": "minimal"
+  "last_gen": "2026-08-14T15:38:41.555771+00:00"
 }
