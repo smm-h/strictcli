@@ -131,7 +131,17 @@ context as `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet` and
   registration, tag DSL selection, DAG-ordered execution.
 - **MCP server integration** — expose commands as Model Context Protocol tools.
 - **Schema dump** — every app answers `--dump-schema` with a machine-readable
-  JSON description of its full structure.
+  JSON description of its full structure, at `schema_version: 2`. Every flag and
+  arg entry carries a `value_schema`: a real JSON Schema fragment from a closed
+  subset of `type`, `items`, `additionalProperties` and `enum`, using JSON
+  Schema's own type names. Arity is part of the value's shape, so a `t.list(...)`
+  flag and a variadic arg publish the identical array fragment. A choice flag
+  carries no fragment — its value is a variant the subset cannot express — and
+  publishes its nested `choices` and scopes instead, each scoped entry a full
+  flag entry, with `elect_by` marking the spelling. Keys are emitted in a
+  declared order at every depth and the document is written in one canonical
+  encoding, so a schema file written by this implementation and one written by
+  the Python or Go implementation for the same declaration are byte-identical.
 - **Groups, passthrough commands, deprecation notices, mutex/co-required/implies
   dependencies** — the complete strictcli surface.
 
