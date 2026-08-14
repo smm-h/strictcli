@@ -120,7 +120,6 @@ import {
 	type AnyArg,
 	type AnyCommand,
 	type AnyFlag,
-	type AnyMutexGroup,
 	BANNED_FLAG_NAMES,
 	type ConflictMode,
 	type DeprecatedDef,
@@ -128,6 +127,7 @@ import {
 	defineReadOnlyCommand,
 	type FlagMap,
 	flagOpts,
+	type GlobalFlagMap,
 	type MutatingCommandSpec,
 	type PassthroughDef,
 	pyRepr,
@@ -161,8 +161,12 @@ export interface AppSpec {
 	readonly version: string;
 	readonly help: string;
 	readonly envPrefix?: string;
-	/** Global flags, keyed by the underscore form of each flag's name. */
-	readonly flags?: FlagMap;
+	/**
+	 * Global flags, keyed by the underscore form of each flag's name. Ordinary
+	 * flags only: a selector declares scopes, and a global flag is resolved
+	 * before any command's declaration is consulted (contract §24.3).
+	 */
+	readonly flags?: GlobalFlagMap;
 	// Config subsystem (config.ts).
 	readonly config?: boolean;
 	/** Explicit config file path; a relativeToRoot() marker resolves eagerly. */
@@ -482,7 +486,6 @@ export function defineFrameworkCommand(
 		readonly help: string;
 		readonly flags?: FlagMap;
 		readonly args?: readonly AnyArg[];
-		readonly mutex?: readonly AnyMutexGroup[];
 		readonly interactive?: boolean;
 		readonly payloadSchema?: Readonly<Record<string, unknown>>;
 		readonly handler: (
@@ -1419,6 +1422,15 @@ export class AppImpl implements App {
 					outcome.cmd.name,
 					(outcome.cmd.def as AnyCommand).payloadSchema ?? null,
 				);
+				// Every conditional binding whose scope was not elected is named
+				// here, one line per binding in declaration order, at debug level
+				// -- hidden by default, shown by --verbose, and carried in machine
+				// mode's diagnostics whatever the human stream did (§24.6). They
+				// are diagnostics, not errors: no `error: ` prefix, and the run
+				// continues.
+				for (const line of outcome.skippedBindings) {
+					ctx.debug(line);
+				}
 				const def = outcome.cmd.def as AnyCommand;
 				const declined = this.runConfirm(mode, outcome.cmd, outcome, err);
 				if (declined !== undefined) {

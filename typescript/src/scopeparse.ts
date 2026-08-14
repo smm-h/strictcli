@@ -1,0 +1,766 @@
+/**
+ * The scoped-selector parser (contract §24.3): elections, scope-membership
+ * validation, and per-scope value resolution.
+ *
+ * Parsing is PHASED, and the phases are what make order independence, the
+ * distinct out-of-scope error, and that error's priority over a missing
+ * required flag fall out instead of being special-cased:
+ *
+ *   1. Tokenize every occurrence, without interpreting any of it (parse.ts).
+ *   2. Resolve elections, outermost first, then recursively inside each
+ *      elected choice.
+ *   3. Validate scope membership of every supplied flag.
+ *   4. Resolve values and presence within the live scopes only.
+ *
+ * Error precedence is pinned by that order -- election -> scope -> value ->
+ * presence -- so a command line with several problems reports the same error
+ * every time and never one that depends on declaration order. `--via sms
+ * --subject hi` says *`--subject` belongs to `email`*, never *`--phone-number`
+ * is required*: the spelling mistake is reported before its consequence.
+ */
+
+import type { StdinTracker } from "./atprefix.js";
+import { attachProvidedFields } from "./elected.js";
+import { resolveEnvValue } from "./env.js";
+import {
+	errAmbientBindingSkippedConfig,
+	errAmbientBindingSkippedEnv,
+	errConfigValueError,
+	errElectionOriginConfig,
+	errElectionOriginDefault,
+	errElectionOriginEnv,
+	errElectionOriginSuffix,
+	errFlagInvalidChoice,
+	errFlagOutOfScope,
+	errFlagValueError,
+	errMutexDeclineClause,
+	errMutexRedundantNegation,
+	errMutuallyExclusive,
+	errOneOfRequired,
+	errScopeSuffix,
+	errScopeWhyElected,
+	errScopeWhyNoMemberElected,
+	errScopeWhyNotProvided,
+	errSelectorElectedTwice,
+	ParseError,
+} from "./errors.js";
+import {
+	type AnyChoiceFlag,
+	type AnyDecl,
+	type AnyFlag,
+	buildScopeIndex,
+	CHOICE_TAG_KEY,
+	CHOICE_VALUE_KEY,
+	choiceValues,
+	flagOpts,
+	flagParamName,
+	memberList,
+	type ScopeIndexEntry,
+	type ScopeStep,
+	scopePath,
+	surfaceNames,
+} from "./factories.js";
+import type { SourceLabel } from "./sources.js";
+import {
+	formatChoices,
+	formatValueForError,
+	validateChoices,
+} from "./values.js";
+
+/** One surface name's raw occurrences, collected before anything is interpreted. */
+export interface Occurrence {
+	/** Raw values of every positive occurrence, in command-line order. */
+	readonly positive: string[];
+	/** Whether `--no-<name>` was typed (a bool declines; it elects nothing). */
+	negated: boolean;
+}
+
+/** Raw occurrences by dash name, produced by parse.ts's token loop. */
+export type Occurrences = Map<string, Occurrence>;
+
+/** The four phases, as comparable stage numbers (§24.3's precedence rule). */
+export const STAGE = {
+	election: 1,
+	scope: 2,
+	value: 3,
+	presence: 4,
+} as const;
+
+/** One recorded problem: reported in stage order, then in recording order. */
+export interface ParseProblem {
+	readonly stage: number;
+	readonly message: string;
+}
+
+/** The config seam this module needs (parse.ts owns loading and precedence). */
+export interface ScopeConfig {
+	readonly data: Readonly<Record<string, unknown>> | null;
+	coerce(f: AnyFlag, value: unknown): unknown;
+}
+
+export interface ScopeParseInput {
+	readonly decls: readonly AnyDecl[];
+	readonly occ: Occurrences;
+	readonly hermetic: boolean;
+	readonly cfg: ScopeConfig | null;
+	readonly tracker: StdinTracker;
+	readonly infraRoots: ReadonlyMap<string, string>;
+}
+
+export interface ScopeParseResult {
+	/** Elected record per selector, keyed by the selector's dash name. */
+	readonly records: Map<string, unknown>;
+	/** The selector's own source label, for ctx.source / ctx.provided. */
+	readonly sources: Map<string, SourceLabel>;
+	readonly problems: ParseProblem[];
+	/** Every surface name that belongs to a scope the invocation made live. */
+	readonly liveNames: Set<string>;
+	/**
+	 * Conditional bindings that were NOT consulted because their scope was not
+	 * elected -- diagnostics, never errors, surfaced under --verbose (§24.6).
+	 */
+	readonly skippedBindings: string[];
+}
+
+/** How a selector's election came about, as the pinned origin clause (§12.13). */
+type Origin = "" | string;
+
+interface Election {
+	/** The choice name elected, or undefined when nothing was. */
+	readonly elected: string | undefined;
+	/** The pinned origin clause: empty for a command-line election. */
+	readonly origin: Origin;
+}
+
+interface Run {
+	readonly input: ScopeParseInput;
+	readonly problems: ParseProblem[];
+	readonly elections: Map<AnyChoiceFlag, Election>;
+	readonly liveNames: Set<string>;
+	readonly skippedBindings: string[];
+	readonly records: Map<string, unknown>;
+	readonly sources: Map<string, SourceLabel>;
+}
+
+/**
+ * Runs phases 2-4 over a command's root declarations. Nothing throws: every
+ * problem is recorded with its stage, and parse.ts reports the first one in
+ * stage order (which is what makes precedence independent of declaration
+ * order).
+ */
+export function parseScopes(input: ScopeParseInput): ScopeParseResult {
+	const run: Run = {
+		input,
+		problems: [],
+		elections: new Map(),
+		liveNames: new Set(),
+		skippedBindings: [],
+		records: new Map(),
+		sources: new Map(),
+	};
+	resolveScope(input.decls, [], null, run);
+	validateScopeMembership(run);
+	collectSkippedBindings(input.decls, [], run);
+	return {
+		records: run.records,
+		sources: run.sources,
+		problems: run.problems,
+		liveNames: run.liveNames,
+		skippedBindings: run.skippedBindings,
+	};
+}
+
+// --- Phase 3: scope membership ---
+
+/**
+ * Anything supplied that no live scope claims. The token loop already refused
+ * names the declaration never mentions, so what is left here is exactly the
+ * out-of-scope case, which gets its own sentence -- deliberately NOT "unknown
+ * flag": the flag is declared, it is simply not in the elected scope.
+ */
+function validateScopeMembership(run: Run): void {
+	const index = buildScopeIndex(run.input.decls);
+	for (const name of run.input.occ.keys()) {
+		if (run.liveNames.has(name)) {
+			continue;
+		}
+		const entries = index.get(name);
+		if (entries === undefined || entries.length === 0) {
+			continue;
+		}
+		const owners = entries.map((e) => `'${ownerPath(e)}'`).join(" or ");
+		const first = entries[0] as ScopeIndexEntry;
+		run.problems.push({
+			stage: STAGE.scope,
+			message: errFlagOutOfScope(name, owners, whyOutOfScope(first, run)),
+		});
+	}
+}
+
+/**
+ * The scope path that OWNS a surface name. A member-spelled election's own
+ * name belongs to its parent scope, and its owner is therefore that scope --
+ * naming the member's own election here would say the flag is only valid
+ * under itself.
+ */
+function ownerPath(entry: ScopeIndexEntry): string {
+	return scopePath(entry.path);
+}
+
+/**
+ * The `<why>` clause: the FIRST (outermost) unsatisfied election on the first
+ * owner's path, never the innermost one. A flag two levels down whose outer
+ * election is the one that failed blames the OUTER election, because that is
+ * the token the user would have to change (§24.3, §12.13).
+ */
+function whyOutOfScope(entry: ScopeIndexEntry, run: Run): string {
+	const satisfied: ScopeStep[] = [];
+	for (const step of entry.path) {
+		const el = run.elections.get(step.selector);
+		if (el !== undefined && el.elected === step.choiceName) {
+			satisfied.push(step);
+			continue;
+		}
+		const sel = step.selector;
+		const electedName = el?.elected;
+		if (electedName !== undefined) {
+			const electedPath = scopePath([
+				...satisfied,
+				{ selector: sel, choiceName: electedName },
+			]);
+			return errScopeWhyElected(electedPath, el?.origin ?? "");
+		}
+		return sel.electBy === "member-flags"
+			? errScopeWhyNoMemberElected(memberList(sel))
+			: errScopeWhyNotProvided(sel.name);
+	}
+	// Every election on the path was satisfied, so the name is live after all.
+	return errScopeWhyNotProvided(
+		(entry.path[0] as ScopeStep | undefined)?.selector.name ?? "",
+	);
+}
+
+// --- Phases 2 and 4: elections, then values within the live scopes ---
+
+/**
+ * Resolves one scope: every declaration in it, in declaration order. Ordinary
+ * flags resolve their own value and presence; a selector resolves its
+ * election and then recurses into the elected choice.
+ *
+ * `out` is null for the root scope, whose ordinary flags are resolved by
+ * parse.ts's existing root pipeline (env, config, implies, dependencies).
+ */
+function resolveScope(
+	decls: readonly AnyDecl[],
+	path: readonly ScopeStep[],
+	out: { values: Record<string, unknown>; provided: Set<string> } | null,
+	run: Run,
+): void {
+	const suffix = errScopeSuffix(scopePath(path));
+	for (const decl of decls) {
+		for (const s of surfaceNames(decl)) {
+			run.liveNames.add(s.name);
+		}
+		if (decl.kind === "choice-flag") {
+			resolveSelector(decl, path, out, run, suffix);
+			continue;
+		}
+		if (out !== null) {
+			resolveScopedFlag(decl, path, out, run, suffix);
+		}
+	}
+}
+
+/** Resolves one selector's election and, when it elected, its chosen scope. */
+function resolveSelector(
+	sel: AnyChoiceFlag,
+	path: readonly ScopeStep[],
+	out: { values: Record<string, unknown>; provided: Set<string> } | null,
+	run: Run,
+	suffix: string,
+): void {
+	const election =
+		sel.electBy === "member-flags"
+			? electByMembers(sel, run, suffix)
+			: electByToken(sel, run, suffix);
+	run.elections.set(sel, election);
+	const key = flagParamName(sel.name);
+	if (election.elected === undefined) {
+		return;
+	}
+	const chosen = sel.choices[election.elected];
+	if (chosen === undefined) {
+		return;
+	}
+	const record: Record<string, unknown> = {
+		[CHOICE_TAG_KEY]: election.elected,
+	};
+	const provided = new Set<string>();
+	if (chosen.value !== undefined) {
+		const raw = run.input.occ.get(election.elected)?.positive[0];
+		if (raw !== undefined) {
+			try {
+				record[CHOICE_VALUE_KEY] = chosen.value.parse(raw);
+				provided.add(CHOICE_VALUE_KEY);
+			} catch (e) {
+				run.problems.push({
+					stage: STAGE.value,
+					message: errFlagValueError(election.elected, (e as Error).message),
+				});
+			}
+		}
+	}
+	resolveScope(
+		Object.values(chosen.flags),
+		[...path, { selector: sel, choiceName: election.elected }],
+		{ values: record, provided },
+		run,
+	);
+	attachProvidedFields(record, provided);
+	if (out === null) {
+		run.records.set(sel.name, record);
+		run.sources.set(sel.name, sourceOfOrigin(election.origin));
+	} else {
+		out.values[key] = record;
+		if (election.origin === "") {
+			out.provided.add(key);
+		}
+	}
+}
+
+/** §23.6's source vocabulary, derived from the pinned origin clause. */
+function sourceOfOrigin(origin: Origin): SourceLabel {
+	if (origin === "") {
+		return "cli";
+	}
+	if (origin === errElectionOriginDefault) {
+		return "default";
+	}
+	return origin.startsWith(" from env var ") ? "env" : "config";
+}
+
+/**
+ * `--via email`: the selector names the choice. A token-spelled selector is
+ * an ordinary value flag whose value happens to name a choice, so CLI > env >
+ * config > default applies unchanged (§24.6).
+ */
+function electByToken(sel: AnyChoiceFlag, run: Run, suffix: string): Election {
+	const occ = run.input.occ.get(sel.name);
+	const typed = occ?.positive ?? [];
+	if (typed.length > 1) {
+		// Last-wins is right for a plain flag and wrong for an election, because
+		// discarding a value would discard a whole scope with it.
+		run.problems.push({
+			stage: STAGE.election,
+			message: errSelectorElectedTwice(
+				sel.name,
+				typed.map((v) => `'${v}'`).join(" and "),
+			),
+		});
+		return { elected: undefined, origin: "" };
+	}
+	const named = (raw: string, origin: Origin): Election => {
+		if (!Object.hasOwn(sel.choices, raw)) {
+			run.problems.push({
+				stage: STAGE.election,
+				message: errFlagInvalidChoice(
+					sel.name,
+					formatValueForError(raw),
+					formatChoices(Object.keys(sel.choices)),
+				),
+			});
+			return { elected: undefined, origin };
+		}
+		return { elected: raw, origin };
+	};
+	const first = typed[0];
+	if (first !== undefined) {
+		return named(first, "");
+	}
+	const ambient = ambientElection(sel, run);
+	if (ambient !== undefined) {
+		return named(ambient.raw, ambient.origin);
+	}
+	const o = sel.opts;
+	if (o.presence === "default" && o.default !== undefined) {
+		return { elected: o.default, origin: errElectionOriginDefault };
+	}
+	// A required selector that elected nothing is recorded and DEFERRED here
+	// rather than refused: scope validation may report a token the reader
+	// actually typed, which is the more useful of the two true statements
+	// (§24.3).
+	run.problems.push({
+		stage: STAGE.presence,
+		message: `flag '--${sel.name}' is required${suffix}`,
+	});
+	return { elected: undefined, origin: "" };
+}
+
+/** The env-then-config lookup a token-spelled selector takes (§24.6). */
+function ambientElection(
+	sel: AnyChoiceFlag,
+	run: Run,
+): { raw: string; origin: string } | undefined {
+	if (run.input.hermetic) {
+		return undefined;
+	}
+	const envVar = sel.opts.env;
+	if (envVar !== undefined) {
+		const value = process.env[envVar];
+		if (value !== undefined) {
+			return { raw: value, origin: errElectionOriginEnv(envVar) };
+		}
+	}
+	const data = run.input.cfg?.data;
+	if (data != null) {
+		const key = flagParamName(sel.name);
+		if (Object.hasOwn(data, key) && typeof data[key] === "string") {
+			return {
+				raw: data[key] as string,
+				origin: errElectionOriginConfig(key),
+			};
+		}
+	}
+	return undefined;
+}
+
+/**
+ * `--profile work` / `--all-profiles`: each choice is spelled as its own flag.
+ * This is §21 restated as a scope tree -- a bool member elects only on true,
+ * `--no-<name>` DECLINES rather than choosing, a redundant negation beside a
+ * real election is a parse error, and election is COMMAND-LINE ONLY (§24.4,
+ * §24.6). Its three error sentences are §21.4's, carried over verbatim.
+ */
+function electByMembers(
+	sel: AnyChoiceFlag,
+	run: Run,
+	suffix: string,
+): Election {
+	const elected: string[] = [];
+	const declined: string[] = [];
+	for (const choiceName of Object.keys(sel.choices)) {
+		const occ = run.input.occ.get(choiceName);
+		if (occ === undefined) {
+			continue;
+		}
+		if (occ.positive.length > 0) {
+			elected.push(choiceName);
+		}
+		if (occ.negated) {
+			declined.push(choiceName);
+		}
+	}
+	const firstDeclined = declined[0];
+	const clause =
+		firstDeclined !== undefined ? errMutexDeclineClause(firstDeclined) : "";
+	if (elected.length > 1) {
+		run.problems.push({
+			stage: STAGE.election,
+			message: errMutuallyExclusive(elected.map((c) => `--${c}`).join(" and ")),
+		});
+		return { elected: undefined, origin: "" };
+	}
+	const sole = elected[0];
+	if (sole !== undefined) {
+		if (declined.length > 0) {
+			run.problems.push({
+				stage: STAGE.election,
+				message: errMutexRedundantNegation(
+					declined.map((c) => `--no-${c}`).join(" and "),
+					sole,
+					clause,
+				),
+			});
+			return { elected: undefined, origin: "" };
+		}
+		return { elected: sole, origin: "" };
+	}
+	const o = sel.opts;
+	if (o.presence === "default" && o.default !== undefined) {
+		return { elected: o.default, origin: errElectionOriginDefault };
+	}
+	run.problems.push({
+		stage: STAGE.presence,
+		message: `${errOneOfRequired(memberList(sel), clause)}${suffix}`,
+	});
+	return { elected: undefined, origin: "" };
+}
+
+/**
+ * One ordinary flag inside a live scope. §23 applies again unchanged, one
+ * level down: an optional sub-flag delivers absence as a present FIELD of the
+ * record, never a missing one, and a required one is required.
+ */
+function resolveScopedFlag(
+	f: AnyFlag,
+	path: readonly ScopeStep[],
+	out: { values: Record<string, unknown>; provided: Set<string> },
+	run: Run,
+	suffix: string,
+): void {
+	const key = flagParamName(f.name);
+	const o = flagOpts(f);
+	const occ = run.input.occ.get(f.name);
+	const store = new Map<string, unknown>();
+	let source: SourceLabel | undefined;
+
+	if (occ !== undefined && (occ.positive.length > 0 || occ.negated)) {
+		if (f.schema === "bool") {
+			store.set(f.name, occ.positive.length > 0);
+		} else {
+			for (const raw of occ.positive) {
+				try {
+					parseScopedRawValue(f, raw, store, run.input.tracker);
+				} catch (e) {
+					run.problems.push({
+						stage: STAGE.value,
+						message: (e as Error).message,
+					});
+					return;
+				}
+			}
+		}
+		source = "cli";
+	} else if (!run.input.hermetic && o.env !== undefined) {
+		const envVal = process.env[o.env];
+		if (envVal !== undefined) {
+			try {
+				store.set(f.name, resolveEnvValue(f, o.env, envVal, run.input.tracker));
+				source = "env";
+			} catch (e) {
+				run.problems.push({
+					stage: STAGE.value,
+					message: (e as Error).message,
+				});
+				return;
+			}
+		}
+	}
+	if (
+		source === undefined &&
+		!run.input.hermetic &&
+		run.input.cfg?.data != null
+	) {
+		const data = run.input.cfg.data;
+		if (Object.hasOwn(data, key)) {
+			try {
+				store.set(f.name, run.input.cfg.coerce(f, data[key]));
+				source = "config";
+			} catch (e) {
+				run.problems.push({
+					stage: STAGE.value,
+					message: errConfigValueError(f.name, (e as Error).message),
+				});
+				return;
+			}
+		}
+	}
+
+	if (source === undefined) {
+		// The declaration decides. A required sub-flag names the scope it is
+		// required under, and the origin of a non-command-line election, so a
+		// refusal never blames a command line that does not contain the cause.
+		if (o.presence === "required") {
+			const origin = electionOriginOf(path, run);
+			run.problems.push({
+				stage: STAGE.presence,
+				message: `flag '--${f.name}' is required${suffix}${errElectionOriginSuffix(origin)}`,
+			});
+			return;
+		}
+		if (o.presence === "default") {
+			out.values[key] = cloneDefault(o.default);
+			return;
+		}
+		out.values[key] = undefined;
+		return;
+	}
+
+	const value = store.get(f.name);
+	try {
+		validateChoices(
+			f.name,
+			value,
+			f.schema.startsWith("list["),
+			o.choices === undefined ? undefined : choiceValues(o.choices),
+			false,
+		);
+	} catch (e) {
+		run.problems.push({ stage: STAGE.value, message: (e as Error).message });
+		return;
+	}
+	const validate = o.validate;
+	if (validate !== undefined) {
+		const check = (v: unknown): boolean => {
+			try {
+				validate(v as never);
+				return true;
+			} catch (e) {
+				run.problems.push({
+					stage: STAGE.value,
+					message: errFlagValueError(f.name, (e as Error).message),
+				});
+				return false;
+			}
+		};
+		if (Array.isArray(value)) {
+			for (const v of value) {
+				if (!check(v)) {
+					return;
+				}
+			}
+		} else if (value !== undefined && value !== null && !check(value)) {
+			return;
+		}
+	}
+	out.values[key] = value;
+	out.provided.add(key);
+}
+
+/** The origin clause of the innermost election on a path, for a nested refusal. */
+function electionOriginOf(path: readonly ScopeStep[], run: Run): Origin {
+	const last = path[path.length - 1];
+	if (last === undefined) {
+		return "";
+	}
+	return run.elections.get(last.selector)?.origin ?? "";
+}
+
+/** Copies a declared compound default so a handler cannot mutate the declaration. */
+function cloneDefault(dflt: unknown): unknown {
+	if (dflt instanceof Map) {
+		return new Map(dflt);
+	}
+	if (Array.isArray(dflt)) {
+		return [...dflt];
+	}
+	return dflt;
+}
+
+/**
+ * Value coercion for a scoped flag. Deferred until phase 4 on purpose: a
+ * coercion failure is a VALUE-stage problem, and a flag whose scope was never
+ * elected is never coerced at all.
+ */
+function parseScopedRawValue(
+	f: AnyFlag,
+	raw: string,
+	store: Map<string, unknown>,
+	tracker: StdinTracker,
+): void {
+	// Imported lazily through parse.ts's shared helper to keep one coercion
+	// path for scoped and unscoped flags alike.
+	scopedValueParser(f, raw, store, tracker);
+}
+
+/**
+ * Installed by parse.ts at module load: the ONE raw-value coercion path, so a
+ * scoped flag and a root flag coerce identically (dict merge, list append
+ * with unique enforcement, scalar coercion with @-prefix resolution).
+ */
+let scopedValueParser: (
+	f: AnyFlag,
+	raw: string,
+	store: Map<string, unknown>,
+	tracker: StdinTracker,
+) => void = () => {
+	throw new Error("internal: scoped value parser not installed");
+};
+
+/** Package-internal wiring (parse.ts owns the coercion implementation). */
+export function installScopedValueParser(
+	fn: (
+		f: AnyFlag,
+		raw: string,
+		store: Map<string, unknown>,
+		tracker: StdinTracker,
+	) => void,
+): void {
+	scopedValueParser = fn;
+}
+
+// --- The conditional-binding diagnostics (§24.6) ---
+
+/**
+ * Every env var or config key bound to a flag whose scope was NOT elected,
+ * named one line per binding, in declaration order.
+ *
+ * The binding's condition is written in the declaration (the flag sits in a
+ * scope), the framework evaluates the same condition the same way every run,
+ * and the same command line plus the same environment always produces the
+ * same values -- which is what keeps this inside the no-silent-degradation
+ * rule rather than beside it. What is refused is the SILENT part, and it is
+ * refused by surfacing.
+ */
+function collectSkippedBindings(
+	decls: readonly AnyDecl[],
+	path: readonly ScopeStep[],
+	run: Run,
+): void {
+	for (const decl of decls) {
+		if (decl.kind === "choice-flag") {
+			const elected = run.elections.get(decl)?.elected;
+			for (const [choiceName, c] of Object.entries(decl.choices)) {
+				const next = [...path, { selector: decl, choiceName }];
+				if (choiceName === elected) {
+					collectSkippedBindings(Object.values(c.flags), next, run);
+				} else {
+					recordSkipped(Object.values(c.flags), next, run);
+				}
+			}
+		}
+	}
+}
+
+/** Names every binding inside a scope that was not elected, at any depth. */
+function recordSkipped(
+	decls: readonly AnyDecl[],
+	path: readonly ScopeStep[],
+	run: Run,
+): void {
+	const rendered = scopePath(path);
+	for (const decl of decls) {
+		if (decl.kind === "choice-flag") {
+			for (const [choiceName, c] of Object.entries(decl.choices)) {
+				recordSkipped(
+					Object.values(c.flags),
+					[...path, { selector: decl, choiceName }],
+					run,
+				);
+			}
+			continue;
+		}
+		const o = flagOpts(decl);
+		if (!run.input.hermetic && o.env !== undefined) {
+			const value = process.env[o.env];
+			if (value !== undefined) {
+				run.skippedBindings.push(
+					errAmbientBindingSkippedEnv(o.env, decl.name, rendered),
+				);
+			}
+		}
+		const data = run.input.cfg?.data;
+		if (!run.input.hermetic && data != null) {
+			const key = flagParamName(decl.name);
+			if (Object.hasOwn(data, key)) {
+				run.skippedBindings.push(
+					errAmbientBindingSkippedConfig(key, decl.name, rendered),
+				);
+			}
+		}
+	}
+}
+
+/** Throws the first problem in stage order, or returns when there are none. */
+export function throwFirstProblem(problems: readonly ParseProblem[]): void {
+	if (problems.length === 0) {
+		return;
+	}
+	let best = problems[0] as ParseProblem;
+	for (const p of problems) {
+		if (p.stage < best.stage) {
+			best = p;
+		}
+	}
+	throw new ParseError(best.message);
+}

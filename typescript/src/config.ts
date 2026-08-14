@@ -63,7 +63,6 @@ import {
 	elemSchemaOf,
 	flag,
 	flagOpts,
-	mutexGroup,
 	type Presence,
 	pyRepr,
 	schemaKind,

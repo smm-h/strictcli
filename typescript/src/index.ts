@@ -59,23 +59,33 @@ export type {
 	Response,
 	Spawned,
 } from "./effects.js";
+export type { ElectedRecord } from "./elected.js";
+export { assertNever, provided } from "./elected.js";
 // ParseError and RegistrationError stay internal (sibling parity: Python's
 // __all__ and Go both export only InvokeError -- registration failures are
 // Go panics / Python ValueError, parse failures print to stderr and exit 1).
 export { EffectFailed, InvokeError } from "./errors.js";
 export type {
 	AnyArg,
+	AnyChoice,
+	AnyChoiceFlag,
 	AnyCommand,
+	AnyDecl,
 	AnyFlag,
 	AnyFlagSet,
-	AnyMutexGroup,
 	ArgDef,
 	ArgOpts,
+	ChoiceDef,
+	ChoiceFlagDef,
+	ChoiceFlagOpts,
+	ChoiceMap,
+	ChoiceRecord,
 	CommandDef,
 	ConflictMode,
 	CoRequired,
 	Dependency,
 	DeprecatedDef,
+	ElectBy,
 	ElementOf,
 	FlagDef,
 	FlagMap,
@@ -84,15 +94,17 @@ export type {
 	Handler,
 	Implies,
 	MutatingCommandSpec,
-	MutexGroup,
 	PassthroughArgs,
 	PassthroughDef,
 	PassthroughHandler,
 	ReadOnlyCommandSpec,
 	Requires,
+	ValueChoiceDef,
 } from "./factories.js";
 export {
 	arg,
+	choice,
+	choiceFlag,
 	coRequired,
 	defineMutatingCommand,
 	defineReadOnlyCommand,
@@ -100,12 +112,20 @@ export {
 	flag,
 	flagSet,
 	implies,
+	memberChoiceFlag,
 	mutatingPassthrough,
-	mutexGroup,
 	readOnlyPassthrough,
 	requires,
 } from "./factories.js";
-export type { HandlerArgs, InferHandler, InferHandlerArgs } from "./infer.js";
+export type {
+	ChoiceOf,
+	Elected,
+	ElectedOf,
+	HandlerArgs,
+	InferHandler,
+	InferHandlerArgs,
+	InferScopeArgs,
+} from "./infer.js";
 export type { InfraRootPath } from "./infra.js";
 export { relativeToRoot } from "./infra.js";
 export type { CallOptions } from "./invoke.js";

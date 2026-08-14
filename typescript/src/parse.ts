@@ -32,24 +32,35 @@ import {
 	errHermeticWithConfigCommands,
 	errImpliesConflict,
 	errMissingRequiredArgument,
-	errMutexDeclineClause,
-	errMutexRedundantNegation,
-	errMutuallyExclusive,
-	errOneOfRequired,
 	errUnexpectedArgument,
 	errUnknownFlag,
 	ParseError,
 } from "./errors.js";
 import {
 	type AnyArg,
+	type AnyDecl,
 	type AnyFlag,
+	buildScopeIndex,
+	type ChoiceRecordView,
 	type ConflictMode,
+	choiceValues,
 	elemSchemaOf,
 	flagOpts,
+	flagParamName,
+	type ScopeIndexEntry,
 	schemaKind,
 } from "./factories.js";
 import { isInfraRootPath, resolveInfraRootPath } from "./infra.js";
 import { resolveCommand } from "./routing.js";
+import {
+	installScopedValueParser,
+	type Occurrence,
+	type Occurrences,
+	type ParseProblem,
+	parseScopes,
+	STAGE,
+	throwFirstProblem,
+} from "./scopeparse.js";
 import { SourcedStore, type SourceLabel } from "./sources.js";
 import {
 	appendListValue,
@@ -64,10 +75,9 @@ import {
 
 // --- Parameter naming ---
 
-/** Converts a flag name like "dry-run" to its handler-args key "dry_run". */
-export function flagParamName(flagName: string): string {
-	return flagName.replace(/^-+/, "").replaceAll("-", "_");
-}
+// Declared in factories.ts (where the declaration tree lives) and re-exported
+// here, which is the import site the rest of the package already uses.
+export { flagParamName };
 
 // --- Config seam (Phase 5 fills; the default provider supplies no data) ---
 
@@ -233,7 +243,7 @@ function newLookups(flags: readonly AnyFlag[]): FlagLookups {
  * handling dict merge (duplicate keys are hard errors), list append with
  * unique enforcement, and scalar coercion with @-prefix resolution.
  */
-function parseRawFlagValue(
+export function parseRawFlagValue(
 	f: AnyFlag,
 	raw: string,
 	cliSet: Map<string, unknown>,
@@ -263,6 +273,12 @@ function parseRawFlagValue(
 	}
 	cliSet.set(f.name, value);
 }
+
+// ONE coercion path for scoped and unscoped flags alike: a flag three scopes
+// down merges dicts, appends to lists with unique enforcement and resolves
+// @-prefixes exactly as a command-level flag does (contract §24.3's
+// "unaffected by the construct" list).
+installScopedValueParser(parseRawFlagValue);
 
 // --- Env and config resolution passes ---
 
@@ -350,9 +366,9 @@ interface DefaultedValue {
 /**
  * Resolves the value of a flag that was not provided by CLI, env, or config,
  * from its DECLARED presence (contract §23.1) -- nothing is inferred from the
- * shape of the default any more, and there is no mutex-member exemption: a
- * member declares `optional` (or a default) like anything else and the group
- * enforces cardinality on top of that.
+ * shape of the default any more. There is no mutex-member exemption either:
+ * the construct that needed one is deleted, and a choice's scoped flags are
+ * resolved by the scope that elected them (contract §23.4's box, §24.1).
  *
  * Throws ParseError when the flag declares `required`. prefix is "" for
  * command flags and "global " for global flags. A relativeToRoot() marker
@@ -418,6 +434,84 @@ export interface ParsedCommand {
 	readonly postGlobalValues: Record<string, unknown>;
 	/** Param-name -> source label for command flags and post-command globals. */
 	readonly sources: Record<string, string>;
+	/**
+	 * Conditional bindings whose scope was not elected, named one line per
+	 * binding in declaration order (contract §24.6). Diagnostics, not errors:
+	 * the run continues, and they are shown only under --verbose.
+	 */
+	readonly skippedBindings: readonly string[];
+}
+
+/**
+ * The token-level surface of the whole declaration TREE: every name a scoped
+ * flag, a token-spelled selector or a member-spelled election puts on the
+ * command line. Root-level ordinary flags are NOT here -- they keep the
+ * existing eager pipeline, which is what makes this construct cost nothing on
+ * a command that declares no selector.
+ */
+interface ScopedTokenTarget {
+	readonly name: string;
+	readonly takesValue: boolean;
+}
+
+interface ScopedLookups {
+	readonly long: Map<string, ScopedTokenTarget>;
+	readonly short: Map<string, ScopedTokenTarget>;
+	readonly negation: Map<string, ScopedTokenTarget>;
+	/** True when the command declares no selector at all. */
+	readonly empty: boolean;
+}
+
+function newScopedLookups(decls: readonly AnyDecl[]): ScopedLookups {
+	const long = new Map<string, ScopedTokenTarget>();
+	const short = new Map<string, ScopedTokenTarget>();
+	const negation = new Map<string, ScopedTokenTarget>();
+	const index = buildScopeIndex(decls);
+	for (const [name, entries] of index) {
+		const first = entries[0] as ScopeIndexEntry;
+		// A root-level ordinary flag is not part of the scoped surface.
+		const isScoped = entries.some(
+			(e) => e.path.length > 0 || e.decl.kind === "choice-flag",
+		);
+		if (!isScoped) {
+			continue;
+		}
+		const target: ScopedTokenTarget = {
+			name,
+			takesValue: first.takesValue,
+		};
+		long.set(`--${name}`, target);
+		if (!first.takesValue) {
+			// A payload-less member declines with `--no-<name>` (§21.2, carried
+			// over to member spelling), and a scoped bool negates as any bool does.
+			negation.set(`--no-${name}`, target);
+		}
+		for (const e of entries) {
+			if (e.elects !== undefined) {
+				continue;
+			}
+			const sh = e.decl.opts.short;
+			if (typeof sh === "string" && sh !== "") {
+				short.set(`-${sh}`, target);
+			}
+		}
+	}
+	return { long, short, negation, empty: long.size === 0 };
+}
+
+/** Records one raw occurrence of a scoped surface name, in command-line order. */
+function recordOccurrence(
+	occ: Occurrences,
+	name: string,
+	raw: string | undefined,
+): void {
+	const entry: Occurrence = occ.get(name) ?? { positive: [], negated: false };
+	if (raw === undefined) {
+		entry.negated = true;
+	} else {
+		entry.positive.push(raw);
+	}
+	occ.set(name, entry);
 }
 
 /**
@@ -443,9 +537,32 @@ export function parseCommand(
 	const lookups = newLookups(cmd.flags);
 	addToLookups(lookups, globalFlags);
 	const globalFlagNames = new Set(globalFlags.map((f) => f.name));
+	const scoped = newScopedLookups(def.allDecls);
 
 	const cliSet = new Map<string, unknown>();
 	const positionals: string[] = [];
+	// Phase 1: tokenize every occurrence WITHOUT interpreting any of it. Every
+	// problem the loop finds is recorded with its stage rather than thrown, so
+	// an election or a scope violation can outrank it (contract §24.3's
+	// precedence rule). With no selector declared, only value-stage problems
+	// can arise and the first recorded one is the first thrown -- which is what
+	// this loop did before the construct existed.
+	const occ: Occurrences = new Map();
+	const problems: ParseProblem[] = [];
+	const record = (message: string): void => {
+		problems.push({ stage: STAGE.value, message });
+	};
+	const coerce = (f: AnyFlag, raw: string): void => {
+		try {
+			parseRawFlagValue(f, raw, cliSet, tracker);
+		} catch (e) {
+			if (e instanceof ParseError) {
+				record(e.message);
+				return;
+			}
+			throw e;
+		}
+	};
 
 	let i = 0;
 	let stopFlags = false;
@@ -470,15 +587,26 @@ export function parseCommand(
 			const flagPart = tok.slice(0, eqPos);
 			const valuePart = tok.slice(eqPos + 1);
 			const f = lookups.long.get(flagPart);
+			const sc = scoped.long.get(flagPart);
 			if (f !== undefined) {
 				if (f.schema === "bool") {
-					throw new ParseError(errBoolFlagNoValue(flagPart));
+					record(errBoolFlagNoValue(flagPart));
+				} else {
+					coerce(f, valuePart);
 				}
-				parseRawFlagValue(f, valuePart, cliSet, tracker);
-			} else if (lookups.negation.has(flagPart)) {
-				throw new ParseError(errBoolNegationNoValue(flagPart));
+			} else if (sc !== undefined) {
+				if (!sc.takesValue) {
+					record(errBoolFlagNoValue(flagPart));
+				} else {
+					recordOccurrence(occ, sc.name, valuePart);
+				}
+			} else if (
+				lookups.negation.has(flagPart) ||
+				scoped.negation.has(flagPart)
+			) {
+				record(errBoolNegationNoValue(flagPart));
 			} else {
-				throw new ParseError(errUnknownFlag(flagPart));
+				record(errUnknownFlag(flagPart));
 			}
 			i++;
 			continue;
@@ -491,40 +619,86 @@ export function parseCommand(
 			i++;
 			continue;
 		}
+		const scopedNegated = scoped.negation.get(tok);
+		if (scopedNegated !== undefined) {
+			recordOccurrence(occ, scopedNegated.name, undefined);
+			i++;
+			continue;
+		}
 
 		// --flag (long form without =)
 		if (tok.startsWith("--")) {
 			const f = lookups.long.get(tok);
-			if (f === undefined) {
-				throw new ParseError(errUnknownFlag(tok));
-			}
-			if (f.schema === "bool") {
-				cliSet.set(f.name, true);
+			const sc = scoped.long.get(tok);
+			if (f === undefined && sc === undefined) {
+				record(errUnknownFlag(tok));
 				i++;
-			} else {
-				if (i + 1 >= tokens.length) {
-					throw new ParseError(errFlagRequiresValue(tok));
-				}
-				parseRawFlagValue(f, tokens[i + 1] as string, cliSet, tracker);
-				i += 2;
+				continue;
 			}
+			const takesValue =
+				f !== undefined
+					? f.schema !== "bool"
+					: (sc as ScopedTokenTarget).takesValue;
+			if (!takesValue) {
+				if (f !== undefined) {
+					cliSet.set(f.name, true);
+				} else {
+					recordOccurrence(occ, (sc as ScopedTokenTarget).name, "true");
+				}
+				i++;
+				continue;
+			}
+			if (i + 1 >= tokens.length) {
+				record(errFlagRequiresValue(tok));
+				i++;
+				continue;
+			}
+			if (f !== undefined) {
+				coerce(f, tokens[i + 1] as string);
+			} else {
+				recordOccurrence(
+					occ,
+					(sc as ScopedTokenTarget).name,
+					tokens[i + 1] as string,
+				);
+			}
+			i += 2;
 			continue;
 		}
 
 		// -x (short form)
 		if (tok.length === 2) {
 			const f = lookups.short.get(tok);
-			if (f !== undefined) {
-				if (f.schema === "bool") {
-					cliSet.set(f.name, true);
-					i++;
-				} else {
-					if (i + 1 >= tokens.length) {
-						throw new ParseError(errFlagRequiresValue(tok));
+			const sc = scoped.short.get(tok);
+			if (f !== undefined || sc !== undefined) {
+				const takesValue =
+					f !== undefined
+						? f.schema !== "bool"
+						: (sc as ScopedTokenTarget).takesValue;
+				if (!takesValue) {
+					if (f !== undefined) {
+						cliSet.set(f.name, true);
+					} else {
+						recordOccurrence(occ, (sc as ScopedTokenTarget).name, "true");
 					}
-					parseRawFlagValue(f, tokens[i + 1] as string, cliSet, tracker);
-					i += 2;
+					i++;
+					continue;
 				}
+				if (i + 1 >= tokens.length) {
+					record(errFlagRequiresValue(tok));
+					i++;
+					continue;
+				}
+				if (f !== undefined) {
+					coerce(f, tokens[i + 1] as string);
+				} else {
+					recordOccurrence(
+						occ,
+						(sc as ScopedTokenTarget).name,
+						tokens[i + 1] as string,
+					);
+				}
+				i += 2;
 				continue;
 			}
 		}
@@ -534,6 +708,19 @@ export function parseCommand(
 		positionals.push(tok);
 		i++;
 	}
+
+	// Phases 2-4: elections outermost first, scope-membership validation, then
+	// values and presence within the live scopes only.
+	const scopeResult = parseScopes({
+		decls: def.allDecls,
+		occ,
+		hermetic,
+		cfg,
+		tracker,
+		infraRoots,
+	});
+	problems.push(...scopeResult.problems);
+	throwFirstProblem(problems);
 
 	const envNames = new Set<string>();
 	const configNames = new Set<string>();
@@ -580,6 +767,13 @@ export function parseCommand(
 		}
 	}
 
+	// The elected records enter the same sourced store every flag value uses,
+	// so ctx.source and ctx.provided answer for a selector's own key exactly
+	// as they do for any flag (§24.5, §24.9).
+	for (const [name, value] of scopeResult.records) {
+		store.set(name, value, scopeResult.sources.get(name) ?? "cli");
+	}
+
 	return validateAndBuildKwargs(
 		cmd,
 		def.args,
@@ -587,11 +781,13 @@ export function parseCommand(
 		positionals,
 		globalFlagNames,
 		infraRoots,
+		[...scopeResult.records.keys()],
+		scopeResult.skippedBindings,
 	);
 }
 
 /**
- * Second half of command parsing: mutex enforcement, implies resolution,
+ * Second half of command parsing: implies resolution,
  * dependency checks, defaults, choices, custom validation, positional-arg
  * resolution, and kwargs assembly, all on sourced values. Exported for
  * invoke.ts, which feeds it a store populated from pre-typed kwargs.
@@ -603,69 +799,18 @@ export function validateAndBuildKwargs(
 	positionals: readonly string[],
 	globalFlagNames: ReadonlySet<string>,
 	infraRoots: ReadonlyMap<string, string>,
+	selectorNames: readonly string[] = [],
+	skippedBindings: readonly string[] = [],
 ): ParsedCommand {
 	if (cmd.def.kind !== "command") {
 		throw new Error("internal: passthrough commands are not parsed");
 	}
 	const def = cmd.def;
 
-	// Mutex constraints (before defaults). Election is CLI-only and
-	// value-aware (effects contract §21):
-	//   - a bool member elects only when the typed token resolved to true;
-	//     `--no-x` DECLINES (it names the member and says it is not the choice)
-	//   - every other type elects on presence with any value, including ""
-	//   - env and config elect nothing AND supply nothing: their entries are
-	//     dropped here, before dependency validation, so an unelected member
-	//     delivers its declared default (or undefined) and never a stale env
-	//     value
-	for (const mg of def.mutex) {
-		const mgFlags = Object.values(mg.flags);
-		const elected: AnyFlag[] = [];
-		const declined: AnyFlag[] = [];
-		for (const f of mgFlags) {
-			if (store.isEnvOrConfig(f.name)) {
-				store.delete(f.name);
-				continue;
-			}
-			if (!store.isCli(f.name)) {
-				continue;
-			}
-			if (f.schema === "bool" && store.get(f.name) !== true) {
-				declined.push(f);
-			} else {
-				elected.push(f);
-			}
-		}
-		const firstDeclined = declined[0];
-		const clause =
-			firstDeclined !== undefined
-				? errMutexDeclineClause(firstDeclined.name)
-				: "";
-		if (elected.length > 1) {
-			throw new ParseError(
-				errMutuallyExclusive(elected.map((f) => `--${f.name}`).join(" and ")),
-			);
-		}
-		const soleElected = elected[0];
-		if (
-			elected.length === 1 &&
-			soleElected !== undefined &&
-			declined.length > 0
-		) {
-			throw new ParseError(
-				errMutexRedundantNegation(
-					declined.map((f) => `--no-${f.name}`).join(" and "),
-					soleElected.name,
-					clause,
-				),
-			);
-		}
-		if (elected.length === 0) {
-			throw new ParseError(
-				errOneOfRequired(mgFlags.map((f) => `--${f.name}`).join(", "), clause),
-			);
-		}
-	}
+	// The mutex block that stood here is DELETED with the construct (contract
+	// §21's supersession box). Its three sentences survive as member spelling's
+	// errors, evaluated by the election phase in scopeparse.ts -- where the
+	// scope tree, not a group, decides which alternative is live.
 
 	// Implies resolution (before dependency checks, so implied values
 	// participate in downstream coRequired/requires validation).
@@ -708,9 +853,9 @@ export function validateAndBuildKwargs(
 		}
 	}
 
-	// Defaults. Every flag resolves from its own declared presence, mutex
-	// members included: the exemption that handed a member an absent value its
-	// declaration never asked for is deleted (contract §23.4).
+	// Defaults. Every flag resolves from its own declared presence: the
+	// exemption that handed a mutex member an absent value its declaration
+	// never asked for is deleted (contract §23.4).
 	for (const f of cmd.flags) {
 		if (store.has(f.name)) {
 			continue;
@@ -722,11 +867,12 @@ export function validateAndBuildKwargs(
 	// Choices
 	for (const f of cmd.flags) {
 		if (store.has(f.name)) {
+			const declared = flagOpts(f).choices;
 			validateChoices(
 				f.name,
 				store.get(f.name),
 				schemaKind(f.schema) === "list",
-				flagOpts(f).choices,
+				declared === undefined ? undefined : choiceValues(declared),
 				false,
 			);
 		}
@@ -801,21 +947,27 @@ export function validateAndBuildKwargs(
 	// Arg choices (after type coercion)
 	for (const a of args) {
 		if (argValues.has(a.name)) {
-			const opts = a.opts as { readonly choices?: readonly unknown[] };
+			const opts = a.opts as { readonly choices?: readonly ChoiceRecordView[] };
 			validateChoices(
 				a.name,
 				argValues.get(a.name),
 				a.opts.variadic === true,
-				opts.choices,
+				opts.choices === undefined ? undefined : choiceValues(opts.choices),
 				true,
 			);
 		}
 	}
 
-	// kwargs (command flags and args only; doParse merges globals)
+	// kwargs (command flags, selectors and args only; doParse merges globals)
 	const kwargs: Record<string, unknown> = {};
 	for (const f of cmd.flags) {
 		kwargs[flagParamName(f.name)] = store.get(f.name);
+	}
+	// A selector contributes exactly ONE key -- its own -- at any depth, which
+	// is what keeps §23's delivery invariant untouched rather than merely
+	// compatible: sub-flags are never top-level handler arguments (§24.1).
+	for (const name of selectorNames) {
+		kwargs[flagParamName(name)] = store.get(name);
 	}
 	for (const a of args) {
 		if (argValues.has(a.name)) {
@@ -838,6 +990,12 @@ export function validateAndBuildKwargs(
 			sources[flagParamName(f.name)] = s;
 		}
 	}
+	for (const name of selectorNames) {
+		const s = rawSources.get(name);
+		if (s !== undefined) {
+			sources[flagParamName(name)] = s;
+		}
+	}
 	// Globals parsed post-command emit their source label too (always "cli"
 	// here; env/config for globals resolve in the pre-command pass). Without
 	// this, `tool cmd --global X` would report source "default".
@@ -848,7 +1006,7 @@ export function validateAndBuildKwargs(
 		}
 	}
 
-	return { kwargs, postGlobalValues, sources };
+	return { kwargs, postGlobalValues, sources, skippedBindings };
 }
 
 // --- Global flag extraction (pre-command phase) ---
@@ -1004,11 +1162,12 @@ export function extractGlobalFlags(
 	// Choices for global flags
 	for (const f of app.globalFlags) {
 		if (cliSet.has(f.name)) {
+			const declared = flagOpts(f).choices;
 			validateChoices(
 				f.name,
 				cliSet.get(f.name),
 				schemaKind(f.schema) === "list",
-				flagOpts(f).choices,
+				declared === undefined ? undefined : choiceValues(declared),
 				false,
 			);
 		}
@@ -1351,6 +1510,12 @@ export type ParseOutcome =
 			readonly sources: Record<string, string>;
 			readonly hermetic: boolean;
 			readonly reserved: ReservedFlags;
+			/**
+			 * Conditional bindings whose scope was not elected (§24.6). Named
+			 * under --verbose at debug level, carried in machine mode's
+			 * diagnostics whatever the human stream did.
+			 */
+			readonly skippedBindings: readonly string[];
 	  }
 	| {
 			readonly kind: "passthrough";
@@ -1639,6 +1804,7 @@ export function doParse(
 		sources,
 		hermetic: pre.hermetic,
 		reserved: reservedFlagsOf(pre),
+		skippedBindings: parsed.skippedBindings,
 	};
 }
 

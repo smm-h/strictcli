@@ -27,7 +27,12 @@ import { errConfirmDeclined } from "./errors.js";
 import { formatFloatCanonical } from "./float.js";
 import { commandClassification } from "./invoke.js";
 import { jsonCompact } from "./outcome.js";
-import { buildJSONSchema, collectToolCommands } from "./tool.js";
+import {
+	buildJSONSchema,
+	collectToolCommands,
+	flatToCallKwargs,
+	scopeDescriptionBlock,
+} from "./tool.js";
 
 /** Optional stream overrides for serveMcp (defaults: process stdin/stdout). */
 export interface McpIO {
@@ -411,7 +416,9 @@ function handleToolsList(
 		const { effect, consequential } = commandClassification(cmd);
 		const def: JsonObject = {
 			name: dottedPath,
-			description: cmd.help,
+			// The scope structure the flattened schema cannot carry rides the
+			// description, exactly as it does on the Tool descriptor (§24.11).
+			description: `${cmd.help}${scopeDescriptionBlock(cmd)}`,
 			effect,
 			inputSchema: buildJSONSchema(cmd),
 		};
@@ -519,7 +526,15 @@ async function handleToolsCall(
 
 	let result: unknown;
 	try {
-		result = await app.call(toolName, callArgs, {
+		// The flat machine form is converted into the elected records at the
+		// protocol boundary, through the same election machinery the argv path
+		// uses (§24.11); a wrong combination is refused with the CLI's own
+		// sentence, surfaced through the same isError content an invocation
+		// error takes.
+		const entry = collectToolCommands(app).find(([path]) => path === toolName);
+		const callable =
+			entry === undefined ? callArgs : flatToCallKwargs(entry[1], callArgs);
+		result = await app.call(toolName, callable, {
 			approveConsequential: consented,
 		});
 	} catch (e) {

@@ -14,16 +14,29 @@
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import type { Effect } from "./effects.js";
 import {
+	errFlagOutOfScope,
 	errJsonSchemaIsGroup,
 	errJsonSchemaRouteError,
+	errOneOfRequired,
 	errRouterCommandMustBeString,
 	InvokeError,
 } from "./errors.js";
-import { elemSchemaOf, flagOpts, schemaKind } from "./factories.js";
+import {
+	type AnyChoiceFlag,
+	type AnyCommand,
+	type AnyDecl,
+	type AnyFlag,
+	choiceValues,
+	elemSchemaOf,
+	flagOpts,
+	memberList,
+	schemaKind,
+} from "./factories.js";
 import { type CallOptions, commandClassification } from "./invoke.js";
 import { flagParamName } from "./parse.js";
 import { resolveCommand } from "./routing.js";
 import type { ScalarSchema } from "./types.js";
+import { formatValueForError } from "./values.js";
 
 /**
  * A descriptor for exposing one CLI command to tool-using LLM agents.
@@ -66,8 +79,8 @@ export function buildJSONSchema(
 	const properties: Record<string, unknown> = {};
 	const required: string[] = [];
 
-	for (const f of cmd.flags) {
-		const paramName = flagParamName(f.name);
+	/** One ordinary flag's property, at root scope or any depth. */
+	const flagProperty = (f: AnyFlag): Record<string, unknown> => {
 		const prop: Record<string, unknown> = {};
 		const kind = schemaKind(f.schema);
 		if (kind === "dict") {
@@ -83,20 +96,67 @@ export function buildJSONSchema(
 		}
 		const o = flagOpts(f);
 		if (o.choices !== undefined) {
-			prop.enum = [...o.choices];
+			prop.enum = [...choiceValues(o.choices)];
 		}
 		prop.description = o.help;
-		properties[paramName] = prop;
+		return prop;
+	};
 
+	/**
+	 * The MCP projection is FLATTEN plus a description map (contract §24.11):
+	 * every scoped flag contributes a top-level property, and NEVER appears in
+	 * `required` -- its requiredness is conditional, and the schema has no
+	 * vocabulary for that. A member-spelled selector projects IDENTICALLY to a
+	 * token-spelled one: tokenization is a command-line fact and there are no
+	 * tokens at this boundary, so a member's payload flattens under the
+	 * member's own flag name, which the framework already guarantees unique
+	 * command-wide.
+	 */
+	const flattenScope = (decls: readonly AnyDecl[]): void => {
+		for (const d of decls) {
+			if (d.kind === "flag") {
+				properties[flagParamName(d.name)] = flagProperty(d);
+				continue;
+			}
+			properties[flagParamName(d.name)] = {
+				type: "string",
+				enum: Object.keys(d.choices),
+				description: d.opts.help,
+			};
+			for (const [choiceName, c] of Object.entries(d.choices)) {
+				if (c.value !== undefined) {
+					properties[flagParamName(choiceName)] = {
+						type: JSON_SCHEMA_TYPES[c.value.schema],
+						description: c.help,
+					};
+				}
+				flattenScope(Object.values(c.flags));
+			}
+		}
+	};
+
+	const rootDecls =
+		cmd.def.kind === "command" ? (cmd.def as AnyCommand).allDecls : [];
+	for (const d of rootDecls) {
+		if (d.kind === "choice-flag") {
+			// The selector's own property follows the ordinary rule: it appears in
+			// `required` iff the selector declares `required` (§13's narrowing).
+			if (d.opts.presence === "required") {
+				required.push(flagParamName(d.name));
+			}
+			continue;
+		}
+		const o = flagOpts(d);
 		// Requiredness comes from the DECLARED presence, flags and args alike
 		// (contract §13's presence-round amendment). The hand-written derivation
 		// this replaces excluded bools on the reasoning that "bool flags always
 		// have a default", which §23 makes false by construction: a required
 		// bool now appears here, as it already did in Python's projection.
 		if (o.presence === "required") {
-			required.push(paramName);
+			required.push(flagParamName(d.name));
 		}
 	}
+	flattenScope(rootDecls);
 
 	const args = cmd.def.kind === "command" ? cmd.def.args : [];
 	for (const a of args) {
@@ -203,6 +263,211 @@ export function asToolsForApp(app: AppImpl): Tool[] {
 	return tools;
 }
 
+/**
+ * The scope structure survives in the TOOL DESCRIPTION, appended as a
+ * deterministic block so that an agent can read the constraint it cannot see
+ * in the schema (contract §24.11):
+ *
+ *   Scoped parameters (enforced at call time):
+ *     via=email: subject (required), recipient (required)
+ *     via=sms: phone_number (required)
+ *     visibility=user-facing type=feature: (no parameters)
+ *
+ * One line per scope, at every depth, in declaration order. The key is the
+ * scope's path rendered as `<selector>=<choice>` segments joined by a single
+ * space -- the machine-side spelling of §12.13's scope path, using the
+ * PROPERTY names the schema publishes rather than the flags a CLI user types.
+ *
+ * The cost is stated rather than discovered: an agent cannot see the scope
+ * rule before it calls; it learns by being refused. That is the least-bad of
+ * the three options §24.11 records.
+ */
+export function scopeDescriptionBlock(cmd: RegisteredCommand): string {
+	const decls =
+		cmd.def.kind === "command" ? (cmd.def as AnyCommand).allDecls : [];
+	const lines: string[] = [];
+	const walk = (list: readonly AnyDecl[], prefix: readonly string[]): void => {
+		for (const d of list) {
+			if (d.kind !== "choice-flag") {
+				continue;
+			}
+			for (const [choiceName, c] of Object.entries(d.choices)) {
+				const path = [
+					...prefix,
+					`${flagParamName(d.name)}=${flagParamName(choiceName)}`,
+				];
+				const params: string[] = [];
+				if (c.value !== undefined) {
+					params.push(`${flagParamName(choiceName)} (required)`);
+				}
+				for (const sub of Object.values(c.flags)) {
+					params.push(`${flagParamName(sub.name)} (${presenceClause(sub)})`);
+				}
+				lines.push(
+					`  ${path.join(" ")}: ${params.length === 0 ? "(no parameters)" : params.join(", ")}`,
+				);
+				walk(Object.values(c.flags), path);
+			}
+		}
+	};
+	walk(decls, []);
+	if (lines.length === 0) {
+		return "";
+	}
+	return `\n\nScoped parameters (enforced at call time):\n${lines.join("\n")}`;
+}
+
+/** A scoped parameter's presence, as the description block spells it. */
+function presenceClause(d: AnyDecl): string {
+	const presence = d.opts.presence;
+	if (presence !== "default") {
+		return presence;
+	}
+	const dflt = (d.opts as { readonly default?: unknown }).default;
+	return `default: ${formatValueForError(dflt)}`;
+}
+
+/**
+ * Converts the FLAT machine form (§24.11's projection) into the elected
+ * records `call()` takes, through the same election, scope and presence
+ * machinery the argv path uses -- which is what makes the two front doors
+ * agree by construction rather than by test.
+ *
+ * A wrong combination is refused here, at call time, with the SAME SENTENCE
+ * the CLI parser gives. A command that declares no selector returns its
+ * arguments unchanged, so this costs nothing where nothing is scoped.
+ */
+export function flatToCallKwargs(
+	cmd: RegisteredCommand,
+	kwargs: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+	const decls =
+		cmd.def.kind === "command" ? (cmd.def as AnyCommand).allDecls : [];
+	if (!decls.some((d) => d.kind === "choice-flag")) {
+		return { ...kwargs };
+	}
+	const out: Record<string, unknown> = {};
+	const consumed = new Set<string>();
+	const scopedParams = new Map<string, string[]>();
+	const collectScoped = (
+		list: readonly AnyDecl[],
+		path: readonly string[],
+	): void => {
+		for (const d of list) {
+			if (d.kind === "flag") {
+				const owners = scopedParams.get(flagParamName(d.name)) ?? [];
+				owners.push(path.join(" "));
+				scopedParams.set(flagParamName(d.name), owners);
+				continue;
+			}
+			for (const [choiceName, c] of Object.entries(d.choices)) {
+				const next = [
+					...path,
+					`${flagParamName(d.name)}=${flagParamName(choiceName)}`,
+				];
+				if (c.value !== undefined) {
+					const owners = scopedParams.get(flagParamName(choiceName)) ?? [];
+					owners.push(next.join(" "));
+					scopedParams.set(flagParamName(choiceName), owners);
+				}
+				collectScoped(Object.values(c.flags), next);
+			}
+		}
+	};
+	for (const d of decls) {
+		if (d.kind === "choice-flag") {
+			for (const [choiceName, c] of Object.entries(d.choices)) {
+				const base = [`${flagParamName(d.name)}=${flagParamName(choiceName)}`];
+				if (c.value !== undefined) {
+					const owners = scopedParams.get(flagParamName(choiceName)) ?? [];
+					owners.push(base.join(" "));
+					scopedParams.set(flagParamName(choiceName), owners);
+				}
+				collectScoped(Object.values(c.flags), base);
+			}
+		}
+	}
+
+	const buildRecord = (sel: AnyChoiceFlag): unknown => {
+		const key = flagParamName(sel.name);
+		const named = kwargs[key];
+		consumed.add(key);
+		const tag =
+			typeof named === "string"
+				? named
+				: sel.opts.presence === "default"
+					? sel.opts.default
+					: undefined;
+		if (tag === undefined) {
+			throw new InvokeError(
+				sel.electBy === "member-flags"
+					? errOneOfRequired(memberList(sel), "")
+					: `flag '--${sel.name}' is required`,
+			);
+		}
+		const chosen = sel.choices[tag];
+		if (chosen === undefined) {
+			throw new InvokeError(
+				`--${sel.name}: invalid value '${tag}', must be one of: ${Object.keys(
+					sel.choices,
+				)
+					.map((c) => `'${c}'`)
+					.join(", ")}`,
+			);
+		}
+		const record: Record<string, unknown> = { choice: tag };
+		if (chosen.value !== undefined) {
+			const payloadKey = flagParamName(tag);
+			consumed.add(payloadKey);
+			if (Object.hasOwn(kwargs, payloadKey)) {
+				record.value = kwargs[payloadKey];
+			}
+		}
+		for (const [subKey, sub] of Object.entries(chosen.flags)) {
+			if (sub.kind === "choice-flag") {
+				record[subKey] = buildRecord(sub);
+				continue;
+			}
+			const param = flagParamName(sub.name);
+			consumed.add(param);
+			if (Object.hasOwn(kwargs, param)) {
+				record[subKey] = kwargs[param];
+			}
+		}
+		return record;
+	};
+
+	for (const d of decls) {
+		if (d.kind === "choice-flag") {
+			out[flagParamName(d.name)] = buildRecord(d);
+			continue;
+		}
+		const param = flagParamName(d.name);
+		consumed.add(param);
+		if (Object.hasOwn(kwargs, param)) {
+			out[param] = kwargs[param];
+		}
+	}
+	for (const [key, value] of Object.entries(kwargs)) {
+		if (consumed.has(key)) {
+			continue;
+		}
+		const owners = scopedParams.get(key);
+		if (owners === undefined) {
+			out[key] = value;
+			continue;
+		}
+		throw new InvokeError(
+			errFlagOutOfScope(
+				key,
+				owners.map((o) => `'${o}'`).join(" or "),
+				"that scope was not elected",
+			),
+		);
+	}
+	return out;
+}
+
 function makeTool(
 	app: AppImpl,
 	commandPath: string,
@@ -210,10 +475,11 @@ function makeTool(
 ): Tool {
 	return {
 		name: commandPath,
-		description: cmd.help,
+		description: `${cmd.help}${scopeDescriptionBlock(cmd)}`,
 		parameters: buildJSONSchema(cmd),
 		...commandClassification(cmd),
-		execute: (kwargs = {}, opts = {}) => app.call(commandPath, kwargs, opts),
+		execute: (kwargs = {}, opts = {}) =>
+			app.call(commandPath, flatToCallKwargs(cmd, kwargs), opts),
 	};
 }
 

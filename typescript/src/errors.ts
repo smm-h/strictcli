@@ -665,16 +665,12 @@ export function errDeprecatedAlreadyRegistered(name: string): string {
 // strictcli.go — buildAndValidateCommand
 // ---------------------------------------------------------------------------
 
-export function errCommandMutexMinFlags(name: string, count: number): string {
-	return `command ${q(name)}: mutex group must have at least 2 flags, got ${count}`;
-}
-
-export function errCommandFlagInMultipleMutex(
-	name: string,
-	flagName: string,
-): string {
-	return `command ${q(name)}: flag ${q(flagName)} appears in multiple mutex groups`;
-}
+// The two mutex-group registration templates that lived here are DELETED with
+// the construct (§21's supersession box): `MutexGroup` is removed from all
+// three implementations, so "mutex group must have at least 2 flags" and
+// "appears in multiple mutex groups" describe declarations that can no longer
+// be written. Their replacements are the selector's own guards (§12.13's
+// `errSelectorNoChoices` and the co-electable name-reuse family).
 
 export function errCommandFlagCollidesGlobal(
 	name: string,
@@ -2224,10 +2220,11 @@ export function errArgDefaultNullNotOptional(name: string): string {
 	return `Arg ${q(name)}: default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)`;
 }
 
-/** §23.5's mutex row: the group's own requirement is what makes the choice mandatory. */
-export function errFlagMutexMemberRequired(name: string): string {
-	return `Flag ${q(name)}: a mutex member cannot declare ${PRESENCE_SPELLING_REQUIRED}: the group's own requirement is what makes the choice mandatory`;
-}
+// §23.5's mutex row is superseded (§21's box, §18.15 item 178) and its
+// template is DELETED rather than reworded: `errFlagMutexMemberRequired` said
+// a member may NOT declare requiredness, and a member flag now MUST -- two
+// opposite rules about the same declaration, which item 149's rule refuses to
+// carry on one name. The live rule is §12.13's `errMemberFlagPresence`.
 
 /** §23.3: a variadic arg always delivers a list, so the empty case is `optional`. */
 export function errArgVariadicDefault(name: string): string {
@@ -2247,4 +2244,303 @@ export function errFlagDefaultValueMissing(name: string): string {
 
 export function errArgDefaultValueMissing(name: string): string {
 	return `Arg ${q(name)}: ${PRESENCE_SPELLING_DEFAULT_BARE} requires a default value: declare default: <value>, or ${PRESENCE_SPELLING_OPTIONAL} for no value`;
+}
+
+// ---------------------------------------------------------------------------
+// factories.ts / parse.ts -- the scoped-selector construct (contract §12.13)
+//
+// The family splits across both parity categories: the election, scope and
+// delivery templates are PARSE-time (stderr, exit 1); the declaration guards
+// are REGISTRATION-time, in §12.10's and §12.12's class.
+//
+// Templates naming a SPELLING carry TypeScript's own noun phrase inside a
+// byte-identical sentence (§12.12's mechanism): `<record-spelling>` is
+// `{ value: <value>, help: "..." }`, `<selector-spelling>` is `choiceFlag(...)`
+// and `<member-selector-spelling>` is `memberChoiceFlag(...)`.
+// ---------------------------------------------------------------------------
+
+/** TypeScript's spelling of a `choices` entry record (§24.2, §12.13). */
+export const RECORD_SPELLING = '{ value: <value>, help: "..." }';
+/** TypeScript's spelling of the selector constructor (§24.12, §12.13). */
+export const SELECTOR_SPELLING = "choiceFlag(...)";
+/** TypeScript's spelling of the member-spelled selector constructor (§24.12). */
+export const MEMBER_SELECTOR_SPELLING = "memberChoiceFlag(...)";
+
+/** The `Choice "<c>" of "<sel>": ` prefix -- the round's one new prefix family. */
+function choicePrefix(choiceName: string, selector: string): string {
+	return `Choice ${q(choiceName)} of ${q(selector)}: `;
+}
+
+// --- Parse-time: the scope suffix and the out-of-scope frame ---
+
+/**
+ * The scope suffix appended to a presence message when the flag or the
+ * selector lives inside a scope. Empty at root scope, which is what makes
+ * every root-scope message byte-identical to what it was before this round.
+ */
+export function errScopeSuffix(path: string): string {
+	return path === "" ? "" : ` under '${path}'`;
+}
+
+/**
+ * The round's central parse error, and deliberately NOT "unknown flag": the
+ * flag is declared, it is simply not in the elected scope, and the sentence
+ * names both sides. `owners` is one or more quoted scope paths joined by
+ * ` or `; `why` is one of the three clause templates below.
+ */
+export function errFlagOutOfScope(
+	x: string,
+	owners: string,
+	why: string,
+): string {
+	return `flag '--${x}' is only valid under ${owners}, but ${why}`;
+}
+
+/** Out-of-scope clause: another choice of the blocking selector was elected. */
+export function errScopeWhyElected(path: string, origin: string): string {
+	return `'${path}' was elected${origin}`;
+}
+
+/** Out-of-scope clause: a required token-spelled selector elected nothing. */
+export function errScopeWhyNotProvided(sel: string): string {
+	return `'--${sel}' was not provided`;
+}
+
+/** Out-of-scope clause: the member-spelled twin, which names no selector token. */
+export function errScopeWhyNoMemberElected(members: string): string {
+	return `none of ${members} was elected`;
+}
+
+// --- Parse-time: where an election came from ---
+
+/** Origin clause: the election came from an environment variable. */
+export function errElectionOriginEnv(envVar: string): string {
+	return ` from env var '${envVar}'`;
+}
+
+/** Origin clause: the election came from a config key. */
+export function errElectionOriginConfig(key: string): string {
+	return ` from config key '${key}'`;
+}
+
+/** Origin clause: the declaration's own default elected. */
+export const errElectionOriginDefault = " by default";
+
+/**
+ * The parenthesized wrapper composition produces (§18.18 item 212). A
+ * command-line election produces the EMPTY suffix rather than a bare
+ * `(elected)`: the wrapper exists exactly when the clause it wraps does.
+ */
+export function errElectionOriginSuffix(origin: string): string {
+	return origin === "" ? "" : ` (elected${origin})`;
+}
+
+/**
+ * A selector elected more than once. Last-wins is right for a plain flag and
+ * wrong for an election, because discarding a value would discard a whole
+ * scope with it. Values in command-line order, each quoted, joined by ` and `.
+ */
+export function errSelectorElectedTwice(sel: string, values: string): string {
+	return `--${sel}: elected more than once, as ${values}`;
+}
+
+// --- Parse-time diagnostics: conditional ambient bindings (§24.6) ---
+
+/**
+ * A binding whose scope was not elected is never consulted -- not an error,
+ * not a value. Every skipped binding is named under --verbose, one line per
+ * binding, in declaration order, at debug level.
+ */
+export function errAmbientBindingSkippedEnv(
+	envVar: string,
+	x: string,
+	path: string,
+): string {
+	return `not consulted: env var '${envVar}' binds flag '--${x}' under '${path}', which was not elected`;
+}
+
+export function errAmbientBindingSkippedConfig(
+	key: string,
+	x: string,
+	path: string,
+): string {
+	return `not consulted: config key '${key}' binds flag '--${x}' under '${path}', which was not elected`;
+}
+
+// --- Registration guards (§12.13) ---
+
+/**
+ * Ruling B2 made structural: there is no at-most-one construct anywhere in
+ * the framework, and this is the one place a consumer would otherwise
+ * reintroduce it.
+ */
+export function errSelectorOptional(name: string): string {
+	return `Flag ${q(name)}: a choice flag cannot declare ${PRESENCE_SPELLING_OPTIONAL}: an absent selection is a choice nobody named, so name it as a choice of its own`;
+}
+
+export function errSelectorNoChoices(name: string): string {
+	return `Flag ${q(name)}: a choice flag must declare at least two choices`;
+}
+
+/**
+ * Structurally unreachable through TypeScript's keyed choice map (object keys
+ * are unique by construction); enforced defensively for a widened or
+ * JSON-driven caller, exactly as the presence checks are.
+ */
+export function errChoiceDuplicateName(sel: string, c: string): string {
+	return `Flag ${q(sel)}: choice ${q(c)} is declared twice`;
+}
+
+export function errChoiceHelpEmpty(sel: string, c: string): string {
+	return `${choicePrefix(c, sel)}help text is required`;
+}
+
+export function errSelectorDefaultUnknownChoice(
+	sel: string,
+	defaultSpelling: string,
+	names: string,
+): string {
+	return `Flag ${q(sel)}: ${defaultSpelling} names no declared choice: must be one of: ${names}`;
+}
+
+/**
+ * A defaulted selection is complete: a choice plus every field its scope
+ * needs, so a defaulted selection with an unsatisfied required sub-flag
+ * cannot exist. Python-excluded -- Python's default IS a choice instance, so
+ * the incomplete state is unconstructable rather than refused (§24.5).
+ */
+export function errSelectorDefaultIncomplete(
+	sel: string,
+	defaultSpelling: string,
+	c: string,
+	sub: string,
+): string {
+	return `Flag ${q(sel)}: ${defaultSpelling} elects choice ${q(c)}, whose scope declares the required flag '--${sub}': a defaulted selection must be complete with nothing typed`;
+}
+
+/**
+ * The rule §12.12's `errFlagMutexMemberRequired` inverted: a member flag now
+ * MUST declare requiredness, read as *required once this member is elected*.
+ *
+ * TypeScript's authored spelling satisfies the rule by construction -- a
+ * member's payload is supplied by the token that elects it, so the choice
+ * object has no presence slot at all. The guard fires only for a widened or
+ * JSON-driven caller that writes a presence onto a choice.
+ */
+export function errMemberFlagPresence(sel: string, m: string): string {
+	return `${choicePrefix(m, sel)}a member flag must declare ${PRESENCE_SPELLING_REQUIRED}, read as required once this member is elected`;
+}
+
+export function errMemberSelectorShort(sel: string): string {
+	return `Flag ${q(sel)}: a member-spelled choice flag is never typed, so it cannot carry a short: declare the short on a member`;
+}
+
+export function errMemberDefaultCarriesValue(
+	sel: string,
+	defaultSpelling: string,
+	c: string,
+): string {
+	return `Flag ${q(sel)}: ${defaultSpelling} elects choice ${q(c)}, whose flag carries a value nothing supplies: only a payload-less member can be a default`;
+}
+
+/**
+ * A payload is delivered under the reserved name `value` and ONLY under
+ * member spelling: a token-spelled choice is named by the token itself and
+ * has no payload to carry (§24.4, §18.18 item 210).
+ */
+export function errTokenChoiceCarriesPayload(sel: string, c: string): string {
+	return `${choicePrefix(c, sel)}a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with ${MEMBER_SELECTOR_SPELLING}`;
+}
+
+/**
+ * The bare-value `choices` entry is deleted: an entry that may carry help and
+ * an entry that carries none would be two spellings of one fact (§24.2).
+ */
+export function errChoicesEntryNotRecord(name: string, i: number): string {
+	return `Flag ${q(name)}: choices entry ${i} is a bare value: declare it as ${RECORD_SPELLING}`;
+}
+
+// --- Registration guards: reserved names inside a scope (§24.7) ---
+
+export function errScopedNameChoiceReserved(c: string, sel: string): string {
+	return `${choicePrefix(c, sel)}flag name 'choice' is reserved by the framework: it tags the delivered record`;
+}
+
+export function errScopedNameValueReserved(c: string, sel: string): string {
+	return `${choicePrefix(c, sel)}flag name 'value' is reserved by the framework: it carries a member-spelled choice's own payload`;
+}
+
+// --- Registration guards: name collisions (§24.7) ---
+
+export function errScopedNameCollidesRoot(
+	c: string,
+	sel: string,
+	x: string,
+): string {
+	return `${choicePrefix(c, sel)}flag '--${x}' collides with a command-level flag of the same name: the scoped one could never be reached`;
+}
+
+export function errScopedNameCollidesSelector(
+	c: string,
+	sel: string,
+	x: string,
+): string {
+	return `${choicePrefix(c, sel)}flag '--${x}' collides with the choice flag's own name`;
+}
+
+/**
+ * One condition, one message: a name reused by sibling scopes whose two
+ * declarations do not tokenize identically. The noun is VALUE SHAPE, §25.3's
+ * word for type-and-arity together (§18.18 item 208).
+ */
+export function errSiblingScopeShapeMismatch(
+	sel: string,
+	x: string,
+	a: string,
+	b: string,
+): string {
+	return `Flag ${q(sel)}: flag '--${x}' is declared by choices ${q(a)} and ${q(b)} with different value shapes: sibling scopes may reuse a name only with an identical type and arity, because tokenizing '--${x}' cannot wait for an election`;
+}
+
+/**
+ * Written against SIMULTANEOUSLY ELECTABLE scopes rather than siblings, so
+ * that adopting multi-elect (§24.13) narrows an existing rule instead of
+ * contradicting one.
+ */
+export function errCoElectableNameReuse(
+	name: string,
+	x: string,
+	p1: string,
+	p2: string,
+): string {
+	return `command ${q(name)}: flag '--${x}' is declared under '${p1}' and under '${p2}', which can be elected at the same time: simultaneously electable scopes may not reuse a flag name`;
+}
+
+export function errShortCollidesAcrossScopes(
+	name: string,
+	s: string,
+	a: string,
+	b: string,
+): string {
+	return `command ${q(name)}: short '-${s}' is claimed by '--${a}' and '--${b}', which can be elected at the same time`;
+}
+
+/** A positional's meaning cannot depend on an election typed after it (§24.7). */
+export function errScopedPositional(c: string, sel: string): string {
+	return `${choicePrefix(c, sel)}positional args cannot be declared inside a choice scope: a positional's meaning would depend on an election that may be typed after it`;
+}
+
+/**
+ * The scope already IS the constraint, and expressing one fact in two
+ * mechanisms is how the two disagree later (§24.8). `<Family>` is the
+ * declared family's own spelling, exactly as the existing
+ * `... references unknown flag ...` trio names itself.
+ */
+export function errConstraintReferencesScopedFlag(
+	name: string,
+	family: string,
+	x: string,
+	path: string,
+): string {
+	return `command ${q(name)}: ${family} references '${x}', which is declared under '${path}': dependency constraints operate at root scope only`;
 }

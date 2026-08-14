@@ -36,6 +36,10 @@ import {
 	errArgPresenceUndeclared,
 	errArgStrDefaultTypeMismatch,
 	errArgVariadicDefault,
+	errChoiceDuplicateName,
+	errChoiceHelpEmpty,
+	errChoicesEntryNotRecord,
+	errCoElectableNameReuse,
 	errCommandAtMostOneVariadic,
 	errCommandCoRequiredDuplicate,
 	errCommandCoRequiredMinFlags,
@@ -44,19 +48,18 @@ import {
 	errCommandDryRunReasonWithoutDeclaration,
 	errCommandDuplicateArg,
 	errCommandDuplicateFlag,
-	errCommandFlagInMultipleMutex,
 	errCommandImpliesSameFlag,
 	errCommandImpliesTargetNotBool,
 	errCommandImpliesTriggerNotBool,
 	errCommandImpliesUnknownFlag,
 	errCommandImpliesValueMustBeBool,
 	errCommandMissingHelp,
-	errCommandMutexMinFlags,
 	errCommandReadOnlyConsequential,
 	errCommandReadOnlyDryRunUnsupported,
 	errCommandRequiresSameFlag,
 	errCommandRequiresUnknownFlag,
 	errCommandVariadicMustBeLast,
+	errConstraintReferencesScopedFlag,
 	errDeprecatedMessageEmpty,
 	errDeprecatedNameEmpty,
 	errFlagChoicesEmpty,
@@ -79,7 +82,6 @@ import {
 	errFlagForceReserved,
 	errFlagHelpEmpty,
 	errFlagIntDefaultTypeMismatch,
-	errFlagMutexMemberRequired,
 	errFlagNameConsentReserved,
 	errFlagNameJsonReserved,
 	errFlagNameReservedByFramework,
@@ -96,7 +98,22 @@ import {
 	errGrantNameInvalid,
 	errGrantReasonEmpty,
 	errInvalidTagName,
+	errMemberDefaultCarriesValue,
+	errMemberFlagPresence,
+	errMemberSelectorShort,
 	errPayloadSchemaInvalid,
+	errScopedNameChoiceReserved,
+	errScopedNameCollidesRoot,
+	errScopedNameCollidesSelector,
+	errScopedNameValueReserved,
+	errScopedPositional,
+	errSelectorDefaultIncomplete,
+	errSelectorDefaultUnknownChoice,
+	errSelectorNoChoices,
+	errSelectorOptional,
+	errShortCollidesAcrossScopes,
+	errSiblingScopeShapeMismatch,
+	errTokenChoiceCarriesPayload,
 	PRESENCE_SPELLING_OPTIONAL,
 	PRESENCE_SPELLING_REQUIRED,
 	presenceSpellingDefault,
@@ -115,7 +132,7 @@ import type {
 	ScalarSchema,
 	Schema,
 } from "./types.js";
-import { formatValueForError } from "./values.js";
+import { formatChoices, formatValueForError } from "./values.js";
 
 // --- Python-parity value formatting for registration errors ---
 
@@ -193,6 +210,71 @@ export type ConflictMode = "cli-wins" | "error";
 export type Presence = "required" | "optional" | "default";
 
 /**
+ * One entry of a value flag's (or arg's) `choices` list: a value with
+ * OPTIONAL help (contract §24.2, §24.12's value-flag record row).
+ *
+ * The bare-value entry (`choices: ["head", "branches"]`) is DELETED. An entry
+ * that may carry help and an entry that carries none would otherwise be two
+ * spellings of one fact, which is §23's one-spelling-per-fact rule applied one
+ * surface over. Help is optional -- that is what keeps §24.10's one-line
+ * rendering reachable -- and, when supplied, must be non-empty like every
+ * other help string in the framework.
+ */
+export interface ChoiceRecord<V> {
+	readonly value: V;
+	readonly help?: string;
+}
+
+/** Runtime view of one `choices` entry (see FlagOptsView). */
+export interface ChoiceRecordView {
+	readonly value: unknown;
+	readonly help?: string;
+}
+
+/** The declared values of a `choices` list, in declaration order. */
+export function choiceValues(
+	choices: readonly ChoiceRecordView[],
+): readonly unknown[] {
+	return choices.map((c) => c.value);
+}
+
+/** True when any entry of a `choices` list carries help (§24.10's block rule). */
+export function anyChoiceHasHelp(
+	choices: readonly ChoiceRecordView[],
+): boolean {
+	return choices.some((c) => c.help !== undefined);
+}
+
+/**
+ * Validates a `choices` list's entry SHAPE (contract §24.2). Every entry is a
+ * record; a bare value is refused with the redirect §12.13 pins, and a help
+ * string that is present but empty is refused like every other help string.
+ * Shared by the flag and arg surfaces.
+ */
+function validateChoiceRecords(
+	entries: readonly unknown[],
+	entryNotRecord: (i: number) => string,
+	helpEmpty: () => string,
+): void {
+	entries.forEach((entry, i) => {
+		if (
+			typeof entry !== "object" ||
+			entry === null ||
+			!Object.hasOwn(entry, "value")
+		) {
+			throw new RegistrationError(entryNotRecord(i));
+		}
+		const help = (entry as ChoiceRecordView).help;
+		if (
+			help !== undefined &&
+			(typeof help !== "string" || help.trim() === "")
+		) {
+			throw new RegistrationError(helpEmpty());
+		}
+	});
+}
+
+/**
  * The options every flag carries whatever its presence declaration is.
  * Inapplicable options are `never`-typed so they cannot be provided at all:
  * negatable is bool-only; choices exclude bool and dict;
@@ -210,7 +292,10 @@ interface FlagCommonOpts<Out, S extends Schema> {
 	readonly negatable?: S extends "bool" ? boolean : never;
 	readonly choices?: S extends "bool" | DictSchema
 		? never
-		: readonly [ElementOf<Out>, ...ElementOf<Out>[]];
+		: readonly [
+				ChoiceRecord<ElementOf<Out>>,
+				...ChoiceRecord<ElementOf<Out>>[],
+			];
 	readonly envSeparator?: S extends ListSchema ? string : never;
 	readonly repeatable?: S extends ListSchema ? true : never;
 	readonly unique?: S extends ListSchema ? boolean : never;
@@ -287,6 +372,8 @@ export interface AnyFlag {
 	readonly carrier: Carrier<unknown, Schema>;
 	readonly opts: {
 		readonly help: string;
+		readonly short?: string;
+		readonly env?: string;
 		readonly presence: Presence;
 		readonly default?: unknown;
 	};
@@ -309,7 +396,7 @@ export interface FlagOptsView {
 	readonly validate?: (value: never) => void;
 	readonly default?: unknown;
 	readonly negatable?: boolean;
-	readonly choices?: readonly unknown[];
+	readonly choices?: readonly ChoiceRecordView[];
 	readonly envSeparator?: string;
 	readonly repeatable?: boolean;
 	readonly unique?: boolean;
@@ -343,7 +430,7 @@ export function elemSchemaOf(carrier: Carrier<unknown, Schema>): ScalarSchema {
 /**
  * The four flag names the effects regime reserves for the framework. The ban is
  * UNCONDITIONAL and applies at every level -- command flags, flag-set flags,
- * mutex-group flags and app global flags -- because the framework extracts
+ * scoped sub-flags and app global flags -- because the framework extracts
  * them in the position-aware pre-scan and delivers them on the Context.
  *
  * Declared here rather than in app.ts so factories.ts can enforce the ban
@@ -477,17 +564,15 @@ function resolvePresence(
 	return declared;
 }
 
-// Mirrors Python Flag.__post_init__ (the divergence ground truth), with the
-// TS carrier model: list carriers ARE the repeatable flags, dict carriers are
-// Map-backed, int is bigint, float is number.
-function validateFlagConfig(
-	name: string,
-	carrier: Carrier<unknown, Schema>,
-	o: FlagOptsView,
-): void {
-	if (typeof o.help !== "string" || o.help.trim() === "") {
-		throw new RegistrationError(errFlagHelpEmpty());
-	}
+/**
+ * Every flag-name ban, in one place so it re-runs at EVERY depth: on a command
+ * flag, on a flag-set flag, on a selector's own name, on a member-spelled
+ * choice name (which IS a flag name), and on a sub-flag declared three scopes
+ * down. A ban enforced only against a flat root list is the scoped-selector
+ * construct's most likely correctness defect (contract §24.7), so the bans
+ * live behind one function rather than inline in one caller.
+ */
+function validateFlagName(name: string): void {
 	if (name === "force") {
 		throw new RegistrationError(errFlagForceReserved());
 	}
@@ -508,6 +593,20 @@ function validateFlagConfig(
 	if (name.startsWith("no-")) {
 		throw new RegistrationError(errFlagNoPrefixReserved(name));
 	}
+}
+
+// Mirrors Python Flag.__post_init__ (the divergence ground truth), with the
+// TS carrier model: list carriers ARE the repeatable flags, dict carriers are
+// Map-backed, int is bigint, float is number.
+function validateFlagConfig(
+	name: string,
+	carrier: Carrier<unknown, Schema>,
+	o: FlagOptsView,
+): void {
+	if (typeof o.help !== "string" || o.help.trim() === "") {
+		throw new RegistrationError(errFlagHelpEmpty());
+	}
+	validateFlagName(name);
 	const presence = resolvePresence(name, o, FLAG_PRESENCE_ERRORS);
 	const kind = schemaKind(carrier.schema);
 	const elem = elemSchemaOf(carrier);
@@ -576,7 +675,12 @@ function validateFlagConfig(
 		if (!Array.isArray(o.choices) || o.choices.length === 0) {
 			throw new RegistrationError(errFlagChoicesEmpty(name));
 		}
-		for (const c of o.choices) {
+		validateChoiceRecords(
+			o.choices,
+			(i) => errChoicesEntryNotRecord(name, i),
+			() => errFlagHelpEmpty(),
+		);
+		for (const c of choiceValues(o.choices)) {
 			if (!matchesScalar(elem, c)) {
 				throw new RegistrationError(
 					errFlagChoiceTypeMismatch(name, pyRepr(c), elem),
@@ -639,11 +743,11 @@ function validateFlagConfig(
 		kind === "scalar" &&
 		o.choices !== undefined &&
 		dflt !== undefined &&
-		!(o.choices as readonly unknown[]).includes(dflt)
+		!choiceValues(o.choices).includes(dflt)
 	) {
 		throw new RegistrationError(
-			`Flag "${name}": default ${pyRepr(dflt)} is not in choices [${(
-				o.choices as readonly unknown[]
+			`Flag "${name}": default ${pyRepr(dflt)} is not in choices [${choiceValues(
+				o.choices,
 			)
 				.map(pyRepr)
 				.join(", ")}]`,
@@ -674,7 +778,7 @@ export function flag<
 
 type ArgChoices<Out, S extends ScalarSchema> = S extends "bool"
 	? never
-	: readonly [Out, ...Out[]];
+	: readonly [ChoiceRecord<Out>, ...ChoiceRecord<Out>[]];
 
 /**
  * Args take scalar carriers only; a variadic arg collects Out[] (the list-arg
@@ -749,7 +853,7 @@ export interface ArgOptsView {
 	readonly presence: Presence;
 	readonly variadic?: boolean;
 	readonly default?: unknown;
-	readonly choices?: readonly unknown[];
+	readonly choices?: readonly ChoiceRecordView[];
 }
 
 /**
@@ -800,7 +904,12 @@ export function arg<
 		if (!Array.isArray(o.choices) || o.choices.length === 0) {
 			throw new RegistrationError(errArgChoicesEmpty(name));
 		}
-		for (const c of o.choices) {
+		validateChoiceRecords(
+			o.choices,
+			(i) => errChoicesEntryNotRecord(name, i),
+			() => errArgHelpEmpty(),
+		);
+		for (const c of choiceValues(o.choices)) {
 			if (!matchesScalar(carrier.schema, c)) {
 				throw new RegistrationError(
 					errArgChoiceTypeMismatch(name, pyRepr(c), carrier.schema),
@@ -826,11 +935,11 @@ export function arg<
 	if (
 		o.choices !== undefined &&
 		dflt !== undefined &&
-		!(o.choices as readonly unknown[]).includes(dflt)
+		!choiceValues(o.choices).includes(dflt)
 	) {
 		throw new RegistrationError(
-			`Arg "${name}": default ${pyRepr(dflt)} is not in choices [${(
-				o.choices as readonly unknown[]
+			`Arg "${name}": default ${pyRepr(dflt)} is not in choices [${choiceValues(
+				o.choices,
 			)
 				.map(pyRepr)
 				.join(", ")}]`,
@@ -863,22 +972,13 @@ export function flagSet<const N extends string, const F extends FlagMap>(
 	return { kind: "flag-set", name, flags };
 }
 
-/** A group of mutually exclusive flags -- at most one may be provided per invocation. */
-export interface MutexGroup<F extends FlagMap> {
-	readonly kind: "mutex-group";
-	readonly flags: F;
-}
-
-/** Structural supertype of every MutexGroup instantiation. */
-export interface AnyMutexGroup {
-	readonly kind: "mutex-group";
-	readonly flags: FlagMap;
-}
-
-/** Creates a mutex group: at most one of the given flags may be provided. */
-export function mutexGroup<const F extends FlagMap>(flags: F): MutexGroup<F> {
-	return { kind: "mutex-group", flags };
-}
+// `MutexGroup` is DELETED (contract §21's supersession box, §24.4, §24.14).
+// The exactly-one family left the constraint system entirely: every
+// exactly-one shape is a selector -- member-spelled where the alternatives are
+// their own flags (`memberChoiceFlag`), token-spelled where they are values of
+// one flag (`choiceFlag`). There is no shim, no alias and no deprecation
+// period, and no `ExactlyOne` constructor or cardinality parameter may
+// reintroduce one.
 
 /** Constraint: the listed flags must all be provided together or all be absent. */
 export interface CoRequired {
@@ -939,8 +1039,695 @@ export type Dependency = CoRequired | Requires | Implies;
  * come free (no dash-to-underscore type machinery). defineCommand verifies at
  * runtime that each key is the underscore form of its flag's name.
  */
-/** A keyed map of flags where the key is the underscore form of the flag name (also the handler arg key). */
-export type FlagMap = Readonly<Record<string, AnyFlag>>;
+/** A keyed map of declarations: the key is the underscore form of the name (also the handler arg key). */
+export type FlagMap = Readonly<Record<string, AnyDecl>>;
+
+/**
+ * A keyed map of ORDINARY flags only. App-level global flags take this rather
+ * than `FlagMap`: a global flag is resolved by the pre-command scan, before
+ * any command's declaration is consulted, so there is no command whose scopes
+ * an election could open (contract §24.3's pre-scan note).
+ */
+export type GlobalFlagMap = Readonly<Record<string, AnyFlag>>;
+
+// --- The scoped-selector construct (contract §24) ---
+
+/**
+ * Everything that can sit in a flag map: an ordinary flag, or a SELECTOR --
+ * a flag that elects exactly one of its declared choices, each of which owns
+ * the flags that exist only while it is elected (contract §24.1).
+ */
+export type AnyDecl = AnyFlag | AnyChoiceFlag;
+
+/** The discriminant key every elected record carries; reserved in every scope. */
+export const CHOICE_TAG_KEY = "choice";
+/** The key a member-spelled choice's own payload is delivered under. */
+export const CHOICE_VALUE_KEY = "value";
+
+/** One choice of a selector: mandatory help plus the scope it owns. */
+export interface ChoiceDef<F extends FlagMap> {
+	readonly kind: "choice";
+	readonly help: string;
+	readonly flags: F;
+}
+
+/**
+ * A choice that carries a payload of its own, delivered under the reserved
+ * name `value`. Only member spelling can carry one: a token-spelled choice is
+ * named by the token itself and has nowhere to put a payload (§24.4).
+ */
+export interface ValueChoiceDef<Out, F extends FlagMap> {
+	readonly kind: "choice";
+	readonly help: string;
+	readonly flags: F;
+	readonly value: Carrier<Out, ScalarSchema>;
+}
+
+/** Structural supertype of every choice descriptor. */
+export interface AnyChoice {
+	readonly kind: "choice";
+	readonly help: string;
+	readonly flags: FlagMap;
+	readonly value?: Carrier<unknown, ScalarSchema>;
+}
+
+/** A selector's choice map: the choice name (as typed) to the choice it declares. */
+export type ChoiceMap = Readonly<Record<string, AnyChoice>>;
+
+/**
+ * Declares one choice of a selector. `flags` is the scope it owns -- omitted
+ * for a choice that owns none, which is the degenerate case that makes this
+ * construct subsume a plain constrained value with per-choice documentation.
+ * `value` declares the payload a member-spelled choice's own token carries.
+ */
+export function choice<const F extends FlagMap = Record<never, never>>(spec: {
+	readonly help: string;
+	readonly flags?: F;
+}): ChoiceDef<F>;
+export function choice<
+	Out,
+	const F extends FlagMap = Record<never, never>,
+>(spec: {
+	readonly help: string;
+	readonly value: Carrier<Out, ScalarSchema>;
+	readonly flags?: F;
+}): ValueChoiceDef<Out, F>;
+export function choice(spec: {
+	readonly help: string;
+	readonly value?: Carrier<unknown, ScalarSchema>;
+	readonly flags?: FlagMap;
+}): AnyChoice {
+	const flags = spec.flags ?? {};
+	return spec.value === undefined
+		? { kind: "choice", help: spec.help, flags }
+		: { kind: "choice", help: spec.help, flags, value: spec.value };
+}
+
+/**
+ * Selector options. Presence is `required` or a `default` and NOTHING else:
+ * `optional` has no union member at all, because an absent selection is a
+ * choice nobody named and the answer is to name it (§24.5, ruling B2). A
+ * widened caller that reaches the factory with one anyway is refused at
+ * registration with the redirect §12.13 pins.
+ *
+ * The `default` member is typed `keyof C & string`, so a default naming a
+ * choice that does not exist is a COMPILE error before it is a registration
+ * error.
+ */
+interface ChoiceFlagCommonOpts {
+	readonly help: string;
+	readonly short?: string;
+	readonly env?: string;
+	readonly prefixed?: boolean;
+	readonly conflictMode?: ConflictMode;
+}
+
+export type ChoiceFlagOpts<C extends ChoiceMap> =
+	| (ChoiceFlagCommonOpts & {
+			readonly presence: "required";
+			/** Never declared here: a required selector has no election of its own. */
+			readonly default?: never;
+	  })
+	| (ChoiceFlagCommonOpts & {
+			readonly presence: "default";
+			readonly default: keyof C & string;
+	  });
+
+/**
+ * How a choice is elected on the command line (§24.12's own two strings,
+ * which are also what the dumped schema publishes):
+ *
+ * - `selector-token`: one flag names the choice -- `--via email`.
+ * - `member-flags`: each choice is spelled as its own flag -- `--profile work`
+ *   elects the `profile` choice carrying "work", `--all-profiles` elects a
+ *   payload-less one. The selector's own name is never typed; it is the
+ *   handler key and the noun help and errors use.
+ *
+ * The spelling is the FACTORY's name (the defineReadOnlyCommand /
+ * defineMutatingCommand precedent), so there is no option to forget and no
+ * inference. Delivery is identical for both: only tokenization differs.
+ */
+export type ElectBy = "selector-token" | "member-flags";
+
+/** A fully typed selector descriptor produced by the twin selector factories. */
+export interface ChoiceFlagDef<
+	N extends string,
+	C extends ChoiceMap,
+	O extends ChoiceFlagOpts<C>,
+> {
+	readonly kind: "choice-flag";
+	readonly electBy: ElectBy;
+	readonly name: N;
+	readonly choices: C;
+	readonly opts: O;
+}
+
+/** Structural supertype of every ChoiceFlagDef instantiation. */
+export interface AnyChoiceFlag {
+	readonly kind: "choice-flag";
+	readonly electBy: ElectBy;
+	readonly name: string;
+	readonly choices: ChoiceMap;
+	readonly opts: {
+		readonly help: string;
+		readonly short?: string;
+		readonly env?: string;
+		readonly prefixed?: boolean;
+		readonly conflictMode?: ConflictMode;
+		readonly presence: Presence;
+		readonly default?: string;
+	};
+}
+
+/** Converts a flag name like "dry-run" to its handler-args key "dry_run". */
+export function flagParamName(flagName: string): string {
+	return flagName.replace(/^-+/, "").replaceAll("-", "_");
+}
+
+/** Narrows a declaration to a selector. */
+export function isChoiceFlag(d: AnyDecl): d is AnyChoiceFlag {
+	return d.kind === "choice-flag";
+}
+
+/**
+ * A choice map whose keys are not literal -- `{[someVariable]: choice(...)}`
+ * -- silently degrades the delivered tag to `string`, which makes the switch
+ * have nothing to be exhaustive over and makes `assertNever` accept anything.
+ * Since silence is the failure mode, the constraint turns it into a compile
+ * error naming itself (§24.12).
+ */
+type RequireLiteralChoiceKeys<C> = string extends keyof C
+	? { readonly __choice_keys_must_be_literal: never }
+	: unknown;
+
+/**
+ * Declares a TOKEN-spelled selector: `--via email` names the choice, and each
+ * choice owns the flags that exist only while it is elected.
+ *
+ * The choice map sits where a carrier sits on `flag()`: `flag(name, t.str,
+ * opts)` says "this flag's type is t.str", and `choiceFlag(name, choices,
+ * opts)` says "this flag's type is this set of choices" -- for a selector, the
+ * choices ARE the type.
+ */
+export function choiceFlag<
+	const N extends string,
+	const C extends ChoiceMap,
+	const O extends ChoiceFlagOpts<C>,
+>(
+	name: N,
+	choices: C & RequireLiteralChoiceKeys<C>,
+	opts: O,
+): ChoiceFlagDef<N, C, O> {
+	return buildChoiceFlag("selector-token", name, choices, opts);
+}
+
+/**
+ * Declares the same construct spelled as its own member flags: `--profile
+ * work` elects the `profile` choice with the payload "work", `--all-profiles`
+ * elects a payload-less one, and the selector's own name is never typed.
+ *
+ * This is the shape that subsumes the deleted `MutexGroup` (§21's box): it
+ * reproduces that construct's error sentences byte-for-byte and its `--no-x`
+ * decline semantics, and adds what a group could not express -- a member that
+ * owns a scope, and a member that carries its payload in the alternative that
+ * owns it.
+ */
+export function memberChoiceFlag<
+	const N extends string,
+	const C extends ChoiceMap,
+	const O extends ChoiceFlagOpts<C>,
+>(
+	name: N,
+	choices: C & RequireLiteralChoiceKeys<C>,
+	opts: O,
+): ChoiceFlagDef<N, C, O> {
+	return buildChoiceFlag("member-flags", name, choices, opts);
+}
+
+/** Widened options of a selector descriptor, for runtime validation. */
+interface ChoiceFlagOptsView {
+	readonly help?: unknown;
+	readonly short?: unknown;
+	readonly env?: unknown;
+	readonly presence?: unknown;
+	readonly default?: unknown;
+}
+
+/**
+ * The one place a selector's own declaration is validated. Command-context
+ * checks that need to see sibling declarations (root collisions, co-electable
+ * name reuse, shorts across scopes) run in buildCommandDef.
+ */
+function buildChoiceFlag<
+	const N extends string,
+	const C extends ChoiceMap,
+	const O extends ChoiceFlagOpts<C>,
+>(electBy: ElectBy, name: N, choices: C, opts: O): ChoiceFlagDef<N, C, O> {
+	const o = opts as ChoiceFlagOptsView;
+	if (typeof o.help !== "string" || o.help.trim() === "") {
+		throw new RegistrationError(errFlagHelpEmpty());
+	}
+	// Every name ban re-runs on a selector's own name exactly as it does on an
+	// ordinary flag's: a ban enforced only against a flat root list is this
+	// construct's most likely correctness defect (§24.7).
+	validateFlagName(name);
+	// `optional` is refused with the redirect that names the remedy. The type
+	// union has no `"optional"` member, so only a widened caller reaches this.
+	if (o.presence === "optional") {
+		throw new RegistrationError(errSelectorOptional(name));
+	}
+	if (o.presence !== "required" && o.presence !== "default") {
+		throw new RegistrationError(errFlagPresenceUndeclared(name));
+	}
+	if (o.presence === "default" && o.default === undefined) {
+		throw new RegistrationError(errFlagDefaultValueMissing(name));
+	}
+	const entries = Object.entries(choices);
+	if (entries.length < 2) {
+		throw new RegistrationError(errSelectorNoChoices(name));
+	}
+	const seenChoiceNames = new Set<string>();
+	for (const [choiceName, c] of entries) {
+		if (seenChoiceNames.has(choiceName)) {
+			throw new RegistrationError(errChoiceDuplicateName(name, choiceName));
+		}
+		seenChoiceNames.add(choiceName);
+		if (typeof c?.help !== "string" || c.help.trim() === "") {
+			throw new RegistrationError(errChoiceHelpEmpty(name, choiceName));
+		}
+		// A payload rides the electing token, and a token-spelled choice's
+		// electing token IS its name -- there is nowhere to put one (§24.4).
+		if (electBy === "selector-token" && c.value !== undefined) {
+			throw new RegistrationError(
+				errTokenChoiceCarriesPayload(name, choiceName),
+			);
+		}
+		if (electBy === "member-flags") {
+			// A member's choice name IS a flag name and inherits every flag-name
+			// rule, including the bans (§24.7).
+			validateFlagName(choiceName);
+			// TypeScript's spelling has no per-member presence slot: electing the
+			// member supplies its payload, so the rule holds by construction. A
+			// widened caller writing one anyway is refused (§12.13).
+			const declaredPresence = (c as { readonly presence?: unknown }).presence;
+			if (declaredPresence !== undefined && declaredPresence !== "required") {
+				throw new RegistrationError(errMemberFlagPresence(name, choiceName));
+			}
+		}
+		validateScopeContents(name, choiceName, c.flags);
+	}
+	// A member-spelled selector is never typed, so it cannot carry a short.
+	if (electBy === "member-flags" && o.short !== undefined) {
+		throw new RegistrationError(errMemberSelectorShort(name));
+	}
+	if (o.presence === "default") {
+		validateSelectorDefault(name, electBy, choices, o.default as string);
+	}
+	validateSiblingScopeShapes(name, choices);
+	return { kind: "choice-flag", electBy, name, choices, opts };
+}
+
+/**
+ * A defaulted selection is COMPLETE: a choice plus every field its scope
+ * needs, so a defaulted selection with an unsatisfied required sub-flag
+ * cannot exist (§24.5). Electing a choice on the command line never borrows
+ * the default's values, so this is the only place completeness is checkable.
+ */
+function validateSelectorDefault(
+	name: string,
+	electBy: ElectBy,
+	choices: ChoiceMap,
+	dflt: string,
+): void {
+	const spelling = presenceSpellingDefault(formatValueForError(dflt));
+	const elected = choices[dflt];
+	if (elected === undefined) {
+		throw new RegistrationError(
+			errSelectorDefaultUnknownChoice(
+				name,
+				spelling,
+				formatChoices(Object.keys(choices)),
+			),
+		);
+	}
+	// A value-carrying member's value is supplied by the token that elects it,
+	// and a default has no token (§24.5).
+	if (electBy === "member-flags" && elected.value !== undefined) {
+		throw new RegistrationError(
+			errMemberDefaultCarriesValue(name, spelling, dflt),
+		);
+	}
+	for (const sub of Object.values(elected.flags)) {
+		if (sub.opts.presence === "required") {
+			throw new RegistrationError(
+				errSelectorDefaultIncomplete(name, spelling, dflt, sub.name),
+			);
+		}
+	}
+}
+
+/**
+ * The checks one choice's own scope answers: the two reserved names, the
+ * scoped-positional ban, and the collision with the selector's own name.
+ * Recurses through nested selectors, so every rule holds at every depth.
+ */
+function validateScopeContents(
+	selector: string,
+	choiceName: string,
+	flags: FlagMap,
+): void {
+	for (const decl of Object.values(flags)) {
+		// A positional's meaning would depend on an election that may be typed
+		// after it. The typed surface cannot express one; a widened caller can.
+		if ((decl as { readonly kind?: string }).kind === "arg") {
+			throw new RegistrationError(errScopedPositional(choiceName, selector));
+		}
+		if (decl.name === CHOICE_TAG_KEY) {
+			throw new RegistrationError(
+				errScopedNameChoiceReserved(choiceName, selector),
+			);
+		}
+		if (decl.name === CHOICE_VALUE_KEY) {
+			throw new RegistrationError(
+				errScopedNameValueReserved(choiceName, selector),
+			);
+		}
+		if (decl.name === selector) {
+			throw new RegistrationError(
+				errScopedNameCollidesSelector(choiceName, selector, decl.name),
+			);
+		}
+	}
+}
+
+/**
+ * The value shape of one surface name: its type and its arity together
+ * (§25.3's word for the pair). Tokenizing `--x` cannot wait for an election,
+ * so two sibling scopes declaring one name must agree on it (§24.7).
+ */
+function valueShapeOf(s: SurfaceName): string {
+	return s.takesValue ? s.shape : `${s.shape}/flag`;
+}
+
+/**
+ * Sibling scopes may reuse a flag name only with an identical value shape.
+ * Two choices of one selector can never be elected together, so the name is
+ * unambiguous at delivery -- but tokenization precedes election.
+ */
+function validateSiblingScopeShapes(name: string, choices: ChoiceMap): void {
+	const seen = new Map<string, { shape: string; choice: string }>();
+	for (const [choiceName, c] of Object.entries(choices)) {
+		for (const s of scopeSurfaceNames(c.flags)) {
+			const prior = seen.get(s.name);
+			if (prior === undefined) {
+				seen.set(s.name, { shape: valueShapeOf(s), choice: choiceName });
+				continue;
+			}
+			if (prior.choice === choiceName) {
+				continue;
+			}
+			if (prior.shape !== valueShapeOf(s)) {
+				throw new RegistrationError(
+					errSiblingScopeShapeMismatch(name, s.name, prior.choice, choiceName),
+				);
+			}
+		}
+	}
+}
+
+/** One surface name typed on the command line, and what it tokenizes as. */
+export interface SurfaceName {
+	/** The dash name, without leading dashes. */
+	readonly name: string;
+	/** Whether the token consumes the following argv element. */
+	readonly takesValue: boolean;
+	/** The declared value shape, for the sibling-reuse rule. */
+	readonly shape: string;
+	/** For member spelling, the choice this name elects. */
+	readonly elects?: string;
+	/** The declaration the name belongs to. */
+	readonly decl: AnyDecl;
+}
+
+/**
+ * The names one declaration puts on the command line. A token-spelled
+ * selector puts its own name there; a member-spelled one puts one name per
+ * choice instead, and never its own.
+ */
+export function surfaceNames(decl: AnyDecl): SurfaceName[] {
+	if (decl.kind === "flag") {
+		return [
+			{
+				name: decl.name,
+				takesValue: decl.schema !== "bool",
+				shape: decl.schema,
+				decl,
+			},
+		];
+	}
+	if (decl.electBy === "selector-token") {
+		return [{ name: decl.name, takesValue: true, shape: "choice", decl }];
+	}
+	return Object.entries(decl.choices).map(([choiceName, c]) => ({
+		name: choiceName,
+		takesValue: c.value !== undefined,
+		shape: c.value === undefined ? "bool" : c.value.schema,
+		elects: choiceName,
+		decl,
+	}));
+}
+
+/** Every surface name declared anywhere inside a scope subtree, in declaration order. */
+function scopeSurfaceNames(flags: FlagMap): SurfaceName[] {
+	const out: SurfaceName[] = [];
+	for (const decl of Object.values(flags)) {
+		out.push(...surfaceNames(decl));
+		if (decl.kind === "choice-flag") {
+			for (const c of Object.values(decl.choices)) {
+				out.push(...scopeSurfaceNames(c.flags));
+			}
+		}
+	}
+	return out;
+}
+
+/** One election on a scope path: a selector plus the choice it elected. */
+export interface ScopeStep {
+	readonly selector: AnyChoiceFlag;
+	readonly choiceName: string;
+}
+
+/**
+ * One segment of the pinned scope-path format (§12.13): a token-spelled
+ * segment is `--<selector> <choice>`, a member-spelled one is `--<choice>`
+ * (the member's own flag, which is the only token a reader ever types).
+ */
+export function scopeSegment(
+	selector: AnyChoiceFlag,
+	choiceName: string,
+): string {
+	return selector.electBy === "member-flags"
+		? `--${choiceName}`
+		: `--${selector.name} ${choiceName}`;
+}
+
+/**
+ * The pinned scope-path rendering: one segment per election on the path,
+ * outermost first, joined by a single space. Empty at root scope. Callers
+ * wrap it in single quotes wherever a template names one.
+ */
+export function scopePath(path: readonly ScopeStep[]): string {
+	return path.map((s) => scopeSegment(s.selector, s.choiceName)).join(" ");
+}
+
+/** The member list a member-spelled selector offers, unquoted and comma-joined. */
+export function memberList(sel: AnyChoiceFlag): string {
+	return Object.keys(sel.choices)
+		.map((c) => `--${c}`)
+		.join(", ");
+}
+
+/** One entry of the flat index every scoped surface name resolves through. */
+export interface ScopeIndexEntry {
+	readonly decl: AnyDecl;
+	readonly path: readonly ScopeStep[];
+	readonly takesValue: boolean;
+	/** Set when the name is a member-spelled election (`--all-profiles`). */
+	readonly elects?: string;
+}
+
+/**
+ * Every surface name in one declaration tree, by dash name. One name can map
+ * to several entries: two sibling choices may each declare `--subject`, since
+ * they can never be elected at once.
+ */
+export type ScopeIndex = ReadonlyMap<string, readonly ScopeIndexEntry[]>;
+
+/** Builds the whole-tree surface-name index for a declaration list. */
+export function buildScopeIndex(decls: readonly AnyDecl[]): ScopeIndex {
+	const index = new Map<string, ScopeIndexEntry[]>();
+	const walk = (list: readonly AnyDecl[], path: readonly ScopeStep[]): void => {
+		for (const decl of list) {
+			for (const s of surfaceNames(decl)) {
+				const entries = index.get(s.name) ?? [];
+				entries.push(
+					s.elects === undefined
+						? { decl, path, takesValue: s.takesValue }
+						: { decl, path, takesValue: s.takesValue, elects: s.elects },
+				);
+				index.set(s.name, entries);
+			}
+			if (decl.kind === "choice-flag") {
+				for (const [choiceName, c] of Object.entries(decl.choices)) {
+					walk(Object.values(c.flags), [
+						...path,
+						{ selector: decl, choiceName },
+					]);
+				}
+			}
+		}
+	};
+	walk(decls, []);
+	return index;
+}
+
+/**
+ * Two scopes are simultaneously electable unless some selector on both paths
+ * elected DIFFERENT choices -- which is exactly when the two can never be
+ * live at once. The rule is written against *simultaneously electable* rather
+ * than against *sibling* deliberately: it is the formulation that still holds
+ * if multi-elect is ever adopted (§24.13).
+ */
+function simultaneouslyElectable(
+	a: readonly ScopeStep[],
+	b: readonly ScopeStep[],
+): boolean {
+	for (const sa of a) {
+		for (const sb of b) {
+			if (sa.selector === sb.selector && sa.choiceName !== sb.choiceName) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+/**
+ * The whole-tree registration checks a single selector cannot answer on its
+ * own, because each of them needs to see a sibling declaration: a scoped name
+ * colliding with a command-level flag, a name or a short reused by two scopes
+ * that can be elected at the same time (§24.7).
+ */
+function validateDeclTree(
+	cmdName: string,
+	decls: readonly AnyDecl[],
+	rootNames: ReadonlySet<string>,
+): void {
+	const index = buildScopeIndex(decls);
+	for (const [name, entries] of index) {
+		for (let i = 0; i < entries.length; i++) {
+			const a = entries[i] as ScopeIndexEntry;
+			// A scoped flag may not reuse a command-level flag's name: it could
+			// never be reached.
+			if (a.path.length > 0 && rootNames.has(name)) {
+				const last = a.path[a.path.length - 1] as ScopeStep;
+				throw new RegistrationError(
+					errScopedNameCollidesRoot(last.choiceName, last.selector.name, name),
+				);
+			}
+			for (let j = i + 1; j < entries.length; j++) {
+				const b = entries[j] as ScopeIndexEntry;
+				if (!simultaneouslyElectable(a.path, b.path)) {
+					continue;
+				}
+				throw new RegistrationError(
+					errCoElectableNameReuse(
+						cmdName,
+						name,
+						scopePath(a.path),
+						scopePath(b.path),
+					),
+				);
+			}
+		}
+	}
+	// Shorts are claimed across every simultaneously live scope; sibling
+	// scopes may reuse one. Only pairs involving a scoped declaration are
+	// checked here -- a root-level short collision is pre-existing surface
+	// this round does not touch.
+	const shorts = new Map<
+		string,
+		{ name: string; path: readonly ScopeStep[] }[]
+	>();
+	for (const entries of index.values()) {
+		for (const e of entries) {
+			// A member-spelled election's short belongs to its own choice flag,
+			// which cannot carry one at all (§24.4).
+			if (e.elects !== undefined) {
+				continue;
+			}
+			const short = e.decl.opts.short;
+			if (typeof short !== "string" || short === "") {
+				continue;
+			}
+			const claims = shorts.get(short) ?? [];
+			if (!claims.some((c) => c.name === e.decl.name)) {
+				claims.push({ name: e.decl.name, path: e.path });
+			}
+			shorts.set(short, claims);
+		}
+	}
+	for (const [short, claims] of shorts) {
+		for (let i = 0; i < claims.length; i++) {
+			for (let j = i + 1; j < claims.length; j++) {
+				const a = claims[i] as { name: string; path: readonly ScopeStep[] };
+				const b = claims[j] as { name: string; path: readonly ScopeStep[] };
+				if (a.path.length === 0 && b.path.length === 0) {
+					continue;
+				}
+				if (!simultaneouslyElectable(a.path, b.path)) {
+					continue;
+				}
+				throw new RegistrationError(
+					errShortCollidesAcrossScopes(cmdName, short, a.name, b.name),
+				);
+			}
+		}
+	}
+}
+
+/**
+ * Every name declared inside SOME scope, mapped to the rendered scope path it
+ * lives under -- the lookup the constraint families consult before reporting
+ * an operand as unknown (§24.8).
+ */
+function scopedFlagPathMap(
+	decls: readonly AnyDecl[],
+): ReadonlyMap<string, string> {
+	const out = new Map<string, string>();
+	for (const [name, entries] of buildScopeIndex(decls)) {
+		const scoped = entries.find((e) => e.path.length > 0);
+		if (scoped !== undefined && !out.has(name)) {
+			out.set(name, scopePath(scoped.path));
+		}
+	}
+	return out;
+}
+
+/** Every ordinary flag declared anywhere inside a declaration tree. */
+export function allScopedFlags(decls: readonly AnyDecl[]): AnyFlag[] {
+	const out: AnyFlag[] = [];
+	for (const decl of decls) {
+		if (decl.kind === "flag") {
+			out.push(decl);
+			continue;
+		}
+		for (const c of Object.values(decl.choices)) {
+			out.push(...allScopedFlags(Object.values(c.flags)));
+		}
+	}
+	return out;
+}
 
 /**
  * A command handler function receiving typed args and a Context.
@@ -956,10 +1743,9 @@ export type Handler<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
 	FS extends readonly AnyFlagSet[] = readonly [],
-	M extends readonly AnyMutexGroup[] = readonly [],
 	C = MutatingContext,
 > = (
-	args: HandlerArgs<F, A, FS, M>,
+	args: HandlerArgs<F, A, FS>,
 	ctx: C,
 ) => HandlerReturn | Promise<HandlerReturn>;
 
@@ -969,7 +1755,6 @@ export interface CommandDef<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
 	FS extends readonly AnyFlagSet[] = readonly [],
-	M extends readonly AnyMutexGroup[] = readonly [],
 	C = MutatingContext,
 > {
 	readonly kind: "command";
@@ -1013,11 +1798,16 @@ export interface CommandDef<
 	readonly flags: F;
 	readonly args: A;
 	readonly flagSets: FS;
-	readonly mutex: M;
 	readonly dependencies: readonly Dependency[];
-	/** Merged flag list (flags, then flag-set flags, then mutex flags), in declaration order. */
+	/**
+	 * Merged ROOT-LEVEL declaration list (own flags, then flag-set flags), in
+	 * declaration order. A selector appears here as one entry; the flags its
+	 * choices own are reachable only through it (contract §24.1).
+	 */
+	readonly allDecls: readonly AnyDecl[];
+	/** The root-level ORDINARY flags of allDecls, in declaration order. */
 	readonly allFlags: readonly AnyFlag[];
-	readonly handler: Handler<F, A, FS, M, C>;
+	readonly handler: Handler<F, A, FS, C>;
 	readonly tags: readonly string[];
 	readonly hidden: boolean;
 	readonly interactive: boolean;
@@ -1048,8 +1838,8 @@ export interface AnyCommand {
 	readonly flags: FlagMap;
 	readonly args: readonly AnyArg[];
 	readonly flagSets: readonly AnyFlagSet[];
-	readonly mutex: readonly AnyMutexGroup[];
 	readonly dependencies: readonly Dependency[];
+	readonly allDecls: readonly AnyDecl[];
 	readonly allFlags: readonly AnyFlag[];
 	readonly handler: (
 		args: never,
@@ -1072,15 +1862,13 @@ export interface ReadOnlyCommandSpec<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
 	FS extends readonly AnyFlagSet[] = readonly [],
-	M extends readonly AnyMutexGroup[] = readonly [],
 > {
 	readonly help: string;
 	readonly flags?: F;
 	readonly args?: A;
 	readonly flagSets?: FS;
-	readonly mutex?: M;
 	readonly dependencies?: readonly Dependency[];
-	readonly handler: Handler<F, A, FS, M, ReadOnlyContext>;
+	readonly handler: Handler<F, A, FS, ReadOnlyContext>;
 	/**
 	 * Declaring this on a read_only command is a registration-time hard error:
 	 * a command that changes nothing has nothing to confirm. The member exists
@@ -1121,15 +1909,13 @@ export interface MutatingCommandSpec<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
 	FS extends readonly AnyFlagSet[] = readonly [],
-	M extends readonly AnyMutexGroup[] = readonly [],
 > {
 	readonly help: string;
 	readonly flags?: F;
 	readonly args?: A;
 	readonly flagSets?: FS;
-	readonly mutex?: M;
 	readonly dependencies?: readonly Dependency[];
-	readonly handler: Handler<F, A, FS, M, MutatingContext>;
+	readonly handler: Handler<F, A, FS, MutatingContext>;
 	/**
 	 * Declares that this command's effects are worth interrupting someone for.
 	 * It is the ONLY thing that makes the framework prompt (§8.1): a plain
@@ -1310,13 +2096,12 @@ function buildCommandDef<
 	F extends FlagMap,
 	A extends readonly AnyArg[],
 	FS extends readonly AnyFlagSet[],
-	M extends readonly AnyMutexGroup[],
 	C,
 >(
 	name: N,
-	spec: ReadOnlyCommandSpec<F, A, FS, M> | MutatingCommandSpec<F, A, FS, M>,
+	spec: ReadOnlyCommandSpec<F, A, FS> | MutatingCommandSpec<F, A, FS>,
 	effect: Effect,
-): CommandDef<N, F, A, FS, M, C> {
+): CommandDef<N, F, A, FS, C> {
 	if (typeof spec.help !== "string" || spec.help.trim() === "") {
 		throw new RegistrationError(errCommandMissingHelp(name));
 	}
@@ -1337,51 +2122,34 @@ function buildCommandDef<
 	const flags = spec.flags ?? ({} as F);
 	const args = spec.args ?? ([] as unknown as A);
 	const flagSets = spec.flagSets ?? ([] as unknown as FS);
-	const mutex = spec.mutex ?? ([] as unknown as M);
 	const dependencies = spec.dependencies ?? [];
 
 	validateFlagMapKeys(name, flags);
 	for (const fs of flagSets) {
 		validateFlagMapKeys(name, fs.flags);
 	}
-	const mutexFlagNames = new Set<string>();
-	for (const mg of mutex) {
-		validateFlagMapKeys(name, mg.flags);
-		const mgFlags = Object.values(mg.flags);
-		if (mgFlags.length < 2) {
-			throw new RegistrationError(
-				errCommandMutexMinFlags(name, mgFlags.length),
-			);
-		}
-		for (const f of mgFlags) {
-			// A member that must always be typed contradicts a group that permits
-			// exactly one: the group's own requirement is what makes the choice
-			// mandatory (§23.5's mutex row). The member declares optional (or a
-			// default) and the group enforces cardinality on top of that.
-			if (flagOpts(f).presence === "required") {
-				throw new RegistrationError(errFlagMutexMemberRequired(f.name));
-			}
-			if (mutexFlagNames.has(f.name)) {
-				throw new RegistrationError(
-					errCommandFlagInMultipleMutex(name, f.name),
-				);
-			}
-			mutexFlagNames.add(f.name);
-		}
-	}
 
-	const allFlags: AnyFlag[] = [
+	const allDecls: AnyDecl[] = [
 		...Object.values(flags),
 		...flagSets.flatMap((fs) => Object.values(fs.flags)),
-		...mutex.flatMap((mg) => Object.values(mg.flags)),
 	];
+	const allFlags: AnyFlag[] = allDecls.filter(
+		(d): d is AnyFlag => d.kind === "flag",
+	);
 	const seenFlagNames = new Set<string>();
-	for (const f of allFlags) {
-		if (seenFlagNames.has(f.name)) {
-			throw new RegistrationError(errCommandDuplicateFlag(name, f.name));
+	for (const d of allDecls) {
+		if (seenFlagNames.has(d.name)) {
+			throw new RegistrationError(errCommandDuplicateFlag(name, d.name));
 		}
-		seenFlagNames.add(f.name);
+		seenFlagNames.add(d.name);
 	}
+	// The whole declaration TREE: root collisions, simultaneously-electable
+	// name and short reuse, and the scoped keys of every nested scope
+	// (contract §24.7).
+	validateDeclTree(name, allDecls, seenFlagNames);
+	// A constraint naming a scoped flag is a registration error: the scope
+	// already IS the constraint (§24.8).
+	const scopedFlagPaths = scopedFlagPathMap(allDecls);
 
 	const seenArgNames = new Set<string>();
 	for (const a of args) {
@@ -1401,7 +2169,18 @@ function buildCommandDef<
 	});
 
 	// Dependency reference validation, in the Python check order (unknown
-	// references are reported before same-flag violations).
+	// references are reported before same-flag violations). A SCOPED operand
+	// is refused before either: the scope already is the constraint, and it
+	// would otherwise report as an unknown flag, which is the wrong diagnosis
+	// (§24.8).
+	const refuseScopedOperand = (family: string, flagName: string): void => {
+		const path = scopedFlagPaths.get(flagName);
+		if (path !== undefined) {
+			throw new RegistrationError(
+				errConstraintReferencesScopedFlag(name, family, flagName, path),
+			);
+		}
+	};
 	for (const dep of dependencies) {
 		switch (dep.kind) {
 			case "co-required": {
@@ -1412,6 +2191,7 @@ function buildCommandDef<
 				}
 				const seenDep = new Set<string>();
 				for (const flagName of dep.flags) {
+					refuseScopedOperand("CoRequired", flagName);
 					if (!seenFlagNames.has(flagName)) {
 						throw new RegistrationError(
 							errCommandCoRequiredUnknownFlag(name, flagName),
@@ -1427,6 +2207,8 @@ function buildCommandDef<
 				break;
 			}
 			case "requires": {
+				refuseScopedOperand("Requires", dep.flag);
+				refuseScopedOperand("Requires", dep.dependsOn);
 				if (!seenFlagNames.has(dep.flag)) {
 					throw new RegistrationError(
 						errCommandRequiresUnknownFlag(name, dep.flag),
@@ -1445,6 +2227,8 @@ function buildCommandDef<
 				break;
 			}
 			case "implies": {
+				refuseScopedOperand("Implies", dep.flag);
+				refuseScopedOperand("Implies", dep.implies);
 				if (!seenFlagNames.has(dep.flag)) {
 					throw new RegistrationError(
 						errCommandImpliesUnknownFlag(name, dep.flag),
@@ -1496,10 +2280,10 @@ function buildCommandDef<
 		flags,
 		args,
 		flagSets,
-		mutex,
 		dependencies,
+		allDecls,
 		allFlags,
-		handler: spec.handler as Handler<F, A, FS, M, C>,
+		handler: spec.handler as Handler<F, A, FS, C>,
 		tags,
 		hidden: spec.hidden ?? false,
 		interactive: spec.interactive ?? false,
@@ -1510,9 +2294,9 @@ function buildCommandDef<
 }
 
 /**
- * Creates a `read_only` command descriptor with typed flags, args, flag sets,
- * mutex groups, and dependencies. Validates all constraints at construction
- * time.
+ * Creates a `read_only` command descriptor with typed flags (ordinary or
+ * scoped selectors), args, flag sets and dependencies. Validates all
+ * constraints at construction time.
  *
  * A read_only command never prompts (§8) and cannot be declared consequential;
  * calling any mutating member of the effects handle is a hard error at call
@@ -1524,22 +2308,17 @@ export function defineReadOnlyCommand<
 	const F extends FlagMap = Record<never, never>,
 	const A extends readonly AnyArg[] = readonly [],
 	const FS extends readonly AnyFlagSet[] = readonly [],
-	const M extends readonly AnyMutexGroup[] = readonly [],
 >(
 	name: N,
-	spec: ReadOnlyCommandSpec<F, A, FS, M>,
-): CommandDef<N, F, A, FS, M, ReadOnlyContext> {
-	return buildCommandDef<N, F, A, FS, M, ReadOnlyContext>(
-		name,
-		spec,
-		"read_only",
-	);
+	spec: ReadOnlyCommandSpec<F, A, FS>,
+): CommandDef<N, F, A, FS, ReadOnlyContext> {
+	return buildCommandDef<N, F, A, FS, ReadOnlyContext>(name, spec, "read_only");
 }
 
 /**
- * Creates a `mutating` command descriptor with typed flags, args, flag sets,
- * mutex groups, and dependencies. Validates all constraints at construction
- * time.
+ * Creates a `mutating` command descriptor with typed flags (ordinary or
+ * scoped selectors), args, flag sets and dependencies. Validates all
+ * constraints at construction time.
  *
  * A mutating command participates in dry mode and may call every member of the
  * effects handle. It does NOT prompt unless it also declares
@@ -1550,16 +2329,11 @@ export function defineMutatingCommand<
 	const F extends FlagMap = Record<never, never>,
 	const A extends readonly AnyArg[] = readonly [],
 	const FS extends readonly AnyFlagSet[] = readonly [],
-	const M extends readonly AnyMutexGroup[] = readonly [],
 >(
 	name: N,
-	spec: MutatingCommandSpec<F, A, FS, M>,
-): CommandDef<N, F, A, FS, M, MutatingContext> {
-	return buildCommandDef<N, F, A, FS, M, MutatingContext>(
-		name,
-		spec,
-		"mutating",
-	);
+	spec: MutatingCommandSpec<F, A, FS>,
+): CommandDef<N, F, A, FS, MutatingContext> {
+	return buildCommandDef<N, F, A, FS, MutatingContext>(name, spec, "mutating");
 }
 
 // --- Passthrough and deprecated command carriers ---

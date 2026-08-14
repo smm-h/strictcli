@@ -19,7 +19,12 @@
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import {
 	type AnyArg,
+	type AnyChoiceFlag,
+	type AnyDecl,
 	type AnyFlag,
+	anyChoiceHasHelp,
+	type ChoiceRecordView,
+	choiceValues,
 	elemSchemaOf,
 	flagOpts,
 	type Presence,
@@ -245,8 +250,11 @@ export function buildFlagMeta(f: AnyFlag): string {
 	if (o.unique === true) {
 		metaParts.push("unique");
 	}
-	if (o.choices !== undefined) {
-		metaParts.push(`choices: ${formatChoices(o.choices)}`);
+	// The one-line `[choices: a, b, c]` form survives for a value flag whose
+	// entries carry no help and no scope; anything richer renders as the
+	// indented block below (§24.10).
+	if (o.choices !== undefined && !anyChoiceHasHelp(o.choices)) {
+		metaParts.push(`choices: ${formatChoices(choiceValues(o.choices))}`);
 	}
 	if (o.env !== undefined) {
 		metaParts.push(
@@ -265,6 +273,108 @@ function flagRows(flags: readonly AnyFlag[]): (readonly [string, string])[] {
 	);
 }
 
+/**
+ * One rendered line of the command's flag block: its left column already
+ * carries its indentation, so the alignment column below is computed across
+ * the WHOLE block, deepest entry included (contract §24.10).
+ */
+interface FlagBlockRow {
+	readonly left: string;
+	readonly right: string;
+}
+
+/** Two columns of indent per level, exactly as §24.10's layout pins. */
+const SCOPE_INDENT = "  ";
+
+/**
+ * A choice-carrying flag renders as an INDENTED BLOCK iff any of its choices
+ * carries help OR a scope; otherwise it keeps the one-line
+ * `[choices: a, b, c]` form (§24.10).
+ *
+ * A selector is therefore always a block -- its choices carry mandatory help
+ * -- and a value flag is a block exactly when its entries were given help.
+ */
+function declBlockRows(decl: AnyDecl, depth: number): FlagBlockRow[] {
+	const pad = SCOPE_INDENT.repeat(depth);
+	if (decl.kind === "choice-flag") {
+		return selectorBlockRows(decl, depth);
+	}
+	const rows: FlagBlockRow[] = [
+		{
+			left: `${pad}${buildFlagSpec(decl)}`,
+			right: `${decl.opts.help}${buildFlagMeta(decl)}`,
+		},
+	];
+	const choices = flagOpts(decl).choices;
+	if (choices !== undefined && anyChoiceHasHelp(choices)) {
+		// A value flag's entries in block form render the VALUE where a choice
+		// name renders, followed by its help; an entry with no help renders the
+		// value alone.
+		for (const c of choices) {
+			rows.push({
+				left: `${pad}${SCOPE_INDENT}${formatValueForError(c.value)}`,
+				right: c.help ?? "",
+			});
+		}
+	}
+	return rows;
+}
+
+/** The selector block: its own line, then one line per choice, then each scope. */
+function selectorBlockRows(sel: AnyChoiceFlag, depth: number): FlagBlockRow[] {
+	const pad = SCOPE_INDENT.repeat(depth);
+	const rows: FlagBlockRow[] = [];
+	const presence = presenceMeta(
+		sel.opts.presence,
+		sel.opts.default,
+		"scalar",
+		"str",
+	);
+	if (sel.electBy === "member-flags") {
+		// A member-spelled selector has no token to render, so its own line
+		// carries its help, the clause `(exactly one of the following)` and its
+		// presence part, with the member flags rendered as ordinary flag lines
+		// two columns beneath it.
+		rows.push({
+			left: `${pad}--${sel.name}`,
+			right: `${sel.opts.help} (exactly one of the following) [${presence}]`,
+		});
+	} else {
+		const parts = [`--${sel.name}`];
+		if (sel.opts.short !== undefined && sel.opts.short !== "") {
+			parts.push(`-${sel.opts.short}`);
+		}
+		rows.push({
+			left: `${pad}${parts.join(", ")} <choice>`,
+			right: `${sel.opts.help} [${presence}]`,
+		});
+	}
+	for (const [choiceName, c] of Object.entries(sel.choices)) {
+		const spec =
+			sel.electBy === "member-flags"
+				? `--${choiceName}${c.value === undefined ? "" : ` <${c.value.schema}>`}`
+				: choiceName;
+		rows.push({ left: `${pad}${SCOPE_INDENT}${spec}`, right: c.help });
+		for (const sub of Object.values(c.flags)) {
+			rows.push(...declBlockRows(sub, depth + 2));
+		}
+	}
+	return rows;
+}
+
+/**
+ * Renders the command's whole flag block with ONE alignment column computed
+ * across every entry, deepest included, so help text starts in the same
+ * column everywhere on the page (§24.10).
+ */
+function flagBlock(decls: readonly AnyDecl[]): string[] {
+	const rows = decls.flatMap((d) => declBlockRows(d, 0));
+	const maxLen = Math.max(...rows.map((r) => r.left.length));
+	return rows.map(
+		(r) => `  ${r.left}${" ".repeat(maxLen - r.left.length + 4)}${r.right}`,
+	);
+}
+
 function argDisplayName(a: AnyArg): string {
 	return a.opts.variadic === true ? `${a.name}...` : a.name;
 }
@@ -275,10 +385,10 @@ function argMeta(a: AnyArg): string {
 		metaParts.push(`type: ${a.schema}`);
 	}
 	const opts = a.opts as {
-		readonly choices?: readonly unknown[];
+		readonly choices?: readonly ChoiceRecordView[];
 	} & AnyArg["opts"];
-	if (opts.choices !== undefined) {
-		metaParts.push(`choices: ${formatChoices(opts.choices)}`);
+	if (opts.choices !== undefined && !anyChoiceHasHelp(opts.choices)) {
+		metaParts.push(`choices: ${formatChoices(choiceValues(opts.choices))}`);
 	}
 	// Args carry the same single presence part flags do -- a required
 	// positional renders `[required]` where nothing was rendered before, since
@@ -336,23 +446,12 @@ export function formatCommandHelp(
 		lines.push("", "Arguments:", ...twoColumn(rows));
 	}
 
-	const mutexFlagNames = new Set<string>();
-	for (const mg of def.mutex) {
-		for (const f of Object.values(mg.flags)) {
-			mutexFlagNames.add(f.name);
-		}
-	}
-	const regularFlags = cmd.flags.filter((f) => !mutexFlagNames.has(f.name));
-
-	if (regularFlags.length > 0) {
-		lines.push("", "Flags:", ...twoColumn(flagRows(regularFlags)));
-	}
-	for (const mg of def.mutex) {
-		lines.push(
-			"",
-			"Flags (mutually exclusive):",
-			...twoColumn(flagRows(Object.values(mg.flags))),
-		);
+	// One `Flags:` section for every declaration, in declaration order. The
+	// separate `Flags (mutually exclusive):` section is gone with the construct
+	// that produced it: an exactly-one group is now a member-spelled selector,
+	// which renders as a block inside this one section (§21's box, §24.10).
+	if (def.allDecls.length > 0) {
+		lines.push("", "Flags:", ...flagBlock(def.allDecls));
 	}
 	if (app.globalFlags.length > 0) {
 		lines.push("", "Global flags:", ...twoColumn(flagRows(app.globalFlags)));

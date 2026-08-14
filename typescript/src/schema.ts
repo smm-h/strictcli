@@ -37,8 +37,11 @@ import {
 } from "./errors.js";
 import {
 	type AnyArg,
+	type AnyChoiceFlag,
 	type AnyCommand,
+	type AnyDecl,
 	type AnyFlag,
+	choiceValues,
 	flagOpts,
 	schemaKind,
 } from "./factories.js";
@@ -151,8 +154,12 @@ function serializeFlag(f: AnyFlag): Record<string, unknown> {
 	if (o.env !== undefined) {
 		d.env = o.env;
 	}
+	// §24.2's records: the dumped `choices` array carries the declared VALUES,
+	// and the per-entry help rides the schema-v2 sibling key that round
+	// authors. Emitting the records here would pin bytes this round does not
+	// own (§24.11, §24.15).
 	if (o.choices !== undefined) {
-		d.choices = [...o.choices];
+		d.choices = [...choiceValues(o.choices)];
 	}
 	// repeatable: never emitted (see the module comment).
 	if (o.unique === true) {
@@ -195,22 +202,67 @@ function serializeArg(a: AnyArg): Record<string, unknown> {
 	if (o.variadic === true) {
 		d.variadic = true;
 	}
-	const choices = (o as { choices?: readonly unknown[] }).choices;
+	const choices = (o as { choices?: readonly { value: unknown }[] }).choices;
 	if (choices !== undefined) {
-		d.choices = [...choices];
+		d.choices = [...choiceValues(choices)];
 	}
 	return d;
 }
 
-/** Builds the constraints array from a command's mutex groups and dependencies. */
+/**
+ * Serializes one root-level declaration: an ordinary flag, or a SELECTOR.
+ *
+ * The dumped schema's selector encoding is NOT pinned by the scoped-selector
+ * round -- a selector's value shape is a variant, which the closed JSON Schema
+ * subset cannot express, so the encoding belongs to the schema-v2 amendment
+ * (contract §24.11, §24.15). What that round pins is what the encoding must
+ * CARRY, and this provisional shape carries exactly that and nothing more:
+ * the nested choices and scopes, each choice's help, each scoped entry's
+ * presence and default on §13's terms, and the spelling. A dump that flattened
+ * a selector away would not be a legal intermediate state, which is why this
+ * is a real encoding rather than an omission.
+ */
+function serializeDecl(d: AnyDecl): Record<string, unknown> {
+	return d.kind === "flag" ? serializeFlag(d) : serializeSelector(d);
+}
+
+function serializeSelector(sel: AnyChoiceFlag): Record<string, unknown> {
+	const d: Record<string, unknown> = {
+		name: sel.name,
+		type: "choice",
+		help: sel.opts.help,
+	};
+	if (sel.opts.short !== undefined) {
+		d.short = sel.opts.short;
+	}
+	d.elect_by = sel.electBy;
+	d.presence = sel.opts.presence;
+	if (sel.opts.presence === "default") {
+		d.default = sel.opts.default;
+	}
+	if (sel.opts.env !== undefined) {
+		d.env = sel.opts.env;
+	}
+	d.choices = Object.entries(sel.choices).map(([name, c]) => {
+		const entry: Record<string, unknown> = { name, help: c.help };
+		if (c.value !== undefined) {
+			entry.value = { type: c.value.schema };
+		}
+		const scope = Object.values(c.flags);
+		if (scope.length > 0) {
+			entry.flags = scope.map(serializeDecl);
+		}
+		return entry;
+	});
+	return d;
+}
+
+/** Builds the constraints array from a command's dependencies. */
 function serializeConstraints(def: AnyCommand): Record<string, unknown>[] {
 	const constraints: Record<string, unknown>[] = [];
-	for (const mg of def.mutex) {
-		constraints.push({
-			type: "mutex",
-			flags: Object.values(mg.flags).map((f) => f.name),
-		});
-	}
+	// The `mutex` constraint entry is DELETED with the construct (§21's box):
+	// an exactly-one shape is a selector now, and it is published as a flag
+	// entry rather than as a constraint over independent flags.
 	for (const dep of def.dependencies) {
 		switch (dep.kind) {
 			case "co-required":
@@ -280,8 +332,9 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 	if (rc.kind === "passthrough") {
 		d.passthrough = true;
 	}
-	if (rc.flags.length > 0) {
-		d.flags = rc.flags.map(serializeFlag);
+	const decls = rc.kind === "command" ? (rc.def as AnyCommand).allDecls : [];
+	if (decls.length > 0) {
+		d.flags = decls.map(serializeDecl);
 	}
 	if (rc.kind === "command") {
 		const def = rc.def as AnyCommand;

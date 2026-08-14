@@ -22,19 +22,26 @@ import {
 	type Writer,
 } from "./context.js";
 import type { Effect } from "./effects.js";
+import { attachProvidedFields } from "./elected.js";
 import {
 	errCallConsequentialUnconsented,
 	errCallPathIsGroup,
 	errDictFlagExpectedMapType,
+	errOneOfRequired,
 	errPassthroughArgsNotStringSlice,
+	errScopeSuffix,
 	errUnknownParameterForCommand,
 	errUnknownParameterForPassthroughCommand,
 	InvokeError,
 	ParseError,
 } from "./errors.js";
 import {
+	type AnyChoiceFlag,
 	type AnyCommand,
 	type AnyFlag,
+	CHOICE_TAG_KEY,
+	CHOICE_VALUE_KEY,
+	memberList,
 	type PassthroughDef,
 	schemaKind,
 } from "./factories.js";
@@ -238,6 +245,17 @@ export async function invokeApp(
 	}
 	const argNames = new Set(def.args.map((a) => a.name));
 
+	// Selectors declared at command level, by dash name. `call()` takes the
+	// ELECTED RECORD, pre-typed (contract §24.11): the programmatic front
+	// door's contract is unchanged -- pre-typed values, no parsing -- so the
+	// value for a selector is the same record a handler receives.
+	const selectorByName = new Map<string, AnyChoiceFlag>();
+	for (const d of def.allDecls) {
+		if (d.kind === "choice-flag") {
+			selectorByName.set(d.name, d);
+		}
+	}
+
 	// Populate the sourced store from kwargs, mapping param names back to
 	// flag names. Provided kwargs are marked "cli"; absent flags get their
 	// defaults inside validateAndBuildKwargs.
@@ -249,6 +267,15 @@ export async function invokeApp(
 			store.set(flagName, coerceInvokeValue(f, value), "cli");
 			continue;
 		}
+		const sel = selectorByName.get(flagName);
+		if (sel !== undefined) {
+			try {
+				store.set(flagName, validateElectedRecord(sel, value), "cli");
+			} catch (e) {
+				throw new InvokeError((e as Error).message);
+			}
+			continue;
+		}
 		if (app.globalFlagNames.has(flagName)) {
 			store.set(flagName, value, "cli");
 			continue;
@@ -258,6 +285,22 @@ export async function invokeApp(
 		}
 		throw new InvokeError(
 			errUnknownParameterForCommand(paramName, commandPath),
+		);
+	}
+	// A selector with no kwarg elects from its declaration, exactly as the
+	// argv path's election phase does: its default, or the required refusal.
+	for (const [name, sel] of selectorByName) {
+		if (store.has(name)) {
+			continue;
+		}
+		if (sel.opts.presence === "default" && sel.opts.default !== undefined) {
+			store.set(name, electDefaultRecord(sel, sel.opts.default), "default");
+			continue;
+		}
+		throw new InvokeError(
+			sel.electBy === "member-flags"
+				? errOneOfRequired(memberList(sel), "")
+				: `flag '--${name}' is required`,
 		);
 	}
 
@@ -288,6 +331,7 @@ export async function invokeApp(
 			positionals,
 			app.globalFlagNames,
 			app.infraRoots,
+			[...selectorByName.keys()],
 		);
 		validated = { ...parsed.kwargs, ...parsed.postGlobalValues };
 		sources = { ...parsed.sources };
@@ -405,4 +449,110 @@ async function invokePassthrough(
 	const def = cmd.def as PassthroughDef<string>;
 	const result = await def.handler({ name: cmd.name, args, globals }, ctx);
 	return interpretForCall(result, ctx);
+}
+
+// --- Elected records on the programmatic front door (contract §24.11) ---
+
+/**
+ * Validates one pre-typed elected record against its selector's declaration:
+ * the tag names a declared choice, every required sub-flag is present, an
+ * optional one delivers absence as a PRESENT field, and a defaulted one is
+ * filled from the declaration. Unknown fields are refused -- a key the scope
+ * never declared is the same mistake an unknown parameter is one level up.
+ */
+function validateElectedRecord(sel: AnyChoiceFlag, value: unknown): unknown {
+	if (typeof value !== "object" || value === null) {
+		throw new Error(
+			`flag '--${sel.name}': the elected value must be a record carrying its '${CHOICE_TAG_KEY}' tag`,
+		);
+	}
+	const raw = value as Record<string, unknown>;
+	const tag = raw[CHOICE_TAG_KEY];
+	if (typeof tag !== "string" || !Object.hasOwn(sel.choices, tag)) {
+		throw new Error(
+			`--${sel.name}: invalid value '${String(tag)}', must be one of: ${Object.keys(
+				sel.choices,
+			)
+				.map((c) => `'${c}'`)
+				.join(", ")}`,
+		);
+	}
+	const chosen = sel.choices[tag] as NonNullable<(typeof sel.choices)[string]>;
+	const out: Record<string, unknown> = { [CHOICE_TAG_KEY]: tag };
+	const provided = new Set<string>();
+	if (chosen.value !== undefined) {
+		if (!Object.hasOwn(raw, CHOICE_VALUE_KEY)) {
+			throw new Error(
+				`flag '--${tag}' is required${errScopeSuffix(`--${tag}`)}`,
+			);
+		}
+		out[CHOICE_VALUE_KEY] = raw[CHOICE_VALUE_KEY];
+		provided.add(CHOICE_VALUE_KEY);
+	}
+	const path =
+		sel.electBy === "member-flags" ? `--${tag}` : `--${sel.name} ${tag}`;
+	const declared = new Set<string>([CHOICE_TAG_KEY, CHOICE_VALUE_KEY]);
+	for (const [key, sub] of Object.entries(chosen.flags)) {
+		declared.add(key);
+		if (sub.kind === "choice-flag") {
+			if (Object.hasOwn(raw, key)) {
+				out[key] = validateElectedRecord(sub, raw[key]);
+				provided.add(key);
+			} else if (
+				sub.opts.presence === "default" &&
+				sub.opts.default !== undefined
+			) {
+				out[key] = electDefaultRecord(sub, sub.opts.default);
+			} else {
+				throw new Error(
+					sub.electBy === "member-flags"
+						? `${errOneOfRequired(memberList(sub), "")}${errScopeSuffix(path)}`
+						: `flag '--${sub.name}' is required${errScopeSuffix(path)}`,
+				);
+			}
+			continue;
+		}
+		if (Object.hasOwn(raw, key)) {
+			out[key] = coerceInvokeValue(sub, raw[key]);
+			provided.add(key);
+			continue;
+		}
+		if (sub.opts.presence === "required") {
+			throw new Error(
+				`flag '--${sub.name}' is required${errScopeSuffix(path)}`,
+			);
+		}
+		out[key] = sub.opts.presence === "default" ? sub.opts.default : undefined;
+	}
+	for (const key of Object.keys(raw)) {
+		if (!declared.has(key)) {
+			throw new Error(
+				`flag '--${key}' is only valid under '${path}', but that scope does not declare it`,
+			);
+		}
+	}
+	attachProvidedFields(out, provided);
+	return out;
+}
+
+/**
+ * The record a selector's own `default` elects. A defaulted selection is
+ * COMPLETE by registration (§24.5), so every sub-flag resolves from its own
+ * declaration and nothing can be missing.
+ */
+function electDefaultRecord(sel: AnyChoiceFlag, choiceName: string): unknown {
+	const chosen = sel.choices[choiceName];
+	const out: Record<string, unknown> = { [CHOICE_TAG_KEY]: choiceName };
+	for (const [key, sub] of Object.entries(chosen?.flags ?? {})) {
+		if (sub.kind === "choice-flag") {
+			out[key] =
+				sub.opts.default === undefined
+					? undefined
+					: electDefaultRecord(sub, sub.opts.default);
+			continue;
+		}
+		out[key] = sub.opts.presence === "default" ? sub.opts.default : undefined;
+	}
+	attachProvidedFields(out, new Set());
+	return out;
 }
