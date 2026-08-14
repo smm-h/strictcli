@@ -22,6 +22,8 @@ import {
 import { formatFloatCanonical } from "../../typescript/dist/float.js";
 import {
 	arg,
+	choice,
+	choiceFlag,
 	coRequired,
 	createApp,
 	defineMutatingCommand,
@@ -32,8 +34,9 @@ import {
 	flagSet,
 	implies,
 	mutatingPassthrough,
-	mutexGroup,
+	memberChoiceFlag,
 	outcome,
+	provided,
 	readOnlyPassthrough,
 	relativeToRoot,
 	requires,
@@ -161,9 +164,187 @@ function elemTypeOf(ftype) {
 }
 
 // ---------------------------------------------------------------------------
+// Choices: the record spelling, and the scoped-selector construct
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts a declaration's record-shaped `choices_<T>` key into the record
+ * literals the TS surface takes (contract §24.2). The typed split survives on
+ * the input side alone: JSON cannot tell an integer choice from a float one.
+ */
+function choiceRecords(d) {
+	if ("choices_str" in d) {
+		return d.choices_str.map(choiceRecord((v) => v));
+	}
+	if ("choices_int" in d) {
+		return d.choices_int.map(choiceRecord((v) => BigInt(v)));
+	}
+	if ("choices_float" in d) {
+		return d.choices_float.map(choiceRecord((v) => v));
+	}
+	return undefined;
+}
+
+function choiceRecord(conv) {
+	return (rec) =>
+		"help" in rec
+			? { value: conv(rec.value), help: rec.help }
+			: { value: conv(rec.value) };
+}
+
+/** `elect_by` is the input-side discriminator (§13's item-207 box, §25.6). */
+function isSelector(fd) {
+	return "elect_by" in fd;
+}
+
+/**
+ * Builds one choice of a selector. `value` declares a member-spelled choice's
+ * own payload, and stays spellable on a token-spelled choice because that is
+ * the input errTokenChoiceCarriesPayload is asserted against.
+ *
+ * `presence` is the WIDENED call §12.13 names: the declared choice type has no
+ * per-member presence slot, so a case reaching errMemberFlagPresence hands the
+ * factory a value the public type would have rejected.
+ */
+function buildChoice(cd) {
+	const spec = { help: cd.help };
+	if ("flags" in cd) {
+		spec.flags = flagMapOf(cd.flags, (fn) => errCommandDuplicateFlag(cd.name, fn));
+	}
+	if ("value" in cd) {
+		spec.value = scalarCarrier(cd.value.type);
+	}
+	const built = choice(spec);
+	return "presence" in cd ? { ...built, presence: cd.presence } : built;
+}
+
+/** Builds a selector from a flag definition carrying `elect_by` (§24.12). */
+function buildSelectorFlag(fd) {
+	const choices = {};
+	for (const cd of fd.choices ?? []) {
+		choices[cd.name] = buildChoice(cd);
+	}
+	const opts = { help: fd.help };
+	if ("short" in fd) {
+		opts.short = fd.short;
+	}
+	if ("presence" in fd) {
+		opts.presence = fd.presence;
+	}
+	if ("default" in fd) {
+		// TypeScript's default NAMES a choice (§24.5); the case spells the same
+		// flat map §25.6 publishes, and errSelectorDefaultIncomplete is what
+		// guarantees the named choice's scope is complete.
+		opts.default =
+			fd.default !== null && typeof fd.default === "object"
+				? fd.default.choice
+				: fd.default;
+	}
+	if ("env" in fd) {
+		opts.env = fd.env;
+	}
+	if ("prefixed" in fd) {
+		opts.prefixed = fd.prefixed;
+	}
+	if ("conflict_mode" in fd) {
+		opts.conflictMode = fd.conflict_mode;
+	}
+	return fd.elect_by === "member-flags"
+		? memberChoiceFlag(fd.name, choices, opts)
+		: choiceFlag(fd.name, choices, opts);
+}
+
+// ---------------------------------------------------------------------------
+// Delivered records in handler templates (contract §24.1, §24.9)
+//
+// One rendering, three harnesses: `<choice>` when the scope is empty and
+// `<choice>(<field>=<value>, ...)` otherwise, fields in declaration order with
+// a member payload first (where §25.6 places it).
+// ---------------------------------------------------------------------------
+
+function findChoiceDef(fd, name) {
+	return (fd?.choices ?? []).find((cd) => cd.name === name);
+}
+
+function recordFieldOrder(cd) {
+	const out = [];
+	if (cd === undefined) {
+		return out;
+	}
+	if ("value" in cd) {
+		out.push("value");
+	}
+	for (const f of cd.flags ?? []) {
+		out.push(underscore(f.name));
+	}
+	return out;
+}
+
+function findFieldDef(cd, key) {
+	return (cd?.flags ?? []).find((f) => underscore(f.name) === key);
+}
+
+function isRecord(v) {
+	return typeof v === "object" && v !== null && typeof v.choice === "string";
+}
+
+function renderScoped(v, def) {
+	return isRecord(v) ? renderElected(v, def) : render(v);
+}
+
+function renderElected(rec, fd) {
+	const cd = findChoiceDef(fd, rec.choice);
+	const order = recordFieldOrder(cd);
+	if (order.length === 0) {
+		return rec.choice;
+	}
+	return `${rec.choice}(${order
+		.map((k) => `${k}=${renderScoped(rec[k], findFieldDef(cd, k))}`)
+		.join(", ")})`;
+}
+
+function selWalk(v, def, parts) {
+	let cur = v;
+	let d = def;
+	for (const p of parts) {
+		if (p === "choice") {
+			return [cur.choice, undefined];
+		}
+		const key = underscore(p);
+		const cd = findChoiceDef(d, cur.choice);
+		d = findFieldDef(cd, key);
+		cur = cur[key];
+	}
+	return [cur, d];
+}
+
+/** The dotted references a template makes into one selector's record. */
+function scopedRefs(template, prefix, sel) {
+	const out = [];
+	const needle = `{${prefix}${sel}.`;
+	let rest = template;
+	for (;;) {
+		const i = rest.indexOf(needle);
+		if (i < 0) {
+			return out;
+		}
+		rest = rest.slice(i + needle.length);
+		const j = rest.indexOf("}");
+		if (j < 0) {
+			return out;
+		}
+		out.push(rest.slice(0, j));
+		rest = rest.slice(j);
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Flag construction
 // ---------------------------------------------------------------------------
 function buildFlag(fd) {
+	if (isSelector(fd)) {
+		return buildSelectorFlag(fd);
+	}
 	const name = fd.name;
 	const ftype = fd.type ?? "str";
 	const isList = ftype.startsWith("list[");
@@ -238,14 +419,9 @@ function buildFlag(fd) {
 	if ("prefixed" in fd) {
 		opts.prefixed = fd.prefixed;
 	}
-	if ("choices_str" in fd) {
-		opts.choices = fd.choices_str;
-	}
-	if ("choices_int" in fd) {
-		opts.choices = fd.choices_int.map((c) => BigInt(c));
-	}
-	if ("choices_float" in fd) {
-		opts.choices = fd.choices_float;
+	const flagChoices = choiceRecords(fd);
+	if (flagChoices !== undefined) {
+		opts.choices = flagChoices;
 	}
 	if (repeatable) {
 		opts.repeatable = true;
@@ -313,14 +489,9 @@ function buildArg(ad) {
 	if (ad.variadic === true) {
 		opts.variadic = true;
 	}
-	if ("choices_str" in ad) {
-		opts.choices = ad.choices_str;
-	}
-	if ("choices_int" in ad) {
-		opts.choices = ad.choices_int.map((c) => BigInt(c));
-	}
-	if ("choices_float" in ad) {
-		opts.choices = ad.choices_float;
+	const argChoices = choiceRecords(ad);
+	if (argChoices !== undefined) {
+		opts.choices = argChoices;
 	}
 	return arg(ad.name, scalarCarrier(atype), opts);
 }
@@ -345,15 +516,12 @@ function buildDependency(dd) {
 // Handlers
 // ---------------------------------------------------------------------------
 
-/** All flag defs visible to a command's handler: global + direct + flag sets + mutex. */
+/** All flag defs visible to a command's handler: global + direct + flag sets. */
 function collectAllFlagDefs(cmdDef, globalFlags) {
 	const all = [...globalFlags];
 	all.push(...(cmdDef.flags ?? []));
 	for (const fs of cmdDef.flag_sets ?? []) {
 		all.push(...fs.flags);
-	}
-	for (const mg of cmdDef.mutex ?? []) {
-		all.push(...mg.flags);
 	}
 	return all;
 }
@@ -586,6 +754,29 @@ function makeHandler(cmdDef, globalFlags) {
 		}
 		let out = template;
 
+		// Delivered records first: `{via.subject}` reaches into the record, and
+		// `{via}` renders the whole of it (§24.1's one-key-per-selector rule).
+		for (const fd of allFlags) {
+			if (!isSelector(fd)) {
+				continue;
+			}
+			const rec = args[underscore(fd.name)];
+			for (const ref of scopedRefs(out, "provided:", fd.name)) {
+				const parts = ref.split(".");
+				const [parent] = selWalk(rec, fd, parts.slice(0, -1));
+				out = subst(
+					out,
+					`{provided:${fd.name}.${ref}}`,
+					provided(parent, parts[parts.length - 1]) ? "true" : "false",
+				);
+			}
+			for (const ref of scopedRefs(out, "", fd.name)) {
+				const [v, d] = selWalk(rec, fd, ref.split("."));
+				out = subst(out, `{${fd.name}.${ref}}`, renderScoped(v, d));
+			}
+			out = subst(out, `{${fd.name}}`, renderElected(rec, fd));
+		}
+
 		// {source:name} provenance references resolve via ctx.source().
 		for (const fd of allFlags) {
 			const sourceKey = `{source:${fd.name}}`;
@@ -606,6 +797,9 @@ function makeHandler(cmdDef, globalFlags) {
 
 		// Flags: values arrive under the underscore key (globals included).
 		for (const fd of allFlags) {
+			if (isSelector(fd)) {
+				continue;
+			}
 			out = subst(out, `{${fd.name}}`, render(args[underscore(fd.name)]));
 		}
 
@@ -673,7 +867,7 @@ function registerCommand(cmdDef, target, globalFlags) {
 
 	// Passthrough command. The TS factory API makes passthrough-with-parsing
 	// declarations inexpressible (passthrough() takes no flags/args/flag
-	// sets/mutex), so the framework's registration guard is replayed here
+	// sets), so the framework's registration guard is replayed here
 	// with its own catalog message, in the sibling part order.
 	if (cmdDef.passthrough === true) {
 		const parts = [];
@@ -685,9 +879,6 @@ function registerCommand(cmdDef, target, globalFlags) {
 		}
 		if ((cmdDef.flag_sets ?? []).length > 0) {
 			parts.push("flag sets");
-		}
-		if ((cmdDef.mutex ?? []).length > 0) {
-			parts.push("mutex groups");
 		}
 		if (parts.length > 0) {
 			throw new Error(errCommandPassthroughCannotHave(name, parts.join(", ")));
@@ -746,11 +937,6 @@ function registerCommand(cmdDef, target, globalFlags) {
 				fs.name,
 				flagMapOf(fs.flags, (fn) => errCommandDuplicateFlag(name, fn)),
 			),
-		);
-	}
-	if ("mutex" in cmdDef) {
-		spec.mutex = cmdDef.mutex.map((mg) =>
-			mutexGroup(flagMapOf(mg.flags, (fn) => errCommandDuplicateFlag(name, fn))),
 		);
 	}
 	if ("dependencies" in cmdDef) {

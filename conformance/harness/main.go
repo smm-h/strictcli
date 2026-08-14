@@ -576,8 +576,160 @@ func convertScalarDefault(scalarType string, v interface{}) interface{} {
 	return v
 }
 
+// choiceRecords converts a declaration's record-shaped `choices_<T>` key into
+// the ChoiceValue list Go's Choices/ArgChoices take (contract §24.2). A
+// `choices=` entry is ALWAYS a record -- a value plus optional help -- and Go
+// spells "no help" as the empty string for lack of optional parameters.
+//
+// The typed split survives on the input side alone: JSON cannot tell an integer
+// choice from a float one, and the harness must pick a typed constructor.
+func choiceRecords(d map[string]interface{}) ([]strictcli.ChoiceValue, bool) {
+	for key, conv := range map[string]func(interface{}) interface{}{
+		"choices_str":   func(v interface{}) interface{} { return v.(string) },
+		"choices_int":   func(v interface{}) interface{} { return int(v.(float64)) },
+		"choices_float": func(v interface{}) interface{} { return v.(float64) },
+	} {
+		raw, ok := d[key]
+		if !ok {
+			continue
+		}
+		var out []strictcli.ChoiceValue
+		for _, item := range raw.([]interface{}) {
+			rec := item.(map[string]interface{})
+			help := ""
+			if h, ok := rec["help"]; ok {
+				help = h.(string)
+			}
+			out = append(out, strictcli.Ch(conv(rec["value"]), help))
+		}
+		return out, true
+	}
+	return nil, false
+}
+
+// isSelector reports whether a flag definition declares the scoped-selector
+// construct. `elect_by` is the input-side discriminator exactly as it is the
+// dump's (§13's item-207 box, §25.6).
+func isSelector(fd map[string]interface{}) bool {
+	_, ok := fd["elect_by"]
+	return ok
+}
+
+// buildChoice materializes one choice object onto Go's identity values
+// (§24.12): Choice(name, help, scope...) for a token-spelled choice, and
+// MemberChoice(memberFlag, help, scope...) for a member-spelled one.
+//
+// A choice carrying a `value` payload always becomes a MemberChoice, member
+// spelling or not -- which is exactly how a case reaches
+// errTokenChoiceCarriesPayload on the token-spelled side.
+func buildChoice(cd map[string]interface{}, memberSpelled bool) *strictcli.ChoiceDecl {
+	name := cd["name"].(string)
+	help := cd["help"].(string)
+
+	var scope []strictcli.Flag
+	if flags, ok := cd["flags"]; ok {
+		for _, f := range flags.([]interface{}) {
+			scope = append(scope, buildFlag(f.(map[string]interface{})))
+		}
+	}
+
+	payload, carriesPayload := cd["value"].(map[string]interface{})
+	if !carriesPayload && !memberSpelled {
+		return strictcli.Choice(name, help, scope...)
+	}
+
+	// The electing flag. A payload-carrying member is a flag of the payload's
+	// own type carrying the payload's help (which is what the dump publishes as
+	// the `value` entry); a payload-less member is a bool, and electing it is
+	// the whole of what it says.
+	memberOpts := []strictcli.FlagOption{}
+	// The member flag's presence is `required`. The case may spell something
+	// else, and only so errMemberFlagPresence has a covering input.
+	switch presenceOf(cd) {
+	case "optional":
+		memberOpts = append(memberOpts, strictcli.Optional())
+	default:
+		memberOpts = append(memberOpts, strictcli.Required())
+	}
+	var member strictcli.Flag
+	if carriesPayload {
+		phelp := payload["help"].(string)
+		switch payload["type"].(string) {
+		case "int":
+			member = strictcli.IntFlag(name, phelp, memberOpts...)
+		case "float":
+			member = strictcli.FloatFlag(name, phelp, memberOpts...)
+		default:
+			member = strictcli.StringFlag(name, phelp, memberOpts...)
+		}
+	} else {
+		member = strictcli.BoolFlag(name, help, memberOpts...)
+	}
+	return strictcli.MemberChoice(member, help, scope...)
+}
+
+// presenceOf reads a choice object's optional member-presence key.
+func presenceOf(cd map[string]interface{}) string {
+	if v, ok := cd["presence"]; ok {
+		return v.(string)
+	}
+	return "required"
+}
+
+// buildSelectorFlag constructs a selector from a flag definition carrying
+// `elect_by` (contract §24.12).
+func buildSelectorFlag(fd map[string]interface{}) strictcli.Flag {
+	name := fd["name"].(string)
+	help := fd["help"].(string)
+	memberSpelled := fd["elect_by"].(string) == "member-flags"
+
+	var opts []strictcli.FlagOption
+	if v, ok := fd["short"]; ok {
+		opts = append(opts, strictcli.Short(v.(string)))
+	}
+	if v, ok := fd["presence"]; ok {
+		switch v.(string) {
+		case "required":
+			opts = append(opts, strictcli.Required())
+		case "optional":
+			opts = append(opts, strictcli.Optional())
+		}
+	}
+	if v, ok := fd["default"]; ok {
+		// Go's default NAMES a choice (§24.5); the case spells the same flat
+		// map §25.6 publishes, and completeness is guaranteed by
+		// errSelectorDefaultIncomplete rather than by the map's own fields.
+		if m, ok := v.(map[string]interface{}); ok {
+			opts = append(opts, strictcli.Default(m["choice"]))
+		} else {
+			opts = append(opts, strictcli.Default(v))
+		}
+	}
+	if v, ok := fd["env"]; ok {
+		opts = append(opts, strictcli.Env(v.(string)))
+	}
+	if v, ok := fd["prefixed"]; ok {
+		opts = append(opts, strictcli.Prefixed(v.(bool)))
+	}
+	if v, ok := fd["conflict_mode"]; ok {
+		opts = append(opts, strictcli.ConflictMode(v.(string)))
+	}
+	if chs, ok := fd["choices"]; ok {
+		for _, c := range chs.([]interface{}) {
+			opts = append(opts, buildChoice(c.(map[string]interface{}), memberSpelled))
+		}
+	}
+	if memberSpelled {
+		return strictcli.MemberChoiceFlag(name, help, opts...)
+	}
+	return strictcli.ChoiceFlag(name, help, opts...)
+}
+
 // buildFlag constructs a strictcli.Flag from a JSON flag definition.
 func buildFlag(fd map[string]interface{}) strictcli.Flag {
+	if isSelector(fd) {
+		return buildSelectorFlag(fd)
+	}
 	name := fd["name"].(string)
 	help := fd["help"].(string)
 	ftype := "str"
@@ -644,26 +796,8 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	if v, ok := fd["prefixed"]; ok {
 		opts = append(opts, strictcli.Prefixed(v.(bool)))
 	}
-	if v, ok := fd["choices_str"]; ok {
-		var items []interface{}
-		for _, item := range v.([]interface{}) {
-			items = append(items, item.(string))
-		}
-		opts = append(opts, strictcli.Choices(items...))
-	}
-	if v, ok := fd["choices_int"]; ok {
-		var items []interface{}
-		for _, item := range v.([]interface{}) {
-			items = append(items, int(item.(float64)))
-		}
-		opts = append(opts, strictcli.Choices(items...))
-	}
-	if v, ok := fd["choices_float"]; ok {
-		var items []interface{}
-		for _, item := range v.([]interface{}) {
-			items = append(items, item.(float64))
-		}
-		opts = append(opts, strictcli.Choices(items...))
+	if vals, ok := choiceRecords(fd); ok {
+		opts = append(opts, strictcli.Choices(vals...))
 	}
 	if v, ok := fd["repeatable"]; ok && v.(bool) {
 		opts = append(opts, strictcli.Repeatable())
@@ -776,26 +910,8 @@ func buildArg(ad map[string]interface{}) strictcli.Arg {
 	if v, ok := ad["variadic"]; ok && v.(bool) {
 		opts = append(opts, strictcli.Variadic())
 	}
-	if v, ok := ad["choices_str"]; ok {
-		var items []interface{}
-		for _, item := range v.([]interface{}) {
-			items = append(items, item.(string))
-		}
-		opts = append(opts, strictcli.ArgChoices(items...))
-	}
-	if v, ok := ad["choices_int"]; ok {
-		var items []interface{}
-		for _, item := range v.([]interface{}) {
-			items = append(items, int(item.(float64)))
-		}
-		opts = append(opts, strictcli.ArgChoices(items...))
-	}
-	if v, ok := ad["choices_float"]; ok {
-		var items []interface{}
-		for _, item := range v.([]interface{}) {
-			items = append(items, item.(float64))
-		}
-		opts = append(opts, strictcli.ArgChoices(items...))
+	if vals, ok := choiceRecords(ad); ok {
+		opts = append(opts, strictcli.ArgChoices(vals...))
 	}
 
 	return strictcli.NewArg(name, help, opts...)
@@ -833,18 +949,6 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 				fsFlags = append(fsFlags, buildFlag(f.(map[string]interface{})))
 			}
 			opts = append(opts, strictcli.WithFlagSets(strictcli.FlagSet{Name: fsName, Flags: fsFlags}))
-		}
-	}
-
-	// Mutex groups.
-	if mutex, ok := cmdDef["mutex"]; ok {
-		for _, m := range mutex.([]interface{}) {
-			md := m.(map[string]interface{})
-			var mFlags []strictcli.Flag
-			for _, f := range md["flags"].([]interface{}) {
-				mFlags = append(mFlags, buildFlag(f.(map[string]interface{})))
-			}
-			opts = append(opts, strictcli.WithMutex(strictcli.MutexGroup{Flags: mFlags}))
 		}
 	}
 
@@ -1143,7 +1247,172 @@ func runHandlerEffects(ctx *strictcli.Context, entries []interface{}) {
 	}
 }
 
-// collectAllFlagDefs gathers all flag definitions for a command (global + direct + flag sets + mutex).
+// ---------------------------------------------------------------------------
+// Delivered records in handler templates (contract §24.1, §24.9)
+//
+// `{sel}` renders the whole record, `{sel.<field>}` reaches into it to any
+// depth, `{sel.choice}` is the tag, and `{provided:sel.<field>}` is the
+// RECORD's own provided-ness accessor -- the context-level one deliberately
+// does not see scope interiors. All three harnesses render a record the same
+// way: `<choice>` when its scope is empty, `<choice>(<field>=<value>, ...)`
+// otherwise, fields in declaration order with the payload first.
+// ---------------------------------------------------------------------------
+
+// findChoiceDef returns the case's choice object of the given name.
+func findChoiceDef(fd map[string]interface{}, name string) map[string]interface{} {
+	chs, ok := fd["choices"]
+	if !ok {
+		return nil
+	}
+	for _, c := range chs.([]interface{}) {
+		cd := c.(map[string]interface{})
+		if cd["name"].(string) == name {
+			return cd
+		}
+	}
+	return nil
+}
+
+// recordFieldOrder is the declared field order of one choice's scope: the
+// member payload first (where §25.6 places it), then the scope's own flags.
+func recordFieldOrder(cd map[string]interface{}) []string {
+	if cd == nil {
+		return nil
+	}
+	var out []string
+	if _, ok := cd["value"]; ok {
+		out = append(out, "value")
+	}
+	if flags, ok := cd["flags"]; ok {
+		for _, f := range flags.([]interface{}) {
+			name := f.(map[string]interface{})["name"].(string)
+			out = append(out, strings.ReplaceAll(name, "-", "_"))
+		}
+	}
+	return out
+}
+
+// findFieldDef returns the scoped flag definition of the given key.
+func findFieldDef(cd map[string]interface{}, key string) map[string]interface{} {
+	if cd == nil {
+		return nil
+	}
+	flags, ok := cd["flags"]
+	if !ok {
+		return nil
+	}
+	for _, f := range flags.([]interface{}) {
+		fd := f.(map[string]interface{})
+		if strings.ReplaceAll(fd["name"].(string), "-", "_") == key {
+			return fd
+		}
+	}
+	return nil
+}
+
+// renderScoped renders one value out of a delivered record.
+func renderScoped(v interface{}, def map[string]interface{}) string {
+	switch tv := v.(type) {
+	case nil:
+		return "None"
+	case *strictcli.Elected:
+		return renderElected(tv, def)
+	case bool:
+		if tv {
+			return "true"
+		}
+		return "false"
+	case int:
+		return fmt.Sprintf("%d", tv)
+	case []interface{}:
+		parts := make([]string, len(tv))
+		for i, e := range tv {
+			parts[i] = fmt.Sprintf("%v", e)
+		}
+		return strings.Join(parts, ",")
+	case map[string]interface{}:
+		keys := make([]string, 0, len(tv))
+		for k := range tv {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, len(keys))
+		for i, k := range keys {
+			parts[i] = fmt.Sprintf("%s=%v", k, tv[k])
+		}
+		return strings.Join(parts, ",")
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// renderElected renders a whole delivered record.
+func renderElected(e *strictcli.Elected, fd map[string]interface{}) string {
+	cd := findChoiceDef(fd, e.Name())
+	order := recordFieldOrder(cd)
+	if len(order) == 0 {
+		return e.Name()
+	}
+	parts := make([]string, len(order))
+	for i, key := range order {
+		parts[i] = key + "=" + renderScoped(e.Fields[key], findFieldDef(cd, key))
+	}
+	return e.Name() + "(" + strings.Join(parts, ", ") + ")"
+}
+
+// selWalk resolves a dotted scoped reference, returning the value it names and
+// the declaration that value came from.
+func selWalk(v interface{}, def map[string]interface{}, parts []string) (interface{}, map[string]interface{}) {
+	for _, p := range parts {
+		e, ok := v.(*strictcli.Elected)
+		if !ok {
+			panic(fmt.Sprintf("conformance harness: %q walks through a non-record", p))
+		}
+		if p == "choice" {
+			return e.Name(), nil
+		}
+		key := strings.ReplaceAll(p, "-", "_")
+		cd := findChoiceDef(def, e.Name())
+		v = e.Fields[key]
+		def = findFieldDef(cd, key)
+	}
+	return v, def
+}
+
+// selProvided answers the record's own provided-ness for a dotted reference:
+// the walk stops one segment short and the last segment is the field name.
+func selProvided(root *strictcli.Elected, def map[string]interface{}, parts []string) bool {
+	v, d := selWalk(root, def, parts[:len(parts)-1])
+	e, ok := v.(*strictcli.Elected)
+	if !ok {
+		panic("conformance harness: provided reference walks through a non-record")
+	}
+	_ = d
+	return e.Provided(parts[len(parts)-1])
+}
+
+// scopedRefs extracts the dotted references a template makes into a selector's
+// delivered record, in first-appearance order.
+func scopedRefs(template, prefix, sel string) []string {
+	var out []string
+	needle := "{" + prefix + sel + "."
+	rest := template
+	for {
+		i := strings.Index(rest, needle)
+		if i < 0 {
+			return out
+		}
+		rest = rest[i+len(needle):]
+		j := strings.Index(rest, "}")
+		if j < 0 {
+			return out
+		}
+		out = append(out, rest[:j])
+		rest = rest[j:]
+	}
+}
+
+// collectAllFlagDefs gathers all flag definitions for a command (global + direct + flag sets).
 func collectAllFlagDefs(cmdDef map[string]interface{}, globalFlags []map[string]interface{}) []map[string]interface{} {
 	var all []map[string]interface{}
 
@@ -1162,16 +1431,6 @@ func collectAllFlagDefs(cmdDef map[string]interface{}, globalFlags []map[string]
 		for _, t := range flagSets.([]interface{}) {
 			td := t.(map[string]interface{})
 			for _, f := range td["flags"].([]interface{}) {
-				all = append(all, f.(map[string]interface{}))
-			}
-		}
-	}
-
-	// Mutex flags.
-	if mutex, ok := cmdDef["mutex"]; ok {
-		for _, m := range mutex.([]interface{}) {
-			md := m.(map[string]interface{})
-			for _, f := range md["flags"].([]interface{}) {
 				all = append(all, f.(map[string]interface{}))
 			}
 		}
@@ -1303,6 +1562,26 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 		}
 		out := template
 
+		// Delivered records first, so `{via.subject}` is resolved before the
+		// selector's own `{via}` key is (§24.1's one-key-per-selector rule).
+		for _, fd := range allFlags {
+			if !isSelector(fd) {
+				continue
+			}
+			name := fd["name"].(string)
+			key := strings.ReplaceAll(name, "-", "_")
+			e := strictcli.GetElected(args, key)
+			for _, ref := range scopedRefs(out, "provided:", name) {
+				v := strconv.FormatBool(selProvided(e, fd, strings.Split(ref, ".")))
+				out = strings.ReplaceAll(out, "{provided:"+name+"."+ref+"}", v)
+			}
+			for _, ref := range scopedRefs(out, "", name) {
+				v, d := selWalk(e, fd, strings.Split(ref, "."))
+				out = strings.ReplaceAll(out, "{"+name+"."+ref+"}", renderScoped(v, d))
+			}
+			out = strings.ReplaceAll(out, "{"+name+"}", renderElected(e, fd))
+		}
+
 		// Substitute {source:name} provenance references via ctx.Source().
 		for _, fd := range allFlags {
 			name := fd["name"].(string)
@@ -1325,6 +1604,9 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 
 		// Substitute flags.
 		for _, fd := range allFlags {
+			if isSelector(fd) {
+				continue
+			}
 			name := fd["name"].(string)
 			key := strings.ReplaceAll(name, "-", "_")
 			ftype := "str"

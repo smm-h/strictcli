@@ -133,6 +133,226 @@ def _validate_part(decl: dict) -> list[str]:
     return [f"validate=_mk_validate({rejects!r}, {spec['message']!r})"]
 
 
+# ---------------------------------------------------------------------------
+# Choices: the record spelling, and the selector construct
+# ---------------------------------------------------------------------------
+
+def _choices_part(decl: dict) -> list[str]:
+    """Emit `choices=` from the record-shaped typed keys (contract §24.2).
+
+    A `choices=` entry is ALWAYS a record: `Choice(<value>, help=...)`, with the
+    help optional. The typed split survives on the input side alone, because
+    JSON cannot tell an integer choice from a float one.
+    """
+    for key, cast in (
+        ("choices_str", lambda v: repr(v)),
+        ("choices_int", lambda v: repr(int(v))),
+        ("choices_float", lambda v: repr(float(v))),
+    ):
+        if key not in decl:
+            continue
+        entries = []
+        for rec in decl[key]:
+            parts = [cast(rec["value"])]
+            if "help" in rec:
+                parts.append(f"help={rec['help']!r}")
+            entries.append(f"strictcli.Choice({', '.join(parts)})")
+        return [f"choices=[{', '.join(entries)}]"]
+    return []
+
+
+def _is_selector(decl: dict) -> bool:
+    """`elect_by` is the input-side discriminator (§13's item-207 box)."""
+    return "elect_by" in decl
+
+
+def _scalar_annotation(ftype: str) -> str:
+    """The annotation a scoped flag's declared carrier renders as."""
+    return {
+        "str": "str", "bool": "bool", "int": "int", "float": "float",
+        "list[str]": "list[str]", "list[int]": "list[int]",
+        "list[float]": "list[float]",
+        "dict[str,str]": "dict[str, str]", "dict[str,int]": "dict[str, int]",
+        "dict[str,float]": "dict[str, float]",
+    }[ftype]
+
+
+class _ChoiceClassEmitter:
+    """Emits the `@choice`-decorated frozen dataclasses a selector needs.
+
+    Python's declaration surface is classes (§24.12), so a case's nested choice
+    objects become module-level classes emitted BEFORE the command that
+    declares them. The emitter hands back the class variable names, which the
+    `choice_flag(...)` decorator and the handler's annotation both reference.
+    """
+
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+        self._n = 0
+        # Keyed by the flag def's identity rather than its name: two commands
+        # may each declare a selector called "via", and a nested one may reuse
+        # an outer name.
+        self._var_for: dict[tuple[int, str], str] = {}
+
+    def _fresh(self, sel: str, choice: str) -> str:
+        self._n += 1
+        stem = f"{sel}_{choice}".replace("-", "_").replace(".", "_")
+        return f"_C{self._n}_{stem}"
+
+    def emit_selector(self, flag_def: dict, indent: str) -> list[str]:
+        """Emit every class one selector's declaration needs, innermost first.
+
+        Returns the class variable names, in declaration order.
+        """
+        sel = flag_def["name"]
+        names: list[str] = []
+        for choice in flag_def.get("choices", []):
+            var = self._emit_choice(sel, choice, indent)
+            self._var_for[(id(flag_def), choice["name"])] = var
+            names.append(var)
+        return names
+
+    def _emit_choice(self, sel: str, choice: dict, indent: str) -> str:
+        body: list[str] = []
+        field_order: list[str] = []
+        # The member payload is rendered FIRST, which is where §25.6 places it
+        # in the dumped scope and where Go's MemberChoice puts the electing
+        # flag. The three harnesses render a record's fields in one order.
+        if "value" in choice:
+            payload = choice["value"]
+            field_order.append("value")
+            body.append(
+                f"    value: {_scalar_annotation(payload['type'])} = "
+                f"strictcli.member_value(help={payload['help']!r})"
+            )
+        # A nested selector's own classes must exist before the class whose
+        # field annotates them, so they are emitted first (§24.1's recursion).
+        for sub in choice.get("flags", []):
+            field_name = _flag_param(sub["name"])
+            field_order.append(field_name)
+            if _is_selector(sub):
+                sub_names = self.emit_selector(sub, indent)
+                union = " | ".join(sub_names) if sub_names else "object"
+                parts = [f"help={sub['help']!r}", f"choices=[{', '.join(sub_names)}]"]
+                parts.append(f"elect_by={sub['elect_by']!r}")
+                parts.extend(_presence_parts(sub))
+                if "default" in sub:
+                    parts.append(f"default={self.default_expr(sub)}")
+                if "short" in sub:
+                    parts.append(f"short={sub['short']!r}")
+                if "env" in sub:
+                    parts.append(f"env={sub['env']!r}")
+                body.append(
+                    f"    {field_name}: {union} = "
+                    f"strictcli.sub_choice_flag({', '.join(parts)})"
+                )
+                continue
+            ftype = sub.get("type", "str")
+            parts = [f"help={sub['help']!r}"]
+            parts.extend(_presence_parts(sub))
+            if "default" in sub:
+                parts.append(f"default={_emit_default_value(sub['default'], ftype)}")
+            if "short" in sub:
+                parts.append(f"short={sub['short']!r}")
+            if "env" in sub:
+                parts.append(f"env={sub['env']!r}")
+            if "prefixed" in sub:
+                parts.append(f"prefixed={sub['prefixed']!r}")
+            parts.extend(_choices_part(sub))
+            if sub.get("repeatable", False):
+                parts.append("repeatable=True")
+            if "unique" in sub:
+                parts.append(f"unique={sub['unique']}")
+            if "negatable" in sub and not sub["negatable"]:
+                parts.append("negatable=False")
+            parts.extend(_validate_part(sub))
+            body.append(
+                f"    {field_name}: {_scalar_annotation(ftype)} = "
+                f"strictcli.sub_flag({', '.join(parts)})"
+            )
+        # A positional declared inside a scope is refused by name (§12.13); the
+        # case spells it so the refusal has a covering input.
+        for pos in choice.get("args", []):
+            body.append(
+                f"    {pos['name']}: str = strictcli.Arg("
+                f"name={pos['name']!r}, help={pos['help']!r}, presence='required')"
+            )
+        if not body:
+            body.append("    pass")
+
+        var = self._fresh(sel, choice["name"])
+        self.lines.append(
+            f"{indent}@strictcli.choice({choice['name']!r}, help={choice['help']!r})"
+        )
+        self.lines.append(f"{indent}class {var}:")
+        for line in body:
+            self.lines.append(f"{indent}{line}")
+        self.lines.append(f"{indent}_CHOICE_NAMES[{var}] = {choice['name']!r}")
+        self.lines.append(f"{indent}_REC_FIELDS[{var}] = {field_order!r}")
+        self.lines.append("")
+        return var
+
+    def default_expr(self, flag_def: dict) -> str:
+        """Render a selector's defaulted selection as a choice INSTANCE.
+
+        Python's default IS a choice instance, which is what makes an
+        incomplete defaulted selection unconstructable rather than refused
+        (§24.5). The case spells the same flat map §25.6 publishes, and the
+        harness materializes it through the declared class.
+        """
+        flat = dict(flag_def["default"])
+        choice_name = flat.pop("choice")
+        target = None
+        for choice in flag_def.get("choices", []):
+            if choice["name"] == choice_name:
+                target = choice
+                break
+        var = self._var_for.get((id(flag_def), choice_name))
+        if var is None:
+            # A default naming no declared choice is a registration error the
+            # case is asserting; hand the raw name through so the framework
+            # produces its own message instead of the harness raising first.
+            return repr(choice_name)
+        field_types = {}
+        if target is not None:
+            for sub in target.get("flags", []):
+                field_types[_flag_param(sub["name"])] = sub.get("type", "str")
+            if "value" in target:
+                field_types["value"] = target["value"]["type"]
+        kwargs = ", ".join(
+            f"{_flag_param(k)}={_emit_default_value(v, field_types.get(_flag_param(k), 'str'))}"
+            for k, v in flat.items()
+        )
+        return f"{var}({kwargs})"
+
+
+def _emit_selector_decorator(
+    flag_def: dict, class_vars: list[str], emitter: _ChoiceClassEmitter,
+    indent: str,
+) -> str:
+    """Emit the `@strictcli.choice_flag(...)` decorator for one selector."""
+    parts = [f"{flag_def['name']!r}", f"help={flag_def['help']!r}"]
+    parts.append(f"choices=[{', '.join(class_vars)}]")
+    parts.append(f"elect_by={flag_def['elect_by']!r}")
+    parts.extend(_presence_parts(flag_def))
+    if "default" in flag_def:
+        parts.append(f"default={emitter.default_expr(flag_def)}")
+    if "short" in flag_def:
+        parts.append(f"short={flag_def['short']!r}")
+    if "env" in flag_def:
+        parts.append(f"env={flag_def['env']!r}")
+    return f"{indent}@strictcli.choice_flag({', '.join(parts)})"
+
+
+def _selector_annotation(flag_def: dict, class_vars: list[str]) -> str:
+    """The union a selector-bound handler parameter must be annotated with.
+
+    The check is mandatory (§24.12): it is what makes `assert_never` sound, so
+    the harness writes exactly the declared union and nothing wider.
+    """
+    return " | ".join(class_vars) if class_vars else "object"
+
+
 def _emit_flag(flag_def: dict, indent: str = "") -> str:
     """Emit a strictcli.Flag(...) expression from a flag JSON definition."""
     parts = [
@@ -169,14 +389,7 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
     if "prefixed" in flag_def:
         parts.append(f"prefixed={flag_def['prefixed']!r}")
 
-    if "choices_str" in flag_def:
-        parts.append(f"choices={flag_def['choices_str']!r}")
-
-    if "choices_int" in flag_def:
-        parts.append(f"choices={flag_def['choices_int']!r}")
-
-    if "choices_float" in flag_def:
-        parts.append(f"choices={flag_def['choices_float']!r}")
+    parts.extend(_choices_part(flag_def))
 
     if flag_def.get("repeatable", False):
         parts.append("repeatable=True")
@@ -212,33 +425,19 @@ def _emit_flag_set(fs_def: dict, indent: str = "") -> str:
     )
 
 
-def _emit_mutex(mutex_def: dict, indent: str = "") -> str:
-    """Emit a strictcli.MutexGroup(...) expression."""
-    flag_lines = [_emit_flag(f, indent + "        ") for f in mutex_def["flags"]]
-    flags_str = ",\n".join(flag_lines)
-    return (
-        f"{indent}strictcli.MutexGroup(\n"
-        f"{indent}    flags=[\n"
-        f"{flags_str},\n"
-        f"{indent}    ],\n"
-        f"{indent})"
-    )
-
-
 def _collect_params(cmd_def: dict, global_flags: list[dict] | None = None) -> list[str]:
     """Collect all parameter names for a command handler."""
     params = []
     # Global flags (passed as kwargs to all handlers)
     for f in (global_flags or []):
         params.append(_flag_param(f["name"]))
-    # Flags from direct flags, flag sets, and mutex groups
+    # Flags from direct flags and flag sets
+    # A selector contributes ONE key -- its own. Sub-flags are never top-level
+    # handler arguments at any depth (contract §24.1).
     for f in cmd_def.get("flags", []):
         params.append(_flag_param(f["name"]))
     for fs in cmd_def.get("flag_sets", []):
         for f in fs["flags"]:
-            params.append(_flag_param(f["name"]))
-    for mg in cmd_def.get("mutex", []):
-        for f in mg["flags"]:
             params.append(_flag_param(f["name"]))
     # Args
     for a in cmd_def.get("args", []):
@@ -247,13 +446,11 @@ def _collect_params(cmd_def: dict, global_flags: list[dict] | None = None) -> li
 
 
 def _collect_all_flag_defs(cmd_def: dict, global_flags: list[dict] | None = None) -> list[dict]:
-    """Collect all flag definitions (global, direct, from flag sets, from mutex)."""
+    """Collect all flag definitions (global, direct, from flag sets)."""
     flags = list(global_flags or [])
     flags.extend(cmd_def.get("flags", []))
     for fs in cmd_def.get("flag_sets", []):
         flags.extend(fs["flags"])
-    for mg in cmd_def.get("mutex", []):
-        flags.extend(mg["flags"])
     return flags
 
 
@@ -276,10 +473,24 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     # accessor (contract §23.6).
     source_refs = sorted(set(re.findall(r"\{source:([^}]+)\}", template)))
     provided_refs = sorted(set(re.findall(r"\{provided:([^}]+)\}", template)))
+    # Scoped references reach INTO a delivered record (contract §24.1, §24.9):
+    # `{via.subject}` is a field, `{via.choice}` is the tag, and
+    # `{provided:via.subject}` is the record's own provided-ness accessor --
+    # the context-level one deliberately does not see scope interiors.
+    selector_params = {
+        _flag_param(f["name"]) for f in all_flags if _is_selector(f)
+    }
+    scoped_refs = sorted({
+        r for r in re.findall(r"\{([A-Za-z0-9_.-]+)\}", template)
+        if "." in r and _flag_param(r.split(".")[0]) in selector_params
+    })
+    scoped_provided = [r for r in provided_refs if "." in r]
+    provided_refs = [r for r in provided_refs if "." not in r]
 
     # Build a format expression
     params = _collect_params(cmd_def, global_flags)
-    if not params and not source_refs and not provided_refs:
+    if (not params and not source_refs and not provided_refs
+            and not scoped_refs and not scoped_provided):
         return f"    print({template!r})"
 
     # We build the output using string concatenation to handle type formatting
@@ -292,8 +503,25 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
             f"    _parts[{('provided:' + name)!r}] = "
             f"'true' if ctx.provided({name!r}) else 'false'"
         )
+    for ref in scoped_provided:
+        head, *rest = ref.split(".")
+        lines.append(
+            f"    _parts[{('provided:' + ref)!r}] = 'true' if strictcli.provided("
+            f"_sel_walk({_flag_param(head)}, {rest[:-1]!r}), {rest[-1]!r}) else 'false'"
+        )
+    for ref in scoped_refs:
+        head, *rest = ref.split(".")
+        lines.append(
+            f"    _parts[{ref!r}] = _sel_fmt("
+            f"_sel_walk({_flag_param(head)}, {rest!r}))"
+        )
     for f in all_flags:
         pname = _flag_param(f["name"])
+        if _is_selector(f):
+            # A selector delivers ONE tagged record under its own key, so
+            # `{via}` renders the record and `{via.<field>}` reaches into it.
+            lines.append(f"    _parts[{f['name']!r}] = _sel_fmt({pname})")
+            continue
         ftype = f.get("type", "str")
         if ftype.startswith("list["):
             # List compound type: print comma-separated
@@ -573,7 +801,7 @@ def _emit_command_registration(
         lines.append(f"{indent}    {cmd_def['name']!r},")
         lines.append(f"{indent}    help={cmd_def['help']!r},")
 
-        # If the test case also specifies flags/args/flag_sets/mutex (registration error tests),
+        # If the test case also specifies flags/args/flag_sets (registration error tests),
         # include them so the error is triggered
         if cmd_def.get("args"):
             arg_exprs = []
@@ -588,12 +816,7 @@ def _emit_command_registration(
                     aparts.append(f"default={_emit_default_value(a['default'], atype)}")
                 if a.get("variadic", False):
                     aparts.append("variadic=True")
-                if "choices_str" in a:
-                    aparts.append(f"choices={a['choices_str']!r}")
-                if "choices_int" in a:
-                    aparts.append(f"choices={a['choices_int']!r}")
-                if "choices_float" in a:
-                    aparts.append(f"choices={a['choices_float']!r}")
+                aparts.extend(_choices_part(a))
                 arg_exprs.append(f"strictcli.Arg({', '.join(aparts)})")
             lines.append(
                 f"{indent}    args=[{', '.join(arg_exprs)}],"
@@ -604,13 +827,6 @@ def _emit_command_registration(
             lines.append(f"{indent}    flag_sets=[")
             for te in fs_exprs:
                 lines.append(f"{te},")
-            lines.append(f"{indent}    ],")
-
-        if cmd_def.get("mutex"):
-            mutex_exprs = [_emit_mutex(m, indent + "        ") for m in cmd_def["mutex"]]
-            lines.append(f"{indent}    mutex=[")
-            for me in mutex_exprs:
-                lines.append(f"{me},")
             lines.append(f"{indent}    ],")
 
         if cmd_def.get("dependencies"):
@@ -687,12 +903,7 @@ def _emit_command_registration(
                 aparts.append(f"default={_emit_default_value(a['default'], atype)}")
             if a.get("variadic", False):
                 aparts.append("variadic=True")
-            if "choices_str" in a:
-                aparts.append(f"choices={a['choices_str']!r}")
-            if "choices_int" in a:
-                aparts.append(f"choices={a['choices_int']!r}")
-            if "choices_float" in a:
-                aparts.append(f"choices={a['choices_float']!r}")
+            aparts.extend(_choices_part(a))
             arg_exprs.append(f"strictcli.Arg({', '.join(aparts)})")
         decorator_parts.append(
             f"{indent}    args=[{', '.join(arg_exprs)}],"
@@ -704,14 +915,6 @@ def _emit_command_registration(
         decorator_parts.append(f"{indent}    flag_sets=[")
         for te in fs_exprs:
             decorator_parts.append(f"{te},")
-        decorator_parts.append(f"{indent}    ],")
-
-    # mutex
-    if cmd_def.get("mutex"):
-        mutex_exprs = [_emit_mutex(m, indent + "        ") for m in cmd_def["mutex"]]
-        decorator_parts.append(f"{indent}    mutex=[")
-        for me in mutex_exprs:
-            decorator_parts.append(f"{me},")
         decorator_parts.append(f"{indent}    ],")
 
     # dependencies
@@ -761,8 +964,25 @@ def _emit_command_registration(
         "dict[str,str]": "dict[str, str]", "dict[str,int]": "dict[str, int]",
         "dict[str,float]": "dict[str, float]",
     }
+    # Selectors are a declaration surface of their own (§24.12): the choice
+    # classes are emitted BEFORE the command, and the selector itself is a
+    # `choice_flag(...)` decorator rather than a `flag(...)` one.
+    emitter = _ChoiceClassEmitter()
+    selector_vars: dict[str, list[str]] = {}
+    selector_decorators: list[str] = []
+    for f in cmd_def.get("flags", []):
+        if not _is_selector(f):
+            continue
+        class_vars = emitter.emit_selector(f, indent)
+        selector_vars[f["name"]] = class_vars
+        selector_decorators.append(
+            _emit_selector_decorator(f, class_vars, emitter, indent)
+        )
+
     flag_decorators = []
     for f in cmd_def.get("flags", []):
+        if _is_selector(f):
+            continue
         fd_parts = [f"{f['name']!r}"]
         ftype = f.get("type", "str")
         if ftype in compound_type_map:
@@ -783,12 +1003,7 @@ def _emit_command_registration(
             fd_parts.append(f"env={f['env']!r}")
         if "prefixed" in f:
             fd_parts.append(f"prefixed={f['prefixed']!r}")
-        if "choices_str" in f:
-            fd_parts.append(f"choices={f['choices_str']!r}")
-        if "choices_int" in f:
-            fd_parts.append(f"choices={f['choices_int']!r}")
-        if "choices_float" in f:
-            fd_parts.append(f"choices={f['choices_float']!r}")
+        fd_parts.extend(_choices_part(f))
         if f.get("repeatable", False):
             fd_parts.append("repeatable=True")
         if "unique" in f:
@@ -823,6 +1038,15 @@ def _emit_command_registration(
         for d in list(cmd_def.get("args", [])) + list(cmd_def.get("flags", []))
         if d.get("presence") == "optional"
     }
+    # The handler-annotation check is MANDATORY (§24.12): the parameter bound
+    # to a selector must carry exactly the declared union, which is what makes
+    # `assert_never` sound in a consumer's own handler.
+    selector_annotations = {
+        _flag_param(name): _selector_annotation(
+            next(f for f in cmd_def["flags"] if f["name"] == name), class_vars,
+        )
+        for name, class_vars in selector_vars.items()
+    }
     optional_names |= {
         f["name"].replace("-", "_")
         for f in cmd_def.get("flags", [])
@@ -836,8 +1060,13 @@ def _emit_command_registration(
     # way to spell the re-sentinelization the handler-parameter check refuses
     # (§23.3): `def h(ctx, target="")` bound to an optional `--target`.
     overrides = cmd_def.get("handler_param_defaults", {})
+    def _annotated(p: str) -> str:
+        ann = selector_annotations.get(p)
+        return f"{p}: {ann}" if ann else p
+
     param_strs = [
-        p for p in params if p not in optional_names and p not in overrides
+        _annotated(p) for p in params
+        if p not in optional_names and p not in overrides
     ]
     param_strs += [
         f"{p}={overrides[p]!r}" if p in overrides else f"{p}=None"
@@ -848,7 +1077,10 @@ def _emit_command_registration(
     sig_params = ", ".join(["ctx"] + param_strs)
     fn_name = f"{cmd_def['name'].replace('-', '_')}_handler"
 
+    lines.extend(emitter.lines)
     lines.extend(decorator_parts)
+    for sd in selector_decorators:
+        lines.append(sd)
     for fd in flag_decorators:
         lines.append(fd)
     lines.append(f"{indent}def {fn_name}({sig_params}):")
@@ -963,6 +1195,42 @@ def generate(app_def: dict) -> str:
     # `validate`): a callable refusing named values with a fixed message. All
     # three harnesses build the identical callable, so the resulting
     # `--<flag>: <message>` parse error is byte-identical.
+    # The delivered-record vocabulary the three harnesses share: a class ->
+    # choice-name map, a class -> declared field order, and one renderer. A
+    # record renders as `<choice>` when its scope is empty and
+    # `<choice>(<field>=<value>, ...)` otherwise, fields in declaration order.
+    lines.append("_CHOICE_NAMES = {}")
+    lines.append("_REC_FIELDS = {}")
+    lines.append("")
+    lines.append("def _sel_fmt(v):")
+    lines.append("    if type(v) in _CHOICE_NAMES:")
+    lines.append("        name = _CHOICE_NAMES[type(v)]")
+    lines.append("        fields = _REC_FIELDS[type(v)]")
+    lines.append("        if not fields:")
+    lines.append("            return name")
+    lines.append("        inner = ', '.join(")
+    lines.append("            f + '=' + _sel_fmt(getattr(v, f)) for f in fields")
+    lines.append("        )")
+    lines.append("        return name + '(' + inner + ')'")
+    lines.append("    if v is None:")
+    lines.append("        return 'None'")
+    lines.append("    if isinstance(v, bool):")
+    lines.append("        return 'true' if v else 'false'")
+    lines.append("    if isinstance(v, list):")
+    lines.append("        return ','.join(str(x) for x in v)")
+    lines.append("    if isinstance(v, dict):")
+    lines.append("        return ','.join(str(k) + '=' + str(x) for k, x in sorted(v.items()))")
+    lines.append("    return str(v)")
+    lines.append("")
+    lines.append("def _sel_walk(rec, parts):")
+    lines.append("    cur = rec")
+    lines.append("    for p in parts:")
+    lines.append("        if p == 'choice':")
+    lines.append("            cur = _CHOICE_NAMES[type(cur)]")
+    lines.append("        else:")
+    lines.append("            cur = getattr(cur, p.replace('-', '_'))")
+    lines.append("    return cur")
+    lines.append("")
     lines.append("def _mk_validate(rejects, message):")
     lines.append("    def _validate(value):")
     lines.append("        if str(value) in rejects:")
