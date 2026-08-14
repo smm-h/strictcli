@@ -1,6 +1,6 @@
 ---
 title: TypeScript Quickstart
-description: "Build TypeScript CLIs with strictcli: command factories, typed flags, args, groups, the reserved quartet, and consequential consent on CLI, call and MCP."
+description: "Build TypeScript CLIs with strictcli: command factories, typed flags, args, groups, payloads under --json, and consequential consent on CLI, call and MCP."
 nav_group: "Guides"
 nav_order: 0
 ---
@@ -607,7 +607,7 @@ conversion for handler args.
 - **Bare `--force` is banned.** Use qualified names: `--force-overwrite`, `--force-delete`.
 - **`--no-` prefix is reserved.** Flag names cannot start with `no-`. The `--no-` prefix is auto-generated for negatable boolean flags.
 - **Dashes to underscores.** Flags with dashes (`--log-file`) become underscore keys in the handler args (`args.log_file`). The flag map key must also use the underscore form.
-- **The reserved quartet is banned.** `dry-run`, `approve-consequential`, `quiet` and `verbose` cannot be declared at any level. The name `yes` is banned outright -- the confirmation skip is `--approve-consequential`.
+- **The reserved quartet is banned.** `dry-run`, `approve-consequential`, `quiet` and `verbose` cannot be declared at any level. So is `json`, which selects machine mode, on the same every-level tier. The name `yes` is banned outright -- the confirmation skip is `--approve-consequential`.
 
 ```typescript
 // The flag map key is the underscore form of the flag name

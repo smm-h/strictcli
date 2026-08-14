@@ -1,6 +1,6 @@
 ---
 title: Go Quickstart
-description: "Build Go CLIs with strictcli: apps, WithEffect classification, flags, args, groups, the reserved quartet, and consequential consent on CLI, Call and MCP."
+description: "Build Go CLIs with strictcli: apps, WithEffect classification, flags, args, groups, payloads under --json, and consequential consent on CLI, Call and MCP."
 nav_group: "Guides"
 nav_order: 1
 ---
@@ -286,7 +286,7 @@ app.Command("deploy", "Deploy the app", func(ctx *strictcli.Context, kwargs map[
 
 Usage: `mytool --no-color deploy` or `mytool deploy --no-color` (global flags can appear before or after the command).
 
-Reserved global flag names that cannot be used: `help`, `h`, `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`, plus the reserved quartet `dry-run`, `approve-consequential`, `quiet`, `verbose`. The name `yes` is banned outright -- the confirmation skip is `--approve-consequential`.
+Reserved global flag names that cannot be used: `help`, `h`, `version`, `v`, `dump-schema`, `mcp`, `config`, `hermetic`, plus the reserved quartet `dry-run`, `approve-consequential`, `quiet`, `verbose`, plus `json`, which selects machine mode. The name `yes` is banned outright -- the confirmation skip is `--approve-consequential`.
 
 ## Command Groups
 

@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "strictcli's flag and argument system: four types, defaults, boolean negation, repeatable flags, the reserved quartet, the consent parameter, positionals."
+description: "strictcli's flag and argument system: four types, defaults, boolean negation, repeatable flags, the reserved names, mutex election, and positional args."
 nav_group: "Guides"
 nav_order: 3
 ---
@@ -501,7 +501,8 @@ in the application. Global flags are parsed before the command token during the
 global flag parsing stage, and their values are passed to every handler alongside
 the command's own flags. Global flag names cannot collide with reserved framework
 names like `help`, `version`, `dump-schema`, `mcp`, `config`, or `hermetic`, nor
-with the reserved quartet `dry-run`, `approve-consequential`, `quiet`, `verbose`.
+with the reserved quartet `dry-run`, `approve-consequential`, `quiet`, `verbose`,
+nor with `json`, which selects machine mode.
 
 ```python
 app = strictcli.App(

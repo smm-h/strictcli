@@ -1,6 +1,6 @@
 ---
 title: Architecture and Internals
-description: "strictcli internals: the five-stage parse pipeline, its two-region reserved-quartet pre-scan, registration-time validation, the schema format, and config."
+description: "strictcli internals: the five-stage parse pipeline, its two-region reserved-flag pre-scan, registration-time validation, the schema format, and config."
 nav_group: "Guides"
 nav_order: 10
 ---
@@ -45,11 +45,11 @@ identical by the conformance test suite.
 ### Stage 1: reserved flag pre-scan
 
 Before any global flag or command parsing begins, a pre-scan examines argv for
-the 8 framework-reserved flags and removes the ones it consumes. The scan splits
+the 9 framework-reserved flags and removes the ones it consumes. The scan splits
 argv into 2 regions with 2 different rulesets: the pre-command region recognizes
-all 8, while the command region recognizes only the 4 flags of the effects-regime
-quartet. Both regions stop at a bare `--`, and the command region also stops at a
-passthrough command's name.
+all 9, while the command region recognizes only 5 -- the 4 flags of the
+effects-regime quartet plus `--json`. Both regions stop at a bare `--`, and the
+command region also stops at a passthrough command's name.
 
 **The pre-command region** -- everything before the first non-flag token or a
 `--` separator -- recognizes every reserved flag:
@@ -61,18 +61,21 @@ passthrough command's name.
 - `--config <path>`: overrides the config file path.
 - The effects-regime quartet `--dry-run`, `--approve-consequential`, `--quiet`,
   `--verbose`.
+- `--json`: selects machine mode. It is not a fifth member of the quartet --
+  the four are the effects regime's own flags -- but it is delivered by the
+  same rules, in both regions.
 
 The pre-scan does not consume these tokens from argv for `--hermetic`,
-`--config` and the quartet; instead it records their presence and builds a
-"cleaned argv" with them stripped out. `--dump-schema` and `--mcp` cause an
-immediate return (no further parsing occurs).
+`--config`, the quartet and `--json`; instead it records their presence and
+builds a "cleaned argv" with them stripped out. `--dump-schema` and `--mcp`
+cause an immediate return (no further parsing occurs).
 
 The pre-scan also skips over known global flags (long, short, and negation
 forms) so a global-flag value that happens to look like a command name does not
 end the region early.
 
 **The command region** -- from the command token onward -- recognizes the
-**quartet only**, anywhere, exactly like `--help` / `-h`. `myapp deploy --dry-run`
+**quartet and `--json` only**, anywhere, exactly like `--help` / `-h`. `myapp deploy --dry-run`
 and `myapp --dry-run deploy` are equivalent; `myapp dns zone create --dry-run`
 works at any nesting depth. `--hermetic`, `--config`, `--dump-schema` and `--mcp`
 are *not* recognized here and become unknown-flag errors after the command token.
@@ -89,8 +92,8 @@ The command-region scan stops for good at two boundaries:
   sets `ctx.verbose` *and* still forwards the child's own `--verbose` untouched.
 
 Anywhere-recognition costs exactly what `--help` already costs: a flag *value*
-spelled like a quartet token is eaten. Write `--message=--dry-run` or use `--`
-to pass one literally.
+spelled like one of those tokens is eaten. Write `--message=--dry-run` or use
+`--` to pass one literally.
 
 **Go**: `App.preScanReservedFlags()` in `strictcli.go`.
 **Python**: `App._pre_scan_reserved_flags()` in `__init__.py`.
@@ -486,10 +489,10 @@ automatic boolean flag injection when a trigger flag is present.
 
 ```json
 [
-  {"type": "mutex", "flags": ["json", "yaml"]},
+  {"type": "mutex", "flags": ["as-table", "as-csv"]},
   {"type": "co_required", "flags": ["host", "port"]},
   {"type": "requires", "flag": "port", "depends_on": "host"},
-  {"type": "implies", "flag": "verbose", "implies": "debug", "value": true}
+  {"type": "implies", "flag": "trace", "implies": "debug", "value": true}
 ]
 ```
 
