@@ -13,6 +13,17 @@ with full static type inference from flag declarations all the way to handler
 arguments — declare `flag("count", t.int, { help: "...", presence: "required" })`
 and your handler's `args.count` is a `bigint`, checked by the compiler.
 
+There are Python and Go implementations too, and this one is not a port of
+either. The surface here is TypeScript's own — flag and arg options are a
+discriminated union on `presence`, so a `default` written beside
+`presence: "required"` does not compile and a `presence: "default"` without a
+`default` does not either, and the twin command factories narrow the handler's
+`ctx`, making a `.write()` inside a read-only command a compile error. That
+share of the enforcement reaching the compiler is TypeScript's alone; the
+runtime checks every implementation carries are still there underneath. What the
+three hold identical is behavior: the same semantics, the same help bytes, the
+same schema, and the same error sentence with TypeScript's spellings inside it.
+
 ## Install
 
 ```sh
