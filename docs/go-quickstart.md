@@ -496,7 +496,10 @@ retry that echoes the state back with an acceptance is what consents. The state
 is integrity-protected, bound to that client and that exact request, expires in
 five minutes and cannot be redeemed twice. The server declares the feature by
 name (`dev.smmh.strictcli/consequential-confirmation`) in its `server/discover`
-result.
+result. A client that did not declare elicitation is answered `-32021` naming the
+capability it would need, and a client that opened with the `initialize`
+handshake is asked over that era's server-initiated `elicitation/create` instead.
+[Consequential confirmation over MCP](mcp-confirmation.md) has the full dialogue.
 
 Tool descriptors and MCP
 `tools/list` publish `Effect` and `Consequential` beside the argument schema so

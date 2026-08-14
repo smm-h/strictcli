@@ -21,6 +21,7 @@ Declare everything, infer nothing. Help text is mandatory on every app, group, c
 - [Architecture and internals](architecture.md) -- the parse pipeline, registration-time validation, and the schema format
 - [Flag system](flag-system.md) -- flags, arguments, dependencies, mutex groups, and the reserved quartet
 - [Conformance](conformance.md) -- how the three implementations are proven identical
+- [Consequential confirmation over MCP](mcp-confirmation.md) -- how a tool asks a human before it runs
 - [Process trace store](process-trace-store.md) -- how process ancestry is recorded and shared across tools
 
 ## Reference
