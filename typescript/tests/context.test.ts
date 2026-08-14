@@ -85,3 +85,54 @@ test("context: infraValue resolves declared roots and live handshakes", () => {
 			'InfraValue: "OTHER" is not a declared infra root, handshake, or connection env var',
 	});
 });
+
+// --- ctx.provided (contract §23.6) ---
+
+test("context: provided is true for the sources the invocation supplies", () => {
+	const out = sink();
+	const ctx = new Context(
+		out.writer,
+		out.writer,
+		{
+			typed: "cli",
+			from_env: "env",
+			from_config: "config",
+			implied_by: "implied",
+			declared: "default",
+			rooted: "infra",
+		},
+		null,
+	);
+	// The invocation caused the value.
+	assert.equal(ctx.provided("typed"), true);
+	assert.equal(ctx.provided("from_env"), true);
+	assert.equal(ctx.provided("from_config"), true);
+	assert.equal(ctx.provided("implied_by"), true);
+	// The declaration caused the value: a declared default, and a
+	// RelativeToRoot default whose label merely says WHICH default it was.
+	assert.equal(ctx.provided("declared"), false);
+	assert.equal(ctx.provided("rooted"), false);
+});
+
+test("context: provided accepts dashed or underscored names, underscore first", () => {
+	const out = sink();
+	const ctx = new Context(
+		out.writer,
+		out.writer,
+		{ from_file: "cli", "from-file": "default" },
+		null,
+	);
+	assert.equal(ctx.provided("from-file"), true);
+	assert.equal(ctx.provided("from_file"), true);
+});
+
+test("context: provided rejects an unknown name exactly as source does", () => {
+	const out = sink();
+	const ctx = new Context(out.writer, out.writer, { known: "cli" }, null);
+	assert.throws(() => ctx.provided("nope"), {
+		message: 'no source info for flag "nope"',
+	});
+	assert.throws(() => ctx.source("nope"), {
+		message: 'no source info for flag "nope"',
+	});
+});

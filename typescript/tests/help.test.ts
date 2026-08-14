@@ -542,3 +542,63 @@ test("help: app help shows the Infrastructure section (Python-captured)", async 
 		"myapp v1.0.0 -- test app\n\nCommands:\n  cmd    a command\n\nInfrastructure:\n  (location/handshake env vars; not suppressed by --hermetic)\n  MYAPP_ROOT            root (default: ~/.myapp)\n  MYAPP_ORCHESTRATED    set by the orchestrator\n\nUse 'myapp <command> --help' for more information.\n",
 	);
 });
+
+// --- The presence part (contract §23.8) ---
+
+test("help: every flag and arg renders exactly one presence part, last", async () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			args: [
+				arg("src", t.str, { help: "source", presence: "required" }),
+				arg("dest", t.str, { help: "destination", presence: "optional" }),
+				arg("mode", t.str, {
+					help: "mode",
+					presence: "default",
+					default: "fast",
+				}),
+			],
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
+				host: flag("host", t.str, { help: "the host", presence: "optional" }),
+				// An empty collection is a declaration now, so it announces itself
+				// rather than rendering as the one line with no presence part.
+				tag: flag("tag", t.list(t.str), {
+					help: "tags",
+					presence: "default",
+					default: [],
+				}),
+				meta: flag("meta", t.dict(t.int), {
+					help: "metadata",
+					presence: "default",
+					default: new Map(),
+				}),
+				color: flag("color", t.bool, {
+					help: "colorize",
+					presence: "optional",
+				}),
+			},
+			handler: ok,
+		}),
+	);
+	assert.equal(
+		(await app.test(["cmd", "--help"])).stdout,
+		"myapp cmd -- a command\n" +
+			"\n" +
+			"Arguments:\n" +
+			"  src     source [required]\n" +
+			"  dest    destination [optional]\n" +
+			"  mode    mode [default: fast]\n" +
+			"\n" +
+			"Flags:\n" +
+			"  --target <str>         the target [required]\n" +
+			"  --host <str>           the host [optional]\n" +
+			"  --tag <str>            tags [list] [default: []]\n" +
+			"  --meta <key=int>       metadata [dict] [default: {}]\n" +
+			"  --color, --no-color    colorize [optional]\n",
+	);
+});

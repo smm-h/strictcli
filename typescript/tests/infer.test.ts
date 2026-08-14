@@ -1,7 +1,13 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import type { InferHandler } from "../src/index.js";
-import { arg, defineReadOnlyCommand, flag, t } from "../src/index.js";
+import {
+	arg,
+	defineReadOnlyCommand,
+	flag,
+	mutexGroup,
+	t,
+} from "../src/index.js";
 
 // Exact type equality via the conditional-generic-signature trick (see
 // docs/history/_ts-port-spec.md, "Equals type-assertion technique").
@@ -127,4 +133,78 @@ const cp = defineReadOnlyCommand("cp", {
 
 export type _ArgOptionality = Assert<
 	Equals<InferHandler<typeof cp>, { src: string; dest?: string; mode: string }>
+>;
+
+// --- Presence drives optionality, including for mutex members ---
+// Before the presence declaration a mutex member declared no default, was
+// typed as an always-present non-nullable key, and was handed `undefined` by
+// the parser through the exemption contract §23.4 deletes. The member now
+// declares `presence: "optional"` like anything else and the handler-args type
+// follows the declaration by construction.
+
+const pick = defineReadOnlyCommand("pick", {
+	help: "Pick a source",
+	mutex: [
+		mutexGroup({
+			from_file: flag("from-file", t.str, {
+				help: "From a file",
+				presence: "optional",
+			}),
+			from_url: flag("from-url", t.str, {
+				help: "From a URL",
+				presence: "default",
+				default: "https://example.test",
+			}),
+		}),
+	],
+	handler: (args) => (args.from_file === undefined ? args.from_url.length : 0),
+});
+
+// A mutex group's flags reach the handler-args type through an intersection
+// that TS keeps deferred, so these are assignability assertions rather than
+// the Equals identity check the plain flag/arg cases use.
+declare const pickArgs: InferHandler<typeof pick>;
+void [
+	// @ts-expect-error an optional mutex member is possibly undefined
+	(): string => pickArgs.from_file,
+	(): string | undefined => pickArgs.from_file,
+	// A member declaring a default is always present and never undefined.
+	(): string => pickArgs.from_url,
+];
+
+// --- Optionality reaches compound carriers too ---
+
+const gather = defineReadOnlyCommand("gather", {
+	help: "Gather things",
+	flags: {
+		tag: flag("tag", t.list(t.str), { help: "Tags", presence: "optional" }),
+		meta: flag("meta", t.dict(t.int), { help: "Meta", presence: "optional" }),
+		port: flag("port", t.int, { help: "Port", presence: "required" }),
+	},
+	handler: (args) => (args.tag === undefined ? Number(args.port) : 0),
+});
+
+export type _CompoundOptionality = Assert<
+	Equals<
+		InferHandler<typeof gather>,
+		{ port: bigint; tag?: string[]; meta?: Map<string, bigint> }
+	>
+>;
+
+// --- A variadic arg is always present, whatever its presence declaration ---
+
+const collect = defineReadOnlyCommand("collect", {
+	help: "Collect files",
+	args: [
+		arg("files", t.str, {
+			help: "Files",
+			variadic: true,
+			presence: "optional",
+		}),
+	],
+	handler: (args) => args.files.length,
+});
+
+export type _VariadicAlwaysPresent = Assert<
+	Equals<InferHandler<typeof collect>, { files: string[] }>
 >;

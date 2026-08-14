@@ -100,7 +100,7 @@ test("jsonSchema: list and dict flags become array/object", () => {
 
 // --- jsonSchema: required rules ---
 
-test("jsonSchema: required covers only scalar non-bool flags without defaults", () => {
+test("jsonSchema: required is exactly the declared-required set", () => {
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("cmd", {
@@ -139,6 +139,51 @@ test("jsonSchema: required covers only scalar non-bool flags without defaults", 
 		}),
 	);
 	assert.deepEqual(app.jsonSchema("cmd").required, ["name"]);
+});
+
+test("jsonSchema: a required BOOL is required, and so are compounds", () => {
+	// The hand-written derivation excluded bools on the reasoning that "bool
+	// flags always have a default", which the presence declaration makes false
+	// by construction (contract §13's presence-round amendment).
+	const app = buildApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				confirmed: flag("confirmed", t.bool, {
+					help: "must be answered",
+					presence: "required",
+				}),
+				tags: flag("tags", t.list(t.str), {
+					help: "at least one tag",
+					presence: "required",
+				}),
+				chatter: flag("chatter", t.bool, {
+					help: "defaulted bool",
+					presence: "default",
+					default: false,
+				}),
+				color: flag("color", t.bool, {
+					help: "optional bool",
+					presence: "optional",
+				}),
+			},
+			args: [
+				arg("target", t.str, { help: "target", presence: "required" }),
+				arg("mode", t.str, {
+					help: "mode",
+					presence: "default",
+					default: "fast",
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	assert.deepEqual(app.jsonSchema("cmd").required, [
+		"confirmed",
+		"tags",
+		"target",
+	]);
 });
 
 test("jsonSchema: required args are listed; optional args are not", () => {

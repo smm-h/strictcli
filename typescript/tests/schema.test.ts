@@ -1398,3 +1398,81 @@ test("package.json without a usable name field is a hard error", async () => {
 		}
 	});
 });
+
+// --- The presence key (contract §13's presence-round amendment) ---
+
+test("schema: presence is on every flag and arg entry, always", () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			args: [
+				arg("src", t.str, { help: "source", presence: "required" }),
+				arg("dest", t.str, { help: "destination", presence: "optional" }),
+				arg("mode", t.str, {
+					help: "mode",
+					presence: "default",
+					default: "fast",
+				}),
+			],
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
+				host: flag("host", t.str, { help: "the host", presence: "optional" }),
+				tag: flag("tag", t.list(t.str), {
+					help: "tags",
+					presence: "default",
+					default: [],
+				}),
+				meta: flag("meta", t.dict(t.int), {
+					help: "metadata",
+					presence: "default",
+					default: new Map(),
+				}),
+				label: flag("label", t.str, {
+					help: "a label",
+					presence: "default",
+					default: "",
+				}),
+				chatter: flag("chatter", t.bool, {
+					help: "chatter",
+					presence: "default",
+					default: false,
+				}),
+			},
+			handler: () => 0,
+		}),
+	);
+	const dict = app.dumpSchemaDict() as Record<string, unknown> & {
+		commands: Record<string, unknown>;
+	};
+	const cmd = dict.commands.cmd as {
+		flags: Record<string, unknown>[];
+		args: Record<string, unknown>[];
+	};
+	const byName = new Map(cmd.flags.map((f) => [f.name as string, f]));
+	assert.equal(byName.get("target")?.presence, "required");
+	assert.ok(!("default" in (byName.get("target") ?? {})));
+	assert.equal(byName.get("host")?.presence, "optional");
+	assert.ok(!("default" in (byName.get("host") ?? {})));
+	// A declared default is emitted ALWAYS, whatever the value: [], {}, "",
+	// false and 0 are declarations rather than the absence of one.
+	assert.deepEqual(byName.get("tag")?.default, []);
+	assert.deepEqual(byName.get("meta")?.default, new Map());
+	assert.equal(byName.get("label")?.default, "");
+	assert.equal(byName.get("chatter")?.default, false);
+
+	const args = new Map(cmd.args.map((a) => [a.name as string, a]));
+	assert.equal(args.get("src")?.presence, "required");
+	assert.equal(args.get("dest")?.presence, "optional");
+	assert.equal(args.get("mode")?.presence, "default");
+	assert.equal(args.get("mode")?.default, "fast");
+	// The arg entry's `required` key is deleted, here and in the defaults block.
+	for (const a of cmd.args) {
+		assert.ok(!("required" in a));
+	}
+	const defaults = dict.defaults as { arg: Record<string, unknown> };
+	assert.ok(!("required" in defaults.arg));
+});

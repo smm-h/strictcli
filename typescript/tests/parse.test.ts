@@ -12,6 +12,7 @@ import type { AppImpl, AppSpec } from "../src/app.js";
 import { Context } from "../src/context.js";
 import type {
 	AnyCommand,
+	AnyFlag,
 	PassthroughArgs,
 	PassthroughDef,
 } from "../src/factories.js";
@@ -2800,4 +2801,218 @@ test("tokensContainHelp respects the -- separator", () => {
 	assert.equal(tokensContainHelp(["-h"]), true);
 	assert.equal(tokensContainHelp(["--", "--help"]), false);
 	assert.equal(tokensContainHelp(["a", "b"]), false);
+});
+
+// =========================================================================
+// The presence declaration (contract §23)
+// =========================================================================
+
+/** Builds a one-command app whose single flag is declared as given. */
+function appWithFlag(f: AnyFlag): AppImpl {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: { [flagParamName(f.name)]: f } as Record<string, AnyFlag>,
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+async function kwargsOf(
+	app: AppImpl,
+	argv: readonly string[],
+): Promise<Record<string, unknown>> {
+	const r = await run(app, argv);
+	const o = r.outcome as Extract<ParseOutcome, { kind: "command" }>;
+	assert.equal(r.kind, "command", r.stderr);
+	return o.kwargs;
+}
+
+async function sourcesOf(
+	app: AppImpl,
+	argv: readonly string[],
+): Promise<Record<string, string>> {
+	const r = await run(app, argv);
+	const o = r.outcome as Extract<ParseOutcome, { kind: "command" }>;
+	assert.equal(r.kind, "command", r.stderr);
+	return o.sources;
+}
+
+test("presence: an optional flag delivers absence, whatever the carrier", async () => {
+	const scalar = appWithFlag(
+		flag("target", t.str, { help: "the target", presence: "optional" }),
+	);
+	assert.deepEqual(await kwargsOf(scalar, ["cmd"]), { target: undefined });
+
+	const list = appWithFlag(
+		flag("tag", t.list(t.str), { help: "tags", presence: "optional" }),
+	);
+	// Absence, NOT the empty list the framework used to invent (§23.4).
+	assert.deepEqual(await kwargsOf(list, ["cmd"]), { tag: undefined });
+	assert.deepEqual(await kwargsOf(list, ["cmd", "--tag", "a"]), { tag: ["a"] });
+
+	const dict = appWithFlag(
+		flag("meta", t.dict(t.int), { help: "meta", presence: "optional" }),
+	);
+	assert.deepEqual(await kwargsOf(dict, ["cmd"]), { meta: undefined });
+});
+
+test("presence: an optional bool is a real tri-state", async () => {
+	const app = appWithFlag(
+		flag("color", t.bool, { help: "colorize", presence: "optional" }),
+	);
+	assert.deepEqual(await kwargsOf(app, ["cmd"]), { color: undefined });
+	assert.deepEqual(await kwargsOf(app, ["cmd", "--color"]), { color: true });
+	assert.deepEqual(await kwargsOf(app, ["cmd", "--no-color"]), {
+		color: false,
+	});
+});
+
+test("presence: a declared empty collection default is delivered as declared", async () => {
+	const list = appWithFlag(
+		flag("tag", t.list(t.str), {
+			help: "tags",
+			presence: "default",
+			default: [],
+		}),
+	);
+	assert.deepEqual(await kwargsOf(list, ["cmd"]), { tag: [] });
+
+	const dict = appWithFlag(
+		flag("meta", t.dict(t.int), {
+			help: "meta",
+			presence: "default",
+			default: new Map(),
+		}),
+	);
+	assert.deepEqual(await kwargsOf(dict, ["cmd"]), { meta: new Map() });
+});
+
+test("presence: a required compound flag must be supplied", async () => {
+	const list = appWithFlag(
+		flag("tag", t.list(t.str), { help: "tags", presence: "required" }),
+	);
+	const r = await run(list, ["cmd"]);
+	assert.equal(r.exitCode, 1);
+	assert.equal(r.stderr, errOut("flag '--tag' is required", "myapp cmd"));
+	assert.deepEqual(await kwargsOf(list, ["cmd", "--tag", "a"]), { tag: ["a"] });
+
+	const dict = appWithFlag(
+		flag("meta", t.dict(t.int), { help: "meta", presence: "required" }),
+	);
+	assert.equal(
+		(await run(dict, ["cmd"])).stderr,
+		errOut("flag '--meta' is required", "myapp cmd"),
+	);
+});
+
+test("presence: requiredness is satisfied by env, not only by a CLI token", async () => {
+	const app = makeApp({ envPrefix: "MYAPP" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					env: "MYAPP_TARGET",
+					presence: "required",
+				}),
+			},
+			handler: () => 0,
+		}),
+	);
+	await withEnv({ MYAPP_TARGET: "from-env" }, async () => {
+		assert.deepEqual(await kwargsOf(app, ["cmd"]), { target: "from-env" });
+	});
+});
+
+test("presence: an optional arg delivers a present key holding absence", async () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			args: [
+				arg("src", t.str, { help: "source", presence: "required" }),
+				arg("dest", t.str, { help: "destination", presence: "optional" }),
+			],
+			handler: () => 0,
+		}),
+	);
+	const kwargs = await kwargsOf(app, ["cmd", "a"]);
+	// The KEY is present -- key-absence delivery was rejected for the round.
+	assert.ok("dest" in kwargs);
+	assert.deepEqual(kwargs, { src: "a", dest: undefined });
+	assert.deepEqual(await kwargsOf(app, ["cmd", "a", "b"]), {
+		src: "a",
+		dest: "b",
+	});
+});
+
+test("presence: a variadic arg's presence decides whether none is legal", async () => {
+	const mk = (presence: "required" | "optional"): AppImpl => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("cmd", {
+				help: "a command",
+				args: [
+					arg("files", t.str, { help: "files", variadic: true, presence }),
+				],
+				handler: () => 0,
+			}),
+		);
+		return app;
+	};
+	assert.deepEqual(await kwargsOf(mk("optional"), ["cmd"]), { files: [] });
+	assert.equal(
+		(await run(mk("required"), ["cmd"])).stderr,
+		errOut("missing required argument 'files'", "myapp cmd"),
+	);
+});
+
+test("presence: a mutex member's own declaration decides its absence", async () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			mutex: [
+				mutexGroup({
+					from_file: flag("from-file", t.str, {
+						help: "from a file",
+						presence: "optional",
+					}),
+					from_url: flag("from-url", t.str, {
+						help: "from a URL",
+						presence: "default",
+						default: "https://example.test",
+					}),
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	// The exemption that handed every unelected member an absent value is gone
+	// (§23.4): the optional member delivers absence, the defaulted member its
+	// declared default.
+	assert.deepEqual(await kwargsOf(app, ["cmd", "--from-file", "f"]), {
+		from_file: "f",
+		from_url: "https://example.test",
+	});
+	assert.deepEqual(await kwargsOf(app, ["cmd", "--from-url", "u"]), {
+		from_file: undefined,
+		from_url: "u",
+	});
+});
+
+test("presence: an optional flag that received nothing reports source default", async () => {
+	const app = appWithFlag(
+		flag("target", t.str, { help: "the target", presence: "optional" }),
+	);
+	// No seventh source label is minted: an optional declaration deciding on
+	// absence IS the declaration deciding (§23.6).
+	assert.deepEqual(await sourcesOf(app, ["cmd"]), { target: "default" });
+	assert.deepEqual(await sourcesOf(app, ["cmd", "--target", "x"]), {
+		target: "cli",
+	});
 });
