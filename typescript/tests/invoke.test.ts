@@ -283,6 +283,37 @@ test("call: missing required positional arg raises InvokeError", async () => {
 	});
 });
 
+test("call: an omitted optional arg arrives as a present key holding absence", async () => {
+	// The presence declaration reaches the programmatic path too (§23.3): the
+	// key is delivered, holding undefined, rather than being omitted.
+	const app = buildApp();
+	let seen: Record<string, unknown> | undefined;
+	app.command(
+		defineReadOnlyCommand("copy", {
+			help: "copy",
+			args: [
+				arg("src", t.str, { help: "source", presence: "required" }),
+				arg("dest", t.str, { help: "destination", presence: "optional" }),
+			],
+			flags: {
+				mode: flag("mode", t.str, { help: "mode", presence: "optional" }),
+				tag: flag("tag", t.list(t.str), { help: "tags", presence: "optional" }),
+			},
+			handler: (args) => {
+				seen = args as Record<string, unknown>;
+				return 0;
+			},
+		}),
+	);
+	await app.call("copy", { src: "a" });
+	assert.ok(seen);
+	assert.ok("dest" in seen);
+	assert.equal(seen.dest, undefined);
+	assert.equal(seen.mode, undefined);
+	// Not the empty list the framework used to invent for a compound flag.
+	assert.equal(seen.tag, undefined);
+});
+
 // --- Error cases ---
 
 test("call: unknown command raises InvokeError", async () => {
