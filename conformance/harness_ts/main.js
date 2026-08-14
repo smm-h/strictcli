@@ -262,6 +262,19 @@ function buildFlag(fd) {
 	if ("negatable" in fd && fd.negatable === false) {
 		opts.negatable = false;
 	}
+	// The corpus's one expressible validator shape (case-schema `validate`):
+	// a callable refusing named values with a fixed message. Comparison goes
+	// through each language's own default formatting of the value, so one
+	// reject list means the same set in all three.
+	if ("validate" in fd) {
+		const rejects = new Set(fd.validate.rejects.map((r) => String(r)));
+		const message = fd.validate.message;
+		opts.validate = (v) => {
+			if (rejects.has(String(v))) {
+				throw new Error(message);
+			}
+		};
+	}
 	return flag(name, carrier, opts);
 }
 

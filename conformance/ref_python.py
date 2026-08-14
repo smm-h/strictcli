@@ -124,6 +124,15 @@ def _emit_default_value(value: object, ftype: str) -> str:
     return repr(value)
 
 
+def _validate_part(decl: dict) -> list[str]:
+    """Emit the `validate=` keyword from a case's closed validator vocabulary."""
+    if "validate" not in decl:
+        return []
+    spec = decl["validate"]
+    rejects = [str(r) for r in spec["rejects"]]
+    return [f"validate=_mk_validate({rejects!r}, {spec['message']!r})"]
+
+
 def _emit_flag(flag_def: dict, indent: str = "") -> str:
     """Emit a strictcli.Flag(...) expression from a flag JSON definition."""
     parts = [
@@ -183,6 +192,8 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
 
     if "negatable" in flag_def and not flag_def["negatable"]:
         parts.append("negatable=False")
+
+    parts.extend(_validate_part(flag_def))
 
     return f"{indent}strictcli.Flag({', '.join(parts)})"
 
@@ -279,18 +290,24 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
         if ftype.startswith("list["):
             # List compound type: print comma-separated
             lines.append(
-                f"    _parts[{f['name']!r}] = ','.join(str(x) for x in {pname})"
+                f"    _parts[{f['name']!r}] = 'None' if {pname} is None "
+                f"else ','.join(str(x) for x in {pname})"
             )
         elif ftype.startswith("dict["):
             # Dict compound type: print key=value pairs comma-separated, keys
             # sorted for deterministic (cross-target) output.
             lines.append(
-                f"    _parts[{f['name']!r}] = ','.join(f'{{k}}={{v}}' for k, v in sorted({pname}.items()))"
+                f"    _parts[{f['name']!r}] = 'None' if {pname} is None "
+                f"else ','.join(f'{{k}}={{v}}' for k, v in sorted({pname}.items()))"
             )
         elif f.get("repeatable", False):
-            # For repeatable, print comma-separated values
+            # For repeatable, print comma-separated values. An OPTIONAL
+            # compound flag that received nothing delivers absence rather than
+            # an empty collection (contract §23.5), and absence renders as the
+            # scalar branches render it.
             lines.append(
-                f"    _parts[{f['name']!r}] = ','.join(str(x) for x in {pname})"
+                f"    _parts[{f['name']!r}] = 'None' if {pname} is None "
+                f"else ','.join(str(x) for x in {pname})"
             )
         elif ftype == "bool":
             lines.append(
@@ -766,6 +783,7 @@ def _emit_command_registration(
             fd_parts.append(f"env_separator={f['env_separator']!r}")
         if "negatable" in f and not f["negatable"]:
             fd_parts.append("negatable=False")
+        fd_parts.extend(_validate_part(f))
         flag_decorators.append(
             f"{indent}@strictcli.flag({', '.join(fd_parts)})"
         )
@@ -782,7 +800,6 @@ def _emit_command_registration(
             unique_params.append(p)
     params = unique_params
 
-    param_strs = []
     # A handler parameter bound to an OPTIONAL flag or arg must default to None
     # (contract §23.3): the framework refuses any other default at registration.
     optional_names = {
@@ -795,11 +812,12 @@ def _emit_command_registration(
         for f in cmd_def.get("flags", [])
         if f.get("presence") == "optional"
     }
-    for p in params:
-        if p in optional_names:
-            param_strs.append(f"{p}=None")
-        else:
-            param_strs.append(p)
+    # Python forbids a parameter without a default after one that has it, so the
+    # bare parameters are emitted first and the `=None` ones after. Declaration
+    # order carries no meaning here: the framework passes every declared value
+    # as a keyword argument on every dispatch (§23.3's delivery rule).
+    param_strs = [p for p in params if p not in optional_names]
+    param_strs += [f"{p}=None" for p in params if p in optional_names]
     # Handlers are ctx-first under the unified contract.
     sig_params = ", ".join(["ctx"] + param_strs)
     fn_name = f"{cmd_def['name'].replace('-', '_')}_handler"
@@ -914,6 +932,16 @@ def generate(app_def: dict) -> str:
     lines.append("# Add strictcli to path")
     lines.append("sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))")
     lines.append("import strictcli")
+    lines.append("")
+    # The conformance corpus's one expressible validator shape (case-schema
+    # `validate`): a callable refusing named values with a fixed message. All
+    # three harnesses build the identical callable, so the resulting
+    # `--<flag>: <message>` parse error is byte-identical.
+    lines.append("def _mk_validate(rejects, message):")
+    lines.append("    def _validate(value):")
+    lines.append("        if str(value) in rejects:")
+    lines.append("            raise ValueError(message)")
+    lines.append("    return _validate")
     lines.append("")
 
     # The aborting-check exception type. Spelled identically in all three

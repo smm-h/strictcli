@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -683,6 +684,24 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	if v, ok := fd["negatable"]; ok && !v.(bool) {
 		opts = append(opts, strictcli.NegatableOpt(false))
 	}
+	// The corpus's one expressible validator shape (case-schema `validate`):
+	// a callable refusing named values with a fixed message. Comparison goes
+	// through each language's own default formatting of the value, so one
+	// reject list means the same set in all three.
+	if v, ok := fd["validate"]; ok {
+		spec := v.(map[string]interface{})
+		rejects := map[string]bool{}
+		for _, r := range spec["rejects"].([]interface{}) {
+			rejects[fmt.Sprintf("%v", r)] = true
+		}
+		message := spec["message"].(string)
+		opts = append(opts, strictcli.ValidateFn(func(val interface{}) error {
+			if rejects[fmt.Sprintf("%v", val)] {
+				return errors.New(message)
+			}
+			return nil
+		}))
+	}
 
 	switch ftype {
 	case "bool":
@@ -1304,8 +1323,13 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 
 			if strings.HasPrefix(ftype, "list[") {
 				raw := args[key]
-				var parts []string
-				if raw != nil {
+				// An OPTIONAL compound flag that received nothing delivers
+				// absence rather than an empty collection (contract §23.5),
+				// and absence renders as the scalar branches render it.
+				if raw == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else {
+					var parts []string
 					itemType := ftype[5 : len(ftype)-1] // extract "int" from "list[int]"
 					for _, v := range raw.([]interface{}) {
 						if itemType == "int" {
@@ -1314,12 +1338,14 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 							parts = append(parts, fmt.Sprintf("%v", v))
 						}
 					}
+					out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 				}
-				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 			} else if strings.HasPrefix(ftype, "dict[") {
 				raw := args[key]
-				var parts []string
-				if raw != nil {
+				if raw == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else {
+					var parts []string
 					m := raw.(map[string]interface{})
 					keys := make([]string, 0, len(m))
 					for k := range m {
@@ -1329,12 +1355,14 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 					for _, k := range keys {
 						parts = append(parts, fmt.Sprintf("%s=%v", k, m[k]))
 					}
+					out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 				}
-				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 			} else if rep, ok := fd["repeatable"]; ok && rep.(bool) {
 				raw := args[key]
-				var parts []string
-				if raw != nil {
+				if raw == nil {
+					out = strings.ReplaceAll(out, "{"+name+"}", "None")
+				} else {
+					var parts []string
 					for _, v := range raw.([]interface{}) {
 						if ftype == "int" {
 							parts = append(parts, fmt.Sprintf("%d", v.(int)))
@@ -1342,8 +1370,8 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 							parts = append(parts, fmt.Sprintf("%v", v))
 						}
 					}
+					out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 				}
-				out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 			} else if ftype == "bool" {
 				if args[key] == nil {
 					out = strings.ReplaceAll(out, "{"+name+"}", "None")

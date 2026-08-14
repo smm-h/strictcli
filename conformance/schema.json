@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "The 'validate' feature (custom validation callback on flags) is intentionally excluded from this conformance schema because it is a callable that cannot be serialized to JSON. Both implementations support it (Flag.validate in Python, ValidateFn() in Go) but it is tested via unit tests, not conformance tests.",
+  "$comment": "The 'validate' feature (custom validation callback on flags) is expressed through the closed `validate` vocabulary on a flag entry (a reject list plus a message) rather than as an arbitrary callable: a JSON case cannot carry a function, but it can carry the one shape the conformance corpus needs -- a validator that refuses named values -- and each harness builds the identical callable from it. Richer validators stay in the per-language unit suites.",
   "title": "strictcli conformance test cases",
   "description": "Array of test cases for verifying strictcli implementations.",
   "type": "array",
@@ -433,7 +433,7 @@
               "type": "string"
             }
           },
-          "description": "App-level observe authorization (effects contract \u00a76.2): argv PREFIXES matched element-wise by string equality. A ctx.effects.run whose argv matches one is an observe -- it executes even in dry mode, returns a real value, and is never written to the would-do log."
+          "description": "App-level observe authorization (effects contract §6.2): argv PREFIXES matched element-wise by string equality. A ctx.effects.run whose argv matches one is an observe -- it executes even in dry mode, returns a real value, and is never written to the would-do log."
         }
       }
     },
@@ -677,12 +677,12 @@
             "read_only",
             "mutating"
           ],
-          "description": "The mandatory command classification (effects contract \u00a71.1). Deliberately NOT in the top-level 'required' list: a top-level required applies conjunctively with the deprecated branch's 'then', which would make classification mandatory on deprecated entries too -- the opposite of \u00a71.1's exemption. The 'else' branch below is what makes it mandatory on every non-deprecated entry."
+          "description": "The mandatory command classification (effects contract §1.1). Deliberately NOT in the top-level 'required' list: a top-level required applies conjunctively with the deprecated branch's 'then', which would make classification mandatory on deprecated entries too -- the opposite of §1.1's exemption. The 'else' branch below is what makes it mandatory on every non-deprecated entry."
         },
         "consequential": {
           "type": "boolean",
           "default": false,
-          "description": "Declares that the command's effects are worth interrupting someone for (effects contract \u00a78.1). The framework prompts for exactly these commands and for no others. NOT mandatory -- absence means 'not consequential' -- so it is neither in 'required' nor in the 'else' branch. Declaring it on a read_only command is a registration-time hard error."
+          "description": "Declares that the command's effects are worth interrupting someone for (effects contract §8.1). The framework prompts for exactly these commands and for no others. NOT mandatory -- absence means 'not consequential' -- so it is neither in 'required' nor in the 'else' branch. Declaring it on a read_only command is a registration-time hard error."
         },
         "dry_run_supported": {
           "type": "boolean",
@@ -691,12 +691,12 @@
         },
         "payload_schema": {
           "type": "object",
-          "description": "The command's machine payload contract (effects contract \u00a719.5): an inline JSON Schema literal, registered as written, validated at registration over the closed subset, enforced against the payload at emission, and published verbatim by --dump-schema. Absence means the command cannot produce a payload -- ctx.payload is then a call-time hard error. Most cases leave this key out: the harnesses declare the permissive literal {} for every command whose handler_returns supplies a payload, identically in all three languages. Write it explicitly when the case is ABOUT the declaration -- a non-empty literal published by the schema dump, or a payload validated against real keywords."
+          "description": "The command's machine payload contract (effects contract §19.5): an inline JSON Schema literal, registered as written, validated at registration over the closed subset, enforced against the payload at emission, and published verbatim by --dump-schema. Absence means the command cannot produce a payload -- ctx.payload is then a call-time hard error. Most cases leave this key out: the harnesses declare the permissive literal {} for every command whose handler_returns supplies a payload, identically in all three languages. Write it explicitly when the case is ABOUT the declaration -- a non-empty literal published by the schema dump, or a payload validated against real keywords."
         },
         "owns_stdout": {
           "type": "boolean",
           "default": false,
-          "description": "Declares that this command's stdout IS the artifact (effects contract \u00a719.6): in machine mode stdout carries the command's own document byte-exactly and the envelope moves to stderr, together with every framework diagnostic it carries. Outside machine mode the declaration changes nothing at all. Emitted by --dump-schema only when true; absence means the framework owns stdout, which is the baseline."
+          "description": "Declares that this command's stdout IS the artifact (effects contract §19.6): in machine mode stdout carries the command's own document byte-exactly and the envelope moves to stderr, together with every framework diagnostic it carries. Outside machine mode the declaration changes nothing at all. Emitted by --dump-schema only when true; absence means the framework owns stdout, which is the baseline."
         },
         "dry_run_unsupported_reason": {
           "type": "string",
@@ -708,7 +708,7 @@
           "items": {
             "$ref": "#/$defs/grant"
           },
-          "description": "Per-command grant declarations (effects contract \u00a76.1)."
+          "description": "Per-command grant declarations (effects contract §6.1)."
         },
         "forwarding": {
           "type": "object",
@@ -722,14 +722,14 @@
               "minLength": 1
             }
           },
-          "description": "Declared forwarding (effects contract \u00a710.2). The reason is mandatory and non-empty."
+          "description": "Declared forwarding (effects contract §10.2). The reason is mandatory and non-empty."
         },
         "handler_effects": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/handler_effect"
           },
-          "description": "Effect calls the generated handler issues, in order, before its return (effects contract \u00a714.4). Runs BEFORE the handler_prints / handler_returns path and does not replace it."
+          "description": "Effect calls the generated handler issues, in order, before its return (effects contract §14.4). Runs BEFORE the handler_prints / handler_returns path and does not replace it."
         },
         "handler_diagnostics": {
           "type": "array",
@@ -740,17 +740,17 @@
         },
         "handler_claims_log": {
           "const": true,
-          "description": "The generated handler calls ctx.effects.recorded() (effects contract \u00a719.7), which CLAIMS the render: the framework's own end-of-dispatch emission is suppressed for the rest of the run. A claim that never renders is re-rendered at the seam, so this key alone changes no output -- it exists to pin exactly that. Runs after handler_effects and before handler_diagnostics / handler_prints.",
+          "description": "The generated handler calls ctx.effects.recorded() (effects contract §19.7), which CLAIMS the render: the framework's own end-of-dispatch emission is suppressed for the rest of the run. A claim that never renders is re-rendered at the seam, so this key alone changes no output -- it exists to pin exactly that. Runs after handler_effects and before handler_diagnostics / handler_prints.",
           "default": false
         },
         "handler_renders_log": {
           "const": true,
-          "description": "The generated handler calls ctx.effects.render_log() / RenderLog() / renderLog() (effects contract \u00a719.7), which renders the would-do log in \u00a73.2's exact form at that point in the handler body and claims the render. Runs after handler_effects and before handler_diagnostics / handler_prints, so the log lands AHEAD of the handler's own output. A no-op in machine mode and outside dry mode.",
+          "description": "The generated handler calls ctx.effects.render_log() / RenderLog() / renderLog() (effects contract §19.7), which renders the would-do log in §3.2's exact form at that point in the handler body and claims the render. Runs after handler_effects and before handler_diagnostics / handler_prints, so the log lands AHEAD of the handler's own output. A no-op in machine mode and outside dry mode.",
           "default": false
         },
         "handler_payloads_recorded": {
           "const": true,
-          "description": "The generated handler calls ctx.payload with the verbs of ctx.effects.recorded() (effects contract \u00a719.7): the records it reads shape its own payload, identically in both modes. The verbs rather than the records themselves, because a payload is emitted exactly as the handler supplied it (\u00a719.2) and three serializers order an object's keys three ways -- an array of strings is the same bytes everywhere. Implies the permissive payload_schema literal {} when the command declares none.",
+          "description": "The generated handler calls ctx.payload with the verbs of ctx.effects.recorded() (effects contract §19.7): the records it reads shape its own payload, identically in both modes. The verbs rather than the records themselves, because a payload is emitted exactly as the handler supplied it (§19.2) and three serializers order an object's keys three ways -- an array of strings is the same bytes everywhere. Implies the permissive payload_schema literal {} when the command declares none.",
           "default": false
         },
         "hidden": {
@@ -797,7 +797,7 @@
             "kind"
           ],
           "additionalProperties": false,
-          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => ctx.payload(data) then outcome()/Exit(0); 'exit_data' => ctx.payload(data) then outcome(exit_code)/Exit(code); 'none' => return None (Python)/Exit(0) (Go)/return undefined (TypeScript); 'bad' => an invalid return (a hard error on Python and TypeScript; Go's type system makes it unrepresentable, so a 'bad' case must exclude the go target). The data kinds require the command to declare a payload_schema (contract \u00a719.4).",
+          "description": "Pins an explicit handler return (survivor-contract cases). When present, the template-printing path is skipped. 'exit' => outcome(exit_code)/Exit(code); 'data' => ctx.payload(data) then outcome()/Exit(0); 'exit_data' => ctx.payload(data) then outcome(exit_code)/Exit(code); 'none' => return None (Python)/Exit(0) (Go)/return undefined (TypeScript); 'bad' => an invalid return (a hard error on Python and TypeScript; Go's type system makes it unrepresentable, so a 'bad' case must exclude the go target). The data kinds require the command to declare a payload_schema (contract §19.4).",
           "properties": {
             "kind": {
               "enum": [
@@ -818,7 +818,7 @@
         },
         "handler_aborts": {
           "const": true,
-          "description": "The generated handler ABORTS instead of returning: it raises (Python), throws (TypeScript) or panics (Go) with the identical message 'conformance: handler aborted', after running its handler_effects and handler_diagnostics. This is the language-neutral way to reach the framework's unwinding paths (the aborted-preview marker, effects contract \u00a712.3) -- unlike handler_returns kind 'bad', which Go's Outcome type makes unrepresentable. Only true is declarable, and it excludes handler_returns: an aborting handler has no return.",
+          "description": "The generated handler ABORTS instead of returning: it raises (Python), throws (TypeScript) or panics (Go) with the identical message 'conformance: handler aborted', after running its handler_effects and handler_diagnostics. This is the language-neutral way to reach the framework's unwinding paths (the aborted-preview marker, effects contract §12.3) -- unlike handler_returns kind 'bad', which Go's Outcome type makes unrepresentable. Only true is declarable, and it excludes handler_returns: an aborting handler has no return.",
           "default": false
         },
         "passthrough": {
@@ -933,7 +933,7 @@
         "kind"
       ],
       "additionalProperties": false,
-      "description": "A per-command, per-effect-kind authorization with a mandatory human reason (effects contract \u00a76.1).",
+      "description": "A per-command, per-effect-kind authorization with a mandatory human reason (effects contract §6.1).",
       "properties": {
         "name": {
           "type": "string"
@@ -957,7 +957,7 @@
         "method"
       ],
       "additionalProperties": false,
-      "description": "One effect call the generated handler issues (effects contract \u00a714.4). Each harness materializes this identically: iterate in order, call the named method with EXACTLY the keys the entry declares (no per-method filtering -- a case declaring a key the method does not accept is asserting the error), and keep the returned carrier in a per-run slice indexed by position so forward_from / extract_from can reference it.",
+      "description": "One effect call the generated handler issues (effects contract §14.4). Each harness materializes this identically: iterate in order, call the named method with EXACTLY the keys the entry declares (no per-method filtering -- a case declaring a key the method does not accept is asserting the error), and keep the returned carrier in a per-run slice indexed by position so forward_from / extract_from can reference it.",
       "properties": {
         "method": {
           "enum": [
@@ -1024,7 +1024,7 @@
         "message"
       ],
       "additionalProperties": false,
-      "description": "One Context diagnostic call the generated handler issues. The four levels are gated by --quiet / --verbose per the effects contract \u00a77.4: debug is hidden unless --verbose, info is hidden under --quiet, and warn / error are never suppressed. Each harness materializes this identically: iterate in order, call ctx.debug / ctx.info / ctx.warn / ctx.error with the declared message.",
+      "description": "One Context diagnostic call the generated handler issues. The four levels are gated by --quiet / --verbose per the effects contract §7.4: debug is hidden unless --verbose, info is hidden under --quiet, and warn / error are never suppressed. Each harness materializes this identically: iterate in order, call ctx.debug / ctx.info / ctx.warn / ctx.error with the declared message.",
       "properties": {
         "level": {
           "enum": [
@@ -1049,7 +1049,7 @@
         "recorded"
       ],
       "additionalProperties": false,
-      "description": "One record of the structured effect log (effects contract \u00a714.2). Populated in BOTH modes; 'recorded' is the key that says which happened.",
+      "description": "One record of the structured effect log (effects contract §14.2). Populated in BOTH modes; 'recorded' is the key that says which happened.",
       "properties": {
         "seq": {
           "type": "integer"
@@ -1408,6 +1408,35 @@
         },
         "env_separator": {
           "type": "string"
+        },
+        "validate": {
+          "type": "object",
+          "required": [
+            "rejects",
+            "message"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "rejects": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "minItems": 1
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "A custom validation callback (ValidateFn / validate=), expressed as a closed vocabulary a JSON case can carry: the listed values are rejected with the given message, everything else passes. Each harness builds the same callable, so the resulting `--<flag>: <message>` parse error is byte-identical across targets. Contract §23.5's validate row -- it runs on a supplied value only, never on a declared default."
         }
       }
     },
@@ -1590,7 +1619,7 @@
               "type": "integer"
             }
           },
-          "description": "Per-target override of exit_code, for a status that is intrinsically the language's own rather than the framework's. The only such status today is an unrecovered crash: effects contract \u00a73.5 leaves an unwinding dispatch's exit status to the language ('whatever the language would have produced anyway'), and an unrecovered Go panic exits 2 where an uncaught Python exception and an uncaught Node throw both exit 1. It overrides ONLY the status: the case stays a single case and its stdout and stderr are still compared byte-for-byte across every target."
+          "description": "Per-target override of exit_code, for a status that is intrinsically the language's own rather than the framework's. The only such status today is an unrecovered crash: effects contract §3.5 leaves an unwinding dispatch's exit status to the language ('whatever the language would have produced anyway'), and an unrecovered Go panic exits 2 where an uncaught Python exception and an uncaught Node throw both exit 1. It overrides ONLY the status: the case stays a single case and its stdout and stderr are still compared byte-for-byte across every target."
         },
         "stdout_contains": {
           "oneOf": [
@@ -1731,7 +1760,7 @@
           "items": {
             "$ref": "#/$defs/effect_record"
           },
-          "description": "Deep-equality assertion against the structured effect log the run produced (effects contract \u00a714.1). Comparison is STRUCTURAL over the parsed JSON arrays, in order: key order is never compared, key sets are compared as sets (failing fast on the first difference), and values recurse. Absent optional keys and explicit-null keys are equivalent. 'recorded' is required on every record and is therefore never absent. An expected value of the string '$ANY' matches any actual value of any type -- the per-field wildcard for a field whose value is nondeterministic by construction (a continuation signature, a timestamp), where the contract is that the field is present, not what it holds."
+          "description": "Deep-equality assertion against the structured effect log the run produced (effects contract §14.1). Comparison is STRUCTURAL over the parsed JSON arrays, in order: key order is never compared, key sets are compared as sets (failing fast on the first difference), and values recurse. Absent optional keys and explicit-null keys are equivalent. 'recorded' is required on every record and is therefore never absent. An expected value of the string '$ANY' matches any actual value of any type -- the per-field wildcard for a field whose value is nondeterministic by construction (a continuation signature, a timestamp), where the contract is that the field is present, not what it holds."
         },
         "schema_command_keys": {
           "type": "object",

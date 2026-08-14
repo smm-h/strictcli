@@ -5,27 +5,54 @@
 # ///
 """Generate pairwise combinatorial test cases for strictcli conformance.
 
-Uses allpairspy to produce a covering array of all 2-way flag feature
-combinations, then writes JSON test cases to conformance/cases/pairwise.json.
+Uses allpairspy to produce a covering array of all 2-way combinations, then
+writes JSON test cases to conformance/cases/pairwise.json.
 
-Axes:
-  - Flag type: str, bool, int
-  - Short: yes, no
-  - Default: present, absent
-  - Env: present, absent
-  - Repeatable: yes, no (only str/int; forced "no" for bool)
-  - Choices: present, absent (only str/int; forced "absent" for bool)
-  - Negatable: true, false (only bool; forced "na" for str/int)
-  - Mutex: yes, no
+The matrix the presence round asks for (campaign phase L1.8) is
+{required, defaulted, optional} x {str, int, float, bool, list, dict} x
+{plain, choices, env, validate, mutex-member, co-required, implies}. It is
+spelled here as independent axes rather than one three-column table, so the
+2-way covering array also reaches the pairs the older matrix already covered
+(short x type, negatable x mutex, choices x env, repeatable x anything):
+
+  - type: str, bool, int, float, list, dict
+  - presence: required, defaulted, optional     <- the round's new dimension
+  - short: yes, no
+  - env: present, absent
+  - choices: present, absent
+  - negatable: true, false, na (bool only)
+  - mutex: yes, no
+  - constraint: plain, validate, co_required, implies
+  - repeatable: yes, no, na (scalar str/int/float only)
+
+**Presence drives how the value is supplied**, which is what makes the axis
+mean something at parse time rather than only at registration:
+
+  - a mutex member is always elected by a command-line token (see below);
+  - otherwise a flag declaring `env` is supplied through the environment,
+    which is what §23.5's env row promises satisfies requiredness;
+  - otherwise a `required` flag is supplied on the command line;
+  - otherwise nothing supplies it, so a `default` flag delivers its declared
+    value and an `optional` flag delivers **absence** -- the path that had zero
+    conformance coverage in any language before this round.
 
 Invalid combinations filtered:
-  - bool + repeatable=yes
-  - bool + choices=present
-  - non-bool + negatable in (true, false) [forced to "na"]
+  - bool + repeatable=yes, bool + choices=present
+  - non-bool + negatable in (true, false)  [forced to "na"]
+  - list/dict + repeatable in (yes, no)    [forced to "na"]
+  - list/dict + choices=present            [choices are a scalar declaration]
+  - mutex=yes + presence=required          [§23.5's mutex row: registration error]
+  - mutex=yes + constraint in (co_required, implies)  [a member of a group that
+    also demands co-presence contradicts the group's exactly-one requirement]
+  - constraint=validate + type in (bool, dict): the corpus's validator compares
+    the value through each language's own default formatting, which agrees for
+    strings, ints, floats and their list elements, and does NOT agree for a
+    bool (Python's `True` vs `true`) or for a whole dict.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 from pathlib import Path
 
@@ -36,361 +63,488 @@ CONFORMANCE_DIR = Path(__file__).resolve().parent
 SCHEMA_PATH = CONFORMANCE_DIR / "schema.json"
 
 # Axis values
-FLAG_TYPES = ["str", "bool", "int"]
+FLAG_TYPES = ["str", "bool", "int", "float", "list", "dict"]
+PRESENCE_OPTS = ["required", "defaulted", "optional"]
 SHORT_OPTS = ["yes", "no"]
-DEFAULT_OPTS = ["present", "absent"]
 ENV_OPTS = ["present", "absent"]
-REPEATABLE_OPTS = ["yes", "no"]
 CHOICES_OPTS = ["present", "absent"]
 NEGATABLE_OPTS = ["true", "false", "na"]
 MUTEX_OPTS = ["yes", "no"]
+CONSTRAINT_OPTS = ["plain", "validate", "co_required", "implies"]
+REPEATABLE_OPTS = ["yes", "no", "na"]
 
 PARAMETERS = [
     FLAG_TYPES,       # 0: type
-    SHORT_OPTS,       # 1: short
-    DEFAULT_OPTS,     # 2: default
+    PRESENCE_OPTS,    # 1: presence
+    SHORT_OPTS,       # 2: short
     ENV_OPTS,         # 3: env
-    REPEATABLE_OPTS,  # 4: repeatable
-    CHOICES_OPTS,     # 5: choices
-    NEGATABLE_OPTS,   # 6: negatable
-    MUTEX_OPTS,       # 7: mutex
+    CHOICES_OPTS,     # 4: choices
+    NEGATABLE_OPTS,   # 5: negatable
+    MUTEX_OPTS,       # 6: mutex
+    CONSTRAINT_OPTS,  # 7: constraint
+    REPEATABLE_OPTS,  # 8: repeatable
 ]
+
+SCALARS = ("str", "int", "float")
+COMPOUNDS = ("list", "dict")
+
+# The JSON type name each type axis value declares.
+JSON_TYPE = {
+    "str": "str",
+    "bool": "bool",
+    "int": "int",
+    "float": "float",
+    "list": "list[str]",
+    "dict": "dict[str,str]",
+}
+
+# The value a validator refuses, per element type. Never supplied and never a
+# declared default, so a `validate` row stays green: what the validator does to
+# a value it does refuse is pinned by the hand-written validate family.
+VALIDATE_REJECTS = {"str": "REJECTED_VALUE", "int": 1234567, "float": 9.75}
 
 
 def is_valid_combination(row: list) -> bool:
     """Filter out invalid combinations during generation.
 
-    allpairspy calls this incrementally with partial rows, so we check
-    each constraint only when the relevant indices are present.
+    allpairspy calls this incrementally with partial rows, so each constraint
+    is checked only once the indices it reads are present.
     """
     flag_type = row[0]
 
     if len(row) > 4:
-        repeatable = row[4]
-        if flag_type == "bool" and repeatable == "yes":
+        choices = row[4]
+        if flag_type in ("bool",) + COMPOUNDS and choices == "present":
             return False
     if len(row) > 5:
-        choices = row[5]
-        if flag_type == "bool" and choices == "present":
-            return False
-    if len(row) > 6:
-        negatable = row[6]
-        # negatable is only meaningful for bool
+        negatable = row[5]
         if flag_type == "bool" and negatable == "na":
             return False
         if flag_type != "bool" and negatable != "na":
+            return False
+    if len(row) > 6:
+        mutex = row[6]
+        presence = row[1]
+        # A mutex member cannot declare requiredness (contract §23.5's mutex
+        # row): the group's own requirement is what makes the choice mandatory.
+        if mutex == "yes" and presence == "required":
+            return False
+    if len(row) > 7:
+        constraint = row[7]
+        if row[6] == "yes" and constraint in ("co_required", "implies"):
+            return False
+        if constraint == "validate" and flag_type in ("bool", "dict"):
+            return False
+    if len(row) > 8:
+        repeatable = row[8]
+        if flag_type in SCALARS and repeatable == "na":
+            return False
+        if flag_type not in SCALARS and repeatable != "na":
+            return False
+        if flag_type == "bool" and repeatable == "yes":
             return False
     return True
 
 
 def _short_letter(flag_type: str) -> str:
-    """Return a short letter for the flag type."""
-    return {"str": "s", "bool": "b", "int": "n"}[flag_type]
+    return {"str": "s", "bool": "b", "int": "n", "float": "f",
+            "list": "l", "dict": "d"}[flag_type]
 
 
-def _default_value(flag_type: str) -> str | int | bool:
-    """Return a sensible default value for the flag type."""
-    return {"str": "default_val", "bool": False, "int": 42}[flag_type]
+def _choices(flag_type: str) -> list:
+    return {
+        "str": ["test_val", "other_val", "third_val"],
+        "int": [99, 50, 1],
+        "float": [1.5, 2.5, 3.5],
+    }[flag_type]
 
 
-def _choices_for_type(flag_type: str) -> list:
-    """Return a choices list that includes the test value."""
+def _values(flag_type: str, has_choices: bool, kind: str) -> dict:
+    """The three values one row uses: supplied on the CLI, supplied through the
+    environment, and declared as the default.
+
+    With `choices` every one of them is drawn from the declared choices, because
+    the default-in-choices check applies to declared values (§23.5's choices
+    row) and a supplied value is matched at parse time. A repeatable or list
+    flag carries lists, and its env form is the separator-joined text.
+    """
+    if kind in ("repeat", "list"):
+        elem = "str" if flag_type == "list" else flag_type
+        if has_choices:
+            ch = _choices(elem)
+            cli, dflt = [ch[0], ch[1]], [ch[2]]
+        elif elem == "str":
+            cli, dflt = ["alpha", "beta"], ["dflt"]
+        elif elem == "int":
+            cli, dflt = [1, 2], [42]
+        else:
+            cli, dflt = [1.5, 2.25], [0.5]
+        return {"cli": cli, "env": ",".join(str(v) for v in cli), "default": dflt}
+    if kind == "dict":
+        return {"cli": ["k=v"], "env": '{"k": "v"}', "default": {"d": "1"}}
     if flag_type == "str":
-        return ["test_val", "other_val", "third_val"]
-    elif flag_type == "int":
-        return [99, 50, 1]
-    return []
+        if has_choices:
+            return {"cli": "test_val", "env": "other_val", "default": "third_val"}
+        return {"cli": "test_val", "env": "env_val", "default": "default_val"}
+    if flag_type == "int":
+        if has_choices:
+            return {"cli": 99, "env": 50, "default": 1}
+        return {"cli": 99, "env": 77, "default": 42}
+    if flag_type == "float":
+        if has_choices:
+            return {"cli": 1.5, "env": 2.5, "default": 3.5}
+        return {"cli": 1.5, "env": 2.25, "default": 0.5}
+    # bool
+    return {"cli": True, "env": True, "default": False}
 
 
-def _expected_output(
-    flag_name: str,
-    flag_type: str,
-    is_repeatable: bool,
-    is_negatable_test: bool,
-    has_choices: bool,
-    provided_via: str,
-) -> str:
-    """Compute the expected stdout_contains substring for a test case."""
+def _render_scalar(flag_type: str, value) -> str:
+    """Render one value the way all three harnesses render it in a template."""
     if flag_type == "bool":
-        if is_negatable_test:
-            return f"{flag_name}=false"
-        if provided_via == "default":
-            return f"{flag_name}=false"
-        if provided_via == "env":
-            return f"{flag_name}=true"
-        # provided_via == "cli"
-        return f"{flag_name}=true"
+        return "true" if value else "false"
+    return str(value)
 
-    if flag_type == "str":
-        if is_repeatable and provided_via == "cli":
-            return f"{flag_name}=test_val,test_val"
-        if provided_via == "default":
-            return f"{flag_name}=default_val"
-        if provided_via == "env":
-            return f"{flag_name}=test_val" if has_choices else f"{flag_name}=env_val"
-        # provided_via == "cli"
-        return f"{flag_name}=test_val"
 
-    # int
-    if is_repeatable and provided_via == "cli":
-        return f"{flag_name}=99,99"
-    if provided_via == "default":
-        return f"{flag_name}=42"
-    if provided_via == "env":
-        return f"{flag_name}=99" if has_choices else f"{flag_name}=77"
-    # provided_via == "cli"
-    return f"{flag_name}=99"
+def _render(kind: str, flag_type: str, value) -> str:
+    """Render a resolved flag value as the harnesses' template vocabulary does."""
+    if value is None:
+        return "None"
+    if kind in ("repeat", "list"):
+        elem = "str" if flag_type == "list" else flag_type
+        return ",".join(_render_scalar(elem, v) for v in value)
+    if kind == "dict":
+        return ",".join(f"{k}={v}" for k, v in sorted(value.items()))
+    return _render_scalar(flag_type, value)
+
+
+def _kind(flag_type: str, is_repeatable: bool) -> str:
+    if flag_type == "list":
+        return "list"
+    if flag_type == "dict":
+        return "dict"
+    return "repeat" if is_repeatable else "scalar"
+
+
+def _cli_tokens(flag_name: str, short: str | None, kind: str, flag_type: str, values: dict) -> list:
+    """The argv tokens that supply this flag on the command line."""
+    spec = f"-{short}" if short else f"--{flag_name}"
+    if flag_type == "bool":
+        return [f"--{flag_name}"]
+    if kind == "repeat":
+        return [tok for v in values["cli"] for tok in (spec, str(v))]
+    if kind == "list":
+        return [tok for v in values["cli"] for tok in (spec, str(v))]
+    if kind == "dict":
+        return [tok for v in values["cli"] for tok in (spec, str(v))]
+    return [spec, str(values["cli"])]
+
+
+def _cli_result(kind: str, flag_type: str, values: dict):
+    """The value a CLI supply resolves to."""
+    if flag_type == "bool":
+        return True
+    if kind in ("repeat", "list"):
+        return list(values["cli"])
+    if kind == "dict":
+        return dict(pair.split("=", 1) for pair in values["cli"])
+    return values["cli"]
+
+
+def _env_result(kind: str, flag_type: str, values: dict):
+    """The value an env supply resolves to."""
+    if flag_type == "bool":
+        return True
+    if kind in ("repeat", "list"):
+        return list(values["cli"])
+    if kind == "dict":
+        return json.loads(values["env"])
+    return values["env"]
+
+
+def _env_text(kind: str, flag_type: str, values: dict) -> str:
+    if flag_type == "bool":
+        return "true"
+    if kind in ("repeat", "list", "dict"):
+        return values["env"]
+    return str(values["env"])
 
 
 def generate_test_case(row_idx: int, row: list) -> dict:
     """Generate a single test case from a pairwise row."""
     flag_type = row[0]
-    has_short = row[1] == "yes"
-    has_default = row[2] == "present"
+    presence = row[1]
+    has_short = row[2] == "yes"
     has_env = row[3] == "present"
-    is_repeatable = row[4] == "yes"
-    has_choices = row[5] == "present"
-    is_negatable_true = row[6] == "true"  # only meaningful when type=bool
-    is_mutex = row[7] == "yes"
+    has_choices = row[4] == "present"
+    is_negatable = row[5] == "true"  # only meaningful when type=bool
+    is_mutex = row[6] == "yes"
+    constraint = row[7]
+    is_repeatable = row[8] == "yes"
 
-    # Repeatable flags cannot have scalar defaults -- they default to [].
-    # Suppress the default axis when both are set.
-    if is_repeatable and has_default:
-        has_default = False
+    kind = _kind(flag_type, is_repeatable)
+    values = _values(flag_type, has_choices, kind)
 
     flag_name = f"flag{row_idx}"
     env_var = f"MYAPP_{flag_name.upper()}"
+    short = _short_letter(flag_type) if has_short else None
 
-    # Describe the combination for the test name
-    features = [f"type={flag_type}"]
+    # The subject flag is the implication TARGET when it is a bool: the
+    # injected value is what satisfies its presence, whatever that presence is
+    # (§23.5's Implies-target row). For every other type the implication runs
+    # beside it, because an Implies trigger must be a bool flag.
+    subject_is_implied = constraint == "implies" and flag_type == "bool"
+
+    features = [f"type={flag_type}", f"presence={presence}"]
     if has_short:
         features.append("short")
-    if has_default:
-        features.append("default")
     if has_env:
         features.append("env")
-    if is_repeatable:
-        features.append("repeatable")
     if has_choices:
         features.append("choices")
+    if is_repeatable:
+        features.append("repeatable")
     if flag_type == "bool":
-        features.append(f"negatable={row[6]}")
+        features.append(f"negatable={row[5]}")
     if is_mutex:
         features.append("mutex")
-
+    if constraint != "plain":
+        features.append(constraint)
     name = f"pairwise: {', '.join(features)}"
 
-    # Build the flag definition
     flag_def: dict = {
         "name": flag_name,
-        "type": flag_type,
+        "type": JSON_TYPE[flag_type],
         "help": f"test flag {row_idx}",
+        "presence": "default" if presence == "defaulted" else presence,
     }
+    if presence == "defaulted":
+        flag_def["default"] = values["default"]
 
     if has_short:
-        flag_def["short"] = _short_letter(flag_type)
-
-    if has_default:
-        flag_def["default"] = _default_value(flag_type)
-
+        flag_def["short"] = short
     if has_env:
         flag_def["env"] = env_var
-
     if is_repeatable:
         flag_def["repeatable"] = True
-        # Both are stated explicitly rather than left to a default: Go requires
-        # an explicit `unique` for compound flags, and a repeatable flag fed
-        # from an env var needs its separator declared. (Hand-edited into the
-        # generated file by an earlier round; carried here so regeneration is
-        # idempotent.)
+    if kind in ("repeat", "list"):
+        # Go requires an explicit `unique` on a compound flag, and a compound
+        # fed from an env var needs its separator declared.
         flag_def["unique"] = False
         if has_env:
             flag_def["env_separator"] = ","
-
     if has_choices:
-        if flag_type == "str":
-            flag_def["choices_str"] = _choices_for_type("str")
-        elif flag_type == "int":
-            flag_def["choices_int"] = _choices_for_type("int")
-
+        flag_def[f"choices_{flag_type}"] = _choices(flag_type)
     if flag_type == "bool":
-        flag_def["negatable"] = is_negatable_true
-        # A non-negatable bool outside a mutex group is REQUIRED without a
-        # declared default (there is no `--no-x` token that could supply it),
-        # so state one. Mutex members need none: the group supplies the
-        # unelected members' absence. (Hand-edited into the generated file by
-        # the required-booleans round; carried here so regeneration is
-        # idempotent.)
-        if not is_negatable_true and not is_mutex:
-            flag_def["default"] = False
+        flag_def["negatable"] = is_negatable
+    if constraint == "validate":
+        elem = "str" if flag_type == "list" else flag_type
+        flag_def["validate"] = {
+            "rejects": [VALIDATE_REJECTS[elem]],
+            "message": f"{flag_name} refuses that value",
+        }
 
-    # Decide how the value is provided and what output to expect.
-    # Priority: negatable test > env > default > CLI
+    # --- how the value is supplied -----------------------------------------
     #
     # Mutex members are the exception, and it is a hard one: under the election
-    # rules (effects contract §21) only a command-line token elects a member,
-    # and a bool member elects only when it resolves to TRUE. So a mutex row
-    # can neither test `--no-<name>` (that DECLINES, leaving the group
-    # unsatisfied -- a parse error, not the exit-0 this generator asserts) nor
-    # provide the value through env or a default (neither elects). Every mutex
-    # row therefore provides an electing CLI token; the negation and env axes
-    # are still exercised in registration (the flag declares them) and by the
-    # hand-written cases in mutex.json, which pin the decline semantics
-    # directly.
-    test_negation = flag_type == "bool" and is_negatable_true and not is_mutex
-    provided_via = "cli"
+    # rules (§21) only a command-line token elects a member, and a bool member
+    # elects only when it resolves to TRUE. So a mutex row can neither test
+    # `--no-<name>` (that DECLINES, leaving the group unsatisfied -- a parse
+    # error, not the exit-0 this generator asserts) nor supply the value through
+    # env or a default (neither elects). Every mutex row therefore supplies an
+    # electing CLI token; the decline semantics are pinned by mutex.json.
     argv = ["cmd"]
     env_dict: dict[str, str] = {}
-    app_needs_env_prefix = has_env
+    test_negation = False
 
-    if is_mutex:
-        # Elect via the command line, whatever the other axes say.
-        provided_via = "cli"
-        if flag_type == "bool":
-            argv.append(f"--{flag_name}")
-        elif flag_type == "str":
-            if is_repeatable:
-                argv.extend([f"--{flag_name}", "test_val", f"--{flag_name}", "test_val"])
-            elif has_short:
-                argv.extend([f"-{_short_letter(flag_type)}", "test_val"])
-            else:
-                argv.extend([f"--{flag_name}", "test_val"])
-        elif flag_type == "int":
-            if is_repeatable:
-                argv.extend([f"--{flag_name}", "99", f"--{flag_name}", "99"])
-            elif has_short:
-                argv.extend([f"-{_short_letter(flag_type)}", "99"])
-            else:
-                argv.extend([f"--{flag_name}", "99"])
-    elif test_negation:
-        # Test --no-flagname
-        provided_via = "cli"
-        argv.append(f"--no-{flag_name}")
+    if subject_is_implied:
+        supply = "implied"
+    elif is_mutex:
+        supply = "cli"
     elif has_env:
-        # Provide via env (also tests env-over-default when both present)
-        provided_via = "env"
-        if flag_type == "bool":
-            env_dict[env_var] = "true"
-        elif flag_type == "str":
-            env_dict[env_var] = "test_val" if has_choices else "env_val"
-        elif flag_type == "int":
-            env_dict[env_var] = "99" if has_choices else "77"
-    elif has_default:
-        # Let default apply, don't provide the flag
-        provided_via = "default"
+        supply = "env"
+    elif presence == "required":
+        supply = "cli"
     else:
-        # No default, no env: must provide via CLI
-        provided_via = "cli"
-        if flag_type == "bool":
-            argv.append(f"--{flag_name}")
-        elif flag_type == "str":
-            if is_repeatable:
-                argv.extend([f"--{flag_name}", "test_val", f"--{flag_name}", "test_val"])
-            elif has_short:
-                argv.extend([f"-{_short_letter(flag_type)}", "test_val"])
-            else:
-                argv.extend([f"--{flag_name}", "test_val"])
-        elif flag_type == "int":
-            if is_repeatable:
-                argv.extend([f"--{flag_name}", "99", f"--{flag_name}", "99"])
-            elif has_short:
-                argv.extend([f"-{_short_letter(flag_type)}", "99"])
-            else:
-                argv.extend([f"--{flag_name}", "99"])
+        supply = "none"
 
-    expected = _expected_output(
-        flag_name, flag_type, is_repeatable, test_negation,
-        has_choices, provided_via,
-    )
+    if supply == "cli":
+        test_negation = flag_type == "bool" and is_negatable and not is_mutex
+        if test_negation:
+            argv.append(f"--no-{flag_name}")
+        else:
+            argv.extend(_cli_tokens(flag_name, short, kind, flag_type, values))
+    elif supply == "env":
+        env_dict[env_var] = _env_text(kind, flag_type, values)
 
-    # Build the handler_prints template
-    handler_prints = f"{flag_name}={{{flag_name}}}"
+    if supply == "cli":
+        resolved = False if test_negation else _cli_result(kind, flag_type, values)
+    elif supply == "env":
+        resolved = _env_result(kind, flag_type, values)
+    elif supply == "implied":
+        resolved = True
+    elif presence == "defaulted":
+        resolved = flag_def["default"]
+    else:
+        resolved = None
 
-    # Build the command
-    command: dict = {
-        "name": "cmd",
-        "help": "a command",
-        "effect": "read_only",
-        "handler_prints": handler_prints,
-    }
+    expected_parts = [f"{flag_name}={_render(kind, flag_type, resolved)}"]
+    handler_parts = [f"{flag_name}={{{flag_name}}}"]
 
-    # Place flag: if mutex, put in mutex group with a companion flag
+    command: dict = {"name": "cmd", "help": "a command", "effect": "read_only"}
+    flags: list[dict] = []
+    dependencies: list[dict] = []
+
     if is_mutex:
         companion_name = f"alt{row_idx}"
-        companion_def: dict = {
+        companion: dict = {
             "name": companion_name,
-            "type": flag_type,
+            "type": JSON_TYPE[flag_type],
             "help": f"mutex companion {row_idx}",
+            "presence": "optional",
         }
         if flag_type == "bool":
-            companion_def["negatable"] = is_negatable_true
-        elif has_default:
-            # Give companion a default so it doesn't error as required
-            companion_def["default"] = _default_value(flag_type)
-        elif has_env:
-            # Give companion a default=null so it's optional but we don't
-            # need to provide it
-            companion_def["default"] = None
-
-        command["mutex"] = [{
-            "flags": [flag_def, companion_def]
-        }]
-        handler_prints = f"{flag_name}={{{flag_name}}} {companion_name}={{{companion_name}}}"
-        command["handler_prints"] = handler_prints
-
-        # Compute companion's expected output: the companion is never
-        # provided, so it uses its declared default -- and a mutex member with
-        # no declared default is None, never a type zero value.
-        if flag_type == "bool":
-            companion_expected = f"{companion_name}=None"
-        elif has_default:
-            companion_expected = f"{companion_name}={_default_value(flag_type)}"
-        else:
-            # companion has default=null (None)
-            companion_expected = f"{companion_name}=None"
-        expected = f"{expected} {companion_expected}"
+            companion["negatable"] = is_negatable
+        if kind in ("repeat", "list"):
+            companion["unique"] = False
+            if is_repeatable:
+                companion["repeatable"] = True
+        command["mutex"] = [{"flags": [flag_def, companion]}]
+        # The companion is never elected, and an `optional` member delivers
+        # absence rather than a type zero value (§21.3 as amended).
+        handler_parts.append(f"{companion_name}={{{companion_name}}}")
+        expected_parts.append(f"{companion_name}=None")
     else:
-        command["flags"] = [flag_def]
+        flags.append(flag_def)
 
-    # Build the app
+    if constraint == "co_required":
+        partner_name = f"part{row_idx}"
+        # A `default` member is NOT provided by its default (§23.5's CoRequired
+        # row), so the partner is supplied exactly when the subject is.
+        partner_provided = supply in ("cli", "env")
+        flags.append({
+            "name": partner_name,
+            "help": f"co-required partner {row_idx}",
+            "presence": "optional",
+        })
+        dependencies.append({"type": "co_required", "flags": [flag_name, partner_name]})
+        if partner_provided:
+            argv.extend([f"--{partner_name}", "together"])
+            expected_parts.append(f"{partner_name}=together")
+        else:
+            expected_parts.append(f"{partner_name}=None")
+        handler_parts.append(f"{partner_name}={{{partner_name}}}")
+
+    if constraint == "implies":
+        trigger_name = f"trig{row_idx}"
+        flags.append({
+            "name": trigger_name,
+            "type": "bool",
+            "help": f"implication trigger {row_idx}",
+            "presence": "default",
+            "default": False,
+        })
+        argv.append(f"--{trigger_name}")
+        handler_parts.append(f"{trigger_name}={{{trigger_name}}}")
+        expected_parts.append(f"{trigger_name}=true")
+        if subject_is_implied:
+            dependencies.append(
+                {"type": "implies", "flag": trigger_name, "implies": flag_name, "value": True}
+            )
+        else:
+            target_name = f"imp{row_idx}"
+            flags.append({
+                "name": target_name,
+                "type": "bool",
+                "help": f"implication target {row_idx}",
+                "presence": "default",
+                "default": False,
+            })
+            dependencies.append(
+                {"type": "implies", "flag": trigger_name, "implies": target_name, "value": True}
+            )
+            handler_parts.append(f"{target_name}={{{target_name}}}")
+            expected_parts.append(f"{target_name}=true")
+
+    if flags:
+        command["flags"] = flags
+    if dependencies:
+        command["dependencies"] = dependencies
+    command["handler_prints"] = " ".join(handler_parts)
+
     app: dict = {
         "name": "myapp",
         "version": "1.0.0",
         "help": "test",
         "commands": [command],
     }
-
-    if app_needs_env_prefix:
+    if has_env:
         app["env_prefix"] = "MYAPP"
 
-    # Build the test case
     case: dict = {
         "name": name,
         "app": app,
         "argv": argv,
-        "expect": {
-            "exit_code": 0,
-            "stdout_equals": expected,
-        },
+        "expect": {"exit_code": 0, "stdout_equals": " ".join(expected_parts)},
     }
-
     if env_dict:
         case["env"] = env_dict
-
     return case
 
 
+def _pairs_of(row: list) -> set:
+    """Every 2-way (axis, axis, value, value) pair one row covers."""
+    return {
+        (i, j, row[i], row[j])
+        for i in range(len(row))
+        for j in range(i + 1, len(row))
+    }
+
+
+def covering_rows() -> list[list]:
+    """A 2-way covering array over the axes, completed to full coverage.
+
+    allpairspy produces the covering array, but under this matrix's filters it
+    stops short: three legal (type, presence) pairs went uncovered, and a
+    presence axis that does not reach every type is the one thing this
+    generator exists to prevent. So its rows are the seed, and the remainder is
+    completed by greedily adding valid rows until every 2-way pair that ANY
+    valid row can reach is covered. What is achievable is computed from the
+    filtered combination space itself, so an impossible pair is never chased.
+    """
+    valid = [
+        list(combo)
+        for combo in itertools.product(*PARAMETERS)
+        if is_valid_combination(list(combo))
+    ]
+    achievable: set = set()
+    for row in valid:
+        achievable |= _pairs_of(row)
+
+    rows = [list(r) for r in AllPairs(PARAMETERS, filter_func=is_valid_combination)]
+    covered: set = set()
+    for row in rows:
+        covered |= _pairs_of(row)
+
+    while True:
+        missing = achievable - covered
+        if not missing:
+            break
+        best = max(valid, key=lambda r: len(_pairs_of(r) & missing))
+        gain = len(_pairs_of(best) & missing)
+        if gain == 0:
+            raise RuntimeError(f"{len(missing)} achievable pairs left uncoverable")
+        rows.append(best)
+        covered |= _pairs_of(best)
+    return rows
+
+
 def main() -> None:
-    rows = list(AllPairs(PARAMETERS, filter_func=is_valid_combination))
+    rows = covering_rows()
 
     print(f"Generated {len(rows)} pairwise combinations")
 
-    cases = []
-    for idx, row in enumerate(rows):
-        case = generate_test_case(idx, list(row))
-        cases.append(case)
+    cases = [generate_test_case(idx, list(row)) for idx, row in enumerate(rows)]
 
-    # Validate each generated case against the conformance schema
     with open(SCHEMA_PATH) as f:
         full_schema = json.load(f)
     test_case_schema = dict(full_schema["$defs"]["test_case"])
@@ -403,7 +557,7 @@ def main() -> None:
                 f"Generated case {case['name']!r} fails schema validation: {e.message}"
             ) from e
 
-    out_path = Path(__file__).resolve().parent / "cases" / "pairwise.json"
+    out_path = CONFORMANCE_DIR / "cases" / "pairwise.json"
     with open(out_path, "w") as f:
         json.dump(cases, f, indent=2)
         f.write("\n")
