@@ -215,3 +215,24 @@ class TestCheckBlockCanon:
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         # Declared in the TOML as lint-code then check-deps.
         assert list(data["checks"]) == ["check-deps", "lint-code"]
+
+    def test_a_block_with_only_provider_sourced_checks_is_omitted(
+        self, tmp_path, monkeypatch,
+    ):
+        """`checks: {}` is the app baseline, so an empty block is no block."""
+        toml_file = tmp_path / "checks.toml"
+        toml_file.write_text('app = "testapp"\n')
+        monkeypatch.chdir(tmp_path)
+
+        app = strictcli.App(
+            name="testapp", version="1.0.0", help="test app",
+            checks_path=str(toml_file),
+        )
+
+        @app.command("noop", effect="read_only", help="Does nothing")
+        def noop(ctx):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        assert "checks" not in data

@@ -14501,7 +14501,11 @@ def _dump_schema_core(app: App) -> dict:
             if cdef.scope:
                 entry["scope"] = cdef.scope
             checks_schema[name] = entry
-        schema["checks"] = checks_schema
+        # Omitted when empty, which is the baseline the `defaults` block
+        # states: an app whose only checks are provider-sourced publishes no
+        # block at all rather than an empty one.
+        if checks_schema:
+            schema["checks"] = checks_schema
     if app._config_fields:
         # Build field definitions with bound command info
         cf_schema: dict = {}
