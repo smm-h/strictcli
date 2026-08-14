@@ -1,6 +1,6 @@
 ---
 title: strictcli
-description: "strictcli is a strict CLI framework for Python, Go, and TypeScript: declare everything, infer nothing, and keep all three implementations byte-identical."
+description: "strictcli is a strict CLI framework for Python, Go, and TypeScript: declare everything, infer nothing, write each language its own way, and get identical behavior from all three."
 order: 0
 ---
 

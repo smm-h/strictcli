@@ -90,10 +90,11 @@ The divergence is not merely tolerated for style. In every case the language's
 own form bought an enforcement the other two cannot express, and every one of
 those is a gain that reaches exactly one language.
 
-### Go: an unexported field closes a trap the exported one left open
+### Go: a package-private field closes a trap the exported one left open
 
-`Required()`, `Optional()` and `Default(v)` all write the same **unexported**
-`presenceBits` field on the `Flag` struct (`go/strictcli/strictcli.go`). A
+`Required()`, `Optional()` and `Default(v)` all write the same **package-private**
+`presenceBits` field on the `Flag` struct (`go/strictcli/strictcli.go`), which no
+caller outside the package can set and only those three options do write. A
 `Flag` **struct literal** -- written directly, passing through none of the
 option constructors -- therefore declares no presence, and does not register:
 
@@ -104,7 +105,7 @@ app.GlobalFlag(strictcli.Flag{Name: "level", Type: strictcli.TypeStr, Help: "ver
 ```
 
 That refusal closed a pre-existing trap as a side effect. `Flag` has an
-exported `Default` field, and setting it on a literal left the unexported
+exported `Default` field, and setting it on a literal left the package-private
 `hasDefault` bookkeeping false, so the value was accepted at registration and
 then **silently ignored at parse time**. After the presence round that flag does
 not register at all, so the value can no longer be quietly dropped. The
@@ -172,8 +173,8 @@ framework's `None` and no second value competes with it.
 
 Go and TypeScript have no such check, and its absence is not a gap. Their
 handlers receive one `map[string]interface{}` / one args object; there is no
-per-parameter default for a handler author to re-sentinelize with. There is no
-site to check -- not a check that was skipped.
+per-parameter default with which a handler author could stand a sentinel back
+up. There is no site to check -- not a check that was skipped.
 
 ## What parity actually binds
 
@@ -199,7 +200,8 @@ Flags:
 
 **Schema fields.** `--dump-schema` emits `presence` on every flag and arg entry
 in every implementation, which is what stopped schema parity from passing by
-erasure -- the dumped schema previously carried no requiredness at all.
+erasure -- the dumped schema previously said nothing at all about which flags
+had to be supplied.
 
 **Pinned sentences.** This is the subtle one, and it is where the whole design
 becomes legible.
@@ -214,7 +216,7 @@ developer to write `presence="required"`.
 So the contract pins the **sentence**, and substitutes each language's own
 spellings inside it:
 
-| Impl | Text |
+| Implementation | Text |
 |---|---|
 | Python | `Flag "x": presence is undeclared: declare exactly one of presence="required", presence="optional", or default=<value>` |
 | Go | `Flag "target": presence is undeclared: declare exactly one of Required(), Optional(), or Default(<value>)` |
@@ -312,9 +314,9 @@ makes the idiom worth having.
 
 - **No implicit defaults.** Presence is declared three ways and derived zero
   ways. Before the round, the shape of a `default=` declaration was silently
-  read as a statement about requiredness in three mutually incompatible ways;
-  now the declaration says it, in every language, or the program does not
-  register.
+  read as a statement about whether a value had to be supplied -- in three
+  mutually incompatible ways; now the declaration says it, in every language, or
+  the program does not register.
 - **Help text is mandatory** on every app, group, command, flag and arg. Empty
   help is a registration-time error, in all three.
 - **Four types only** -- `str`, `bool`, `int`, `float` -- parsed strictly, with
