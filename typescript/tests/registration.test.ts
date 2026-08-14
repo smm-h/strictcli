@@ -34,34 +34,79 @@ function loose(v: unknown): never {
 
 test("flag: help, force ban, no- prefix ban", () => {
 	rejects(
-		() => flag("target", t.str, { help: "  " }),
+		() => flag("target", t.str, { help: "  ", presence: "required" }),
 		"Flag.help must be a non-empty string",
 	);
 	rejects(
-		() => flag("force", t.str, { help: "h" }),
+		() => flag("force", t.str, { help: "h", presence: "required" }),
 		"flag 'force' is a reserved name; use a qualified name like 'force-overwrite' or 'force-delete'",
 	);
 	rejects(
-		() => flag("no-frame", t.bool, { help: "h", default: true }),
+		() =>
+			flag("no-frame", t.bool, {
+				help: "h",
+				presence: "default",
+				default: true,
+			}),
 		"flag 'no-frame': names starting with 'no-' are reserved for the negation system; use a positive name instead",
 	);
 });
 
 test("flag: dict carriers reject repeatable, unique, choices, envSeparator", () => {
 	rejects(
-		() => flag("meta", t.dict(t.int), loose({ help: "h", repeatable: true })),
+		() =>
+			flag(
+				"meta",
+				t.dict(t.int),
+				loose({
+					help: "h",
+					repeatable: true,
+					presence: "default",
+					default: new Map(),
+				}),
+			),
 		'Flag "meta": dict type cannot be combined with repeatable=True',
 	);
 	rejects(
-		() => flag("meta", t.dict(t.int), loose({ help: "h", unique: true })),
+		() =>
+			flag(
+				"meta",
+				t.dict(t.int),
+				loose({
+					help: "h",
+					unique: true,
+					presence: "default",
+					default: new Map(),
+				}),
+			),
 		'Flag "meta": dict type cannot be combined with unique',
 	);
 	rejects(
-		() => flag("meta", t.dict(t.int), loose({ help: "h", choices: [1n] })),
+		() =>
+			flag(
+				"meta",
+				t.dict(t.int),
+				loose({
+					help: "h",
+					choices: [1n],
+					presence: "default",
+					default: new Map(),
+				}),
+			),
 		'Flag "meta": dict type cannot be combined with choices',
 	);
 	rejects(
-		() => flag("meta", t.dict(t.int), loose({ help: "h", envSeparator: "," })),
+		() =>
+			flag(
+				"meta",
+				t.dict(t.int),
+				loose({
+					help: "h",
+					envSeparator: ",",
+					presence: "default",
+					default: new Map(),
+				}),
+			),
 		'Flag "meta": dict type cannot use env_separator (env vars are parsed as JSON)',
 	);
 });
@@ -72,33 +117,65 @@ test("flag: repeatable constraint web", () => {
 			flag(
 				"chatter",
 				t.bool,
-				loose({ help: "h", default: false, repeatable: true }),
+				loose({
+					help: "h",
+					presence: "default",
+					default: false,
+					repeatable: true,
+				}),
 			),
 		'Flag "chatter": repeatable is incompatible with type=bool',
 	);
 	// TS-only: scalar repeatable flags do not exist -- list carriers ARE the
 	// repeatable flags (no sibling analog for this inexpressible state).
 	rejects(
-		() => flag("tag", t.str, loose({ help: "h", repeatable: true })),
+		() =>
+			flag(
+				"tag",
+				t.str,
+				loose({ help: "h", repeatable: true, presence: "required" }),
+			),
 		'Flag "tag": repeatable requires a list type',
 	);
 	rejects(
-		() => flag("tag", t.str, loose({ help: "h", unique: true })),
+		() =>
+			flag(
+				"tag",
+				t.str,
+				loose({ help: "h", unique: true, presence: "required" }),
+			),
 		'Flag "tag": unique requires repeatable=True',
 	);
 });
 
 test("flag: envSeparator constraint web", () => {
 	rejects(
-		() => flag("tag", t.str, loose({ help: "h", envSeparator: "," })),
+		() =>
+			flag(
+				"tag",
+				t.str,
+				loose({ help: "h", envSeparator: ",", presence: "required" }),
+			),
 		'Flag "tag": env_separator requires repeatable=True',
 	);
 	rejects(
-		() => flag("tag", t.list(t.str), { help: "h", envSeparator: "," }),
+		() =>
+			flag("tag", t.list(t.str), {
+				help: "h",
+				envSeparator: ",",
+				presence: "default",
+				default: [],
+			}),
 		'Flag "tag": env_separator requires env',
 	);
 	rejects(
-		() => flag("tag", t.list(t.str), { help: "h", env: "TAGS" }),
+		() =>
+			flag("tag", t.list(t.str), {
+				help: "h",
+				env: "TAGS",
+				presence: "default",
+				default: [],
+			}),
 		'Flag "tag": repeatable flag with env requires env_separator',
 	);
 	rejects(
@@ -107,6 +184,8 @@ test("flag: envSeparator constraint web", () => {
 				help: "h",
 				env: "TAGS",
 				envSeparator: ",,",
+				presence: "default",
+				default: [],
 			}),
 		'Flag "tag": env_separator must be a single character',
 	);
@@ -116,6 +195,8 @@ test("flag: envSeparator constraint web", () => {
 				help: "h",
 				env: "TAGS",
 				envSeparator: "\\",
+				presence: "default",
+				default: [],
 			}),
 		'Flag "tag": env_separator cannot be a backslash',
 	);
@@ -125,18 +206,28 @@ test("flag: envSeparator constraint web", () => {
 		env: "TAGS",
 		envSeparator: ",",
 		unique: true,
+		presence: "default",
+		default: [],
 	});
 	assert.equal(ok.schema, "list[str]");
 });
 
 test("flag: conflictMode must be cli-wins or error", () => {
 	rejects(
-		() => flag("target", t.str, loose({ help: "h", conflictMode: "merge" })),
+		() =>
+			flag(
+				"target",
+				t.str,
+				loose({ help: "h", conflictMode: "merge", presence: "required" }),
+			),
 		'Flag "target": conflict_mode must be "cli-wins" or "error", got \'merge\'',
 	);
 	assert.equal(
-		flag("target", t.str, { help: "h", conflictMode: "error" }).opts
-			.conflictMode,
+		flag("target", t.str, {
+			help: "h",
+			conflictMode: "error",
+			presence: "required",
+		}).opts.conflictMode,
 		"error",
 	);
 });
@@ -147,70 +238,144 @@ test("flag: choices validation", () => {
 			flag(
 				"chatter",
 				t.bool,
-				loose({ help: "h", default: false, choices: [true] }),
+				loose({
+					help: "h",
+					presence: "default",
+					default: false,
+					choices: [true],
+				}),
 			),
 		'Flag "chatter": choices is incompatible with type=bool',
 	);
 	rejects(
-		() => flag("fmt", t.str, loose({ help: "h", choices: [] })),
+		() =>
+			flag(
+				"fmt",
+				t.str,
+				loose({ help: "h", choices: [], presence: "required" }),
+			),
 		'Flag "fmt": choices must be a non-empty list',
 	);
 	rejects(
-		() => flag("fmt", t.str, loose({ help: "h", choices: ["a", 5n] })),
+		() =>
+			flag(
+				"fmt",
+				t.str,
+				loose({ help: "h", choices: ["a", 5n], presence: "required" }),
+			),
 		'Flag "fmt": choice 5 is not of type str',
 	);
 	rejects(
-		() => flag("lvl", t.int, loose({ help: "h", choices: [1n, "x"] })),
+		() =>
+			flag(
+				"lvl",
+				t.int,
+				loose({ help: "h", choices: [1n, "x"], presence: "required" }),
+			),
 		"Flag \"lvl\": choice 'x' is not of type int",
 	);
 	rejects(
-		() => flag("ratio", t.float, loose({ help: "h", choices: [1.5, 2n] })),
+		() =>
+			flag(
+				"ratio",
+				t.float,
+				loose({ help: "h", choices: [1.5, 2n], presence: "required" }),
+			),
 		'Flag "ratio": choice 2 is not of type float',
 	);
 	// Python parity: choices on LIST flags are allowed and validate elements
 	// against the item type (Go rejects; Python is the divergence oracle).
-	const ok = flag("tag", t.list(t.str), { help: "h", choices: ["a", "b"] });
+	const ok = flag("tag", t.list(t.str), {
+		help: "h",
+		choices: ["a", "b"],
+		presence: "default",
+		default: [],
+	});
 	assert.deepEqual(ok.opts.choices, ["a", "b"]);
 	rejects(
-		() => flag("tag", t.list(t.int), loose({ help: "h", choices: [1n, "x"] })),
+		() =>
+			flag(
+				"tag",
+				t.list(t.int),
+				loose({
+					help: "h",
+					choices: [1n, "x"],
+					presence: "default",
+					default: [],
+				}),
+			),
 		"Flag \"tag\": choice 'x' is not of type int",
 	);
 });
 
 test("flag: scalar default type checks (int and float only, like siblings)", () => {
 	rejects(
-		() => flag("count", t.int, loose({ help: "h", default: 5 })),
+		() =>
+			flag(
+				"count",
+				t.int,
+				loose({ help: "h", presence: "default", default: 5 }),
+			),
 		"Flag \"count\": type=int requires an int default, got 'float'",
 	);
 	rejects(
-		() => flag("count", t.int, loose({ help: "h", default: "x" })),
+		() =>
+			flag(
+				"count",
+				t.int,
+				loose({ help: "h", presence: "default", default: "x" }),
+			),
 		"Flag \"count\": type=int requires an int default, got 'str'",
 	);
 	rejects(
-		() => flag("ratio", t.float, loose({ help: "h", default: 5n })),
+		() =>
+			flag(
+				"ratio",
+				t.float,
+				loose({ help: "h", presence: "default", default: 5n }),
+			),
 		"Flag \"ratio\": type=float requires a float default, got 'int'",
 	);
 	rejects(
-		() => flag("ratio", t.float, loose({ help: "h", default: "x" })),
+		() =>
+			flag(
+				"ratio",
+				t.float,
+				loose({ help: "h", presence: "default", default: "x" }),
+			),
 		"Flag \"ratio\": type=float requires a float default, got 'str'",
 	);
 });
 
 test("flag: dict default shape checks", () => {
 	rejects(
-		() => flag("meta", t.dict(t.int), loose({ help: "h", default: [1n] })),
+		() =>
+			flag(
+				"meta",
+				t.dict(t.int),
+				loose({ help: "h", presence: "default", default: [1n] }),
+			),
 		'Flag "meta": dict flag default must be a Map',
 	);
-	rejects(
-		() => flag("meta", t.dict(t.int), { help: "h", default: new Map() }),
-		'Flag "meta": explicit empty default is redundant for dict flags, omit the default',
+	// An explicit empty dict default is a DECLARATION now (contract §23.5), so
+	// the redundancy error it used to raise is deleted (§12.12).
+	assert.doesNotThrow(() =>
+		flag("meta", t.dict(t.int), {
+			help: "h",
+			presence: "default",
+			default: new Map(),
+		}),
 	);
 	rejects(
 		() =>
 			flag(
 				"meta",
 				t.dict(t.int),
-				loose({ help: "h", default: new Map([["a", "x"]]) }),
+				loose({
+					help: "h",
+					presence: "default",
+					default: new Map([["a", "x"]]),
+				}),
 			),
 		"Flag \"meta\": dict default value for key 'a' is not of type int",
 	);
@@ -219,12 +384,17 @@ test("flag: dict default shape checks", () => {
 			flag(
 				"meta",
 				t.dict(t.int),
-				loose({ help: "h", default: new Map([[5n, 1n]]) }),
+				loose({
+					help: "h",
+					presence: "default",
+					default: new Map([[5n, 1n]]),
+				}),
 			),
 		'Flag "meta": dict default key 5 must be a string',
 	);
 	const ok = flag("meta", t.dict(t.int), {
 		help: "h",
+		presence: "default",
 		default: new Map([["a", 1n]]),
 	});
 	assert.equal(ok.schema, "dict[str,int]");
@@ -232,22 +402,46 @@ test("flag: dict default shape checks", () => {
 
 test("flag: list default shape checks", () => {
 	rejects(
-		() => flag("tag", t.list(t.str), loose({ help: "h", default: "x" })),
+		() =>
+			flag(
+				"tag",
+				t.list(t.str),
+				loose({ help: "h", presence: "default", default: "x" }),
+			),
 		'Flag "tag": list flag default must be an array',
 	);
-	rejects(
-		() => flag("tag", t.list(t.str), { help: "h", default: [] }),
-		'Flag "tag": explicit empty default is redundant for list flags, omit the default',
+	// Likewise for the empty list default: declaring it is how a list flag says
+	// "empty when absent", and omitting it is now the error.
+	assert.doesNotThrow(() =>
+		flag("tag", t.list(t.str), {
+			help: "h",
+			presence: "default",
+			default: [],
+		}),
 	);
 	rejects(
-		() => flag("tag", t.list(t.str), loose({ help: "h", default: ["a", 5n] })),
+		() =>
+			flag(
+				"tag",
+				t.list(t.str),
+				loose({ help: "h", presence: "default", default: ["a", 5n] }),
+			),
 		'Flag "tag": default element 1 is not of type str',
 	);
 	rejects(
-		() => flag("lvl", t.list(t.int), loose({ help: "h", default: [1n, 2] })),
+		() =>
+			flag(
+				"lvl",
+				t.list(t.int),
+				loose({ help: "h", presence: "default", default: [1n, 2] }),
+			),
 		'Flag "lvl": default element 1 is not of type int',
 	);
-	const ok = flag("tag", t.list(t.str), { help: "h", default: ["a"] });
+	const ok = flag("tag", t.list(t.str), {
+		help: "h",
+		presence: "default",
+		default: ["a"],
+	});
 	assert.deepEqual(ok.opts.default, ["a"]);
 });
 
@@ -257,17 +451,25 @@ test("flag: default must be in choices (Python repr formatting)", () => {
 			flag("fmt", t.str, {
 				help: "h",
 				choices: ["text", "json"],
+				presence: "default",
 				default: "xml",
 			}),
 		"Flag \"fmt\": default 'xml' is not in choices ['text', 'json']",
 	);
 	rejects(
-		() => flag("lvl", t.int, { help: "h", choices: [1n, 2n], default: 5n }),
+		() =>
+			flag("lvl", t.int, {
+				help: "h",
+				choices: [1n, 2n],
+				presence: "default",
+				default: 5n,
+			}),
 		'Flag "lvl": default 5 is not in choices [1, 2]',
 	);
 	const ok = flag("fmt", t.str, {
 		help: "h",
 		choices: ["text", "json"],
+		presence: "default",
 		default: "text",
 	});
 	assert.equal(ok.opts.default, "text");
@@ -277,42 +479,54 @@ test("flag: default must be in choices (Python repr formatting)", () => {
 
 test("arg: help and required-default", () => {
 	rejects(
-		() => arg("src", t.str, { help: " " }),
+		() => arg("src", t.str, { help: " ", presence: "required" }),
 		"Arg.help must be a non-empty string",
-	);
-	rejects(
-		() => arg("src", t.str, loose({ help: "h", default: "x" })),
-		"required arg cannot have a default",
 	);
 });
 
 test("arg: compound carriers are rejected", () => {
 	rejects(
-		() => arg("v", loose(t.dict(t.int)), { help: "h" }),
+		() => arg("v", loose(t.dict(t.int)), { help: "h", presence: "required" }),
 		'Arg "v": dict type is not supported on args',
 	);
 	rejects(
-		() => arg("v", loose(t.list(t.int)), { help: "h" }),
+		() => arg("v", loose(t.list(t.int)), { help: "h", presence: "required" }),
 		'Arg "v": list type on args requires variadic=True',
 	);
 	// TS-only: variadic args take the element carrier, never a list carrier.
 	rejects(
-		() => arg("v", loose(t.list(t.int)), { help: "h", variadic: true }),
+		() =>
+			arg("v", loose(t.list(t.int)), {
+				help: "h",
+				variadic: true,
+				presence: "required",
+			}),
 		'Arg "v": variadic args take a scalar element type, not a list type',
 	);
 });
 
 test("arg: choices validation", () => {
 	rejects(
-		() => arg("v", t.bool, loose({ help: "h", choices: [true] })),
+		() =>
+			arg(
+				"v",
+				t.bool,
+				loose({ help: "h", choices: [true], presence: "required" }),
+			),
 		'Arg "v": choices is incompatible with type=bool',
 	);
 	rejects(
-		() => arg("v", t.str, loose({ help: "h", choices: [] })),
+		() =>
+			arg("v", t.str, loose({ help: "h", choices: [], presence: "required" })),
 		'Arg "v": choices must be a non-empty list',
 	);
 	rejects(
-		() => arg("v", t.str, loose({ help: "h", choices: ["a", 5n] })),
+		() =>
+			arg(
+				"v",
+				t.str,
+				loose({ help: "h", choices: ["a", 5n], presence: "required" }),
+			),
 		'Arg "v": choice 5 is not of type str',
 	);
 	// Variadic args may declare choices (validated per element at parse time).
@@ -320,26 +534,34 @@ test("arg: choices validation", () => {
 		help: "h",
 		variadic: true,
 		choices: ["a", "b"],
+		presence: "required",
 	});
 	assert.deepEqual(ok.opts.choices, ["a", "b"]);
 });
 
 test("arg: default type checks for all four types", () => {
 	rejects(
-		() => arg("v", t.str, loose({ help: "h", required: false, default: 5n })),
+		() =>
+			arg("v", t.str, loose({ help: "h", presence: "default", default: 5n })),
 		"Arg \"v\": type=str requires a str default, got 'int'",
 	);
 	rejects(
-		() => arg("v", t.int, loose({ help: "h", required: false, default: "x" })),
+		() =>
+			arg("v", t.int, loose({ help: "h", presence: "default", default: "x" })),
 		"Arg \"v\": type=int requires an int default, got 'str'",
 	);
 	rejects(
 		() =>
-			arg("v", t.float, loose({ help: "h", required: false, default: "x" })),
+			arg(
+				"v",
+				t.float,
+				loose({ help: "h", presence: "default", default: "x" }),
+			),
 		"Arg \"v\": type=float requires a float default, got 'str'",
 	);
 	rejects(
-		() => arg("v", t.bool, loose({ help: "h", required: false, default: 5n })),
+		() =>
+			arg("v", t.bool, loose({ help: "h", presence: "default", default: 5n })),
 		"Arg \"v\": type=bool requires a bool default, got 'int'",
 	);
 });
@@ -349,8 +571,8 @@ test("arg: default must be in choices (Python repr formatting)", () => {
 		() =>
 			arg("v", t.str, {
 				help: "h",
-				required: false,
 				choices: ["a", "b"],
+				presence: "default",
 				default: "c",
 			}),
 		"Arg \"v\": default 'c' is not in choices ['a', 'b']",
@@ -359,8 +581,8 @@ test("arg: default must be in choices (Python repr formatting)", () => {
 		() =>
 			arg("v", t.int, {
 				help: "h",
-				required: false,
 				choices: [1n, 2n],
+				presence: "default",
 				default: 5n,
 			}),
 		'Arg "v": default 5 is not in choices [1, 2]',
@@ -369,9 +591,13 @@ test("arg: default must be in choices (Python repr formatting)", () => {
 
 // --- twin command factory validation ---
 
-const strFlag = (name: string) => flag(name, t.str, { help: "h" });
+const strFlag = (name: string) =>
+	flag(name, t.str, { help: "h", presence: "required" });
+/** Mutex members declare their own absence (contract §23.5's mutex row). */
+const optStrFlag = (name: string) =>
+	flag(name, t.str, { help: "h", presence: "optional" });
 const boolFlag = (name: string) =>
-	flag(name, t.bool, { help: "h", default: false });
+	flag(name, t.bool, { help: "h", presence: "default", default: false });
 
 test("command: missing help", () => {
 	rejects(
@@ -390,7 +616,11 @@ test("command: flag-map keys must be underscore forms (flags, flagSets, mutex)",
 			defineReadOnlyCommand("build", {
 				help: "h",
 				flags: {
-					simRun: flag("sim-run", t.bool, { help: "h", default: false }),
+					simRun: flag("sim-run", t.bool, {
+						help: "h",
+						presence: "default",
+						default: false,
+					}),
 				},
 				handler: () => 0,
 			}),
@@ -433,8 +663,8 @@ test("command: mutex groups need at least 2 flags and no overlap", () => {
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				mutex: [
-					mutexGroup({ a: strFlag("a"), b: strFlag("b") }),
-					mutexGroup({ a: strFlag("a"), c: strFlag("c") }),
+					mutexGroup({ a: optStrFlag("a"), b: optStrFlag("b") }),
+					mutexGroup({ a: optStrFlag("a"), c: optStrFlag("c") }),
 				],
 				handler: () => 0,
 			}),
@@ -457,7 +687,10 @@ test("command: duplicate flag and arg names", () => {
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
-				args: [arg("x", t.str, { help: "h" }), arg("x", t.str, { help: "h" })],
+				args: [
+					arg("x", t.str, { help: "h", presence: "required" }),
+					arg("x", t.str, { help: "h", presence: "required" }),
+				],
 				handler: () => 0,
 			}),
 		'command "cmd": duplicate arg name "x"',
@@ -470,8 +703,8 @@ test("command: variadic arg constraints", () => {
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				args: [
-					arg("x", t.str, { help: "h", variadic: true }),
-					arg("y", t.str, { help: "h", variadic: true }),
+					arg("x", t.str, { help: "h", variadic: true, presence: "required" }),
+					arg("y", t.str, { help: "h", variadic: true, presence: "required" }),
 				],
 				handler: () => 0,
 			}),
@@ -482,8 +715,8 @@ test("command: variadic arg constraints", () => {
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				args: [
-					arg("x", t.str, { help: "h", variadic: true }),
-					arg("y", t.str, { help: "h" }),
+					arg("x", t.str, { help: "h", variadic: true, presence: "required" }),
+					arg("y", t.str, { help: "h", presence: "required" }),
 				],
 				handler: () => 0,
 			}),
@@ -678,6 +911,7 @@ test("createApp: reserved global short flags are rejected", () => {
 					muted: flag("muted", t.bool, {
 						help: "h",
 						short: "v",
+						presence: "default",
 						default: false,
 					}),
 				},
@@ -691,7 +925,11 @@ test("createApp: global flag map keys must be underscore forms", () => {
 		() =>
 			makeApp({
 				flags: {
-					simRun: flag("sim-run", t.bool, { help: "h", default: false }),
+					simRun: flag("sim-run", t.bool, {
+						help: "h",
+						presence: "default",
+						default: false,
+					}),
 				},
 			}),
 		"App.flags key 'simRun' must be the underscore form of flag 'sim-run' ('sim_run')",
@@ -768,7 +1006,13 @@ test("app.command: env prefix enforcement", () => {
 			app.command(
 				defineReadOnlyCommand("cmd", {
 					help: "h",
-					flags: { target: flag("target", t.str, { help: "h", env: "TGT" }) },
+					flags: {
+						target: flag("target", t.str, {
+							help: "h",
+							env: "TGT",
+							presence: "required",
+						}),
+					},
 					handler: () => 0,
 				}),
 			),
@@ -783,8 +1027,13 @@ test("app.command: env prefix enforcement", () => {
 					help: "h",
 					env: "TGT",
 					prefixed: false,
+					presence: "required",
 				}),
-				output: flag("output", t.str, { help: "h", env: "MYAPP_OUTPUT" }),
+				output: flag("output", t.str, {
+					help: "h",
+					env: "MYAPP_OUTPUT",
+					presence: "required",
+				}),
 			},
 			handler: () => 0,
 		}),
@@ -831,8 +1080,14 @@ test("app.command: merged flag order is flags, then flag sets, then mutex", () =
 			flagSets: [flagSet("common", { chatter: boolFlag("chatter") })],
 			mutex: [
 				mutexGroup({
-					from_file: flag("from-file", t.str, { help: "h", default: null }),
-					from_url: flag("from-url", t.str, { help: "h", default: null }),
+					from_file: flag("from-file", t.str, {
+						help: "h",
+						presence: "optional",
+					}),
+					from_url: flag("from-url", t.str, {
+						help: "h",
+						presence: "optional",
+					}),
 				}),
 			],
 			handler: () => 0,
@@ -992,22 +1247,36 @@ const deployCmd = defineReadOnlyCommand("deploy", {
 		region: flag("region", t.str, {
 			help: "Region",
 			choices: ["eu", "us"],
+			presence: "default",
 			default: "eu",
 		}),
-		replicas: flag("replicas", t.int, { help: "Replica count" }),
+		replicas: flag("replicas", t.int, {
+			help: "Replica count",
+			presence: "required",
+		}),
 	},
 	flagSets: [
 		flagSet("common", {
-			chatter: flag("chatter", t.bool, { help: "Chatter", default: false }),
+			chatter: flag("chatter", t.bool, {
+				help: "Chatter",
+				presence: "default",
+				default: false,
+			}),
 		}),
 	],
 	mutex: [
 		mutexGroup({
-			from_file: flag("from-file", t.str, { help: "From file", default: null }),
-			from_url: flag("from-url", t.str, { help: "From URL", default: null }),
+			from_file: flag("from-file", t.str, {
+				help: "From file",
+				presence: "optional",
+			}),
+			from_url: flag("from-url", t.str, {
+				help: "From URL",
+				presence: "optional",
+			}),
 		}),
 	],
-	args: [arg("service", t.str, { help: "Service name" })],
+	args: [arg("service", t.str, { help: "Service name", presence: "required" })],
 	dependencies: [requires({ flag: "from-file", dependsOn: "region" })],
 	handler: (args) => {
 		type _Args = Assert<
@@ -1040,6 +1309,174 @@ test("integration: precisely-typed command registers with derived data intact", 
 	assert.deepEqual(reg.tags, []);
 });
 
+// --- The presence declaration (contract §23.1, §12.12) ---
+// Every message here is byte-exact: the sentence is shared across the three
+// implementations and the spellings inside it are TypeScript's own.
+
+test("presence: declaring nothing does not register", () => {
+	rejects(
+		() => flag("target", t.str, loose({ help: "h" })),
+		'Flag "target": presence is undeclared: declare exactly one of presence: "required", presence: "optional", or presence: "default" with default: <value>',
+	);
+	rejects(
+		() => arg("src", t.str, loose({ help: "h" })),
+		'Arg "src": presence is undeclared: declare exactly one of presence: "required", presence: "optional", or presence: "default" with default: <value>',
+	);
+	// A presence value outside the closed set declares none of the three.
+	rejects(
+		() => flag("target", t.str, loose({ help: "h", presence: "maybe" })),
+		'Flag "target": presence is undeclared: declare exactly one of presence: "required", presence: "optional", or presence: "default" with default: <value>',
+	);
+});
+
+test("presence: declaring two does not register, in canonical order", () => {
+	rejects(
+		() =>
+			flag(
+				"target",
+				t.str,
+				loose({ help: "h", presence: "required", default: "x" }),
+			),
+		'Flag "target": presence is declared twice: presence: "required" and presence: "default" with default: x cannot be combined; declare exactly one',
+	);
+	// Written default-first; the message still renders required/optional first.
+	rejects(
+		() =>
+			flag(
+				"target",
+				t.str,
+				loose({ default: "x", presence: "optional", help: "h" }),
+			),
+		'Flag "target": presence is declared twice: presence: "optional" and presence: "default" with default: x cannot be combined; declare exactly one',
+	);
+	rejects(
+		() =>
+			arg(
+				"src",
+				t.str,
+				loose({ help: "h", presence: "required", default: "x" }),
+			),
+		'Arg "src": presence is declared twice: presence: "required" and presence: "default" with default: x cannot be combined; declare exactly one',
+	);
+	rejects(
+		() =>
+			flag(
+				"count",
+				t.int,
+				loose({ help: "h", presence: "optional", default: 5n }),
+			),
+		'Flag "count": presence is declared twice: presence: "optional" and presence: "default" with default: 5 cannot be combined; declare exactly one',
+	);
+});
+
+test("presence: a null-valued default redirects to the optional spelling", () => {
+	rejects(
+		() => flag("target", t.str, loose({ help: "h", default: null })),
+		'Flag "target": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)',
+	);
+	// Even beside the spelling it redirects to: one spelling per fact.
+	rejects(
+		() =>
+			flag(
+				"target",
+				t.str,
+				loose({ help: "h", presence: "optional", default: null }),
+			),
+		'Flag "target": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)',
+	);
+	rejects(
+		() => arg("src", t.str, loose({ help: "h", default: null })),
+		'Arg "src": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)',
+	);
+});
+
+test('presence: "default" without a value does not register (TS-only)', () => {
+	// No sibling can express a half-written default declaration: Python's
+	// default=<value> and Go's Default(v) ARE the value.
+	rejects(
+		() => flag("target", t.str, loose({ help: "h", presence: "default" })),
+		'Flag "target": presence: "default" requires a default value: declare default: <value>, or presence: "optional" for no value',
+	);
+	rejects(
+		() => arg("src", t.str, loose({ help: "h", presence: "default" })),
+		'Arg "src": presence: "default" requires a default value: declare default: <value>, or presence: "optional" for no value',
+	);
+});
+
+test("presence: a mutex member cannot declare requiredness", () => {
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				mutex: [mutexGroup({ a: strFlag("a"), b: optStrFlag("b") })],
+				handler: () => 0,
+			}),
+		'Flag "a": a mutex member cannot declare presence: "required": the group\'s own requirement is what makes the choice mandatory',
+	);
+	// A member declaring a default is legal and unchanged (§21.3).
+	assert.doesNotThrow(() =>
+		defineReadOnlyCommand("cmd", {
+			help: "h",
+			mutex: [
+				mutexGroup({
+					a: flag("a", t.str, {
+						help: "h",
+						presence: "default",
+						default: "x",
+					}),
+					b: optStrFlag("b"),
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+});
+
+test("presence: a variadic arg cannot declare a default", () => {
+	rejects(
+		() =>
+			arg(
+				"files",
+				t.str,
+				loose({
+					help: "h",
+					variadic: true,
+					presence: "default",
+					default: "x",
+				}),
+			),
+		'Arg "files": a variadic arg cannot declare presence: "default": it always delivers a list, so declare presence: "required" for at least one value or presence: "optional" for possibly none',
+	);
+	// Both other declarations are legal on a variadic arg.
+	assert.doesNotThrow(() =>
+		arg("files", t.str, { help: "h", variadic: true, presence: "required" }),
+	);
+	assert.doesNotThrow(() =>
+		arg("files", t.str, { help: "h", variadic: true, presence: "optional" }),
+	);
+});
+
+test("presence: an optional flag composes with choices and never checks absence", () => {
+	// The default-in-choices check applies to declared VALUES only (§23.5).
+	assert.doesNotThrow(() =>
+		flag("format", t.str, {
+			help: "h",
+			presence: "optional",
+			choices: ["text", "json"],
+		}),
+	);
+	rejects(
+		() =>
+			flag("format", t.str, {
+				help: "h",
+				presence: "default",
+				default: "yaml",
+				choices: ["text", "json"],
+			}),
+		"Flag \"format\": default 'yaml' is not in choices ['text', 'json']",
+	);
+});
+
 // --- Type-level negative cases ---
 // Never-invoked closures: only the compile errors are under test.
 
@@ -1051,8 +1488,9 @@ void [
 	(app: ReturnType<typeof createApp>) =>
 		// @ts-expect-error deprecated carriers register via app.deprecate, not app.command
 		app.command(deprecated("old", "gone")),
-	// @ts-expect-error repeatable is not available on scalar carriers
-	() => flag("tag", t.str, { help: "h", repeatable: true }),
+	() =>
+		// @ts-expect-error repeatable is not available on scalar carriers
+		flag("tag", t.str, { help: "h", repeatable: true, presence: "required" }),
 	() =>
 		// @ts-expect-error configFormat is a closed union
 		createApp({ name: "x", version: "1.0.0", help: "h", configFormat: "yaml" }),

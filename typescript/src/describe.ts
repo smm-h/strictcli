@@ -528,6 +528,7 @@ export const SURFACE = {
 		{ receiver: "Context", name: "debug" },
 		{ receiver: "Context", name: "error" },
 		{ receiver: "Context", name: "source" },
+		{ receiver: "Context", name: "provided" },
 		{ receiver: "Context", name: "infraValue" },
 		{ receiver: "Context", name: "connectionEnvValue" },
 		{ receiver: "ErrorReporter", name: "note" },

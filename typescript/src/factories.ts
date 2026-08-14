@@ -244,8 +244,16 @@ interface FlagCommonOpts<Out, S extends Schema> {
  * factory at runtime with a `null` the compiler never saw.
  */
 export type FlagOpts<Out, S extends Schema> =
-	| (FlagCommonOpts<Out, S> & { readonly presence: "required" })
-	| (FlagCommonOpts<Out, S> & { readonly presence: "optional" })
+	| (FlagCommonOpts<Out, S> & {
+			readonly presence: "required";
+			/** Never declared here: a required flag has no value of its own. */
+			readonly default?: never;
+	  })
+	| (FlagCommonOpts<Out, S> & {
+			readonly presence: "optional";
+			/** Never declared here -- `default: null` is not optionality (§23.1). */
+			readonly default?: never;
+	  })
 	| (FlagCommonOpts<Out, S> & {
 			readonly presence: "default";
 			readonly default: Out | InfraRootPath;
@@ -631,7 +639,8 @@ function validateFlagConfig(
 
 /**
  * Creates a flag descriptor for use in defineCommand(). Validates the flag
- * configuration at construction time (help text, default type, choices, etc.).
+ * configuration at construction time (presence, help text, default type,
+ * choices, etc.).
  */
 export function flag<
 	const N extends string,
@@ -667,12 +676,16 @@ export type ArgOpts<Out, S extends ScalarSchema> =
 	| {
 			readonly help: string;
 			readonly presence: "required";
+			/** Never declared here: a required arg has no value of its own. */
+			readonly default?: never;
 			readonly variadic?: boolean;
 			readonly choices?: ArgChoices<Out, S>;
 	  }
 	| {
 			readonly help: string;
 			readonly presence: "optional";
+			/** Never declared here -- `default: null` is not optionality (§23.1). */
+			readonly default?: never;
 			readonly variadic?: boolean;
 			readonly choices?: ArgChoices<Out, S>;
 	  }

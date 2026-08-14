@@ -94,5 +94,9 @@ const _forged: Carrier<string, "str"> = {
 	parse: (r: string) => r,
 };
 
-// @ts-expect-error a forged carrier cannot be passed to flag()
-flag("target", { schema: "str", parse: (r: string) => r }, { help: "x" });
+flag(
+	"target",
+	// @ts-expect-error a forged carrier cannot be passed to flag()
+	{ schema: "str", parse: (r: string) => r },
+	{ help: "x", presence: "required" },
+);

@@ -81,7 +81,12 @@ export function buildApp(): App {
 					kind: "proc_mutate",
 				},
 			],
-			args: [arg("version", t.str, { help: "The version to release" })],
+			args: [
+				arg("version", t.str, {
+					help: "The version to release",
+					presence: "required",
+				}),
+			],
 			handler: (args, ctx) => {
 				// Real-mode idempotency lives in the handler and branches on an
 				// allowlisted observe -- a real value, so the preview walks straight

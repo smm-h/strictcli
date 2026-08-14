@@ -34,11 +34,21 @@ test("jsonSchema: scalar types map to string/integer/number/boolean", () => {
 		defineReadOnlyCommand("cmd", {
 			help: "multi-type command",
 			flags: {
-				name: flag("name", t.str, { help: "string flag" }),
-				count: flag("count", t.int, { help: "integer flag" }),
-				factor: flag("factor", t.float, { help: "number flag" }),
+				name: flag("name", t.str, {
+					help: "string flag",
+					presence: "required",
+				}),
+				count: flag("count", t.int, {
+					help: "integer flag",
+					presence: "required",
+				}),
+				factor: flag("factor", t.float, {
+					help: "number flag",
+					presence: "required",
+				}),
 				chatter: flag("chatter", t.bool, {
 					help: "boolean flag",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -61,8 +71,16 @@ test("jsonSchema: list and dict flags become array/object", () => {
 		defineReadOnlyCommand("cmd", {
 			help: "compound command",
 			flags: {
-				nums: flag("nums", t.list(t.int), { help: "int list" }),
-				labels: flag("labels", t.dict(t.str), { help: "labels" }),
+				nums: flag("nums", t.list(t.int), {
+					help: "int list",
+					presence: "default",
+					default: [],
+				}),
+				labels: flag("labels", t.dict(t.str), {
+					help: "labels",
+					presence: "default",
+					default: new Map(),
+				}),
 			},
 			handler: () => 0,
 		}),
@@ -88,18 +106,34 @@ test("jsonSchema: required covers only scalar non-bool flags without defaults", 
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				name: flag("name", t.str, { help: "required name" }),
+				name: flag("name", t.str, {
+					help: "required name",
+					presence: "required",
+				}),
 				greeting: flag("greeting", t.str, {
 					help: "optional",
+					presence: "default",
 					default: "hello",
 				}),
 				nickname: flag("nickname", t.str, {
 					help: "explicitly optional",
-					default: null,
+					presence: "optional",
 				}),
-				chatter: flag("chatter", t.bool, { help: "bool", default: false }),
-				items: flag("items", t.list(t.str), { help: "list" }),
-				labels: flag("labels", t.dict(t.str), { help: "dict" }),
+				chatter: flag("chatter", t.bool, {
+					help: "bool",
+					presence: "default",
+					default: false,
+				}),
+				items: flag("items", t.list(t.str), {
+					help: "list",
+					presence: "default",
+					default: [],
+				}),
+				labels: flag("labels", t.dict(t.str), {
+					help: "dict",
+					presence: "default",
+					default: new Map(),
+				}),
 			},
 			handler: () => 0,
 		}),
@@ -113,8 +147,8 @@ test("jsonSchema: required args are listed; optional args are not", () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [
-				arg("target", t.str, { help: "target" }),
-				arg("extra", t.str, { help: "extra", required: false }),
+				arg("target", t.str, { help: "target", presence: "required" }),
+				arg("extra", t.str, { help: "extra", presence: "optional" }),
 			],
 			handler: () => 0,
 		}),
@@ -131,7 +165,13 @@ test("jsonSchema: variadic args become arrays with typed items", () => {
 	app.command(
 		defineReadOnlyCommand("sum", {
 			help: "sum",
-			args: [arg("nums", t.int, { help: "numbers", variadic: true })],
+			args: [
+				arg("nums", t.int, {
+					help: "numbers",
+					variadic: true,
+					presence: "required",
+				}),
+			],
 			handler: () => 0,
 		}),
 	);
@@ -154,10 +194,21 @@ test("jsonSchema: choices become enum (bigint for int flags)", () => {
 				color: flag("color", t.str, {
 					help: "color",
 					choices: ["red", "blue"],
+					presence: "required",
 				}),
-				level: flag("level", t.int, { help: "level", choices: [1n, 2n] }),
+				level: flag("level", t.int, {
+					help: "level",
+					choices: [1n, 2n],
+					presence: "required",
+				}),
 			},
-			args: [arg("mode", t.str, { help: "mode", choices: ["fast", "slow"] })],
+			args: [
+				arg("mode", t.str, {
+					help: "mode",
+					choices: ["fast", "slow"],
+					presence: "required",
+				}),
+			],
 			handler: () => 0,
 		}),
 	);
@@ -173,8 +224,12 @@ test("jsonSchema: no choices means no enum key; help becomes description", () =>
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { name: flag("name", t.str, { help: "a name" }) },
-			args: [arg("target", t.str, { help: "the target" })],
+			flags: {
+				name: flag("name", t.str, { help: "a name", presence: "required" }),
+			},
+			args: [
+				arg("target", t.str, { help: "the target", presence: "required" }),
+			],
 			handler: () => 0,
 		}),
 	);
@@ -190,7 +245,11 @@ test("jsonSchema: dashed flag names use underscored property keys", () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				sim_run: flag("sim-run", t.bool, { help: "dry run", default: false }),
+				sim_run: flag("sim-run", t.bool, {
+					help: "dry run",
+					presence: "default",
+					default: false,
+				}),
 			},
 			handler: () => 0,
 		}),
@@ -209,7 +268,9 @@ test("jsonSchema: resolves group and nested-group command paths", () => {
 	storage.command(
 		defineReadOnlyCommand("upload", {
 			help: "upload",
-			flags: { bucket: flag("bucket", t.str, { help: "bucket" }) },
+			flags: {
+				bucket: flag("bucket", t.str, { help: "bucket", presence: "required" }),
+			},
 			handler: () => 0,
 		}),
 	);
@@ -241,7 +302,12 @@ function toolFixture() {
 		defineReadOnlyCommand("deploy", {
 			payloadSchema: {},
 			help: "deploy the app",
-			flags: { target: flag("target", t.str, { help: "deploy target" }) },
+			flags: {
+				target: flag("target", t.str, {
+					help: "deploy target",
+					presence: "required",
+				}),
+			},
 			handler: (args, ctx) => {
 				ctx.payload({ deployed: args.target });
 				return outcome(0);

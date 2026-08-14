@@ -191,7 +191,12 @@ test("mcp: tools/list returns a definition for a single command", async () => {
 	app.command(
 		defineReadOnlyCommand("deploy", {
 			help: "deploy the app",
-			flags: { target: flag("target", t.str, { help: "deploy target" }) },
+			flags: {
+				target: flag("target", t.str, {
+					help: "deploy target",
+					presence: "required",
+				}),
+			},
 			handler: () => 0,
 		}),
 	);
@@ -315,10 +320,18 @@ test("mcp: tools/list inputSchema matches jsonSchema()", async () => {
 		defineReadOnlyCommand("deploy", {
 			help: "deploy the app",
 			flags: {
-				target: flag("target", t.str, { help: "deploy target" }),
-				count: flag("count", t.int, { help: "instance count", default: 1n }),
+				target: flag("target", t.str, {
+					help: "deploy target",
+					presence: "required",
+				}),
+				count: flag("count", t.int, {
+					help: "instance count",
+					presence: "default",
+					default: 1n,
+				}),
 				chatter: flag("chatter", t.bool, {
 					help: "chatter mode",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -374,8 +387,15 @@ test("mcp: tools/call passes arguments through to the handler", async () => {
 			payloadSchema: {},
 			help: "deploy",
 			flags: {
-				target: flag("target", t.str, { help: "deploy target" }),
-				count: flag("count", t.int, { help: "instance count", default: 1n }),
+				target: flag("target", t.str, {
+					help: "deploy target",
+					presence: "required",
+				}),
+				count: flag("count", t.int, {
+					help: "instance count",
+					presence: "default",
+					default: 1n,
+				}),
 			},
 			handler: (args, ctx) => {
 				captured.target = args.target;
@@ -442,6 +462,7 @@ test("mcp: tools/call resolves dotted grouped-command names", async () => {
 			flags: {
 				sim_run: flag("sim-run", t.bool, {
 					help: "dry run mode",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -485,7 +506,12 @@ test("mcp: missing required flag surfaces as isError content", async () => {
 	app.command(
 		defineReadOnlyCommand("deploy", {
 			help: "deploy",
-			flags: { target: flag("target", t.str, { help: "deploy target" }) },
+			flags: {
+				target: flag("target", t.str, {
+					help: "deploy target",
+					presence: "required",
+				}),
+			},
 			handler: () => 0,
 		}),
 	);
@@ -650,7 +676,12 @@ test("mcp: full conversation: initialize, notification, list, call", async () =>
 		defineReadOnlyCommand("greet", {
 			payloadSchema: {},
 			help: "greet someone",
-			flags: { name: flag("name", t.str, { help: "person to greet" }) },
+			flags: {
+				name: flag("name", t.str, {
+					help: "person to greet",
+					presence: "required",
+				}),
+			},
 			handler: (args, ctx) => {
 				captured.name = args.name;
 				ctx.payload({ greeting: `hello ${args.name}` });
@@ -724,7 +755,12 @@ test("mcp: deeply nested commands list and call by dotted path", async () => {
 		defineReadOnlyCommand("upload", {
 			payloadSchema: {},
 			help: "upload a file",
-			flags: { bucket: flag("bucket", t.str, { help: "target bucket" }) },
+			flags: {
+				bucket: flag("bucket", t.str, {
+					help: "target bucket",
+					presence: "required",
+				}),
+			},
 			handler: (args, ctx) => {
 				ctx.payload({ uploaded_to: args.bucket });
 				return outcome(0);

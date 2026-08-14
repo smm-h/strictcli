@@ -432,6 +432,7 @@ test("a global flag colliding with a check flag is dropped from the command", as
 		flags: {
 			all: flag("all", t.bool, {
 				help: "Global all toggle",
+				presence: "default",
 				default: false,
 			}),
 		},

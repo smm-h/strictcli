@@ -199,7 +199,12 @@ test("flags: str flag with space and equals syntax", async () => {
 		app.command(
 			defineReadOnlyCommand("cmd", {
 				help: "a command",
-				flags: { target: flag("target", t.str, { help: "the target" }) },
+				flags: {
+					target: flag("target", t.str, {
+						help: "the target",
+						presence: "required",
+					}),
+				},
 				handler: (a) => {
 					out.push(`target=${fmt(a.target)}`);
 				},
@@ -221,10 +226,15 @@ function boolApp(out: string[], negatable?: false): AppImpl {
 					negatable === false
 						? flag("chatter", t.bool, {
 								help: "be chatter",
+								presence: "default",
 								default: false,
 								negatable: false,
 							})
-						: flag("chatter", t.bool, { help: "be chatter", default: false }),
+						: flag("chatter", t.bool, {
+								help: "be chatter",
+								presence: "default",
+								default: false,
+							}),
 			},
 			handler: (a) => {
 				out.push(`chatter=${fmt(a.chatter)}`);
@@ -258,11 +268,13 @@ test("flags: short flags for bool and str", async () => {
 				chatter: flag("chatter", t.bool, {
 					help: "be chatter",
 					short: "V",
+					presence: "default",
 					default: false,
 				}),
 				target: flag("target", t.str, {
 					help: "the target",
 					short: "t",
+					presence: "default",
 					default: "none",
 				}),
 			},
@@ -288,6 +300,7 @@ test("flags: str flag default omitted/provided", async () => {
 				flags: {
 					format: flag("format", t.str, {
 						help: "output format",
+						presence: "default",
 						default: "text",
 					}),
 				},
@@ -306,7 +319,12 @@ test("flags: required str flag missing produces exact error", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { target: flag("target", t.str, { help: "the target" }) },
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
+			},
 			handler: () => undefined,
 		}),
 	);
@@ -341,7 +359,12 @@ test("flags: required bool must-be-passed messages", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { watch: flag("watch", t.bool, { help: "watch mode" }) },
+			flags: {
+				watch: flag("watch", t.bool, {
+					help: "watch mode",
+					presence: "required",
+				}),
+			},
 			handler: () => undefined,
 		}),
 	);
@@ -359,7 +382,11 @@ test("flags: required bool must-be-passed messages", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				watch: flag("watch", t.bool, { help: "watch mode", negatable: false }),
+				watch: flag("watch", t.bool, {
+					help: "watch mode",
+					negatable: false,
+					presence: "required",
+				}),
 			},
 			handler: () => undefined,
 		}),
@@ -417,7 +444,12 @@ test("errors: flag requires a value", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { target: flag("target", t.str, { help: "the target" }) },
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
+			},
 			handler: () => undefined,
 		}),
 	);
@@ -460,9 +492,13 @@ test("errors: str flag consumes flag-like next token as its value", async () => 
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				target: flag("target", t.str, { help: "the target" }),
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
 				chatter: flag("chatter", t.bool, {
 					help: "be chatter",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -489,7 +525,9 @@ test("args: single required arg and missing required arg", async () => {
 	app.command(
 		defineReadOnlyCommand("greet", {
 			help: "say hello",
-			args: [arg("name", t.str, { help: "who to greet" })],
+			args: [
+				arg("name", t.str, { help: "who to greet", presence: "required" }),
+			],
 			handler: (a) => {
 				out.push(`hello ${fmt(a.name)}`);
 			},
@@ -512,8 +550,8 @@ test("args: two positional args in order", async () => {
 		defineReadOnlyCommand("copy", {
 			help: "copy files",
 			args: [
-				arg("src", t.str, { help: "source file" }),
-				arg("dst", t.str, { help: "destination file" }),
+				arg("src", t.str, { help: "source file", presence: "required" }),
+				arg("dst", t.str, { help: "destination file", presence: "required" }),
 			],
 			handler: (a) => {
 				out.push(`${fmt(a.src)}->${fmt(a.dst)}`);
@@ -537,7 +575,7 @@ test("args: optional arg with default, provided and omitted", async () => {
 				args: [
 					arg("path", t.str, {
 						help: "project dir",
-						required: false,
+						presence: "default",
 						default: ".",
 					}),
 				],
@@ -558,10 +596,10 @@ test("args: required first, optional second with default", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [
-				arg("src", t.str, { help: "source file" }),
+				arg("src", t.str, { help: "source file", presence: "required" }),
 				arg("dst", t.str, {
 					help: "destination",
-					required: false,
+					presence: "default",
 					default: "out",
 				}),
 			],
@@ -580,7 +618,7 @@ test("args: optional arg without default, omitted gives None", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			args: [arg("path", t.str, { help: "project dir", required: false })],
+			args: [arg("path", t.str, { help: "project dir", presence: "optional" })],
 			handler: (a) => {
 				out.push(`path=${fmt(a.path)}`);
 			},
@@ -599,10 +637,11 @@ test("args: double dash stops flag parsing", async () => {
 			flags: {
 				chatter: flag("chatter", t.bool, {
 					help: "be chatter",
+					presence: "default",
 					default: false,
 				}),
 			},
-			args: [arg("path", t.str, { help: "a path" })],
+			args: [arg("path", t.str, { help: "a path", presence: "required" })],
 			handler: (a) => {
 				out.push(`chatter=${fmt(a.chatter)} path=${fmt(a.path)}`);
 			},
@@ -618,7 +657,7 @@ test("typed args: int/float/bool coercion and exact errors", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			args: [arg("count", t.int, { help: "how many" })],
+			args: [arg("count", t.int, { help: "how many", presence: "required" })],
 			handler: (a) => {
 				out.push(`count=${fmt(a.count)}`);
 			},
@@ -637,7 +676,7 @@ test("typed args: int/float/bool coercion and exact errors", async () => {
 	app3.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			args: [arg("flag", t.bool, { help: "a bool" })],
+			args: [arg("flag", t.bool, { help: "a bool", presence: "required" })],
 			handler: (a) => {
 				out3.push(`flag=${fmt(a.flag)}`);
 			},
@@ -655,7 +694,7 @@ test("typed args: int/float/bool coercion and exact errors", async () => {
 	app5.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			args: [arg("rate", t.float, { help: "the rate" })],
+			args: [arg("rate", t.float, { help: "the rate", presence: "required" })],
 			handler: (a) => {
 				out5.push(`rate=${fmt(a.rate)}`);
 			},
@@ -676,11 +715,15 @@ function variadicApp(out: string[], required: boolean): AppImpl {
 			help: "a command",
 			args: [
 				required
-					? arg("files", t.str, { help: "files to process", variadic: true })
+					? arg("files", t.str, {
+							help: "files to process",
+							variadic: true,
+							presence: "required",
+						})
 					: arg("files", t.str, {
 							help: "files to process",
 							variadic: true,
-							required: false,
+							presence: "optional",
 						}),
 			],
 			handler: (a) => {
@@ -722,8 +765,12 @@ test("variadic: with preceding required arg", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			args: [
-				arg("target", t.str, { help: "the target" }),
-				arg("files", t.str, { help: "files", variadic: true }),
+				arg("target", t.str, { help: "the target", presence: "required" }),
+				arg("files", t.str, {
+					help: "files",
+					variadic: true,
+					presence: "required",
+				}),
 			],
 			handler: (a) => {
 				out.push(`target=${fmt(a.target)} files=${fmt(a.files)}`);
@@ -740,7 +787,9 @@ test("typed args: negative int after double dash", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			args: [arg("offset", t.int, { help: "the offset" })],
+			args: [
+				arg("offset", t.int, { help: "the offset", presence: "required" }),
+			],
 			handler: (a) => {
 				out.push(`offset=${fmt(a.offset)}`);
 			},
@@ -769,7 +818,9 @@ function nestedApp(out: string[]): AppImpl {
 	zone.command(
 		defineReadOnlyCommand("create", {
 			help: "create a zone",
-			flags: { name: flag("name", t.str, { help: "zone name" }) },
+			flags: {
+				name: flag("name", t.str, { help: "zone name", presence: "required" }),
+			},
 			handler: (a) => {
 				out.push(`created ${fmt(a.name)}`);
 			},
@@ -786,8 +837,11 @@ test("nesting: group command dispatch and flags", async () => {
 		defineReadOnlyCommand("set", {
 			help: "set a config value",
 			flags: {
-				key: flag("key", t.str, { help: "config key" }),
-				value: flag("value", t.str, { help: "config value" }),
+				key: flag("key", t.str, { help: "config key", presence: "required" }),
+				value: flag("value", t.str, {
+					help: "config value",
+					presence: "required",
+				}),
 			},
 			handler: (a) => {
 				out.push(`${fmt(a.key)}=${fmt(a.value)}`);
@@ -919,10 +973,12 @@ function globalApp(out: string[]): AppImpl {
 		flags: {
 			chatter: flag("chatter", t.bool, {
 				help: "enable chatter output",
+				presence: "default",
 				default: false,
 			}),
 			settings: flag("settings", t.str, {
 				help: "settings path",
+				presence: "default",
 				default: "/etc/myapp",
 			}),
 		},
@@ -974,7 +1030,11 @@ test("global_flags: global int flag coerces to bigint", async () => {
 	const out: string[] = [];
 	const app = makeApp({
 		flags: {
-			port: flag("port", t.int, { help: "server port", default: 3000n }),
+			port: flag("port", t.int, {
+				help: "server port",
+				presence: "default",
+				default: 3000n,
+			}),
 		},
 	});
 	app.command(
@@ -997,6 +1057,7 @@ test("global_flags: global flag from env var", async () => {
 				chatter: flag("chatter", t.bool, {
 					help: "enable chatter output",
 					env: "MYAPP_VERBOSE",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -1020,10 +1081,12 @@ test("global_flags: global and command flags together (conformance exact)", asyn
 		flags: {
 			chatter: flag("chatter", t.bool, {
 				help: "enable chatter output",
+				presence: "default",
 				default: false,
 			}),
 			settings: flag("settings", t.str, {
 				help: "settings path",
+				presence: "default",
 				default: "/etc/myapp",
 			}),
 		},
@@ -1034,6 +1097,7 @@ test("global_flags: global and command flags together (conformance exact)", asyn
 			flags: {
 				force_deploy: flag("force-deploy", t.bool, {
 					help: "force deploy",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -1068,8 +1132,14 @@ function mutexBoolApp(out: string[]): AppImpl {
 			help: "a command",
 			mutex: [
 				mutexGroup({
-					chatter: flag("chatter", t.bool, { help: "chatter output" }),
-					muted: flag("muted", t.bool, { help: "muted output" }),
+					chatter: flag("chatter", t.bool, {
+						help: "chatter output",
+						presence: "optional",
+					}),
+					muted: flag("muted", t.bool, {
+						help: "muted output",
+						presence: "optional",
+					}),
 				}),
 			],
 			handler: (a) => {
@@ -1118,8 +1188,14 @@ function mutexStrApp(out: string[]): AppImpl {
 			help: "fetch data",
 			mutex: [
 				mutexGroup({
-					file: flag("file", t.str, { help: "read from file", default: null }),
-					url: flag("url", t.str, { help: "read from URL", default: null }),
+					file: flag("file", t.str, {
+						help: "read from file",
+						presence: "optional",
+					}),
+					url: flag("url", t.str, {
+						help: "read from URL",
+						presence: "optional",
+					}),
 				}),
 			],
 			handler: (a) => {
@@ -1160,12 +1236,12 @@ test("mutex: env-set members elect nothing (contract §21.3)", async () => {
 					mutexGroup({
 						file: flag("file", t.str, {
 							help: "read from file",
-							default: null,
+							presence: "optional",
 							env: "MYAPP_FILE",
 						}),
 						url: flag("url", t.str, {
 							help: "read from URL",
-							default: null,
+							presence: "optional",
 							env: "MYAPP_URL",
 						}),
 					}),
@@ -1221,15 +1297,15 @@ function electionApp(out: string[]): AppImpl {
 				mutexGroup({
 					profile: flag("profile", t.str, {
 						help: "a profile",
-						default: null,
+						presence: "optional",
 					}),
 					all_profiles: flag("all-profiles", t.bool, {
 						help: "every profile",
-						default: null,
+						presence: "optional",
 					}),
 					current_profile: flag("current-profile", t.bool, {
 						help: "the current profile",
-						default: null,
+						presence: "optional",
 					}),
 				}),
 			],
@@ -1363,8 +1439,16 @@ test("mutex: a declared default still applies to an unelected member", async () 
 			help: "a command",
 			mutex: [
 				mutexGroup({
-					loud: flag("loud", t.bool, { help: "loud", default: false }),
-					hushed: flag("hushed", t.bool, { help: "hushed", default: false }),
+					loud: flag("loud", t.bool, {
+						help: "loud",
+						presence: "default",
+						default: false,
+					}),
+					hushed: flag("hushed", t.bool, {
+						help: "hushed",
+						presence: "default",
+						default: false,
+					}),
 				}),
 			],
 			handler: (a) => {
@@ -1389,9 +1473,14 @@ function coRequiredApp(out: string[]): AppImpl {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				output: flag("output", t.str, { help: "output file", default: "none" }),
+				output: flag("output", t.str, {
+					help: "output file",
+					presence: "default",
+					default: "none",
+				}),
 				format: flag("format", t.str, {
 					help: "output format",
+					presence: "default",
 					default: "none",
 				}),
 			},
@@ -1438,10 +1527,12 @@ test("dependencies: requires enforcement", async () => {
 				flags: {
 					chatter: flag("chatter", t.bool, {
 						help: "chatter output",
+						presence: "default",
 						default: false,
 					}),
 					output: flag("output", t.str, {
 						help: "output file",
+						presence: "default",
 						default: "none",
 					}),
 				},
@@ -1475,11 +1566,17 @@ function impliesApp(out: string[], envPrefix?: string): AppImpl {
 						? flag("fast", t.bool, {
 								help: "fast mode",
 								env: "MYAPP_FAST",
+								presence: "default",
 								default: false,
 							})
-						: flag("fast", t.bool, { help: "fast mode", default: false }),
+						: flag("fast", t.bool, {
+								help: "fast mode",
+								presence: "default",
+								default: false,
+							}),
 				embeddings: flag("embeddings", t.bool, {
 					help: "enable embeddings",
+					presence: "default",
 					default: true,
 				}),
 			},
@@ -1621,7 +1718,9 @@ test("boundary: empty flag value, dash positional, bare cmd --", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { name: flag("name", t.str, { help: "the name" }) },
+			flags: {
+				name: flag("name", t.str, { help: "the name", presence: "required" }),
+			},
 			handler: (a) => {
 				out.push(`name=${fmt(a.name)}`);
 			},
@@ -1634,7 +1733,7 @@ test("boundary: empty flag value, dash positional, bare cmd --", async () => {
 	app2.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			args: [arg("path", t.str, { help: "the path" })],
+			args: [arg("path", t.str, { help: "the path", presence: "required" })],
 			handler: (a) => {
 				out2.push(`path=${fmt(a.path)}`);
 			},
@@ -1661,7 +1760,9 @@ test("boundary: int forms 007, +5, overflow, 12abc", async () => {
 		app.command(
 			defineReadOnlyCommand("cmd", {
 				help: "a command",
-				flags: { port: flag("port", t.int, { help: "the port" }) },
+				flags: {
+					port: flag("port", t.int, { help: "the port", presence: "required" }),
+				},
 				handler: (a) => {
 					out.push(`port=${fmt(a.port)}`);
 				},
@@ -1699,6 +1800,7 @@ test("boundary: env var edge values", async () => {
 					chatter: flag("chatter", t.bool, {
 						help: "be chatter",
 						env: "MYAPP_VERBOSE",
+						presence: "default",
 						default: false,
 					}),
 				},
@@ -1731,6 +1833,7 @@ test("boundary: env var edge values", async () => {
 					port: flag("port", t.int, {
 						help: "the port",
 						env: "MYAPP_PORT",
+						presence: "default",
 						default: 1n,
 					}),
 				},
@@ -1759,6 +1862,7 @@ test("boundary: env var edge values", async () => {
 				target: flag("target", t.str, {
 					help: "the target",
 					env: "MYAPP_TARGET",
+					presence: "default",
 					default: "x",
 				}),
 			},
@@ -1786,6 +1890,7 @@ test("env: str flag from env var; CLI overrides env", async () => {
 					target: flag("target", t.str, {
 						help: "the target",
 						env: "MYAPP_TARGET",
+						presence: "default",
 						default: "default-target",
 					}),
 				},
@@ -1824,7 +1929,8 @@ function tagsApp(
 					help: "a tag",
 					short: "t",
 					...(opts?.choices !== undefined ? { choices: opts.choices } : {}),
-					...(opts?.default !== undefined ? { default: opts.default } : {}),
+					presence: "default",
+					default: opts?.default ?? [],
 				}),
 			},
 			handler: (a) => {
@@ -1870,7 +1976,11 @@ test("repeatable: int elements coerce; invalid element errors", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				ids: flag("ids", t.list(t.int), { help: "the ids" }),
+				ids: flag("ids", t.list(t.int), {
+					help: "the ids",
+					presence: "default",
+					default: [],
+				}),
 			},
 			handler: (a) => {
 				out.push(`ids=${fmt(a.ids)}`);
@@ -1943,7 +2053,11 @@ test("dict: key=value entries, missing equals, duplicate key", async () => {
 			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
-					header: flag("header", t.dict(t.str), { help: "a header" }),
+					header: flag("header", t.dict(t.str), {
+						help: "a header",
+						presence: "default",
+						default: new Map(),
+					}),
 				},
 				handler: (a) => {
 					out.push(`headers=${fmt(a.header)}`);
@@ -1989,6 +2103,8 @@ test("env_separator: split, escapes, unique and coercion errors", async () => {
 						envSeparator: ",",
 						prefixed: false,
 						unique,
+						presence: "default",
+						default: [],
 					}),
 				},
 				handler: (a) => {
@@ -2032,6 +2148,8 @@ test("env_separator: split, escapes, unique and coercion errors", async () => {
 						envSeparator: ",",
 						prefixed: false,
 						unique: false,
+						presence: "default",
+						default: [],
 					}),
 				},
 				handler: () => undefined,
@@ -2063,6 +2181,7 @@ test("choices: invalid str choice rejected with exact message", async () => {
 				format: flag("format", t.str, {
 					help: "output format",
 					choices: ["text", "json"],
+					presence: "default",
 					default: "text",
 				}),
 			},
@@ -2089,7 +2208,7 @@ test("choices: optional arg with choices -- omitted ok, invalid rejected", async
 				args: [
 					arg("env", t.str, {
 						help: "target env",
-						required: false,
+						presence: "optional",
 						choices: ["dev", "prod"],
 					}),
 				],
@@ -2116,7 +2235,13 @@ test("choices: int arg choices format values without quotes-mismatch", async () 
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			args: [arg("level", t.int, { help: "the level", choices: [0n, 1n, 2n] })],
+			args: [
+				arg("level", t.int, {
+					help: "the level",
+					choices: [0n, 1n, 2n],
+					presence: "required",
+				}),
+			],
 			handler: () => undefined,
 		}),
 	);
@@ -2140,10 +2265,13 @@ test("choices: unset mutex flag with choices is not validated", async () => {
 				mutexGroup({
 					format: flag("format", t.str, {
 						help: "output format",
-						default: null,
+						presence: "optional",
 						choices: ["text", "json"],
 					}),
-					output: flag("output", t.str, { help: "output path", default: null }),
+					output: flag("output", t.str, {
+						help: "output path",
+						presence: "optional",
+					}),
 				}),
 			],
 			handler: (a) => {
@@ -2168,6 +2296,7 @@ test("validate: rejecting validator produces --flag: message", async () => {
 			flags: {
 				port: flag("port", t.int, {
 					help: "the port",
+					presence: "default",
 					default: 1n,
 					validate: (v) => {
 						if (v > 65535n) {
@@ -2197,6 +2326,8 @@ test("validate: list validator runs per element", async () => {
 							throw new Error(`bad tag '${v}'`);
 						}
 					},
+					presence: "default",
+					default: [],
 				}),
 			},
 			handler: () => undefined,
@@ -2217,6 +2348,7 @@ test("passthrough: receives raw args and pre-command globals", async () => {
 		flags: {
 			chatter: flag("chatter", t.bool, {
 				help: "enable chatter output",
+				presence: "default",
 				default: false,
 			}),
 		},
@@ -2256,8 +2388,13 @@ test("help: --help/-h recognized anywhere in command tokens, but not after --", 
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { target: flag("target", t.str, { help: "the target" }) },
-			args: [arg("path", t.str, { help: "a path", required: false })],
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
+			},
+			args: [arg("path", t.str, { help: "a path", presence: "optional" })],
 			handler: () => undefined,
 		}),
 	);
@@ -2290,6 +2427,7 @@ test("hermetic: env vars are ignored; source is 'default'", async () => {
 				level: flag("level", t.int, {
 					help: "the level",
 					env: "MYAPP_LEVEL",
+					presence: "default",
 					default: 0n,
 				}),
 			},
@@ -2312,7 +2450,11 @@ test("hermetic: required flag missing errors even when env is set", async () => 
 		defineReadOnlyCommand("run", {
 			help: "run it",
 			flags: {
-				name: flag("name", t.str, { help: "the name", env: "MYAPP_NAME" }),
+				name: flag("name", t.str, {
+					help: "the name",
+					env: "MYAPP_NAME",
+					presence: "required",
+				}),
 			},
 			handler: () => undefined,
 		}),
@@ -2409,6 +2551,7 @@ test("prescan: global flag value that looks like a command name is skipped", () 
 		flags: {
 			settings: flag("settings", t.str, {
 				help: "settings path",
+				presence: "default",
 				default: "/etc",
 			}),
 		},
@@ -2438,6 +2581,7 @@ test("provenance: cli vs default; post- and pre-command global cli", async () =>
 		flags: {
 			settings: flag("settings", t.str, {
 				help: "settings path",
+				presence: "default",
 				default: "/etc/myapp",
 			}),
 		},
@@ -2446,8 +2590,16 @@ test("provenance: cli vs default; post- and pre-command global cli", async () =>
 		defineReadOnlyCommand("run", {
 			help: "run it",
 			flags: {
-				output: flag("output", t.str, { help: "output file", default: "none" }),
-				level: flag("level", t.int, { help: "the level", default: 5n }),
+				output: flag("output", t.str, {
+					help: "output file",
+					presence: "default",
+					default: "none",
+				}),
+				level: flag("level", t.int, {
+					help: "the level",
+					presence: "default",
+					default: 5n,
+				}),
 			},
 			handler: () => undefined,
 		}),
@@ -2478,6 +2630,7 @@ test("provenance: env label; CLI overrides env with label cli", async () => {
 					help: "the level",
 					env: "PROV_LEVEL",
 					prefixed: false,
+					presence: "default",
 					default: 5n,
 				}),
 			},
@@ -2506,7 +2659,11 @@ test("config: fills flags not set by CLI or env; CLI wins by default", async () 
 			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
-					mode: flag("mode", t.str, { help: "the mode", default: "normal" }),
+					mode: flag("mode", t.str, {
+						help: "the mode",
+						presence: "default",
+						default: "normal",
+					}),
 				},
 				handler: (a) => {
 					out.push(`mode=${fmt(a.mode)}`);
@@ -2533,7 +2690,11 @@ test("config: conflict mode error rejects diverging cli+config", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				mode: flag("mode", t.str, { help: "the mode", default: "normal" }),
+				mode: flag("mode", t.str, {
+					help: "the mode",
+					presence: "default",
+					default: "normal",
+				}),
 			},
 			handler: () => undefined,
 		}),
@@ -2556,6 +2717,7 @@ test("config: post-command global conflict detection (error mode)", async () => 
 		flags: {
 			settings: flag("settings", t.str, {
 				help: "settings path",
+				presence: "default",
 				default: "/etc/myapp",
 			}),
 		},
@@ -2584,7 +2746,11 @@ test("config: repeatable config value overrides default", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				tag: flag("tag", t.list(t.str), { help: "a tag", default: ["x", "y"] }),
+				tag: flag("tag", t.list(t.str), {
+					help: "a tag",
+					presence: "default",
+					default: ["x", "y"],
+				}),
 			},
 			handler: (a) => {
 				out.push(`tags=${fmt(a.tag)}`);
@@ -2603,7 +2769,11 @@ test("config: hermetic skips config entirely", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				mode: flag("mode", t.str, { help: "the mode", default: "normal" }),
+				mode: flag("mode", t.str, {
+					help: "the mode",
+					presence: "default",
+					default: "normal",
+				}),
 			},
 			handler: (a) => {
 				out.push(`mode=${fmt(a.mode)}`);

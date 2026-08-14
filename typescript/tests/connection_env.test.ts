@@ -51,7 +51,7 @@ function connApp() {
 			flags: {
 				dsn: flag("dsn", t.str, {
 					help: "connection string",
-					default: null,
+					presence: "optional",
 					connectionUrl: true,
 					connectionEnv: "DATABASE_URL",
 				}),
@@ -289,7 +289,7 @@ test("connection: URL-class flag with no binding is a registration error", () =>
 					flags: {
 						dsn: flag("dsn", t.str, {
 							help: "dsn",
-							default: null,
+							presence: "optional",
 							connectionUrl: true,
 						}),
 					},
@@ -315,7 +315,7 @@ test("connection: binding to an undeclared connection env is a registration erro
 					flags: {
 						dsn: flag("dsn", t.str, {
 							help: "dsn",
-							default: null,
+							presence: "optional",
 							connectionUrl: true,
 							connectionEnv: "OTHER_URL",
 						}),
@@ -342,7 +342,7 @@ test("connection: binding without the URL marker is a registration error", () =>
 					flags: {
 						dsn: flag("dsn", t.str, {
 							help: "dsn",
-							default: null,
+							presence: "optional",
 							connectionEnv: "DATABASE_URL",
 						}),
 					},
@@ -368,7 +368,7 @@ test("connection: binding plus per-flag env is a registration error", () => {
 					flags: {
 						dsn: flag("dsn", t.str, {
 							help: "dsn",
-							default: null,
+							presence: "optional",
 							env: "SOMETHING_ELSE",
 							connectionUrl: true,
 							connectionEnv: "DATABASE_URL",

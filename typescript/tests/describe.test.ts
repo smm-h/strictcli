@@ -169,8 +169,10 @@ export type _WarnReporter = Assert<
 
 // --- Compile-time: option constructor keys match the real option types ---
 
+// FlagOpts is a discriminated union on `presence` (contract §23.2), so its
+// key set is the union of its members' keys, exactly as ArgOpts's is.
 export type _FlagOptKeys = Assert<
-	Equals<keyof api.FlagOpts<string, "str"> & string, OCKeys<"flag">>
+	Equals<KeysOfUnion<api.FlagOpts<string, "str">>, OCKeys<"flag">>
 >;
 export type _ArgOptKeys = Assert<
 	Equals<KeysOfUnion<api.ArgOpts<string, "str">>, OCKeys<"arg">>
@@ -219,20 +221,26 @@ export type _WarnCheckSpecKeys = Assert<
 // carrier kind must match the registry's per_carrier lists exactly.
 type FlagPC = OC<"flag">["per_carrier"];
 export type _FlagPCBool = Assert<
-	Equals<NonNeverKeys<api.FlagOpts<boolean, "bool">>, FlagPC["bool"][number]>
+	Equals<
+		NonNeverKeysOfUnion<api.FlagOpts<boolean, "bool">>,
+		FlagPC["bool"][number]
+	>
 >;
 export type _FlagPCScalar = Assert<
-	Equals<NonNeverKeys<api.FlagOpts<string, "str">>, FlagPC["scalar"][number]>
+	Equals<
+		NonNeverKeysOfUnion<api.FlagOpts<string, "str">>,
+		FlagPC["scalar"][number]
+	>
 >;
 export type _FlagPCList = Assert<
 	Equals<
-		NonNeverKeys<api.FlagOpts<string[], "list[str]">>,
+		NonNeverKeysOfUnion<api.FlagOpts<string[], "list[str]">>,
 		FlagPC["list"][number]
 	>
 >;
 export type _FlagPCDict = Assert<
 	Equals<
-		NonNeverKeys<api.FlagOpts<Map<string, string>, "dict[str,str]">>,
+		NonNeverKeysOfUnion<api.FlagOpts<Map<string, string>, "dict[str,str]">>,
 		FlagPC["dict"][number]
 	>
 >;
@@ -456,9 +464,9 @@ function runtimeMembers(name: string): string[] {
 }
 
 test("registry: runtime keys of factory-built carriers match declaration order", () => {
-	const f = api.flag("target", api.t.str, { help: "h" });
+	const f = api.flag("target", api.t.str, { help: "h", presence: "required" });
 	assert.deepEqual(Object.keys(f), runtimeMembers("FlagDef"));
-	const a = api.arg("src", api.t.str, { help: "h" });
+	const a = api.arg("src", api.t.str, { help: "h", presence: "required" });
 	assert.deepEqual(Object.keys(a), runtimeMembers("ArgDef"));
 	const cmd = api.defineReadOnlyCommand("run", {
 		help: "h",
@@ -468,8 +476,16 @@ test("registry: runtime keys of factory-built carriers match declaration order",
 	const fs = api.flagSet("common", { target: f });
 	assert.deepEqual(Object.keys(fs), runtimeMembers("FlagSet"));
 	const mg = api.mutexGroup({
-		as_json: api.flag("as-json", api.t.bool, { help: "h", default: false }),
-		plain: api.flag("plain", api.t.bool, { help: "h", default: false }),
+		as_json: api.flag("as-json", api.t.bool, {
+			help: "h",
+			presence: "default",
+			default: false,
+		}),
+		plain: api.flag("plain", api.t.bool, {
+			help: "h",
+			presence: "default",
+			default: false,
+		}),
 	});
 	assert.deepEqual(Object.keys(mg), runtimeMembers("MutexGroup"));
 	assert.deepEqual(

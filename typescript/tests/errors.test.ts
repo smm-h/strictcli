@@ -63,7 +63,19 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // The mutex-election round (contract §21) adds 2: errMutexRedundantNegation
 // (the redundant-negation parse error) and errMutexDeclineClause (the teaching
 // clause both decline-shaped errors carry).
-const EXPECTED_TEMPLATE_COUNT = 321;
+// The presence round (contract §23, §12.12) is a net +6: it adds 10 and
+// deletes 4. Added -- errFlagPresenceUndeclared / errArgPresenceUndeclared
+// (nothing declared), errFlagPresenceDeclaredTwice / errArgPresenceDeclaredTwice
+// (two declared), errFlagDefaultNullNotOptional / errArgDefaultNullNotOptional
+// (the null-valued default's redirect), errFlagMutexMemberRequired (a mutex
+// member declaring requiredness), errArgVariadicDefault (a variadic arg
+// declaring a default), and the TS-only pair errFlagDefaultValueMissing /
+// errArgDefaultValueMissing for `presence: "default"` written without a value,
+// a half-written declaration no sibling spelling can express. Deleted -- the
+// three `explicit empty default is redundant for <kind> flags` templates (an
+// explicit [] or {} is a declaration now) and errRequiredArgCannotHaveDefault
+// (subsumed by the two-declared error).
+const EXPECTED_TEMPLATE_COUNT = 327;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

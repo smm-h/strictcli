@@ -852,7 +852,9 @@ test("effects: the quartet is stripped from argv after the command name", async 
 	app.command(
 		defineReadOnlyCommand("look", {
 			help: "h",
-			args: [arg("name", t.str, { help: "a positional" })],
+			args: [
+				arg("name", t.str, { help: "a positional", presence: "required" }),
+			],
 			handler: (a, ctx) => {
 				seen = { name: a.name, quiet: ctx.quiet };
 				return 0;
@@ -871,7 +873,13 @@ test("effects: a token after -- is data, never a reserved flag", async () => {
 	app.command(
 		defineReadOnlyCommand("look", {
 			help: "h",
-			args: [arg("rest", t.str, { help: "trailing args", variadic: true })],
+			args: [
+				arg("rest", t.str, {
+					help: "trailing args",
+					variadic: true,
+					presence: "required",
+				}),
+			],
 			handler: (a, ctx) => {
 				seen = { rest: a.rest, dryRun: ctx.dryRun };
 				return 0;

@@ -83,7 +83,13 @@ test("test: outcome data prints one compact JSON line with BigInt tokens", async
 		defineReadOnlyCommand("run", {
 			payloadSchema: {},
 			help: "run",
-			flags: { count: flag("count", t.int, { help: "count", default: 7n }) },
+			flags: {
+				count: flag("count", t.int, {
+					help: "count",
+					presence: "default",
+					default: 7n,
+				}),
+			},
 			handler: (args, ctx) => {
 				ctx.payload({ count: args.count, name: "x" });
 				return outcome(0);
@@ -108,7 +114,13 @@ test("test: a BigInt payload past 2^53 is refused rather than emitted lossily", 
 		defineReadOnlyCommand("run", {
 			payloadSchema: {},
 			help: "run",
-			flags: { count: flag("count", t.int, { help: "count", default: 7n }) },
+			flags: {
+				count: flag("count", t.int, {
+					help: "count",
+					presence: "default",
+					default: 7n,
+				}),
+			},
 			handler: (args, ctx) => {
 				ctx.payload({ count: args.count, name: "x" });
 				return outcome(0);
@@ -186,7 +198,11 @@ test("test: ctx.source works during dispatch", async () => {
 		defineReadOnlyCommand("run", {
 			help: "run",
 			flags: {
-				sim_run: flag("sim-run", t.bool, { help: "dry", default: true }),
+				sim_run: flag("sim-run", t.bool, {
+					help: "dry",
+					presence: "default",
+					default: true,
+				}),
 			},
 			handler: (_args, ctx) => {
 				ctx.info(`cli=${ctx.source("sim-run")}`);
@@ -231,7 +247,11 @@ test("test: tag contracts satisfied by command or global flags pass", async () =
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			as_json: flag("as-json", t.bool, { help: "json output", default: false }),
+			as_json: flag("as-json", t.bool, {
+				help: "json output",
+				presence: "default",
+				default: false,
+			}),
 		},
 	});
 	app.command(

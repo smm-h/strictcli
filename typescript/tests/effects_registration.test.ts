@@ -44,25 +44,39 @@ const YES_BAN_MESSAGE =
 
 test("reserved quartet: flag() refuses each reserved name", () => {
 	for (const name of RESERVED) {
-		assert.throws(() => flag(name, t.bool, { help: "h", default: false }), {
-			name: "RegistrationError",
-			message: reservedMessage(name),
-		});
+		assert.throws(
+			() =>
+				flag(name, t.bool, { help: "h", presence: "default", default: false }),
+			{
+				name: "RegistrationError",
+				message: reservedMessage(name),
+			},
+		);
 	}
 });
 
 test("reserved names: `yes` is banned outright", () => {
-	assert.throws(() => flag("yes", t.bool, { help: "h", default: false }), {
-		name: "RegistrationError",
-		message: YES_BAN_MESSAGE,
-	});
+	assert.throws(
+		() =>
+			flag("yes", t.bool, { help: "h", presence: "default", default: false }),
+		{
+			name: "RegistrationError",
+			message: YES_BAN_MESSAGE,
+		},
+	);
 	assert.throws(
 		() =>
 			createApp({
 				name: "t",
 				version: "1",
 				help: "h",
-				flags: { yes: flag("yes", t.bool, { help: "h", default: false }) },
+				flags: {
+					yes: flag("yes", t.bool, {
+						help: "h",
+						presence: "default",
+						default: false,
+					}),
+				},
 			}),
 		{ message: YES_BAN_MESSAGE },
 	);
@@ -72,18 +86,32 @@ test("reserved quartet: the ban applies at every level, not just globals", () =>
 	// Command flags, flag-set flags and mutex-group flags all go through the
 	// same flag() factory, so the ban is unconditional by construction.
 	for (const name of RESERVED) {
-		assert.throws(() => flag(name, t.bool, { help: "h", default: false }));
+		assert.throws(() =>
+			flag(name, t.bool, { help: "h", presence: "default", default: false }),
+		);
 	}
 	// A flag set and a mutex group cannot even be built with one.
 	assert.throws(() =>
 		flagSet("common", {
-			quiet: flag("quiet", t.bool, { help: "h", default: false }),
+			quiet: flag("quiet", t.bool, {
+				help: "h",
+				presence: "default",
+				default: false,
+			}),
 		}),
 	);
 	assert.throws(() =>
 		mutexGroup({
-			yes: flag("yes", t.bool, { help: "h", default: false }),
-			no_thanks: flag("no-thanks", t.bool, { help: "h", default: false }),
+			yes: flag("yes", t.bool, {
+				help: "h",
+				presence: "default",
+				default: false,
+			}),
+			no_thanks: flag("no-thanks", t.bool, {
+				help: "h",
+				presence: "default",
+				default: false,
+			}),
 		}),
 	);
 });
@@ -96,7 +124,7 @@ test("reserved quartet: the global-flag path carries the same message", () => {
 		name: "verbose",
 		schema: "bool" as const,
 		carrier: t.bool,
-		opts: { help: "h", default: false },
+		opts: { help: "h", presence: "default" as const, default: false },
 	};
 	assert.throws(
 		() =>
@@ -112,18 +140,29 @@ test("reserved quartet: the global-flag path carries the same message", () => {
 
 test("reserved quartet: --output is explicitly NOT reserved", () => {
 	assert.doesNotThrow(() =>
-		flag("output", t.str, { help: "where to write", default: "-" }),
+		flag("output", t.str, {
+			help: "where to write",
+			presence: "default",
+			default: "-",
+		}),
 	);
 });
 
 test("reserved quartet: short names are unaffected by the ban", () => {
 	assert.doesNotThrow(() =>
-		flag("quietly", t.bool, { help: "h", short: "q", default: false }),
+		flag("quietly", t.bool, {
+			help: "h",
+			short: "q",
+			presence: "default",
+			default: false,
+		}),
 	);
 });
 
 test("reserved quartet: arg names are unaffected (an arg has no -- spelling)", () => {
-	assert.doesNotThrow(() => arg("verbose", t.str, { help: "h" }));
+	assert.doesNotThrow(() =>
+		arg("verbose", t.str, { help: "h", presence: "required" }),
+	);
 });
 
 // --- §7.1 the consent PARAMETER name, reserved on both surfaces ---
@@ -135,24 +174,41 @@ const CONSENT_ARG_BAN =
 
 test("consent parameter: flag() refuses the underscore spelling", () => {
 	assert.throws(
-		() => flag("approve_consequential", t.bool, { help: "h", default: false }),
+		() =>
+			flag("approve_consequential", t.bool, {
+				help: "h",
+				presence: "default",
+				default: false,
+			}),
 		{ name: "RegistrationError", message: CONSENT_FLAG_BAN },
 	);
-	assert.throws(() => flag("approve_consequential", t.str, { help: "h" }), {
-		message: CONSENT_FLAG_BAN,
-	});
+	assert.throws(
+		() =>
+			flag("approve_consequential", t.str, { help: "h", presence: "required" }),
+		{
+			message: CONSENT_FLAG_BAN,
+		},
+	);
 });
 
 test("consent parameter: arg() refuses it too", () => {
-	assert.throws(() => arg("approve_consequential", t.str, { help: "h" }), {
-		name: "RegistrationError",
-		message: CONSENT_ARG_BAN,
-	});
+	assert.throws(
+		() =>
+			arg("approve_consequential", t.str, { help: "h", presence: "required" }),
+		{
+			name: "RegistrationError",
+			message: CONSENT_ARG_BAN,
+		},
+	);
 });
 
 test("consent parameter: only that one name reaches the arg surface", () => {
-	assert.doesNotThrow(() => arg("approve", t.str, { help: "h" }));
-	assert.doesNotThrow(() => arg("approve-consequential", t.str, { help: "h" }));
+	assert.doesNotThrow(() =>
+		arg("approve", t.str, { help: "h", presence: "required" }),
+	);
+	assert.doesNotThrow(() =>
+		arg("approve-consequential", t.str, { help: "h", presence: "required" }),
+	);
 });
 
 // --- §1.1 mandatory classification ---
@@ -544,7 +600,8 @@ test("registration: framework commands go through the same validated path", () =
 
 test("registration: RegistrationError is the thrown type for every ban", () => {
 	assert.throws(
-		() => flag("quiet", t.bool, { help: "h", default: false }),
+		() =>
+			flag("quiet", t.bool, { help: "h", presence: "default", default: false }),
 		RegistrationError,
 	);
 });

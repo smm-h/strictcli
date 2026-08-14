@@ -25,14 +25,18 @@ const RESERVED = /flag name 'json' is reserved by the framework/;
 
 test("json is reserved on a command flag", () => {
 	assert.throws(
-		() => flag("json", t.bool, { help: "h", default: false }),
+		() =>
+			flag("json", t.bool, { help: "h", presence: "default", default: false }),
 		RESERVED,
 	);
 });
 
 test("json is reserved on a flag-set flag", () => {
 	assert.throws(
-		() => flagSet("s", { json: flag("json", t.bool, { help: "h" }) }),
+		() =>
+			flagSet("s", {
+				json: flag("json", t.bool, { help: "h", presence: "required" }),
+			}),
 		RESERVED,
 	);
 });
@@ -41,8 +45,16 @@ test("json is reserved on a mutex-group flag", () => {
 	assert.throws(
 		() =>
 			mutexGroup({
-				json: flag("json", t.bool, { help: "h", default: false }),
-				text: flag("text", t.bool, { help: "h", default: false }),
+				json: flag("json", t.bool, {
+					help: "h",
+					presence: "default",
+					default: false,
+				}),
+				text: flag("text", t.bool, {
+					help: "h",
+					presence: "default",
+					default: false,
+				}),
 			}),
 		RESERVED,
 	);
@@ -55,7 +67,13 @@ test("json is reserved on an app global flag", () => {
 				name: "a",
 				version: "1",
 				help: "h",
-				flags: { json: flag("json", t.bool, { help: "h", default: false }) },
+				flags: {
+					json: flag("json", t.bool, {
+						help: "h",
+						presence: "default",
+						default: false,
+					}),
+				},
 			}),
 		RESERVED,
 	);
@@ -63,7 +81,9 @@ test("json is reserved on an app global flag", () => {
 
 test("an arg named json is unaffected", () => {
 	// The ban covers the flag surface only: an arg has no `--` spelling.
-	assert.doesNotThrow(() => arg("json", t.str, { help: "a file named json" }));
+	assert.doesNotThrow(() =>
+		arg("json", t.str, { help: "a file named json", presence: "required" }),
+	);
 });
 
 // --- delivery: both argv regions, stripped, on the Context -----------------

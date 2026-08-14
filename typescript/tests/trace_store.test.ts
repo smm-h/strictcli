@@ -996,7 +996,7 @@ const app = createApp({ name: "chain", version: "9.9.9", help: "chain" });
 app.command(
 	defineMutatingCommand("go", {
 		help: "start the next link",
-		args: [arg("depth", t.int, { help: "how many more children to start" })],
+		args: [arg("depth", t.int, { help: "how many more children to start", presence: "required" })],
 		handler: (args, ctx) => {
 			const depth = Number(args.depth);
 			if (depth > 0) {

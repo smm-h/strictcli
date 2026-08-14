@@ -73,8 +73,15 @@ test("call: pre-typed flag values reach the handler; defaults fill gaps", async 
 		defineReadOnlyCommand("greet", {
 			help: "say hello",
 			flags: {
-				name: flag("name", t.str, { help: "who to greet" }),
-				count: flag("count", t.int, { help: "times", default: 2n }),
+				name: flag("name", t.str, {
+					help: "who to greet",
+					presence: "required",
+				}),
+				count: flag("count", t.int, {
+					help: "times",
+					presence: "default",
+					default: 2n,
+				}),
 			},
 			handler: (args) => {
 				captured = { name: args.name, count: args.count };
@@ -93,7 +100,11 @@ test("call: dashed flag names use underscored kwargs keys", async () => {
 		defineReadOnlyCommand("deploy", {
 			help: "deploy",
 			flags: {
-				sim_run: flag("sim-run", t.bool, { help: "dry run", default: false }),
+				sim_run: flag("sim-run", t.bool, {
+					help: "dry run",
+					presence: "default",
+					default: false,
+				}),
 			},
 			handler: (args) => {
 				seen = args.sim_run;
@@ -112,8 +123,12 @@ test("call: provided kwargs report source cli; defaults report default", async (
 		defineReadOnlyCommand("greet", {
 			help: "say hello",
 			flags: {
-				name: flag("name", t.str, { help: "who" }),
-				count: flag("count", t.int, { help: "times", default: 1n }),
+				name: flag("name", t.str, { help: "who", presence: "required" }),
+				count: flag("count", t.int, {
+					help: "times",
+					presence: "default",
+					default: 1n,
+				}),
 			},
 			handler: (_args, ctx) => {
 				sources.name = ctx.source("name");
@@ -132,8 +147,16 @@ test("call: global flags accept kwargs and fall back to defaults", async () => {
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			chatter: flag("chatter", t.bool, { help: "chatter", default: false }),
-			region: flag("region", t.str, { help: "region", default: "eu" }),
+			chatter: flag("chatter", t.bool, {
+				help: "chatter",
+				presence: "default",
+				default: false,
+			}),
+			region: flag("region", t.str, {
+				help: "region",
+				presence: "default",
+				default: "eu",
+			}),
 		},
 	});
 	let captured: Record<string, unknown> | undefined;
@@ -160,6 +183,8 @@ test("call: dict flag accepts a Map or a plain object (converted to Map)", async
 			flags: {
 				labels: flag("labels", t.dict(t.str), {
 					help: "labels",
+					presence: "default",
+					default: new Map(),
 				}),
 			},
 			handler: (args) => {
@@ -186,7 +211,11 @@ test("call: dict flag rejects non-map values with the Go-templated message", asy
 		defineReadOnlyCommand("tag", {
 			help: "tag",
 			flags: {
-				labels: flag("labels", t.dict(t.str), { help: "labels" }),
+				labels: flag("labels", t.dict(t.str), {
+					help: "labels",
+					presence: "default",
+					default: new Map(),
+				}),
 			},
 			handler: () => 0,
 		}),
@@ -205,7 +234,7 @@ test("call: positional args are passed by declared name", async () => {
 	app.command(
 		defineReadOnlyCommand("deploy", {
 			help: "deploy",
-			args: [arg("target", t.str, { help: "target" })],
+			args: [arg("target", t.str, { help: "target", presence: "required" })],
 			handler: (args) => {
 				seen = args.target;
 				return 0;
@@ -222,7 +251,13 @@ test("call: variadic args take an array and re-coerce elements", async () => {
 	app.command(
 		defineReadOnlyCommand("sum", {
 			help: "sum",
-			args: [arg("nums", t.int, { help: "numbers", variadic: true })],
+			args: [
+				arg("nums", t.int, {
+					help: "numbers",
+					variadic: true,
+					presence: "required",
+				}),
+			],
 			handler: (args) => {
 				seen = args.nums;
 				return 0;
@@ -238,7 +273,7 @@ test("call: missing required positional arg raises InvokeError", async () => {
 	app.command(
 		defineReadOnlyCommand("deploy", {
 			help: "deploy",
-			args: [arg("target", t.str, { help: "target" })],
+			args: [arg("target", t.str, { help: "target", presence: "required" })],
 			handler: () => 0,
 		}),
 	);
@@ -276,7 +311,9 @@ test("call: unknown parameter raises InvokeError with the command path", async (
 	app.command(
 		defineReadOnlyCommand("greet", {
 			help: "hi",
-			flags: { name: flag("name", t.str, { help: "who" }) },
+			flags: {
+				name: flag("name", t.str, { help: "who", presence: "required" }),
+			},
 			handler: () => 0,
 		}),
 	);
@@ -291,7 +328,9 @@ test("call: missing required flag raises InvokeError", async () => {
 	app.command(
 		defineReadOnlyCommand("greet", {
 			help: "hi",
-			flags: { name: flag("name", t.str, { help: "who" }) },
+			flags: {
+				name: flag("name", t.str, { help: "who", presence: "required" }),
+			},
 			handler: () => 0,
 		}),
 	);
@@ -309,8 +348,8 @@ test("call: mutex violations raise InvokeError", async () => {
 				help: "fetch",
 				mutex: [
 					mutexGroup({
-						url: flag("url", t.str, { help: "url" }),
-						file: flag("file", t.str, { help: "file" }),
+						url: flag("url", t.str, { help: "url", presence: "optional" }),
+						file: flag("file", t.str, { help: "file", presence: "optional" }),
 					}),
 				],
 				handler: () => 0,
@@ -339,11 +378,11 @@ test("call: an explicit false bool declines instead of electing (A1)", async () 
 				mutexGroup({
 					profile: flag("profile", t.str, {
 						help: "a profile",
-						default: null,
+						presence: "optional",
 					}),
 					all_profiles: flag("all-profiles", t.bool, {
 						help: "every profile",
-						default: null,
+						presence: "optional",
 					}),
 				}),
 			],
@@ -364,8 +403,8 @@ test("call: dependency violations raise InvokeError", async () => {
 		defineReadOnlyCommand("sync", {
 			help: "sync",
 			flags: {
-				user: flag("user", t.str, { help: "user", default: null }),
-				pass: flag("pass", t.str, { help: "pass", default: null }),
+				user: flag("user", t.str, { help: "user", presence: "optional" }),
+				pass: flag("pass", t.str, { help: "pass", presence: "optional" }),
 			},
 			dependencies: [coRequired(["user", "pass"])],
 			handler: () => 0,
@@ -384,8 +423,16 @@ test("call: implies dependency injects the implied value", async () => {
 		defineReadOnlyCommand("logs", {
 			help: "logs",
 			flags: {
-				watch: flag("watch", t.bool, { help: "watch", default: false }),
-				follow: flag("follow", t.bool, { help: "follow", default: false }),
+				watch: flag("watch", t.bool, {
+					help: "watch",
+					presence: "default",
+					default: false,
+				}),
+				follow: flag("follow", t.bool, {
+					help: "follow",
+					presence: "default",
+					default: false,
+				}),
 			},
 			dependencies: [
 				implies({ flag: "watch", implies: "follow", value: true }),
@@ -410,6 +457,7 @@ test("call: choices are validated on pre-typed values", async () => {
 				color: flag("color", t.str, {
 					help: "color",
 					choices: ["red", "blue"],
+					presence: "required",
 				}),
 			},
 			handler: () => 0,
@@ -435,7 +483,9 @@ test("call: dot-separated paths resolve nested group commands", async () => {
 		defineReadOnlyCommand("create", {
 			payloadSchema: {},
 			help: "create zone",
-			flags: { name: flag("name", t.str, { help: "zone name" }) },
+			flags: {
+				name: flag("name", t.str, { help: "zone name", presence: "required" }),
+			},
 			handler: (args, ctx) => {
 				ctx.payload({ created: args.name });
 				return outcome(0);
@@ -455,7 +505,11 @@ test("call: passthrough forwards _args, name, and global values", async () => {
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			chatter: flag("chatter", t.bool, { help: "chatter", default: false }),
+			chatter: flag("chatter", t.bool, {
+				help: "chatter",
+				presence: "default",
+				default: false,
+			}),
 		},
 	});
 	let captured:
@@ -526,7 +580,11 @@ test("call: passthrough rejects unknown kwargs", async () => {
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			chatter: flag("chatter", t.bool, { help: "chatter", default: false }),
+			chatter: flag("chatter", t.bool, {
+				help: "chatter",
+				presence: "default",
+				default: false,
+			}),
 		},
 	});
 	app.command(
@@ -547,8 +605,12 @@ test("call: passthrough missing required global flag raises InvokeError", async 
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			token: flag("token", t.str, { help: "auth token" }),
-			chatter: flag("chatter", t.bool, { help: "chatter", default: false }),
+			token: flag("token", t.str, { help: "auth token", presence: "required" }),
+			chatter: flag("chatter", t.bool, {
+				help: "chatter",
+				presence: "default",
+				default: false,
+			}),
 		},
 	});
 	app.command(
@@ -566,7 +628,10 @@ test("call: passthrough missing required bool global names both forms", async ()
 		version: "1.0.0",
 		help: "test app",
 		flags: {
-			force_run: flag("force-run", t.bool, { help: "force operation" }),
+			force_run: flag("force-run", t.bool, {
+				help: "force operation",
+				presence: "required",
+			}),
 		},
 	});
 	app.command(

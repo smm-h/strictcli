@@ -166,7 +166,11 @@ test("configFilePath: override wins and expands ~", () => {
 // =========================================================================
 
 test("coerceConfigValueForFlag: scalars coerce with long-typename errors", () => {
-	const intFlag = flag("count", t.int, { help: "c", default: 0n });
+	const intFlag = flag("count", t.int, {
+		help: "c",
+		presence: "default",
+		default: 0n,
+	});
 	assert.equal(coerceConfigValueForFlag(42n, intFlag), 42n);
 	assert.throws(
 		() => coerceConfigValueForFlag("x", intFlag),
@@ -177,15 +181,27 @@ test("coerceConfigValueForFlag: scalars coerce with long-typename errors", () =>
 		() => coerceConfigValueForFlag(1.5, intFlag),
 		/expected integer, got float/,
 	);
-	const floatFlag = flag("rate", t.float, { help: "r", default: 0 });
+	const floatFlag = flag("rate", t.float, {
+		help: "r",
+		presence: "default",
+		default: 0,
+	});
 	assert.equal(coerceConfigValueForFlag(2n, floatFlag), 2);
 	assert.equal(coerceConfigValueForFlag(2.5, floatFlag), 2.5);
-	const boolFlag = flag("on", t.bool, { help: "b", default: false });
+	const boolFlag = flag("on", t.bool, {
+		help: "b",
+		presence: "default",
+		default: false,
+	});
 	assert.throws(
 		() => coerceConfigValueForFlag("yes", boolFlag),
 		/expected boolean, got str/,
 	);
-	const strFlag = flag("name", t.str, { help: "s", default: "" });
+	const strFlag = flag("name", t.str, {
+		help: "s",
+		presence: "default",
+		default: "",
+	});
 	assert.throws(
 		() => coerceConfigValueForFlag(1n, strFlag),
 		/expected string, got int/,
@@ -197,7 +213,11 @@ test("coerceConfigValueForFlag: scalars coerce with long-typename errors", () =>
 });
 
 test("coerceConfigValueForFlag: lists and dicts (element errors carry index/key)", () => {
-	const listFlag = flag("tags", t.list(t.str), { help: "t" });
+	const listFlag = flag("tags", t.list(t.str), {
+		help: "t",
+		presence: "default",
+		default: [],
+	});
 	assert.deepEqual(coerceConfigValueForFlag(["a", "b"], listFlag), ["a", "b"]);
 	assert.throws(
 		() => coerceConfigValueForFlag(["a", 1n], listFlag),
@@ -207,7 +227,11 @@ test("coerceConfigValueForFlag: lists and dicts (element errors carry index/key)
 		() => coerceConfigValueForFlag("a", listFlag),
 		/expected array for repeatable flag, got str/,
 	);
-	const dictFlag = flag("meta", t.dict(t.int), { help: "m" });
+	const dictFlag = flag("meta", t.dict(t.int), {
+		help: "m",
+		presence: "default",
+		default: new Map(),
+	});
 	const coerced = coerceConfigValueForFlag({ a: 1n }, dictFlag) as Map<
 		string,
 		unknown
@@ -239,8 +263,16 @@ function basicApp(extra?: Partial<AppSpec>): App {
 		defineReadOnlyCommand("run", {
 			help: "run command",
 			flags: {
-				count: flag("count", t.int, { help: "a count", default: 0n }),
-				name: flag("name", t.str, { help: "a name", default: "world" }),
+				count: flag("count", t.int, {
+					help: "a count",
+					presence: "default",
+					default: 0n,
+				}),
+				name: flag("name", t.str, {
+					help: "a name",
+					presence: "default",
+					default: "world",
+				}),
 			},
 			handler: (args, ctx) => {
 				ctx.info(`count=${args.count}`);
@@ -265,6 +297,7 @@ function portApp(extra?: Partial<AppSpec>): App {
 			flags: {
 				port: flag("port", t.int, {
 					help: "port number",
+					presence: "default",
 					default: 80n,
 					env: "APP_PORT",
 				}),
@@ -347,9 +380,21 @@ test("TOML config loading with typed values via run + config show", async () => 
 			defineReadOnlyCommand("run", {
 				help: "run command",
 				flags: {
-					count: flag("count", t.int, { help: "a count", default: 0n }),
-					debug: flag("debug", t.bool, { help: "debug mode", default: false }),
-					rate: flag("rate", t.float, { help: "a rate", default: 0 }),
+					count: flag("count", t.int, {
+						help: "a count",
+						presence: "default",
+						default: 0n,
+					}),
+					debug: flag("debug", t.bool, {
+						help: "debug mode",
+						presence: "default",
+						default: false,
+					}),
+					rate: flag("rate", t.float, {
+						help: "a rate",
+						presence: "default",
+						default: 0,
+					}),
 				},
 				handler: (args, ctx) => {
 					ctx.info(`${args.count} ${args.debug} ${args.rate}`);
@@ -425,7 +470,13 @@ function bigFloatApp(): App {
 	app.command(
 		defineReadOnlyCommand("run", {
 			help: "run command",
-			flags: { size: flag("size", t.float, { help: "how big", default: 0 }) },
+			flags: {
+				size: flag("size", t.float, {
+					help: "how big",
+					presence: "default",
+					default: 0,
+				}),
+			},
 			handler: () => 0,
 		}),
 	);
@@ -479,7 +530,13 @@ test("config set: unknown key / bad int / bad bool errors", async () => {
 	app.command(
 		defineReadOnlyCommand("run", {
 			help: "r",
-			flags: { debug: flag("debug", t.bool, { help: "d", default: false }) },
+			flags: {
+				debug: flag("debug", t.bool, {
+					help: "d",
+					presence: "default",
+					default: false,
+				}),
+			},
 			handler: () => 0,
 		}),
 	);
@@ -529,9 +586,12 @@ test("mutex: a config value elects nothing and is never delivered (A5)", async (
 					mutexGroup({
 						file: flag("file", t.str, {
 							help: "read from file",
-							default: null,
+							presence: "optional",
 						}),
-						url: flag("url", t.str, { help: "read from URL", default: null }),
+						url: flag("url", t.str, {
+							help: "read from URL",
+							presence: "optional",
+						}),
 					}),
 				],
 				handler: (args, ctx) => {
@@ -683,6 +743,7 @@ function conflictApp(mode: "cli-wins" | "error"): App {
 			flags: {
 				name: flag("name", t.str, {
 					help: "n",
+					presence: "default",
 					default: "d",
 					env: "MYAPP_NAME",
 				}),
@@ -742,6 +803,7 @@ test("per-flag conflictMode beats the app-level mode (both directions)", async (
 				flags: {
 					name: flag("name", t.str, {
 						help: "n",
+						presence: "default",
 						default: "d",
 						conflictMode: flagMode,
 					}),
@@ -778,7 +840,14 @@ test("conflict equality: plain lists order-sensitive, unique flags multiset", as
 		app.command(
 			defineReadOnlyCommand("run", {
 				help: "r",
-				flags: { tag: flag("tag", t.list(t.str), { help: "t", unique }) },
+				flags: {
+					tag: flag("tag", t.list(t.str), {
+						help: "t",
+						unique,
+						presence: "default",
+						default: [],
+					}),
+				},
 				handler: (_args, ctx) => {
 					ctx.info("ok");
 					return 0;
@@ -814,7 +883,11 @@ test("conflict detection covers global flags parsed after the command name", asy
 			config: true,
 			configConflictMode: mode,
 			flags: {
-				settings: flag("settings", t.str, { help: "s", default: "d" }),
+				settings: flag("settings", t.str, {
+					help: "s",
+					presence: "default",
+					default: "d",
+				}),
 			},
 		});
 		app.command(
@@ -856,7 +929,14 @@ function tagsApp(unique = true): App {
 	app.command(
 		defineReadOnlyCommand("run", {
 			help: "r",
-			flags: { tags: flag("tags", t.list(t.str), { help: "tags", unique }) },
+			flags: {
+				tags: flag("tags", t.list(t.str), {
+					help: "tags",
+					unique,
+					presence: "default",
+					default: [],
+				}),
+			},
 			handler: (args, ctx) => {
 				ctx.info(`tags=${args.tags.join(",")}`);
 				return 0;
@@ -900,7 +980,12 @@ test("repeatable: int array from config; show --plain displays the array", async
 		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
-				ports: flag("ports", t.list(t.int), { help: "p", unique: false }),
+				ports: flag("ports", t.list(t.int), {
+					help: "p",
+					unique: false,
+					presence: "default",
+					default: [],
+				}),
 			},
 			handler: (args, ctx) => {
 				ctx.info(`ports=${args.ports.join(",")}`);
@@ -925,8 +1010,17 @@ test("repeatable/dict: show --plain renders empty defaults as []/{} (Python pari
 		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
-				tags: flag("tags", t.list(t.str), { help: "tags", unique: true }),
-				meta: flag("meta", t.dict(t.int), { help: "meta" }),
+				tags: flag("tags", t.list(t.str), {
+					help: "tags",
+					unique: true,
+					presence: "default",
+					default: [],
+				}),
+				meta: flag("meta", t.dict(t.int), {
+					help: "meta",
+					presence: "default",
+					default: new Map(),
+				}),
 			},
 			handler: () => 0,
 		}),
@@ -953,9 +1047,22 @@ function setApp(): App {
 		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
-				count: flag("count", t.int, { help: "c", default: 0n }),
-				tags: flag("tags", t.list(t.str), { help: "t", unique: true }),
-				meta: flag("meta", t.dict(t.int), { help: "m" }),
+				count: flag("count", t.int, {
+					help: "c",
+					presence: "default",
+					default: 0n,
+				}),
+				tags: flag("tags", t.list(t.str), {
+					help: "t",
+					unique: true,
+					presence: "default",
+					default: [],
+				}),
+				meta: flag("meta", t.dict(t.int), {
+					help: "m",
+					presence: "default",
+					default: new Map(),
+				}),
 			},
 			handler: () => 0,
 		}),
@@ -1058,7 +1165,13 @@ test("config set on TOML preserves comments and layout byte-exactly (tomlkit par
 		app.command(
 			defineReadOnlyCommand("run", {
 				help: "r",
-				flags: { count: flag("count", t.int, { help: "c", default: 0n }) },
+				flags: {
+					count: flag("count", t.int, {
+						help: "c",
+						presence: "default",
+						default: 0n,
+					}),
+				},
 				handler: () => 0,
 			}),
 		);
@@ -1200,6 +1313,7 @@ function coexistApp(): App {
 			flags: {
 				target: flag("target", t.str, {
 					help: "deploy target",
+					presence: "default",
 					default: "prod",
 				}),
 			},
@@ -1249,7 +1363,11 @@ test("field-flag coexist: disagreeing defaults are a registration error", () => 
 				defineReadOnlyCommand("run", {
 					help: "r",
 					flags: {
-						target: flag("target", t.str, { help: "h", default: "stage" }),
+						target: flag("target", t.str, {
+							help: "h",
+							presence: "default",
+							default: "stage",
+						}),
 					},
 					handler: () => 0,
 				}),
@@ -1275,8 +1393,12 @@ test("config init: TOML template with comments, sections, and required markers (
 		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
-				count: flag("count", t.int, { help: "a count", default: 3n }),
-				name: flag("name", t.str, { help: "a name" }),
+				count: flag("count", t.int, {
+					help: "a count",
+					presence: "default",
+					default: 3n,
+				}),
+				name: flag("name", t.str, { help: "a name", presence: "required" }),
 			},
 			handler: () => 0,
 		}),
@@ -1309,8 +1431,12 @@ test("config init: JSON template nests dotted fields; required fields are null (
 		defineReadOnlyCommand("run", {
 			help: "r",
 			flags: {
-				count: flag("count", t.int, { help: "a count", default: 3n }),
-				name: flag("name", t.str, { help: "a name" }),
+				count: flag("count", t.int, {
+					help: "a count",
+					presence: "default",
+					default: 3n,
+				}),
+				name: flag("name", t.str, { help: "a name", presence: "required" }),
 			},
 			handler: () => 0,
 		}),
@@ -1458,7 +1584,13 @@ function dryConfigApp(
 	app.command(
 		defineReadOnlyCommand("run", {
 			help: "run something",
-			flags: { opt: flag("opt", t.str, { help: "an option", default: "" }) },
+			flags: {
+				opt: flag("opt", t.str, {
+					help: "an option",
+					presence: "default",
+					default: "",
+				}),
+			},
 			handler: () => 0,
 		}),
 	);

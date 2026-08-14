@@ -71,7 +71,6 @@ const EXPECTED_JSON = `{
     },
     "arg": {
       "type": "str",
-      "required": true,
       "default": null,
       "variadic": false,
       "choices": null
@@ -104,6 +103,7 @@ const EXPECTED_JSON = `{
       "type": "bool",
       "help": "Enable chatter output",
       "short": "V",
+      "presence": "default",
       "default": false,
       "negatable": true
     },
@@ -111,6 +111,7 @@ const EXPECTED_JSON = `{
       "name": "log-level",
       "type": "str",
       "help": "Logging level",
+      "presence": "default",
       "default": "info",
       "env": "RICH_LOG_LEVEL",
       "choices": [
@@ -124,6 +125,7 @@ const EXPECTED_JSON = `{
       "name": "state-file",
       "type": "str",
       "help": "State file relative to the infra root",
+      "presence": "default",
       "default": {
         "relative_to_root": {
           "env_var": "RICH_HOME",
@@ -140,11 +142,18 @@ const EXPECTED_JSON = `{
       "name": "check",
       "help": "Run project checks registered via the check framework and report results",
       "effect": "read_only",
+      "payload_schema": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
       "flags": [
         {
           "name": "all",
           "type": "bool",
           "help": "Run every registered check regardless of tag or name filters",
+          "presence": "default",
           "default": false,
           "negatable": true
         },
@@ -152,18 +161,21 @@ const EXPECTED_JSON = `{
           "name": "tag",
           "type": "str",
           "help": "Tag DSL expression to select checks (e.g. 'changelog & !quality')",
+          "presence": "default",
           "default": ""
         },
         {
           "name": "name",
           "type": "str",
           "help": "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')",
+          "presence": "default",
           "default": ""
         },
         {
           "name": "list",
           "type": "bool",
           "help": "List all registered checks with their tags and exit without running",
+          "presence": "default",
           "default": false,
           "negatable": true
         },
@@ -171,16 +183,11 @@ const EXPECTED_JSON = `{
           "name": "ignore-warnings",
           "type": "bool",
           "help": "Treat warn-severity results as passing so they do not cause nonzero exit",
+          "presence": "default",
           "default": false,
           "negatable": true
         }
       ],
-      "payload_schema": {
-        "type": "array",
-        "items": {
-          "type": "object"
-        }
-      },
       "forwarding": {
         "reason": "framework-internal: absorbs app-defined global flag values"
       }
@@ -194,36 +201,42 @@ const EXPECTED_JSON = `{
           "name": "name",
           "type": "str",
           "help": "A string flag",
+          "presence": "default",
           "default": "world"
         },
         {
           "name": "count",
           "type": "int",
           "help": "An integer flag",
+          "presence": "default",
           "default": 42
         },
         {
           "name": "big",
           "type": "int",
           "help": "A big integer flag",
+          "presence": "default",
           "default": 9007199254740993
         },
         {
           "name": "ratio",
           "type": "float",
           "help": "A float flag",
+          "presence": "default",
           "default": 3.14
         },
         {
           "name": "sim-run",
           "type": "bool",
           "help": "Dry run mode",
+          "presence": "required",
           "negatable": true
         },
         {
           "name": "cache-file",
           "type": "str",
           "help": "Cache file relative to the infra root",
+          "presence": "default",
           "default": {
             "relative_to_root": {
               "env_var": "RICH_HOME",
@@ -237,7 +250,8 @@ const EXPECTED_JSON = `{
       "args": [
         {
           "name": "target",
-          "help": "Target to process"
+          "help": "Target to process",
+          "presence": "required"
         }
       ]
     },
@@ -250,6 +264,8 @@ const EXPECTED_JSON = `{
           "name": "tag",
           "type": "list[str]",
           "help": "Tags to apply",
+          "presence": "default",
+          "default": [],
           "env": "RICH_TAGS",
           "unique": true,
           "env_separator": ","
@@ -258,6 +274,7 @@ const EXPECTED_JSON = `{
           "name": "port",
           "type": "list[int]",
           "help": "Ports to open",
+          "presence": "default",
           "default": [
             80,
             443
@@ -267,6 +284,7 @@ const EXPECTED_JSON = `{
           "name": "matrix",
           "type": "dict[str,int]",
           "help": "Named weights",
+          "presence": "default",
           "default": {
             "alpha": 1,
             "beta": 2
@@ -283,18 +301,21 @@ const EXPECTED_JSON = `{
           "name": "as-json",
           "type": "bool",
           "help": "JSON output",
+          "presence": "optional",
           "negatable": true
         },
         {
           "name": "yaml",
           "type": "bool",
           "help": "YAML output",
+          "presence": "optional",
           "negatable": true
         },
         {
           "name": "text",
           "type": "bool",
           "help": "Text output",
+          "presence": "optional",
           "negatable": true
         }
       ],
@@ -317,23 +338,27 @@ const EXPECTED_JSON = `{
         {
           "name": "host",
           "type": "str",
-          "help": "Deploy host"
+          "help": "Deploy host",
+          "presence": "optional"
         },
         {
           "name": "port-num",
           "type": "int",
-          "help": "Deploy port"
+          "help": "Deploy port",
+          "presence": "optional"
         },
         {
           "name": "ssl",
           "type": "bool",
           "help": "Use SSL",
+          "presence": "required",
           "negatable": true
         },
         {
           "name": "cert",
           "type": "str",
-          "help": "SSL certificate path"
+          "help": "SSL certificate path",
+          "presence": "optional"
         }
       ],
       "constraints": [
@@ -360,12 +385,14 @@ const EXPECTED_JSON = `{
           "name": "email",
           "type": "bool",
           "help": "Send email notification",
+          "presence": "required",
           "negatable": true
         },
         {
           "name": "alert",
           "type": "bool",
           "help": "Enable alerts",
+          "presence": "required",
           "negatable": true
         }
       ],
@@ -387,12 +414,14 @@ const EXPECTED_JSON = `{
           "name": "page",
           "type": "int",
           "help": "Page number",
+          "presence": "default",
           "default": 1
         },
         {
           "name": "per-page",
           "type": "int",
           "help": "Items per page",
+          "presence": "default",
           "default": 20
         }
       ]
@@ -404,18 +433,19 @@ const EXPECTED_JSON = `{
       "args": [
         {
           "name": "src",
-          "help": "Source directory"
+          "help": "Source directory",
+          "presence": "required"
         },
         {
           "name": "mode",
           "help": "Copy mode",
-          "required": false,
+          "presence": "default",
           "default": "fast"
         },
         {
           "name": "extra",
           "help": "Extra files",
-          "required": false,
+          "presence": "optional",
           "variadic": true
         }
       ]
@@ -444,6 +474,7 @@ const EXPECTED_JSON = `{
           "name": "priority",
           "type": "int",
           "help": "Priority level",
+          "presence": "default",
           "default": 3,
           "choices": [
             1,
@@ -457,6 +488,7 @@ const EXPECTED_JSON = `{
           "name": "threshold",
           "type": "float",
           "help": "Threshold value",
+          "presence": "default",
           "default": 0.5,
           "choices": [
             0.1,
@@ -476,12 +508,14 @@ const EXPECTED_JSON = `{
           "type": "str",
           "help": "Output format",
           "short": "f",
+          "presence": "default",
           "default": "table"
         },
         {
           "name": "color-off",
           "type": "bool",
           "help": "Disable colors",
+          "presence": "default",
           "default": false,
           "negatable": false
         },
@@ -489,6 +523,7 @@ const EXPECTED_JSON = `{
           "name": "strict-mode",
           "type": "bool",
           "help": "Strict mode",
+          "presence": "default",
           "default": false,
           "conflict_mode": "error",
           "negatable": true
@@ -534,18 +569,19 @@ const EXPECTED_JSON = `{
           "name": "show",
           "help": "Show every flag and config field with its effective value and where that value came from, resolved through the precedence chain environment variable, then config file, then declared default. Declared infrastructure roots, handshake and connection environment variables are listed too. Choose --plain for an aligned human-readable table; the framework-owned --json yields the same information as a machine-readable object carrying each entry's type, default and help text.",
           "effect": "read_only",
+          "payload_schema": {
+            "type": "object"
+          },
           "flags": [
             {
               "name": "plain",
               "type": "bool",
               "help": "Display config values in a human-readable table format",
+              "presence": "default",
               "default": false,
               "negatable": true
             }
           ],
-          "payload_schema": {
-            "type": "object"
-          },
           "forwarding": {
             "reason": "framework-internal: absorbs app-defined global flag values"
           }
@@ -559,6 +595,7 @@ const EXPECTED_JSON = `{
               "name": "clear",
               "type": "bool",
               "help": "Clear a repeatable flag by setting its value to an empty list",
+              "presence": "default",
               "default": false,
               "negatable": true
             },
@@ -566,6 +603,7 @@ const EXPECTED_JSON = `{
               "name": "default",
               "type": "bool",
               "help": "Reset a key to its default value by removing it from the config file",
+              "presence": "default",
               "default": false,
               "negatable": true
             }
@@ -573,12 +611,13 @@ const EXPECTED_JSON = `{
           "args": [
             {
               "name": "key",
-              "help": "The config key to set, matching a registered flag name"
+              "help": "The config key to set, matching a registered flag name",
+              "presence": "required"
             },
             {
               "name": "value",
               "help": "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
-              "required": false
+              "presence": "optional"
             }
           ],
           "forwarding": {
@@ -616,7 +655,8 @@ const EXPECTED_JSON = `{
             {
               "name": "steps",
               "type": "int",
-              "help": "Migration steps"
+              "help": "Migration steps",
+              "presence": "optional"
             }
           ],
           "tags": [
@@ -657,6 +697,7 @@ const EXPECTED_JSON = `{
                   "name": "detailed",
                   "type": "bool",
                   "help": "Show detailed stats",
+                  "presence": "required",
                   "negatable": true
                 }
               ],
@@ -769,7 +810,7 @@ scope = "db"
 `;
 
 /** Builds the TS rich app; registration order mirrors the Python mirror app. */
-function buildRichApp(): App {
+export function buildRichApp(): App {
 	const app = createApp({
 		name: "richapp",
 		version: "2.5.0",
@@ -783,16 +824,19 @@ function buildRichApp(): App {
 			chatter: flag("chatter", t.bool, {
 				help: "Enable chatter output",
 				short: "V",
+				presence: "default",
 				default: false,
 			}),
 			log_level: flag("log-level", t.str, {
 				help: "Logging level",
+				presence: "default",
 				default: "info",
 				env: "RICH_LOG_LEVEL",
 				choices: ["debug", "info", "warn", "error"],
 			}),
 			state_file: flag("state-file", t.str, {
 				help: "State file relative to the infra root",
+				presence: "default",
 				default: relativeToRoot("RICH_HOME", "state", "app.db"),
 			}),
 		},
@@ -819,27 +863,40 @@ function buildRichApp(): App {
 			flags: {
 				name: flag("name", t.str, {
 					help: "A string flag",
+					presence: "default",
 					default: "world",
 				}),
 				count: flag("count", t.int, {
 					help: "An integer flag",
+					presence: "default",
 					default: 42n,
 				}),
 				big: flag("big", t.int, {
 					help: "A big integer flag",
+					presence: "default",
 					default: 9007199254740993n,
 				}),
 				ratio: flag("ratio", t.float, {
 					help: "A float flag",
+					presence: "default",
 					default: 3.14,
 				}),
-				sim_run: flag("sim-run", t.bool, { help: "Dry run mode" }),
+				sim_run: flag("sim-run", t.bool, {
+					help: "Dry run mode",
+					presence: "required",
+				}),
 				cache_file: flag("cache-file", t.str, {
 					help: "Cache file relative to the infra root",
+					presence: "default",
 					default: relativeToRoot("RICH_HOME", "cache.bin"),
 				}),
 			},
-			args: [arg("target", t.str, { help: "Target to process" })],
+			args: [
+				arg("target", t.str, {
+					help: "Target to process",
+					presence: "required",
+				}),
+			],
 			handler: () => 0,
 		}),
 	);
@@ -853,15 +910,19 @@ function buildRichApp(): App {
 					unique: true,
 					env: "RICH_TAGS",
 					envSeparator: ",",
+					presence: "default",
+					default: [],
 				}),
 				port: flag("port", t.list(t.int), {
 					help: "Ports to open",
 					unique: false,
+					presence: "default",
 					default: [80n, 443n],
 				}),
 				// Insertion order beta-then-alpha; the schema must sort dict keys.
 				matrix: flag("matrix", t.dict(t.int), {
 					help: "Named weights",
+					presence: "default",
 					default: new Map([
 						["beta", 2n],
 						["alpha", 1n],
@@ -877,9 +938,18 @@ function buildRichApp(): App {
 			help: "Test mutex flags",
 			mutex: [
 				mutexGroup({
-					as_json: flag("as-json", t.bool, { help: "JSON output" }),
-					yaml: flag("yaml", t.bool, { help: "YAML output" }),
-					text: flag("text", t.bool, { help: "Text output" }),
+					as_json: flag("as-json", t.bool, {
+						help: "JSON output",
+						presence: "optional",
+					}),
+					yaml: flag("yaml", t.bool, {
+						help: "YAML output",
+						presence: "optional",
+					}),
+					text: flag("text", t.bool, {
+						help: "Text output",
+						presence: "optional",
+					}),
 				}),
 			],
 			handler: () => 0,
@@ -890,15 +960,18 @@ function buildRichApp(): App {
 		defineReadOnlyCommand("deploy", {
 			help: "Test dependencies",
 			flags: {
-				host: flag("host", t.str, { help: "Deploy host", default: null }),
+				host: flag("host", t.str, {
+					help: "Deploy host",
+					presence: "optional",
+				}),
 				port_num: flag("port-num", t.int, {
 					help: "Deploy port",
-					default: null,
+					presence: "optional",
 				}),
-				ssl: flag("ssl", t.bool, { help: "Use SSL" }),
+				ssl: flag("ssl", t.bool, { help: "Use SSL", presence: "required" }),
 				cert: flag("cert", t.str, {
 					help: "SSL certificate path",
-					default: null,
+					presence: "optional",
 				}),
 			},
 			dependencies: [
@@ -913,8 +986,14 @@ function buildRichApp(): App {
 		defineReadOnlyCommand("notify", {
 			help: "Test implies dependency",
 			flags: {
-				email: flag("email", t.bool, { help: "Send email notification" }),
-				alert: flag("alert", t.bool, { help: "Enable alerts" }),
+				email: flag("email", t.bool, {
+					help: "Send email notification",
+					presence: "required",
+				}),
+				alert: flag("alert", t.bool, {
+					help: "Enable alerts",
+					presence: "required",
+				}),
 			},
 			dependencies: [implies({ flag: "email", implies: "alert", value: true })],
 			handler: () => 0,
@@ -926,9 +1005,14 @@ function buildRichApp(): App {
 			help: "Test flag sets",
 			flagSets: [
 				flagSet("pagination", {
-					page: flag("page", t.int, { help: "Page number", default: 1n }),
+					page: flag("page", t.int, {
+						help: "Page number",
+						presence: "default",
+						default: 1n,
+					}),
 					per_page: flag("per-page", t.int, {
 						help: "Items per page",
+						presence: "default",
 						default: 20n,
 					}),
 				}),
@@ -941,15 +1025,15 @@ function buildRichApp(): App {
 		defineReadOnlyCommand("files", {
 			help: "Test args",
 			args: [
-				arg("src", t.str, { help: "Source directory" }),
+				arg("src", t.str, { help: "Source directory", presence: "required" }),
 				arg("mode", t.str, {
 					help: "Copy mode",
-					required: false,
+					presence: "default",
 					default: "fast",
 				}),
 				arg("extra", t.str, {
 					help: "Extra files",
-					required: false,
+					presence: "optional",
 					variadic: true,
 				}),
 			],
@@ -979,11 +1063,13 @@ function buildRichApp(): App {
 				priority: flag("priority", t.int, {
 					help: "Priority level",
 					choices: [1n, 2n, 3n, 4n, 5n],
+					presence: "default",
 					default: 3n,
 				}),
 				threshold: flag("threshold", t.float, {
 					help: "Threshold value",
 					choices: [0.1, 0.5, 0.9],
+					presence: "default",
 					default: 0.5,
 				}),
 			},
@@ -998,16 +1084,19 @@ function buildRichApp(): App {
 				format: flag("format", t.str, {
 					help: "Output format",
 					short: "f",
+					presence: "default",
 					default: "table",
 				}),
 				color_off: flag("color-off", t.bool, {
 					help: "Disable colors",
 					negatable: false,
+					presence: "default",
 					default: false,
 				}),
 				strict_mode: flag("strict-mode", t.bool, {
 					help: "Strict mode",
 					conflictMode: "error",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -1049,7 +1138,7 @@ function buildRichApp(): App {
 			flags: {
 				steps: flag("steps", t.int, {
 					help: "Migration steps",
-					default: null,
+					presence: "optional",
 				}),
 			},
 			configFields: ["listen_port"],
@@ -1069,7 +1158,10 @@ function buildRichApp(): App {
 		defineReadOnlyCommand("stats", {
 			help: "Show cache stats",
 			flags: {
-				detailed: flag("detailed", t.bool, { help: "Show detailed stats" }),
+				detailed: flag("detailed", t.bool, {
+					help: "Show detailed stats",
+					presence: "required",
+				}),
 			},
 			handler: () => 0,
 		}),

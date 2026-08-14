@@ -17,7 +17,11 @@ import {
 // --- Runtime: descriptor shapes ---
 
 test("flag captures name, schema, and opts", () => {
-	const f = flag("sim-run", t.bool, { help: "Dry run", default: true });
+	const f = flag("sim-run", t.bool, {
+		help: "Dry run",
+		presence: "default",
+		default: true,
+	});
 	assert.equal(f.kind, "flag");
 	assert.equal(f.name, "sim-run");
 	assert.equal(f.schema, "bool");
@@ -26,34 +30,58 @@ test("flag captures name, schema, and opts", () => {
 });
 
 test("flag registration errors match sibling messages", () => {
-	assert.throws(() => flag("target", t.str, { help: "" }), {
-		message: "Flag.help must be a non-empty string",
-	});
-	assert.throws(() => flag("target", t.str, { help: "   " }), {
-		message: "Flag.help must be a non-empty string",
-	});
-	assert.throws(() => flag("force", t.str, { help: "x" }), {
-		message:
-			"flag 'force' is a reserved name; use a qualified name like 'force-overwrite' or 'force-delete'",
-	});
-	assert.throws(() => flag("no-frame", t.bool, { help: "x", default: true }), {
-		message:
-			"flag 'no-frame': names starting with 'no-' are reserved for the negation system; use a positive name instead",
-	});
+	assert.throws(
+		() => flag("target", t.str, { help: "", presence: "required" }),
+		{
+			message: "Flag.help must be a non-empty string",
+		},
+	);
+	assert.throws(
+		() => flag("target", t.str, { help: "   ", presence: "required" }),
+		{
+			message: "Flag.help must be a non-empty string",
+		},
+	);
+	assert.throws(
+		() => flag("force", t.str, { help: "x", presence: "required" }),
+		{
+			message:
+				"flag 'force' is a reserved name; use a qualified name like 'force-overwrite' or 'force-delete'",
+		},
+	);
+	assert.throws(
+		() =>
+			flag("no-frame", t.bool, {
+				help: "x",
+				presence: "default",
+				default: true,
+			}),
+		{
+			message:
+				"flag 'no-frame': names starting with 'no-' are reserved for the negation system; use a positive name instead",
+		},
+	);
 });
 
 test("arg registration errors match sibling messages", () => {
-	assert.throws(() => arg("src", t.str, { help: "" }), {
+	assert.throws(() => arg("src", t.str, { help: "", presence: "required" }), {
 		message: "Arg.help must be a non-empty string",
 	});
 	// The type system cannot excess-property-check generic constraints (spike
-	// finding), so a stray default on a required arg is a runtime error.
-	assert.throws(() => arg("src", t.str, { help: "Source", default: "x" }), {
-		message: "required arg cannot have a default",
-	});
+	// finding), so a widened option object still reaches the factory: the
+	// two-declared error is what refuses it now that `required arg cannot have
+	// a default` is deleted (contract §12.12).
 	assert.throws(
-		() => arg("src", t.str, { help: "Source", required: true, default: "x" }),
-		{ message: "required arg cannot have a default" },
+		() =>
+			arg("src", t.str, {
+				help: "Source",
+				presence: "required",
+				default: "x",
+			} as unknown as { help: string; presence: "required" }),
+		{
+			message:
+				'Arg "src": presence is declared twice: presence: "required" and presence: "default" with default: x cannot be combined; declare exactly one',
+		},
 	);
 });
 
@@ -79,15 +107,19 @@ test("dependency descriptors carry sibling field shapes", () => {
 
 test("flagSet and mutexGroup hold keyed flag maps", () => {
 	const common = flagSet("common", {
-		chatter: flag("chatter", t.bool, { help: "Chatter", default: false }),
+		chatter: flag("chatter", t.bool, {
+			help: "Chatter",
+			presence: "default",
+			default: false,
+		}),
 	});
 	assert.equal(common.kind, "flag-set");
 	assert.equal(common.name, "common");
 	assert.equal(common.flags.chatter.name, "chatter");
 
 	const mg = mutexGroup({
-		file: flag("file", t.str, { help: "From file", default: null }),
-		url: flag("url", t.str, { help: "From URL", default: null }),
+		file: flag("file", t.str, { help: "From file", presence: "optional" }),
+		url: flag("url", t.str, { help: "From URL", presence: "optional" }),
 	});
 	assert.equal(mg.kind, "mutex-group");
 	assert.equal(mg.flags.file.schema, "str");
@@ -114,7 +146,11 @@ test("defineReadOnlyCommand validates help, tags, and flag-map keys", () => {
 			defineReadOnlyCommand("build", {
 				help: "h",
 				flags: {
-					simRun: flag("sim-run", t.bool, { help: "h", default: false }),
+					simRun: flag("sim-run", t.bool, {
+						help: "h",
+						presence: "default",
+						default: false,
+					}),
 				},
 				handler: () => 0,
 			}),
@@ -150,22 +186,95 @@ test("passthrough and deprecated carriers", () => {
 // also reject these shapes, and only the compile error is under test here.
 
 void [
-	// @ts-expect-error int flags take bigint defaults, not number
-	() => flag("count", t.int, { help: "h", default: 5 }),
-	// @ts-expect-error list defaults are element arrays, not scalars
-	() => flag("tag", t.list(t.str), { help: "h", default: "x" }),
-	// @ts-expect-error choices are incompatible with bool flags
-	() => flag("chatter", t.bool, { help: "h", default: false, choices: [true] }),
-	// @ts-expect-error negatable is only meaningful for bool flags
-	() => flag("target", t.str, { help: "h", negatable: false }),
-	// @ts-expect-error unique requires a list carrier
-	() => flag("target", t.str, { help: "h", unique: true }),
-	// @ts-expect-error dict flags cannot use envSeparator (env vars are JSON)
-	() => flag("meta", t.dict(t.int), { help: "h", envSeparator: "," }),
+	() =>
+		flag("count", t.int, {
+			help: "h",
+			presence: "default",
+			// @ts-expect-error int flags take bigint defaults, not number
+			default: 5,
+		}),
+	() =>
+		flag("tag", t.list(t.str), {
+			help: "h",
+			presence: "default",
+			// @ts-expect-error list defaults are element arrays, not scalars
+			default: "x",
+		}),
+	() =>
+		flag("chatter", t.bool, {
+			help: "h",
+			presence: "default",
+			default: false,
+			// @ts-expect-error choices are incompatible with bool flags
+			choices: [true],
+		}),
+	() =>
+		flag("target", t.str, {
+			help: "h",
+			// @ts-expect-error negatable is only meaningful for bool flags
+			negatable: false,
+			presence: "required",
+		}),
+	() =>
+		flag("target", t.str, {
+			help: "h",
+			// @ts-expect-error unique requires a list carrier
+			unique: true,
+			presence: "required",
+		}),
+	() =>
+		flag("meta", t.dict(t.int), {
+			help: "h",
+			// @ts-expect-error dict flags cannot use envSeparator (env vars are JSON)
+			envSeparator: ",",
+			presence: "default",
+			default: new Map(),
+		}),
 	// @ts-expect-error dict carriers are not allowed on args
-	() => arg("values", t.dict(t.int), { help: "h" }),
+	() => arg("values", t.dict(t.int), { help: "h", presence: "required" }),
 	// @ts-expect-error list args are expressed as scalar carrier + variadic: true
-	() => arg("values", t.list(t.float), { help: "h" }),
-	// @ts-expect-error choices elements must match the carrier's value type
-	() => flag("level", t.int, { help: "h", choices: [1, 2] }),
+	() => arg("values", t.list(t.float), { help: "h", presence: "required" }),
+	() =>
+		flag("level", t.int, {
+			help: "h",
+			// @ts-expect-error choices elements must match the carrier's value type
+			choices: [1, 2],
+			presence: "required",
+		}),
+];
+
+// --- Type-level: the presence union (contract §23.2) ---
+// A `default` outside the "default" member does not type-check, the "default"
+// member's `default` is not optional, and a declaration with no presence at
+// all does not type-check either.
+
+void [
+	() =>
+		// @ts-expect-error a required flag cannot carry a default value
+		flag("target", t.str, { help: "h", presence: "required", default: "x" }),
+	() =>
+		// @ts-expect-error an optional flag cannot carry a default value
+		flag("target", t.str, { help: "h", presence: "optional", default: "x" }),
+	// @ts-expect-error presence: "default" without a default value is incomplete
+	() => flag("target", t.str, { help: "h", presence: "default" }),
+	// @ts-expect-error a flag that declares no presence does not register
+	() => flag("target", t.str, { help: "h" }),
+	() =>
+		// @ts-expect-error null is not a spelling of optionality
+		flag("target", t.str, { help: "h", presence: "optional", default: null }),
+	() =>
+		// @ts-expect-error a required arg cannot carry a default value
+		arg("src", t.str, { help: "h", presence: "required", default: "x" }),
+	// @ts-expect-error presence: "default" without a default value is incomplete
+	() => arg("src", t.str, { help: "h", presence: "default" }),
+	// @ts-expect-error an arg that declares no presence does not register
+	() => arg("src", t.str, { help: "h" }),
+	() =>
+		// @ts-expect-error a variadic arg cannot declare a default
+		arg("src", t.str, {
+			help: "h",
+			presence: "default",
+			default: "x",
+			variadic: true,
+		}),
 ];

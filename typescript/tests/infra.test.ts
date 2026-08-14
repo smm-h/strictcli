@@ -127,6 +127,7 @@ function infraApp() {
 			flags: {
 				db: flag("db", t.str, {
 					help: "Database path",
+					presence: "default",
 					default: relativeToRoot("MYAPP_HOME", "db.sqlite"),
 				}),
 			},
@@ -229,6 +230,7 @@ test("infra: hermetic suppresses the flag's env var but not the marker default",
 					db: flag("db", t.str, {
 						help: "db",
 						env: "MYAPP_DB",
+						presence: "default",
 						default: relativeToRoot("MYAPP_HOME", "db.sqlite"),
 					}),
 				},
@@ -263,6 +265,7 @@ test("infra: global flag marker default resolves with source 'infra'", async () 
 			flags: {
 				state_dir: flag("state-dir", t.str, {
 					help: "State directory",
+					presence: "default",
 					default: relativeToRoot("MYAPP_HOME", "state"),
 				}),
 			},
@@ -398,6 +401,7 @@ test("infra: global flag marker referencing an undeclared root is a hard error",
 				flags: {
 					db: flag("db", t.str, {
 						help: "db",
+						presence: "default",
 						default: relativeToRoot("NOPE", "db.sqlite"),
 					}),
 				},
@@ -416,6 +420,7 @@ test("infra: command flag marker referencing an undeclared root is a hard error"
 		flags: {
 			db: flag("db", t.str, {
 				help: "db",
+				presence: "default",
 				default: relativeToRoot("NOPE"),
 			}),
 		},
@@ -439,6 +444,7 @@ test("infra: group-nested command flag markers are validated too", () => {
 					flags: {
 						path: flag("path", t.str, {
 							help: "path",
+							presence: "default",
 							default: relativeToRoot("NOPE"),
 						}),
 					},
@@ -461,6 +467,7 @@ test("infra: declared markers register cleanly at every level", () => {
 		flags: {
 			state_dir: flag("state-dir", t.str, {
 				help: "state",
+				presence: "default",
 				default: relativeToRoot("MYAPP_HOME", "state"),
 			}),
 		},
@@ -472,6 +479,7 @@ test("infra: declared markers register cleanly at every level", () => {
 			flags: {
 				path: flag("path", t.str, {
 					help: "path",
+					presence: "default",
 					default: relativeToRoot("MYAPP_HOME", "db.sqlite"),
 				}),
 			},
@@ -483,14 +491,17 @@ test("infra: declared markers register cleanly at every level", () => {
 test("infra: validateFlagInfraMarker ignores non-marker defaults", () => {
 	const roots = new Map<string, string>();
 	validateFlagInfraMarker(
-		flag("plain", t.str, { help: "p", default: "x" }),
+		flag("plain", t.str, { help: "p", presence: "default", default: "x" }),
 		roots,
 	);
 	validateFlagInfraMarker(
-		flag("opt", t.str, { help: "o", default: null }),
+		flag("opt", t.str, { help: "o", presence: "optional" }),
 		roots,
 	);
-	validateFlagInfraMarker(flag("req", t.str, { help: "r" }), roots);
+	validateFlagInfraMarker(
+		flag("req", t.str, { help: "r", presence: "required" }),
+		roots,
+	);
 });
 
 test("infra: marker on an int flag is rejected like Python (type mismatch)", () => {
@@ -498,6 +509,7 @@ test("infra: marker on an int flag is rejected like Python (type mismatch)", () 
 		() =>
 			flag("n", t.int, {
 				help: "n",
+				presence: "default",
 				default: relativeToRoot("MYAPP_HOME"),
 			}),
 		{
@@ -514,6 +526,7 @@ test("infra: marker default vs choices renders the Python repr", () => {
 			flag("c", t.str, {
 				help: "c",
 				choices: ["a", "b"],
+				presence: "default",
 				default: relativeToRoot("MYAPP_HOME"),
 			}),
 		{

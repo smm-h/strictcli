@@ -21,7 +21,11 @@ const tracker = newStdinTracker;
 // --- Scalars ---
 
 test("str env values pass through verbatim (conformance boundary cases)", () => {
-	const f = flag("name", t.str, { help: "h", env: "MYAPP_NAME" });
+	const f = flag("name", t.str, {
+		help: "h",
+		env: "MYAPP_NAME",
+		presence: "required",
+	});
 	assert.equal(resolveEnvValue(f, "MYAPP_NAME", "", tracker()), "");
 	assert.equal(
 		resolveEnvValue(f, "MYAPP_NAME", "  hello  ", tracker()),
@@ -31,7 +35,11 @@ test("str env values pass through verbatim (conformance boundary cases)", () => 
 });
 
 test("str env values resolve the @-prefix", () => {
-	const f = flag("msg", t.str, { help: "h", env: "MYAPP_MSG" });
+	const f = flag("msg", t.str, {
+		help: "h",
+		env: "MYAPP_MSG",
+		presence: "required",
+	});
 	assert.equal(resolveEnvValue(f, "MYAPP_MSG", "@@lit", tracker()), "@lit");
 	const p = join(dir, "content.txt");
 	writeFileSync(p, "from file\n");
@@ -50,6 +58,7 @@ test("bool env strings follow the strict six-string rule", () => {
 	const f = flag("chatter", t.bool, {
 		help: "h",
 		env: "MYAPP_VERBOSE",
+		presence: "default",
 		default: false,
 	});
 	for (const [s, want] of [
@@ -76,7 +85,11 @@ test("bool env strings follow the strict six-string rule", () => {
 });
 
 test("int env values parse strictly with the env-suffixed message", () => {
-	const f = flag("port", t.int, { help: "h", env: "MYAPP_PORT" });
+	const f = flag("port", t.int, {
+		help: "h",
+		env: "MYAPP_PORT",
+		presence: "required",
+	});
 	assert.equal(resolveEnvValue(f, "MYAPP_PORT", "8080", tracker()), 8080n);
 	// conformance int_type.json / boundary.json
 	assert.throws(
@@ -94,7 +107,11 @@ test("int env values parse strictly with the env-suffixed message", () => {
 });
 
 test("float env values parse strictly with the env-suffixed message", () => {
-	const f = flag("rate", t.float, { help: "h", env: "MYAPP_RATE" });
+	const f = flag("rate", t.float, {
+		help: "h",
+		env: "MYAPP_RATE",
+		presence: "required",
+	});
 	assert.equal(resolveEnvValue(f, "MYAPP_RATE", "2.5", tracker()), 2.5);
 	// conformance float_type.json: NaN from env var
 	assert.throws(
@@ -114,6 +131,8 @@ test("list env values split on the separator with escapes", () => {
 		help: "h",
 		env: "TAGS",
 		envSeparator: ",",
+		presence: "default",
+		default: [],
 	});
 	assert.deepEqual(resolveEnvValue(f, "TAGS", "a,b,c", tracker()), [
 		"a",
@@ -131,6 +150,8 @@ test("list env values split on the separator with escapes", () => {
 		help: "h",
 		env: "PATHS",
 		envSeparator: ":",
+		presence: "default",
+		default: [],
 	});
 	assert.deepEqual(
 		resolveEnvValue(colon, "PATHS", "/usr/bin:/usr/local/bin", tracker()),
@@ -143,6 +164,8 @@ test("list element coercion errors carry the env suffix", () => {
 		help: "h",
 		env: "COUNTS",
 		envSeparator: ",",
+		presence: "default",
+		default: [],
 	});
 	assert.deepEqual(resolveEnvValue(counts, "COUNTS", "1,2,3", tracker()), [
 		1n,
@@ -159,6 +182,8 @@ test("list element coercion errors carry the env suffix", () => {
 		help: "h",
 		env: "RATES",
 		envSeparator: ",",
+		presence: "default",
+		default: [],
 	});
 	assert.deepEqual(
 		resolveEnvValue(rates, "RATES", "1.5,2.5", tracker()),
@@ -177,6 +202,8 @@ test("list unique enforcement from env", () => {
 		env: "TAGS",
 		envSeparator: ",",
 		unique: true,
+		presence: "default",
+		default: [],
 	});
 	assert.deepEqual(resolveEnvValue(f, "TAGS", "a,b", tracker()), ["a", "b"]);
 	// conformance env_separator.json: unique enforcement from env
@@ -191,6 +218,8 @@ test("list str elements resolve the @-prefix", () => {
 		help: "h",
 		env: "MSGS",
 		envSeparator: ",",
+		presence: "default",
+		default: [],
 	});
 	assert.deepEqual(resolveEnvValue(f, "MSGS", "@@a,plain", tracker()), [
 		"@a",
@@ -201,7 +230,12 @@ test("list str elements resolve the @-prefix", () => {
 // --- Dicts (env vars are JSON) ---
 
 test("dict env values parse as a whole JSON object", () => {
-	const f = flag("meta", t.dict(t.int), { help: "h", env: "MYAPP_META" });
+	const f = flag("meta", t.dict(t.int), {
+		help: "h",
+		env: "MYAPP_META",
+		presence: "default",
+		default: new Map(),
+	});
 	assert.deepEqual(
 		resolveEnvValue(f, "MYAPP_META", '{"a": 7, "b": -2}', tracker()),
 		new Map([

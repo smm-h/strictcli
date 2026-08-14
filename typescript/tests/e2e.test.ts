@@ -85,7 +85,12 @@ test("e2e 2: str flag with space syntax", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { target: flag("target", t.str, { help: "the target" }) },
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
+			},
 			handler: (args, ctx) => {
 				ctx.info(`target=${args.target}`);
 				return 0;
@@ -108,6 +113,7 @@ test("e2e 3: unknown flag", async () => {
 			flags: {
 				chatter: flag("chatter", t.bool, {
 					help: "be chatter",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -134,6 +140,7 @@ test("e2e 4: invalid choice", async () => {
 				format: flag("format", t.str, {
 					help: "output format",
 					choices: ["text", "json"],
+					presence: "required",
 				}),
 			},
 			handler: (args, ctx) => {
@@ -156,7 +163,12 @@ test("e2e 5: required flag missing", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { target: flag("target", t.str, { help: "the target" }) },
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
+			},
 			handler: (args, ctx) => {
 				ctx.info(`target=${args.target}`);
 				return 0;
@@ -179,6 +191,7 @@ test("e2e 6: bool negation", async () => {
 			flags: {
 				chatter: flag("chatter", t.bool, {
 					help: "be chatter",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -209,6 +222,7 @@ test("e2e 7: str flag from env var", async () => {
 			flags: {
 				target: flag("target", t.str, {
 					help: "the target",
+					presence: "default",
 					default: "fallback",
 					env: "MYAPP_TARGET",
 				}),

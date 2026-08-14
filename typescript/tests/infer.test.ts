@@ -16,12 +16,30 @@ type Assert<T extends true> = T;
 const build = defineReadOnlyCommand("build", {
 	help: "Build the project",
 	flags: {
-		sim_run: flag("sim-run", t.bool, { help: "Dry run", default: true }),
-		count: flag("count", t.int, { help: "How many" }),
-		tag: flag("tag", t.list(t.str), { help: "Tags" }),
-		meta: flag("meta", t.dict(t.int), { help: "Metadata" }),
+		sim_run: flag("sim-run", t.bool, {
+			help: "Dry run",
+			presence: "default",
+			default: true,
+		}),
+		count: flag("count", t.int, { help: "How many", presence: "required" }),
+		tag: flag("tag", t.list(t.str), {
+			help: "Tags",
+			presence: "default",
+			default: [],
+		}),
+		meta: flag("meta", t.dict(t.int), {
+			help: "Metadata",
+			presence: "default",
+			default: new Map(),
+		}),
 	},
-	args: [arg("values", t.float, { help: "Values", variadic: true })],
+	args: [
+		arg("values", t.float, {
+			help: "Values",
+			variadic: true,
+			presence: "required",
+		}),
+	],
 	handler: (args) => {
 		// Assignment checks inside the handler mirror the spike.
 		const used: [boolean, bigint, string[], Map<string, bigint>, number[]] = [
@@ -76,8 +94,12 @@ test("flags and args default to empty when omitted", () => {
 const fetchCmd = defineReadOnlyCommand("fetch", {
 	help: "Fetch a resource",
 	flags: {
-		url: flag("url", t.str, { help: "URL", default: null }),
-		retries: flag("retries", t.int, { help: "Retries", default: 3n }),
+		url: flag("url", t.str, { help: "URL", presence: "optional" }),
+		retries: flag("retries", t.int, {
+			help: "Retries",
+			presence: "default",
+			default: 3n,
+		}),
 	},
 	handler: (args) => (args.url === undefined ? Number(args.retries) : 0),
 });
@@ -96,9 +118,9 @@ export type _NotUndefinedUnion = Assert<
 const cp = defineReadOnlyCommand("cp", {
 	help: "Copy a file",
 	args: [
-		arg("src", t.str, { help: "Source" }),
-		arg("dest", t.str, { help: "Destination", required: false }),
-		arg("mode", t.str, { help: "Mode", required: false, default: "fast" }),
+		arg("src", t.str, { help: "Source", presence: "required" }),
+		arg("dest", t.str, { help: "Destination", presence: "optional" }),
+		arg("mode", t.str, { help: "Mode", presence: "default", default: "fast" }),
 	],
 	handler: (args) => (args.dest === undefined ? args.mode.length : 0),
 });

@@ -383,9 +383,11 @@ function buildSchemaDefaults(): Record<string, unknown> {
 			negatable: null,
 			hidden: false,
 		},
+		// `required` is gone with the arg entry's key: presence is always
+		// emitted, so there is no default to reconstruct it from (§13's
+		// presence-round amendment).
 		arg: {
 			type: "str",
-			required: true,
 			default: null,
 			variadic: false,
 			choices: null,

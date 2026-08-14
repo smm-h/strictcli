@@ -51,10 +51,13 @@ test("help: command help shows flags and args (help.json)", async () => {
 	app.command(
 		defineReadOnlyCommand("deploy", {
 			help: "deploy the app",
-			args: [arg("target", t.str, { help: "deploy target" })],
+			args: [
+				arg("target", t.str, { help: "deploy target", presence: "required" }),
+			],
 			flags: {
 				sim_run: flag("sim-run", t.bool, {
 					help: "preview changes",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -64,7 +67,7 @@ test("help: command help shows flags and args (help.json)", async () => {
 	const r = await app.test(["deploy", "--help"]);
 	assert.equal(
 		r.stdout,
-		"myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target\n\nFlags:\n  --sim-run, --no-sim-run    preview changes [default: false]\n",
+		"myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target [required]\n\nFlags:\n  --sim-run, --no-sim-run    preview changes [default: false]\n",
 	);
 	assert.equal(r.exitCode, 0);
 });
@@ -86,6 +89,7 @@ test("help: str flag shows <str> and default (help.json)", async () => {
 			flags: {
 				output: flag("output", t.str, {
 					help: "output path",
+					presence: "default",
 					default: "out.txt",
 				}),
 			},
@@ -104,7 +108,12 @@ test("help: required flag shown as [required] (help.json)", async () => {
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			flags: { target: flag("target", t.str, { help: "the target" }) },
+			flags: {
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "required",
+				}),
+			},
 			handler: ok,
 		}),
 	);
@@ -121,7 +130,10 @@ test("help: explicitly-optional flag shows [optional] (Go Default(nil) fix)", as
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				target: flag("target", t.str, { help: "the target", default: null }),
+				target: flag("target", t.str, {
+					help: "the target",
+					presence: "optional",
+				}),
 			},
 			handler: ok,
 		}),
@@ -158,7 +170,7 @@ test("help: optional arg shows default / [optional] (help.json)", async () => {
 			args: [
 				arg("path", t.str, {
 					help: "project dir",
-					required: false,
+					presence: "default",
 					default: ".",
 				}),
 			],
@@ -178,7 +190,7 @@ test("help: optional arg shows default / [optional] (help.json)", async () => {
 	noDefault.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			args: [arg("path", t.str, { help: "project dir", required: false })],
+			args: [arg("path", t.str, { help: "project dir", presence: "optional" })],
 			handler: ok,
 		}),
 	);
@@ -201,6 +213,7 @@ test("help: env var and choices metadata (env.json, choices.json)", async () => 
 			flags: {
 				target: flag("target", t.str, {
 					help: "the target",
+					presence: "default",
 					default: "x",
 					env: "MYAPP_TARGET",
 				}),
@@ -225,6 +238,7 @@ test("help: env var and choices metadata (env.json, choices.json)", async () => 
 				format: flag("format", t.str, {
 					help: "output format",
 					choices: ["text", "json"],
+					presence: "default",
 					default: "text",
 				}),
 			},
@@ -243,7 +257,11 @@ test("help: int flag shows <int> (int_type.json)", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				port: flag("port", t.int, { help: "the port", default: 8000n }),
+				port: flag("port", t.int, {
+					help: "the port",
+					presence: "default",
+					default: 8000n,
+				}),
 			},
 			handler: ok,
 		}),
@@ -260,14 +278,19 @@ test("help: repeatable list flags show [repeatable] (repeatable.json)", async ()
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				tag: flag("tag", t.list(t.str), { help: "a tag", repeatable: true }),
+				tag: flag("tag", t.list(t.str), {
+					help: "a tag",
+					repeatable: true,
+					presence: "default",
+					default: [],
+				}),
 			},
 			handler: ok,
 		}),
 	);
 	assert.equal(
 		(await bare.test(["cmd", "--help"])).stdout,
-		"myapp cmd -- a command\n\nFlags:\n  --tag <str>    a tag [repeatable]\n",
+		"myapp cmd -- a command\n\nFlags:\n  --tag <str>    a tag [repeatable] [default: []]\n",
 	);
 
 	const withDefault = createApp({
@@ -282,6 +305,7 @@ test("help: repeatable list flags show [repeatable] (repeatable.json)", async ()
 				tag: flag("tag", t.list(t.str), {
 					help: "a tag",
 					repeatable: true,
+					presence: "default",
 					default: ["x", "y"],
 				}),
 			},
@@ -300,12 +324,22 @@ test("help: mutex groups render their own section (mutex.json)", async () => {
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
 			flags: {
-				name: flag("name", t.str, { help: "your name", default: "anon" }),
+				name: flag("name", t.str, {
+					help: "your name",
+					presence: "default",
+					default: "anon",
+				}),
 			},
 			mutex: [
 				mutexGroup({
-					chatter: flag("chatter", t.bool, { help: "chatter output" }),
-					muted: flag("muted", t.bool, { help: "muted output" }),
+					chatter: flag("chatter", t.bool, {
+						help: "chatter output",
+						presence: "optional",
+					}),
+					muted: flag("muted", t.bool, {
+						help: "muted output",
+						presence: "optional",
+					}),
 				}),
 			],
 			handler: ok,
@@ -313,7 +347,7 @@ test("help: mutex groups render their own section (mutex.json)", async () => {
 	);
 	assert.equal(
 		(await app.test(["cmd", "--help"])).stdout,
-		"myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [required]\n  --muted, --no-muted        muted output [required]\n",
+		"myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [optional]\n  --muted, --no-muted        muted output [optional]\n",
 	);
 });
 
@@ -325,6 +359,7 @@ test("help: global flags in command help (global_flags.json)", async () => {
 		flags: {
 			chatter: flag("chatter", t.bool, {
 				help: "enable chatter output",
+				presence: "default",
 				default: false,
 			}),
 		},
@@ -343,8 +378,11 @@ test("help: nested command help shows the group prefix (nesting.json)", async ()
 		defineReadOnlyCommand("set", {
 			help: "set a config value",
 			flags: {
-				key: flag("key", t.str, { help: "config key" }),
-				value: flag("value", t.str, { help: "config value" }),
+				key: flag("key", t.str, { help: "config key", presence: "required" }),
+				value: flag("value", t.str, {
+					help: "config value",
+					presence: "required",
+				}),
 			},
 			handler: ok,
 		}),
@@ -368,7 +406,9 @@ test("help: 3-level nesting (nesting.json)", async () => {
 	zone.command(
 		defineReadOnlyCommand("create", {
 			help: "create a zone",
-			flags: { name: flag("name", t.str, { help: "zone name" }) },
+			flags: {
+				name: flag("name", t.str, { help: "zone name", presence: "required" }),
+			},
 			handler: ok,
 		}),
 	);
@@ -434,6 +474,7 @@ test("help: flag-set flags render in the Flags section (flag_sets.json)", async 
 				flagSet("diagnostics", {
 					debug: flag("debug", t.bool, {
 						help: "enable debug mode",
+						presence: "default",
 						default: false,
 					}),
 				}),
@@ -474,6 +515,7 @@ test("help: app help shows Global flags without meta (Python-captured)", async (
 		flags: {
 			chatter: flag("chatter", t.bool, {
 				help: "enable chatter output",
+				presence: "default",
 				default: false,
 				short: "V",
 			}),
