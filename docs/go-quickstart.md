@@ -9,6 +9,12 @@ nav_order: 1
 
 This guide walks through building a CLI application with the Go implementation of strictcli.
 
+Everything below is Go-shaped on purpose -- functional options, typed
+constants, unexported fields that make a half-written declaration fail to
+register -- and none of it is a transliteration of the Python or TypeScript
+surface. The three implementations are identical in behavior, not in spelling;
+see [Language idioms](language-idioms.md).
+
 ## Install
 
 ```bash

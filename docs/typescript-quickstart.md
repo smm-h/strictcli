@@ -9,6 +9,13 @@ nav_order: 0
 
 strictcli is a strict CLI framework where you declare everything and infer nothing. Every flag, arg, command, and group requires explicit help text. Types are enforced at both compile time and runtime. This guide covers the TypeScript implementation, published on npm as `strictcli`.
 
+Everything below is TypeScript-shaped on purpose -- discriminated unions, const
+type parameters, twin command factories that narrow the handler's context --
+and none of it is a transliteration of the Python or Go surface. The three
+implementations are identical in behavior, not in spelling, and TypeScript's
+share of the enforcement lands in the compiler; see
+[Language idioms](language-idioms.md).
+
 ## Installation
 
 Requires Node >= 22. The TypeScript implementation is published on npm as

@@ -9,6 +9,11 @@ nav_order: 2
 
 This guide walks through building a CLI application with the Python implementation of strictcli.
 
+Everything below is Python-shaped on purpose -- decorators, keyword arguments,
+a `Flag` dataclass -- and none of it is a transliteration of the Go or
+TypeScript surface. The three implementations are identical in behavior, not in
+spelling; see [Language idioms](language-idioms.md).
+
 ## Install
 
 ```bash
