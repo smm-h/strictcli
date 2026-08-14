@@ -1576,6 +1576,71 @@ test("mcp: legacy read-only and consented calls are never asked about", async ()
 	}
 });
 
+/**
+ * Fails unless the modern replay of a spent blob was refused as already used
+ * rather than running the command.
+ */
+function assertReplayRefused(resp: Record<string, unknown>): void {
+	assert.ok(
+		Object.hasOwn(resp, "error"),
+		`the aborted blob was replayed and ran the command: ${JSON.stringify(resp)}`,
+	);
+	assert.equal(errorOf(resp).message, "requestState has already been used");
+}
+
+/** The modern replay of the blob the server put on the wire as an elicitation id. */
+function replayAskedBlob(seen: Record<string, unknown>[]): unknown {
+	const ask = seen.filter((r) => r.method === "elicitation/create").pop() as
+		| Record<string, unknown>
+		| undefined;
+	return toolCall(3, {
+		name: "release",
+		arguments: {},
+		requestState: ask?.id,
+		inputResponses: acceptance(true),
+	});
+}
+
+/*
+ * Every legacy exit spends the blob -- an abort is not a free replay.
+ *
+ * The blob binds the same principal and the same request digest the modern era
+ * mints, and stays live for five minutes. An exchange that ended without
+ * consuming it therefore hands the client a `requestState` it can answer
+ * itself, on the modern path, for the very call it just aborted.
+ */
+test("mcp: a legacy exchange aborted by an error response consumes its state", async () => {
+	const responses = await serveSession(
+		confirmingApp(),
+		() => handshakeRequest(true),
+		() => legacyCall(2, "release"),
+		(seen) => {
+			const ask = seen[seen.length - 1] as Record<string, unknown>;
+			return {
+				jsonrpc: "2.0",
+				id: ask.id,
+				error: { code: -32601, message: "Method not found" },
+			};
+		},
+		replayAskedBlob,
+	);
+	assert.equal(resultOf(responses[2] as Record<string, unknown>).isError, true);
+	assertReplayRefused(responses[3] as Record<string, unknown>);
+});
+
+test("mcp: a legacy exchange that ends unanswered consumes its state", async () => {
+	const responses = await serveScript(
+		confirmingApp(),
+		{ build: () => handshakeRequest(true), reply: true },
+		{ build: () => legacyCall(2, "release"), reply: true },
+		// Held while the server waits; the stream then ends without an answer,
+		// which aborts, and the held request is served afterwards.
+		{ build: replayAskedBlob, reply: false },
+	);
+	assert.equal(resultOf(responses[2] as Record<string, unknown>).isError, true);
+	assertReplayRefused(responses[3] as Record<string, unknown>);
+});
+
 test("mcp: legacy traffic arriving mid-exchange is held, not dropped", async () => {
 	const responses = await serveScript(
 		confirmingApp(),
