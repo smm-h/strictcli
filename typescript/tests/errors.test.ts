@@ -63,8 +63,8 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // The mutex-election round (contract §21) adds 2: errMutexRedundantNegation
 // (the redundant-negation parse error) and errMutexDeclineClause (the teaching
 // clause both decline-shaped errors carry).
-// The presence round (contract §23, §12.12) is a net +6: it adds 10 and
-// deletes 4. Added -- errFlagPresenceUndeclared / errArgPresenceUndeclared
+// The presence round (contract §23, §12.12) is a net +3: it adds 10 and
+// deletes 7. Added -- errFlagPresenceUndeclared / errArgPresenceUndeclared
 // (nothing declared), errFlagPresenceDeclaredTwice / errArgPresenceDeclaredTwice
 // (two declared), errFlagDefaultNullNotOptional / errArgDefaultNullNotOptional
 // (the null-valued default's redirect), errFlagMutexMemberRequired (a mutex
@@ -73,9 +73,14 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // errArgDefaultValueMissing for `presence: "default"` written without a value,
 // a half-written declaration no sibling spelling can express. Deleted -- the
 // three `explicit empty default is redundant for <kind> flags` templates (an
-// explicit [] or {} is a declaration now) and errRequiredArgCannotHaveDefault
-// (subsumed by the two-declared error).
-const EXPECTED_TEMPLATE_COUNT = 327;
+// explicit [] or {} is a declaration now), errRequiredArgCannotHaveDefault
+// (subsumed by the two-declared error), and the three arg-side list-default
+// templates the round made unreachable: errArgListDefaultMustBeList,
+// errArgExplicitEmptyDefaultRedundantList and
+// errArgDefaultElementTypeMismatch. A list-typed arg must be variadic and a
+// variadic arg refuses a default, so no arg can carry a list default for them
+// to describe; the flag-side counterparts are untouched.
+const EXPECTED_TEMPLATE_COUNT = 324;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

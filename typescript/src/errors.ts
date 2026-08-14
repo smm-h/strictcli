@@ -249,21 +249,12 @@ export function errArgChoiceTypeMismatch(
 	return `Arg ${q(name)}: choice ${c} is not of type ${typeName}`;
 }
 
-export function errArgListDefaultMustBeList(name: string): string {
-	return `Arg ${q(name)}: list arg default must be a list`;
-}
-
-export function errArgExplicitEmptyDefaultRedundantList(name: string): string {
-	return `Arg ${q(name)}: explicit empty default is redundant for list args, omit the default`;
-}
-
-export function errArgDefaultElementTypeMismatch(
-	name: string,
-	i: number,
-	typeName: string,
-): string {
-	return `Arg ${q(name)}: default element ${i} is not of type ${typeName}`;
-}
+// The three arg-side list-default templates the presence round left
+// unreachable are deleted rather than retained: a list-typed arg must be
+// variadic (errArgListTypeOnArgsRequiresVariadicTrue), and a variadic arg
+// refuses any default (errArgVariadicDefault), so no arg can carry a list
+// default for them to describe. Their flag-side counterparts stay: a list
+// FLAG can declare a default, empty or not.
 
 export function errArgStrDefaultTypeMismatch(
 	name: string,
