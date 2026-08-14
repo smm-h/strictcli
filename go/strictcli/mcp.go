@@ -799,6 +799,59 @@ func newMCPContinuation() *mcpContinuation {
 	return &mcpContinuation{key: key, consumed: map[string]int64{}}
 }
 
+// mcpB64URLAlphabet is the base64url alphabet, in value order -- the one
+// spelling §22.4 defines.
+const mcpB64URLAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+// mcpB64URLCanonical reports whether text is the ONE unpadded base64url
+// spelling of some bytes.
+//
+// The three languages' decoders do not agree on their own -- Python's ignores
+// stray characters and accepts padding, Node's ignores anything outside the
+// alphabet, and Go's skips newlines -- and all three ignore the trailing bits
+// of a final character that does not fill a byte, so a blob's last character
+// can be altered without changing what it decodes to. The blob is
+// attacker-controlled input, so the spelling is checked here, before any
+// decoder sees it, identically in all three implementations.
+func mcpB64URLCanonical(text string) bool {
+	remainder := len(text) % 4
+	if remainder == 1 {
+		// No byte string encodes to a length one past a multiple of four.
+		return false
+	}
+	last := 0
+	for i := 0; i < len(text); i++ {
+		value := strings.IndexByte(mcpB64URLAlphabet, text[i])
+		if value < 0 {
+			return false
+		}
+		last = value
+	}
+	if remainder == 0 {
+		return true
+	}
+	// Two characters carry one byte and three carry two, so the final character
+	// has 4 or 2 bits left over, and a canonical encoder leaves them zero.
+	leftover := 0b11
+	if remainder == 2 {
+		leftover = 0b1111
+	}
+	return last&leftover == 0
+}
+
+// mcpB64URLDecode decodes canonical unpadded base64url; ok is false when the
+// text is not one.
+func mcpB64URLDecode(text string) (raw []byte, ok bool) {
+	if !mcpB64URLCanonical(text) {
+		return nil, false
+	}
+	decoded, err := base64.RawURLEncoding.Strict().DecodeString(text)
+	if err != nil {
+		return nil, false
+	}
+	return decoded, true
+}
+
 func (c *mcpContinuation) mac(payload []byte) []byte {
 	mac := hmac.New(sha256.New, c.key)
 	mac.Write(payload)
@@ -835,12 +888,12 @@ func (c *mcpContinuation) verify(blob, principal, digest string, now int64) stri
 	if len(parts) != 2 {
 		return mcpErrStateVerification
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
+	raw, ok := mcpB64URLDecode(parts[0])
+	if !ok {
 		return mcpErrStateVerification
 	}
-	mac, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
+	mac, ok := mcpB64URLDecode(parts[1])
+	if !ok {
 		return mcpErrStateVerification
 	}
 	if !hmac.Equal(mac, c.mac(raw)) {

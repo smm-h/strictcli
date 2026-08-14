@@ -2084,6 +2084,43 @@ func TestMCPMalformedAnswerIsAProtocolError(t *testing.T) {
 	}
 }
 
+// TestMCPContinuationAcceptsOnlyCanonicalBase64URL pins that §22.4's blob is
+// unpadded base64url and no other spelling of it.
+//
+// Left to themselves the three languages' decoders disagree: Python's accepts
+// padding and Node's ignores anything outside the alphabet, while Go's refuses
+// both -- and all three ignore a newline or the trailing bits of a final
+// character that does not fill a byte. The blob is attacker-controlled input,
+// so the spelling is checked before any decoder sees it, identically
+// everywhere.
+func TestMCPContinuationAcceptsOnlyCanonicalBase64URL(t *testing.T) {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	continuation := newMCPContinuation()
+	var now int64 = 1000000
+	good := continuation.mint("cli/1.0.0", "digest", now)
+	head, mac, _ := strings.Cut(good, ".")
+	// The same data bits with a flipped ignored trailing bit: a lax decoder
+	// yields the identical MAC bytes and accepts the blob.
+	noisy := mac[:len(mac)-1] + string(alphabet[strings.IndexByte(alphabet, mac[len(mac)-1])^1])
+	spellings := map[string]string{
+		"padding":      good + "=",
+		"outside":      good + "*",
+		"newline":      head[:5] + "\n" + head[5:] + "." + mac,
+		"trailingBits": head + "." + noisy,
+	}
+	for name, spelling := range spellings {
+		t.Run(name, func(t *testing.T) {
+			if refusal := continuation.verify(spelling, "cli/1.0.0", "digest", now); refusal != mcpErrStateVerification {
+				t.Errorf("accepted a non-canonical spelling (%q): %q", spelling, refusal)
+			}
+		})
+	}
+	// The canonical spelling still verifies, and is consumed doing so.
+	if refusal := continuation.verify(good, "cli/1.0.0", "digest", now); refusal != "" {
+		t.Errorf("the canonical spelling was refused: %q", refusal)
+	}
+}
+
 func TestMCPContinuationExpiryAndIsolation(t *testing.T) {
 	// No clock reaches the wire, so expiry is driven at the mint.
 	continuation := newMCPContinuation()
