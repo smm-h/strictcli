@@ -1,7 +1,6 @@
 package strictcli
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -128,34 +127,5 @@ func TestMutexFlagChoicesUnsetNotValidated(t *testing.T) {
 	}
 }
 
-func TestFlagOptionalValidateNotCalled(t *testing.T) {
-	// A custom validator must not run for a flag that was not passed
-	// (resolved value nil) -- there is no value to validate.
-	app := simpleApp("cmd", "a command", "name={name}",
-		WithFlags(StringFlag("name", "a name", Optional(),
-			ValidateFn(func(v interface{}) error {
-				s, ok := v.(string)
-				if !ok {
-					return fmt.Errorf("validator received non-string value %v", v)
-				}
-				if s == "bad" {
-					return fmt.Errorf("bad name")
-				}
-				return nil
-			}))))
-	r := app.Test([]string{"cmd"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
-	}
-	if r.Stdout != "name=None" {
-		t.Fatalf("expected 'name=None', got %q", r.Stdout)
-	}
-	// Passed value still validated.
-	r = app.Test([]string{"cmd", "--name", "bad"})
-	if r.ExitCode != 1 {
-		t.Fatalf("expected exit 1 for invalid value, got %d", r.ExitCode)
-	}
-	if !strings.Contains(r.Stderr, "--name: bad name") {
-		t.Fatalf("expected validator error, got %q", r.Stderr)
-	}
-}
+// The validator family lives in validate_test.go; the "never runs on absence"
+// case moved there as TestValidateNeverRunsOnAbsence.

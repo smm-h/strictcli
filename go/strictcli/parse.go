@@ -110,15 +110,25 @@ func (s *sourcedStore) delete(name string) {
 	delete(s.entries, name)
 }
 
-// isPresentForDeps returns true if the flag is "present" for dependency
-// checks (CoRequired, Requires). CLI, env, config, and implied sources
-// count. Default values do NOT count.
+// isPresentForDeps reports whether the INVOCATION caused this flag's value.
+// This is the single definition of "was this supplied" (contract §23.6):
+// cli, env, config and implied count; default and infra do not, both being
+// the declaration deciding rather than the invocation. Context.Provided
+// answers the same question off the same set of source labels.
+//
+// It drives the dependency checks (CoRequired, Requires, the Implies
+// trigger) and the custom-validator step, which runs on a supplied value
+// only (contract §23.5's validate row).
 func (s *sourcedStore) isPresentForDeps(name string) bool {
 	e, ok := s.entries[name]
 	if !ok {
 		return false
 	}
-	return e.source != SourceDefault
+	switch e.source {
+	case SourceCLI, SourceEnv, SourceConfig, SourceImplied:
+		return true
+	}
+	return false
 }
 
 // toMap returns a plain map of name -> value (dropping source info).
@@ -786,17 +796,17 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 		}
 	}
 
-	// Custom validation
+	// Custom validation. It runs on a SUPPLIED value only: never on absence,
+	// and never on a declared default -- including a RelativeToRoot default,
+	// whose "infra" label is still the declaration deciding (contract §23.5's
+	// validate row, §23.6).
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
-		if f.Validate == nil {
+		if f.Validate == nil || !store.isPresentForDeps(f.Name) {
 			continue
 		}
 		val, ok := store.get(f.Name)
 		if !ok || val == nil {
-			// nil means the flag was not passed (an Optional()
-			// declaration, or an unelected mutex member) -- validate
-			// never runs on absence (contract §23.5).
 			continue
 		}
 		if f.Repeatable {

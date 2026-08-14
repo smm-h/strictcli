@@ -2,6 +2,7 @@ package strictcli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,6 +121,65 @@ func TestCliOverride_NotInfra(t *testing.T) {
 	}
 	if (*sourcesP)["db"] != "cli" {
 		t.Fatalf("source = %q, want cli", (*sourcesP)["db"])
+	}
+}
+
+// --- Infra defaults and the dependency presence predicate ---
+
+// An infra-resolved default is still a DECLARED default: it does not make the
+// flag provided, so it never counts as present for CoRequired or Requires
+// (contract §23.5's CoRequired/Requires rows, §23.6's source table).
+
+func newInfraDepApp(deps ...Dependency) *App {
+	app := NewApp("myapp", "1.0.0", "test app",
+		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"))
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		fmt.Printf("db=%v cache=%v", kwargs["db"], kwargs["cache"])
+		return Exit(0)
+	}, WithFlags(
+		StringFlag("db", "db path", Default(RelativeToRoot("MYAPP_HOME", "db.sqlite"))),
+		StringFlag("cache", "cache path", Optional()),
+	), WithDependencies(deps...), WithEffect(EffectReadOnly))
+	return app
+}
+
+func TestInfraDefaultIsNotPresentForCoRequired(t *testing.T) {
+	os.Unsetenv("MYAPP_HOME")
+	app := newInfraDepApp(CoRequired{Flags: []string{"db", "cache"}})
+	// Neither member supplied: the infra default is not a supplied value, so
+	// the group is not half-filled and there is no violation.
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "db=/var/lib/myapp/db.sqlite cache=<nil>" {
+		t.Fatalf("unexpected stdout %q", r.Stdout)
+	}
+}
+
+func TestInfraDefaultDoesNotSatisfyCoRequired(t *testing.T) {
+	os.Unsetenv("MYAPP_HOME")
+	app := newInfraDepApp(CoRequired{Flags: []string{"db", "cache"}})
+	// The other member supplied alone: the infra default does not stand in for
+	// the missing one, so the group IS half-filled.
+	r := app.Test([]string{"run", "--cache", "/tmp/c"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	if !strings.Contains(r.Stderr, "flags --db, --cache must be used together") {
+		t.Fatalf("expected co-required error, got %q", r.Stderr)
+	}
+}
+
+func TestInfraDefaultDoesNotSatisfyRequires(t *testing.T) {
+	os.Unsetenv("MYAPP_HOME")
+	app := newInfraDepApp(Requires{Flag: "cache", DependsOn: "db"})
+	r := app.Test([]string{"run", "--cache", "/tmp/c"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	if !strings.Contains(r.Stderr, "flag '--cache' requires '--db'") {
+		t.Fatalf("expected requires error, got %q", r.Stderr)
 	}
 }
 
